@@ -23,6 +23,7 @@ import type {
   SortBy,
   ViewMode,
 } from './hooks/useDashboardViewPrefs';
+import { useBrandAccents } from 'depictio-react-core';
 
 export interface DashboardsToolbarProps {
   prefs: DashboardViewPrefs;
@@ -141,6 +142,7 @@ const FilterPopover: React.FC<{
   ownerOptions: { value: string; label: string }[];
   setFilters: (f: DashboardFilters) => void;
 }> = ({ prefs, projectOptions, ownerOptions, setFilters }) => {
+  const accent = useBrandAccents();
   const activeCount =
     prefs.filters.projects.length +
     prefs.filters.owners.length +
@@ -153,13 +155,13 @@ const FilterPopover: React.FC<{
           <Indicator
             label={activeCount}
             size={16}
-            color="orange"
+            color={accent.tertiary}
             disabled={activeCount === 0}
             offset={4}
           >
             <ActionIcon
               variant={activeCount > 0 ? 'light' : 'default'}
-              color={activeCount > 0 ? 'orange' : undefined}
+              color={activeCount > 0 ? accent.tertiary : undefined}
               size="lg"
               radius="md"
               aria-label={`Filters${activeCount > 0 ? ` (${activeCount} active)` : ''}`}
@@ -244,6 +246,7 @@ const DashboardsToolbar: React.FC<DashboardsToolbarProps> = ({
   setOnlyPinned,
   clearFilters,
 }) => {
+  const accent = useBrandAccents();
   // Sort selector is meaningless in Table view (column headers handle sort).
   const showSort = prefs.view !== 'table';
 
@@ -379,12 +382,12 @@ const DashboardsToolbar: React.FC<DashboardsToolbarProps> = ({
             <Badge
               key={chip.key}
               variant="light"
-              color="orange"
+              color={accent.tertiary}
               rightSection={
                 <ActionIcon
                   size="xs"
                   variant="transparent"
-                  color="orange"
+                  color={accent.tertiary}
                   onClick={chip.onRemove}
                   aria-label={`Remove filter ${chip.label}`}
                 >

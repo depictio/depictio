@@ -23,7 +23,7 @@ import type { ColDef, ICellRendererParams } from 'ag-grid-community';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 
-import { fetchLinkMappingPreview } from 'depictio-react-core';
+import { fetchLinkMappingPreview, useBrandAccents } from 'depictio-react-core';
 import type {
   DCLink,
   LinkMappingPreviewResponse,
@@ -359,33 +359,36 @@ export const LinkMappingModal: React.FC<LinkMappingModalProps> = ({
   sourceTag,
   targetTag,
   onClose,
-}) => (
-  // Wide on purpose: the grid carries a source value, a status, the match
-  // rule and a full variant list per row, and at Mantine's `xl` (780px) the
-  // variant list wrapped to six lines a row.
-  <Modal opened={opened} onClose={onClose} title={null} size="90%" centered padding="lg">
-    <Stack gap="md" data-testid="link-mapping-modal">
-      <Group justify="center" gap="sm">
-        <Icon icon="mdi:magnify-scan" width={32} color="var(--mantine-color-teal-6)" />
-        <Title order={3} c="teal" m={0}>
-          Inspect mapping
-        </Title>
-      </Group>
-      {link && (
-        <Group gap="xs" justify="center">
-          <Code>
-            {sourceTag}.{link.source_column}
-          </Code>
-          <Icon icon="mdi:arrow-right" width={16} />
-          <Code>{targetTag}</Code>
-          <Badge size="sm" variant="light">
-            {link.link_config?.resolver || 'direct'}
-          </Badge>
+}) => {
+  const accent = useBrandAccents();
+  return (
+      // Wide on purpose: the grid carries a source value, a status, the match
+      // rule and a full variant list per row, and at Mantine's `xl` (780px) the
+      // variant list wrapped to six lines a row.
+      <Modal opened={opened} onClose={onClose} title={null} size="90%" centered padding="lg">
+      <Stack gap="md" data-testid="link-mapping-modal">
+        <Group justify="center" gap="sm">
+          <Icon icon="mdi:magnify-scan" width={32} color={`var(--mantine-color-${accent.secondary}-6)`} />
+          <Title order={3} c={accent.secondary} m={0}>
+            Inspect mapping
+          </Title>
         </Group>
-      )}
-      {link && (
-        <LinkMappingInspector projectId={projectId} linkId={link.id} collapsible={false} />
-      )}
-    </Stack>
-  </Modal>
-);
+        {link && (
+          <Group gap="xs" justify="center">
+            <Code>
+              {sourceTag}.{link.source_column}
+            </Code>
+            <Icon icon="mdi:arrow-right" width={16} />
+            <Code>{targetTag}</Code>
+            <Badge size="sm" variant="light">
+              {link.link_config?.resolver || 'direct'}
+            </Badge>
+          </Group>
+        )}
+        {link && (
+          <LinkMappingInspector projectId={projectId} linkId={link.id} collapsible={false} />
+        )}
+      </Stack>
+    </Modal>
+  );
+};

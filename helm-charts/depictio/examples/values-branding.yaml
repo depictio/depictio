@@ -2,8 +2,8 @@
 # Instance Branding Configuration Example
 # =====================================================
 # This values file demonstrates how to brand a Depictio deployment for
-# your institute / core facility: your own logo, instance name, primary
-# UI color and Plotly figure colorway.
+# your institute / core facility: logo, instance name, a three-color brand
+# palette, chrome surfaces, typography and the Plotly figure palette.
 #
 # Usage:
 #   helm upgrade depictio ./helm-charts/depictio \
@@ -13,12 +13,19 @@
 # The BACKEND is the only place these belong. The viewer ships as a static,
 # pre-built bundle served by nginx, so it cannot read environment variables at
 # runtime — it fetches this configuration from the API at boot instead
-# (GET /depictio/api/v1/utils/public-config).
+# (GET /depictio/api/v1/utils/public-config), already resolved.
 backend:
   env:
-    # Custom logo shown in the sidebar and on the login page, replacing the
-    # depictio logo. Absolute https:// URL, or a path served by this
-    # deployment. The "Powered by Depictio" header badge is unaffected.
+    # ── Shortcut: start from a shipped preset ────────────────────────────
+    # One of: depictio (the stock look), trec, embl, ocean. Anything you set
+    # below overrides the preset field by field, so a preset is a starting
+    # point rather than a mode.
+    # DEPICTIO_BRANDING_PRESET: "trec"
+
+    # ── Identity ─────────────────────────────────────────────────────────
+    # Custom logo shown in the sidebar, on dashboards and on the login page,
+    # replacing the depictio logo. Absolute https:// URL, or a path served by
+    # this deployment. The "Powered by Depictio" header badge is unaffected.
     DEPICTIO_BRANDING_LOGO_URL: "https://example.org/assets/facility-logo.svg"
 
     # Optional dark-mode variant. Falls back to DEPICTIO_BRANDING_LOGO_URL
@@ -29,18 +36,64 @@ backend:
     # ("Welcome to <name> :").
     DEPICTIO_BRANDING_APP_NAME: "My Core Facility"
 
-    # Primary UI color: a Mantine palette name (blue, teal, grape, ...) or a
-    # hex color the viewer expands into a full palette.
-    DEPICTIO_BRANDING_PRIMARY_COLOR: "#0ca678"
+    # ── Brand palette ────────────────────────────────────────────────────
+    # Each is a hex color or a Mantine palette name (blue, teal, grape, ...).
+    # A hex color is expanded server-side into a full 10-shade Mantine tuple
+    # with your color on the shade buttons actually paint, so a filled button
+    # is your brand color rather than a lighter cousin of it.
+    DEPICTIO_BRANDING_PRIMARY_COLOR: "#00a550"
+    DEPICTIO_BRANDING_SECONDARY_COLOR: "#1a4f8f"
+    DEPICTIO_BRANDING_TERTIARY_COLOR: "#f5a11b"
 
-    # Categorical colorway for server-rendered Plotly figures: comma-separated
-    # hex colors. Overrides the default Mantine colorway in both light and
-    # dark themes.
-    # DEPICTIO_BRANDING_COLORWAY: "#0ca678,#f76707,#7048e8,#1c7ed6,#e64980"
+    # How far the brand reaches into the app's existing accents:
+    #   accent (default) — only the primary accent is re-tinted
+    #   full             — the secondary and tertiary also take over the
+    #                      app's teal/orange accent families, so buttons,
+    #                      tabs, badges and section accents all follow
+    # DEPICTIO_BRANDING_TINT_MODE: "full"
+
+    # ── Status colors ────────────────────────────────────────────────────
+    # Deliberately left out of the brand reach, because pass / warn / fail
+    # have to stay readable as meaning rather than as decoration. Set them
+    # only if your brand has its own.
+    # DEPICTIO_BRANDING_SUCCESS_COLOR: "#2f9e44"
+    # DEPICTIO_BRANDING_WARNING_COLOR: "#f08c00"
+    # DEPICTIO_BRANDING_DANGER_COLOR: "#e03131"
+
+    # ── Typography and shape ─────────────────────────────────────────────
+    # CSS font-family lists. Whatever you name has to be installed or served
+    # by this deployment — no font is fetched for you.
+    # DEPICTIO_BRANDING_FONT_FAMILY: "Inter, system-ui, sans-serif"
+    # DEPICTIO_BRANDING_HEADINGS_FONT_FAMILY: "Inter Tight, Inter, sans-serif"
+    # Mantine radius token: xs, sm, md (default), lg or xl.
+    # DEPICTIO_BRANDING_DEFAULT_RADIUS: "sm"
+
+    # ── Figures ──────────────────────────────────────────────────────────
+    # Left unset, the categorical colorway and the continuous scale are
+    # derived from the brand palette above, so figures follow the brand
+    # without a second list to keep in step. Set them to state your own.
+    # DEPICTIO_BRANDING_COLORWAY: "#00a550,#1a4f8f,#f5a11b,#19e87d,#3c7cc9"
+    # DEPICTIO_BRANDING_SEQUENTIAL: "#e9f8ef,#b6e8ca,#7fd6a3,#43c07a,#00a550"
+    # Plotly template applied to figures whose component doesn't pick one.
+    # Unset means "follow the UI color scheme" (Depictio's own brand-aware
+    # mantine_light / mantine_dark templates).
+    # DEPICTIO_BRANDING_PLOT_TEMPLATE: "simple_white"
+
+    # ── Escape hatch ─────────────────────────────────────────────────────
+    # A whole brand theme as JSON, for the fields with no flat variable of
+    # their own (per-scheme surfaces). Merged under the flat variables above,
+    # so anything set both ways is won by the flat one.
+    # DEPICTIO_BRANDING_THEME: >-
+    #   {"surfaces_light": {"app_bg": "#f8faf9", "section_bg": "#ffffff",
+    #    "nav_bg": "#ffffff", "heading": "#00514b"},
+    #    "surfaces_dark": {"app_bg": "#12191c", "section_bg": "#1a2226"}}
 
 # Notes:
 # - All keys are optional and independent — set only what you need.
 # - Remote logo URLs work out of the box (the viewer's CSP already allows
 #   https: images); host the files somewhere stable and CDN-cached.
-# - Component- and dashboard-level color settings still take precedence over
-#   the instance colorway for individual figures.
+# - Admins can edit all of the above from /admin -> Branding without a
+#   redeploy; those overrides layer on top of what is set here, and the panel
+#   can export and re-import the result as JSON.
+# - A dashboard can override any of it for itself (Settings -> Appearance),
+#   and component-level color settings still win over the figure palette.

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Badge, Button, Popover, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { GROUPING_COLOR } from 'depictio-react-core';
+import { useGroupingColor } from 'depictio-react-core';
 import type { ColorByState } from 'depictio-react-core';
 
 /**
@@ -34,6 +34,9 @@ const GroupingHeaderControl: React.FC<{
   /** The SelectionGroupsPanel node, owned by the app (state is the app's). */
   children: React.ReactNode;
 }> = ({ groupCount, colorBy, opened, onOpenedChange, armed, onToggle, children }) => {
+  // Tertiary under a brand, violet otherwise — either way distinct from the
+  // Edit and Save buttons beside it (see `useGroupingColor`).
+  const groupingColor = useGroupingColor();
   // Base name "Analysis": the panel spans visual encoding (color/split by a
   // column), group annotation and group comparison — broader than any one of
   // those. When a Color-by mode is on the label names its target ("Analysis:
@@ -70,7 +73,7 @@ const GroupingHeaderControl: React.FC<{
             // `compact-sm` set a larger font than its neighbours and made the
             // cluster look ragged.
             size="xs"
-            color={GROUPING_COLOR}
+            color={groupingColor}
             // Filled while a Color-by mode is on OR analysis mode is armed:
             // the button doubles as the always-visible indicator that a
             // dashboard-wide override is repainting the figures, and as the

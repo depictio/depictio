@@ -125,7 +125,7 @@ async def preview_figure(
           "dashboard_id": "..." (optional)
         }
 
-    ``dashboard_id``, when supplied, pulls that dashboard's ``plot_theme``
+    ``dashboard_id``, when supplied, pulls that dashboard's ``brand_theme``
     defaults into the preview so it matches what the saved component will
     render (#397).
     """
@@ -141,7 +141,7 @@ async def preview_figure(
         from bson import ObjectId
 
         from depictio.api.v1.db import dashboards_collection
-        from depictio.api.v1.services.figure.figure_builder import merge_dashboard_plot_theme
+        from depictio.api.v1.services.figure.figure_builder import merge_dashboard_brand_theme
 
         try:
             dashboard_doc = dashboards_collection.find_one(
@@ -149,11 +149,11 @@ async def preview_figure(
             )
         except Exception:
             dashboard_doc = None
-        if dashboard_doc and dashboard_doc.get("plot_theme"):
+        if dashboard_doc and dashboard_doc.get("brand_theme"):
             metadata = {
                 **metadata,
-                "dict_kwargs": merge_dashboard_plot_theme(
-                    dashboard_doc["plot_theme"], metadata.get("dict_kwargs") or {}
+                "dict_kwargs": merge_dashboard_brand_theme(
+                    dashboard_doc["brand_theme"], metadata.get("dict_kwargs") or {}
                 ),
             }
 

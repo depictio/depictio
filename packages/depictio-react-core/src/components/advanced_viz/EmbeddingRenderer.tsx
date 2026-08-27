@@ -24,7 +24,7 @@ import {
   StoredMetadata,
   type ComputeEmbeddingResult,
 } from '../../api';
-import { stableColorMap, TAB10_PALETTE } from '../../colors';
+import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyThemeColors } from './plotlyTheme';
 
@@ -379,7 +379,7 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
       categories.sort();
       const colourSource = stableColorMap(
         colorUniverse ?? categories,
-        TAB10_PALETTE,
+        resolveCategoricalPalette(theme, TAB10_PALETTE),
         config.category_palette ?? null,
       );
       const centroids: { x: number; y: number; z?: number; label: string }[] = [];

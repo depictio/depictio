@@ -43,6 +43,7 @@ from depictio.models.components.lite import (
 )
 from depictio.models.logging import logger
 from depictio.models.models.base import MongoModel, PyObjectId, convert_objectid_to_str
+from depictio.models.models.branding import BrandTheme
 from depictio.models.models.users import Permission
 
 
@@ -172,40 +173,6 @@ class FilterSectionSpec(BaseModel):
     )
 
 
-class DashboardThemeSpec(BaseModel):
-    """Dashboard-level defaults for server-rendered Plotly figures (#397).
-
-    Applied to every figure component that doesn't set the corresponding
-    option itself — component-explicit values always win, and the instance
-    branding / mantine defaults apply when this is unset.
-
-    Example YAML:
-        plot_theme:
-          template: seaborn
-          colorway:
-            - "#0ca678"
-            - "#f76707"
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    template: str | None = Field(
-        default=None,
-        description="Plotly template name (e.g. 'seaborn', 'plotly_white') used by all "
-        "figures whose component doesn't pick one. Unset/`mantine_light`/`mantine_dark` "
-        "mean 'follow the UI theme'.",
-    )
-    colorway: list[str] | None = Field(
-        default=None,
-        description="Default categorical color sequence (hex list) for figures that set "
-        "neither `color_discrete_sequence` nor `color_discrete_map`.",
-    )
-
-    @property
-    def is_empty(self) -> bool:
-        return self.template is None and not self.colorway
-
-
 class DashboardDataLite(BaseModel):
     """Minimal dashboard format for YAML import/export.
 
@@ -314,18 +281,13 @@ class DashboardDataLite(BaseModel):
         "as `filter_sections`, applied to non-interactive components.",
     )
 
-    # Dashboard-level figure theme defaults (template + colorway)
-    plot_theme: DashboardThemeSpec | None = Field(
+    # Dashboard-level brand override (#397). Same shape as the instance
+    # branding; unset fields inherit from it, so a dashboard only states what
+    # it wants to differ. Covers logo, palette, surfaces and figure defaults.
+    brand_theme: BrandTheme | None = Field(
         default=None,
-        description="Optional Plotly template/colorway applied as the default for all "
-        "figure components of this dashboard.",
-    )
-
-    # Dashboard logo, shown at the bottom of the dashboard sidebar. Uploaded
-    # through /dashboards/upload_logo and served from /static/dashboard_logos/.
-    logo_url: str | None = Field(
-        default=None,
-        description="URL of the dashboard logo image (uploaded server-side).",
+        description="Optional per-dashboard brand override (logo, colors, surfaces, plot "
+        "template/colorway). Unset fields inherit the instance branding.",
     )
 
     # Components using Lite models
@@ -441,8 +403,7 @@ class DashboardDataLite(BaseModel):
         "funnel_filtering",
         "filter_sections",
         "grid_sections",
-        "plot_theme",
-        "logo_url",
+        "brand_theme",
     ]
 
     @staticmethod
@@ -816,21 +777,58 @@ class DashboardDataLite(BaseModel):
         except ValueError as e:
             return False, [{"type": "yaml_error", "msg": str(e)}]
 
-    @staticmethod
-    def _exportable_logo_url(logo_url: Any) -> str | None:
+    #: Static mounts that only exist on the instance that uploaded the file.
+    _LOCAL_UPLOAD_PREFIXES: ClassVar[tuple[str, ...]] = (
+        "/static/dashboard_logos/",
+        "/static/branding/",
+    )
+
+    @classmethod
+    def _exportable_logo_url(cls, logo_url: Any) -> str | None:
         """Only external logo URLs survive an export.
 
-        Uploaded logos live under the instance-local ``/static/dashboard_logos/``
-        mount, named after this instance's ``dashboard_id`` (which imports
-        re-mint) and never shipped with the code — carrying the URL into a
-        YAML/seed would render a silently broken image on any other
-        deployment. Hand-written external URLs round-trip untouched.
+        Uploaded logos live under instance-local static mounts, named after
+        this instance's ``dashboard_id`` (which imports re-mint) and never
+        shipped with the code — carrying the URL into a YAML/seed would render
+        a silently broken image on any other deployment. Hand-written external
+        URLs round-trip untouched.
         """
         if not logo_url or not isinstance(logo_url, str):
             return None
-        if logo_url.startswith("/static/dashboard_logos/"):
+        if logo_url.startswith(cls._LOCAL_UPLOAD_PREFIXES):
             return None
         return logo_url
+
+    @classmethod
+    def _exportable_brand_theme(cls, brand_theme: Any) -> "BrandTheme | None":
+        """A dashboard brand theme safe to ship in a YAML/seed.
+
+        Strips instance-local logo uploads (see ``_exportable_logo_url``) and
+        drops a theme that carries nothing but defaults, so an untouched
+        dashboard exports no ``brand_theme:`` block at all.
+        """
+        if not brand_theme:
+            return None
+        theme = (
+            brand_theme
+            if isinstance(brand_theme, BrandTheme)
+            else BrandTheme(**brand_theme)
+            if isinstance(brand_theme, dict)
+            else None
+        )
+        if theme is None:
+            return None
+        theme = theme.model_copy(deep=True)
+        # Derived on every resolve, so shipping it would only let a stale copy
+        # travel with the YAML.
+        theme.palettes = None
+        theme.logo_url = cls._exportable_logo_url(theme.logo_url)
+        theme.logo_url_dark = cls._exportable_logo_url(theme.logo_url_dark)
+        if theme.logo_mode == "custom" and not theme.logo_url:
+            # The URL didn't survive the export, so "custom" would resolve to a
+            # broken image on the importing instance. Fall back to inheriting.
+            theme.logo_mode = None
+        return None if theme.is_empty else theme
 
     @classmethod
     def from_full(cls, dashboard_data: dict[str, Any]) -> "DashboardDataLite":
@@ -1153,8 +1151,7 @@ class DashboardDataLite(BaseModel):
             filter_sections=dashboard_data.get("filter_sections") or [],
             grid_sections=dashboard_data.get("grid_sections") or [],
             funnel_filtering=bool(dashboard_data.get("funnel_filtering", True)),
-            plot_theme=dashboard_data.get("plot_theme") or None,
-            logo_url=cls._exportable_logo_url(dashboard_data.get("logo_url")),
+            brand_theme=cls._exportable_brand_theme(dashboard_data.get("brand_theme")),
             # Tab fields
             is_main_tab=dashboard_data.get("is_main_tab", True),
             tab_order=dashboard_data.get("tab_order", 0),
@@ -1224,8 +1221,9 @@ class DashboardDataLite(BaseModel):
             "filter_sections": [s.model_dump() for s in self.filter_sections],
             "grid_sections": [s.model_dump() for s in self.grid_sections],
             "funnel_filtering": self.funnel_filtering,
-            "plot_theme": self.plot_theme.model_dump() if self.plot_theme else None,
-            "logo_url": self.logo_url,
+            "brand_theme": self.brand_theme.model_dump(exclude_none=True)
+            if self.brand_theme
+            else None,
             # parent_dashboard_tag is resolved to parent_dashboard_id during import
         }
 
@@ -1556,11 +1554,40 @@ class DashboardData(MongoModel):
     # Funnel filtering (issue #939). On by default; authors opt out per
     # dashboard from the settings drawer.
     funnel_filtering: bool = True
-    # Dashboard-level figure theme defaults. None for dashboards saved before
-    # the feature existed — figures then follow the UI theme exactly as before.
-    plot_theme: DashboardThemeSpec | None = None
-    # Dashboard logo URL (uploaded via /dashboards/upload_logo). None hides it.
-    logo_url: str | None = None
+    # Dashboard-level brand override (logo, palette, surfaces, figure
+    # defaults). None for dashboards saved before the feature existed — those
+    # inherit the instance branding exactly as they did before.
+    brand_theme: BrandTheme | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _fold_legacy_appearance(cls, data: Any) -> Any:
+        """Read the two appearance fields that predate `brand_theme`.
+
+        `logo_url` and `plot_theme` were separate top-level fields before the
+        brand theme absorbed them. The model forbids extras, so a document
+        still carrying them would fail to load and take the whole dashboard
+        down with a 500 rather than just losing its colours.
+        """
+        if not isinstance(data, dict):
+            return data
+        if "logo_url" not in data and "plot_theme" not in data:
+            return data
+
+        data = dict(data)
+        theme = dict(data.get("brand_theme") or {})
+        logo_url = data.pop("logo_url", None)
+        plot_theme = data.pop("plot_theme", None)
+        if logo_url and not theme.get("logo_url"):
+            theme["logo_url"] = logo_url
+            theme.setdefault("logo_mode", "custom")
+        if isinstance(plot_theme, dict) and not theme.get("plots"):
+            plots = {k: v for k, v in plot_theme.items() if k in ("template", "colorway")}
+            if plots:
+                theme["plots"] = plots
+        data["brand_theme"] = theme or None
+        return data
+
     buttons_data: dict = {
         "unified_edit_mode": True,  # Default edit mode ON for dashboard owners
         "add_components_button": {"count": 0},

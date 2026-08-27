@@ -57,20 +57,11 @@ import {
   validateSession,
 } from 'depictio-react-core';
 import { UiScaleContext } from 'depictio-react-core';
-import { generateColors } from '@mantine/colors-generator';
 import BootSplash from './components/BootSplash';
-import { buildDepictioTheme } from './theme';
+import { brandCssVariablesResolver, buildDepictioTheme } from './theme';
 import { readStoredScheme } from './hooks/useColorScheme';
 import { useUiScalePref } from './hooks/useUiScalePref';
-import {
-  BRAND_PALETTE_NAME,
-  Branding,
-  BrandingContext,
-  getBranding,
-  isMantinePaletteName,
-  setBranding,
-  subscribeBranding,
-} from './branding';
+import { BrandingContext, getBranding, setBranding, subscribeBranding } from './branding';
 import { initGoogleAnalytics } from './googleAnalytics';
 import { WalkthroughHost } from './walkthrough';
 
@@ -136,60 +127,48 @@ function readInitialColorScheme(): 'light' | 'dark' {
   return readStoredScheme() ?? 'light';
 }
 
-/** Mantine theme options derived from instance branding (#397). */
-function brandingThemeOptions(branding: Branding | null): {
-  primaryColor?: string;
-  colors?: Record<string, ReturnType<typeof generateColors>>;
-} {
-  const color = branding?.primary_color;
-  if (!color) return {};
-  if (isMantinePaletteName(color)) return { primaryColor: color };
-  if (/^#[0-9a-fA-F]{6}$/.test(color)) {
-    return {
-      primaryColor: BRAND_PALETTE_NAME,
-      colors: { [BRAND_PALETTE_NAME]: generateColors(color) },
-    };
-  }
-  return {};
-}
-
 /**
  * Theme + UI-scale + branding root. Rebuilds the Mantine theme whenever the
- * instance branding resolves (cached in localStorage for a flash-free first
+ * instance brand theme resolves (cached in localStorage for a flash-free first
  * paint on return visits; the /utils/public-config fetch updates it
  * in-flight). The font-size preference deliberately does NOT touch the theme:
  * it scales dashboard content only (see useContentScaleStyle), never the app
  * chrome. The numeric scale reaches the non-Mantine content surfaces (Plotly
  * fonts, AG Grid row metrics) via UiScaleContext; the branding reaches
  * logo/title consumers via BrandingContext.
+ *
+ * Surfaces (page/nav/section backgrounds, heading color) travel as CSS
+ * variables rather than theme fields: a brand needs a light *and* a dark value
+ * for each, which is exactly what `cssVariablesResolver` is for.
  */
 function ThemeRoot({ children }: { children: React.ReactNode }) {
   const { scale } = useUiScalePref();
   const branding = React.useSyncExternalStore(subscribeBranding, getBranding);
-  const theme = React.useMemo(
-    () => buildDepictioTheme(brandingThemeOptions(branding)),
+  const theme = React.useMemo(() => buildDepictioTheme({ brand: branding }), [branding]);
+  const cssVariablesResolver = React.useMemo(
+    () => brandCssVariablesResolver(branding),
     [branding],
   );
-
-  React.useEffect(() => {
-    if (branding?.app_name) document.title = branding.app_name;
-  }, [branding?.app_name]);
 
   return (
     <UiScaleContext.Provider value={scale}>
       <BrandingContext.Provider value={branding}>
-      <MantineProvider theme={theme} defaultColorScheme={readInitialColorScheme()}>
-        {/* DatesProvider is required for @mantine/dates components to pick up
-            locale + first-day-of-week settings. Matches what DMC does
-            internally for ``dmc.DatePickerInput``. */}
-        <DatesProvider settings={{ locale: 'en', firstDayOfWeek: 1 }}>
-          <Notifications position="bottom-right" />
-          <ErrorBoundary>
-            <Suspense fallback={<BootSplash />}>{children}</Suspense>
-          </ErrorBoundary>
-          <WalkthroughHost />
-        </DatesProvider>
-      </MantineProvider>
+        <MantineProvider
+          theme={theme}
+          cssVariablesResolver={cssVariablesResolver}
+          defaultColorScheme={readInitialColorScheme()}
+        >
+          {/* DatesProvider is required for @mantine/dates components to pick up
+              locale + first-day-of-week settings. Matches what DMC does
+              internally for ``dmc.DatePickerInput``. */}
+          <DatesProvider settings={{ locale: 'en', firstDayOfWeek: 1 }}>
+            <Notifications position="bottom-right" />
+            <ErrorBoundary>
+              <Suspense fallback={<BootSplash />}>{children}</Suspense>
+            </ErrorBoundary>
+            <WalkthroughHost />
+          </DatesProvider>
+        </MantineProvider>
       </BrandingContext.Provider>
     </UiScaleContext.Provider>
   );
@@ -308,7 +287,7 @@ function bootstrapPublicConfig(): void {
       if (ga?.enabled && ga.tracking_id) {
         initGoogleAnalytics(ga.tracking_id);
       }
-      // Instance branding: push into the theme root's store + localStorage
+      // Instance brand theme: push into the theme root's store + localStorage
       // cache. `undefined` means an older backend without the field — leave
       // whatever the cache holds rather than un-branding a live UI.
       if (config.branding !== undefined) {

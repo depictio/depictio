@@ -17,7 +17,7 @@ import {
   StoredMetadata,
 } from '../../api';
 import { isStaleFetch } from '../../fetchQueue';
-import { stableColorMap } from '../../colors';
+import { resolveCategoricalPalette, stableColorMap } from '../../colors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 
@@ -57,6 +57,7 @@ interface Props {
   refreshTick?: number;
 }
 
+/** Fallback cycle for an unbranded deployment; a brand's colorway wins. */
 const PALETTE = [
   '#1c7ed6', '#e64980', '#fab005', '#37b24d', '#7048e8', '#f76707',
   '#0ca678', '#d6336c', '#15aabf', '#fd7e14', '#82c91e', '#ae3ec9',
@@ -67,6 +68,7 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
   const theme = useMantineTheme();
   const isDark = colorScheme === 'dark';
   const config = (metadata.config || {}) as StackedTaxonomyConfig;
+  const palette = resolveCategoricalPalette(theme, PALETTE);
 
   const [rank, setRank] = useState<string | null>(config.default_rank ?? null);
   const [topN, setTopN] = useState<number>(config.top_n ?? 20);
@@ -252,7 +254,7 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     // the top-N colours. Universe = all taxa in the DC; fallback = the filtered
     // top-N set ordered as they appear in tracesByTaxon.
     const taxaForPalette = Array.from(tracesByTaxon.keys()).filter((t) => t !== 'Other');
-    const colourSource = stableColorMap(taxonUniverse ?? taxaForPalette, PALETTE);
+    const colourSource = stableColorMap(taxonUniverse ?? taxaForPalette, palette);
     const data = Array.from(tracesByTaxon.entries())
       .filter(([, arr]) => arr.some((v) => v > 0))
       .map(([t, arr]) => ({
@@ -293,7 +295,7 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
         }
         // Stable category→colour for THIS strip's categories.
         const uniq = Array.from(new Set(sampleToValue.values())).sort();
-        const stripPalette = stableColorMap(uniq, PALETTE, strip.palette ?? null);
+        const stripPalette = stableColorMap(uniq, palette, strip.palette ?? null);
 
         const isBottom = (strip.position ?? 'bottom') === 'bottom';
         const y0 = isBottom ? bottomCursor - STRIP_BAND : topCursor;

@@ -41,17 +41,7 @@ import {
   TextInput,
 } from '@mantine/core';
 
-import {
-  fetchProject,
-  fetchDataCollectionPreview,
-  fetchMultiQCByDataCollection,
-  renameDataCollection,
-  deleteDataCollection,
-  createDataCollectionFromUpload,
-  createMultiQCDataCollection,
-  checkMultiQCUniformity,
-  fetchVizSuggestions,
-} from 'depictio-react-core';
+import { checkMultiQCUniformity, createDataCollectionFromUpload, createMultiQCDataCollection, deleteDataCollection, fetchDataCollectionPreview, fetchMultiQCByDataCollection, fetchProject, fetchVizSuggestions, renameDataCollection, useBrandAccents } from 'depictio-react-core';
 import type {
   ProjectListEntry,
   PreviewResult,
@@ -88,6 +78,7 @@ import {
   dcMetatypeMeta,
   METADATA_COLOR,
 } from '../dcMetatype';
+import { usePageTitle } from '../../branding';
 
 interface DataCollectionShape {
   _id?: string;
@@ -280,6 +271,7 @@ function extractColumns(dc: DataCollectionShape): string[] {
 }
 
 const ProjectDetailApp: React.FC = () => {
+  const accent = useBrandAccents();
   const [project, setProject] = useState<ProjectListEntry | null>(null);
   const [deltaLocations, setDeltaLocations] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -319,9 +311,7 @@ const ProjectDetailApp: React.FC = () => {
   const { user } = useCurrentUser();
   const projectId = readProjectIdFromPath();
 
-  useEffect(() => {
-    document.title = 'Depictio — Project Data Collections';
-  }, []);
+  usePageTitle('Project Data Collections');
 
   useEffect(() => {
     if (!projectId) {
@@ -462,9 +452,9 @@ const ProjectDetailApp: React.FC = () => {
             <Icon
               icon="mdi:jira"
               width={22}
-              color="var(--mantine-color-teal-6)"
+              color={`var(--mantine-color-${accent.secondary}-6)`}
             />
-            <Title order={3} c="teal">
+            <Title order={3} c={accent.secondary}>
               Project Data Manager
             </Title>
           </Group>
@@ -822,6 +812,7 @@ const MultiQCUniformityChecklist: React.FC<{
   mismatch: MultiQCMismatch | null;
   onCheck: () => void;
 }> = ({ fileCount, submitting, validating, lastCheckPassed, mismatch, onCheck }) => {
+  const accent = useBrandAccents();
   const hasMultiple = fileCount >= 2;
   const busy = submitting || validating;
   const statusText = !hasMultiple
@@ -855,7 +846,7 @@ const MultiQCUniformityChecklist: React.FC<{
           <Button
             size="compact-xs"
             variant="light"
-            color="teal"
+            color={accent.secondary}
             onClick={onCheck}
             disabled={!hasMultiple || busy}
             loading={validating}
@@ -1082,6 +1073,7 @@ const CreateDataCollectionModal: React.FC<{
   onClose: () => void;
   onSuccess: () => void;
 }> = ({ opened, projectType, projectId, onClose, onSuccess }) => {
+  const accent = useBrandAccents();
   const [dcType, setDcType] = useState<'table' | 'multiqc'>('table');
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState('');
@@ -1447,9 +1439,9 @@ const CreateDataCollectionModal: React.FC<{
           <Icon
             icon="mdi:database-plus-outline"
             width={32}
-            color="var(--mantine-color-teal-6)"
+            color={`var(--mantine-color-${accent.secondary}-6)`}
           />
-          <Title order={3} c="teal" m={0}>
+          <Title order={3} c={accent.secondary} m={0}>
             Create a Data Collection
           </Title>
         </Group>
@@ -1775,7 +1767,7 @@ const CreateDataCollectionModal: React.FC<{
             Cancel
           </Button>
           <Button
-            color="teal"
+            color={accent.secondary}
             onClick={handleSubmit}
             loading={submitting}
             disabled={
@@ -1800,6 +1792,7 @@ const RenameDataCollectionModal: React.FC<{
   onClose: () => void;
   onSuccess: () => void;
 }> = ({ target, onClose, onSuccess }) => {
+  const accent = useBrandAccents();
   const [name, setName] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1861,7 +1854,7 @@ const RenameDataCollectionModal: React.FC<{
           <Button variant="default" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button color="teal" onClick={handleSubmit} loading={submitting}>
+          <Button color={accent.secondary} onClick={handleSubmit} loading={submitting}>
             Save
           </Button>
         </Group>
@@ -1948,6 +1941,7 @@ const ProjectHeader: React.FC<{
   project: ProjectListEntry;
   projectType: 'basic' | 'advanced';
 }> = ({ project, projectType }) => {
+  const accent = useBrandAccents();
   const tmpl = parseTemplate(project);
   return (
     <Paper withBorder radius="md" p="lg">
@@ -1956,9 +1950,9 @@ const ProjectHeader: React.FC<{
           <Icon
             icon="mdi:database-outline"
             width={26}
-            color="var(--mantine-color-teal-6)"
+            color={`var(--mantine-color-${accent.secondary}-6)`}
           />
-          <Title order={3} c="teal" style={{ fontWeight: 600 }}>
+          <Title order={3} c={accent.secondary} style={{ fontWeight: 600 }}>
             Project Data Manager
           </Title>
         </Group>
@@ -2188,6 +2182,7 @@ const DataCollectionsManagerSection: React.FC<{
   onManage,
   onCreate,
 }) => {
+  const accent = useBrandAccents();
   return (
     /* Header mirrors the Cross-DC links section (LinksSection.tsx): Paper,
        clickable title area, then the primary action and the chevron as an
@@ -2220,7 +2215,7 @@ const DataCollectionsManagerSection: React.FC<{
         <Group gap="xs" wrap="nowrap">
           <Button
             data-testid="create-dc-btn"
-            color="teal"
+            color={accent.secondary}
             size="xs"
             leftSection={<Icon icon="mdi:plus" width={16} />}
             disabled={!canMutate}
@@ -2411,6 +2406,7 @@ const DataCollectionsTable: React.FC<{
   onDelete,
   onManage,
 }) => {
+  const accent = useBrandAccents();
   const [filter, setFilter] = useState('');
   const [sortKey, setSortKey] = useState<DcSortKey>('tag');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -2583,7 +2579,7 @@ const DataCollectionsTable: React.FC<{
                       <ActionIcon
                         data-testid="manage-dc-btn"
                         variant="subtle"
-                        color="teal"
+                        color={accent.secondary}
                         size="sm"
                         disabled={!canMutate}
                         onClick={guard(() => onManage(dc))}
@@ -3358,6 +3354,7 @@ const DetailRow: React.FC<{
 );
 
 const DataPreviewPanel: React.FC<{ dcId: string }> = ({ dcId }) => {
+  const accent = useBrandAccents();
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -3379,7 +3376,7 @@ const DataPreviewPanel: React.FC<{ dcId: string }> = ({ dcId }) => {
   if (!preview && !loading && !error) {
     return (
       <Button
-        color="teal"
+        color={accent.secondary}
         variant="light"
         size="sm"
         onClick={handleLoad}

@@ -1,34 +1,47 @@
-"""Instance branding resolution (issue #397, admin UI follow-up).
+"""Instance branding resolution (issue #397).
 
-Two layers compose the effective branding:
+Three layers compose what a visitor sees:
 
 - **Deployment defaults** — the ``DEPICTIO_BRANDING_*`` env vars
   (``settings.branding``), baked in by whoever operates the deployment
   (helm values, compose env).
 - **Admin overrides** — a singleton document in ``instance_settings``,
-  edited live from the /admin Branding panel. Per-field: an override set to
-  ``None``/absent falls back to the env default, so a deployment configured
-  by env keeps working until an admin explicitly changes something.
+  edited live from the /admin Branding panel.
+- **Dashboard override** — ``DashboardData.brand_theme``, applied by the
+  viewer and the figure render path on top of the two above.
 
-``get_effective_branding()`` is what every consumer reads: the
-``/utils/public-config`` channel (viewer logo/name/primary color) and the
-figure render paths (mantine template colorway) — API and Celery worker
-alike, both have DB access. Reads go through a short TTL cache so the
-per-figure template patch never adds a Mongo round-trip per render;
-``set_branding_overrides`` invalidates it in-process (other processes catch
-up within the TTL).
+All three are the same ``BrandTheme`` shape (``depictio.models.models.branding``),
+so composing them is one right-wins fold and an unset field always means
+"inherit from the layer below".
+
+``resolve_effective_brand_theme()`` is what every consumer reads: the
+``/utils/public-config`` channel (viewer logo/name/colors) and the figure
+render paths (Plotly template colorway) — API and Celery worker alike, both
+have DB access. It returns a *resolved* theme, i.e. one where the derived
+values (figure colorway, sequential colorscale) are already materialised, so
+the SPA never re-derives them and can't drift from the server.
+
+Reads go through a short TTL cache so the per-figure template patch never adds
+a Mongo round-trip per render; ``set_brand_theme_overrides`` invalidates it
+in-process (other processes catch up within the TTL).
 """
 
 from __future__ import annotations
 
-import re
 import time
-from typing import Any
+from typing import Any, Optional
 
 import pymongo
 
 from depictio.api.v1.configs.config import MONGODB_URL, settings
 from depictio.api.v1.configs.logging_init import logger
+from depictio.models.models.branding import (
+    HEX_COLOR_RE,
+    PALETTE_NAME_RE,
+    BrandTheme,
+    merge_brand_themes,
+    resolve_brand_theme,
+)
 
 _DOC_ID = "branding"
 
@@ -50,66 +63,78 @@ def _get_collection() -> Any:
     return instance_settings_collection
 
 
-#: Fields an admin can override. Mirrors BrandingConfig (settings_models.py),
-#: except colorway is stored as a list here rather than a comma-string.
-BRANDING_FIELDS = ("logo_url", "logo_url_dark", "app_name", "primary_color", "colorway")
+#: Flat field names the pre-BrandTheme admin panel wrote. Read-only support, so
+#: a dev instance branded before the rework doesn't silently lose its logo.
+_LEGACY_FIELD_MAP = {
+    "logo_url": "logo_url",
+    "logo_url_dark": "logo_url_dark",
+    "app_name": "app_name",
+    "primary_color": "primary",
+}
 
-HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
-#: Mantine palette name (e.g. "teal") — the other accepted primary_color form.
-PALETTE_NAME_RE = re.compile(r"^[a-z][a-z0-9-]*$")
-
-# Render-path cache: get_effective_branding() runs for every server-rendered
-# figure (template colorway patch), so the singleton read is memoized briefly.
+# Render-path cache: the effective theme is read for every server-rendered
+# figure (template patch), so the singleton read is memoized briefly.
 _CACHE_TTL_SECONDS = 30.0
-_cache: tuple[float, dict[str, Any]] | None = None
+_cache: tuple[float, BrandTheme] | None = None
 
 
-def get_branding_overrides() -> dict[str, Any]:
-    """The raw admin overrides document ({} when none saved yet)."""
-    doc = _get_collection().find_one({"_id": _DOC_ID}) or {}
-    return {field: doc.get(field) for field in BRANDING_FIELDS if doc.get(field) is not None}
+def _theme_from_doc(doc: dict[str, Any]) -> BrandTheme:
+    """Parse a stored overrides document, tolerating the pre-BrandTheme shape."""
+    if not doc:
+        return BrandTheme()
+    if isinstance(doc.get("theme"), dict):
+        return BrandTheme(**doc["theme"])
+
+    legacy = {new: doc[old] for old, new in _LEGACY_FIELD_MAP.items() if doc.get(old) is not None}
+    if doc.get("colorway"):
+        legacy["plots"] = {"colorway": doc["colorway"]}
+    return BrandTheme(**legacy) if legacy else BrandTheme()
 
 
-def set_branding_overrides(overrides: dict[str, Any]) -> dict[str, Any]:
-    """Replace the admin overrides with ``overrides`` (validated fields only).
+def get_brand_theme_overrides() -> BrandTheme:
+    """The raw admin overrides (an empty theme when none are saved)."""
+    return _theme_from_doc(_get_collection().find_one({"_id": _DOC_ID}) or {})
 
-    ``None`` values are dropped — absence is what "fall back to the env
-    default" looks like. Returns the new effective branding.
+
+def set_brand_theme_overrides(theme: Optional[BrandTheme]) -> BrandTheme:
+    """Replace the admin overrides with ``theme``. Returns the new effective theme.
+
+    An empty theme deletes the document: absence is what "fall back to the
+    deployment defaults" looks like.
     """
-    doc = {field: overrides[field] for field in BRANDING_FIELDS if overrides.get(field) is not None}
-    if doc:
-        _get_collection().replace_one({"_id": _DOC_ID}, doc, upsert=True)
+    payload = (theme or BrandTheme()).model_dump(exclude_none=True)
+    if payload:
+        _get_collection().replace_one({"_id": _DOC_ID}, {"theme": payload}, upsert=True)
     else:
         _get_collection().delete_one({"_id": _DOC_ID})
     invalidate_branding_cache()
-    return get_effective_branding()
+    return get_effective_brand_theme(use_cache=False)
 
 
-def update_branding_override(field: str, value: Any) -> dict[str, Any]:
-    """Set (or clear, with ``None``) a single override field in place."""
-    if field not in BRANDING_FIELDS:
-        raise ValueError(f"Unknown branding field: {field}")
-    if value is None:
-        _get_collection().update_one({"_id": _DOC_ID}, {"$unset": {field: ""}})
-    else:
-        _get_collection().update_one({"_id": _DOC_ID}, {"$set": {field: value}}, upsert=True)
-    invalidate_branding_cache()
-    return get_effective_branding()
+def patch_brand_theme_overrides(patch: dict[str, Any]) -> BrandTheme:
+    """Set (or clear, with ``None``) some top-level override fields in place.
+
+    Used by the logo upload endpoints, which write two fields and must not
+    clobber a concurrent edit of the rest of the panel.
+    """
+    unknown = set(patch) - set(BrandTheme.model_fields)
+    if unknown:
+        raise ValueError(f"Unknown brand theme field(s): {sorted(unknown)}")
+    current = get_brand_theme_overrides().model_dump(exclude_none=True)
+    for field, value in patch.items():
+        if value is None:
+            current.pop(field, None)
+        else:
+            current[field] = value
+    return set_brand_theme_overrides(BrandTheme(**current))
 
 
-def env_branding_defaults() -> dict[str, Any]:
-    """The deployment-level (env var) branding, colorway already parsed."""
-    branding = settings.branding
-    return {
-        "logo_url": branding.logo_url,
-        "logo_url_dark": branding.logo_url_dark,
-        "app_name": branding.app_name,
-        "primary_color": branding.primary_color,
-        "colorway": branding.colorway_list,
-    }
+def env_brand_theme() -> BrandTheme:
+    """The deployment-level (env var) branding."""
+    return settings.branding.as_brand_theme()
 
 
-def get_effective_branding(use_cache: bool = True) -> dict[str, Any]:
+def get_effective_brand_theme(use_cache: bool = True) -> BrandTheme:
     """Env defaults overridden per-field by the admin document.
 
     Never raises: an unreachable overrides store degrades to the env defaults
@@ -121,13 +146,23 @@ def get_effective_branding(use_cache: bool = True) -> dict[str, Any]:
     if use_cache and _cache and now - _cache[0] < _CACHE_TTL_SECONDS:
         return _cache[1]
 
-    effective = env_branding_defaults()
+    env = env_brand_theme()
     try:
-        effective.update(get_branding_overrides())
+        effective = merge_brand_themes(env, get_brand_theme_overrides())
     except Exception as exc:
         logger.warning(f"Branding overrides unavailable, using env defaults: {exc}")
+        effective = env
     _cache = (now, effective)
     return effective
+
+
+def resolve_effective_brand_theme(use_cache: bool = True) -> BrandTheme:
+    """The effective theme with every derived value materialised.
+
+    This is the wire format: what ``/utils/public-config`` ships to the SPA and
+    what the figure render path reads.
+    """
+    return resolve_brand_theme(get_effective_brand_theme(use_cache=use_cache))
 
 
 def invalidate_branding_cache() -> None:
@@ -136,9 +171,9 @@ def invalidate_branding_cache() -> None:
 
 
 # ── Logo upload validation ────────────────────────────────────────────────────
-# Same rules as the per-dashboard logo endpoint: PNG/JPEG/WebP only (SVG can
-# carry scripts and is served same-origin), extension pinned by the declared
-# content type, magic bytes checked against it.
+# Shared by the instance logo endpoints and the per-dashboard logo endpoint:
+# PNG/JPEG/WebP only (SVG can carry scripts and is served same-origin), the
+# extension pinned by the declared content type, magic bytes checked against it.
 
 LOGO_TYPES: dict[str, tuple[str, tuple[bytes, ...]]] = {
     "image/png": (".png", (b"\x89PNG\r\n\x1a\n",)),
@@ -162,3 +197,20 @@ def validate_logo_upload(content_type: str | None, content: bytes) -> str:
     if not valid_magic:
         raise ValueError("File content does not match the declared image type.")
     return ext
+
+
+__all__ = [
+    "HEX_COLOR_RE",
+    "LOGO_MAX_BYTES",
+    "LOGO_TYPES",
+    "PALETTE_NAME_RE",
+    "env_brand_theme",
+    "get_brand_theme_overrides",
+    "get_effective_brand_theme",
+    "instance_settings_collection",
+    "invalidate_branding_cache",
+    "resolve_effective_brand_theme",
+    "set_brand_theme_overrides",
+    "patch_brand_theme_overrides",
+    "validate_logo_upload",
+]

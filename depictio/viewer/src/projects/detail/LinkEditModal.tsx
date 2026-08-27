@@ -18,12 +18,7 @@ import {
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import {
-  createProjectLink,
-  fetchMultiQCSampleMappings,
-  fetchSpecs,
-  updateProjectLink,
-} from 'depictio-react-core';
+import { createProjectLink, fetchMultiQCSampleMappings, fetchSpecs, updateProjectLink, useBrandAccents } from 'depictio-react-core';
 import type {
   CreateLinkInput,
   DCLink,
@@ -98,6 +93,7 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
   onClose,
   onSaved,
 }) => {
+  const accent = useBrandAccents();
   const editing = !!link;
   const resolverList = resolvers.length ? resolvers : RESOLVER_FALLBACK;
 
@@ -377,9 +373,9 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
           <Icon
             icon={editing ? 'mdi:link-edit' : 'mdi:link-plus'}
             width={32}
-            color="var(--mantine-color-teal-6)"
+            color={`var(--mantine-color-${accent.secondary}-6)`}
           />
-          <Title order={3} c="teal" m={0}>
+          <Title order={3} c={accent.secondary} m={0}>
             {editing ? 'Edit Cross-DC Link' : 'Create Cross-DC Link'}
           </Title>
         </Group>
@@ -543,7 +539,7 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
             Cancel
           </Button>
           <Button
-            color="teal"
+            color={accent.secondary}
             onClick={handleSubmit}
             loading={submitting}
             leftSection={

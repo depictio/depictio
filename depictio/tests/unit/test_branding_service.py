@@ -1,8 +1,9 @@
-"""Instance branding service: env/DB merge, cache invalidation, upload rules."""
+"""Instance brand theme service: env/DB merge, derivation, cache, upload rules."""
 
 import pytest
 
 from depictio.api.v1.services import branding as branding_svc
+from depictio.models.models.branding import BrandPlots, BrandTheme, merge_brand_themes
 
 
 class FakeCollection:
@@ -42,43 +43,102 @@ def fake_store(monkeypatch):
     branding_svc.invalidate_branding_cache()
 
 
-class TestEffectiveBranding:
+class TestEffectiveBrandTheme:
     def test_no_overrides_falls_back_to_env(self, fake_store):
-        effective = branding_svc.get_effective_branding(use_cache=False)
-        assert effective == branding_svc.env_branding_defaults()
+        assert branding_svc.get_effective_brand_theme(use_cache=False) == (
+            branding_svc.env_brand_theme()
+        )
 
     def test_override_wins_per_field(self, fake_store):
-        branding_svc.set_branding_overrides({"app_name": "Core Facility"})
-        effective = branding_svc.get_effective_branding(use_cache=False)
-        assert effective["app_name"] == "Core Facility"
+        branding_svc.set_brand_theme_overrides(BrandTheme(app_name="Core Facility"))
+        effective = branding_svc.get_effective_brand_theme(use_cache=False)
+        assert effective.app_name == "Core Facility"
         # Untouched fields keep the env defaults.
-        env = branding_svc.env_branding_defaults()
-        assert effective["primary_color"] == env["primary_color"]
-        assert effective["colorway"] == env["colorway"]
+        env = branding_svc.env_brand_theme()
+        assert effective.primary == env.primary
+        assert effective.plots == env.plots
+
+    def test_nested_blocks_merge_field_wise(self, fake_store):
+        """A dashboard/admin layer that sets one plot key keeps the others."""
+        branding_svc.set_brand_theme_overrides(
+            BrandTheme(plots=BrandPlots(template="seaborn", colorway=["#111111"]))
+        )
+        merged = merge_brand_themes(
+            branding_svc.get_effective_brand_theme(use_cache=False),
+            BrandTheme(plots=BrandPlots(colorway=["#222222"])),
+        )
+        assert merged.plots is not None
+        assert merged.plots.template == "seaborn"
+        assert merged.plots.colorway == ["#222222"]
 
     def test_none_values_are_not_stored(self, fake_store):
-        branding_svc.set_branding_overrides({"app_name": "X", "primary_color": None})
-        assert branding_svc.get_branding_overrides() == {"app_name": "X"}
+        branding_svc.set_brand_theme_overrides(BrandTheme(app_name="X", primary=None))
+        assert branding_svc.get_brand_theme_overrides().model_dump(exclude_none=True) == {
+            "app_name": "X"
+        }
 
     def test_reset_clears_document(self, fake_store):
-        branding_svc.set_branding_overrides({"app_name": "X"})
-        branding_svc.set_branding_overrides({})
-        assert branding_svc.get_branding_overrides() == {}
+        branding_svc.set_brand_theme_overrides(BrandTheme(app_name="X"))
+        branding_svc.set_brand_theme_overrides(None)
+        assert branding_svc.get_brand_theme_overrides().is_empty
         assert fake_store.docs == {}
 
     def test_set_invalidates_cache(self, fake_store):
         # Prime the cache, then change the overrides: the cached value must
         # not survive the write.
-        assert branding_svc.get_effective_branding()["app_name"] is None or True
-        branding_svc.set_branding_overrides({"app_name": "Fresh"})
-        assert branding_svc.get_effective_branding()["app_name"] == "Fresh"
+        branding_svc.get_effective_brand_theme()
+        branding_svc.set_brand_theme_overrides(BrandTheme(app_name="Fresh"))
+        assert branding_svc.get_effective_brand_theme().app_name == "Fresh"
 
-    def test_update_single_field(self, fake_store):
-        branding_svc.set_branding_overrides({"app_name": "X", "primary_color": "#0ca678"})
-        branding_svc.update_branding_override("app_name", None)
-        assert branding_svc.get_branding_overrides() == {"primary_color": "#0ca678"}
+    def test_patch_touches_only_the_named_fields(self, fake_store):
+        branding_svc.set_brand_theme_overrides(BrandTheme(app_name="X", primary="#0ca678"))
+        branding_svc.patch_brand_theme_overrides({"app_name": None})
+        assert branding_svc.get_brand_theme_overrides().model_dump(exclude_none=True) == {
+            "primary": "#0ca678"
+        }
         with pytest.raises(ValueError):
-            branding_svc.update_branding_override("nope", "x")
+            branding_svc.patch_brand_theme_overrides({"nope": "x"})
+
+    def test_legacy_flat_document_is_still_readable(self, fake_store):
+        """A dev instance branded before the BrandTheme rework keeps its logo."""
+        fake_store.docs["branding"] = {
+            "_id": "branding",
+            "app_name": "Old",
+            "primary_color": "#0ca678",
+            "logo_url": "/static/branding/logo_light.png",
+            "colorway": ["#111111", "#222222"],
+        }
+        overrides = branding_svc.get_brand_theme_overrides()
+        assert overrides.app_name == "Old"
+        assert overrides.primary == "#0ca678"
+        assert overrides.logo_url == "/static/branding/logo_light.png"
+        assert overrides.plots is not None
+        assert overrides.plots.colorway == ["#111111", "#222222"]
+
+
+class TestResolvedBrandTheme:
+    """The wire format: derived values materialised once, server-side."""
+
+    def test_palette_derives_figure_colors(self, fake_store):
+        branding_svc.set_brand_theme_overrides(
+            BrandTheme(primary="#00a550", secondary="#1a4f8f", tertiary="#f5a11b")
+        )
+        resolved = branding_svc.resolve_effective_brand_theme(use_cache=False)
+        assert resolved.plots is not None
+        assert resolved.plots.colorway[:3] == ["#00a550", "#1a4f8f", "#f5a11b"]
+        assert len(resolved.plots.sequential) > 1
+
+    def test_explicit_colorway_is_not_overwritten(self, fake_store):
+        branding_svc.set_brand_theme_overrides(
+            BrandTheme(primary="#00a550", plots=BrandPlots(colorway=["#123456"]))
+        )
+        resolved = branding_svc.resolve_effective_brand_theme(use_cache=False)
+        assert resolved.plots.colorway == ["#123456"]
+
+    def test_defaults_are_explicit(self, fake_store):
+        resolved = branding_svc.resolve_effective_brand_theme(use_cache=False)
+        assert resolved.tint_mode == "accent"
+        assert resolved.logo_mode == "inherit"
 
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 16

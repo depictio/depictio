@@ -53,6 +53,7 @@ import {
   resolveGroupRender,
   SelectionGroupsPanel,
   SaveGroupContext,
+  BrandScope,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -94,6 +95,7 @@ import InspectorProviders from './chrome/inspector/InspectorProviders';
 import NotesFooter from './components/NotesFooter';
 import DashboardLoadIndicator from './components/DashboardLoadIndicator';
 import BootSplash from './components/BootSplash';
+import { usePageTitle } from './branding';
 
 /**
  * Top-level SPA. Layout:
@@ -249,13 +251,7 @@ const App: React.FC = () => {
   const [ingestionBannerDismissed, setIngestionBannerDismissed] = useState(false);
 
   // Keep the browser tab title in sync with the dashboard name.
-  useEffect(() => {
-    if (dashboard?.title) {
-      document.title = `Depictio — ${dashboard.title}`;
-    } else if (dashboardId) {
-      document.title = `Depictio — ${dashboardId}`;
-    }
-  }, [dashboard?.title, dashboardId]);
+  usePageTitle(dashboard?.title || dashboardId);
 
   // Fetch dashboard + tab list in parallel
   useEffect(() => {
@@ -845,6 +841,9 @@ const App: React.FC = () => {
       <DashboardLoadingProvider>
       <InspectorProviders control={inspectorControl}>
       <SaveGroupContext.Provider value={saveGroupApi}>
+      {/* A dashboard that overrides the instance branding retints its own page
+          and nothing else — /dashboards and /admin stay on the instance look. */}
+      <BrandScope theme={dashboard?.brand_theme}>
       <AppShell
       header={{ height: 50 }}
       navbar={{
@@ -919,7 +918,7 @@ const App: React.FC = () => {
       </AppShell.Header>
 
       <AppShell.Navbar p="md" data-tour-id="sidebar">
-        <Sidebar tabs={tabSiblings} activeId={dashboardId} logoUrl={dashboard?.logo_url} />
+        <Sidebar tabs={tabSiblings} activeId={dashboardId} brandTheme={dashboard?.brand_theme} />
       </AppShell.Navbar>
 
       <AppShell.Main style={{ height: 'calc(100vh - 50px)' }}>
@@ -1303,6 +1302,7 @@ const App: React.FC = () => {
         dashboard={dashboard}
       />
     </AppShell>
+      </BrandScope>
       </SaveGroupContext.Provider>
       </InspectorProviders>
       </DashboardLoadingProvider>

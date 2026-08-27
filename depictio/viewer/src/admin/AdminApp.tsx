@@ -23,6 +23,7 @@ import AdminDashboardsPanel from './AdminDashboardsPanel';
 import AdminBrandingPanel from './AdminBrandingPanel';
 import AdminMaintenancePanel from './AdminMaintenancePanel';
 import AdminMonitoringPanel from './AdminMonitoringPanel';
+import { usePageTitle } from '../branding';
 
 type AdminTab = 'users' | 'projects' | 'dashboards' | 'branding' | 'monitoring' | 'maintenance';
 
@@ -58,9 +59,7 @@ const AdminApp: React.FC = () => {
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
   const [activeTab, setActiveTab] = useState<AdminTab>(readInitialTab);
 
-  useEffect(() => {
-    document.title = 'Depictio — Administration';
-  }, []);
+  usePageTitle('Administration');
 
   useEffect(() => {
     try {

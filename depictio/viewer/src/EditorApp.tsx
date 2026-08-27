@@ -79,6 +79,7 @@ import {
   batchIdsFromPayload,
   authFetch,
   uploadDashboardLogo,
+  updateDashboardAppearance,
   useMapPanel,
   useCrossTabComponents,
   PersistentSectionsHost,
@@ -95,12 +96,13 @@ import {
   resolveGroupRender,
   SelectionGroupsPanel,
   SaveGroupContext,
+  BrandScope,
 } from 'depictio-react-core';
 import type {
   DashboardData,
   DashboardPermissions,
   DashboardSummary,
-  DashboardThemeSpec,
+  BrandTheme,
   FilterSectionSpec,
   PersistentSection,
   InteractiveFilter,
@@ -121,6 +123,7 @@ import { Header, Sidebar, SettingsDrawer, TabModal } from './chrome';
 import type { TabModalSubmitPayload } from './chrome';
 import NotesFooter from './components/NotesFooter';
 import './chrome/chrome.css';
+import { usePageTitle } from './branding';
 
 const API_BASE = '/depictio/api/v1';
 const SAVE_DEBOUNCE_MS = 500;
@@ -332,13 +335,7 @@ const EditorApp: React.FC = () => {
   }, [userLoading, dashboard, dashboardId, isOwner]);
 
   // Keep the browser tab title in sync with the dashboard name.
-  useEffect(() => {
-    if (dashboard?.title) {
-      document.title = `Depictio — ${dashboard.title}`;
-    } else if (dashboardId) {
-      document.title = `Depictio — ${dashboardId}`;
-    }
-  }, [dashboard?.title, dashboardId]);
+  usePageTitle(dashboard?.title || dashboardId);
 
   // Fetch dashboard + tab list
   useEffect(() => {
@@ -588,33 +585,35 @@ const EditorApp: React.FC = () => {
     [scheduleSave],
   );
 
-  /** Dashboard-level plot theme (#397). Saved immediately (not debounced):
-   *  the server resolves `plot_theme` from the DB at figure-render time, so
-   *  figures can only refetch once the save has landed. */
-  const handlePlotThemeChange = useCallback(
-    (spec: DashboardThemeSpec | null) => {
+  /** Dashboard-level brand theme (#397). Goes through the targeted
+   *  `PATCH /dashboards/appearance` rather than the full-document save: an
+   *  appearance edit and an in-flight layout save would otherwise be
+   *  last-writer-wins against each other. Not debounced either — the server
+   *  resolves the theme from the DB at figure-render time, so figures can only
+   *  refetch once the write has landed. */
+  const handleBrandThemeChange = useCallback(
+    (theme: BrandTheme | null) => {
       const cur = dashboardRef.current;
       if (!cur || !dashboardId) return;
-      const next = { ...cur, plot_theme: spec };
-      applyDashboard(next);
+      applyDashboard({ ...cur, brand_theme: theme });
       setSaveStatus('saving');
-      saveDashboard(dashboardId, next)
+      updateDashboardAppearance(dashboardId, theme)
         .then(() => {
           setSaveStatus('saved');
           setPlotThemeTick((t) => t + 1);
         })
         .catch((err) => {
-          console.error('[EditorApp] plot theme save failed:', err);
+          console.error('[EditorApp] brand theme save failed:', err);
           setSaveStatus('error');
         });
     },
     [dashboardId, applyDashboard],
   );
 
-  /** Dashboard logo upload. The upload endpoint persists `logo_url` on the
-   *  dashboard document itself (file write + field update in one
-   *  ownership-checked call), so on success only the local state needs the
-   *  new URL. Errors propagate to the drawer, which displays them. */
+  /** Dashboard logo upload. The upload endpoint stamps the URL onto the
+   *  dashboard's brand theme itself (file write + field update in one
+   *  ownership-checked call), so on success only the local state needs it.
+   *  Errors propagate to the drawer, which displays them. */
   const handleUploadLogo = useCallback(
     async (file: File) => {
       const cur = dashboardRef.current;
@@ -622,10 +621,18 @@ const EditorApp: React.FC = () => {
       setSaveStatus('saving');
       try {
         const logoUrl = await uploadDashboardLogo(dashboardId, file);
-        // Re-read the ref: another action (plot theme, layout…) may have
+        // Re-read the ref: another action (appearance, layout…) may have
         // advanced the dashboard while the upload was in flight — merging
         // into the pre-await snapshot would silently revert it.
-        applyDashboard({ ...(dashboardRef.current ?? cur), logo_url: logoUrl });
+        const latest = dashboardRef.current ?? cur;
+        applyDashboard({
+          ...latest,
+          brand_theme: {
+            ...(latest.brand_theme ?? {}),
+            logo_url: logoUrl,
+            logo_mode: 'custom',
+          },
+        });
         setSaveStatus('saved');
       } catch (err) {
         setSaveStatus('error');
@@ -634,23 +641,6 @@ const EditorApp: React.FC = () => {
     },
     [dashboardId, applyDashboard],
   );
-
-  /** Clears the logo through the regular save path (mirrors plot theme). The
-   *  uploaded file stays on disk — harmless, and overwritten by the next
-   *  upload for this dashboard. */
-  const handleRemoveLogo = useCallback(() => {
-    const cur = dashboardRef.current;
-    if (!cur || !dashboardId) return;
-    const next = { ...cur, logo_url: null };
-    applyDashboard(next);
-    setSaveStatus('saving');
-    saveDashboard(dashboardId, next)
-      .then(() => setSaveStatus('saved'))
-      .catch((err) => {
-        console.error('[EditorApp] logo removal save failed:', err);
-        setSaveStatus('error');
-      });
-  }, [dashboardId, applyDashboard]);
 
   const handleLeftLayoutChange = useCallback(
     (newLayout: Layout[]) => {
@@ -1627,6 +1617,9 @@ const EditorApp: React.FC = () => {
     <>
     <InspectorProviders control={inspectorControl}>
     <SaveGroupContext.Provider value={saveGroupApi}>
+    {/* Same scoping as the viewer, so an editor sees the override they are
+        editing without it escaping into the rest of the app. */}
+    <BrandScope theme={dashboard?.brand_theme}>
     <AppShell
       header={{ height: 50 }}
       navbar={{
@@ -1708,7 +1701,7 @@ const EditorApp: React.FC = () => {
           onEditTab={openEditTabModal}
           onDeleteTab={handleDeleteTab}
           onMoveTab={handleMoveTab}
-          logoUrl={dashboard?.logo_url}
+          brandTheme={dashboard?.brand_theme}
         />
       </AppShell.Navbar>
 
@@ -1960,9 +1953,8 @@ const EditorApp: React.FC = () => {
         onClose={closeSettings}
         dashboard={dashboard}
         onToggleFunnelFiltering={handleToggleFunnelFiltering}
-        onChangePlotTheme={handlePlotThemeChange}
+        onChangeBrandTheme={handleBrandThemeChange}
         onUploadLogo={handleUploadLogo}
-        onRemoveLogo={handleRemoveLogo}
       />
 
       <TabModal
@@ -1993,6 +1985,7 @@ const EditorApp: React.FC = () => {
         onManageAll={handleManageAllSections}
       />
     </AppShell>
+    </BrandScope>
     </SaveGroupContext.Provider>
     </InspectorProviders>
     </>

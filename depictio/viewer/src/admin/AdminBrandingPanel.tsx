@@ -1,17 +1,16 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActionIcon,
   Alert,
   Button,
-  ColorInput,
-  Divider,
   FileButton,
+  Grid,
   Group,
   Loader,
+  Menu,
   Paper,
+  ScrollArea,
   Stack,
   Text,
-  TextInput,
   Title,
   Tooltip,
 } from '@mantine/core';
@@ -19,45 +18,21 @@ import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
 
 import {
+  BrandThemeForm,
+  BrandThemePreview,
   fetchBrandingAdmin,
+  fetchBrandPresets,
+  isEmptyBrandTheme,
   resetBrandingAdmin,
   updateBrandingAdmin,
   uploadBrandingLogo,
+  useResolvedBrandTheme,
 } from 'depictio-react-core';
-import type { AdminBrandingState, BrandingFields } from 'depictio-react-core';
+import type { AdminBrandingState, BrandPreset, BrandTheme } from 'depictio-react-core';
 import { setBranding } from '../branding';
 
-const HEX_RE = /^#([0-9a-fA-F]{6})$/;
 /** Client-side mirror of the server's upload cap. */
 const LOGO_MAX_BYTES = 2 * 1024 * 1024;
-
-interface FormState {
-  app_name: string;
-  primary_color: string;
-  colorway: string[];
-  logo_url: string | null;
-  logo_url_dark: string | null;
-}
-
-function formFromOverrides(overrides: Partial<BrandingFields>): FormState {
-  return {
-    app_name: overrides.app_name ?? '',
-    primary_color: overrides.primary_color ?? '',
-    colorway: overrides.colorway ? [...overrides.colorway] : [],
-    logo_url: overrides.logo_url ?? null,
-    logo_url_dark: overrides.logo_url_dark ?? null,
-  };
-}
-
-function overridesFromForm(form: FormState): Partial<BrandingFields> {
-  return {
-    app_name: form.app_name.trim() || null,
-    primary_color: form.primary_color.trim() || null,
-    colorway: form.colorway.length ? form.colorway : null,
-    logo_url: form.logo_url,
-    logo_url_dark: form.logo_url_dark,
-  };
-}
 
 /** Push the saved branding into this tab's live theme + localStorage cache, so
  *  the admin sees the result immediately; other visitors pick it up on their
@@ -69,14 +44,14 @@ function applyEffective(state: AdminBrandingState) {
 const LogoField: React.FC<{
   label: string;
   hint: string;
-  value: string | null;
-  envDefault: string | null;
+  value: string | null | undefined;
+  envDefault: string | null | undefined;
   uploading: boolean;
   onUpload: (file: File | null) => void;
   onClear: () => void;
 }> = ({ label, hint, value, envDefault, uploading, onUpload, onClear }) => (
   <Stack gap={6}>
-    <Text fw={500} size="sm">
+    <Text fw={500} size="xs">
       {label}
     </Text>
     <Text size="xs" c="dimmed">
@@ -120,24 +95,31 @@ const LogoField: React.FC<{
 );
 
 /**
- * Admin Branding panel (issue #397 follow-up): live, per-field overrides of
- * the `DEPICTIO_BRANDING_*` env defaults — instance name, primary UI color,
- * default figure colorway and logos — persisted server-side and served to
- * every visitor through `/utils/public-config`. A cleared field falls back
- * to the deployment default, and "Reset all" returns the whole instance to
- * its env-var configuration.
+ * Admin Branding panel (issue #397): live overrides of the
+ * `DEPICTIO_BRANDING_*` env defaults — name, logos, brand and status colors,
+ * surfaces, typography and figure defaults — persisted server-side and served
+ * to every visitor through `/utils/public-config`. A cleared field falls back
+ * to the deployment default, and "Reset all" returns the whole instance to its
+ * env-var configuration.
+ *
+ * Two columns: the form on the left, a live preview on the right rendered from
+ * the *draft* under its own scoped MantineProvider. Nothing here needs a save
+ * to be seen, which is the whole point — a palette is a thing you judge by
+ * looking at it.
  */
 const AdminBrandingPanel: React.FC = () => {
   const [state, setState] = useState<AdminBrandingState | null>(null);
-  const [form, setForm] = useState<FormState | null>(null);
+  const [form, setForm] = useState<BrandTheme | null>(null);
+  const [presets, setPresets] = useState<BrandPreset[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState<'light' | 'dark' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const importRef = useRef<HTMLInputElement>(null);
 
   const adopt = useCallback((next: AdminBrandingState) => {
     setState(next);
-    setForm(formFromOverrides(next.overrides));
+    setForm(next.overrides ?? {});
   }, []);
 
   useEffect(() => {
@@ -145,21 +127,21 @@ const AdminBrandingPanel: React.FC = () => {
       .then(adopt)
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load branding.'))
       .finally(() => setLoading(false));
+    fetchBrandPresets().then(setPresets);
   }, [adopt]);
 
-  const patchForm = (patch: Partial<FormState>) =>
-    setForm((prev) => (prev ? { ...prev, ...patch } : prev));
-
-  const colorwayValid = !form || form.colorway.every((c) => HEX_RE.test(c));
+  // The preview follows the draft, not the saved state, and needs the derived
+  // figure colors — which only the server computes (see useResolvedBrandTheme).
+  const resolved = useResolvedBrandTheme(form ?? {});
 
   const handleSave = async () => {
     if (!form) return;
     setSaving(true);
     try {
-      const next = await updateBrandingAdmin(overridesFromForm(form));
+      const next = await updateBrandingAdmin(form);
       adopt(next);
       applyEffective(next);
-      notifications.show({ message: 'Branding saved.', color: 'teal' });
+      notifications.show({ message: 'Branding saved.' });
     } catch (err) {
       notifications.show({
         message: err instanceof Error ? err.message : 'Failed to save branding.',
@@ -176,7 +158,7 @@ const AdminBrandingPanel: React.FC = () => {
       const next = await resetBrandingAdmin();
       adopt(next);
       applyEffective(next);
-      notifications.show({ message: 'Branding reset to deployment defaults.', color: 'teal' });
+      notifications.show({ message: 'Branding reset to deployment defaults.' });
     } catch (err) {
       notifications.show({
         message: err instanceof Error ? err.message : 'Failed to reset branding.',
@@ -208,6 +190,46 @@ const AdminBrandingPanel: React.FC = () => {
     }
   };
 
+  /** A preset seeds the form; it is not applied until Save, like every other
+   *  edit here. Logos are left alone — a palette is not an identity. */
+  const applyPreset = (preset: BrandPreset) =>
+    setForm((prev) => ({
+      logo_mode: prev?.logo_mode,
+      logo_url: prev?.logo_url,
+      logo_url_dark: prev?.logo_url_dark,
+      app_name: prev?.app_name,
+      ...preset.theme,
+    }));
+
+  const handleExport = () => {
+    const blob = new Blob([JSON.stringify(form ?? {}, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${(form?.app_name || 'depictio').toLowerCase().replace(/\s+/g, '-')}-brand-theme.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImport = async (file: File | null) => {
+    if (!file) return;
+    try {
+      const parsed = JSON.parse(await file.text());
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('Not a brand theme object.');
+      }
+      // Seeded into the form, not saved: the admin still sees it in the
+      // preview and decides. Unknown keys are rejected server-side on Save.
+      setForm(parsed as BrandTheme);
+      notifications.show({ message: 'Theme imported — review the preview, then Save.' });
+    } catch (err) {
+      notifications.show({
+        message: err instanceof Error ? err.message : 'Could not read that file.',
+        color: 'red',
+      });
+    }
+  };
+
   if (loading) {
     return (
       <Group justify="center" py="xl">
@@ -224,124 +246,142 @@ const AdminBrandingPanel: React.FC = () => {
   }
 
   const env = state.env_defaults;
-  const hasOverrides = Object.keys(state.overrides).length > 0;
+  const hasOverrides = !isEmptyBrandTheme(state.overrides);
 
   return (
-    <Stack gap="md" maw={640} data-testid="admin-branding-panel">
-      <Stack gap={4}>
-        <Title order={4}>Instance branding</Title>
-        <Text size="sm" c="dimmed">
-          Rebrand this deployment (e.g. for a core facility) without touching its
-          configuration: name, logos and colors apply to every visitor. Cleared fields fall
-          back to the deployment&apos;s <code>DEPICTIO_BRANDING_*</code> defaults.
-        </Text>
-      </Stack>
-
-      <Paper withBorder p="md">
-        <Stack gap="md">
-          <TextInput
-            label="Instance name"
-            description="Browser tab title and login-page greeting."
-            placeholder={env.app_name ?? 'Depictio'}
-            value={form.app_name}
-            onChange={(e) => patchForm({ app_name: e.currentTarget.value })}
-            data-testid="branding-app-name"
-          />
-          <ColorInput
-            label="Primary UI color"
-            description="Buttons, links and accents across the whole app."
-            placeholder={env.primary_color ?? 'Default (blue)'}
-            value={form.primary_color}
-            onChange={(value) => patchForm({ primary_color: value })}
-            format="hex"
-            data-testid="branding-primary-color"
-          />
-
-          <Divider />
-
-          <LogoField
-            label="Logo"
-            hint="Replaces the depictio logo in the sidebar and on the login page. PNG, JPEG or WebP, up to 2MB."
-            value={form.logo_url}
-            envDefault={env.logo_url}
-            uploading={uploading === 'light'}
-            onUpload={handleLogoUpload('light')}
-            onClear={() => patchForm({ logo_url: null })}
-          />
-          <LogoField
-            label="Logo (dark mode)"
-            hint="Optional dark-mode variant; falls back to the logo above."
-            value={form.logo_url_dark}
-            envDefault={env.logo_url_dark}
-            uploading={uploading === 'dark'}
-            onUpload={handleLogoUpload('dark')}
-            onClear={() => patchForm({ logo_url_dark: null })}
-          />
-
-          <Divider />
-
-          <Stack gap={6}>
-            <Text fw={500} size="sm">
-              Figure color palette
-            </Text>
-            <Text size="xs" c="dimmed">
-              Default categorical colorway of server-rendered figures. Dashboards and
-              individual figures can still pick their own.
-            </Text>
-            {form.colorway.map((color, idx) => (
-              // eslint-disable-next-line react/no-array-index-key
-              <Group key={idx} gap="xs" wrap="nowrap">
-                <ColorInput
-                  size="xs"
-                  value={color}
-                  onChange={(value) =>
-                    patchForm({
-                      colorway: form.colorway.map((c, i) => (i === idx ? value : c)),
-                    })
-                  }
-                  format="hex"
-                  style={{ flex: 1 }}
-                />
-                <Tooltip label="Remove color" withArrow>
-                  <ActionIcon
-                    variant="subtle"
-                    color="red"
-                    size="sm"
-                    onClick={() =>
-                      patchForm({ colorway: form.colorway.filter((_, i) => i !== idx) })
-                    }
-                    aria-label="Remove color"
-                  >
-                    <Icon icon="mdi:close" width={14} />
-                  </ActionIcon>
-                </Tooltip>
-              </Group>
-            ))}
-            <Group gap="xs">
-              <Button
-                variant="default"
-                size="compact-xs"
-                leftSection={<Icon icon="mdi:plus" width={14} />}
-                onClick={() =>
-                  patchForm({
-                    colorway: [
-                      ...form.colorway,
-                      form.colorway[form.colorway.length - 1] ?? '#636efa',
-                    ],
-                  })
-                }
-              >
-                Add color
-              </Button>
-              {form.colorway.length === 0 && (env.colorway?.length ?? 0) > 0 && (
-                <Text size="xs" c="dimmed">
-                  Deployment default in use ({env.colorway!.length} colors).
-                </Text>
-              )}
-            </Group>
-          </Stack>
+    <Stack gap="md" data-testid="admin-branding-panel">
+      <Group justify="space-between" align="flex-end" wrap="wrap">
+        <Stack gap={4} style={{ flex: 1, minWidth: 280 }}>
+          <Title order={4}>Instance branding</Title>
+          <Text size="sm" c="dimmed">
+            Rebrand this deployment without touching its configuration: name, logos, colors,
+            surfaces and figure palette apply to every visitor. Cleared fields fall back to
+            the deployment&apos;s <code>DEPICTIO_BRANDING_*</code> defaults.
+          </Text>
         </Stack>
-      </Paper>
+        <Group gap="xs">
+          {presets.length > 0 && (
+            <Menu position="bottom-end" withinPortal shadow="md">
+              <Menu.Target>
+                <Button
+                  variant="default"
+                  size="xs"
+                  leftSection={<Icon icon="mdi:palette-swatch" width={14} />}
+                  data-testid="branding-preset-menu"
+                >
+                  Presets
+                </Button>
+              </Menu.Target>
+              <Menu.Dropdown>
+                {presets.map((preset) => (
+                  <Menu.Item
+                    key={preset.id}
+                    onClick={() => applyPreset(preset)}
+                    data-testid={`branding-preset-${preset.id}`}
+                    leftSection={
+                      <Group gap={2} wrap="nowrap">
+                        {[preset.preview.primary, preset.preview.secondary, preset.preview.tertiary]
+                          .filter(Boolean)
+                          .map((color) => (
+                            <div
+                              key={color as string}
+                              style={{
+                                width: 10,
+                                height: 10,
+                                borderRadius: 2,
+                                background: color as string,
+                              }}
+                            />
+                          ))}
+                      </Group>
+                    }
+                  >
+                    {preset.label}
+                  </Menu.Item>
+                ))}
+              </Menu.Dropdown>
+            </Menu>
+          )}
+          <Button
+            variant="default"
+            size="xs"
+            leftSection={<Icon icon="mdi:tray-arrow-up" width={14} />}
+            onClick={() => importRef.current?.click()}
+          >
+            Import
+          </Button>
+          {/* A bare input rather than Mantine's FileButton: re-importing the
+              same file must re-fire, which needs the value reset on open. */}
+          <input
+            ref={importRef}
+            type="file"
+            accept="application/json,.json"
+            hidden
+            onChange={(e) => {
+              void handleImport(e.currentTarget.files?.[0] ?? null);
+              e.currentTarget.value = '';
+            }}
+            data-testid="branding-import"
+          />
+          <Button
+            variant="default"
+            size="xs"
+            leftSection={<Icon icon="mdi:tray-arrow-down" width={14} />}
+            onClick={handleExport}
+            data-testid="branding-export"
+          >
+            Export
+          </Button>
+        </Group>
+      </Group>
+
+      <Grid gutter="md" align="flex-start">
+        <Grid.Col span={{ base: 12, md: 7 }}>
+          <Paper withBorder p="md">
+            <BrandThemeForm
+              scope="instance"
+              value={form}
+              defaults={env}
+              onChange={setForm}
+              logoSlot={
+                <Stack gap="sm">
+                  <LogoField
+                    label="Logo"
+                    hint="Replaces the depictio logo in the sidebar and on the login page. PNG, JPEG or WebP, up to 2MB."
+                    value={form.logo_url}
+                    envDefault={env.logo_url}
+                    uploading={uploading === 'light'}
+                    onUpload={handleLogoUpload('light')}
+                    onClear={() => setForm({ ...form, logo_url: null, logo_mode: null })}
+                  />
+                  <LogoField
+                    label="Logo (dark mode)"
+                    hint="Optional dark-mode variant; falls back to the logo above."
+                    value={form.logo_url_dark}
+                    envDefault={env.logo_url_dark}
+                    uploading={uploading === 'dark'}
+                    onUpload={handleLogoUpload('dark')}
+                    onClear={() => setForm({ ...form, logo_url_dark: null })}
+                  />
+                </Stack>
+              }
+            />
+          </Paper>
+        </Grid.Col>
+
+        <Grid.Col span={{ base: 12, md: 5 }}>
+          {/* Sticky so the preview stays in view while the form scrolls past
+              it — judging a palette means watching it while you change it. */}
+          <Stack gap="xs" style={{ position: 'sticky', top: 16 }}>
+            <Text fw={600} size="sm">
+              Preview
+            </Text>
+            <ScrollArea.Autosize mah="calc(100vh - 220px)" type="auto">
+              <BrandThemePreview theme={resolved} />
+            </ScrollArea.Autosize>
+          </Stack>
+        </Grid.Col>
+      </Grid>
 
       <Group justify="space-between">
         <Button
@@ -350,13 +390,13 @@ const AdminBrandingPanel: React.FC = () => {
           disabled={!hasOverrides || saving}
           onClick={handleReset}
           leftSection={<Icon icon="mdi:restore" width={16} />}
+          data-testid="branding-reset"
         >
           Reset all to deployment defaults
         </Button>
         <Button
           onClick={handleSave}
           loading={saving}
-          disabled={!colorwayValid}
           leftSection={<Icon icon="mdi:content-save" width={16} />}
           data-testid="branding-save"
         >

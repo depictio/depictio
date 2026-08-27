@@ -34,6 +34,23 @@ _WEAK_PASSWORDS: frozenset[str] = frozenset(
 _WEAK_PASSWORDS_MINIO: frozenset[str] = _WEAK_PASSWORDS | frozenset({"changeme", "change_me"})
 _MIN_SECRET_LEN = 8
 
+
+def _warn(message: str) -> None:
+    """Log a config warning without importing the logger at module scope.
+
+    ``logging_init`` reads these settings, so a module-level import would be
+    circular. Everything here runs once, off the hot path.
+    """
+    try:
+        from depictio.api.v1.configs.logging_init import logger
+
+        logger.warning(message)
+    except Exception:  # pragma: no cover - logging must never break config load
+        import warnings
+
+        warnings.warn(message, stacklevel=2)
+
+
 # ── Core Services ─────────────────────────────────────────────────────────────
 
 
@@ -1254,14 +1271,40 @@ class GoogleAnalyticsConfig(BaseSettings):
 
 
 class BrandingConfig(BaseSettings):
-    """Instance-level branding (issue #397).
+    """Instance-level branding, the deployment-defaults layer (issue #397).
 
-    Lets a deployment (e.g. a core facility) replace the depictio logo, name
-    the instance, and re-tint the UI and server-rendered Plotly figures —
-    all env-driven, exposed to the SPA through ``/utils/public-config``
-    (same channel as ``GoogleAnalyticsConfig``). The "Powered by Depictio"
-    header badge is not affected.
+    Lets a deployment (e.g. a core facility, or an EMBL TREC instance) replace
+    the depictio logo, name the instance, and re-skin the UI and its
+    server-rendered Plotly figures. Everything here is a *default*: the /admin
+    Branding panel overrides it per field, and a dashboard can override it
+    again. See ``depictio.models.models.branding`` for the shared shape and
+    ``depictio.api.v1.services.branding`` for the merge.
+
+    Three ways to set it, most general to most targeted (later wins):
+
+    1. ``DEPICTIO_BRANDING_PRESET=trec`` — a named starting palette.
+    2. ``DEPICTIO_BRANDING_THEME='{"surfaces_light": {"nav_bg": "#f4f8f5"}}'`` —
+       a JSON ``BrandTheme``, the escape hatch for the nested blocks that have
+       no flat env var of their own.
+    3. The flat vars below.
+
+    The "Powered by Depictio" header badge is deliberately not affected.
     """
+
+    preset: Optional[str] = Field(
+        default=None,
+        description=(
+            "Named starting palette applied before every other branding var "
+            "(e.g. 'trec', 'embl', 'ocean'). Unknown names are ignored with a warning."
+        ),
+    )
+    theme: Optional[str] = Field(
+        default=None,
+        description=(
+            "JSON-encoded BrandTheme, applied over the preset and under the flat vars. "
+            "The only way to set nested blocks (surfaces_light/surfaces_dark) by env."
+        ),
+    )
 
     logo_url: Optional[str] = Field(
         default=None,
@@ -1283,6 +1326,7 @@ class BrandingConfig(BaseSettings):
             "Instance display name, used for the browser tab title and the login-page greeting."
         ),
     )
+
     primary_color: Optional[str] = Field(
         default=None,
         description=(
@@ -1290,31 +1334,134 @@ class BrandingConfig(BaseSettings):
             "color (e.g. '#0ca678') the viewer expands into a palette."
         ),
     )
+    secondary_color: Optional[str] = Field(
+        default=None, description="Secondary brand color, same accepted forms as primary_color."
+    )
+    tertiary_color: Optional[str] = Field(
+        default=None, description="Tertiary / accent brand color, same accepted forms."
+    )
+    success_color: Optional[str] = Field(default=None, description="Overrides Mantine green.")
+    warning_color: Optional[str] = Field(default=None, description="Overrides Mantine yellow.")
+    danger_color: Optional[str] = Field(default=None, description="Overrides Mantine red.")
+
+    tint_mode: Optional[str] = Field(
+        default=None,
+        description=(
+            "How far the brand hues reach: 'accent' (primary only, the default) or "
+            "'full' (also remaps the secondary/tertiary accent families)."
+        ),
+    )
+    font_family: Optional[str] = Field(default=None, description="CSS font stack for body text.")
+    headings_font_family: Optional[str] = Field(
+        default=None, description="CSS font stack for headings; falls back to font_family."
+    )
+    default_radius: Optional[str] = Field(
+        default=None, description="Mantine radius token: xs, sm, md, lg or xl."
+    )
+
     colorway: Optional[str] = Field(
         default=None,
         description=(
             "Comma-separated hex colors (e.g. '#1f77b4,#ff7f0e,...') used as "
-            "the categorical colorway of server-rendered Plotly figures."
+            "the categorical colorway of server-rendered Plotly figures. Unset means "
+            "'derive it from the brand palette'."
+        ),
+    )
+    sequential: Optional[str] = Field(
+        default=None,
+        description=(
+            "Comma-separated hex colors (light to dark) used as the continuous "
+            "colorscale of server-rendered figures. Unset means 'derive from primary_color'."
+        ),
+    )
+    plot_template: Optional[str] = Field(
+        default=None,
+        description=(
+            "Plotly template name applied to figures that don't pick one "
+            "(e.g. 'seaborn'). Unset means 'follow the UI light/dark theme'."
         ),
     )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_BRANDING_")
 
-    @property
-    def colorway_list(self) -> Optional[list[str]]:
-        """Parsed & validated colorway; None when unset or nothing valid remains."""
-        if not self.colorway:
+    @staticmethod
+    def _hex_list(raw: Optional[str]) -> Optional[list[str]]:
+        """Parse & validate a comma-separated hex list; None when nothing valid remains."""
+        if not raw:
             return None
         colors = [
             color.strip()
-            for color in self.colorway.split(",")
+            for color in raw.split(",")
             if re.fullmatch(r"#[0-9a-fA-F]{6}", color.strip())
         ]
         return colors or None
 
     @property
+    def colorway_list(self) -> Optional[list[str]]:
+        """Parsed & validated colorway; None when unset or nothing valid remains."""
+        return self._hex_list(self.colorway)
+
+    @property
+    def sequential_list(self) -> Optional[list[str]]:
+        return self._hex_list(self.sequential)
+
+    def as_brand_theme(self):
+        """This deployment's branding as a ``BrandTheme``.
+
+        Preset first, then the JSON blob, then the flat vars, so a targeted
+        ``DEPICTIO_BRANDING_PRIMARY_COLOR`` always beats a blob that also
+        mentions the primary. Malformed input degrades to "ignore that layer"
+        rather than taking the API down at import time.
+        """
+        # Local import: this module is the earliest import in every context and
+        # must stay free of heavier model imports at module scope.
+        from depictio.models.models.branding import BrandTheme, merge_brand_themes, preset_theme
+
+        layers: list[Optional[BrandTheme]] = []
+
+        if self.preset:
+            base = preset_theme(self.preset)
+            if base is None:
+                _warn(f"Unknown DEPICTIO_BRANDING_PRESET {self.preset!r}, ignoring.")
+            layers.append(base)
+
+        if self.theme:
+            try:
+                layers.append(BrandTheme.model_validate_json(self.theme))
+            except Exception as exc:
+                _warn(f"Invalid DEPICTIO_BRANDING_THEME, ignoring: {exc}")
+
+        plots = {
+            "template": self.plot_template,
+            "colorway": self.colorway_list,
+            "sequential": self.sequential_list,
+        }
+        flat = {
+            "app_name": self.app_name,
+            "logo_url": self.logo_url,
+            "logo_url_dark": self.logo_url_dark,
+            "primary": self.primary_color,
+            "secondary": self.secondary_color,
+            "tertiary": self.tertiary_color,
+            "success": self.success_color,
+            "warning": self.warning_color,
+            "danger": self.danger_color,
+            "tint_mode": self.tint_mode,
+            "font_family": self.font_family,
+            "headings_font_family": self.headings_font_family,
+            "default_radius": self.default_radius,
+            "plots": {k: v for k, v in plots.items() if v is not None} or None,
+        }
+        try:
+            layers.append(BrandTheme(**{k: v for k, v in flat.items() if v is not None}))
+        except Exception as exc:
+            _warn(f"Invalid DEPICTIO_BRANDING_* value, ignoring: {exc}")
+
+        return merge_brand_themes(*layers)
+
+    @property
     def is_configured(self) -> bool:
-        return any((self.logo_url, self.app_name, self.primary_color, self.colorway_list))
+        return not self.as_brand_theme().is_empty
 
 
 class ProfilingConfig(BaseSettings):

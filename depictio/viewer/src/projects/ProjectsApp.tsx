@@ -16,13 +16,7 @@ import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 
-import {
-  listProjects,
-  createProject,
-  updateProject as apiUpdateProject,
-  deleteProject as apiDeleteProject,
-  importProjectZip,
-} from 'depictio-react-core';
+import { createProject, deleteProject as apiDeleteProject, importProjectZip, listProjects, updateProject as apiUpdateProject, useBrandAccents } from 'depictio-react-core';
 import type {
   CreateProjectInput,
   EditProjectInput,
@@ -36,6 +30,7 @@ import ProjectsList from './ProjectsList';
 import CreateProjectModal from './CreateProjectModal';
 import EditProjectModal from './EditProjectModal';
 import DeleteProjectModal from './DeleteProjectModal';
+import { usePageTitle } from '../branding';
 
 /** Separate storage key from per-dashboard sidebar (`sidebar-collapsed`) so
  *  the projects management page can default to OPEN regardless of the user's
@@ -67,6 +62,7 @@ function useProjectsSidebar(): [boolean, () => void] {
 }
 
 const ProjectsApp: React.FC = () => {
+  const accent = useBrandAccents();
   const [projects, setProjects] = useState<ProjectListEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -91,9 +87,7 @@ const ProjectsApp: React.FC = () => {
   // `projects_endpoints.routes.create_project`.
   const createDisabled = isPublic && !user?.is_admin;
 
-  useEffect(() => {
-    document.title = 'Depictio — Projects';
-  }, []);
+  usePageTitle('Projects');
 
   useEffect(() => {
     setLoading(true);
@@ -211,9 +205,9 @@ const ProjectsApp: React.FC = () => {
             <Icon
               icon="mdi:jira"
               width={22}
-              color="var(--mantine-color-teal-6)"
+              color={`var(--mantine-color-${accent.secondary}-6)`}
             />
-            <Title order={3} c="teal" data-tour-id="projects-header">
+            <Title order={3} c={accent.secondary} data-tour-id="projects-header">
               Projects
             </Title>
           </Group>
@@ -228,7 +222,7 @@ const ProjectsApp: React.FC = () => {
             withArrow
           >
             <Button
-              color="teal"
+              color={accent.secondary}
               variant="filled"
               size="md"
               onClick={openCreate}

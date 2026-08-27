@@ -346,13 +346,15 @@ def _trace_colors(plan: AggPlan, names: list[str]) -> list[str | None]:
     mapping = _as_json(plan.style.get("color_discrete_map")) or {}
     sequence = _as_json(plan.style.get("color_discrete_sequence"))
     if not isinstance(sequence, list) or not sequence:
-        from depictio.api.v1.services.branding import get_effective_branding
+        from depictio.api.v1.services.branding import resolve_effective_brand_theme
 
         # A branded instance re-tints the mantine templates' colorway, which
         # the px path picks up implicitly — mirror it here so graph_objects
         # builders don't fall back to Plotly's default palette on those
-        # deployments. Effective branding = env defaults + admin overrides.
-        sequence = get_effective_branding().get("colorway") or list(px.colors.qualitative.Plotly)
+        # deployments. Resolved theme = env defaults + admin overrides, with a
+        # colorway derived from the brand palette when none was set explicitly.
+        plots = resolve_effective_brand_theme().plots
+        sequence = (plots.colorway if plots else None) or list(px.colors.qualitative.Plotly)
     if not isinstance(mapping, dict):
         mapping = {}
     return [mapping.get(name) or sequence[i % len(sequence)] for i, name in enumerate(names)]
