@@ -15,7 +15,10 @@ def _project(links):
             {
                 "data_collections": [
                     {"data_collection_tag": "metadata", "_id": "65a000000000000000000001"},
-                    {"data_collection_tag": "taxonomy_rel_abundance", "id": "65a000000000000000000002"},
+                    {
+                        "data_collection_tag": "taxonomy_rel_abundance",
+                        "id": "65a000000000000000000002",
+                    },
                 ]
             }
         ],

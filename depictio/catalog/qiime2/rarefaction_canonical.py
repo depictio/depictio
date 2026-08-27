@@ -108,9 +108,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     # annotation for a metric.
     first = sources["shannon"]
     sample_col = first.columns[0]
-    trailing = [
-        c for c in first.columns if c != sample_col and not c.startswith("depth-")
-    ]
+    trailing = [c for c in first.columns if c != sample_col and not c.startswith("depth-")]
     if trailing:
         anno = (
             first.select([sample_col, *trailing])
@@ -130,9 +128,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
                 meta_slim = (
                     metadata.unique(subset=[sample_id_col])
                     .rename({sample_id_col: "sample_id"})
-                    .with_columns(
-                        [pl.col(c).cast(pl.Utf8, strict=False) for c in meta_cols]
-                    )
+                    .with_columns([pl.col(c).cast(pl.Utf8, strict=False) for c in meta_cols])
                 )
                 df = df.join(meta_slim, on="sample_id", how="left")
 

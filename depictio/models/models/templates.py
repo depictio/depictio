@@ -135,7 +135,9 @@ class ProvenanceSource(BaseModel):
     """
 
     name: str = Field(..., description="Source label shown next to each entry (e.g. 'params')")
-    glob: str = Field(..., description="Glob relative to DATA_ROOT (e.g. 'pipeline_info/params*.json')")
+    glob: str = Field(
+        ..., description="Glob relative to DATA_ROOT (e.g. 'pipeline_info/params*.json')"
+    )
     format: str = Field(
         default="auto",
         description="File format: 'json', 'yaml', 'tsv' (2-column key/value) or 'auto' (by suffix)",

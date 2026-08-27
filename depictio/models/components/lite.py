@@ -428,9 +428,10 @@ class CardLiteComponent(BaseLiteComponent):
         ``box_plot``. Mixed with scalar aggregations the layout is left alone
         (the renderer drops the dict row from the list).
         """
-        if (
-            self.aggregations == ["box_plot_stats"]
-            and self.secondary_layout in ("vertical", "compact", "grid")
+        if self.aggregations == ["box_plot_stats"] and self.secondary_layout in (
+            "vertical",
+            "compact",
+            "grid",
         ):
             self.secondary_layout = "box_plot"
         return self

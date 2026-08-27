@@ -69,7 +69,9 @@ def test_grouping_exclude_and_catch_all(tmp_path):
 def test_yaml_source_with_fixed_group_flattens_nested(tmp_path):
     d = tmp_path / "pipeline_info"
     d.mkdir()
-    (d / "software_versions.yml").write_text("CUTADAPT:\n  cutadapt: 4.6\nDADA2:\n  dada2: 1.30.0\n")
+    (d / "software_versions.yml").write_text(
+        "CUTADAPT:\n  cutadapt: 4.6\nDADA2:\n  dada2: 1.30.0\n"
+    )
     spec = ProvenanceSpec(
         sources=[
             ProvenanceSource(

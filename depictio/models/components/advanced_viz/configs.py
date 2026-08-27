@@ -464,7 +464,8 @@ class PhylogeneticConfig(_BaseVizConfig):
     # the DCs by tag and `_resolve_workflow_tags` rewrites the *_id fields at
     # import time (same contract as the map's `geojson_dc_tag`).
     tree_dc_tag: str | None = Field(
-        default=None, description="Data-collection tag of the phylogeny DC (resolved to ids at import)"
+        default=None,
+        description="Data-collection tag of the phylogeny DC (resolved to ids at import)",
     )
 
     # Tip-metadata source — a table DC keyed by taxon name.

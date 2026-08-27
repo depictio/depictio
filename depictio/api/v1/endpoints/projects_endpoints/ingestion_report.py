@@ -474,9 +474,7 @@ def build_ingestion_report(project: dict) -> IngestionReport:
         manifest_source=manifest_source,
         variables=variables,
         run_provenance=run_provenance,
-        run_provenance_files=[
-            str(f) for f in (template_origin.get("run_provenance_files") or [])
-        ],
+        run_provenance_files=[str(f) for f in (template_origin.get("run_provenance_files") or [])],
         data_collections=dc_entries,
         runs=runs,
         summary=summary,

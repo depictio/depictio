@@ -111,6 +111,8 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         # annotations ride only on the first source — later pieces are id+metric.
         df = df.join(piece, on="sample_id", how="full", coalesce=True)
     # Metrics last, annotations in the middle: keeps the table scannable.
-    metrics = [m for m in ("shannon", "observed_features", "faith_pd", "evenness") if m in df.columns]
+    metrics = [
+        m for m in ("shannon", "observed_features", "faith_pd", "evenness") if m in df.columns
+    ]
     rest = [c for c in df.columns if c != "sample_id" and c not in metrics]
     return df.select(["sample_id", *rest, *metrics]).sort("sample_id")

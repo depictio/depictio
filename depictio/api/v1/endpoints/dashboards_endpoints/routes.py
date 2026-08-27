@@ -4836,8 +4836,7 @@ def _resolve_workflow_tags(component: dict, project_id: PyObjectId | None = None
                         config[f"{base}_dc_id"] = str(resolved["_id"])
                         config[f"{base}_wf_id"] = str(wf["_id"])
                         logger.debug(
-                            f"Resolved config {key}='{extra_tag}' to "
-                            f"{base}_dc_id {resolved['_id']}"
+                            f"Resolved config {key}='{extra_tag}' to {base}_dc_id {resolved['_id']}"
                         )
                     else:
                         # A named DC this project never materialised (an
