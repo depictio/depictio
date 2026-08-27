@@ -35,6 +35,7 @@ DISPATCH = ADVANCED_VIZ / "AdvancedVizDispatch.tsx"
 # keep rendering; it reuses da_barplot's renderer and has no model of its own.
 LEGACY_KIND_ALIASES = {"ancombc_differentials"}
 
+
 def _kind_to_model() -> dict[str, type]:
     """Derive kind -> config model from the discriminated union itself."""
     return {m.model_fields["viz_kind"].default: m for m in get_args(get_args(VizConfig)[0])}

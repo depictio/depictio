@@ -91,9 +91,7 @@ def frames(collections) -> dict[str, pl.DataFrame]:
             scanned = SCANNED_FILES[tag]
             computed[tag] = pl.read_csv(scanned, separator="\t")
             continue
-        extra = {
-            ref: computed[upstream] for ref, upstream in DC_REF_UPSTREAM.get(tag, {}).items()
-        }
+        extra = {ref: computed[upstream] for ref, upstream in DC_REF_UPSTREAM.get(tag, {}).items()}
         computed[tag] = execute_recipe(transform["recipe"], DATA_DIR, extra_sources=extra or None)
     return computed
 

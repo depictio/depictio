@@ -124,7 +124,12 @@ def stage_mosdepth_amplicon_coverage() -> None:
     df = pl.read_csv(CATALOG / "mosdepth" / "amplicon_coverage.tsv", separator="\t")
     df = df.filter(pl.col("sample").is_in(VIRAL_SAMPLES)).drop("aggregation_time")
     _write(
-        DATA / "variants" / "bowtie2" / "mosdepth" / "amplicon" / "all_samples.mosdepth.coverage.tsv",
+        DATA
+        / "variants"
+        / "bowtie2"
+        / "mosdepth"
+        / "amplicon"
+        / "all_samples.mosdepth.coverage.tsv",
         df.write_csv(separator="\t"),
     )
 
