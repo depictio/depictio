@@ -1,0 +1,623 @@
+{
+  "fixture": "card_metrics.csv",
+  "layout_cases": [
+    {
+      "name": "histogram_coverage",
+      "layout": "histogram",
+      "column": "coverage",
+      "card": {}
+    },
+    {
+      "name": "threshold_coverage_min",
+      "layout": "threshold",
+      "column": "coverage",
+      "card": {
+        "threshold_value": 60,
+        "threshold_direction": "min",
+        "threshold_warn": 40
+      }
+    },
+    {
+      "name": "threshold_coverage_max_no_warn",
+      "layout": "threshold",
+      "column": "coverage",
+      "card": {
+        "threshold_value": 80,
+        "threshold_direction": "max"
+      }
+    },
+    {
+      "name": "completeness_coverage",
+      "layout": "completeness",
+      "column": "coverage",
+      "card": {}
+    },
+    {
+      "name": "uniqueness_sample",
+      "layout": "uniqueness",
+      "column": "sample",
+      "card": {}
+    },
+    {
+      "name": "uniqueness_run",
+      "layout": "uniqueness",
+      "column": "run",
+      "card": {}
+    },
+    {
+      "name": "attrition_reads",
+      "layout": "attrition",
+      "column": "raw_reads",
+      "card": {
+        "attrition_cols": [
+          "trimmed_reads",
+          "mapped_reads"
+        ],
+        "aggregation": "sum"
+      }
+    },
+    {
+      "name": "trend_by_day_bucketed",
+      "layout": "trend",
+      "column": "coverage",
+      "card": {
+        "trend_col": "day",
+        "aggregation": "average"
+      }
+    },
+    {
+      "name": "trend_by_run",
+      "layout": "trend",
+      "column": "coverage",
+      "card": {
+        "trend_col": "run",
+        "aggregation": "average"
+      }
+    },
+    {
+      "name": "trend_by_run_count",
+      "layout": "trend",
+      "column": "sample",
+      "card": {
+        "trend_col": "run",
+        "aggregation": "count"
+      }
+    },
+    {
+      "name": "trend_by_lineage_categorical",
+      "layout": "trend",
+      "column": "coverage",
+      "card": {
+        "trend_col": "lineage",
+        "aggregation": "sum"
+      }
+    }
+  ],
+  "layouts": {
+    "histogram_coverage": {
+      "bins": [
+        1,
+        3,
+        4,
+        4,
+        5,
+        4,
+        5,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+      ],
+      "breakpoints": [
+        24.375,
+        36.25,
+        48.125,
+        60.0,
+        71.875,
+        83.75,
+        95.625,
+        107.5,
+        119.375,
+        131.25,
+        143.125,
+        155.0,
+        166.875,
+        178.75,
+        190.625,
+        202.5,
+        214.375,
+        226.25,
+        238.125,
+        250.0
+      ],
+      "min": 12.5,
+      "max": 250.0,
+      "median": 64.9,
+      "total": 30,
+      "nulls": 2
+    },
+    "threshold_coverage_min": {
+      "column": "coverage",
+      "threshold": 60.0,
+      "warn_threshold": 40.0,
+      "direction": "min",
+      "total": 30,
+      "measured": 28,
+      "nulls": 2,
+      "passing": 16,
+      "warning": 7,
+      "failing": 5,
+      "pass_rate": 0.5714285714285714,
+      "min": 12.5,
+      "max": 250.0,
+      "median": 64.9
+    },
+    "threshold_coverage_max_no_warn": {
+      "column": "coverage",
+      "threshold": 80.0,
+      "warn_threshold": null,
+      "direction": "max",
+      "total": 30,
+      "measured": 28,
+      "nulls": 2,
+      "passing": 20,
+      "warning": 0,
+      "failing": 8,
+      "pass_rate": 0.7142857142857143,
+      "min": 12.5,
+      "max": 250.0,
+      "median": 64.9
+    },
+    "completeness_coverage": {
+      "column": "coverage",
+      "total": 30,
+      "filled": 28,
+      "nulls": 2,
+      "fill_rate": 0.9333333333333333
+    },
+    "uniqueness_sample": {
+      "column": "sample",
+      "total": 30,
+      "measured": 30,
+      "distinct": 29,
+      "duplicated": 1,
+      "unique_rate": 0.9666666666666667,
+      "nulls": 0,
+      "top_repeat": {
+        "name": "SRR0001",
+        "count": 2
+      }
+    },
+    "uniqueness_run": {
+      "column": "run",
+      "total": 30,
+      "measured": 30,
+      "distinct": 6,
+      "duplicated": 24,
+      "unique_rate": 0.2,
+      "nulls": 0,
+      "top_repeat": {
+        "name": "1",
+        "count": 5
+      }
+    },
+    "attrition_reads": {
+      "columns": [
+        "raw_reads",
+        "trimmed_reads",
+        "mapped_reads"
+      ],
+      "aggregation": "sum",
+      "stages": [
+        {
+          "name": "raw_reads",
+          "value": 32175000.0,
+          "share": 1.0,
+          "step_share": null
+        },
+        {
+          "name": "trimmed_reads",
+          "value": 29584905.0,
+          "share": 0.9194997668997669,
+          "step_share": 0.9194997668997669
+        },
+        {
+          "name": "mapped_reads",
+          "value": 23968545.0,
+          "share": 0.7449431235431235,
+          "step_share": 0.8101612967829371
+        }
+      ],
+      "retained": 0.7449431235431235
+    },
+    "trend_by_day_bucketed": {
+      "column": "coverage",
+      "axis": "day",
+      "axis_kind": "temporal",
+      "aggregation": "average",
+      "points": [
+        {
+          "label": "2024-01-03",
+          "value": 55.45
+        },
+        {
+          "label": "2024-01-07",
+          "value": 76.0
+        },
+        {
+          "label": "2024-01-09",
+          "value": 55.25
+        },
+        {
+          "label": "2024-01-11",
+          "value": 0.0
+        },
+        {
+          "label": "2024-01-13",
+          "value": 169.05
+        },
+        {
+          "label": "2024-01-17",
+          "value": 41.9
+        },
+        {
+          "label": "2024-01-19",
+          "value": 63.3
+        },
+        {
+          "label": "2024-01-21",
+          "value": 0.0
+        },
+        {
+          "label": "2024-01-23",
+          "value": 72.8
+        },
+        {
+          "label": "2024-01-25",
+          "value": 61.7
+        },
+        {
+          "label": "2024-01-29",
+          "value": 58.6
+        },
+        {
+          "label": "2024-01-31",
+          "value": 47.2
+        },
+        {
+          "label": "2024-02-02",
+          "value": 81.7
+        },
+        {
+          "label": "2024-02-04",
+          "value": 66.5
+        },
+        {
+          "label": "2024-02-06",
+          "value": 62.099999999999994
+        },
+        {
+          "label": "2024-02-10",
+          "value": 70.1
+        },
+        {
+          "label": "2024-02-12",
+          "value": 52.0
+        },
+        {
+          "label": "2024-02-14",
+          "value": 85.5
+        },
+        {
+          "label": "2024-02-16",
+          "value": 39.8
+        },
+        {
+          "label": "2024-02-18",
+          "value": 69.45
+        },
+        {
+          "label": "2024-02-22",
+          "value": 44.4
+        },
+        {
+          "label": "2024-02-24",
+          "value": 92.6
+        },
+        {
+          "label": "2024-02-26",
+          "value": 36.1
+        },
+        {
+          "label": "2024-02-28",
+          "value": 63.1
+        }
+      ],
+      "first": 55.45,
+      "last": 63.1,
+      "change": 0.13796212804328212,
+      "min": 0.0,
+      "max": 169.05
+    },
+    "trend_by_run": {
+      "column": "coverage",
+      "axis": "run",
+      "axis_kind": "numeric",
+      "aggregation": "average",
+      "points": [
+        {
+          "label": "1",
+          "value": 71.78
+        },
+        {
+          "label": "2",
+          "value": 64.46249999999999
+        },
+        {
+          "label": "3",
+          "value": 99.96
+        },
+        {
+          "label": "4",
+          "value": 71.1
+        },
+        {
+          "label": "5",
+          "value": 49.58
+        },
+        {
+          "label": "6",
+          "value": 59.32000000000001
+        }
+      ],
+      "first": 71.78,
+      "last": 59.32000000000001,
+      "change": -0.1735859570911117,
+      "min": 49.58,
+      "max": 99.96
+    },
+    "trend_by_run_count": {
+      "column": "sample",
+      "axis": "run",
+      "axis_kind": "numeric",
+      "aggregation": "count",
+      "points": [
+        {
+          "label": "1",
+          "value": 5.0
+        },
+        {
+          "label": "2",
+          "value": 5.0
+        },
+        {
+          "label": "3",
+          "value": 5.0
+        },
+        {
+          "label": "4",
+          "value": 5.0
+        },
+        {
+          "label": "5",
+          "value": 5.0
+        },
+        {
+          "label": "6",
+          "value": 5.0
+        }
+      ],
+      "first": 5.0,
+      "last": 5.0,
+      "change": 0.0,
+      "min": 5.0,
+      "max": 5.0
+    },
+    "trend_by_lineage_categorical": {
+      "column": "coverage",
+      "axis": "lineage",
+      "axis_kind": "categorical",
+      "aggregation": "sum",
+      "points": [
+        {
+          "label": "AY.4",
+          "value": 107.9
+        },
+        {
+          "label": "B.1.1.7",
+          "value": 586.6
+        },
+        {
+          "label": "B.1.617.2",
+          "value": 440.3
+        },
+        {
+          "label": "P.1",
+          "value": 401.55
+        }
+      ],
+      "first": 107.9,
+      "last": 401.55,
+      "change": 2.7215013901760887,
+      "min": 107.9,
+      "max": 586.6
+    }
+  },
+  "breakdown_cases": [
+    {
+      "name": "breakdown_lineage_count",
+      "column": "coverage",
+      "breakdown_col": "lineage",
+      "aggregation": "count",
+      "top_n_count": 3
+    },
+    {
+      "name": "breakdown_lineage_sum",
+      "column": "coverage",
+      "breakdown_col": "lineage",
+      "aggregation": "sum",
+      "top_n_count": 5
+    },
+    {
+      "name": "breakdown_self",
+      "column": "lineage",
+      "breakdown_col": "lineage",
+      "aggregation": "nunique",
+      "top_n_count": 3
+    },
+    {
+      "name": "breakdown_run_nunique",
+      "column": "sample",
+      "breakdown_col": "run",
+      "aggregation": "nunique",
+      "top_n_count": 4
+    }
+  ],
+  "breakdowns": {
+    "breakdown_lineage_count": {
+      "column": "lineage",
+      "total": 30,
+      "top": [
+        {
+          "name": "B.1.1.7",
+          "count": 9,
+          "percent": 0.3
+        },
+        {
+          "name": "B.1.617.2",
+          "count": 9,
+          "percent": 0.3
+        },
+        {
+          "name": "P.1",
+          "count": 6,
+          "percent": 0.2
+        }
+      ],
+      "top_share": 0.8,
+      "unique_values": 5,
+      "breakdown_kind": "count",
+      "evenness": 0.9349775297671233
+    },
+    "breakdown_lineage_sum": {
+      "column": "lineage",
+      "total": 1945,
+      "top": [
+        {
+          "name": "B.1.1.7",
+          "count": 586,
+          "percent": 0.3012853470437018
+        },
+        {
+          "name": "B.1.617.2",
+          "count": 440,
+          "percent": 0.2262210796915167
+        },
+        {
+          "name": "(null)",
+          "count": 409,
+          "percent": 0.2102827763496144
+        },
+        {
+          "name": "P.1",
+          "count": 401,
+          "percent": 0.20616966580976864
+        },
+        {
+          "name": "AY.4",
+          "count": 107,
+          "percent": 0.055012853470437016
+        }
+      ],
+      "top_share": 0.9989717223650385,
+      "unique_values": 5,
+      "breakdown_kind": "sum",
+      "evenness": 0.9386296131264552
+    },
+    "breakdown_self": {
+      "column": "lineage",
+      "total": 30,
+      "top": [
+        {
+          "name": "B.1.1.7",
+          "count": 9,
+          "percent": 0.3
+        },
+        {
+          "name": "B.1.617.2",
+          "count": 9,
+          "percent": 0.3
+        },
+        {
+          "name": "P.1",
+          "count": 6,
+          "percent": 0.2
+        }
+      ],
+      "top_share": 0.8,
+      "unique_values": 5,
+      "breakdown_kind": "nunique",
+      "evenness": 0.9349775297671233
+    },
+    "breakdown_run_nunique": {
+      "column": "run",
+      "total": 30,
+      "top": [
+        {
+          "name": "1",
+          "count": 5,
+          "percent": 0.16666666666666666
+        },
+        {
+          "name": "2",
+          "count": 5,
+          "percent": 0.16666666666666666
+        },
+        {
+          "name": "3",
+          "count": 5,
+          "percent": 0.16666666666666666
+        },
+        {
+          "name": "4",
+          "count": 5,
+          "percent": 0.16666666666666666
+        }
+      ],
+      "top_share": 0.6666666666666666,
+      "unique_values": 6,
+      "breakdown_kind": "nunique",
+      "evenness": 0.9999999999999999
+    }
+  },
+  "aggregations": {
+    "coverage::count": 28,
+    "coverage::nunique": 28,
+    "coverage::sum": 1945.4499999999998,
+    "coverage::average": 69.48035714285713,
+    "coverage::median": 64.9,
+    "coverage::min": 12.5,
+    "coverage::max": 250.0,
+    "coverage::range": 237.5,
+    "coverage::variance": 1731.726729497354,
+    "coverage::std_dev": 41.61402082829,
+    "coverage::q1": 46.5,
+    "coverage::q3": 82.65,
+    "coverage::percentile": 64.9,
+    "coverage::skewness": 3.0657845311257255,
+    "coverage::kurtosis": 13.32575330305346,
+    "lineage::count": 27,
+    "lineage::nunique": 4,
+    "lineage::mode": "B.1.1.7",
+    "run::mode": 1.0
+  }
+}

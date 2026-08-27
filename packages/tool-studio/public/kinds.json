@@ -1,0 +1,879 @@
+{
+  "kinds": [
+    {
+      "category": "plot",
+      "description": "Clustered heatmap with dendrograms + annotation tracks. Server-side clustering via plotly-complexheatmap, dispatched as a Celery task.",
+      "heavy": true,
+      "icon": "tabler:grid-pattern",
+      "label": "ComplexHeatmap (clustered)",
+      "required_roles": [
+        "index"
+      ],
+      "roles": {
+        "index": {
+          "description": "Row identifier used as the heatmap index.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "complex_heatmap"
+    },
+    {
+      "category": "plot",
+      "description": "Read depth / signal along a coordinate axis. Optional per-sample faceting and categorical annotation lane (gene region, peak class, \u2026).",
+      "heavy": false,
+      "icon": "tabler:chart-area-line",
+      "label": "Coverage track",
+      "required_roles": [
+        "chromosome",
+        "position",
+        "value"
+      ],
+      "roles": {
+        "category": {
+          "description": "Categorical grouping / annotation.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "chromosome": {
+          "description": "Chromosome / contig name.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "end": {
+          "description": "End coordinate of the interval.",
+          "dtypes": [
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "position": {
+          "description": "Genomic or sequence position (integer).",
+          "dtypes": [
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "sample": {
+          "description": "Optional sample column for faceting.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "value": {
+          "description": "Numeric value plotted (e.g. coverage).",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "coverage_track"
+    },
+    {
+      "category": "tool",
+      "description": "Ranked signed-LFC top-N features for differential abundance \u2014 `contrast_view: \"all\"` (default) faceted small-multiples, or any specific contrast value for a single-panel drill-in. Replaces the previous ancombc_differentials kind (auto-migrated).",
+      "heavy": false,
+      "icon": "tabler:chart-bar-popular",
+      "label": "Differential-abundance bars (tool)",
+      "required_roles": [
+        "feature_id",
+        "contrast",
+        "lfc"
+      ],
+      "roles": {
+        "contrast": {
+          "description": "Comparison / contrast label (group vs group).",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "feature_id": {
+          "description": "Identifier for each feature / gene / row (e.g. gene_id, ENSEMBL id).",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "label": {
+          "description": "Optional text label for points.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "lfc": {
+          "description": "Log2 fold change.",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": true
+        },
+        "significance": {
+          "description": "Statistical significance \u2014 p-value or adjusted p / FDR.",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": false
+        }
+      },
+      "viz_kind": "da_barplot"
+    },
+    {
+      "category": "plot",
+      "description": "scanpy / Seurat marker dot plot: cluster \u00d7 gene with size = fraction expressing, colour = mean expression.",
+      "heavy": false,
+      "icon": "tabler:circle-dot",
+      "label": "Dot plot",
+      "required_roles": [
+        "cluster",
+        "gene",
+        "mean_expression",
+        "frac_expressing"
+      ],
+      "roles": {
+        "cluster": {
+          "description": "Cluster / cell-type label.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "frac_expressing": {
+          "description": "Fraction of cells expressing (dot size).",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": true
+        },
+        "gene": {
+          "description": "Gene / feature name.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "mean_expression": {
+          "description": "Mean expression level (dot colour).",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "dot_plot"
+    },
+    {
+      "category": "plot",
+      "description": "2D/3D sample embedding (PCA / UMAP / t-SNE / PCoA) \u2014 accepts a pre-computed DC (dim_1, dim_2 columns) or runs the reduction live on a wide sample\u00d7feature matrix DC via Celery.",
+      "heavy": true,
+      "icon": "tabler:atom",
+      "label": "Embedding / clustering",
+      "required_roles": [
+        "sample_id",
+        "dim_1",
+        "dim_2"
+      ],
+      "roles": {
+        "cluster": {
+          "description": "Cluster / cell-type label.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "color": {
+          "description": "Optional column mapped to point colour.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "String",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "dim_1": {
+          "description": "First embedding coordinate (PC1 / UMAP1 / tSNE1).",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": true
+        },
+        "dim_2": {
+          "description": "Second embedding coordinate (PC2 / UMAP2 / tSNE2).",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": true
+        },
+        "dim_3": {
+          "description": "Optional third embedding coordinate for 3D plots.",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": false
+        },
+        "sample_id": {
+          "description": "Identifier for each sample / observation.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "embedding"
+    },
+    {
+      "category": "tool",
+      "description": "Dot plot: term on y, NES on x, dot size = gene-set size, colour = -log10(padj).",
+      "heavy": false,
+      "icon": "tabler:chart-dots",
+      "label": "GSEA / pathway enrichment (tool)",
+      "required_roles": [
+        "term",
+        "nes",
+        "padj",
+        "gene_count"
+      ],
+      "roles": {
+        "gene_count": {
+          "description": "Number of genes in the set.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "nes": {
+          "description": "Normalised enrichment score.",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": true
+        },
+        "padj": {
+          "description": "Adjusted p-value / FDR.",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": true
+        },
+        "source": {
+          "description": "Source / database of the term.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "term": {
+          "description": "Pathway / GO term / gene-set name.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "enrichment"
+    },
+    {
+      "category": "plot",
+      "description": "Variant tracks along genes: vertical stems coloured by consequence, marker size = effect.",
+      "heavy": false,
+      "icon": "tabler:chart-arcs",
+      "label": "Lollipop / needle plot",
+      "required_roles": [
+        "feature_id",
+        "position",
+        "category"
+      ],
+      "roles": {
+        "category": {
+          "description": "Categorical grouping / annotation.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "effect": {
+          "description": "Optional effect-size column.",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": false
+        },
+        "feature_id": {
+          "description": "Identifier for each feature / gene / row (e.g. gene_id, ENSEMBL id).",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "position": {
+          "description": "Genomic or sequence position (integer).",
+          "dtypes": [
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "lollipop"
+    },
+    {
+      "category": "plot",
+      "description": "Mean log intensity vs log2 fold change \u2014 same hits as a volcano, classic DE / proteomics layout.",
+      "heavy": false,
+      "icon": "tabler:chart-bell",
+      "label": "MA plot",
+      "required_roles": [
+        "feature_id",
+        "avg_log_intensity",
+        "log2_fold_change"
+      ],
+      "roles": {
+        "avg_log_intensity": {
+          "description": "Average log intensity \u2014 MA-plot x-axis (e.g. baseMean).",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": true
+        },
+        "feature_id": {
+          "description": "Identifier for each feature / gene / row (e.g. gene_id, ENSEMBL id).",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "label": {
+          "description": "Optional text label for points.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "log2_fold_change": {
+          "description": "Log2 fold change \u2014 MA-plot y-axis.",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": true
+        },
+        "significance": {
+          "description": "Statistical significance \u2014 p-value or adjusted p / FDR.",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": false
+        }
+      },
+      "viz_kind": "ma"
+    },
+    {
+      "category": "tool",
+      "description": "chr / pos / score scatter \u2014 works for true GWAS, peak qvalues, and variant AF.",
+      "heavy": false,
+      "icon": "tabler:chart-histogram",
+      "label": "Manhattan plot",
+      "required_roles": [
+        "chr",
+        "pos",
+        "score"
+      ],
+      "roles": {
+        "chr": {
+          "description": "Chromosome / contig name.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "effect": {
+          "description": "Optional effect-size column.",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": false
+        },
+        "feature": {
+          "description": "Optional feature annotation.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "pos": {
+          "description": "Genomic or sequence position (integer).",
+          "dtypes": [
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "score": {
+          "description": "Value plotted on the y-axis (e.g. -log10 p, signal).",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "manhattan"
+    },
+    {
+      "category": "plot",
+      "description": "Sample \u00d7 gene mutation matrix with discrete mutation-type colours and frequency strips.",
+      "heavy": true,
+      "icon": "tabler:grid-pattern",
+      "label": "Oncoplot",
+      "required_roles": [
+        "sample_id",
+        "gene",
+        "mutation_type"
+      ],
+      "roles": {
+        "gene": {
+          "description": "Gene / feature name.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "mutation_type": {
+          "description": "Mutation class / variant consequence.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "sample_id": {
+          "description": "Identifier for each sample / observation.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "oncoplot"
+    },
+    {
+      "category": "plot",
+      "description": "Newick tree + tip metadata (Microreact-style): 5 layouts, tip search, subtree highlight.",
+      "heavy": false,
+      "icon": "tabler:hierarchy-3",
+      "label": "Phylogenetic tree",
+      "required_roles": [
+        "taxon"
+      ],
+      "roles": {
+        "color": {
+          "description": "Optional column mapped to point colour.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "String",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "label": {
+          "description": "Optional text label for points.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "taxon": {
+          "description": "Taxon / lineage name, or tree tip label.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "phylogenetic"
+    },
+    {
+      "category": "plot",
+      "description": "Quantile-quantile of -log10(p) vs uniform null \u2014 standard p-value distribution QC.",
+      "heavy": false,
+      "icon": "tabler:chart-line",
+      "label": "QQ plot",
+      "required_roles": [
+        "p_value"
+      ],
+      "roles": {
+        "category": {
+          "description": "Categorical grouping / annotation.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "feature_id": {
+          "description": "Identifier for each feature / gene / row (e.g. gene_id, ENSEMBL id).",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "p_value": {
+          "description": "P-value for the QQ distribution.",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "qq"
+    },
+    {
+      "category": "plot",
+      "description": "Alpha-diversity vs sequencing depth \u2014 one line per sample with \u00b1SE band and group colouring.",
+      "heavy": false,
+      "icon": "tabler:chart-line",
+      "label": "Rarefaction curves",
+      "required_roles": [
+        "sample_id",
+        "depth",
+        "metric"
+      ],
+      "roles": {
+        "depth": {
+          "description": "Sequencing / sampling depth.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "group": {
+          "description": "Grouping column for colouring / faceting.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "iter": {
+          "description": "Rarefaction iteration index.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "metric": {
+          "description": "Diversity or summary metric value.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "sample_id": {
+          "description": "Identifier for each sample / observation.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "rarefaction"
+    },
+    {
+      "category": "plot",
+      "description": "Flow across N ordered categorical levels (e.g. sample \u2192 lineage \u2192 clade). Server-side aggregation, client-side colour / opacity tweaks.",
+      "heavy": true,
+      "icon": "tabler:chart-sankey",
+      "label": "Sankey (categorical flow)",
+      "required_roles": [],
+      "roles": {},
+      "viz_kind": "sankey"
+    },
+    {
+      "category": "plot",
+      "description": "Per-sample stacked relative-abundance bar with rank dropdown.",
+      "heavy": false,
+      "icon": "tabler:chart-pie",
+      "label": "Stacked taxonomy",
+      "required_roles": [
+        "sample_id",
+        "taxon",
+        "rank",
+        "abundance"
+      ],
+      "roles": {
+        "abundance": {
+          "description": "Abundance / count / relative frequency.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "rank": {
+          "description": "Taxonomic rank / level (e.g. Phylum, Genus).",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "sample_id": {
+          "description": "Identifier for each sample / observation.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "taxon": {
+          "description": "Taxon / lineage name, or tree tip label.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "stacked_taxonomy"
+    },
+    {
+      "category": "plot",
+      "description": "Hierarchical taxonomy / pathway viewer \u2014 concentric rings from root to leaf.",
+      "heavy": false,
+      "icon": "tabler:sun",
+      "label": "Sunburst",
+      "required_roles": [
+        "abundance"
+      ],
+      "roles": {
+        "abundance": {
+          "description": "Abundance / count / relative frequency.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "sunburst"
+    },
+    {
+      "category": "plot",
+      "description": "Set-intersection visualisation (alternative to Venn diagrams). Server-side compute via plotly-upset, dispatched as a Celery task.",
+      "heavy": true,
+      "icon": "tabler:chart-bar-popular",
+      "label": "UpSet plot",
+      "required_roles": [],
+      "roles": {},
+      "viz_kind": "upset_plot"
+    },
+    {
+      "category": "plot",
+      "description": "Effect size vs significance, threshold lines, search & top-N labels.",
+      "heavy": false,
+      "icon": "tabler:chart-scatter",
+      "label": "Volcano plot",
+      "required_roles": [
+        "feature_id",
+        "effect_size",
+        "significance"
+      ],
+      "roles": {
+        "category": {
+          "description": "Categorical grouping / annotation.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "effect_size": {
+          "description": "Magnitude of change, typically log2 fold change.",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": true
+        },
+        "feature_id": {
+          "description": "Identifier for each feature / gene / row (e.g. gene_id, ENSEMBL id).",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "label": {
+          "description": "Optional text label for points.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "significance": {
+          "description": "Statistical significance \u2014 p-value or adjusted p / FDR.",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "volcano"
+    }
+  ]
+}

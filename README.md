@@ -49,7 +49,7 @@
 
 ## Contribute a tool
 
-[![Catalog Studio](https://img.shields.io/badge/catalog%20studio-open-7C3AED?style=flat-square&logo=github)](https://depictio.github.io/depictio-catalog-studio/)
+[![Tool Studio](https://img.shields.io/badge/tool%20studio-open-7C3AED?style=flat-square&logo=github)](https://depictio.github.io/depictio-tool-studio/)
 
 </div>
 
