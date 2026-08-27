@@ -752,6 +752,7 @@ export type InteractiveFilterSource =
   | 'table_selection'
   | 'map_selection'
   | 'image_selection'
+  | 'tree_selection'
   /** Derived projection of saved selection groups (see `selectionGroups.ts`).
    *  Never merged into the user's filter list — composed at the fetch
    *  boundary only. */

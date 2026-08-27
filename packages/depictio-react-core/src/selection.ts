@@ -3,8 +3,8 @@
  *
  * The Dash viewer stores selections in ``interactive-values-store`` with a
  * ``source`` discriminator (``scatter_selection`` / ``table_selection`` /
- * ``map_selection``) so passive components can merge them alongside regular
- * interactive filters. The React viewer mirrors that protocol via
+ * ``map_selection`` / ``tree_selection``) so passive components can merge them
+ * alongside regular interactive filters. The React viewer mirrors that protocol via
  * ``InteractiveFilter.source`` and uses the helpers below to extract values
  * from Plotly/AG Grid events and to merge / clear by ``(index, source)``.
  */
