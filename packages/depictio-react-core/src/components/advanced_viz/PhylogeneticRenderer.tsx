@@ -1726,11 +1726,10 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
   }, [tree, highlightedRootId, colorCol, stripCols, metaCols, valueAt]);
 
   // ---- Selection box -----------------------------------------------------
-  // A real container under the view controls, stacked: a small heading so the
-  // box says what it is, the facts as aligned key/value rows, then the actions
-  // on their own line. Reading down a column beats scanning a wide row, and it
-  // keeps every action the same short distance from the facts it acts on.
-  // Present only while there is a selection, so nothing shifts at rest.
+  // A real container floating over the tree's top-left corner: a small heading
+  // so the box says what it is, the facts as aligned key/value rows, then the
+  // actions on their own line. Reading down a column beats scanning a wide row,
+  // and it keeps every action the same short distance from the facts it acts on.
   const kvRow = (label: string, value: string, hint?: string) => (
     <Group key={label} gap="xs" wrap="nowrap" align="baseline">
       <Tooltip label={hint} withArrow multiline w={260} disabled={!hint} openDelay={300}>
@@ -1753,18 +1752,28 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
     </Group>
   );
 
+  // Floated over the tree rather than stacked above it. Stacked, it claimed
+  // vertical space the moment a clade was picked, Plotly re-fitted the tree
+  // into what was left, and the node under the pointer slid away — so the
+  // second click of a select/deselect pair landed on a different clade. A
+  // selection must not move what produced it.
   const selectionBox = selectionMode ? (
     <Paper
       withBorder
+      shadow="sm"
       radius="sm"
       px="sm"
       py="xs"
-      mx="sm"
-      mb={6}
       w="fit-content"
       maw="calc(100% - var(--mantine-spacing-sm) * 2)"
       bg="var(--mantine-color-default-hover)"
       data-testid="phylo-selection-box"
+      style={{
+        position: 'absolute',
+        top: 'var(--mantine-spacing-xs)',
+        left: 'var(--mantine-spacing-sm)',
+        zIndex: 2,
+      }}
     >
       <Stack gap={6}>
         <Text size="xs" fw={600} tt="uppercase" c="dimmed">
@@ -1872,8 +1881,8 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
   ) : null;
 
   // ---- View controls -----------------------------------------------------
-  // Always the same three, always in the same place. The selection box above
-  // carries what changes, so this strip never rearranges under the pointer.
+  // Always the same three, always in the same place. The selection box over
+  // the tree carries what changes, so this strip never rearranges.
   const toolbar = (
     <Paper
       withBorder
@@ -2141,10 +2150,10 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
             stops receiving clicks, which reads as a broken button rather than
             as a layout problem. */}
         <div style={{ flexShrink: 0 }}>{toolbar}</div>
-        {selectionBox ? <div style={{ flexShrink: 0 }}>{selectionBox}</div> : null}
         {legendPos === 'bottom' ? <div style={{ flexShrink: 0 }}>{legendSwatches}</div> : null}
         <div style={{ flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'row' }}>
-          <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+          <div style={{ flex: '1 1 auto', minWidth: 0, position: 'relative' }}>
+            {selectionBox}
             {themedData && themedLayout ? (
               <AdvancedVizPlot
                 divId={plotDivId}
