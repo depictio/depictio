@@ -34,6 +34,11 @@ import {
 } from './SectionAccordion';
 import ComponentRenderer, { formatValue, inferCardTitle } from './ComponentRenderer';
 
+/** Bucket key for what is left of the unsectioned components once the tab's
+ *  opening text has been split off — never a real section name, so it can't
+ *  collide with `sectionKey(name)`. */
+const UNSECTIONED_REST_KEY = '\u0000unsectioned-rest';
+
 interface DashboardGridProps {
   dashboardId: string;
   metadataList: StoredMetadata[];
@@ -289,10 +294,46 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   // manager has no members yet, and skipping it would make the act of creating
   // one look like it did nothing. A published dashboard still never shows an
   // empty band.
-  const sections = useMemo(
-    () => sectionComponents(metadataList, gridSections, editMode),
-    [metadataList, gridSections, editMode],
-  );
+  const sections = useMemo(() => {
+    const buckets = sectionComponents(metadataList, gridSections, editMode);
+    // Split the unsectioned bucket after its opening text, so a persistent
+    // section fanned out from a sibling tab can land between the two.
+    //
+    // A pinned section is the family's shared content: it has to sit in the
+    // same place on every tab. Rendered after the whole unsectioned bucket it
+    // did on a tab with sections of its own — but on a tab that sections
+    // nothing, the bucket IS the tab, and the pinned section fell to the very
+    // bottom. Rendered before it, it jumps ahead of the intro text that says
+    // what the tab is. The intro belongs first, the shared metadata second.
+    //
+    // Edit mode keeps the single flat bucket: splitting it would put the intro
+    // text in a grid of its own, where it could no longer be dragged next to
+    // the components below it.
+    if (editMode) return buckets;
+    const flatIdx = new Map(layouts.map((l, i) => [l.i, i]));
+    const at = (m: StoredMetadata) => {
+      const l = layouts.find((x) => x.i === m.index);
+      return l ? [l.y, l.x, flatIdx.get(m.index) ?? 0] : [0, 0, flatIdx.get(m.index) ?? 0];
+    };
+    return buckets.flatMap((b) => {
+      if (b.sectionName || b.members.length === 0) return [b];
+      const ordered = [...b.members].sort((a, c) => {
+        const [ay, ax, ai] = at(a);
+        const [cy, cx, ci] = at(c);
+        return ay - cy || ax - cx || ai - ci;
+      });
+      let lead = 0;
+      while (lead < ordered.length && ordered[lead].component_type === 'text') lead += 1;
+      // No opening text: the whole bucket is "the rest", so the pinned section
+      // still renders above it rather than below the tab's entire content.
+      if (lead === 0) return [{ ...b, key: UNSECTIONED_REST_KEY }];
+      if (lead === ordered.length) return [b];
+      return [
+        { ...b, members: ordered.slice(0, lead) },
+        { ...b, key: UNSECTIONED_REST_KEY, members: ordered.slice(lead) },
+      ];
+    });
+  }, [metadataList, gridSections, editMode, layouts]);
   /**
    * Sections whose grid is actually rendered: the ones open now, plus every one
    * that has been open at some point since mount.
@@ -533,12 +574,69 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     </ResponsiveGridLayout>
     );
 
-  const unsectioned = sections.find((s) => !s.sectionName);
+  const leadBucket = sections.find((s) => !s.sectionName && s.key !== UNSECTIONED_REST_KEY);
+  const restBucket = sections.find((s) => s.key === UNSECTIONED_REST_KEY);
   const named = sections.filter((s) => s.sectionName);
+  // A persistent section is family-wide content: it has to land in the same
+  // place on the tab that owns it and on every tab it fans out to. On a foreign
+  // tab it arrives through `beforeSections`; here it would otherwise keep its
+  // declared position among this tab's own sections, which on a tab with no
+  // sections is below everything. Hoisting it out of `named` puts both copies
+  // in the one place: under the tab's opening text, above everything else.
+  const isPinnedTop = (s: ComponentSection) =>
+    Boolean(s.spec?.persistent) && s.spec?.pin !== 'bottom';
+  const pinnedTop = named.filter(isPinnedTop);
+  const ownSections = named.filter((s) => !isPinnedTop(s));
   // Drives one button rather than a pair: "collapse all" until nothing is open,
   // then "expand all". A single control can't be in the dead state where the
   // one you want is the one already applied.
   const anySectionOpen = named.some((s) => sectionCollapse.isOpen(s.key));
+
+  const renderSections = (list: ComponentSection[]) =>
+    list.length === 0 ? null : (
+      <SectionAccordion
+        value={list.filter((s) => sectionCollapse.isOpen(s.key)).map((s) => s.key)}
+        onChange={(open) =>
+          applyAccordionValue(
+            open,
+            list.map((s) => s.key),
+            sectionCollapse,
+          )
+        }
+      >
+        {list.map((section) => (
+          <SectionAccordionItem
+            key={section.key}
+            value={section.key}
+            color={section.spec?.color}
+            actions={renderSectionActions?.(section.sectionName ?? null)}
+          >
+            <Accordion.Control>
+              <SectionHeader
+                spec={section.spec}
+                name={section.sectionName}
+                // Only while folded: expanded, these numbers are already on
+                // screen as the cards themselves. Folding a section must not
+                // cost you the figures it was showing.
+                trailing={
+                  !sectionCollapse.isOpen(section.key) ? (
+                    <SectionSummary section={section} cardValues={cardValues} />
+                  ) : undefined
+                }
+              />
+            </Accordion.Control>
+            <Accordion.Panel>
+              {/* Plain wrapper so the width available inside the section box
+                  can be read off the DOM — see `sectionInset`. Absent until
+                  the section has been opened once: see `renderedSections`. */}
+              {renderedSections.has(section.key) && (
+                <div data-section-grid>{renderGrid(section)}</div>
+              )}
+            </Accordion.Panel>
+          </SectionAccordionItem>
+        ))}
+      </SectionAccordion>
+    );
 
   return (
     <div
@@ -546,11 +644,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       className={rootClass}
       style={{ width: '100%', overflowX: 'hidden' }}
     >
-      {unsectioned && renderGrid(unsectioned)}
-      {/* Ahead of `beforeSections`, not after it: the control belongs to this
-          tab's own sections, and a foreign pinned section sitting between the
-          tab's content and its section toolbar left the toolbar looking like
-          it belonged to that section instead. */}
+      {leadBucket && renderGrid(leadBucket)}
       {named.length > 0 && (
         <Group justify="flex-end" mb={4}>
           <Button
@@ -571,54 +665,19 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
           </Button>
         </Group>
       )}
-      {/* Spaced, not glued: the pinned section belongs to another tab and the
-          sections below belong to this one — with no gap the two read as one
-          stack. */}
-      {beforeSections && <div style={{ marginBottom: 10 }}>{beforeSections}</div>}
-      {named.length > 0 && (
-        <SectionAccordion
-          value={named.filter((s) => sectionCollapse.isOpen(s.key)).map((s) => s.key)}
-          onChange={(open) =>
-            applyAccordionValue(
-              open,
-              named.map((s) => s.key),
-              sectionCollapse,
-            )
-          }
-        >
-          {named.map((section) => (
-            <SectionAccordionItem
-              key={section.key}
-              value={section.key}
-              color={section.spec?.color}
-              actions={renderSectionActions?.(section.sectionName ?? null)}
-            >
-              <Accordion.Control>
-                <SectionHeader
-                  spec={section.spec}
-                  name={section.sectionName}
-                  // Only while folded: expanded, these numbers are already on
-                  // screen as the cards themselves. Folding a section must not
-                  // cost you the figures it was showing.
-                  trailing={
-                    !sectionCollapse.isOpen(section.key) ? (
-                      <SectionSummary section={section} cardValues={cardValues} />
-                    ) : undefined
-                  }
-                />
-              </Accordion.Control>
-              <Accordion.Panel>
-                {/* Plain wrapper so the width available inside the section box
-                    can be read off the DOM — see `sectionInset`. Absent until
-                    the section has been opened once: see `renderedSections`. */}
-                {renderedSections.has(section.key) && (
-                  <div data-section-grid>{renderGrid(section)}</div>
-                )}
-              </Accordion.Panel>
-            </SectionAccordionItem>
-          ))}
-        </SectionAccordion>
+      {/* Straight after the tab's opening text and the section toolbar that
+          governs it too, ahead of everything else the tab draws — whether the
+          pinned section is owned here (`pinnedTop`) or fanned out from a
+          sibling tab (`beforeSections`). Spaced from what follows so the two
+          don't read as one stack. */}
+      {(beforeSections || pinnedTop.length > 0) && (
+        <div style={{ marginBottom: 10 }}>
+          {beforeSections}
+          {renderSections(pinnedTop)}
+        </div>
       )}
+      {restBucket && renderGrid(restBucket)}
+      {renderSections(ownSections)}
     </div>
   );
 };
