@@ -3,6 +3,10 @@
 # values-embl-internal-prod.yaml with dev hostnames/namespace, including
 # 3-replica Percona PSMDB HA mongo.
 #
+# Diverges from prod on two points, both under backend.env below: registration
+# is disabled (so no account can be created here, by form or by OAuth) and the
+# instance carries TREC branding.
+#
 # Namespace: datasci-depictio-internal-dev
 #   (Tenant: datasci-depictio-internal, 64 CPU / 128 GiB, shared with -prod)
 #
@@ -101,8 +105,35 @@ backend:
     # Google OAuth Configuration
     DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED: "true"
 
+    # No self-service accounts on this instance. /register returns 403 and the
+    # Register button is hidden, AND the OAuth callback stops provisioning:
+    # google_oauth_routes.py passes allow_create=not registration_disabled, so
+    # an unknown Google email gets 403 instead of a new account. OAuth stays a
+    # login-only door for people who already have one here.
+    DEPICTIO_AUTH_REGISTRATION_DISABLED: "true"
+
     # Celery Configuration - Disabled for now
     # DEPICTIO_CELERY_ENABLED: "false"
+
+    # ── TREC branding ────────────────────────────────────────────────────
+    # Deployment defaults only: /admin -> Branding overrides any of this live,
+    # without a redeploy, and a dashboard can override it again for itself.
+    #
+    # The shipped preset is the whole palette — primary #00a550, secondary
+    # #1a4f8f, tertiary #f5a11b, tint_mode full (models/models/branding.py).
+    # Deliberately not restated as flat vars here: sampling the official tag
+    # gives #009f4d / #183e8f / #f49e17, within 2-3 units of the preset and
+    # indistinguishable on screen, so pinning our own copy would only mean the
+    # preset could be refined upstream without this deployment following.
+    DEPICTIO_BRANDING_PRESET: "trec"
+    # Substituted into the literal "Depictio" of the login heading
+    # (AuthCard.tsx: heading.replace('Depictio', app_name)), so this reads
+    # "Welcome to Depictio for TREC :" rather than dropping Depictio's name.
+    # Also the browser tab title.
+    DEPICTIO_BRANDING_APP_NAME: "Depictio for TREC"
+    # 620x620 JPEG on white — no alpha, so it sits in a white square in dark
+    # mode. Upload a transparent PNG via /admin -> Branding to fix that.
+    DEPICTIO_BRANDING_LOGO_URL: "https://www.embl.org/about/info/trec/wp-content/uploads/2023/02/20230126_TREC_Tag_RGB-s.jpg"
 
 # Client ID/secret come from values-embl-secrets.yaml's top-level `auth:` map
 # (same OAuth app across environments — deep-merged with this block). The
