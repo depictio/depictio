@@ -147,23 +147,23 @@ test.describe("Phylogeny zoom / pan / subtree selection", () => {
   test("subtree selects on click, deselects on re-click and via the clear control", async ({
     page,
   }) => {
-    const badge = page.locator("[data-testid='phylo-selection-badge']");
-    await expect(badge).toBeHidden();
+    const info = page.locator("[data-testid='phylo-selection-info']");
+    await expect(info).toBeHidden();
 
     const node = await internalNodePixel(page, "deepest");
     await page.mouse.click(node.x, node.y);
-    await expect(badge).toBeVisible();
-    await expect(badge).toContainText("tips");
+    await expect(info).toBeVisible();
+    await expect(info).toContainText("Tips");
 
     // Re-clicking the same node deselects.
     await page.mouse.click(node.x, node.y);
-    await expect(badge).toBeHidden();
+    await expect(info).toBeHidden();
 
     // Explicit clear control.
     await page.mouse.click(node.x, node.y);
-    await expect(badge).toBeVisible();
+    await expect(info).toBeVisible();
     await page.locator("[data-testid='phylo-clear-selection']").click();
-    await expect(badge).toBeHidden();
+    await expect(info).toBeHidden();
   });
 
   test("filter-to-subtree toggles without dimming the tree's own tips", async ({ page }) => {
@@ -174,22 +174,22 @@ test.describe("Phylogeny zoom / pan / subtree selection", () => {
     await page.mouse.click(node.x, node.y);
 
     const filterBtn = page.locator("[data-testid='phylo-filter-subtree']");
-    await expect(filterBtn).toHaveText("Filter to subtree");
+    await expect(filterBtn).toHaveText("Filter");
     await filterBtn.click();
-    await expect(filterBtn).toHaveText("Filtered — clear");
+    await expect(filterBtn).toHaveText("Filtered");
 
     // Self-exclusion: the tree strips its own filter before fetching, so it
     // keeps rendering every tip (the selection reads as the highlight).
     expect(await tipCount(page)).toBe(allTips);
 
     await filterBtn.click();
-    await expect(filterBtn).toHaveText("Filter to subtree");
+    await expect(filterBtn).toHaveText("Filter");
   });
 
   test("export .nwk downloads the selected clade", async ({ page }) => {
     const node = await internalNodePixel(page, "deepest");
     await page.mouse.click(node.x, node.y);
-    await expect(page.locator("[data-testid='phylo-selection-badge']")).toBeVisible();
+    await expect(page.locator("[data-testid='phylo-selection-info']")).toBeVisible();
 
     const downloadP = page.waitForEvent("download");
     await page.locator("[data-testid='phylo-export-newick']").click();
