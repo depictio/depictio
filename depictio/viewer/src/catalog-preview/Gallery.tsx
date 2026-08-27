@@ -519,7 +519,7 @@ const Gallery: React.FC<{ tools: ToolEntry[]; onOpen: (id: string) => void; them
             {tools.length} tools · {totalOutputs} outputs
           </Badge>
           {/* Tool Studio — the no-backend web app to author a new tool entry.
-              Hosted on GitHub Pages under the project base path. */}
+              Hosted on GitHub Pages from the depictio-tool-studio showcase repo. */}
           <Button
             component="a"
             href="https://depictio.github.io/depictio-tool-studio/"
