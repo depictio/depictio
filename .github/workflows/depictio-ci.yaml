@@ -2726,8 +2726,11 @@ jobs:
           # opt-in because it is a test fixture, and the catalog coverage spec is
           # the only thing that needs it.
           echo "DEPICTIO_SEED_EXTRA_PROJECTS=catalog_conformance" >> docker-compose/.env
-          mkdir -p data/depictioDB data/minio_data data/prof_files data/cache data/redis
-          chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache data/redis
+          # `multiqc_prerender` is bind-mounted into the backend and the worker,
+          # both of which run as $UID:$GID. Left to Docker to create, it lands
+          # root-owned and every MultiQC render 500s on the cache write.
+          mkdir -p data/depictioDB data/minio_data data/prof_files data/cache data/redis data/multiqc_prerender
+          chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache data/redis data/multiqc_prerender
 
       - name: Log in and start services
         run: |

@@ -147,6 +147,12 @@ ma, dot_plot, lollipop, qq, sunburst, oncoplot, coverage_track, sankey.
   and `roles` bind to them.
 - Non-tabular / role-less renders (`table`, `multiqc_plot`, `figure`) need
   neither a recipe nor `columns`.
+- **Which collection an output binds to follows the same split.** The picker
+  offers a recipe output only on the collection that recipe produced, and a
+  recipe-free output only on the collection that scanned the file `find`
+  describes (`_match_dc_to_catalog`). An output cannot be offered on the raw
+  file its recipe eats: the renders are authored against the recipe's schema, so
+  a renaming recipe would bind columns the raw file does not have.
 
 Use `depictio dev catalog columns <recipe>` to see a recipe's output column names
 while writing `roles`.

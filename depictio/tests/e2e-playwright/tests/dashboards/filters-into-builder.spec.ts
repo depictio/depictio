@@ -30,13 +30,16 @@ async function pickOption(page: Page, text: string | RegExp): Promise<void> {
     .click();
 }
 
-/** Open the component builder from the editor chrome.
+/** Open the component builder from the editor chrome, on the manual stepper.
  *  "Add" is a menu (Component / Section), not a direct link, so reaching the
- *  builder takes two clicks — the button, then the entry. */
+ *  builder takes two clicks — the button, then the entry. The Add-component
+ *  page then fronts the stepper with a two-tile chooser (manual / catalog), so
+ *  a third click is what actually lands on the Component Type step. */
 async function openComponentBuilder(page: Page): Promise<void> {
   await page.locator("[data-tour-id='editor-add-component']").click();
   await page.locator("[data-testid='add-component']").click();
   await page.waitForURL(/\/component\/add\//, { timeout: 15_000 });
+  await page.locator("[data-testid='component-source-manual']").click();
 }
 
 /** StepType: pick a component type card by its type, not by its text.

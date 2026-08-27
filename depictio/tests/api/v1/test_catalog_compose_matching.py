@@ -70,9 +70,35 @@ class TestMatchSignals:
 
     def test_filename_glob_still_matches(self, entries):
         matched = _match_dc_to_catalog(
+            entries, basename="SRR1_profile.txt", full_path="/run/metaphlan/SRR1_profile.txt"
+        )
+        assert "metaphlan_profile" in _ids(matched)
+
+    def test_an_outputs_recipe_makes_its_path_lane_inert(self, entries):
+        """`pangolin_report` declares a recipe, so its raw CSV is not bindable.
+
+        The recipe owns the output columns (SCHEMA.md), so offering the render on
+        the raw collection would bind columns that only the recipe produces.
+        """
+        raw = _match_dc_to_catalog(
             entries, basename="sample.pangolin.csv", full_path="/run/sample.pangolin.csv"
         )
-        assert "pangolin_report" in _ids(matched)
+        assert "pangolin_report" not in _ids(raw)
+
+        derived = _match_dc_to_catalog(entries, recipe="pangolin/pangolin_lineages.py")
+        assert _ids(derived) == {"pangolin_report"}
+
+    def test_a_renaming_recipe_is_never_offered_on_its_raw_file(self, entries):
+        """The regression: mosdepth renames chrom/start/coverage, so a coverage
+        track bound to the raw TSV failed with `"chromosome" not found`."""
+        raw_tsv = "/run/variants/bowtie2/mosdepth/genome/all_samples.mosdepth.coverage.tsv"
+        raw = _match_dc_to_catalog(
+            entries, basename="all_samples.mosdepth.coverage.tsv", full_path=raw_tsv
+        )
+        assert "mosdepth_genome_coverage" not in _ids(raw)
+
+        derived = _match_dc_to_catalog(entries, recipe="mosdepth/coverage_track_canonical.py")
+        assert _ids(derived) == {"mosdepth_genome_coverage"}
 
     def test_one_recipe_may_back_several_outputs(self, entries):
         """Two catalog outputs render the same frame differently; both are offered."""

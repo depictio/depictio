@@ -61,13 +61,22 @@ def _match_dc_to_catalog(
 ) -> list[dict[str, Any]]:
     """Return catalog output matches for a DC identified by path and/or recipe.
 
-    Three independent signals, any of which is enough:
+    Two lanes, and which one an output uses is decided by whether it declares a
+    recipe — the catalog's schema-ownership rule (SCHEMA.md): a recipe owns the
+    output columns, and such an output must not declare ``columns`` of its own.
 
-    - ``find.filename`` (fnmatch on the basename)
-    - ``find.path_glob`` (PurePosixPath.match on the full path, ** aware)
-    - the recipe that produced the DC, compared to the output's ``recipe``
+    - **No recipe** → the raw file is the bindable frame, recognised by
+      ``find.filename`` (fnmatch on the basename) or ``find.path_glob``
+      (PurePosixPath.match on the full path, ** aware).
+    - **Recipe** → only the recipe that produced the DC binds it, compared to the
+      output's ``recipe``. ``find`` still says which raw file the recipe eats,
+      but the raw DC cannot satisfy renders authored against the recipe's
+      schema: ``mosdepth_genome_coverage`` renames chrom/start/coverage to
+      chromosome/position/value, so a coverage track offered on the raw
+      collection came up "chromosome" not found. Keeping the two apart also
+      stops one output being offered twice, once per collection.
 
-    The recipe clause is what recognises *derived* collections. A recipe DC never
+    The recipe lane is what recognises *derived* collections. A recipe DC never
     keeps the raw pipeline path the ``find`` patterns describe: it is either
     computed straight into a delta table (no scan block at all) or materialised
     as a canonical seed file. Recipe paths are namespaced per tool and pipeline,
@@ -80,10 +89,16 @@ def _match_dc_to_catalog(
             # The `basename` / `full_path` guards keep a recipe-only lookup, which
             # passes neither, from matching a wildcard `find` pattern on "".
             matched = (
-                (basename and find.filename and fnmatch(basename, find.filename))
-                or (full_path and find.path_glob and PurePosixPath(full_path).match(find.path_glob))
-                or (recipe is not None and output.recipe is not None and recipe == output.recipe)
-            )
+                output.recipe is None
+                and (
+                    (basename and find.filename and fnmatch(basename, find.filename))
+                    or (
+                        full_path
+                        and find.path_glob
+                        and PurePosixPath(full_path).match(find.path_glob)
+                    )
+                )
+            ) or (recipe is not None and output.recipe is not None and recipe == output.recipe)
             if matched:
                 matches.append(
                     {
