@@ -5,9 +5,14 @@ playwright-report/
 .golden-out/
 *.tsbuildinfo
 
-# The root .gitignore ignores all *.csv, but this fixture is a committed CI
-# input (scripts/genGolden.ts → round-trip validate). Keep it tracked.
-!e2e/golden/golden.csv
+# The root .gitignore ignores all *.csv, but everything under e2e/golden is a
+# committed CI input (scripts/genGolden.ts → round-trip validate;
+# scripts/card_metrics_golden.py → src/test/cardMetricsGolden.json). Negate the
+# whole directory, not one file at a time: a fixture added without its own
+# negation is silently untracked, `git add` says nothing, the suite stays green
+# locally because the file is on disk, and CI fails on ENOENT — which is exactly
+# how card_metrics.csv went missing.
+!e2e/golden/*.csv
 .playwright-mcp/
 
 # Local env (OAuth client id / worker URL / dev token) — never commit secrets.
