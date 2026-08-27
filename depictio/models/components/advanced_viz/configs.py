@@ -512,6 +512,37 @@ class PhylogeneticConfig(_BaseVizConfig):
     )
 
 
+class Molecule3DConfig(_BaseVizConfig):
+    """3D molecular structure viewer (3Dmol.js) — single static PDB/mmCIF model.
+
+    The structure comes from a *separate* DC with `type: "structure"` (see
+    DCStructureConfig), served raw via the
+    /advanced_viz/structure/{dc_id}/file endpoint. There is no tabular
+    payload and no cross-filter participation — the CANONICAL_SCHEMAS entry
+    is empty, like upset_plot/sankey.
+    """
+
+    viz_kind: Literal["molecule_3d"] = "molecule_3d"
+
+    # Structure source — a structure DC (the .pdb/.cif file lives on disk or
+    # S3, served via the /advanced_viz/structure/{dc_id}/file endpoint).
+    structure_wf_id: str = Field(..., description="Workflow id of the structure DC")
+    structure_dc_id: str = Field(..., description="Data-collection id of the structure DC")
+
+    # Display defaults (editable from the viz controls).
+    representation: Literal["cartoon", "trace", "stick", "sphere"] = Field(
+        default="cartoon", description="Default molecular representation"
+    )
+    color_mode: Literal["spectrum", "chain", "plddt"] = Field(
+        default="spectrum",
+        description=(
+            "Default colouring: N→C rainbow spectrum, per-chain categorical, or "
+            "AlphaFold-style pLDDT bands (requires pLDDT in the B-factor column, "
+            "the AlphaFold/ESMFold convention)"
+        ),
+    )
+
+
 class MAConfig(_BaseVizConfig):
     """MA (Bland-Altman) plot: mean log intensity (x) vs log fold change (y).
 
@@ -808,6 +839,7 @@ VizConfig = Annotated[
     | EnrichmentConfig
     | ComplexHeatmapConfig
     | UpsetPlotConfig
+    | Molecule3DConfig
     | MAConfig
     | DotPlotConfig
     | LollipopConfig

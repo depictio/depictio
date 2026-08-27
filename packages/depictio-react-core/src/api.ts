@@ -945,7 +945,8 @@ export type AdvancedVizKind =
   | 'sunburst'
   | 'oncoplot'
   | 'coverage_track'
-  | 'sankey';
+  | 'sankey'
+  | 'molecule_3d';
 
 /** Accepted dtypes for one role, plus whether the role is required. Sourced
  *  from the backend canonical schema so the builder never duplicates the
@@ -1386,6 +1387,14 @@ export async function pollSankey(jobId: string): Promise<SankeyJob> {
 export async function fetchPhylogenyNewick(dcId: string): Promise<string> {
   const res = await authFetch(`${API_BASE}/advanced_viz/phylogeny/${dcId}/newick`);
   if (!res.ok) throw new Error(`Failed to fetch phylogeny newick: ${res.status}`);
+  return res.text();
+}
+
+
+/** Fetch the raw PDB/mmCIF text for a structure-type DC. */
+export async function fetchStructureFile(dcId: string): Promise<string> {
+  const res = await authFetch(`${API_BASE}/advanced_viz/structure/${dcId}/file`);
+  if (!res.ok) throw new Error(`Failed to fetch structure file: ${res.status}`);
   return res.text();
 }
 

@@ -353,6 +353,7 @@ async def create_initial_dashboards(
                 "oncoplot",
                 "coverage_track",
                 "categorical_flow",
+                "molecule_3d",
             )
         ),
         # nf-core/viralrecon multi-tab dashboard. Seed JSONs are snapshotted

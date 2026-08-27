@@ -4840,7 +4840,7 @@ def _component_has_data(component: dict, dc_meta: dict[str, dict]) -> bool:
         deltatables record (processing skipped it, no data) -> DROP.
       - Otherwise KEEP. In particular a NON-optional DC is always kept so a genuine
         gap renders a visible error instead of being silently hidden, and
-        MultiQC / phylogeny DCs (which don't register a delta table) are kept.
+        MultiQC / phylogeny / structure DCs (which don't register a delta table) are kept.
     """
     dc_tag = component.get("data_collection_tag")
     if not dc_tag:
@@ -4871,7 +4871,7 @@ def _component_has_data(component: dict, dc_meta: dict[str, dict]) -> bool:
             return False
         return True
 
-    # Stored config.type is normalised lower-case (e.g. "table"); MultiQC/phylogeny
+    # Stored config.type is normalised lower-case (e.g. "table"); MultiQC/phylogeny/structure
     # types don't register delta tables, so only delta-backed Table DCs are checked.
     if not info.get("optional") or (info.get("type") or "").lower() != "table":
         return True
@@ -5019,7 +5019,7 @@ def _tab_has_visualization_components(
     taxonomy DCs were all pruned for a skip_qiime run, leaving only the sample
     metadata table/card) is treated as empty — the surviving metadata viz is not
     the tab's purpose. DCs whose `metatype` is `Metadata` therefore don't count
-    toward keeping the tab; everything else (MultiQC, taxonomy, phylogeny, …) does.
+    toward keeping the tab; everything else (MultiQC, taxonomy, phylogeny, structure, …) does.
     """
     dc_meta = dc_meta or {}
     for c in dashboard_dict.get("stored_metadata", []):

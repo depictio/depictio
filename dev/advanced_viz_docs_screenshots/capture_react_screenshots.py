@@ -55,6 +55,7 @@ VIZ_MAP: dict[str, str] = {
     "upset_plot": "646b0f3c1e4a2d7f8e5b8d29",
     "sankey": "646b0f3c1e4a2d7f8e5b8d47",
     "oncoplot": "646b0f3c1e4a2d7f8e5b8d45",
+    "molecule_3d": "646b0f3c1e4a2d7f8e5b8d48",
 }
 
 

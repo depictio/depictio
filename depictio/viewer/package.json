@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Depictio React viewer SPA — read-only dashboard rendering using shared depictio-components.",
+  "description": "Depictio React viewer SPA \u2014 read-only dashboard rendering using shared depictio-components.",
   "scripts": {
     "icons": "node scripts/generate-icon-subset.mjs",
     "dev": "pnpm run icons && vite",
@@ -12,6 +12,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "3dmol": "^2.5.5",
     "@iconify/react": "^5.0.2",
     "@mantine/carousel": "^7.14.0",
     "@mantine/code-highlight": "^7.14.0",

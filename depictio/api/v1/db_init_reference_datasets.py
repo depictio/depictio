@@ -154,6 +154,8 @@ STATIC_IDS = {
             # never registered here, so seeded deploys 404'd on these tiles.
             "coverage_track_demo": "646b0f3c1e4a2d7f8e5b8d50",
             "categorical_flow_demo": "646b0f3c1e4a2d7f8e5b8d51",
+            # 3D structure showcase: crambin PDB for the molecule_3d viz.
+            "structure_demo": "646b0f3c1e4a2d7f8e5b8d52",
         },
         "dashboards": {
             # Main tab reuses the project_id so get_child_tabs(main_id) finds
@@ -183,6 +185,9 @@ STATIC_IDS = {
             "advanced_viz_qq": "646b0f3c1e4a2d7f8e5b8d43",
             "advanced_viz_sunburst": "646b0f3c1e4a2d7f8e5b8d44",
             "advanced_viz_oncoplot": "646b0f3c1e4a2d7f8e5b8d45",
+            # coverage_track (8d46) / categorical_flow (8d47) ids live only in
+            # their seed JSONs; molecule_3d registers here for discoverability.
+            "advanced_viz_molecule_3d": "646b0f3c1e4a2d7f8e5b8d48",
         },
     },
     # nf-core/viralrecon 3.0.0 viral-genome analysis template — five-tab

@@ -12,6 +12,7 @@ from depictio.models.models.data_collections_types.image import DCImageConfig
 from depictio.models.models.data_collections_types.jbrowse import DCJBrowse2Config
 from depictio.models.models.data_collections_types.multiqc import DCMultiQC
 from depictio.models.models.data_collections_types.phylogeny import DCPhylogenyConfig
+from depictio.models.models.data_collections_types.structure import DCStructureConfig
 from depictio.models.models.data_collections_types.table import DCTableConfig
 from depictio.models.models.data_collections_types.table_coordinates import (
     DCTableCoordinatesConfig,
@@ -174,6 +175,7 @@ class DataCollectionConfig(MongoModel):
         | DCImageConfig
         | DCGeoJSONConfig
         | DCPhylogenyConfig
+        | DCStructureConfig
     )
     join: TableJoinConfig | None = None
     transform: TransformConfig | None = None
@@ -213,7 +215,15 @@ class DataCollectionConfig(MongoModel):
 
     @field_validator("type", mode="before")
     def validate_type(cls, v):
-        allowed_values = ["table", "jbrowse2", "multiqc", "image", "geojson", "phylogeny"]
+        allowed_values = [
+            "table",
+            "jbrowse2",
+            "multiqc",
+            "image",
+            "geojson",
+            "phylogeny",
+            "structure",
+        ]
         lower_v = v.lower()
         if lower_v not in allowed_values:
             raise ValueError(f"type must be one of {allowed_values}")
@@ -288,6 +298,12 @@ class DataCollectionConfig(MongoModel):
                     values["dc_specific_properties"] = DCPhylogenyConfig(**dc_specific_properties)
                 else:
                     values["dc_specific_properties"] = DCPhylogenyConfig()
+        elif type_value == "structure":
+            if not isinstance(dc_specific_properties, DCStructureConfig):
+                if isinstance(dc_specific_properties, dict):
+                    values["dc_specific_properties"] = DCStructureConfig(**dc_specific_properties)
+                else:
+                    values["dc_specific_properties"] = DCStructureConfig()
 
         # Validate that scan is provided for non-MultiQC types and native sources
         source = values.get("source", "native")  # Default to string value

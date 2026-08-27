@@ -204,7 +204,8 @@
                 "sunburst",
                 "oncoplot",
                 "coverage_track",
-                "sankey"
+                "sankey",
+                "molecule_3d"
               ],
               "type": "string"
             },

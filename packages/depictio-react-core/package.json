@@ -22,6 +22,7 @@
     "src"
   ],
   "peerDependencies": {
+    "3dmol": "^2.5.5",
     "@iconify/react": "^5.0.2",
     "@mantine/core": "^7.14.0",
     "@mantine/dates": "^7.14.0",
@@ -37,6 +38,7 @@
     "react-resizable": "^3.0.5"
   },
   "devDependencies": {
+    "3dmol": "^2.5.5",
     "@iconify/react": "^5.0.2",
     "@mantine/core": "^7.14.0",
     "@mantine/dates": "^7.14.0",
