@@ -5,6 +5,7 @@ version: 1
 title: "Iris Dataset Analysis"
 subtitle: "Overview of sepal/petal measurements across the three Iris varieties"
 project_tag: "Iris Dataset Project Data Analysis"
+main_tab_name: "Overview"
 
 # `filter_sections` and `grid_sections` are two independent lists: the first
 # groups the left panel's interactive controls, the second groups everything
@@ -19,10 +20,15 @@ project_tag: "Iris Dataset Project Data Analysis"
 # the narrower list the editor's Sections manager offers
 # (depictio/viewer/src/components/sections/sectionIcons.ts).
 filter_sections:
+  # Persistent: this filter renders in every tab's panel and the variety picked
+  # here survives tab switches (FilterSectionSpec.persistent, cross-tab fan-out).
+  # `pin` is left at its default "top": a shared filter is what the panel should
+  # open with, on every tab.
   - name: "Variety"
     icon: "mdi:filter-variant"
     color: "blue"
-    description: "Which flowers to look at"
+    description: "Which flowers to look at, on every tab"
+    persistent: true
   - name: "Measurements"
     icon: "mdi:ruler"
     color: "indigo"
@@ -51,11 +57,18 @@ grid_sections:
     icon: "mdi:chart-bell-curve"
     color: "violet"
     description: "Where the three varieties separate, and where they do not"
+  # Persistent: the raw-data table renders (read-only) on every tab in the
+  # family — the "records in view wherever you land" slot of issue #858.
+  # `pin: bottom` puts it after each tab's own sections: it is reference
+  # material, so it should not come before the tab's own introduction. Set it
+  # to "top" (the default) for shared content that has to lead instead.
   - name: "Raw Data"
     icon: "mdi:table"
     color: "gray"
-    description: "Per-flower records behind every figure above"
+    description: "Per-flower records behind every figure, shown on every tab"
     collapsed: true
+    persistent: true
+    pin: "bottom"
 
 components:
   # ── Narrative intro ────────────────────────────────────────────────
@@ -411,6 +424,28 @@ components:
       color_discrete_map: '{"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}'
     layout: {x: 0, y: 16, w: 8, h: 5}
 
+  # Plain scatter (no marginals/trendline) so lasso selection stays direct:
+  # selections narrow the dashboard and can be saved as named groups
+  # ("select & compare"). The bivariate above keeps its marginals instead.
+  - tag: petal-shape-scatter
+    component_type: figure
+    section: "Distributions"
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    visu_type: scatter
+    title: "Petal Shape — Length vs Width"
+    description: "Lasso a cluster to filter the dashboard, or save the selection as a group. Note: iris has no per-flower ID, so a selection captures whole varieties."
+    title_size: h3
+    dict_kwargs:
+      x: petal.length
+      y: petal.width
+      color: variety
+      opacity: 0.85
+      color_discrete_map: '{"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}'
+    selection_enabled: true
+    selection_column: variety
+    layout: {x: 0, y: 21, w: 8, h: 5}
+
   # ── Data table ─────────────────────────────────────────────────────
   - tag: data-table
     component_type: table
@@ -422,4 +457,4 @@ components:
     title_size: h3
     title_align: left
     page_size: 100
-    layout: {x: 0, y: 21, w: 8, h: 5}
+    layout: {x: 0, y: 26, w: 8, h: 5}

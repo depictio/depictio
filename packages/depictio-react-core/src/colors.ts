@@ -32,6 +32,38 @@ export const TAB10_PALETTE: readonly string[] = [
   '#17becf',
 ];
 
+/** A theme carrying the resolved brand — `MantineTheme`, structurally. */
+interface BrandCarryingTheme {
+  other?: Record<string, unknown>;
+}
+
+/**
+ * The brand's categorical hues, or null when the deployment states no brand.
+ *
+ * The colorway is derived server-side and travels on the Mantine theme
+ * (`buildDepictioTheme` stashes the resolved brand in `theme.other`), so a
+ * nested provider — a dashboard overriding the instance — is picked up for
+ * free, and the client never re-derives what the server already computed.
+ */
+export function brandColorway(theme?: BrandCarryingTheme | null): string[] | null {
+  const brand = theme?.other?.brand as { plots?: { colorway?: string[] | null } } | null | undefined;
+  const colorway = brand?.plots?.colorway;
+  return colorway && colorway.length ? colorway : null;
+}
+
+/**
+ * The categorical palette a renderer should map values through: the brand's
+ * when there is one, so a client-rendered viz uses the same hues as the
+ * server-rendered figures beside it, and otherwise the palette the renderer
+ * has always used.
+ */
+export function resolveCategoricalPalette(
+  theme?: BrandCarryingTheme | null,
+  fallback: readonly string[] = TAB10_PALETTE,
+): readonly string[] {
+  return brandColorway(theme) ?? fallback;
+}
+
 function hashString(s: string): number {
   // Stable, cheap hash — same value always yields the same colour even when
   // it's not in the supplied ``allValues``.

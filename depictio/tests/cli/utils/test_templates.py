@@ -23,6 +23,7 @@ from depictio.cli.cli.utils.templates import (
     _strip_ids,
     latest_template_version,
     locate_template,
+    materialize_recipe_seeds,
     substitute_template_variables,
 )
 from depictio.models.models.templates import (
@@ -382,3 +383,98 @@ class TestApplyConditionals:
         for wf in result["workflows"]:
             tags = [dc["data_collection_tag"] for dc in wf["data_collections"]]
             assert "dc_optional_a" not in tags
+
+
+class TestMaterializeRecipeSeeds:
+    """The shared recipe→seed conversion used by both the CLI and boot seeding."""
+
+    @staticmethod
+    def _config(source: str = "transformed", *, tag: str = "taxonomy", **extra) -> dict:
+        dc_config: dict = {"source": source, **extra}
+        if source == "transformed":
+            dc_config.setdefault("transform", {"recipe": "some_recipe"})
+        return {
+            "workflows": [
+                {
+                    "name": "wf",
+                    "data_collections": [
+                        {"data_collection_tag": tag, "config": dc_config},
+                        {
+                            "data_collection_tag": "plain",
+                            "config": {"source": "native", "scan": {"mode": "recursive"}},
+                        },
+                    ],
+                }
+            ],
+            "links": [{"source_dc_tag": tag, "target_dc_tag": "plain"}],
+        }
+
+    def test_seed_present_replaces_recipe_with_file_scan(self, tmp_path: Path) -> None:
+        """A recipe DC with a committed seed becomes a single-file TSV scan."""
+        (tmp_path / "taxonomy.tsv").write_text("a\tb\n1\t2\n")
+        config = self._config(dc_specific_properties={"format": "csv"})
+
+        materialized, missing = materialize_recipe_seeds(config, str(tmp_path), drop_missing=False)
+
+        assert (materialized, missing) == (["taxonomy"], [])
+        dc_config = config["workflows"][0]["data_collections"][0]["config"]
+        # `source` survives so the viewer still shows the recipe lineage; the
+        # absent `transform` is what marks the DC as materialised.
+        assert dc_config["source"] == "transformed"
+        assert "transform" not in dc_config
+        assert dc_config["scan"] == {
+            "mode": "single",
+            "scan_parameters": {"filename": str(tmp_path / "taxonomy.tsv")},
+        }
+        # The template's format described the recipe's *input*, not the seed.
+        assert dc_config["dc_specific_properties"]["format"] == "tsv"
+
+    def test_seed_missing_keeps_recipe_when_not_dropping(self, tmp_path: Path) -> None:
+        """The CLI contract: no seed means the recipe runs exactly as before."""
+        config = self._config()
+
+        materialized, missing = materialize_recipe_seeds(config, str(tmp_path), drop_missing=False)
+
+        assert (materialized, missing) == ([], [])
+        dc_config = config["workflows"][0]["data_collections"][0]["config"]
+        assert dc_config["transform"] == {"recipe": "some_recipe"}
+        assert "scan" not in dc_config
+        assert len(config["workflows"][0]["data_collections"]) == 2
+        assert config["links"] == [{"source_dc_tag": "taxonomy", "target_dc_tag": "plain"}]
+
+    def test_seed_missing_drops_dc_and_its_links(self, tmp_path: Path) -> None:
+        """The init contract: no seed means the DC goes, links included."""
+        config = self._config()
+
+        materialized, missing = materialize_recipe_seeds(config, str(tmp_path), drop_missing=True)
+
+        assert (materialized, missing) == ([], ["taxonomy"])
+        tags = [dc["data_collection_tag"] for dc in config["workflows"][0]["data_collections"]]
+        assert tags == ["plain"]
+        assert config["links"] == []
+
+    def test_native_dc_with_matching_tsv_is_untouched(self, tmp_path: Path) -> None:
+        """A root `{dc_tag}.tsv` next to a non-recipe DC is a name collision.
+
+        viralrecon ships mosdepth_*.tsv beside `source: native` recursive-scan
+        DCs of the same tag — "root TSV present" must never on its own mean
+        "this DC has a seed".
+        """
+        (tmp_path / "mosdepth_genome_coverage.tsv").write_text("a\tb\n")
+        config = self._config("native", tag="mosdepth_genome_coverage", scan={"mode": "recursive"})
+
+        materialized, missing = materialize_recipe_seeds(config, str(tmp_path), drop_missing=True)
+
+        assert (materialized, missing) == ([], [])
+        dc_config = config["workflows"][0]["data_collections"][0]["config"]
+        assert dc_config["scan"] == {"mode": "recursive"}
+
+    def test_absent_dc_specific_properties_is_created(self, tmp_path: Path) -> None:
+        """A DC declaring no (or null) dc_specific_properties still gets the format."""
+        (tmp_path / "taxonomy.tsv").write_text("a\tb\n")
+        config = self._config(dc_specific_properties=None)
+
+        materialize_recipe_seeds(config, str(tmp_path), drop_missing=False)
+
+        dc_config = config["workflows"][0]["data_collections"][0]["config"]
+        assert dc_config["dc_specific_properties"] == {"format": "tsv"}

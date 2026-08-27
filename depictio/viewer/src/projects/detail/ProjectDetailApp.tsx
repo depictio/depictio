@@ -19,6 +19,7 @@ import {
   Tabs,
   Text,
   Title,
+  Tooltip,
   UnstyledButton,
   useMantineColorScheme,
 } from '@mantine/core';
@@ -40,17 +41,7 @@ import {
   TextInput,
 } from '@mantine/core';
 
-import {
-  fetchProject,
-  fetchDataCollectionPreview,
-  fetchMultiQCByDataCollection,
-  renameDataCollection,
-  deleteDataCollection,
-  createDataCollectionFromUpload,
-  createMultiQCDataCollection,
-  checkMultiQCUniformity,
-  fetchVizSuggestions,
-} from 'depictio-react-core';
+import { checkMultiQCUniformity, createDataCollectionFromUpload, createMultiQCDataCollection, deleteDataCollection, fetchDataCollectionPreview, fetchMultiQCByDataCollection, fetchProject, fetchVizSuggestions, renameDataCollection, useBrandAccents } from 'depictio-react-core';
 import type {
   ProjectListEntry,
   PreviewResult,
@@ -73,7 +64,21 @@ import { AppSidebar } from '../../chrome';
 import JoinsGraph from './JoinsGraph';
 import IngestionReportPanel from './IngestionReportPanel';
 import { parseTemplate, TemplateChip, templateDocsUrl } from '../template';
-import { DcTypeIcon } from '../dcTypeIcon';
+import {
+  DcTypeBadges,
+  DcTypeIcon,
+  dcHasCoordinates,
+  dcTypeSearchKey,
+  GEO_COLOR,
+  GEO_ICON,
+} from '../dcTypeIcon';
+import {
+  AGGREGATE_COLOR,
+  DcMetatypeBadge,
+  dcMetatypeMeta,
+  METADATA_COLOR,
+} from '../dcMetatype';
+import { usePageTitle } from '../../branding';
 
 interface DataCollectionShape {
   _id?: string;
@@ -142,18 +147,6 @@ function getDcSizeBytes(dc: DataCollectionShape): number {
     );
   }
   return (flex.deltatable_size_bytes as number | undefined) ?? 0;
-}
-
-/** A DC is a "coordinates table" when its config carries explicit lat/lon
- *  column hints — backed by DCTableCoordinatesConfig server-side, but the
- *  dc_type stays "table". Mirrors validation.py:dc_has_coordinates. */
-function dcHasCoordinates(dc: DataCollectionShape): boolean {
-  const type = (dc.config?.type as string | undefined)?.toLowerCase();
-  if (type !== 'table') return false;
-  const props = dc.config?.dc_specific_properties as
-    | Record<string, unknown>
-    | undefined;
-  return Boolean(props?.lat_column) && Boolean(props?.lon_column);
 }
 
 /** Pick the right "where is this data stored" string for a DC. */
@@ -278,6 +271,7 @@ function extractColumns(dc: DataCollectionShape): string[] {
 }
 
 const ProjectDetailApp: React.FC = () => {
+  const accent = useBrandAccents();
   const [project, setProject] = useState<ProjectListEntry | null>(null);
   const [deltaLocations, setDeltaLocations] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -317,9 +311,7 @@ const ProjectDetailApp: React.FC = () => {
   const { user } = useCurrentUser();
   const projectId = readProjectIdFromPath();
 
-  useEffect(() => {
-    document.title = 'Depictio — Project Data Collections';
-  }, []);
+  usePageTitle('Project Data Collections');
 
   useEffect(() => {
     if (!projectId) {
@@ -382,10 +374,6 @@ const ProjectDetailApp: React.FC = () => {
 
   const projectType: 'basic' | 'advanced' =
     project?.project_type === 'advanced' ? 'advanced' : 'basic';
-
-  // The ingestion report only makes sense for template-instantiated projects
-  // (it compares against the frozen expected-DC manifest). Surface a tab when so.
-  const hasTemplate = useMemo(() => !!(project && parseTemplate(project)), [project]);
 
   // Tag → DC id, so identified ingestion rows can lazily list their files.
   const dcIdByTag = useMemo(() => {
@@ -464,9 +452,9 @@ const ProjectDetailApp: React.FC = () => {
             <Icon
               icon="mdi:jira"
               width={22}
-              color="var(--mantine-color-teal-6)"
+              color={`var(--mantine-color-${accent.secondary}-6)`}
             />
-            <Title order={3} c="teal">
+            <Title order={3} c={accent.secondary}>
               Project Data Manager
             </Title>
           </Group>
@@ -582,7 +570,7 @@ const ProjectDetailApp: React.FC = () => {
               return (
                 <Stack gap="lg">
                   <ProjectHeader project={project} projectType={projectType} />
-                  {hasTemplate && projectId ? (
+                  {projectId ? (
                     <Tabs value={activeTab} onChange={setActiveTab} keepMounted={false}>
                       <Tabs.List mb="md">
                         <Tabs.Tab
@@ -824,6 +812,7 @@ const MultiQCUniformityChecklist: React.FC<{
   mismatch: MultiQCMismatch | null;
   onCheck: () => void;
 }> = ({ fileCount, submitting, validating, lastCheckPassed, mismatch, onCheck }) => {
+  const accent = useBrandAccents();
   const hasMultiple = fileCount >= 2;
   const busy = submitting || validating;
   const statusText = !hasMultiple
@@ -857,7 +846,7 @@ const MultiQCUniformityChecklist: React.FC<{
           <Button
             size="compact-xs"
             variant="light"
-            color="teal"
+            color={accent.secondary}
             onClick={onCheck}
             disabled={!hasMultiple || busy}
             loading={validating}
@@ -1084,6 +1073,7 @@ const CreateDataCollectionModal: React.FC<{
   onClose: () => void;
   onSuccess: () => void;
 }> = ({ opened, projectType, projectId, onClose, onSuccess }) => {
+  const accent = useBrandAccents();
   const [dcType, setDcType] = useState<'table' | 'multiqc'>('table');
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState('');
@@ -1181,21 +1171,22 @@ const CreateDataCollectionModal: React.FC<{
     [csvColumns],
   );
 
-  // Auto-confirm coords on lat/lon header detection. Gated by a per-file ref
-  // so a user who toggles the switch off doesn't have it flipped back on by
-  // this effect (the auto-fill fires once per file, then stays out of the way).
-  const autoConfirmedForFileRef = useRef<File | null>(null);
+  // Prefill lat/lon pickers on header detection — a SUGGESTION only. The
+  // "Save as a coordinates table" switch stays off until the user flips it:
+  // silently opting a table in used to turn every metadata table carrying
+  // latitude/longitude columns into a "Coordinates" table, hiding its
+  // Metadata nature. Gated by a per-file ref so it fires once per file.
+  const prefilledForFileRef = useRef<File | null>(null);
   useEffect(() => {
     if (!file) {
-      autoConfirmedForFileRef.current = null;
+      prefilledForFileRef.current = null;
       return;
     }
     if (!coordsGuess) return;
-    if (autoConfirmedForFileRef.current === file) return;
-    autoConfirmedForFileRef.current = file;
+    if (prefilledForFileRef.current === file) return;
+    prefilledForFileRef.current = file;
     setLatColumn(coordsGuess.latColumn);
     setLonColumn(coordsGuess.lonColumn);
-    setCoordsConfirmed(true);
   }, [file, coordsGuess]);
 
   // Reset everything when the modal closes — otherwise re-opening shows stale
@@ -1448,9 +1439,9 @@ const CreateDataCollectionModal: React.FC<{
           <Icon
             icon="mdi:database-plus-outline"
             width={32}
-            color="var(--mantine-color-teal-6)"
+            color={`var(--mantine-color-${accent.secondary}-6)`}
           />
-          <Title order={3} c="teal" m={0}>
+          <Title order={3} c={accent.secondary} m={0}>
             Create a Data Collection
           </Title>
         </Group>
@@ -1461,24 +1452,18 @@ const CreateDataCollectionModal: React.FC<{
           variant="default"
         >
           <Tabs.List grow>
+            {/* Same glyphs the manager and the ingestion report use, so the
+                type you pick here is the type you recognise later. */}
             <Tabs.Tab
               value="table"
-              leftSection={<Icon icon="mdi:table" width={18} />}
+              leftSection={<DcTypeIcon type="table" size={18} withTooltip={false} />}
               disabled={submitting}
             >
               Table (CSV / TSV / Parquet)
             </Tabs.Tab>
             <Tabs.Tab
               value="multiqc"
-              leftSection={
-                <img
-                  src={`${import.meta.env.BASE_URL}logos/multiqc_icon_color.svg`}
-                  alt=""
-                  width={18}
-                  height={18}
-                  style={{ objectFit: 'contain', display: 'block' }}
-                />
-              }
+              leftSection={<DcTypeIcon type="multiqc" size={18} withTooltip={false} />}
               disabled={submitting}
             >
               MultiQC report(s)
@@ -1505,6 +1490,18 @@ const CreateDataCollectionModal: React.FC<{
               {file && (
                 <Paper p="sm" withBorder radius="sm" bg="var(--mantine-color-default-hover)">
                   <Stack gap="xs">
+                    {coordsGuess && !coordsConfirmed && (
+                      <Alert
+                        color={GEO_COLOR}
+                        variant="light"
+                        icon={<Icon icon={GEO_ICON} />}
+                        data-testid="coords-detected-alert"
+                      >
+                        Geographic columns detected ({coordsGuess.latColumn} /{' '}
+                        {coordsGuess.lonColumn}). Turn on the switch below to make this
+                        table available to Map components.
+                      </Alert>
+                    )}
                     <Switch
                       label="Save as a coordinates table"
                       description="Adds latitude / longitude column metadata so the data collection can power Map components."
@@ -1770,7 +1767,7 @@ const CreateDataCollectionModal: React.FC<{
             Cancel
           </Button>
           <Button
-            color="teal"
+            color={accent.secondary}
             onClick={handleSubmit}
             loading={submitting}
             disabled={
@@ -1795,6 +1792,7 @@ const RenameDataCollectionModal: React.FC<{
   onClose: () => void;
   onSuccess: () => void;
 }> = ({ target, onClose, onSuccess }) => {
+  const accent = useBrandAccents();
   const [name, setName] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1856,7 +1854,7 @@ const RenameDataCollectionModal: React.FC<{
           <Button variant="default" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button color="teal" onClick={handleSubmit} loading={submitting}>
+          <Button color={accent.secondary} onClick={handleSubmit} loading={submitting}>
             Save
           </Button>
         </Group>
@@ -1943,6 +1941,7 @@ const ProjectHeader: React.FC<{
   project: ProjectListEntry;
   projectType: 'basic' | 'advanced';
 }> = ({ project, projectType }) => {
+  const accent = useBrandAccents();
   const tmpl = parseTemplate(project);
   return (
     <Paper withBorder radius="md" p="lg">
@@ -1951,9 +1950,9 @@ const ProjectHeader: React.FC<{
           <Icon
             icon="mdi:database-outline"
             width={26}
-            color="var(--mantine-color-teal-6)"
+            color={`var(--mantine-color-${accent.secondary}-6)`}
           />
-          <Title order={3} c="teal" style={{ fontWeight: 600 }}>
+          <Title order={3} c={accent.secondary} style={{ fontWeight: 600 }}>
             Project Data Manager
           </Title>
         </Group>
@@ -2183,31 +2182,66 @@ const DataCollectionsManagerSection: React.FC<{
   onManage,
   onCreate,
 }) => {
+  const accent = useBrandAccents();
   return (
-    <Card withBorder radius="md" p="sm">
-      <UnstyledButton onClick={onToggle} w="100%">
+    /* Header mirrors the Cross-DC links section (LinksSection.tsx): Paper,
+       clickable title area, then the primary action and the chevron as an
+       ActionIcon on the far right. Create Data Collection lives in the
+       always-visible header — inside the Collapse it was unreachable while
+       the section was collapsed (the default). */
+    <Paper withBorder radius="md" p="sm">
+      <Group justify="space-between" wrap="nowrap">
+        <UnstyledButton onClick={onToggle} style={{ flex: 1, minWidth: 0 }}>
+          <Group gap="xs" wrap="nowrap">
+            <Icon
+              icon="mdi:database-outline"
+              width={22}
+              color="var(--mantine-color-dark-6)"
+            />
+            <Title order={4}>Data Collections Manager</Title>
+            <Badge
+              color={projectType === 'advanced' ? 'orange' : 'cyan'}
+              variant="light"
+              radius="sm"
+              size="sm"
+            >
+              {projectType === 'advanced' ? 'Advanced Project' : 'Basic Project'}
+            </Badge>
+            <Badge variant="light" color="dark" size="sm">
+              {dataCollections.length}
+            </Badge>
+          </Group>
+        </UnstyledButton>
         <Group gap="xs" wrap="nowrap">
-          <Icon
-            icon="mdi:database-outline"
-            width={22}
-            color="var(--mantine-color-dark-6)"
-          />
-          <Title order={4}>Data Collections Manager</Title>
-          <Badge
-            color={projectType === 'advanced' ? 'orange' : 'cyan'}
-            variant="light"
-            radius="sm"
-            size="sm"
+          <Button
+            data-testid="create-dc-btn"
+            color={accent.secondary}
+            size="xs"
+            leftSection={<Icon icon="mdi:plus" width={16} />}
+            disabled={!canMutate}
+            onClick={() => {
+              // Expand the section too, so the new DC lands in view.
+              if (!opened) onToggle();
+              onCreate();
+            }}
+            title={
+              canMutate
+                ? 'Create a new data collection'
+                : 'Owner permission required'
+            }
           >
-            {projectType === 'advanced' ? 'Advanced Project' : 'Basic Project'}
-          </Badge>
-          <Badge variant="light" color="dark" size="sm">
-            {dataCollections.length}
-          </Badge>
-          <Box style={{ flex: 1 }} />
-          <Icon icon={opened ? 'mdi:chevron-up' : 'mdi:chevron-down'} width={22} />
+            Create Data Collection
+          </Button>
+          <ActionIcon
+            variant="subtle"
+            color="gray"
+            onClick={onToggle}
+            aria-label={opened ? 'Collapse data collections' : 'Expand data collections'}
+          >
+            <Icon icon={opened ? 'mdi:chevron-up' : 'mdi:chevron-down'} width={22} />
+          </ActionIcon>
         </Group>
-      </UnstyledButton>
+      </Group>
 
       <Collapse in={opened}>
         <ScrollArea.Autosize mah={640} type="auto" offsetScrollbars pt="sm">
@@ -2230,8 +2264,8 @@ const DataCollectionsManagerSection: React.FC<{
           iconColor="var(--mantine-color-orange-6)"
           label="Collection Types"
           primaryDual={[
-            { count: stats.aggregate, label: 'Aggregate', color: 'orange' },
-            { count: stats.metadata, label: 'Metadata', color: 'orange' },
+            { count: stats.aggregate, label: 'Aggregate', color: AGGREGATE_COLOR },
+            { count: stats.metadata, label: 'Metadata', color: METADATA_COLOR },
           ]}
         />
         <StatCard
@@ -2249,28 +2283,11 @@ const DataCollectionsManagerSection: React.FC<{
       </SimpleGrid>
 
       <Paper withBorder radius="md" p="md">
-        <Group justify="space-between" mb="xs">
-          <Group gap="xs">
-            <Title order={5}>Data Collections</Title>
-            <Badge variant="light" color="dark" size="sm">
-              {dataCollections.length} COLLECTIONS
-            </Badge>
-          </Group>
-          <Button
-            data-testid="create-dc-btn"
-            color="teal"
-            size="sm"
-            leftSection={<Icon icon="mdi:plus" width={16} />}
-            disabled={!canMutate}
-            onClick={onCreate}
-            title={
-              canMutate
-                ? 'Create a new data collection'
-                : 'Owner permission required'
-            }
-          >
-            Create Data Collection
-          </Button>
+        <Group gap="xs" mb="xs">
+          <Title order={5}>Data Collections</Title>
+          <Badge variant="light" color="dark" size="sm">
+            {dataCollections.length} COLLECTIONS
+          </Badge>
         </Group>
         <DataCollectionsTable
           projectType={projectType}
@@ -2286,7 +2303,7 @@ const DataCollectionsManagerSection: React.FC<{
           </Stack>
         </ScrollArea.Autosize>
       </Collapse>
-    </Card>
+    </Paper>
   );
 };
 
@@ -2389,6 +2406,7 @@ const DataCollectionsTable: React.FC<{
   onDelete,
   onManage,
 }) => {
+  const accent = useBrandAccents();
   const [filter, setFilter] = useState('');
   const [sortKey, setSortKey] = useState<DcSortKey>('tag');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -2403,8 +2421,10 @@ const DataCollectionsTable: React.FC<{
 
   const rows = useMemo(() => {
     const q = filter.trim().toLowerCase();
-    const dcType = (dc: DataCollectionShape) =>
-      ((dc.config?.type as string | undefined) || '').toLowerCase();
+    // A geomap answers to both "table" and "geomap", the two words the Type
+    // cell shows for it. Sorting on the same key keeps geomaps next to the
+    // plain tables they are a kind of.
+    const dcType = (dc: DataCollectionShape) => dcTypeSearchKey(dc);
     const list = dataCollections.filter(
       (dc) =>
         !q ||
@@ -2454,7 +2474,7 @@ const DataCollectionsTable: React.FC<{
         highlightOnHover
         stickyHeader
         layout="fixed"
-        miw={760}
+        miw={850}
       >
         <Table.Thead>
           <Table.Tr>
@@ -2464,7 +2484,7 @@ const DataCollectionsTable: React.FC<{
               activeKey={sortKey}
               dir={sortDir}
               onSort={onSort}
-              w={120}
+              w={190}
             />
             <SortableTh
               label="Data collection"
@@ -2473,7 +2493,7 @@ const DataCollectionsTable: React.FC<{
               dir={sortDir}
               onSort={onSort}
             />
-            <Table.Th w={130}>Kind</Table.Th>
+            <Table.Th w={130}>Metatype</Table.Th>
             <SortableTh
               label="Size"
               sortKey="size"
@@ -2508,21 +2528,10 @@ const DataCollectionsTable: React.FC<{
             const isSelected = id === selectedDcId;
             const type = (dc.config?.type as string | undefined) || 'unknown';
             const isMultiQC = type.toLowerCase() === 'multiqc';
-            const isTable = type.toLowerCase() === 'table';
-            const isCoord = dcHasCoordinates(dc);
-            const metatype = (dc.config?.metatype as string | undefined) || null;
             const sizeBytes = getDcSizeBytes(dc);
-            // One consistent classification per DC. An aggregate table looks the
-            // same whether the backend stamped metatype="Aggregated" or left it null
-            // (inferred) — fixes the old grey "AGGREGATED" vs orange "AGGREGATE"
-            // split for what is the same thing.
-            const kind = isCoord
-              ? { label: 'Coordinates', color: 'grape' }
-              : (metatype || '').toLowerCase().startsWith('metadat')
-                ? { label: 'Metadata', color: 'gray' }
-                : projectType === 'advanced' && isTable
-                  ? { label: 'Aggregate', color: 'orange' }
-                  : null;
+            // The two axes come from their own modules, so the row, the DC
+            // viewer and the ingestion report name a collection the same way.
+            const metatypeMeta = dcMetatypeMeta(dc, projectType);
             return (
               <Table.Tr
                 key={id}
@@ -2533,12 +2542,11 @@ const DataCollectionsTable: React.FC<{
                 }}
               >
                 <Table.Td>
-                  <Group gap={6} wrap="nowrap">
-                    <DcTypeIcon type={type} isCoord={isCoord} withTooltip={false} />
-                    <Text size="xs" c="dimmed">
-                      {type}
-                    </Text>
-                  </Group>
+                  {/* Same component as the DC viewer's Type row: a type reads
+                      identically wherever it is shown. Geomap sits beside the
+                      type, never in place of it, since the collection is still
+                      a table and still binds to every table component. */}
+                  <DcTypeBadges dc={dc} size="xs" />
                 </Table.Td>
                 <Table.Td>
                   <Text fw={600} size="sm" style={{ wordBreak: 'break-word' }}>
@@ -2546,10 +2554,8 @@ const DataCollectionsTable: React.FC<{
                   </Text>
                 </Table.Td>
                 <Table.Td>
-                  {kind ? (
-                    <Badge color={kind.color} variant="light" size="sm">
-                      {kind.label}
-                    </Badge>
+                  {metatypeMeta ? (
+                    <DcMetatypeBadge dc={dc} projectType={projectType} />
                   ) : (
                     <Text size="xs" c="dimmed">
                       —
@@ -2573,7 +2579,7 @@ const DataCollectionsTable: React.FC<{
                       <ActionIcon
                         data-testid="manage-dc-btn"
                         variant="subtle"
-                        color="teal"
+                        color={accent.secondary}
                         size="sm"
                         disabled={!canMutate}
                         onClick={guard(() => onManage(dc))}
@@ -2638,17 +2644,11 @@ const DataCollectionViewer: React.FC<{
 }> = ({ dc, projectType, allDataCollections, joins, links }) => {
   const dcId = (dc._id ?? dc.id) as string;
   const type = (dc.config?.type as string | undefined) || 'unknown';
-  const metatype = (dc.config?.metatype as string | undefined) || null;
   const format =
     (dc.config?.dc_specific_properties?.format as string | undefined) || null;
   const isMultiQC = type.toLowerCase() === 'multiqc';
-  // Backend stamps `metatype: "Metadata"` on metadata tables but leaves
-  // aggregate tables with `metatype: null` (see project YAMLs and
-  // `/projects/get/all` payload). Mirror the row's fallback so the viewer
-  // surfaces the implicit "AGGREGATE" classification too.
   const isTable = type.toLowerCase() === 'table';
   const isCoordTable = dcHasCoordinates(dc);
-  const isAggregate = isTable && (metatype || '').toLowerCase() !== 'metadata';
 
   // Ranked viz-kind fit scores for this DC — surfaced in the viewer as
   // "compatible advanced visualizations" chips so users discover the affinity
@@ -2688,37 +2688,12 @@ const DataCollectionViewer: React.FC<{
           <Title order={4}>Data Collection Viewer</Title>
         </Group>
         <Group gap="sm">
-          {isMultiQC ? (
-            <img
-              src={`${import.meta.env.BASE_URL}logos/multiqc_icon_color.svg`}
-              alt="MultiQC"
-              width={22}
-              height={22}
-              style={{ objectFit: 'contain', display: 'block' }}
-            />
-          ) : (
-            <Icon
-              icon={
-                isCoordTable
-                  ? 'mdi:map-marker-radius-outline'
-                  : type === 'table'
-                    ? 'mdi:table'
-                    : 'mdi:file-document-outline'
-              }
-              width={22}
-              color={
-                isCoordTable
-                  ? 'var(--mantine-color-grape-6)'
-                  : 'var(--mantine-color-teal-6)'
-              }
-            />
-          )}
           <Title order={4}>{dc.data_collection_tag || dcId}</Title>
-          {isCoordTable && (
-            <Badge color="grape" variant="light" size="sm" radius="sm">
-              COORDINATES
-            </Badge>
-          )}
+          {/* The same badges the manager row carries, in the same order. Three
+              coexisting facts, never alternatives: a table carrying coordinates
+              can be a metadata table and a geomap at once. */}
+          <DcTypeBadges dc={dc} />
+          <DcMetatypeBadge dc={dc} projectType={projectType} />
         </Group>
         {detectedVizKinds.length > 0 && (
           <Alert
@@ -2755,44 +2730,16 @@ const DataCollectionViewer: React.FC<{
             </Group>
             <Stack gap={4}>
               <DetailRow label="Data Collection ID" value={dcId} mono />
-              <DetailRow
-                label="Type"
-                badge={
-                  <Group gap={4} wrap="nowrap">
-                    <Badge color="blue" size="sm" radius="sm">
-                      {type.toUpperCase()}
-                    </Badge>
-                    {isCoordTable && (
-                      <Badge color="grape" variant="light" size="sm" radius="sm">
-                        COORDINATES
-                      </Badge>
-                    )}
-                  </Group>
-                }
-              />
-              {/* Metatype (Metadata vs Aggregate) is meaningful only for
-               *  CLI-driven advanced projects that fan multiple files into
-               *  one DC. Basic projects upload exactly one file per DC, so
-               *  the distinction adds noise without adding information. */}
-              {projectType === 'advanced' && metatype ? (
+              <DetailRow label="Type" badge={<DcTypeBadges dc={dc} />} />
+              {/* Metatype is what the collection IS within its project; the
+               *  Type row above is what it holds. A geomap can be metadata or
+               *  aggregate, so the two rows never merge. */}
+              {dcMetatypeMeta(dc, projectType) && (
                 <DetailRow
                   label="Metatype"
-                  badge={
-                    <Badge color="gray" variant="light" size="sm" radius="sm">
-                      {metatype.toUpperCase()}
-                    </Badge>
-                  }
+                  badge={<DcMetatypeBadge dc={dc} projectType={projectType} />}
                 />
-              ) : projectType === 'advanced' && isAggregate && !isCoordTable ? (
-                <DetailRow
-                  label="Metatype"
-                  badge={
-                    <Badge color="orange" variant="light" size="sm" radius="sm">
-                      AGGREGATE
-                    </Badge>
-                  }
-                />
-              ) : null}
+              )}
               {isCoordTable && (
                 <>
                   <DetailRow
@@ -2866,13 +2813,13 @@ const DataCollectionViewer: React.FC<{
               <Accordion.Control
                 icon={
                   <Icon
-                    icon="mdi:eye-outline"
+                    icon={isCoordTable ? GEO_ICON : 'mdi:eye-outline'}
                     width={18}
-                    color="var(--mantine-color-blue-6)"
+                    color={`var(--mantine-color-${isCoordTable ? GEO_COLOR : 'blue'}-6)`}
                   />
                 }
               >
-                <Text fw={600}>Preview</Text>
+                <Text fw={600}>{isCoordTable ? 'Map preview' : 'Preview'}</Text>
               </Accordion.Control>
               <Accordion.Panel>
                 {isMultiQC ? (
@@ -3330,13 +3277,7 @@ const MultiQCReportsCard: React.FC<{ dcId: string }> = ({ dcId }) => {
   return (
     <Card withBorder radius="md" p="md">
       <Group gap="xs" mb="xs">
-        <img
-          src={`${import.meta.env.BASE_URL}logos/multiqc_icon_color.svg`}
-          alt="MultiQC"
-          width={20}
-          height={20}
-          style={{ objectFit: 'contain', display: 'block' }}
-        />
+        <DcTypeIcon type="multiqc" size={20} withTooltip={false} />
         <Text fw={600}>MultiQC Report Metadata</Text>
         <Text size="sm" c="dimmed">
           ·{' '}
@@ -3413,6 +3354,7 @@ const DetailRow: React.FC<{
 );
 
 const DataPreviewPanel: React.FC<{ dcId: string }> = ({ dcId }) => {
+  const accent = useBrandAccents();
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -3434,7 +3376,7 @@ const DataPreviewPanel: React.FC<{ dcId: string }> = ({ dcId }) => {
   if (!preview && !loading && !error) {
     return (
       <Button
-        color="teal"
+        color={accent.secondary}
         variant="light"
         size="sm"
         onClick={handleLoad}

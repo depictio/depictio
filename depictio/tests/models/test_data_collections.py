@@ -414,6 +414,65 @@ class TestDataCollectionConfig:
                 },
             )
 
+    def test_table_coordinates_rejects_half_configured(self):
+        """A coord dict carrying only one of lat/lon must error loudly, not be
+        silently kept as a raw dict with the geo capability stripped — the YAML
+        author needs to see what's missing."""
+        scan_config = Scan(mode="single", scan_parameters=ScanSingle(filename="half.tsv"))
+        with pytest.raises((ValidationError, TypeError)):
+            DataCollectionConfig(
+                type="table",
+                scan=scan_config,
+                dc_specific_properties={  # type: ignore[arg-type]
+                    "format": "tsv",
+                    "lat_column": "latitude",
+                },
+            )
+
+    def test_project_yaml_geo_declaration_round_trips(self):
+        """The floating_map_demo project YAML declares lat_column/lon_column on
+        its sampling_sites DC — the config must materialise as
+        DCTableCoordinatesConfig so YAML/CLI-defined geo tables are Map-builder
+        compatible (they used to be silently excluded)."""
+        from pathlib import Path
+
+        yaml_path = (
+            Path(__file__).resolve().parents[2]
+            / "projects"
+            / "test"
+            / "floating_map_demo"
+            / "project.yaml"
+        )
+        project_dict = yaml.safe_load(yaml_path.read_text())
+        dc_dict = next(
+            dc
+            for wf in project_dict["workflows"]
+            for dc in wf["data_collections"]
+            if dc["data_collection_tag"] == "sampling_sites"
+        )
+
+        config = DataCollectionConfig(**dc_dict["config"])
+        assert isinstance(config.dc_specific_properties, DCTableCoordinatesConfig)
+        assert config.dc_specific_properties.lat_column == "latitude"
+        assert config.dc_specific_properties.lon_column == "longitude"
+
+    def test_table_coordinates_orthogonal_to_metatype(self):
+        """Geo capability composes with metatype: a Metadata table can carry
+        lat/lon hints (the exact shape the ampliseq sample-metadata YAML uses)."""
+        scan_config = Scan(mode="single", scan_parameters=ScanSingle(filename="meta.tsv"))
+        config = DataCollectionConfig(
+            type="table",
+            metatype="Metadata",
+            scan=scan_config,
+            dc_specific_properties={  # type: ignore[arg-type]
+                "format": "tsv",
+                "lat_column": "latitude",
+                "lon_column": "longitude",
+            },
+        )
+        assert config.metatype == "Metadata"
+        assert isinstance(config.dc_specific_properties, DCTableCoordinatesConfig)
+
 
 class TestDataCollection:
     """Test suite for DataCollection model."""

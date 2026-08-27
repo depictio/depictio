@@ -10,17 +10,56 @@ import {
   Stack,
   Tabs,
   Text,
+  Tooltip,
   useMantineColorScheme,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import type { DashboardSummary } from 'depictio-react-core';
+import { brandAccent, useBranding } from 'depictio-react-core';
+import type { BrandTheme, DashboardSummary } from 'depictio-react-core';
+import BrandLogo from './BrandLogo';
+import PoweredBy from './PoweredBy';
 import ThemeToggle from './ThemeToggle';
 import ServerStatusBadge from './ServerStatusBadge';
 import ProfileBadge from './ProfileBadge';
 import AuthModeBadge from './AuthModeBadge';
 import { dashboardHref } from '../dashboards/lib/dashboardLinks';
 import './chrome.css';
+
+/**
+ * A tab's name, truncated to the sidebar's width, with the full name in a
+ * tooltip once it no longer fits.
+ *
+ * The tooltip is conditional on purpose: a pill wide enough to show its whole
+ * name has nothing to reveal, and a tooltip on every tab turns an ordinary
+ * mouse path across the sidebar into a trail of popups. `scrollWidth >
+ * clientWidth` is the only reliable read of "the ellipsis is showing" — it is
+ * re-measured on resize because the sidebar is user-resizable.
+ */
+const TabLabel: React.FC<{ label: string }> = ({ label }) => {
+  const ref = React.useRef<HTMLSpanElement>(null);
+  const [truncated, setTruncated] = useState(false);
+
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => setTruncated(el.scrollWidth > el.clientWidth);
+    measure();
+    // ResizeObserver catches both the sidebar being dragged and the label
+    // changing width when the edit-mode "..." menu appears beside it.
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [label]);
+
+  return (
+    <Tooltip label={label} disabled={!truncated} withArrow openDelay={300} position="right">
+      <span ref={ref} className="depictio-chrome-tab-label">
+        {label}
+      </span>
+    </Tooltip>
+  );
+};
 
 /** True for path-like icon values (PNG/SVG file URLs) — these came from the
  * Dash YAML and aren't valid Iconify names. */
@@ -94,14 +133,24 @@ function resolveTabIcon(tab: DashboardSummary, isParent: boolean): string {
     return 'mdi:bacteria-outline';
   return isParent ? 'mdi:view-dashboard' : 'mdi:tab';
 }
-function resolveTabColor(tab: DashboardSummary, isParent: boolean): string {
+function resolveTabColor(
+  tab: DashboardSummary,
+  isParent: boolean,
+  brand: BrandTheme | null,
+): string {
   // MultiQC tabs always render in a neutral grey/black scheme — the YAML
   // currently stamps `orange` on the parent MultiQC tab, but the official
   // logo is monochrome so a coloured fill clashes with the icon. Force
   // `dark` so light mode gets a near-black active fill and dark mode gets
   // the same near-black fill (Mantine `dark.6` ≈ `#25262b`).
   if (isMultiqcIcon(tab.tab_icon) || isMultiqcIcon(tab.icon)) return 'dark';
-  return tab.tab_icon_color || tab.icon_color || (isParent ? 'orange' : 'blue');
+  // A colour the YAML picked is the author's decision and outranks the brand;
+  // only the unstated default follows it.
+  return (
+    tab.tab_icon_color ||
+    tab.icon_color ||
+    (isParent ? brandAccent(brand, 'tertiary', 'orange') : brandAccent(brand, 'primary', 'blue'))
+  );
 }
 
 /** Reserved sentinel value — clicking the trailing pill triggers `onAddTab`
@@ -121,6 +170,10 @@ interface SidebarProps {
   onDeleteTab?: (tab: DashboardSummary) => void;
   onMoveTab?: (tab: DashboardSummary, direction: TabMoveDirection) => void;
   onAddTab?: () => void;
+  /** The dashboard's own brand theme. Its logo renders centered at the
+   *  bottom of the sidebar, just above the footer divider; when the dashboard
+   *  doesn't set one it inherits the instance logo. */
+  brandTheme?: BrandTheme | null;
 }
 
 /**
@@ -139,9 +192,13 @@ const Sidebar: React.FC<SidebarProps> = ({
   onDeleteTab,
   onMoveTab,
   onAddTab,
+  brandTheme,
 }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
+  // The brand in force for this subtree — the dashboard's own when it
+  // overrides, the instance's otherwise (App/EditorApp nest the context).
+  const brand = useBranding();
   const isEdit = mode === 'edit';
 
   // Lift the per-tab menu open-state up here so only ONE "..." menu can be
@@ -209,6 +266,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           )}
           {tabs.length > 0 && (
             <Tabs
+              className="depictio-chrome-tabs"
               orientation="vertical"
               variant="pills"
               placement="left"
@@ -232,7 +290,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               <Tabs.List>
                 {tabs.map((d) => {
                   const isParent = !d.parent_dashboard_id;
-                  const iconColor = resolveTabColor(d, isParent);
+                  const iconColor = resolveTabColor(d, isParent, brand);
                   const isActive = d.dashboard_id === activeId;
                   const label = isParent
                     ? d.main_tab_name || d.title || d.dashboard_id
@@ -331,7 +389,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                         <a {...props} href={dashboardHref(d.dashboard_id, linkMode)} />
                       )}
                     >
-                      <span className="depictio-chrome-tab-label">{label}</span>
+                      <TabLabel label={label} />
                     </Tabs.Tab>
                   );
                 })}
@@ -367,6 +425,24 @@ const Sidebar: React.FC<SidebarProps> = ({
         active server mode (Demo / Public / Single User), matching
         `depictio/dash/layouts/sidebar.py:create_sidebar_footer`. */}
       <Stack gap="xs" align="center">
+        {/* Dashboard logo — centered, right above the footer divider.
+            Falls through to the instance logo, then to nothing.
+
+            Sized generously: on a dashboard this is the one place the brand
+            appears, and a logo small enough to be mistaken for an icon reads
+            as an afterthought. The cap is a height so a wide wordmark and a
+            square badge both land at a similar visual weight. */}
+        <BrandLogo
+          theme={brandTheme}
+          fallback="none"
+          testId="dashboard-logo"
+          style={{ maxWidth: '92%', maxHeight: 130, margin: '0 auto' }}
+        />
+        {/* Attribution, below the brand's own mark. On a branded instance the
+            logo above belongs to the operator, so the depictio wordmark needs
+            a slot of its own or it disappears from the dashboard entirely —
+            the app sidebar that normally carries it is collapsed here. */}
+        <PoweredBy />
         <Divider w="100%" />
         <ThemeToggle />
         <ServerStatusBadge />

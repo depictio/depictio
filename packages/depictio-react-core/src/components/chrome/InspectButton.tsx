@@ -17,7 +17,7 @@ interface InspectButtonProps {
 const InspectButton: React.FC<InspectButtonProps> = ({ componentId, active, onInspect }) => (
   <Tooltip label={active ? 'Close inspector' : 'Inspect'} withArrow>
     <ActionIcon
-      variant={active ? 'filled' : 'light'}
+      variant={active ? 'filled' : 'subtle'}
       color="grape"
       size="sm"
       onClick={() => onInspect(componentId)}

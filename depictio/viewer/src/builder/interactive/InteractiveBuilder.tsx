@@ -216,7 +216,7 @@ const InteractiveBuilder: React.FC = () => {
   // The dashboard's other interactive components, used only to suggest the
   // group names already in use. Group stays free text, so a failed fetch
   // degrades to "no suggestions" rather than blocking authoring. (Section is
-  // picked from the dashboard's declared list by `SectionSelect` instead.)
+  // picked from the dashboard's declared list by `PlacementSection` instead.)
   const [siblings, setSiblings] = useState<StoredMetadata[]>([]);
   useEffect(() => {
     if (!dashboardId) return;

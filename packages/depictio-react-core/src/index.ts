@@ -11,6 +11,8 @@ import './styles/realtime-highlight.css';
 
 // Grid + top-level renderer
 export { default as DashboardGrid } from './components/DashboardGrid';
+export { default as PersistentSectionsHost } from './components/PersistentSectionsHost';
+export type { PersistentSectionsHostProps } from './components/PersistentSectionsHost';
 // The grid's own geometry + per-type default box, for consumers that render a
 // single component outside a grid and want the size it would really have.
 export {
@@ -93,6 +95,10 @@ export {
 export { default as FilterPanel } from './components/interactive/FilterPanel';
 export { FILTER_PANEL_RAIL_WIDTH } from './components/interactive/FilterPanel';
 export type { FilterPanelProps } from './components/interactive/FilterPanel';
+export { default as SelectionGroupsPanel } from './components/interactive/SelectionGroupsPanel';
+export type { SelectionGroupsPanelProps } from './components/interactive/SelectionGroupsPanel';
+export { SaveGroupContext } from './components/chrome/SaveGroupAction';
+export type { SaveGroupApi } from './components/chrome/SaveGroupAction';
 export { default as InteractiveGroupCard } from './components/InteractiveGroupCard';
 // One swatch for every place a section is drawn — the two panel headers and the
 // viewer's authoring UI — so a section named "QC" never looks different
@@ -156,6 +162,7 @@ export {
   fetchDashboard,
   fetchAllDashboards,
   fetchFloatingComponents,
+  fetchCrossTabComponents,
   fetchSpecs,
   fetchUniqueValues,
   fetchBreakdown,
@@ -192,6 +199,15 @@ export {
   fetchFigureVisualizationList,
   upsertComponent,
   saveDashboardNotes,
+  uploadDashboardLogo,
+  updateDashboardAppearance,
+  // Instance branding (admin panel)
+  fetchBrandingAdmin,
+  updateBrandingAdmin,
+  resetBrandingAdmin,
+  fetchBrandPresets,
+  resolveBrandTheme,
+  uploadBrandingLogo,
   // Auth helpers (React /auth page)
   fetchAuthStatus,
   loginUser,
@@ -267,6 +283,9 @@ export {
   deleteProjectLink,
   listLinkResolvers,
   fetchMultiQCSampleMappings,
+  fetchLinkMappingPreview,
+  // Funnel filtering (issue #939)
+  fetchFunnelValues,
   // MultiQC management (multipart uploads)
   createMultiQCDataCollection,
   checkMultiQCUniformity,
@@ -294,8 +313,12 @@ export {
   fetchCatalogPreviewPayload,
 } from './api';
 export type {
+  AdminBrandingState,
+  BrandPreset,
   FloatingComponent,
   FloatingComponentsResponse,
+  PersistentSection,
+  CrossTabComponentsResponse,
   TableMutationResult,
   RoleDtypeSpec,
   IngestionReport,
@@ -338,18 +361,20 @@ export { default as MapPanelDock } from './components/mapPanel/MapPanelDock';
 export type { MapPanelDockProps } from './components/mapPanel/MapPanelDock';
 export { useMapPanel } from './components/mapPanel/useMapPanel';
 export type { MapPanel, UseMapPanelOptions } from './components/mapPanel/useMapPanel';
+export { useCrossTabComponents } from './hooks/useCrossTabComponents';
+export type { CrossTabComponents } from './hooks/useCrossTabComponents';
 export type {
   MapPanelMode,
   MapPanelCardSize,
   MapPanelState,
 } from './components/mapPanel/useMapPanelState';
 export {
-  readFloatingFilters,
-  writeFloatingFilters,
-  clearFloatingFilters,
-  persistableFloatingFilters,
-} from './floatingFilters';
-export type { FloatingFilterPayload } from './floatingFilters';
+  readCrossTabFilters,
+  writeCrossTabFilters,
+  clearCrossTabFilters,
+  persistableCrossTabFilters,
+} from './crossTabFilters';
+export type { CrossTabFilterPayload } from './crossTabFilters';
 export {
   readEditorFilters,
   writeEditorFilters,
@@ -357,12 +382,49 @@ export {
 } from './editorFilters';
 export type { EditorFilterPayload } from './editorFilters';
 
+// Selection groups: named, colored snapshots of selections ("select & compare")
+export {
+  GROUP_FILTER_SOURCE,
+  GROUP_FILTER_INDEX_PREFIX,
+  MAX_GROUP_VALUES,
+  GROUPING_COLOR,
+  useGroupingColor,
+  useGroupingColorVar,
+  COLOR_BY_NONE,
+  resolveGroupRender,
+  selectableSelectionFilters,
+  groupFromSelectionFilter,
+  groupsToFilters,
+  groupsRenderPayload,
+  nextGroupColor,
+  readSelectionGroups,
+  writeSelectionGroups,
+} from './selectionGroups';
+export type {
+  SelectionGroup,
+  SelectionGroupsPayload,
+  GroupRenderDef,
+  GroupRenderState,
+  ColorByState,
+  GroupingDisplay,
+} from './selectionGroups';
+export { useSelectionGroups } from './hooks/useSelectionGroups';
+export type { SelectionGroupsApi } from './hooks/useSelectionGroups';
+export { useCategoricalColumns, useColorByColumnRender } from './hooks/useColorByColumns';
+export type { ColorByColumn, ColorByColumnRender } from './hooks/useColorByColumns';
+export type { GroupSummaryRow } from './components/interactive/ActiveFilterSummary';
+
 // Cross-DC available-values intersection (powers greying-out unavailable
-// options in interactive filter dropdowns).
+// options in interactive filter dropdowns) + the funnel-filtering layer on
+// top of it (issue #939).
 export {
   AvailableFilterValuesProvider,
   useAvailableSet,
+  useFunnelState,
 } from './availableValues';
+export type { FunnelComponentState } from './availableValues';
+export { default as FunnelView } from './components/interactive/FunnelView';
+export type { FunnelViewProps } from './components/interactive/FunnelView';
 
 // Real-time event subscription (WebSocket /events/ws)
 export { useDataCollectionUpdates, useMonitoringEvents, ADMIN_MONITORING_CHANNEL } from './realtime';
@@ -377,6 +439,56 @@ export { useRealtimeJournal } from './hooks/useRealtimeJournal';
 export type { RealtimeJournalEntry } from './hooks/useRealtimeJournal';
 export { batchIdsFromPayload } from './highlight';
 export type { ActiveHighlight } from './highlight';
+
+// Dashboard-wide UI scale (font-size) preference. The viewer app owns the
+// provider; Plotly/AG Grid renderers consume the value for their non-Mantine
+// pixel metrics.
+export { UiScaleContext, useUiScale, UI_SCALE_STEPS, UI_SCALE_DEFAULT } from './uiScale';
+
+// Brand theme (#397): the shared shape and its mapping onto Mantine. Lives
+// here rather than in the viewer so every entry point that mounts its own
+// MantineProvider (catalog preview, dev harnesses) can build the same theme.
+export {
+  BRAND_PALETTES,
+  brandAccent,
+  BrandingContext,
+  brandCssVariablesResolver,
+  buildDepictioTheme,
+  depictioTheme,
+  isEmptyBrandTheme,
+  isHexColor,
+  mergeBrandThemes,
+  isMantinePaletteName,
+  resolveBrandLogo,
+  useBrandAccent,
+  useBrandAccents,
+  useBranding,
+} from './brandTheme';
+export type {
+  BrandPlots,
+  BrandRole,
+  BrandSurfaces,
+  BrandTheme,
+  DepictioThemeOptions,
+  LogoMode,
+  TintMode,
+} from './brandTheme';
+
+// Brand theme editor + live preview, shared by the /admin Branding panel and
+// the per-dashboard appearance panel — the two levels edit the same model, so
+// they share the controls rather than mirroring each other.
+export {
+  BrandScope,
+  BrandThemeForm,
+  BrandThemePreview,
+  PLOT_TEMPLATE_OPTIONS,
+  useResolvedBrandTheme,
+} from './components/branding';
+export type {
+  BrandFormScope,
+  BrandThemeFormProps,
+  BrandThemePreviewProps,
+} from './components/branding';
 
 // Render-fetch queue. Apps that own the filter state call
 // ``bumpFetchGeneration`` when it changes, so requests queued for the previous
@@ -467,6 +579,12 @@ export type {
   CreateLinkInput,
   UpdateLinkInput,
   ResolverInfo,
+  LinkMappingPreviewRow,
+  LinkMappingPreviewResponse,
+  // Funnel filtering types (issue #939)
+  FunnelTargetResult,
+  FunnelStage,
+  FunnelValuesResponse,
   // MultiQC management types
   CreateMultiQCDCInput,
   MultiQCMutationResult,

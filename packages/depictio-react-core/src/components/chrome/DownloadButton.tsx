@@ -70,7 +70,7 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
   return (
     <Tooltip label={label} withArrow>
       <ActionIcon
-        variant="light"
+        variant="subtle"
         color="green"
         size="sm"
         onClick={onClick}

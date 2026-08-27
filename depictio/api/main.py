@@ -267,6 +267,26 @@ app.mount(
     name="dashboard-screenshots",
 )
 
+# Dashboard logos — uploaded via /dashboards/upload_logo (editor Settings
+# drawer) and referenced by the dashboard's `logo_url` field.
+_DASHBOARD_LOGOS_DIR = Path(__file__).resolve().parent / "static" / "dashboard_logos"
+_DASHBOARD_LOGOS_DIR.mkdir(parents=True, exist_ok=True)
+app.mount(
+    "/static/dashboard_logos",
+    StaticFiles(directory=str(_DASHBOARD_LOGOS_DIR)),
+    name="dashboard-logos",
+)
+
+# Instance branding logos — uploaded via /utils/branding/logo/{variant} (admin
+# Branding panel) and referenced by the branding overrides' logo URLs.
+_BRANDING_DIR = Path(__file__).resolve().parent / "static" / "branding"
+_BRANDING_DIR.mkdir(parents=True, exist_ok=True)
+app.mount(
+    "/static/branding",
+    StaticFiles(directory=str(_BRANDING_DIR)),
+    name="instance-branding",
+)
+
 # Workflow logos / icons referenced by the React viewer as ``/assets/images/...``.
 # Relocated out of the deleted depictio/dash/assets/ tree.
 _STATIC_ASSETS_DIR = Path(__file__).resolve().parent / "static_assets"

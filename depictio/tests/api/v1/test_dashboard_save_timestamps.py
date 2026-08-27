@@ -33,6 +33,10 @@ def db():
         # already covered by test_dashboard_save_screenshot_guard.py.
         patch.object(dash_routes, "_should_enqueue_screenshot", return_value=False),
         patch.object(dash_routes, "check_project_permission", return_value=True),
+        # The insert branch stamps `is_public` from the parent project; these
+        # tests care about timestamps only, so pin the lookup instead of
+        # seeding a projects collection.
+        patch.object(dash_routes, "get_project_visibility", return_value=False),
     ):
         yield database
 

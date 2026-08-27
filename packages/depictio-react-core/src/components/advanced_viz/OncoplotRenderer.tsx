@@ -14,7 +14,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
-import { stableColorMap, TAB10_PALETTE } from '../../colors';
+import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import {
   applyDataTheme,
@@ -132,7 +132,7 @@ const OncoplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
 
     // Cell colour from stable mutation-type palette. Background is NaN so
     // missing cells stay blank — plotly skips them in the heatmap.
-    const colourSource = stableColorMap(mutationUniverse ?? mutList, TAB10_PALETTE);
+    const colourSource = stableColorMap(mutationUniverse ?? mutList, resolveCategoricalPalette(theme, TAB10_PALETTE));
     const mutToIdx = new Map<string, number>();
     mutList.forEach((m, i) => mutToIdx.set(m, i));
 

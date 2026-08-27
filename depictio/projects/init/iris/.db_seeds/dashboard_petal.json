@@ -1,0 +1,1114 @@
+{
+  "title": "Iris Petal Analysis",
+  "subtitle": "Multi-metric summaries and conditional filters on petal measurements",
+  "version": 1,
+  "icon": "mdi:view-dashboard",
+  "icon_color": "orange",
+  "icon_variant": "filled",
+  "workflow_system": "none",
+  "notes_content": "<p></p>",
+  "is_public": false,
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": false,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_main_tab": false,
+  "tab_order": 1,
+  "main_tab_name": null,
+  "tab_icon": null,
+  "tab_icon_color": null,
+  "filter_sections": [
+    {
+      "name": "Measurements",
+      "icon": "mdi:ruler",
+      "color": "indigo",
+      "description": "Petal and sepal ranges, one collapsible card each",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Scoped views",
+      "icon": "mdi:tune",
+      "color": "pink",
+      "description": "Options computed from a pre-filtered subset",
+      "collapsed": true,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Petal geometry",
+      "icon": "mdi:ruler",
+      "color": "teal",
+      "description": "Shape, spread and measurement resolution of the two petal columns",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Variety separation",
+      "icon": "mdi:chart-scatter-plot",
+      "color": "violet",
+      "description": "How far a petal cut-off gets you toward naming the variety",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "stored_metadata": [
+    {
+      "index": "42a7adac-8d1e-4ad6-99a4-6387b69adc36",
+      "component_type": "text",
+      "title": "Petal Geometry as a Species Signal",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": null,
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-07T09:12:49.687042",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": null,
+      "order": 2,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "Petal length \u00d7 width is the cleanest variety separator in Fisher's dataset. The first row summarises the two petal columns; the second asks how much of the classification a single threshold buys."
+    },
+    {
+      "index": "74d99157-6c29-441d-ae56-b5a65c7ade94",
+      "component_type": "card",
+      "title": "Petal Length",
+      "workflow_tag": "python/iris_workflow",
+      "data_collection_tag": "iris_table",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9b"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Iris dataset in CSV format",
+        "data_collection_tag": "iris_table",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-07T09:12:49.687071",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Petal geometry",
+      "aggregation": "median",
+      "column_name": "petal.length",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "histogram",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-histogram",
+      "icon_color": "#43A047",
+      "title_color": "#43A047",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/iris_workflow"
+    },
+    {
+      "index": "125f8df6-dffb-48f3-bb43-1470e28b42bd",
+      "component_type": "card",
+      "title": "Petal Width",
+      "workflow_tag": "python/iris_workflow",
+      "data_collection_tag": "iris_table",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9b"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Iris dataset in CSV format",
+        "data_collection_tag": "iris_table",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-07T09:12:49.687085",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Petal geometry",
+      "aggregation": "median",
+      "column_name": "petal.width",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": [
+        "box_plot_stats"
+      ],
+      "filter_expr": null,
+      "secondary_layout": "box_plot",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-box-outline",
+      "icon_color": "#00897B",
+      "title_color": "#00897B",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/iris_workflow"
+    },
+    {
+      "index": "b0794615-c49d-4acb-bd30-5164c2ff8275",
+      "component_type": "card",
+      "title": "Sepal Length",
+      "workflow_tag": "python/iris_workflow",
+      "data_collection_tag": "iris_table",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9b"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Iris dataset in CSV format",
+        "data_collection_tag": "iris_table",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-07T09:12:49.687094",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Petal geometry",
+      "aggregation": "median",
+      "column_name": "sepal.length",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": [
+        "min",
+        "q1",
+        "q3",
+        "max"
+      ],
+      "filter_expr": null,
+      "secondary_layout": "grid",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:grid-large",
+      "icon_color": "#8E24AA",
+      "title_color": "#8E24AA",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/iris_workflow"
+    },
+    {
+      "index": "29f9c41f-70d6-4e5c-a86b-b3e42f31580b",
+      "component_type": "card",
+      "title": "Petal width values",
+      "workflow_tag": "python/iris_workflow",
+      "data_collection_tag": "iris_table",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9b"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Iris dataset in CSV format",
+        "data_collection_tag": "iris_table",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-07T09:12:49.687101",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Petal geometry",
+      "aggregation": "nunique",
+      "column_name": "petal.width",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "uniqueness",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:decimal",
+      "icon_color": "#546E7A",
+      "title_color": "#546E7A",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/iris_workflow"
+    },
+    {
+      "index": "d2bcf76c-baad-4e4a-9e68-06055e8b77b5",
+      "component_type": "card",
+      "title": "Varieties",
+      "workflow_tag": "python/iris_workflow",
+      "data_collection_tag": "iris_table",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9b"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Iris dataset in CSV format",
+        "data_collection_tag": "iris_table",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-07T09:12:49.687109",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Variety separation",
+      "aggregation": "nunique",
+      "column_name": "variety",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "donut",
+      "breakdown_col": "variety",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-donut",
+      "icon_color": "#2196F3",
+      "title_color": "#2196F3",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/iris_workflow"
+    },
+    {
+      "index": "bd8e4cc3-4f87-4143-a509-e05d1227f95f",
+      "component_type": "card",
+      "title": "Petal length cut-off",
+      "workflow_tag": "python/iris_workflow",
+      "data_collection_tag": "iris_table",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9b"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Iris dataset in CSV format",
+        "data_collection_tag": "iris_table",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-07T09:12:49.687117",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Variety separation",
+      "aggregation": "count",
+      "column_name": "petal.length",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "threshold",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": 2.5,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:check-decagram",
+      "icon_color": "#F4511E",
+      "title_color": "#F4511E",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/iris_workflow"
+    },
+    {
+      "index": "8f9a91c1-4666-4bd3-a2c9-4603c7731cd0",
+      "component_type": "card",
+      "title": "Petals > 4 cm",
+      "workflow_tag": "python/iris_workflow",
+      "data_collection_tag": "iris_table",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9b"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Iris dataset in CSV format",
+        "data_collection_tag": "iris_table",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-07T09:12:49.687146",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Variety separation",
+      "aggregation": "count",
+      "column_name": "petal.length",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": "col('petal.length') > 4",
+      "secondary_layout": "gauge",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": 150,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:gauge",
+      "icon_color": "#1E88E5",
+      "title_color": "#1E88E5",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/iris_workflow"
+    },
+    {
+      "index": "98e01a43-8ff7-4f15-b264-13b35d22a49b",
+      "component_type": "card",
+      "title": "Varieties > 4 cm",
+      "workflow_tag": "python/iris_workflow",
+      "data_collection_tag": "iris_table",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9b"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Iris dataset in CSV format",
+        "data_collection_tag": "iris_table",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-07T09:12:49.687155",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Variety separation",
+      "aggregation": "nunique",
+      "column_name": "variety",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": "col('petal.length') > 4",
+      "secondary_layout": "composition",
+      "breakdown_col": "variety",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-bar",
+      "icon_color": "#C44E52",
+      "title_color": "#C44E52",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/iris_workflow"
+    },
+    {
+      "index": "e2f428df-be8f-432e-9385-709a1f2f1ea4",
+      "component_type": "interactive",
+      "title": "Petal length (cm)",
+      "workflow_tag": "python/iris_workflow",
+      "data_collection_tag": "iris_table",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9b"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Iris dataset in CSV format",
+        "data_collection_tag": "iris_table",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-07T09:12:49.687164",
+      "title_align": "left",
+      "section": "Measurements",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "petal.length",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Petal",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#55A467",
+      "icon_name": "mdi:ruler",
+      "wf_tag": "python/iris_workflow"
+    },
+    {
+      "index": "69a47fac-74bf-4a5f-a51b-b0a9e843fd06",
+      "component_type": "interactive",
+      "title": "Petal width (cm)",
+      "workflow_tag": "python/iris_workflow",
+      "data_collection_tag": "iris_table",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9b"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Iris dataset in CSV format",
+        "data_collection_tag": "iris_table",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-07T09:12:49.687171",
+      "title_align": "left",
+      "section": "Measurements",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "petal.width",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Petal",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#8172B2",
+      "icon_name": "mdi:ruler",
+      "wf_tag": "python/iris_workflow"
+    },
+    {
+      "index": "e4e685c4-ec4f-4eed-baac-d6160ad8cef1",
+      "component_type": "interactive",
+      "title": "Sepal length (cm)",
+      "workflow_tag": "python/iris_workflow",
+      "data_collection_tag": "iris_table",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9b"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Iris dataset in CSV format",
+        "data_collection_tag": "iris_table",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-07T09:12:49.687177",
+      "title_align": "left",
+      "section": "Measurements",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "sepal.length",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Sepal",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#4C72B0",
+      "icon_name": "mdi:ruler",
+      "wf_tag": "python/iris_workflow"
+    },
+    {
+      "index": "f672f448-cc7c-4033-ba4c-21056c3a8c4c",
+      "component_type": "interactive",
+      "title": "Sepal width (cm)",
+      "workflow_tag": "python/iris_workflow",
+      "data_collection_tag": "iris_table",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9b"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Iris dataset in CSV format",
+        "data_collection_tag": "iris_table",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-07T09:12:49.687183",
+      "title_align": "left",
+      "section": "Measurements",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "sepal.width",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Sepal",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#937860",
+      "icon_name": "mdi:ruler",
+      "wf_tag": "python/iris_workflow"
+    },
+    {
+      "index": "4baffb46-dc9c-48c5-afa9-4f33649cd258",
+      "component_type": "interactive",
+      "title": "Variety (petal > 4 cm)",
+      "workflow_tag": "python/iris_workflow",
+      "data_collection_tag": "iris_table",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9b"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Iris dataset in CSV format",
+        "data_collection_tag": "iris_table",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-07T09:12:49.687188",
+      "title_align": "left",
+      "section": "Scoped views",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "variety",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": "col('petal.length') > 4",
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#C44E52",
+      "icon_name": "mdi:filter-cog-outline",
+      "wf_tag": "python/iris_workflow"
+    },
+    {
+      "index": "2a095e9c-d360-4a40-8eaa-bdcf5051dc99",
+      "component_type": "figure",
+      "title": "Petal Length vs Width",
+      "workflow_tag": "python/iris_workflow",
+      "data_collection_tag": "iris_table",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9b"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Iris dataset in CSV format",
+        "data_collection_tag": "iris_table",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-07T09:12:49.687206",
+      "description": "Colour + symbol = variety, size = sepal length. Top marginal = violin, right marginal = rug ticks. The gap in both marginals is the same cut the threshold card scores.",
+      "title_size": "h3",
+      "title_align": "left",
+      "section": "Petal geometry",
+      "visu_type": "scatter",
+      "dict_kwargs": {
+        "x": "petal.length",
+        "y": "petal.width",
+        "color": "variety",
+        "size": "sepal.length",
+        "symbol": "variety",
+        "size_max": 16,
+        "marginal_x": "violin",
+        "marginal_y": "rug",
+        "opacity": 0.85,
+        "color_discrete_map": "{\"Setosa\": \"#4C72B0\", \"Versicolor\": \"#DD8452\", \"Virginica\": \"#55A467\"}"
+      },
+      "mode": "ui",
+      "code_content": null,
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": false,
+      "selection_column": null,
+      "wf_tag": "python/iris_workflow"
+    },
+    {
+      "index": "a9b1f161-d918-49b4-8acf-7850f84eaf33",
+      "component_type": "figure",
+      "title": "Petal Length by Variety",
+      "workflow_tag": "python/iris_workflow",
+      "data_collection_tag": "iris_table",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9b"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Iris dataset in CSV format",
+        "data_collection_tag": "iris_table",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-07T09:12:49.687214",
+      "description": "Box + all points; notched to show median CIs. Setosa is detached, while Versicolor and Virginica touch at their whiskers \u2014 the overlap a 4 cm cut runs into.",
+      "title_size": "h3",
+      "title_align": "left",
+      "section": "Variety separation",
+      "visu_type": "box",
+      "dict_kwargs": {
+        "x": "variety",
+        "y": "petal.length",
+        "color": "variety",
+        "points": "all",
+        "notched": true,
+        "color_discrete_map": "{\"Setosa\": \"#4C72B0\", \"Versicolor\": \"#DD8452\", \"Virginica\": \"#55A467\"}"
+      },
+      "mode": "ui",
+      "code_content": null,
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": false,
+      "selection_column": null,
+      "wf_tag": "python/iris_workflow"
+    },
+    {
+      "index": "0c6705eb-e48a-4073-9feb-b7f23081b29d",
+      "component_type": "figure",
+      "title": "Petal Width by Variety",
+      "workflow_tag": "python/iris_workflow",
+      "data_collection_tag": "iris_table",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9b"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Iris dataset in CSV format",
+        "data_collection_tag": "iris_table",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-07T09:12:49.687221",
+      "description": "The same chart on the width side. Width separates the two larger varieties slightly better than length, at a coarser measurement resolution.",
+      "title_size": "h3",
+      "title_align": "left",
+      "section": "Variety separation",
+      "visu_type": "box",
+      "dict_kwargs": {
+        "x": "variety",
+        "y": "petal.width",
+        "color": "variety",
+        "points": "all",
+        "notched": true,
+        "color_discrete_map": "{\"Setosa\": \"#4C72B0\", \"Versicolor\": \"#DD8452\", \"Virginica\": \"#55A467\"}"
+      },
+      "mode": "ui",
+      "code_content": null,
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": false,
+      "selection_column": null,
+      "wf_tag": "python/iris_workflow"
+    },
+    {
+      "index": "307f1d12-4a41-4157-9fd1-fb7aaa404463",
+      "component_type": "figure",
+      "title": "Petal Width Distribution (overlay)",
+      "workflow_tag": "python/iris_workflow",
+      "data_collection_tag": "iris_table",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9b"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Iris dataset in CSV format",
+        "data_collection_tag": "iris_table",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-07T09:12:49.687227",
+      "description": "Per-variety overlay; bars semi-transparent to expose overlap. The empty band between Setosa and the rest is why a single threshold works at all.",
+      "title_size": "h3",
+      "title_align": "left",
+      "section": "Variety separation",
+      "visu_type": "histogram",
+      "dict_kwargs": {
+        "x": "petal.width",
+        "color": "variety",
+        "nbins": 25,
+        "barmode": "overlay",
+        "opacity": 0.7,
+        "color_discrete_map": "{\"Setosa\": \"#4C72B0\", \"Versicolor\": \"#DD8452\", \"Virginica\": \"#55A467\"}"
+      },
+      "mode": "ui",
+      "code_content": null,
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": false,
+      "selection_column": null,
+      "wf_tag": "python/iris_workflow"
+    }
+  ],
+  "stored_layout_data": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-e2f428df-be8f-432e-9385-709a1f2f1ea4",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-69a47fac-74bf-4a5f-a51b-b0a9e843fd06",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-e4e685c4-ec4f-4eed-baac-d6160ad8cef1",
+      "x": 0,
+      "y": 9,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-f672f448-cc7c-4033-ba4c-21056c3a8c4c",
+      "x": 0,
+      "y": 12,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-4baffb46-dc9c-48c5-afa9-4f33649cd258",
+      "x": 0,
+      "y": 15,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-42a7adac-8d1e-4ad6-99a4-6387b69adc36",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-74d99157-6c29-441d-ae56-b5a65c7ade94",
+      "x": 0,
+      "y": 1,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-125f8df6-dffb-48f3-bb43-1470e28b42bd",
+      "x": 2,
+      "y": 1,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-b0794615-c49d-4acb-bd30-5164c2ff8275",
+      "x": 4,
+      "y": 1,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-29f9c41f-70d6-4e5c-a86b-b3e42f31580b",
+      "x": 6,
+      "y": 1,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-d2bcf76c-baad-4e4a-9e68-06055e8b77b5",
+      "x": 0,
+      "y": 3,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-bd8e4cc3-4f87-4143-a509-e05d1227f95f",
+      "x": 2,
+      "y": 3,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-8f9a91c1-4666-4bd3-a2c9-4603c7731cd0",
+      "x": 4,
+      "y": 3,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-98e01a43-8ff7-4f15-b264-13b35d22a49b",
+      "x": 6,
+      "y": 3,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-2a095e9c-d360-4a40-8eaa-bdcf5051dc99",
+      "x": 0,
+      "y": 5,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-a9b1f161-d918-49b4-8acf-7850f84eaf33",
+      "x": 0,
+      "y": 10,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-0c6705eb-e48a-4073-9feb-b7f23081b29d",
+      "x": 4,
+      "y": 10,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-307f1d12-4a41-4157-9fd1-fb7aaa404463",
+      "x": 0,
+      "y": 15,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_children_data": [],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "_id": {
+    "$oid": "6a75a191f5e6ff34386c8f0b"
+  },
+  "dashboard_id": {
+    "$oid": "6a75a191f5e6ff34386c8f0b"
+  },
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8c9a"
+  },
+  "last_saved_ts": "2026-08-07 09:14:51",
+  "parent_dashboard_id": {
+    "$oid": "6824cb3b89d2b72169309737"
+  }
+}

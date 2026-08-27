@@ -11,19 +11,26 @@
  */
 import type { MantineTheme } from '@mantine/core';
 
+import { brandColorway } from '../../colors';
+
 export interface PlotlyThemeColors {
   textColor: string;
   gridColor: string;
   zeroLineColor: string;
   bgColor: string;
+  /** The brand's categorical hues, or undefined on an unbranded instance —
+   *  where Plotly's own default cycle is the right answer. */
+  colorway?: string[];
 }
 
 export function plotlyThemeColors(isDark: boolean, theme: MantineTheme): PlotlyThemeColors {
+  const colorway = brandColorway(theme);
   return {
     textColor: isDark ? theme.colors.gray[2] : theme.colors.gray[8],
     gridColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
     zeroLineColor: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)',
     bgColor: 'rgba(0,0,0,0)',
+    colorway: colorway ?? undefined,
   };
 }
 
@@ -38,6 +45,7 @@ export function plotlyThemeFragment(isDark: boolean, theme: MantineTheme) {
     plot_bgcolor: c.bgColor,
     paper_bgcolor: c.bgColor,
     font: { color: c.textColor },
+    ...(c.colorway ? { colorway: c.colorway } : {}),
   };
 }
 
@@ -156,6 +164,9 @@ export function applyLayoutTheme(
     plot_bgcolor: c.bgColor,
     paper_bgcolor: c.bgColor,
     font: { ...((out.font || {}) as Record<string, unknown>), color: c.textColor },
+    // Plotly only reaches for the colorway on traces that named no colour of
+    // their own, so a figure that colours its traces explicitly is untouched.
+    ...(c.colorway ? { colorway: c.colorway } : {}),
   };
 }
 

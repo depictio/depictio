@@ -16,6 +16,9 @@ from depictio.api.v1.db import (
     runs_collection,
     users_collection,
 )
+from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
+    cascade_project_visibility,
+)
 from depictio.api.v1.endpoints.migrate_endpoints.routes import _collect_s3_locations_for_project
 from depictio.api.v1.endpoints.projects_endpoints.ingestion_report import (
     IngestionReport,
@@ -339,6 +342,11 @@ async def update_project(project: Project, current_user=Depends(get_current_user
     update_payload["registration_time"] = preserved_creation_time(
         existing_project_dict, project.id, utc_now_str()
     )
+    # Visibility has a dedicated owner-gated path (`/toggle_public_private`)
+    # that also cascades to the project's dashboards. The client round-trips
+    # the whole project document, so honoring `is_public` here would flip
+    # visibility silently without the cascade.
+    update_payload["is_public"] = existing_project_dict.get("is_public", False)
     update_payload["last_modified"] = utc_now_str()
     projects_collection.update_one({"_id": project.id}, {"$set": update_payload})
 
@@ -520,7 +528,12 @@ async def toggle_public_private(
         {"$set": {"is_public": is_public_bool, "last_modified": utc_now_str()}},
     )
 
+    # Visibility is project-driven: dashboards carry a derived `is_public`
+    # flag (read by listings and badges) that must follow the project.
+    cascade_counts = cascade_project_visibility(project_id, is_public_bool)
+
     return {
         "success": True,
         "message": f"Project '{project['name']}' with ID '{project_id}' is now {'public' if is_public_bool else 'private'}.",
+        **cascade_counts,
     }

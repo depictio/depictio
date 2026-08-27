@@ -1,8 +1,9 @@
 import React from 'react';
-import { ActionIcon, Badge, Box, Button, Group, Loader, Title, Tooltip, useMantineColorScheme } from '@mantine/core';
+import { ActionIcon, Badge, Box, Button, Group, Loader, Menu, Title, Tooltip, useMantineColorScheme } from '@mantine/core';
+import { BRAND_PALETTES, useBrandAccent, useBranding } from 'depictio-react-core';
 import { Icon } from '@iconify/react';
 
-import type { DashboardData, DashboardSummary } from 'depictio-react-core';
+import type { BrandTheme, DashboardData, DashboardSummary } from 'depictio-react-core';
 import PoweredBy from './PoweredBy';
 
 /** True for path-like icon values (PNG/SVG file URLs) — these came from the
@@ -30,11 +31,20 @@ function rewriteMultiqcIcon(path: string, theme: 'light' | 'dark'): string {
 function resolveTabIcon(tab: DashboardSummary | null | undefined): string | null {
   return (tab?.tab_icon || tab?.icon) ?? null;
 }
-function resolveTabColor(tab: DashboardSummary | null | undefined): string | null {
+function resolveTabColor(
+  tab: DashboardSummary | null | undefined,
+  brand: BrandTheme | null,
+): string | null {
   // Match the Sidebar rule: MultiQC tabs render in neutral dark, regardless
   // of whatever colour the YAML/seed stamped.
   if (isMultiqcIcon(tab?.tab_icon) || isMultiqcIcon(tab?.icon)) return 'dark';
-  return (tab?.tab_icon_color || tab?.icon_color) ?? null;
+  // Same precedence as the sidebar pill this title names: the author's colour
+  // wins, and a tab that states none takes the brand. Still `null` when there
+  // is no brand — an unbranded deployment kept a colourless tab's title as
+  // plain body text, and this is not the place to change that.
+  return (
+    tab?.tab_icon_color || tab?.icon_color || (brand?.tertiary ? BRAND_PALETTES.tertiary : null)
+  );
 }
 
 interface HeaderProps {
@@ -52,14 +62,15 @@ interface HeaderProps {
   cardsLoading?: boolean;
   /** 'view' (default) shows Edit; 'edit' shows View + Add + Save. */
   mode?: 'view' | 'edit';
-  /** Edit-mode only: invoked when the user clicks "Add component". */
+  /** Edit-mode only: opens the component builder. */
   onAddComponent?: () => void;
-  /** Edit-mode only: opens the Sections manager. */
-  onOpenSections?: () => void;
+  /** Edit-mode only: opens the add-section dialog. The "Add" menu is add-only —
+   *  editing sections happens from the "…" on each section header. */
+  onAddSection?: () => void;
   /** Edit-mode only: invoked when the user clicks "Save". Should force-flush any pending debounced save. */
   onSave?: () => void;
   /** True when the current user owns this dashboard. When false, the
-   *  Edit / Add component / Save buttons render disabled with a tooltip
+   *  Edit / Add / Save buttons render disabled with a tooltip
    *  explaining why — the backend enforces the same rule with 403s. The
    *  default is `true` so callers that haven't been migrated keep working,
    *  matching prior behavior. */
@@ -98,7 +109,7 @@ const Header: React.FC<HeaderProps> = ({
   cardsLoading = false,
   mode = 'view',
   onAddComponent,
-  onOpenSections,
+  onAddSection,
   onSave,
   isOwner = true,
   rightExtras,
@@ -115,7 +126,14 @@ const Header: React.FC<HeaderProps> = ({
   // Iconify names (mdi:..., bx:...) pass through unchanged.
   const tabIconImageSrc =
     tabIconIsImage && tabIconRaw ? rewriteMultiqcIcon(tabIconRaw, theme) : null;
-  const resolvedColor = resolveTabColor(activeTab);
+  // The header's three actions, as brand roles. The literals are what an
+  // unbranded deployment has always shown; an instance that names a brand gets
+  // its own hues here in either tint mode.
+  const brand = useBranding();
+  const addColor = useBrandAccent('primary', 'green');
+  const saveColor = useBrandAccent('secondary', 'teal');
+  const editColor = useBrandAccent('primary', 'blue');
+  const resolvedColor = resolveTabColor(activeTab, brand);
   const tabIconColor = resolvedColor || 'gray';
   // Title text color:
   //   - 'dark' (the MultiQC neutral scheme) → page text color (`#1a1b1e`
@@ -247,43 +265,53 @@ const Header: React.FC<HeaderProps> = ({
       {/* Right region — colors mirror depictio/dash/layouts/header.py */}
       <Group gap={8} wrap="nowrap" style={{ flexShrink: 0 }}>
         <PoweredBy withRightBorder />
+        {/* One Add menu rather than a button per thing that can be added: the
+            two entries name what appears, and the menu stays add-only. An
+            existing section is edited from the "…" on its own header. */}
         {mode === 'edit' && onAddComponent && (
-          <Tooltip
-            label="You can only edit dashboards you own. Duplicate this one to get your own copy."
-            disabled={isOwner}
-            withArrow
-          >
-            <Button
-              leftSection={<Icon icon="mdi:plus-circle" width={14} />}
-              color="green"
-              variant="filled"
-              size="xs"
-              onClick={onAddComponent}
-              disabled={!dashboardId || !isOwner}
-              data-tour-id="editor-add-component"
-            >
-              Add component
-            </Button>
-          </Tooltip>
-        )}
-        {mode === 'edit' && onOpenSections && (
-          <Tooltip
-            label="You can only edit dashboards you own. Duplicate this one to get your own copy."
-            disabled={isOwner}
-            withArrow
-          >
-            <Button
-              leftSection={<Icon icon="mdi:format-list-group" width={14} />}
-              color="grape"
-              variant="filled"
-              size="xs"
-              onClick={onOpenSections}
-              disabled={!dashboardId || !isOwner}
-              data-tour-id="editor-sections"
-            >
-              Sections
-            </Button>
-          </Tooltip>
+          <Menu shadow="md" width={200} position="bottom-end">
+            <Menu.Target>
+              {/* Tooltip inside the target, around the button: `Menu.Target`
+                  and `Tooltip` both need a ref-able child, and a `Menu` is a
+                  function component — wrapping the Menu in the Tooltip drops
+                  the ref and the menu stops opening. */}
+              <Tooltip
+                label="You can only edit dashboards you own. Duplicate this one to get your own copy."
+                disabled={isOwner}
+                withArrow
+              >
+                <Button
+                  leftSection={<Icon icon="mdi:plus-circle" width={14} />}
+                  rightSection={<Icon icon="mdi:chevron-down" width={14} />}
+                  color={addColor}
+                  variant="filled"
+                  size="xs"
+                  disabled={!dashboardId || !isOwner}
+                  data-tour-id="editor-add-component"
+                >
+                  Add
+                </Button>
+              </Tooltip>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Item
+                leftSection={<Icon icon="mdi:view-grid-plus-outline" width={14} />}
+                onClick={onAddComponent}
+                data-testid="add-component"
+              >
+                Component
+              </Menu.Item>
+              {onAddSection && (
+                <Menu.Item
+                  leftSection={<Icon icon="mdi:format-list-group" width={14} />}
+                  onClick={onAddSection}
+                  data-testid="add-section"
+                >
+                  Section
+                </Menu.Item>
+              )}
+            </Menu.Dropdown>
+          </Menu>
         )}
         {mode === 'edit' && onSave && (
           <Tooltip
@@ -293,7 +321,7 @@ const Header: React.FC<HeaderProps> = ({
           >
             <Button
               leftSection={<Icon icon="mdi:content-save" width={14} />}
-              color="teal"
+              color={saveColor}
               variant="filled"
               size="xs"
               onClick={onSave}
@@ -304,6 +332,12 @@ const Header: React.FC<HeaderProps> = ({
             </Button>
           </Tooltip>
         )}
+        {/* Analysis sits between Save and Edit / Exit Edit. It is a way of
+            *reading* the dashboard rather than changing it, so it stays clear of
+            Settings and of the mode switch; putting it after Save also keeps
+            the primary action leftmost in edit mode. In view mode the Save
+            block is absent, so this lands immediately left of Edit. */}
+        {rightExtras}
         {mode === 'view' ? (
           <Tooltip
             label="You can only edit dashboards you own. Duplicate this one to get your own copy."
@@ -312,7 +346,7 @@ const Header: React.FC<HeaderProps> = ({
           >
             <Button
               leftSection={<Icon icon="mdi:pencil" width={14} />}
-              color="blue"
+              color={editColor}
               variant="filled"
               size="xs"
               onClick={handleEdit}
@@ -343,7 +377,6 @@ const Header: React.FC<HeaderProps> = ({
         >
           Settings
         </Button>
-        {rightExtras}
       </Group>
     </Group>
   );

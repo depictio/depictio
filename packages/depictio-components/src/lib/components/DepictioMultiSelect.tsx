@@ -61,6 +61,13 @@ export interface DepictioMultiSelectProps {
   setProps?: (props: Partial<DepictioMultiSelectProps>) => void;
   /** Non-Dash React onChange handler for the React viewer use case. */
   onChange?: (value: string[]) => void;
+  /** Custom dropdown option renderer, forwarded to Mantine's MultiSelect.
+   *  Used by funnel filtering to color-mark options that still lead to a
+   *  non-empty result set. React-viewer only — Dash never sets this. */
+  renderOption?: (item: {
+    option: MultiSelectOption;
+    checked?: boolean;
+  }) => React.ReactNode;
 }
 
 const normalizeOptions = (
@@ -91,6 +98,7 @@ const DepictioMultiSelect: React.FC<DepictioMultiSelectProps> = ({
   size = 'sm',
   setProps,
   onChange,
+  renderOption,
 }) => {
   const handleChange = useCallback(
     (next: string[]) => {
@@ -135,6 +143,7 @@ const DepictioMultiSelect: React.FC<DepictioMultiSelectProps> = ({
       size={size}
       maxDropdownHeight={220}
       comboboxProps={{ withinPortal: true }}
+      renderOption={renderOption}
     />
   );
 

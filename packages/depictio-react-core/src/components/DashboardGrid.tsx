@@ -6,6 +6,7 @@ import 'react-resizable/css/styles.css';
 import { StoredMetadata, InteractiveFilter } from '../api';
 import type { FilterSectionSpec } from '../api';
 import { ActiveHighlight } from '../highlight';
+import type { GroupRenderState } from '../selectionGroups';
 import {
   PANEL_RESIZE_END_EVENT,
   PANEL_TOGGLE_EVENTS,
@@ -48,6 +49,9 @@ interface DashboardGridProps {
   /** The batch currently highlighted (live arrival or a pinned re-selection
    *  from the event log). Forwarded to renderers so they glow its rows. */
   activeHighlight?: ActiveHighlight | null;
+  /** Selection groups to color figures by. Forwarded to figure renderers,
+   *  which fold it into their render request. */
+  groupRender?: GroupRenderState;
   /** Allow users to drag grid items. Defaults to false (viewer-safe). */
   isDraggable?: boolean;
   /** Allow users to resize grid items. Defaults to false (viewer-safe). */
@@ -71,6 +75,13 @@ interface DashboardGridProps {
   /** `DashboardData.grid_sections` — order, icons and default collapse for the
    *  grid's accordion sections. Empty means no sections, i.e. one flat grid. */
   gridSections?: FilterSectionSpec[];
+  /**
+   * Host-provided per-section actions, beside the fold control rather than
+   * inside it. Called with the section name (`null` for the unsectioned grid,
+   * which has no header). The editor puts its "…" here, so a section is edited
+   * from where it is seen.
+   */
+  renderSectionActions?: (sectionName: string | null) => React.ReactNode;
 }
 
 /**
@@ -96,12 +107,14 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   cardValuesLoading,
   refreshTick,
   activeHighlight,
+  groupRender,
   isDraggable = false,
   isResizable = false,
   editMode = false,
   onLayoutChange,
   renderItemOverlay,
   gridSections,
+  renderSectionActions,
 }) => {
   // Memoised because it feeds the deps of everything below: rebuilding this
   // array on every render (a panel toggle, a collapse click) would invalidate
@@ -410,6 +423,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
                 cardLoading={cardValuesLoading}
                 refreshTick={refreshTick}
                 activeHighlight={activeHighlight}
+                groupRender={groupRender}
                 extraActions={showOverlays ? renderItemOverlay!(m.index, m) : undefined}
                 showDragHandle={editMode && isDraggable}
               />
@@ -429,6 +443,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     cardValuesLoading,
     refreshTick,
     activeHighlight,
+    groupRender,
     showOverlays,
     renderItemOverlay,
     editMode,
@@ -547,6 +562,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
               key={section.key}
               value={section.key}
               color={section.spec?.color}
+              actions={renderSectionActions?.(section.sectionName ?? null)}
             >
               <Accordion.Control>
                 <SectionHeader
@@ -652,7 +668,7 @@ const SectionSummary: React.FC<{
   );
 };
 
-function normalizeLayout(
+export function normalizeLayout(
   metadataList: StoredMetadata[],
   layoutData: unknown,
   interactive: boolean,

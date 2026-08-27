@@ -3,8 +3,8 @@
  *
  * The Dash viewer stores selections in ``interactive-values-store`` with a
  * ``source`` discriminator (``scatter_selection`` / ``table_selection`` /
- * ``map_selection``) so passive components can merge them alongside regular
- * interactive filters. The React viewer mirrors that protocol via
+ * ``map_selection`` / ``tree_selection``) so passive components can merge them
+ * alongside regular interactive filters. The React viewer mirrors that protocol via
  * ``InteractiveFilter.source`` and uses the helpers below to extract values
  * from Plotly/AG Grid events and to merge / clear by ``(index, source)``.
  */
@@ -230,4 +230,43 @@ export function enrichFilterWithDcId(
         update.interactive_component_type ?? update.metadata?.interactive_component_type,
     },
   };
+}
+
+/**
+ * Whether this component can produce a selection that becomes an analysis
+ * group ("select & compare", issue #89).
+ *
+ * One predicate for all four selection sources, so the capability marker the
+ * chrome draws and the gates the renderers use can never disagree about what
+ * is selectable. Each arm mirrors its renderer's own enable check:
+ *
+ * - `figure` — only scatter / scatter_3d carry the per-row customdata a
+ *   meaningful selection needs; aggregated visus emit per-bin envelopes.
+ * - `table`  — row selection is opt-in per component.
+ * - `map`    — see `isMapSelectionEnabled` (choropleth is excluded).
+ * - `image`  — a gallery selects thumbnails, which requires an image column.
+ *
+ * `hasHandler` folds in the caller's "is anyone listening" check, so read-only
+ * hosts (catalog, project previews) advertise nothing.
+ */
+export function supportsSelectionGrouping(
+  metadata: StoredMetadata,
+  hasHandler: boolean,
+): boolean {
+  if (!hasHandler) return false;
+  switch (metadata.component_type) {
+    case 'figure':
+      return (
+        Boolean(metadata.selection_enabled) &&
+        (metadata.visu_type === 'scatter' || metadata.visu_type === 'scatter_3d')
+      );
+    case 'table':
+      return Boolean(metadata.row_selection_enabled);
+    case 'map':
+      return isMapSelectionEnabled(metadata, true);
+    case 'image':
+      return Boolean(metadata.image_column);
+    default:
+      return false;
+  }
 }

@@ -32,6 +32,7 @@ import {
   formatRelative,
   timestampSortKey,
 } from '../../lib/datetime';
+import { useBrandAccents } from 'depictio-react-core';
 
 export interface DashboardTableViewProps {
   groups: GroupedDashboards[];
@@ -255,6 +256,7 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
   onBulkExport,
   onBulkDelete,
 }) => {
+  const accent = useBrandAccents();
   const [sortKey, setSortKey] = useState<ColumnKey>('modified');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -372,7 +374,7 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
     switch (key) {
       case 'title': {
         const icon = coerceString(r.dashboard.icon, 'mdi:view-dashboard');
-        const iconColor = coerceString(r.dashboard.icon_color, 'orange');
+        const iconColor = coerceString(r.dashboard.icon_color, accent.tertiary);
         return (
           <Group gap="xs" wrap="nowrap">
             {isImagePath(icon) ? (
@@ -437,7 +439,7 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
         const pid = (r.dashboard.project_id as string | undefined) || null;
         return (
           <Badge
-            color="teal"
+            color={accent.secondary}
             variant="light"
             size="sm"
             component={pid ? 'a' : 'div'}
@@ -567,7 +569,7 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
           <ActionIcon.Group>
             <ActionIcon
               variant={density === 'cozy' ? 'filled' : 'subtle'}
-              color={density === 'cozy' ? 'orange' : 'gray'}
+              color={density === 'cozy' ? accent.tertiary : 'gray'}
               onClick={() => onSetDensity('cozy')}
               aria-label="Cozy density"
             >
@@ -575,7 +577,7 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
             </ActionIcon>
             <ActionIcon
               variant={density === 'compact' ? 'filled' : 'subtle'}
-              color={density === 'compact' ? 'orange' : 'gray'}
+              color={density === 'compact' ? accent.tertiary : 'gray'}
               onClick={() => onSetDensity('compact')}
               aria-label="Compact density"
             >

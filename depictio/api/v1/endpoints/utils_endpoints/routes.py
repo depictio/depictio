@@ -1,7 +1,10 @@
 import asyncio
+import time
 from datetime import datetime
+from pathlib import Path
+from typing import Literal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Header, HTTPException, UploadFile
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
@@ -24,6 +27,7 @@ from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import (
     process_initial_data_collections,
 )
 from depictio.api.v1.s3 import s3_client
+from depictio.models.models.branding import BrandTheme, resolve_brand_theme
 from depictio.models.models.users import UserBeanie
 from depictio.version import get_version
 
@@ -116,6 +120,8 @@ async def public_config():
     GA measurement ID is already visible in the page's network traffic once
     injected, so exposing it changes nothing.
     """
+    from depictio.api.v1.services.branding import resolve_effective_brand_theme
+
     ga = settings.google_analytics
     return {
         "google_analytics": {
@@ -124,7 +130,150 @@ async def public_config():
             # does not leak a property ID it is not using.
             "tracking_id": ga.tracking_id if ga.is_configured else None,
         },
+        # Instance brand theme (#397): logo / name / palette / surfaces /
+        # figure colors for e.g. a core facility deployment. Env defaults
+        # overridden by the admin panel's live settings, with the derived
+        # values (figure colorway, sequential scale) already materialised so
+        # the SPA never re-derives them. Always emitted (an unbranded
+        # instance sends the resolved defaults) so the contract is shape-stable.
+        "branding": resolve_effective_brand_theme().model_dump(exclude_none=True),
     }
+
+
+# ── Admin branding (issue #397, admin UI) ────────────────────────────────────
+# Live overrides of the DEPICTIO_BRANDING_* env defaults, persisted in the
+# `instance_settings` collection and served to every visitor through
+# /utils/public-config above. Admin only.
+#
+# The request body IS the shared BrandTheme model, so every colour/URL/radius
+# rule is enforced by the model's own validators (FastAPI turns their
+# ValueErrors into 422s) rather than by a hand-written mirror that can drift.
+
+# Uploaded branding logos; served by the /static/branding mount (api/main.py).
+_BRANDING_LOGOS_DIR = Path(__file__).resolve().parents[3] / "static" / "branding"
+
+
+def _require_admin(current_user) -> None:
+    if not getattr(current_user, "is_admin", False):
+        raise HTTPException(status_code=403, detail="User is not an admin.")
+
+
+def _branding_admin_view() -> dict:
+    """The three layers the panel needs: what env sets, what the admin
+    overrode, and the resolved result the rest of the app sees."""
+    from depictio.api.v1.services.branding import (
+        env_brand_theme,
+        get_brand_theme_overrides,
+        resolve_effective_brand_theme,
+    )
+
+    return {
+        "overrides": get_brand_theme_overrides().model_dump(exclude_none=True),
+        "env_defaults": env_brand_theme().model_dump(exclude_none=True),
+        "effective": resolve_effective_brand_theme(use_cache=False).model_dump(exclude_none=True),
+    }
+
+
+@utils_endpoint_router.get("/branding/presets")
+async def list_branding_presets():
+    """Named starting palettes offered by the /admin Branding panel.
+
+    Public: these are static design constants, and the login page is already
+    branded before a user is known.
+    """
+    from depictio.models.models.branding import BRAND_PRESETS, BrandTheme, resolve_brand_theme
+
+    return {
+        "presets": [
+            {
+                "id": preset_id,
+                "label": preset["label"],
+                "theme": preset["theme"],
+                # Resolved alongside so the picker can show real swatches
+                # without re-implementing the derivation in TypeScript.
+                "preview": resolve_brand_theme(BrandTheme(**preset["theme"])).model_dump(
+                    exclude_none=True
+                ),
+            }
+            for preset_id, preset in BRAND_PRESETS.items()
+        ]
+    }
+
+
+@utils_endpoint_router.post("/branding/resolve")
+async def resolve_branding(theme: BrandTheme, current_user=Depends(get_current_user)):
+    """Resolve a brand theme without saving it — the live-preview channel.
+
+    The derived figure colors are deliberately computed in one place
+    (``models/branding.py``) so the server and the SPA can't drift. That means
+    an unsaved draft in the Branding panel has to come here to be resolved
+    rather than re-deriving client-side. Pure computation on the supplied
+    input: no instance state is read or written, so any signed-in user may
+    call it (the dashboard appearance panel is used by editors, not admins).
+    """
+    del current_user  # authentication only — nothing user-specific is returned
+    return resolve_brand_theme(theme).model_dump(exclude_none=True)
+
+
+@utils_endpoint_router.get("/branding")
+async def get_branding_admin(current_user=Depends(get_current_user)):
+    """Current branding state for the admin panel: overrides, env, effective."""
+    _require_admin(current_user)
+    return _branding_admin_view()
+
+
+@utils_endpoint_router.put("/branding")
+async def put_branding_admin(theme: BrandTheme, current_user=Depends(get_current_user)):
+    """Replace the admin brand-theme overrides. Null/omitted fields fall back to env."""
+    _require_admin(current_user)
+    from depictio.api.v1.services.branding import set_brand_theme_overrides
+
+    set_brand_theme_overrides(theme)
+    logger.info(f"Branding overrides updated by {getattr(current_user, 'email', '?')}")
+    return _branding_admin_view()
+
+
+@utils_endpoint_router.delete("/branding")
+async def delete_branding_admin(current_user=Depends(get_current_user)):
+    """Clear every override — the deployment's env defaults apply again."""
+    _require_admin(current_user)
+    from depictio.api.v1.services.branding import set_brand_theme_overrides
+
+    set_brand_theme_overrides(None)
+    logger.info(f"Branding overrides reset by {getattr(current_user, 'email', '?')}")
+    return _branding_admin_view()
+
+
+@utils_endpoint_router.post("/branding/logo/{variant}")
+async def upload_branding_logo(
+    variant: Literal["light", "dark"],
+    file: UploadFile = File(...),
+    current_user=Depends(get_current_user),
+):
+    """Store an instance logo (light or dark variant) and point the override at it."""
+    _require_admin(current_user)
+    from depictio.api.v1.services.branding import patch_brand_theme_overrides, validate_logo_upload
+
+    content = await file.read()
+    try:
+        ext = validate_logo_upload(file.content_type, content)
+    except ValueError as exc:
+        raise HTTPException(status_code=415, detail=str(exc))
+
+    _BRANDING_LOGOS_DIR.mkdir(parents=True, exist_ok=True)
+    for old in _BRANDING_LOGOS_DIR.glob(f"logo_{variant}.*"):
+        old.unlink(missing_ok=True)
+    (_BRANDING_LOGOS_DIR / f"logo_{variant}{ext}").write_bytes(content)
+
+    logo_url = f"/static/branding/logo_{variant}{ext}?v={int(time.time())}"
+    patch = {"logo_url" if variant == "light" else "logo_url_dark": logo_url}
+    # An upload is an unambiguous "use this logo", so it also lifts a prior
+    # "no logo" choice rather than silently storing an unused URL.
+    if variant == "light":
+        patch["logo_mode"] = "custom"
+    patch_brand_theme_overrides(patch)
+    logger.info(f"Branding logo ({variant}) updated by {getattr(current_user, 'email', '?')}")
+    return _branding_admin_view()
 
 
 @utils_endpoint_router.get("/telemetry/preview")

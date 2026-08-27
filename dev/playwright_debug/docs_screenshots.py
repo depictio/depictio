@@ -511,6 +511,164 @@ async def _realtime_highlight(ctx: ShotContext) -> None:
     await _page_shot_current(ctx, _rb(f"realtime_highlight_{ctx.theme}"))
 
 
+# ---- Cross-DC link inspection shots ---------------------------------------
+# Driven against a project that owns at least one MultiQC `sample_mapping`
+# link (the nf-core reference projects do). The links section is collapsed by
+# default, so every shot here expands it first.
+
+
+async def _open_links_section(ctx: ShotContext) -> None:
+    """Open the project page and expand the Cross-DC links section."""
+    await ctx.page.goto(
+        f"{ctx.viewer_url}/projects/{ctx.project_id}", wait_until="domcontentloaded"
+    )
+    await ctx.page.wait_for_timeout(1_500)
+    await dismiss_notifications(ctx.page)
+    toggle = ctx.page.get_by_test_id("links-section-toggle")
+    await toggle.wait_for(state="visible", timeout=15_000)
+    await toggle.click()
+    # Wait for a row rather than a fixed delay: the list is fetched on mount.
+    await ctx.page.locator('[data-testid="inspect-link-btn"]').first.wait_for(
+        state="visible", timeout=15_000
+    )
+    await ctx.page.wait_for_timeout(400)
+
+
+@register("link_inspect_action")
+async def _link_inspect_action(ctx: ShotContext) -> None:
+    """Cross-DC links table with the per-row inspect (magnifier) action."""
+    await _open_links_section(ctx)
+    await _shot(ctx, '[data-testid="links-section"]', _rb("link_inspect_action"))
+
+
+@register("link_mapping_modal")
+async def _link_mapping_modal(ctx: ShotContext) -> None:
+    """Standalone mapping inspector, opened from a sample_mapping link's magnifier."""
+    await _open_links_section(ctx)
+    row = ctx.page.locator("tr", has_text="sample_mapping").first
+    await row.get_by_test_id("inspect-link-btn").click()
+    # The preview resolves every distinct source value server-side; wait for
+    # the grid to hold rows so the shot isn't the loading state.
+    await ctx.page.locator('[data-testid="mapping-inspector-grid"] .ag-row').first.wait_for(
+        state="visible", timeout=60_000
+    )
+    await ctx.page.wait_for_timeout(600)
+    await _shot(ctx, '[data-testid="link-mapping-modal"]', _rb("link_mapping_modal"))
+
+
+# ---- Funnel filtering shots ------------------------------------------------
+# Driven against a dashboard with categorical (MultiSelect) filters. Funnel
+# filtering is an author-level dashboard flag; these shots flip it with the
+# panel's own toggle, which is per-page-view and writes nothing.
+
+FUNNEL_PICKS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("species", ("Adelie",)),
+    ("island", ("Torgersen", "Biscoe")),
+    ("sex", ("male",)),
+)
+
+
+async def _filter_panel(ctx: ShotContext):
+    """The filter panel Paper — located from the funnel toggle it contains."""
+    return ctx.page.get_by_test_id("funnel-toggle").locator(
+        "xpath=ancestor::*[contains(@class,'mantine-Paper-root')][1]"
+    )
+
+
+async def _open_funnel_panel(ctx: ShotContext) -> None:
+    """Open the dashboard, reveal the filter panel and switch funnelling on."""
+    await ctx.page.goto(
+        f"{ctx.viewer_url}/dashboard/{ctx.dashboard_id}", wait_until="domcontentloaded"
+    )
+    await ctx.page.wait_for_timeout(6_000)
+    await dismiss_notifications(ctx.page)
+    rail = ctx.page.locator('[aria-label="Show filters"]')
+    if await rail.count() and await rail.first.is_visible():
+        await rail.first.click()
+        await ctx.page.wait_for_timeout(800)
+    toggle = ctx.page.get_by_test_id("funnel-toggle")
+    await toggle.wait_for(state="visible", timeout=20_000)
+    # The overview button is mounted-but-disabled while funnelling is off —
+    # that is the state check, since the toggle itself only varies by variant.
+    overview = ctx.page.get_by_test_id("funnel-view-button")
+    if await overview.is_disabled():
+        await toggle.click()
+        await ctx.page.wait_for_timeout(1_500)
+
+
+async def _apply_funnel_filters(ctx: ShotContext) -> None:
+    """Select the categorical values the funnel captions describe."""
+    for column, values in FUNNEL_PICKS:
+        field = ctx.page.get_by_placeholder(f"Select {column}…")
+        await field.wait_for(state="visible", timeout=15_000)
+        await field.click()
+        for value in values:
+            await ctx.page.get_by_role("option", name=value, exact=True).first.click()
+        await ctx.page.keyboard.press("Escape")
+        # Each change debounces, refetches the availability sets and re-renders.
+        await ctx.page.wait_for_timeout(2_500)
+
+
+@register("funnel_panel_header")
+async def _funnel_panel_header(ctx: ShotContext) -> None:
+    """Panel header: title, attached funnel pair, overflow menu, Reset."""
+    await _open_funnel_panel(ctx)
+    await _apply_funnel_filters(ctx)
+    box = await (await _filter_panel(ctx)).bounding_box()
+    if not box:
+        raise RuntimeError("filter panel not found")
+    await _clip_shot(
+        ctx,
+        {"x": box["x"], "y": box["y"], "width": box["width"], "height": min(box["height"], 150)},
+        _rb("funnel_panel_header"),
+    )
+
+
+@register("funnel_panel_highlighting")
+async def _funnel_panel_highlighting(ctx: ShotContext) -> None:
+    """Whole panel with funnelling on: per-value markers and n/N badges."""
+    await _open_funnel_panel(ctx)
+    await _apply_funnel_filters(ctx)
+    panel = await _filter_panel(ctx)
+    target = ctx.output_dir / f"{_rb('funnel_panel_highlighting')}.png"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    await panel.screenshot(path=str(target))
+    typer.echo(f"  → {_rel(target)}")
+
+
+async def _open_funnel_overview(ctx: ShotContext):
+    await ctx.page.get_by_test_id("funnel-view-button").click()
+    modal = ctx.page.locator(".mantine-Modal-content").first
+    await modal.wait_for(state="visible", timeout=20_000)
+    # Plotly draws after the funnel counts land; wait for the trace itself.
+    await ctx.page.locator(".mantine-Modal-content .js-plotly-plot").first.wait_for(
+        state="visible", timeout=60_000
+    )
+    await ctx.page.wait_for_timeout(1_500)
+    return modal
+
+
+@register("funnel_overview")
+async def _funnel_overview(ctx: ShotContext) -> None:
+    """Funnel overview modal: cascading row counts + the stage list."""
+    await _open_funnel_panel(ctx)
+    await _apply_funnel_filters(ctx)
+    await _open_funnel_overview(ctx)
+    await _shot(ctx, ".mantine-Modal-content", _rb("funnel_overview"))
+
+
+@register("funnel_overview_reordered")
+async def _funnel_overview_reordered(ctx: ShotContext) -> None:
+    """Same funnel with the last stage moved up — intermediate counts change,
+    the final count does not."""
+    await _open_funnel_panel(ctx)
+    await _apply_funnel_filters(ctx)
+    await _open_funnel_overview(ctx)
+    await ctx.page.locator('[aria-label^="Move "][aria-label$=" earlier"]').last.click()
+    await ctx.page.wait_for_timeout(3_000)
+    await _shot(ctx, ".mantine-Modal-content", _rb("funnel_overview_reordered"))
+
+
 # ---- CLI ------------------------------------------------------------------
 
 

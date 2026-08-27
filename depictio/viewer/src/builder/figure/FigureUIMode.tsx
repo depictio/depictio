@@ -36,6 +36,7 @@ import {
 } from './visuTypes';
 import ParameterField from './ParameterField';
 import CrossFilterSection from '../shared/CrossFilterSection';
+import PlacementSection from '../shared/PlacementSection';
 
 type CategoryKey = 'core' | 'common' | 'specific' | 'advanced';
 
@@ -269,90 +270,114 @@ const FigureUIMode: React.FC<FigureUIModeProps> = ({ hideCrossFilter = false }) 
         </Alert>
       )}
 
-      {cachedSpec && (
-        <Accordion
-          variant="separated"
-          radius="md"
-          multiple
-          defaultValue={['core']}
-        >
-          {FIXED_CATEGORIES.map((c) => {
-            const items = byCategory[c.category];
-            if (!items.length) return null;
-            return (
-              <Accordion.Item key={c.key} value={c.key}>
-                <Accordion.Control
-                  icon={<Icon icon={c.icon} width={18} height={18} />}
-                >
-                  <Text fw={700} size="sm">
-                    {c.title}
-                  </Text>
-                </Accordion.Control>
-                <Accordion.Panel>
-                  <Stack gap="sm">
-                    {items.map((p) => (
-                      <ParameterField key={p.name} param={p} />
-                    ))}
-                  </Stack>
-                </Accordion.Panel>
-              </Accordion.Item>
-            );
-          })}
-
-          {byCategory.specific.length > 0 && (
-            <Accordion.Item value="specific">
+      {/* Rendered unconditionally: every item inside guards itself (the
+          spec-driven ones are empty without a spec, Placement hides when the
+          dashboard has no sections), so an accordion with nothing to show
+          collapses to an empty box rather than taking a gate of its own —
+          which is what used to make "Max points" vanish on a spec load
+          failure. */}
+      <Accordion
+        variant="separated"
+        radius="md"
+        multiple
+        defaultValue={['core']}
+      >
+        {FIXED_CATEGORIES.map((c) => {
+          const items = byCategory[c.category];
+          if (!items.length) return null;
+          return (
+            <Accordion.Item key={c.key} value={c.key}>
               <Accordion.Control
-                icon={<Icon icon={specificIcon} width={18} height={18} />}
+                icon={<Icon icon={c.icon} width={18} height={18} />}
               >
                 <Text fw={700} size="sm">
-                  {specificTitle}
+                  {c.title}
                 </Text>
               </Accordion.Control>
               <Accordion.Panel>
                 <Stack gap="sm">
-                  {byCategory.specific.map((p) => (
+                  {items.map((p) => (
                     <ParameterField key={p.name} param={p} />
                   ))}
                 </Stack>
               </Accordion.Panel>
             </Accordion.Item>
-          )}
+          );
+        })}
 
-          {/* Cross-filtering only carries per-row identity for scatter
-           *  traces (their customdata lines up 1:1 with input rows).
-           *  Aggregated visus — histogram, bar, box, pie — would emit
-           *  per-bin envelopes with no useful filter target, so we hide the
-           *  toggle entirely on those. FigureRenderer + ComponentRenderer
-           *  enforce the same gate defensively for legacy metadata. */}
-          {!hideCrossFilter && (visuType === 'scatter' || visuType === 'scatter_3d') && (
-            <CrossFilterSection
-              enabled={Boolean(config.selection_enabled)}
-              onEnabledChange={(checked) =>
-                patchConfig({ selection_enabled: checked })
-              }
-              column={config.selection_column}
-              onColumnChange={(name) => patchConfig({ selection_column: name })}
-              columnDescription="Column to extract from selected points"
-            />
-          )}
-        </Accordion>
-      )}
+        {byCategory.specific.length > 0 && (
+          <Accordion.Item value="specific">
+            <Accordion.Control
+              icon={<Icon icon={specificIcon} width={18} height={18} />}
+            >
+              <Text fw={700} size="sm">
+                {specificTitle}
+              </Text>
+            </Accordion.Control>
+            <Accordion.Panel>
+              <Stack gap="sm">
+                {byCategory.specific.map((p) => (
+                  <ParameterField key={p.name} param={p} />
+                ))}
+              </Stack>
+            </Accordion.Panel>
+          </Accordion.Item>
+        )}
 
-      {isPointPlot && (
-        <NumberInput
-          label="Max points"
-          description="Downsample above this count (blank = global default). Viewers can still load all points on demand."
-          // min 1: blank means "use the global default"; disabling the cap
-          // entirely is a viewer-side action ("Load all"), not an authoring one.
-          min={1}
-          step={1000}
-          placeholder="Global default"
-          value={typeof config.max_points === 'number' ? config.max_points : ''}
-          onChange={(v) =>
-            patchConfig({ max_points: typeof v === 'number' && v > 0 ? v : null })
-          }
-        />
-      )}
+        {/* Cross-filtering only carries per-row identity for scatter
+         *  traces (their customdata lines up 1:1 with input rows).
+         *  Aggregated visus — histogram, bar, box, pie — would emit
+         *  per-bin envelopes with no useful filter target, so we hide the
+         *  toggle entirely on those. FigureRenderer + ComponentRenderer
+         *  enforce the same gate defensively for legacy metadata. */}
+        {cachedSpec &&
+          !hideCrossFilter &&
+          (visuType === 'scatter' || visuType === 'scatter_3d') && (
+          <CrossFilterSection
+            enabled={Boolean(config.selection_enabled)}
+            onEnabledChange={(checked) =>
+              patchConfig({ selection_enabled: checked })
+            }
+            column={config.selection_column}
+            onColumnChange={(name) => patchConfig({ selection_column: name })}
+            columnDescription="Column to extract from selected points"
+          />
+        )}
+
+        {isPointPlot && (
+          <Accordion.Item value="performance">
+            <Accordion.Control
+              icon={<Icon icon="mdi:speedometer" width={18} height={18} />}
+            >
+              <Text fw={700} size="sm">
+                Performance
+              </Text>
+            </Accordion.Control>
+            <Accordion.Panel>
+              <Stack gap="sm">
+                <NumberInput
+                  label="Max points"
+                  description="Downsample above this count (blank = global default). Viewers can still load all points on demand."
+                  // min 1: blank means "use the global default"; disabling the cap
+                  // entirely is a viewer-side action ("Load all"), not an authoring one.
+                  min={1}
+                  step={1000}
+                  placeholder="Global default"
+                  value={typeof config.max_points === 'number' ? config.max_points : ''}
+                  onChange={(v) =>
+                    patchConfig({ max_points: typeof v === 'number' && v > 0 ? v : null })
+                  }
+                />
+              </Stack>
+            </Accordion.Panel>
+          </Accordion.Item>
+        )}
+
+        {/* Placement lives in the right-hand control column with everything
+            else, not full-width beneath the preview. Self-hiding when the
+            dashboard declares no sections. */}
+        <PlacementSection />
+      </Accordion>
     </Stack>
   );
 };

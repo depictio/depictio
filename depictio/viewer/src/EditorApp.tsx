@@ -28,6 +28,7 @@ import React, {
   useMemo,
 } from 'react';
 import {
+  ActionIcon,
   AppShell,
   Button,
   Center,
@@ -39,11 +40,13 @@ import {
   Paper,
   Stack,
   Title,
+  Tooltip,
 } from '@mantine/core';
 import { useDisclosure, useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
+import { useContentScaleStyle } from './hooks/useUiScalePref';
 import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
 import { FILTER_PANEL_WIDTH_VAR, useFilterPanelWidth } from './hooks/useFilterPanelWidth';
 import { useCurrentUser } from './hooks/useCurrentUser';
@@ -75,7 +78,11 @@ import {
   useRealtimeJournal,
   batchIdsFromPayload,
   authFetch,
+  uploadDashboardLogo,
+  updateDashboardAppearance,
   useMapPanel,
+  useCrossTabComponents,
+  PersistentSectionsHost,
   MapPanelControl,
   MapPanelDock,
   MapPanelSurface,
@@ -83,27 +90,40 @@ import {
   countActiveFilters,
   readEditorFilters,
   writeEditorFilters,
+  useSelectionGroups,
+  useCategoricalColumns,
+  useColorByColumnRender,
+  resolveGroupRender,
+  SelectionGroupsPanel,
+  SaveGroupContext,
+  BrandScope,
 } from 'depictio-react-core';
 import type {
   DashboardData,
   DashboardPermissions,
   DashboardSummary,
+  BrandTheme,
   FilterSectionSpec,
+  PersistentSection,
   InteractiveFilter,
   StoredMetadata,
   RealtimeMode,
   ActiveHighlight,
   RealtimeJournalEntry,
+  GroupRenderState,
 } from 'depictio-react-core';
 
 import GridItemEditOverlay from './components/GridItemEditOverlay';
+import SectionModal from './components/sections/SectionModal';
+import GroupingHeaderControl from './components/GroupingHeaderControl';
 import SectionsModal from './components/sections/SectionsModal';
 import { applySectionOp, groupWith, sectionsFor } from './components/sections/sectionMutations';
-import type { SectionOp } from './components/sections/sectionMutations';
+import type { SectionKind, SectionOp } from './components/sections/sectionMutations';
 import { Header, Sidebar, SettingsDrawer, TabModal } from './chrome';
 import type { TabModalSubmitPayload } from './chrome';
 import NotesFooter from './components/NotesFooter';
 import './chrome/chrome.css';
+import { usePageTitle } from './branding';
 
 const API_BASE = '/depictio/api/v1';
 const SAVE_DEBOUNCE_MS = 500;
@@ -160,6 +180,35 @@ async function saveDashboard(
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
+/**
+ * The "…" a section header carries in the editor.
+ *
+ * One mark for "this section's settings" wherever a section is drawn — the
+ * grid, the filter panel, and a section fanned out from another tab, which
+ * differ only in where the click leads and in what the tooltip says.
+ */
+const SectionActionButton: React.FC<{
+  label: string;
+  ariaLabel?: string;
+  onActivate: () => void;
+}> = ({ label, ariaLabel = 'Edit section', onActivate }) => (
+  <Tooltip label={label} withArrow multiline w={240}>
+    <ActionIcon
+      size="sm"
+      variant="subtle"
+      color="gray"
+      aria-label={ariaLabel}
+      data-testid="section-edit-actions"
+      onClick={(e) => {
+        e.stopPropagation();
+        onActivate();
+      }}
+    >
+      <Icon icon="mdi:dots-vertical" width={16} />
+    </ActionIcon>
+  </Tooltip>
+);
+
 const EditorApp: React.FC = () => {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [allDashboards, setAllDashboards] = useState<DashboardSummary[]>([]);
@@ -184,7 +233,21 @@ const EditorApp: React.FC = () => {
   // Persist across tab/page navigations (matches App.tsx + Dash app).
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
+  const contentScaleStyle = useContentScaleStyle();
+  // Bumped after a plot_theme save lands so figure components refetch and pick
+  // up the new dashboard-level template/colorway (the server reads plot_theme
+  // from the DB at render time, so the request body doesn't change).
+  const [plotThemeTick, setPlotThemeTick] = useState(0);
   const [sectionsOpened, { open: openSections, close: closeSections }] = useDisclosure(false);
+  /** The one add/edit dialog. `fromManager` is what sends the user back to the
+   *  Sections manager on close — the manager closes while this is open rather
+   *  than stacking two dialogs. */
+  const [sectionModal, setSectionModal] = useState<{
+    open: boolean;
+    kind: SectionKind;
+    target: FilterSectionSpec | null;
+    fromManager: boolean;
+  }>({ open: false, kind: 'grid', target: null, fromManager: false });
   const { user: currentUser, loading: userLoading, inspectorEnabled } = useCurrentUser();
   // `control` is null while the flag is off, so no provider value reaches the
   // component chrome and no inspect action is rendered anywhere.
@@ -201,6 +264,23 @@ const EditorApp: React.FC = () => {
   }>({ open: false, mode: 'create', target: null, submitting: false });
 
   const dashboardId = extractDashboardId();
+
+  // Saved selection groups — same hook and same storage key as the viewer, so
+  // groups made in one mode are visible in the other. Groups stay out of the
+  // `filters` state and are composed in only where data is fetched. Scoped to
+  // the dashboard FAMILY (parent id) so groups carry across tabs — see App.tsx.
+  const groupingScopeId = useMemo(() => {
+    if (!dashboard) return undefined;
+    const parent = dashboard.parent_dashboard_id as string | null | undefined;
+    const id = parent || dashboard.dashboard_id || dashboardId;
+    return id ? String(id) : undefined;
+  }, [dashboard, dashboardId]);
+  const groupsApi = useSelectionGroups(groupingScopeId);
+  const combinedFilters = useMemo(
+    () =>
+      groupsApi.groupFilters.length > 0 ? [...filters, ...groupsApi.groupFilters] : filters,
+    [filters, groupsApi.groupFilters],
+  );
 
   // Left filter panel chrome — same hooks and same storage keys as the viewer,
   // so collapsing or resizing in one mode carries over to the other.
@@ -255,13 +335,7 @@ const EditorApp: React.FC = () => {
   }, [userLoading, dashboard, dashboardId, isOwner]);
 
   // Keep the browser tab title in sync with the dashboard name.
-  useEffect(() => {
-    if (dashboard?.title) {
-      document.title = `Depictio — ${dashboard.title}`;
-    } else if (dashboardId) {
-      document.title = `Depictio — ${dashboardId}`;
-    }
-  }, [dashboard?.title, dashboardId]);
+  usePageTitle(dashboard?.title || dashboardId);
 
   // Fetch dashboard + tab list
   useEffect(() => {
@@ -305,7 +379,15 @@ const EditorApp: React.FC = () => {
       // snapping to ``…``. See App.tsx for the matching change.
       if (bulkCtrl.current) bulkCtrl.current.abort();
       bulkCtrl.current = new AbortController();
-      bulkComputeCards(dashboardId, filters, cardIds)
+      bulkComputeCards(
+        dashboardId,
+        combinedFilters,
+        cardIds,
+        groupsApi.bulkOptions,
+        // See App.tsx: prevents a slow superseded compare-on response from
+        // overwriting a newer one.
+        bulkCtrl.current.signal,
+      )
         .then((res) => {
           setCardValues(res.values);
           setCardSecondaryValues(res.secondary_values || {});
@@ -318,7 +400,14 @@ const EditorApp: React.FC = () => {
         .finally(() => setCardsLoading(false));
     }, 250);
     return () => clearTimeout(timer);
-  }, [dashboard, dashboardId, stableFilterKey(filters)]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    dashboard,
+    dashboardId,
+    stableFilterKey(combinedFilters),
+    // Undefined while compare is off, so group edits don't refire the fetch.
+    JSON.stringify(groupsApi.bulkOptions ?? null),
+  ]);
 
   // Mirror the live filters into the per-tab store so they survive the
   // builder's full-page round-trip (see editorFilters.ts). Writing on every
@@ -337,14 +426,83 @@ const EditorApp: React.FC = () => {
     [dashboard],
   );
 
+  // In-place "save selection as group" on components with a live selection
+  // (mirrors App.tsx).
+  // Analysis mode, tracked separately from whether the header panel is open.
+  // Mantine dismisses a Popover on mousedown outside it, and that mousedown is
+  // the one that starts a lasso — so tying the mode to `analysisOpen` would
+  // erase every capability marker exactly when the user acts on one. Opening
+  // the panel arms the mode; only the button (or a second click on it) ends it.
+  const [analysisOpen, setAnalysisOpen] = useState(false);
+  const [analysisArmed, setAnalysisArmed] = useState(false);
+  const handleAnalysisOpenChange = useCallback((next: boolean) => {
+    setAnalysisOpen(next);
+    if (next) setAnalysisArmed(true);
+  }, []);
+  const handleAnalysisToggle = useCallback(() => {
+    const next = !analysisOpen;
+    setAnalysisOpen(next);
+    setAnalysisArmed(next);
+  }, [analysisOpen]);
+
+  const saveGroupApi = useMemo(
+    () => ({
+      groups: groupsApi.groups,
+      createGroup: groupsApi.createGroupFromFilter,
+      clearSelection: handleFilterChange,
+      // "Engaged" spans both ways into analysis: the panel being open (the user
+      // is looking for where to act) and a grouping mode being on (the
+      // dashboard is already repainted by one). Outside those, capable
+      // components stay unmarked so ordinary viewing is unchanged.
+      analysisEngaged: analysisArmed || groupsApi.colorBy.kind !== 'none',
+    }),
+    [
+      groupsApi.groups,
+      groupsApi.createGroupFromFilter,
+      handleFilterChange,
+      analysisArmed,
+      groupsApi.colorBy.kind,
+    ],
+  );
+
   // Authors see the panel as viewers will. Cross-tab (floating) filter
   // persistence is deliberately viewer-only: an editing session's filter state
   // is scratch across dashboards, and carrying it between tabs would be
   // surprising here. Same-dashboard persistence within this browser tab is a
   // different matter — see editorFilters.ts, which keeps filters alive across
   // the builder round-trip.
+  const crossTab = useCrossTabComponents(dashboardId ?? '');
+
+  // Persistent sections owned by *sibling* tabs. They render here exactly as
+  // the viewer draws them — read-only, on their own surfaces — so an author
+  // laying out this tab sees the space they take. Everything editable stays
+  // keyed on this dashboard's own `stored_metadata`: a foreign member must
+  // never reach the layout merges that write `left_panel_layout_data` /
+  // `right_panel_layout_data`, nor the ⋮ menus that delete or re-section a
+  // component this document does not own.
+  const foreignPersistentSections = useMemo(
+    () => crossTab.persistentSections.filter((s) => s.owner_dashboard_id !== dashboardId),
+    [crossTab.persistentSections, dashboardId],
+  );
+  const foreignFilterSections = useMemo(
+    () => foreignPersistentSections.filter((s) => s.kind === 'filter'),
+    [foreignPersistentSections],
+  );
+  const foreignGridSections = useMemo(
+    () => foreignPersistentSections.filter((s) => s.kind === 'grid'),
+    [foreignPersistentSections],
+  );
+  const topGridSections = useMemo(
+    () => foreignGridSections.filter((s) => s.spec.pin !== 'bottom'),
+    [foreignGridSections],
+  );
+  const bottomGridSections = useMemo(
+    () => foreignGridSections.filter((s) => s.spec.pin === 'bottom'),
+    [foreignGridSections],
+  );
   const mapPanel = useMapPanel({
-    dashboardId: dashboardId ?? '',
+    components: crossTab.floating,
+    familyId: crossTab.familyId,
     filters,
     onFilterChange: handleFilterChange,
   });
@@ -396,28 +554,118 @@ const EditorApp: React.FC = () => {
     [handleSectionOp],
   );
 
+  /** Layout entries for components this document actually holds.
+   *
+   *  The read-only rendering already keeps fanned-out members out of the
+   *  editable grids, but that rule is spread across a section flag and a merge
+   *  skip. This is the boundary where it has to hold no matter what: an entry
+   *  keyed on another tab's component would be an orphan in this dashboard's
+   *  layout, and the components it belongs to would still live over there. */
+  const ownLayoutOnly = useCallback((layout: Layout[], cur: DashboardData) => {
+    const own = new Set((cur.stored_metadata ?? []).map((m) => m.index));
+    return layout.filter((item) => own.has(stripBoxPrefix(String(item.i))));
+  }, []);
+
+  /** Per-figure font-size multiplier, stored on the component's
+   *  stored_metadata entry so the viewer renders the same emphasis. Goes
+   *  through the debounced save like layout nudges — stepping A− / A+
+   *  repeatedly produces one POST. */
+  const handleComponentFontScale = useCallback(
+    (componentId: string, scale: number) => {
+      const cur = dashboardRef.current;
+      if (!cur) return;
+      const next = {
+        ...cur,
+        stored_metadata: (cur.stored_metadata || []).map((m) =>
+          m.index === componentId ? { ...m, font_scale: scale === 1 ? undefined : scale } : m,
+        ),
+      };
+      scheduleSave(next);
+    },
+    [scheduleSave],
+  );
+
+  /** Dashboard-level brand theme (#397). Goes through the targeted
+   *  `PATCH /dashboards/appearance` rather than the full-document save: an
+   *  appearance edit and an in-flight layout save would otherwise be
+   *  last-writer-wins against each other. Not debounced either — the server
+   *  resolves the theme from the DB at figure-render time, so figures can only
+   *  refetch once the write has landed. */
+  const handleBrandThemeChange = useCallback(
+    (theme: BrandTheme | null) => {
+      const cur = dashboardRef.current;
+      if (!cur || !dashboardId) return;
+      applyDashboard({ ...cur, brand_theme: theme });
+      setSaveStatus('saving');
+      updateDashboardAppearance(dashboardId, theme)
+        .then(() => {
+          setSaveStatus('saved');
+          setPlotThemeTick((t) => t + 1);
+        })
+        .catch((err) => {
+          console.error('[EditorApp] brand theme save failed:', err);
+          setSaveStatus('error');
+        });
+    },
+    [dashboardId, applyDashboard],
+  );
+
+  /** Dashboard logo upload. The upload endpoint stamps the URL onto the
+   *  dashboard's brand theme itself (file write + field update in one
+   *  ownership-checked call), so on success only the local state needs it.
+   *  Errors propagate to the drawer, which displays them. */
+  const handleUploadLogo = useCallback(
+    async (file: File) => {
+      const cur = dashboardRef.current;
+      if (!cur || !dashboardId) return;
+      setSaveStatus('saving');
+      try {
+        const logoUrl = await uploadDashboardLogo(dashboardId, file);
+        // Re-read the ref: another action (appearance, layout…) may have
+        // advanced the dashboard while the upload was in flight — merging
+        // into the pre-await snapshot would silently revert it.
+        const latest = dashboardRef.current ?? cur;
+        applyDashboard({
+          ...latest,
+          brand_theme: {
+            ...(latest.brand_theme ?? {}),
+            logo_url: logoUrl,
+            logo_mode: 'custom',
+          },
+        });
+        setSaveStatus('saved');
+      } catch (err) {
+        setSaveStatus('error');
+        throw err;
+      }
+    },
+    [dashboardId, applyDashboard],
+  );
+
   const handleLeftLayoutChange = useCallback(
     (newLayout: Layout[]) => {
       const cur = dashboardRef.current;
       if (!cur) return;
+      const next = ownLayoutOnly(newLayout, cur);
       // Skip no-op writes during the initial mount where react-grid-layout
       // emits the layout it was just given.
       const prev = cur.left_panel_layout_data;
-      if (layoutsEqual(prev, newLayout)) return;
-      scheduleSave({ ...cur, left_panel_layout_data: newLayout });
+      if (layoutsEqual(prev, next)) return;
+      scheduleSave({ ...cur, left_panel_layout_data: next });
     },
-    [scheduleSave],
+    [scheduleSave, ownLayoutOnly],
   );
 
   const handleRightLayoutChange = useCallback(
     (newLayout: Layout[]) => {
       const cur = dashboardRef.current;
       if (!cur) return;
+      const next = ownLayoutOnly(newLayout, cur);
       const prev = cur.right_panel_layout_data;
-      if (layoutsEqual(prev, newLayout)) return;
-      scheduleSave({ ...cur, right_panel_layout_data: newLayout });
+      if (layoutsEqual(prev, next)) return;
+      scheduleSave({ ...cur, right_panel_layout_data: next });
     },
-    [scheduleSave],
+    [scheduleSave, ownLayoutOnly],
   );
 
   /** Delete: strip from stored_metadata + both layouts, save, then refetch. */
@@ -454,6 +702,33 @@ const EditorApp: React.FC = () => {
         setSaveStatus('saved');
       } catch (err) {
         console.error('[EditorApp] delete failed:', err);
+        setSaveStatus('error');
+      }
+    },
+    [dashboardId, applyDashboard],
+  );
+
+  /**
+   * Persist the dashboard-level funnel-filtering default (issue #939). Same
+   * save-now pattern as delete: apply optimistically, POST the full document.
+   */
+  const handleToggleFunnelFiltering = useCallback(
+    async (enabled: boolean) => {
+      if (!dashboardId) return;
+      const cur = dashboardRef.current;
+      if (!cur) return;
+      const next = { ...cur, funnel_filtering: enabled };
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+      }
+      applyDashboard(next);
+      setSaveStatus('saving');
+      try {
+        await saveDashboard(dashboardId, next);
+        setSaveStatus('saved');
+      } catch (err) {
+        console.error('[EditorApp] funnel toggle save failed:', err);
         setSaveStatus('error');
       }
     },
@@ -646,10 +921,88 @@ const EditorApp: React.FC = () => {
     () => interactiveComponents.filter((m) => m.placement === 'top'),
     [interactiveComponents],
   );
-  const leftComponents = useMemo(
-    () => interactiveComponents.filter((m) => m.placement !== 'top'),
-    [interactiveComponents],
+  const leftComponents = useMemo(() => {
+    const own = interactiveComponents.filter((m) => m.placement !== 'top');
+    const seen = new Set(own.map((m) => m.index));
+    // Controls fanned out from a sibling tab's persistent filter section, same
+    // as the viewer does: their renderers fetch options by dc_id/column, not by
+    // dashboard id. `readOnlyPanelSections` below keeps them out of the panel's
+    // editable grid.
+    const foreign = foreignFilterSections
+      .flatMap((s) => s.components.map((c) => c.metadata))
+      .filter((m) => !seen.has(m.index) && m.placement !== 'top');
+    return foreign.length ? [...own, ...foreign] : own;
+  }, [interactiveComponents, foreignFilterSections]);
+  // Section chrome for the panel — own specs plus the foreign persistent ones,
+  // own winning a name clash. Distinct from the `filterSections` memo below,
+  // which feeds the ⋮ "Move to section" menus and must stay own-only: a
+  // component cannot move into a section another tab owns.
+  const panelFilterSections = useMemo(() => {
+    const own = dashboard?.filter_sections ?? [];
+    const names = new Set(own.map((s) => s.name));
+    const foreign = foreignFilterSections.map((s) => s.spec).filter((s) => !names.has(s.name));
+    return foreign.length ? [...own, ...foreign] : own;
+  }, [dashboard?.filter_sections, foreignFilterSections]);
+  // Same exclusion as `panelFilterSections`, and it has to be: a section is
+  // read-only because a sibling tab owns it, and an own section that happens to
+  // share the name is a different section. Without this, declaring a section
+  // named like a sibling's persistent one would freeze this tab's own filters —
+  // no drag, no per-component menu — and drop them from every later
+  // `left_panel_layout_data` write, since the merge skips read-only sections.
+  /** Component ids this dashboard document holds, as opposed to the ones fanned
+   *  out from sibling tabs. */
+  const ownComponentIndices = useMemo(
+    () => new Set((dashboard?.stored_metadata ?? []).map((m) => m.index)),
+    [dashboard?.stored_metadata],
   );
+  const readOnlyPanelSections = useMemo(() => {
+    const ownNames = new Set((dashboard?.filter_sections ?? []).map((s) => s.name));
+    return foreignFilterSections
+      .map((s) => s.spec.name)
+      .filter((name) => !ownNames.has(name));
+  }, [dashboard?.filter_sections, foreignFilterSections]);
+  /** Open the add/edit dialog on one section, by name.
+   *
+   *  A section a component names but the dashboard never declared has no spec
+   *  to patch — `update` maps over the declared list and would be a no-op — so
+   *  it is materialised first, exactly as opening the manager does. */
+  const openSectionEditor = useCallback(
+    (kind: SectionKind, sectionName: string) => {
+      const cur = dashboardRef.current;
+      const declared = cur
+        ? sectionsFor(cur, kind).find((s) => s.name === sectionName)
+        : undefined;
+      if (!declared) handleSectionOp({ op: 'materialize', kind });
+      setSectionModal({
+        open: true,
+        kind,
+        target: declared ?? { name: sectionName },
+        fromManager: false,
+      });
+    },
+    [handleSectionOp],
+  );
+  // A section is edited from where it is seen: its header carries the same "…"
+  // a component's chrome does. Named sections only — the unsectioned bucket has
+  // no header to host it.
+  const renderGridSectionAction = (sectionName: string | null) =>
+    sectionName === null ? null : (
+      <SectionActionButton
+        label={`Edit “${sectionName}”`}
+        onActivate={() => openSectionEditor('grid', sectionName)}
+      />
+    );
+  // Filter names and dc_ids are resolved against the family, not just this
+  // tab: a fanned-out control has no entry in this dashboard's metadata, so
+  // the active-filter summary would fall back to the raw column name.
+  const summaryMetadata = useMemo(() => {
+    const own = dashboard?.stored_metadata || [];
+    const seen = new Set(own.map((m) => m.index));
+    const extras = foreignPersistentSections
+      .flatMap((s) => s.components.map((c) => c.metadata))
+      .filter((m) => !seen.has(m.index));
+    return extras.length ? [...own, ...extras] : own;
+  }, [dashboard, foreignPersistentSections]);
   // Sections offered by the filter controls' ⋮ menus. Keyed on the spec list
   // rather than the whole dashboard so a card value or layout nudge doesn't
   // re-render every overlay.
@@ -672,7 +1025,11 @@ const EditorApp: React.FC = () => {
   // Per-filter edit / duplicate / delete menu. FilterPanel injects it into
   // each control's chrome, including controls nested inside a group card.
   const renderFilterItemOverlay = useCallback(
-    (component: StoredMetadata) => (
+    (component: StoredMetadata) =>
+      // A control fanned out from a sibling tab can share a bucket with this
+      // tab's own filters when both sections carry the same name. It is not in
+      // this document, so none of these actions could reach it.
+      !ownComponentIndices.has(component.index) ? null : (
       <GridItemEditOverlay
         dashboardId={dashboardId!}
         componentId={component.index}
@@ -693,6 +1050,7 @@ const EditorApp: React.FC = () => {
       filterSections,
       handleMoveToSection,
       filterGroupSizes,
+      ownComponentIndices,
     ],
   );
 
@@ -745,7 +1103,61 @@ const EditorApp: React.FC = () => {
     [tabSiblings],
   );
 
-  const handleResetAllFilters = useCallback(() => setFilters([]), []);
+  const handleResetAllFilters = useCallback(() => {
+    setFilters([]);
+    // Mirrors App.tsx: group filters narrow the dashboard too.
+    groupsApi.deactivateAllGroupFilters();
+  }, [groupsApi.deactivateAllGroupFilters]);
+
+  // Filter-active groups as removable active-filter summary rows.
+  const groupSummaryRows = groupsApi.summaryRows;
+  // Global "Color by" column discovery + stable palette (mirrors App.tsx).
+  const colorByColumns = useCategoricalColumns(dashboard?.stored_metadata);
+  const colorByColumnRender = useColorByColumnRender(groupsApi.colorBy, colorByColumns);
+  // Memoised for the grid's per-item render memo (mirrors App.tsx).
+  const groupRender = useMemo(
+    () =>
+      resolveGroupRender(
+        groupsApi.colorBy,
+        groupsApi.renderGroups,
+        colorByColumnRender,
+        groupsApi.displayMode,
+        groupsApi.showOther,
+      ),
+    [
+      groupsApi.colorBy,
+      groupsApi.renderGroups,
+      colorByColumnRender,
+      groupsApi.displayMode,
+      groupsApi.showOther,
+    ],
+  );
+
+  // The Grouping panel's body, mounted in the header popover (mirrors App.tsx).
+  const groupsSection = (
+    <SelectionGroupsPanel
+      filters={filters}
+      components={dashboard?.stored_metadata ?? []}
+      groups={groupsApi.groups}
+      colorBy={groupsApi.colorBy}
+      colorByColumns={colorByColumns}
+      compareInCards={groupsApi.compareInCards}
+      onCreateGroup={groupsApi.createGroupFromFilter}
+      onClearSelection={handleFilterChange}
+      onUpdateGroup={groupsApi.updateGroup}
+      onDeleteGroup={groupsApi.deleteGroup}
+      onToggleGroupFilter={groupsApi.toggleGroupFilter}
+      onColorByChange={groupsApi.setColorBy}
+      onCompareInCardsChange={groupsApi.setCompareInCards}
+      displayMode={groupsApi.displayMode}
+      onDisplayModeChange={groupsApi.setDisplayMode}
+      showOther={groupsApi.showOther}
+      onShowOtherChange={groupsApi.setShowOther}
+      showOverall={groupsApi.showOverall}
+      onShowOverallChange={groupsApi.setShowOverall}
+      onResetAnalysis={groupsApi.resetAnalysis}
+    />
+  );
 
   // ---- Realtime: WebSocket subscription mirrors App.tsx ---------------------
   const [realtimeMode, setRealtimeMode] = useState<RealtimeMode>(() => {
@@ -1053,12 +1465,10 @@ const EditorApp: React.FC = () => {
     [tabSiblings, allDashboards, refreshTabList],
   );
 
-  /** Closing the manager flushes the debounce: the next thing a user does after
-   *  reorganising sections is often "Edit" or "Add component", both of which
-   *  navigate away with `window.location.assign` and would drop a pending
-   *  save. */
-  const handleCloseSections = useCallback(() => {
-    closeSections();
+  /** Closing a sections dialog flushes the debounce: the next thing a user does
+   *  after touching sections is often "Edit" or "Add", both of which navigate
+   *  away with `window.location.assign` and would drop a pending save. */
+  const flushSectionSave = useCallback(() => {
     if (!dashboardId) return;
     const cur = dashboardRef.current;
     if (!cur) return;
@@ -1073,7 +1483,86 @@ const EditorApp: React.FC = () => {
         console.error('[EditorApp] section save failed:', err);
         setSaveStatus('error');
       });
-  }, [closeSections, dashboardId]);
+  }, [dashboardId]);
+
+  const handleCloseSections = useCallback(() => {
+    closeSections();
+    flushSectionSave();
+  }, [closeSections, flushSectionSave]);
+
+  /** Cancel and save both land here. Returning to the manager when that is
+   *  where the dialog came from is what makes editing several sections in a
+   *  row bearable. */
+  const handleCloseSectionModal = useCallback(() => {
+    // Outside the updater: React re-invokes those in dev, and this one opens a
+    // dialog.
+    if (sectionModal.fromManager) openSections();
+    setSectionModal((prev) => ({ ...prev, open: false }));
+    flushSectionSave();
+  }, [sectionModal.fromManager, openSections, flushSectionSave]);
+
+  /** "Manage all sections", the other direction of the same swap. */
+  const handleManageAllSections = useCallback(() => {
+    setSectionModal((prev) => ({ ...prev, open: false, fromManager: false }));
+    openSections();
+    flushSectionSave();
+  }, [openSections, flushSectionSave]);
+
+  const handleManagerAdd = useCallback(
+    (kind: SectionKind) => {
+      closeSections();
+      setSectionModal({ open: true, kind, target: null, fromManager: true });
+    },
+    [closeSections],
+  );
+  const handleManagerEdit = useCallback(
+    (kind: SectionKind, spec: FilterSectionSpec) => {
+      closeSections();
+      setSectionModal({ open: true, kind, target: spec, fromManager: true });
+    },
+    [closeSections],
+  );
+  /** The header's Add menu: a new grid section, the common case. */
+  const handleAddSection = useCallback(
+    () => setSectionModal({ open: true, kind: 'grid', target: null, fromManager: false }),
+    [],
+  );
+
+  /** A persistent section can only be changed where it is declared. Rather
+   *  than leave it inert on every other tab, its header carries a jump to the
+   *  tab that owns it. Flushes first: the navigation is a full page load and
+   *  would drop a pending layout save. */
+  const goToOwnerTab = (ownerDashboardId: string) => {
+    flushSectionSave();
+    window.location.assign(`/dashboard-edit/${ownerDashboardId}`);
+  };
+  const renderPersistentSectionAction = (section: PersistentSection) => (
+    <SectionActionButton
+      label={`Owned by ${
+        section.owner_tab_title ? `“${section.owner_tab_title}”` : 'another tab'
+      } — open that tab to edit it`}
+      ariaLabel="Edit on the owning tab"
+      onActivate={() => goToOwnerTab(section.owner_dashboard_id)}
+    />
+  );
+  // The panel's list also holds the persistent sections a sibling tab owns.
+  // Those get the jump instead of this tab's editor: the modal only knows this
+  // dashboard's own specs. The grid needs no such branch — its foreign sections
+  // render in `PersistentSectionsHost`, which takes its own action.
+  const foreignFilterSectionsByName = new Map(
+    foreignFilterSections.map((s) => [s.spec.name, s] as const),
+  );
+  const renderPanelSectionAction = (sectionName: string | null) => {
+    if (sectionName === null) return null;
+    const foreign = foreignFilterSectionsByName.get(sectionName);
+    if (foreign) return renderPersistentSectionAction(foreign);
+    return (
+      <SectionActionButton
+        label={`Edit “${sectionName}”`}
+        onActivate={() => openSectionEditor('filter', sectionName)}
+      />
+    );
+  };
 
   /** Force-save: cancel any pending debounce and POST current state now.
    *  Mirrors depictio/dash/layouts/save.py:save_dashboard_minimal — uses
@@ -1127,6 +1616,10 @@ const EditorApp: React.FC = () => {
   return (
     <>
     <InspectorProviders control={inspectorControl}>
+    <SaveGroupContext.Provider value={saveGroupApi}>
+    {/* Same scoping as the viewer, so an editor sees the override they are
+        editing without it escaping into the rest of the app. */}
+    <BrandScope theme={dashboard?.brand_theme}>
     <AppShell
       header={{ height: 50 }}
       navbar={{
@@ -1151,15 +1644,27 @@ const EditorApp: React.FC = () => {
           onToggleDesktop={toggleDesktop}
           onOpenSettings={openSettings}
           onOpenFilters={isNarrow && leftComponents.length > 0 ? openFilterDrawer : undefined}
-          filterCount={countActiveFilters(filters)}
+          filterCount={countActiveFilters(filters) + groupSummaryRows.length}
           cardsLoading={cardsLoading}
           mode="edit"
           onAddComponent={handleAddComponent}
-          onOpenSections={openSections}
+          onAddSection={handleAddSection}
           onSave={handleForceSave}
           isOwner={isOwner}
           rightExtras={
             <>
+              {dashboard && (
+                <GroupingHeaderControl
+                  groupCount={groupsApi.groups.length}
+                  colorBy={groupsApi.colorBy}
+                  opened={analysisOpen}
+                  onOpenedChange={handleAnalysisOpenChange}
+                  armed={analysisArmed}
+                  onToggle={handleAnalysisToggle}
+                >
+                  {groupsSection}
+                </GroupingHeaderControl>
+              )}
               <MapPanelControl panel={mapPanel} />
               {realtimeEnabled && (
                 <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
@@ -1196,6 +1701,7 @@ const EditorApp: React.FC = () => {
           onEditTab={openEditTabModal}
           onDeleteTab={handleDeleteTab}
           onMoveTab={handleMoveTab}
+          brandTheme={dashboard?.brand_theme}
         />
       </AppShell.Navbar>
 
@@ -1265,12 +1771,14 @@ const EditorApp: React.FC = () => {
               >
                 <FilterPanel
                   components={leftComponents}
-                  allMetadata={dashboard.stored_metadata}
+                  allMetadata={summaryMetadata}
                   filters={filters}
                   onFilterChange={handleFilterChange}
                   onResetAllFilters={handleResetAllFilters}
                   layoutData={dashboard.left_panel_layout_data}
-                  filterSections={dashboard.filter_sections}
+                  filterSections={panelFilterSections}
+                  readOnlySections={readOnlyPanelSections}
+                  renderSectionActions={renderPanelSectionAction}
                   dashboardId={dashboardId}
                   // No refreshTick: the editor threads no realtime refresh
                   // counter into any of its grids, so the left panel matches
@@ -1280,10 +1788,12 @@ const EditorApp: React.FC = () => {
                   onLayoutChange={handleLeftLayoutChange}
                   collapsed={!filterPanelOpened}
                   onToggleCollapsed={toggleFilterPanel}
+                  groupSummaryRows={groupSummaryRows}
                   footer={
                     <MapPanelDock
                       panel={mapPanel}
-                      filters={filters}
+                      // Docked maps render data: include group filters.
+                      filters={combinedFilters}
                       onFilterChange={handleFilterChange}
                       renderEditActions={renderMapPanelEditActions}
                     />
@@ -1302,20 +1812,40 @@ const EditorApp: React.FC = () => {
               px={4}
               py={4}
               data-tour-id="editor-grid"
+              data-testid="dashboard-content"
               style={{
                 height: '100%',
                 minWidth: 0,
                 overflowY: 'auto',
                 overflowX: 'hidden',
+                // Content font-size preference — scales the dashboard tiles
+                // below, never the surrounding chrome (header, sidebar, panel).
+                ...contentScaleStyle,
               }}
             >
+              {/* The viewer's fan-out, previewed: read-only surfaces of their
+                  own, so a foreign section is visible while laying this tab
+                  out without ever entering its editable grid. */}
+              {topGridSections.length > 0 && (
+                <PersistentSectionsHost
+                  sections={topGridSections}
+                  familyId={crossTab.familyId}
+                  slot="top"
+                  filters={filters}
+                  onFilterChange={handleFilterChange}
+                  groupRender={groupRender}
+                  bulkOptions={groupsApi.bulkOptions}
+                  renderSectionActions={renderPersistentSectionAction}
+                />
+              )}
               <RightComponentGrid
                 dashboardId={dashboardId!}
                 cardComponents={cardComponents}
                 otherComponents={otherComponents}
                 layoutData={dashboard.right_panel_layout_data}
                 gridSections={dashboard.grid_sections}
-                filters={filters}
+                filters={combinedFilters}
+                groupRender={groupRender}
                 onFilterChange={handleFilterChange}
                 cardValues={cardValues}
                 cardSecondaryValues={cardSecondaryValues}
@@ -1326,7 +1856,22 @@ const EditorApp: React.FC = () => {
                 onAddComponent={handleAddComponent}
                 activeHighlight={activeHighlight}
                 onMoveToSection={handleMoveToSection}
+                renderSectionActions={renderGridSectionAction}
+                onComponentFontScale={handleComponentFontScale}
+                refreshTick={plotThemeTick}
               />
+              {bottomGridSections.length > 0 && (
+                <PersistentSectionsHost
+                  sections={bottomGridSections}
+                  familyId={crossTab.familyId}
+                  slot="bottom"
+                  filters={filters}
+                  onFilterChange={handleFilterChange}
+                  groupRender={groupRender}
+                  bulkOptions={groupsApi.bulkOptions}
+                  renderSectionActions={renderPersistentSectionAction}
+                />
+              )}
             </Box>
           </div>
           {/* Mirrors the viewer's footer strip so `placement: 'top'` controls
@@ -1343,11 +1888,13 @@ const EditorApp: React.FC = () => {
                 background: 'var(--mantine-color-body)',
               }}
             >
-              <TopPanel
-                components={topComponents}
-                filters={filters}
-                onFilterChange={handleFilterChange}
-              />
+              <Box style={contentScaleStyle}>
+                <TopPanel
+                  components={topComponents}
+                  filters={filters}
+                  onFilterChange={handleFilterChange}
+                />
+              </Box>
             </Box>
           )}
           </div>
@@ -1366,13 +1913,14 @@ const EditorApp: React.FC = () => {
           >
             <FilterPanel
               components={leftComponents}
-              allMetadata={dashboard.stored_metadata}
+              allMetadata={summaryMetadata}
               filters={filters}
               onFilterChange={handleFilterChange}
               onResetAllFilters={handleResetAllFilters}
               layoutData={dashboard.left_panel_layout_data}
-              filterSections={dashboard.filter_sections}
+              filterSections={panelFilterSections}
               dashboardId={dashboardId}
+              groupSummaryRows={groupSummaryRows}
             />
           </Drawer>
         )}
@@ -1386,7 +1934,8 @@ const EditorApp: React.FC = () => {
         {dashboard && dashboardId && (
           <MapPanelSurface
             panel={mapPanel}
-            filters={filters}
+            // Floating maps render data: include group filters.
+            filters={combinedFilters}
             onFilterChange={handleFilterChange}
             renderEditActions={renderMapPanelEditActions}
           />
@@ -1403,6 +1952,9 @@ const EditorApp: React.FC = () => {
         opened={settingsOpened}
         onClose={closeSettings}
         dashboard={dashboard}
+        onToggleFunnelFiltering={handleToggleFunnelFiltering}
+        onChangeBrandTheme={handleBrandThemeChange}
+        onUploadLogo={handleUploadLogo}
       />
 
       <TabModal
@@ -1419,8 +1971,22 @@ const EditorApp: React.FC = () => {
         onClose={handleCloseSections}
         dashboard={dashboard}
         onOp={handleSectionOp}
+        onAdd={handleManagerAdd}
+        onEdit={handleManagerEdit}
+      />
+
+      <SectionModal
+        opened={sectionModal.open}
+        target={sectionModal.target}
+        kind={sectionModal.kind}
+        dashboard={dashboard}
+        onOp={handleSectionOp}
+        onClose={handleCloseSectionModal}
+        onManageAll={handleManageAllSections}
       />
     </AppShell>
+    </BrandScope>
+    </SaveGroupContext.Provider>
     </InspectorProviders>
     </>
   );
@@ -1448,9 +2014,17 @@ interface RightComponentGridProps {
   onDuplicateComponent: (componentId: string) => void;
   onAddComponent: () => void;
   activeHighlight?: ActiveHighlight | null;
+  groupRender?: GroupRenderState;
   /** Fired by each cell's "Move to section" action. The names on offer are
    *  derived from `gridSections`, which this component already receives. */
   onMoveToSection: (componentId: string, section: string | null) => void;
+  /** Per-section header action — the "…" that opens that section's settings. */
+  renderSectionActions?: (sectionName: string | null) => React.ReactNode;
+
+  /** Fired by a figure cell's font-size control with the new multiplier. */
+  onComponentFontScale: (componentId: string, scale: number) => void;
+  /** Bumped when the dashboard plot theme changes, so figures refetch. */
+  refreshTick?: number;
 }
 
 /**
@@ -1477,7 +2051,11 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   onDuplicateComponent,
   onAddComponent,
   activeHighlight,
+  groupRender,
   onMoveToSection,
+  renderSectionActions,
+  onComponentFontScale,
+  refreshTick,
 }) => {
   const allComponents = useMemo(
     () => [...cardComponents, ...otherComponents],
@@ -1533,9 +2111,12 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
       cardSecondaryValues={cardSecondaryValues}
       cardValuesLoading={cardsLoading}
       activeHighlight={activeHighlight}
+      groupRender={groupRender}
+      refreshTick={refreshTick}
       isDraggable={true}
       isResizable={true}
       editMode={true}
+      renderSectionActions={renderSectionActions}
       onLayoutChange={onLayoutChange}
       renderItemOverlay={(componentId, metadata) => (
         <GridItemEditOverlay
@@ -1548,6 +2129,8 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
           sections={gridSections}
           currentSection={metadata.section ?? null}
           onMoveToSection={onMoveToSection}
+          fontScale={typeof metadata.font_scale === 'number' ? metadata.font_scale : undefined}
+          onFontScale={onComponentFontScale}
         />
       )}
     />

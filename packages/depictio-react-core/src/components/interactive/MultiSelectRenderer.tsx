@@ -7,7 +7,8 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
-import { useAvailableSet } from '../../availableValues';
+import { useAvailableSet, useFunnelState } from '../../availableValues';
+import { FunnelAvailabilityBadge, FunnelOptionMarker } from './funnelDecorations';
 import { INTERACTIVE_FRAME, InteractiveFrame, InteractiveTitle } from './frame';
 
 // Module-level cache for unique-values fetches. Keyed by `${dcId}|${column}`.
@@ -61,10 +62,13 @@ const MultiSelectRenderer: React.FC<{
 
   // Grey out values that the filter's source DC declares but that aren't
   // present in the dashboard's joined data — see `availableValues.tsx`.
+  // With funnel filtering on, the set is live instead: values that no longer
+  // lead to a non-empty result set under every OTHER active filter.
   // Sort order: available values first (so they're immediately visible),
   // then unavailable (greyed) values; alphabetical within each bucket using
   // a locale-aware natural compare so `Sample_2` sorts before `Sample_10`.
-  const availableSet = useAvailableSet(metadata.dc_id, metadata.column_name);
+  const availableSet = useAvailableSet(metadata.dc_id, metadata.column_name, metadata.index);
+  const funnel = useFunnelState(metadata.index);
   const optionItems = useMemo(() => {
     const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
     if (!availableSet) {
@@ -93,6 +97,13 @@ const MultiSelectRenderer: React.FC<{
     );
   }
 
+  // Funnel decorations: a colored dot per option (still-filterable vs
+  // exhausted) and an "n/N available" badge on the control itself.
+  const funnelHighlight = funnel.active && availableSet !== null;
+  const availableCount = funnelHighlight
+    ? options.filter((v) => availableSet!.has(v)).length
+    : null;
+
   return (
     <InteractiveFrame compact={compact}>
       <InteractiveTitle metadata={metadata} compact={compact} />
@@ -104,6 +115,16 @@ const MultiSelectRenderer: React.FC<{
           options={optionItems}
           value={selected}
           placeholder={`Select ${metadata.column_name || 'values'}…`}
+          renderOption={
+            funnelHighlight
+              ? ({ option }) => (
+                  <FunnelOptionMarker
+                    label={option.label}
+                    available={availableSet!.has(option.value)}
+                  />
+                )
+              : undefined
+          }
           onChange={(next) =>
             onChange?.({
               index: metadata.index,
@@ -114,6 +135,13 @@ const MultiSelectRenderer: React.FC<{
             })
           }
         />
+        {funnelHighlight && (
+          <FunnelAvailabilityBadge
+            available={availableCount ?? 0}
+            total={options.length}
+            truncated={funnel.state?.truncated}
+          />
+        )}
       </CompactControlSlot>
     </InteractiveFrame>
   );

@@ -388,6 +388,42 @@ spec:
             {{- toYaml .Values.backend.securityContext | nindent 12 }}
           resources:
             {{- toYaml .Values.initContainerResources | nindent 12 }}
+        {{- if .Values.mongo.useOperator }}
+        - name: wait-for-mongo-auth
+          # A TCP-open port only proves mongod is listening — with the Percona
+          # operator the replica set can report "ready" (and accept TCP) before
+          # its separate spec.users reconcile pass has actually created this DB
+          # user, or before a primary is elected. A backend/celery pod that
+          # starts inside that window gets "Authentication failed" or "No
+          # replica set members match selector Primary()", crashes internally,
+          # and — because the container's PID 1 survives the crash — stays
+          # Running/Ready with a dead app and nothing ever retries. Block here
+          # on a real authenticated ping so the pod is never marked Ready until
+          # the connection Depictio itself will use actually works.
+          image: "{{ .Values.mongo.image.repository }}:{{ .Values.mongo.image.tag }}"
+          imagePullPolicy: {{ .Values.mongo.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              until mongosh \
+                  "mongodb://{{ .Values.mongo.auth.username }}:${MONGO_PASSWORD}@{{ .Release.Name }}-mongo-rs0.{{ .Release.Namespace }}.{{ .Values.mongo.clusterServiceDNSSuffix }}:27017/admin?replicaSet=rs0" \
+                  --quiet --eval 'db.runCommand({ ping: 1 })' > /dev/null 2>&1; do
+                echo "Waiting for mongo replica set + {{ .Values.mongo.auth.username }} user to be ready..."
+                sleep 3
+              done
+              echo "Mongo authenticated ping OK"
+          env:
+            - name: MONGO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-mongo-password
+                  key: password
+          securityContext:
+            {{- toYaml .Values.backend.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.initContainerResources | nindent 12 }}
+        {{- end }}
         {{- if .Values.minio.enabled }}
         - name: wait-for-minio
           image: "{{ .Values.initContainerImage.repository }}:{{ .Values.initContainerImage.tag }}"
@@ -718,6 +754,34 @@ spec:
             {{- toYaml .Values.celery.securityContext | nindent 12 }}
           resources:
             {{- toYaml .Values.initContainerResources | nindent 12 }}
+        {{- if .Values.mongo.useOperator }}
+        # STEP 1b: Wait for the depictio DB user to actually be usable (see
+        # backend's wait-for-mongo-auth for why the TCP check above isn't enough)
+        - name: wait-for-mongo-auth
+          image: "{{ .Values.mongo.image.repository }}:{{ .Values.mongo.image.tag }}"
+          imagePullPolicy: {{ .Values.mongo.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              until mongosh \
+                  "mongodb://{{ .Values.mongo.auth.username }}:${MONGO_PASSWORD}@{{ .Release.Name }}-mongo-rs0.{{ .Release.Namespace }}.{{ .Values.mongo.clusterServiceDNSSuffix }}:27017/admin?replicaSet=rs0" \
+                  --quiet --eval 'db.runCommand({ ping: 1 })' > /dev/null 2>&1; do
+                echo "Waiting for mongo replica set + {{ .Values.mongo.auth.username }} user to be ready..."
+                sleep 3
+              done
+              echo "Mongo authenticated ping OK"
+          env:
+            - name: MONGO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-mongo-password
+                  key: password
+          securityContext:
+            {{- toYaml .Values.celery.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.initContainerResources | nindent 12 }}
+        {{- end }}
         # STEP 2: Wait for Redis
         {{- if .Values.redis.enabled }}
         - name: wait-for-redis

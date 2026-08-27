@@ -7,7 +7,9 @@
  * recovery. Do not attach the bearer by hand — see its docstring for why.
  */
 
+import type { BrandTheme } from './brandTheme';
 import { enqueueFetch } from './fetchQueue';
+import type { GroupingDisplay, GroupRenderDef } from './selectionGroups';
 
 const API_BASE = '/depictio/api/v1';
 
@@ -294,6 +296,10 @@ export interface StoredMetadata {
    *  When omitted, the renderer defaults to visible for ungrouped components and
    *  hidden for components inside a group (compact mode). */
   show_marks?: boolean;
+  /** Per-component font-size multiplier (figures: scales the whole Plotly
+   *  layout font — axis labels, ticks, legend). Multiplies the dashboard-wide
+   *  content scale; 1/undefined = no override. */
+  font_scale?: number;
   // Table
   /** Column allowlist for table components — when non-empty, only these
    *  columns are rendered (empty / undefined = show all columns). */
@@ -316,6 +322,15 @@ export interface FilterSectionSpec {
   color?: string | null;
   description?: string | null;
   collapsed?: boolean;
+  /** Render this section on every tab of the dashboard family: grid sections
+   *  appear read-only alongside each sibling tab's own content, filter sections'
+   *  controls join every tab's filter panel and their values survive tab
+   *  switches. No effect on single-tab dashboards. */
+  persistent?: boolean;
+  /** Which edge a persistent section sits at, on every tab of the family
+   *  including the one that owns it. Unset means 'top'. Ignored unless
+   *  `persistent` is set. */
+  pin?: 'top' | 'bottom' | null;
 }
 
 export interface DashboardData {
@@ -330,6 +345,13 @@ export interface DashboardData {
   /** Ordering + icons for the left panel's filter sections. */
   filter_sections?: FilterSectionSpec[];
   grid_sections?: FilterSectionSpec[];
+  /** Funnel filtering (issue #939): on by default, authors opt out per
+   *  dashboard. Absent on payloads cached before the field existed, which is
+   *  why every reader tests `!== false` rather than `Boolean(...)`. */
+  funnel_filtering?: boolean;
+  /** Per-dashboard brand override (#397): logo, palette, surfaces and figure
+   *  defaults. Unset fields inherit the instance branding. */
+  brand_theme?: BrandTheme | null;
   /** Project-level realtime config — only when ``enabled === true`` should
    *  the viewer mount the WebSocket subscription / live-updates indicator. */
   project_realtime?: { enabled: boolean; debounce_ms: number };
@@ -392,6 +414,63 @@ export async function fetchFloatingComponents(
     // filters hydrated from storage, and a rejection would leave a stale
     // cross-tab selection applied with nothing left to prune it.
     console.warn('[api] fetchFloatingComponents failed:', err);
+    return empty;
+  }
+}
+
+/** One section marked `persistent: true`, fanned out to the whole tab family.
+ *  Members carry their owning tab's `dashboard_id` (the floating-component
+ *  convention) so render calls target the owner while viewing a sibling.
+ *  Sections are keyed `(owner_dashboard_id, kind, name)` — two tabs declaring
+ *  a persistent section with the same name stay two sections. */
+export interface PersistentSection {
+  kind: 'grid' | 'filter';
+  owner_dashboard_id: string;
+  owner_tab_title?: string;
+  spec: FilterSectionSpec;
+  components: FloatingComponent[];
+  /** Owner tab's raw `right_panel_layout_data` entries for the grid members,
+   *  in the stored shape (`box-` prefixes and all). Empty for filter sections. */
+  layouts: unknown[];
+}
+
+export interface CrossTabComponentsResponse {
+  parent_dashboard_id: string | null;
+  floating: FloatingComponent[];
+  persistent_sections: PersistentSection[];
+}
+
+/**
+ * Fetch everything the current tab renders on behalf of its siblings — the
+ * family's floating maps plus its persistent sections — in one request.
+ * Supersedes `fetchFloatingComponents` for the viewer. Resolves empty rather
+ * than throwing, for the same reason as `fetchFloatingComponents`: the caller
+ * uses this result to validate filters hydrated from storage.
+ */
+export async function fetchCrossTabComponents(
+  dashboardId: string,
+): Promise<CrossTabComponentsResponse> {
+  const empty: CrossTabComponentsResponse = {
+    parent_dashboard_id: null,
+    floating: [],
+    persistent_sections: [],
+  };
+  try {
+    const res = await authFetch(
+      `${API_BASE}/dashboards/cross_tab_components/${dashboardId}`,
+    );
+    if (!res.ok) return empty;
+    const data = await res.json();
+    if (!Array.isArray(data?.floating)) return empty;
+    return {
+      parent_dashboard_id: data.parent_dashboard_id ?? null,
+      floating: data.floating,
+      persistent_sections: Array.isArray(data.persistent_sections)
+        ? data.persistent_sections
+        : [],
+    };
+  } catch (err) {
+    console.warn('[api] fetchCrossTabComponents failed:', err);
     return empty;
   }
 }
@@ -512,6 +591,62 @@ export async function fetchBreakdown(
   return res.json();
 }
 
+// =============================================================================
+// Funnel filtering (issue #939)
+// =============================================================================
+
+/** One interactive component's funnel result: which of its values still lead
+ *  to a non-empty result set under every OTHER active filter. */
+export interface FunnelTargetResult {
+  status: 'ok' | 'unrestricted' | 'unsupported' | 'error';
+  column?: string;
+  dc_id?: string;
+  values?: string[];
+  truncated?: boolean;
+}
+
+/** One stage of the funnel overview: the filter applied at this step and the
+ *  per-DC row counts after applying every filter up to and including it. */
+export interface FunnelStage {
+  index?: string;
+  label?: string | null;
+  column_name?: string | null;
+  dc_id?: string;
+  value?: unknown;
+  rows_by_dc: Record<string, number | null>;
+}
+
+export interface FunnelValuesResponse {
+  targets: Record<string, FunnelTargetResult>;
+  stages: FunnelStage[] | null;
+  initial_rows_by_dc: Record<string, number | null> | null;
+  dc_labels: Record<string, string>;
+  filter_count: number;
+}
+
+/** Compute funnel-filtering data: per-component available values under the
+ *  current filters minus each component's own selection, and (optionally) the
+ *  cumulative per-DC row counts backing the funnel overview. */
+export async function fetchFunnelValues(
+  dashboardId: string,
+  filters: unknown[],
+  targetIndexes: string[],
+  includeStages = false,
+  signal?: AbortSignal,
+): Promise<FunnelValuesResponse> {
+  const res = await authFetch(`${API_BASE}/dashboards/funnel_values/${dashboardId}`, {
+    method: 'POST',
+    body: JSON.stringify({
+      filters,
+      target_indexes: targetIndexes,
+      include_stages: includeStages,
+    }),
+    signal,
+  });
+  if (!res.ok) throw new Error(`Failed to fetch funnel values: ${res.status}`);
+  return res.json();
+}
+
 /** Payload for a card's numeric / QC secondary layout (histogram, threshold,
  *  completeness, attrition), computed server-side by the same dispatcher the
  *  saved card uses.
@@ -616,7 +751,12 @@ export type InteractiveFilterSource =
   | 'scatter_selection'
   | 'table_selection'
   | 'map_selection'
-  | 'image_selection';
+  | 'image_selection'
+  | 'tree_selection'
+  /** Derived projection of saved selection groups (see `selectionGroups.ts`).
+   *  Never merged into the user's filter list — composed at the fetch
+   *  boundary only. */
+  | 'group_filter';
 
 /** Per-component computed data (current value under the given filter state).
  *  `metadata.dc_id` is required for cross-DC link resolution server-side; any
@@ -680,16 +820,38 @@ export interface BulkComputeResponse {
   filter_count: number;
 }
 
+export interface BulkComputeOptions {
+  /** Selection groups to compare per card ("Compare groups in cards"). */
+  groups?: GroupRenderDef[];
+  compareGroups?: boolean;
+  /** False omits the "Other" bucket from the per-group comparison. */
+  showOther?: boolean;
+  /** False omits the "All rows" reference entry from the comparison. */
+  showOverall?: boolean;
+}
+
 export async function bulkComputeCards(
   dashboardId: string,
   filters: InteractiveFilter[],
   componentIds?: string[],
+  options?: BulkComputeOptions,
+  signal?: AbortSignal,
 ): Promise<BulkComputeResponse> {
+  // Group state rides in the body only when the comparison is actually on, so
+  // requests without the feature stay byte-identical.
+  const groupBody: Record<string, unknown> = {};
+  if (options?.compareGroups && options.groups && options.groups.length > 0) {
+    groupBody.groups = options.groups;
+    groupBody.compare_groups = true;
+    if (options.showOther === false) groupBody.include_other = false;
+    if (options.showOverall === false) groupBody.include_overall = false;
+  }
   const res = await authFetch(
     `${API_BASE}/dashboards/bulk_compute_cards/${dashboardId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters, component_ids: componentIds }),
+      body: JSON.stringify({ filters, component_ids: componentIds, ...groupBody }),
+      signal,
     },
   );
   if (!res.ok) throw new Error(`Failed to bulk-compute cards: ${res.status}`);
@@ -711,7 +873,25 @@ export interface FigureResponse {
     total_data_count?: number;
     /** True when every point was rendered (no cap applied / full_load). */
     full_data_loaded?: boolean;
+    /** True when the figure was colored by the caller's selection groups. */
+    group_colored?: boolean;
+    /** Column the figure was actually colored by (global "Color by" mode),
+     *  null/absent when the override didn't apply to this frame. */
+    column_colored?: string | null;
   };
+}
+
+export interface RenderFigureOptions {
+  /** Selection groups to color/split the figure by (see `selectionGroups.ts`). */
+  groups?: GroupRenderDef[];
+  colorByGroup?: boolean;
+  /** Global "color by <real column>" override; the color map is the stable
+   *  palette computed client-side from the column's unfiltered universe. */
+  colorByColumn?: { columnName: string; colorMap?: Record<string, string> };
+  /** Overlay ("color", default) vs small-multiples ("facet") display. */
+  display?: GroupingDisplay;
+  /** Groups mode only: false drops ungrouped ("Other") rows from figures. */
+  showOther?: boolean;
 }
 
 export async function renderFigure(
@@ -721,12 +901,30 @@ export async function renderFigure(
   theme: 'light' | 'dark' = 'light',
   fullLoad = false,
   signal?: AbortSignal,
+  options?: RenderFigureOptions,
 ): Promise<FigureResponse> {
+  // Grouping state rides in the body only when coloring is actually requested,
+  // so every request without the feature stays byte-identical to what it was
+  // before. Groups win over a column override (the endpoint enforces the same
+  // precedence).
+  let groupBody: Record<string, unknown> = {};
+  if (options?.colorByGroup && options.groups && options.groups.length > 0) {
+    groupBody = { groups: options.groups, color_by_group: true };
+    if (options.showOther === false) groupBody.include_other = false;
+  } else if (options?.colorByColumn) {
+    const { columnName, colorMap } = options.colorByColumn;
+    groupBody = {
+      color_by_column: { column_name: columnName, ...(colorMap ? { color_map: colorMap } : {}) },
+    };
+  }
+  if (Object.keys(groupBody).length > 0 && options?.display === 'facet') {
+    groupBody.grouping_display = 'facet';
+  }
   const res = await authFetch(
     `${API_BASE}/dashboards/render_figure/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters, theme, full_load: fullLoad }),
+      body: JSON.stringify({ filters, theme, full_load: fullLoad, ...groupBody }),
       signal,
     },
   );
@@ -1499,6 +1697,10 @@ export interface PublicConfigResponse {
     enabled: boolean;
     tracking_id: string | null;
   };
+  /** Instance brand theme (#397), already resolved: derived figure colors
+   *  materialised and defaults made explicit, so the client never re-derives
+   *  a palette. Empty-ish object on an unbranded deployment. */
+  branding?: BrandTheme;
 }
 
 export async function fetchPublicConfig(): Promise<PublicConfigResponse> {
@@ -1606,7 +1808,7 @@ export async function createTab(
     workflow_system: 'none',
     notes_content: '',
     permissions: (parent as Record<string, unknown>).permissions ?? {},
-    is_public: false,
+    // is_public is server-stamped from the parent project on insert.
     last_saved_ts: '',
     project_id: parent.project_id,
     is_main_tab: false,
@@ -1781,6 +1983,9 @@ export interface FigurePreviewRequest {
   metadata: Record<string, unknown>;
   filters?: InteractiveFilter[];
   theme?: 'light' | 'dark';
+  /** Owning dashboard — lets the server fold the dashboard's `brand_theme`
+   *  figure defaults into the preview so it matches the saved render. */
+  dashboard_id?: string;
 }
 
 export async function previewFigure(
@@ -2085,6 +2290,132 @@ export async function saveDashboardNotes(
     body: JSON.stringify(payload),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to save dashboard notes');
+}
+
+// ---- Instance branding (admin panel) --------------------------------------
+
+/** Admin view of the three branding layers.
+ *
+ *  `overrides` is what the admin explicitly set (the form's value),
+ *  `env_defaults` what the deployment's DEPICTIO_BRANDING_* vars provide (the
+ *  form's placeholders), and `effective` the resolved result the rest of the
+ *  app sees — derived figure colors included. */
+export interface AdminBrandingState {
+  overrides: BrandTheme;
+  env_defaults: BrandTheme;
+  effective: BrandTheme;
+}
+
+/** A named starting palette offered by the Branding panel. */
+export interface BrandPreset {
+  id: string;
+  label: string;
+  /** What applying it writes into the form. */
+  theme: BrandTheme;
+  /** The same theme resolved, so the picker can show real swatches. */
+  preview: BrandTheme;
+}
+
+export async function fetchBrandingAdmin(): Promise<AdminBrandingState> {
+  const res = await authFetch(`${API_BASE}/utils/branding`);
+  if (!res.ok) await throwHttpError(res, 'Failed to load branding settings');
+  return res.json();
+}
+
+/** Replace the override set — omitted/null fields fall back to env defaults. */
+export async function updateBrandingAdmin(theme: BrandTheme): Promise<AdminBrandingState> {
+  const res = await authFetch(`${API_BASE}/utils/branding`, {
+    method: 'PUT',
+    body: JSON.stringify(theme),
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to save branding settings');
+  return res.json();
+}
+
+export async function resetBrandingAdmin(): Promise<AdminBrandingState> {
+  const res = await authFetch(`${API_BASE}/utils/branding`, { method: 'DELETE' });
+  if (!res.ok) await throwHttpError(res, 'Failed to reset branding settings');
+  return res.json();
+}
+
+/** Resolve a draft theme (derive its figure colors, make defaults explicit)
+ *  without saving it.
+ *
+ *  The derivation lives server-side so the two ends can't drift, so a live
+ *  preview of an unsaved draft has to ask for it. Cheap and pure — debounce
+ *  it, don't cache it. */
+export async function resolveBrandTheme(theme: BrandTheme): Promise<BrandTheme> {
+  const res = await authFetch(`${API_BASE}/utils/branding/resolve`, {
+    method: 'POST',
+    body: JSON.stringify(theme),
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to resolve brand theme');
+  return res.json();
+}
+
+/** The shipped brand presets. Public, like the login page's branding. */
+export async function fetchBrandPresets(): Promise<BrandPreset[]> {
+  try {
+    const res = await fetch(`${API_BASE}/utils/branding/presets`, { cache: 'no-cache' });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { presets?: BrandPreset[] };
+    return data.presets ?? [];
+  } catch {
+    // Presets are a convenience: an older backend without the route must not
+    // break the panel, the pickers still work.
+    return [];
+  }
+}
+
+/** Upload an instance logo variant; the server stores it under
+ *  /static/branding/ and points the matching override at it. */
+export async function uploadBrandingLogo(
+  variant: 'light' | 'dark',
+  file: File,
+): Promise<AdminBrandingState> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await authFetch(`${API_BASE}/utils/branding/logo/${variant}`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to upload branding logo');
+  return res.json();
+}
+
+// ---- Per-dashboard appearance ----------------------------------------------
+
+/** Replace a dashboard's brand override.
+ *
+ *  A targeted PATCH rather than the full-document `/save`: appearance edits
+ *  and an in-flight layout save would otherwise be last-writer-wins against
+ *  each other. An empty theme clears the override. */
+export async function updateDashboardAppearance(
+  dashboardId: string,
+  theme: BrandTheme | null,
+): Promise<BrandTheme | null> {
+  const res = await authFetch(`${API_BASE}/dashboards/appearance/${dashboardId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(theme ?? {}),
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to save dashboard appearance');
+  const data = (await res.json()) as { brand_theme: BrandTheme | null };
+  return data.brand_theme;
+}
+
+/** Upload a dashboard logo image. The server stores the file, stamps it on the
+ *  dashboard's brand theme (ownership-checked) and returns the cache-busted
+ *  URL. */
+export async function uploadDashboardLogo(dashboardId: string, file: File): Promise<string> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await authFetch(`${API_BASE}/dashboards/upload_logo/${dashboardId}`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to upload dashboard logo');
+  const data = (await res.json()) as { logo_url: string };
+  return data.logo_url;
 }
 
 export async function fetchCurrentUser(): Promise<CurrentUser | null> {
@@ -2615,8 +2946,13 @@ export interface IngestionReport {
     applied_at: string | null;
     data_root: string | null;
   } | null;
-  /** 'template_manifest' (faithful) | 'live_project' (legacy fallback) */
-  manifest_source: string;
+  /**
+   * Where the expected-collection list came from. 'template_manifest' compares
+   * against the manifest frozen when the template was applied; 'live_project'
+   * is assembled from the project's current collections, so gated-out
+   * collections are unknown rather than zero.
+   */
+  manifest_source: 'template_manifest' | 'live_project';
   variables: Array<{ name: string; value: string }>;
   data_collections: IngestionDataCollection[];
   runs: IngestionRun[];
@@ -2720,7 +3056,6 @@ export async function createProject(
  *  fields, and PUTs the merged document. */
 export interface EditProjectInput {
   name?: string;
-  is_public?: boolean;
   data_management_platform_project_url?: string | null;
 }
 
@@ -3007,7 +3342,7 @@ export async function createDashboard(input: CreateDashboardInput): Promise<stri
     workflow_system: input.workflow_system || 'none',
     notes_content: '',
     permissions: { owners: [ownerEntry], editors: [], viewers: [] },
-    is_public: false,
+    // is_public is server-stamped from the parent project on insert.
     last_saved_ts: '',
     project_id: input.project_id,
     is_main_tab: true,
@@ -3071,7 +3406,7 @@ export async function duplicateDashboard(sourceDashboardId: string): Promise<str
     _id: newId,
     title: `${(source.title as string) || 'Untitled'} (copy)`,
     permissions: { owners: [ownerEntry], editors: [], viewers: [] },
-    is_public: false,
+    // is_public is server-stamped from the parent project on insert.
     is_main_tab: true,
     parent_dashboard_id: null,
     tab_order: 0,
@@ -3106,7 +3441,7 @@ export async function duplicateDashboard(sourceDashboardId: string): Promise<str
           _id: newChildId,
           title: child.title ?? (childSource.title as string) ?? 'Tab',
           permissions: { owners: [ownerEntry], editors: [], viewers: [] },
-          is_public: false,
+          // is_public is server-stamped from the parent project on insert.
           is_main_tab: false,
           parent_dashboard_id: newId,
           tab_order: child.tab_order ?? (childSource.tab_order as number) ?? 0,
@@ -3818,6 +4153,47 @@ export async function fetchMultiQCSampleMappings(
     return body.sample_mappings as Record<string, string[]>;
   }
   return (body ?? {}) as Record<string, string[]>;
+}
+
+/** One source value's resolution outcome in the mapping-inspection view. */
+export interface LinkMappingPreviewRow {
+  source_value: string;
+  matched: boolean;
+  /** exact | variant | base | source-suffix | passthrough, or the resolver
+   *  name for non-sample_mapping resolvers. */
+  via: string;
+  resolved: string[];
+}
+
+export interface LinkMappingPreviewResponse {
+  link_id: string;
+  resolver: string;
+  source_dc_id: string;
+  source_column: string;
+  target_dc_id: string;
+  target_type: string;
+  case_sensitive: boolean;
+  mappings_source: 'link_config' | 'multiqc_live' | 'none';
+  source_values_total: number;
+  truncated: boolean;
+  matched_count: number;
+  unmapped_count: number;
+  rows: LinkMappingPreviewRow[];
+  orphan_targets: string[];
+}
+
+/** Full sample ↔ link mapping table for one link — backs the debug/inspect
+ *  view in the link editor (issue #938). */
+export async function fetchLinkMappingPreview(
+  projectId: string,
+  linkId: string,
+  limit = 500,
+): Promise<LinkMappingPreviewResponse> {
+  const res = await authFetch(
+    `${API_BASE}/links/${projectId}/${linkId}/mapping-preview?limit=${limit}`,
+  );
+  if (!res.ok) await throwHttpError(res, 'Failed to fetch mapping preview');
+  return res.json();
 }
 
 // =============================================================================

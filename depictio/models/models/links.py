@@ -334,3 +334,57 @@ class LinkUpdateRequest(BaseModel):
     enabled: bool | None = Field(default=None)
 
     model_config = ConfigDict(extra="forbid")
+
+
+class LinkMappingPreviewRow(BaseModel):
+    """One source value's resolution outcome, for the mapping-inspection UI."""
+
+    source_value: str = Field(..., description="Distinct value from the source DC's link column")
+    matched: bool = Field(..., description="Whether the value resolved through the link")
+    via: str = Field(
+        ...,
+        description="How it matched: exact | variant | base | source-suffix | "
+        "passthrough, or the resolver name for non-sample_mapping resolvers",
+    )
+    resolved: list[str] = Field(
+        default_factory=list,
+        description="Target identifiers this value resolves to",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class LinkMappingPreviewResponse(BaseModel):
+    """Full sample ↔ link mapping table for one DC link.
+
+    Backs the debug/inspection view: every distinct source value with its
+    resolution outcome, plus the target-side names no source value reaches
+    (orphans) so mismatches are visible from both directions.
+    """
+
+    link_id: str = Field(...)
+    resolver: str = Field(...)
+    source_dc_id: str = Field(...)
+    source_column: str = Field(...)
+    target_dc_id: str = Field(...)
+    target_type: str = Field(...)
+    case_sensitive: bool = Field(...)
+    mappings_source: Literal["link_config", "multiqc_live", "none"] = Field(
+        ...,
+        description="Where the effective mappings came from: frozen on the link, "
+        "fetched live from MultiQC reports, or absent",
+    )
+    source_values_total: int = Field(..., description="Distinct source values in the DC")
+    truncated: bool = Field(
+        default=False,
+        description="True when rows were capped by the request limit",
+    )
+    matched_count: int = Field(default=0)
+    unmapped_count: int = Field(default=0)
+    rows: list[LinkMappingPreviewRow] = Field(default_factory=list)
+    orphan_targets: list[str] = Field(
+        default_factory=list,
+        description="Target-side sample names not reached by any listed source value",
+    )
+
+    model_config = ConfigDict(extra="forbid")

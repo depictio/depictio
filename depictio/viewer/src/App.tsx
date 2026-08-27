@@ -23,6 +23,7 @@ import {
   AvailableFilterValuesProvider,
   DashboardGrid,
   FilterPanel,
+  FunnelView,
   TopPanel,
   mergeFiltersBySource,
   enrichFilterWithDcId,
@@ -38,23 +39,33 @@ import {
   MapPanelControl,
   MapPanelDock,
   MapPanelSurface,
-  readFloatingFilters,
-  writeFloatingFilters,
-  clearFloatingFilters,
-  persistableFloatingFilters,
+  useCrossTabComponents,
+  PersistentSectionsHost,
+  readCrossTabFilters,
+  writeCrossTabFilters,
+  clearCrossTabFilters,
+  persistableCrossTabFilters,
   FILTER_PANEL_RAIL_WIDTH,
   countActiveFilters,
+  useSelectionGroups,
+  useCategoricalColumns,
+  useColorByColumnRender,
+  resolveGroupRender,
+  SelectionGroupsPanel,
+  SaveGroupContext,
+  BrandScope,
 } from 'depictio-react-core';
 import type {
   DashboardData,
   DashboardPermissions,
   DashboardSummary,
-  FloatingComponent,
+  CrossTabComponentsResponse,
   InteractiveFilter,
   RealtimeMode,
   ActiveHighlight,
   RealtimeJournalEntry,
   IngestionSummary,
+  StoredMetadata,
 } from 'depictio-react-core';
 import { parseTemplateOrigin } from './projects/template';
 
@@ -71,17 +82,20 @@ const FILTER_DEBOUNCE_MS = 250;
 import { notifications } from '@mantine/notifications';
 import { Header, Sidebar, SettingsDrawer } from './chrome';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
+import { useContentScaleStyle } from './hooks/useUiScalePref';
 import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
 import { FILTER_PANEL_WIDTH_VAR, useFilterPanelWidth } from './hooks/useFilterPanelWidth';
 import { useCurrentUser } from './hooks/useCurrentUser';
 import { isDashboardOwner } from './lib/dashboardOwnership';
 import FilterPanelResizer, { FILTER_PANEL_RESIZER_WIDTH } from './components/FilterPanelResizer';
+import GroupingHeaderControl from './components/GroupingHeaderControl';
 import Inspector from './chrome/inspector/Inspector';
 import { useInspectorChrome } from './chrome/inspector/useInspectorChrome';
 import InspectorProviders from './chrome/inspector/InspectorProviders';
 import NotesFooter from './components/NotesFooter';
 import DashboardLoadIndicator from './components/DashboardLoadIndicator';
 import BootSplash from './components/BootSplash';
+import { usePageTitle } from './branding';
 
 /**
  * Top-level SPA. Layout:
@@ -103,14 +117,15 @@ const App: React.FC = () => {
   const [allDashboards, setAllDashboards] = useState<DashboardSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  // Seed from the floating panel's persisted selection, synchronously. A
-  // selection made on the floating map is meant to survive a tab switch, and
-  // hydrating in an effect instead would let every grid tile fetch once
-  // unfiltered before the seed landed, then again straight after. The seed is
-  // validated against the real floating components once they resolve
-  // (`handleFloatingResolved`), which is what discards stale entries.
+  // Seed from the persisted cross-tab filters, synchronously. A selection made
+  // on the floating map or a value set in a persistent filter section is meant
+  // to survive a tab switch, and hydrating in an effect instead would let
+  // every grid tile fetch once unfiltered before the seed landed, then again
+  // straight after. The seed is validated against the real cross-tab
+  // components once they resolve (`handleCrossTabResolved`), which is what
+  // discards stale entries.
   const [filters, setFilters] = useState<InteractiveFilter[]>(
-    () => readFloatingFilters()?.filters ?? [],
+    () => readCrossTabFilters()?.filters ?? [],
   );
   // Indices we hydrated from storage. Only these may be pruned as stale — a
   // selection the viewer makes on a *grid* map during this page load must
@@ -123,14 +138,47 @@ const App: React.FC = () => {
   if (hydratedIndicesRef.current === null) {
     hydratedIndicesRef.current = new Set(filters.map((f) => f.index));
   }
-  const [floatingIndices, setFloatingIndices] = useState<Set<string> | null>(null);
-  const [floatingFamilyId, setFloatingFamilyId] = useState<string | null>(null);
+  // Saved selection groups ("select & compare"): annotation state kept apart
+  // from `filters` — the user's filter list stays theirs, and the active
+  // groups are only *composed in* at the fetch boundary below. That keeps
+  // group entries out of mergeFiltersBySource / the clear-chip path, where a
+  // derived filter could not be cleared meaningfully.
+  //
+  // Scoped to the dashboard FAMILY (parent id), not the tab: a multi-tab
+  // dashboard's tabs share the same data collections, so groups saved on one
+  // tab apply on the others — same reasoning as the floating map's cross-tab
+  // filters. Undefined until the dashboard loads; the hook re-hydrates when
+  // the scope id lands.
+  const groupingScopeId = useMemo(() => {
+    if (!dashboard) return undefined;
+    const parent = dashboard.parent_dashboard_id as string | null | undefined;
+    const id = parent || dashboard.dashboard_id || extractDashboardId();
+    return id ? String(id) : undefined;
+  }, [dashboard]);
+  const groupsApi = useSelectionGroups(groupingScopeId);
+  const combinedFilters = useMemo(
+    () =>
+      groupsApi.groupFilters.length > 0 ? [...filters, ...groupsApi.groupFilters] : filters,
+    [filters, groupsApi.groupFilters],
+  );
   // Data fetches follow a *settled* filter, not every intermediate value of one.
   // Interactive components keep reading `filters` directly so their own UI stays
   // instant; only the components that hit the API wait for the pause. Without
   // this, picking three values in a MultiSelect fires three full rounds of
   // renders and the first two are obsolete before they land.
-  const [deferredFilters] = useDebouncedValue(filters, FILTER_DEBOUNCE_MS);
+  const [deferredFilters] = useDebouncedValue(combinedFilters, FILTER_DEBOUNCE_MS);
+
+  // Funnel filtering (issue #939). The dashboard's `funnel_filtering` field is
+  // the author's default; the panel button flips it for this page view only
+  // (viewers may lack edit rights, so the button never writes back). The field
+  // defaults to on, so only an explicit `false` disables it: a dashboard saved
+  // before the field existed has no value and must still get the funnel.
+  const [funnelEnabled, setFunnelEnabled] = useState(true);
+  const [funnelViewOpen, setFunnelViewOpen] = useState(false);
+  const funnelDefault = dashboard?.funnel_filtering !== false;
+  useEffect(() => {
+    setFunnelEnabled(funnelDefault);
+  }, [funnelDefault]);
 
   // Invalidate whatever the previous filter left queued.
   //
@@ -155,6 +203,7 @@ const App: React.FC = () => {
   // `sidebar-collapsed` localStorage key the Dash app writes.
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
+  const contentScaleStyle = useContentScaleStyle();
   const { user: currentUser, inspectorEnabled } = useCurrentUser();
   const isOwner = isDashboardOwner(dashboard, currentUser?.email ?? null);
   // `control` is null while the flag is off, so no provider value reaches the
@@ -202,13 +251,7 @@ const App: React.FC = () => {
   const [ingestionBannerDismissed, setIngestionBannerDismissed] = useState(false);
 
   // Keep the browser tab title in sync with the dashboard name.
-  useEffect(() => {
-    if (dashboard?.title) {
-      document.title = `Depictio — ${dashboard.title}`;
-    } else if (dashboardId) {
-      document.title = `Depictio — ${dashboardId}`;
-    }
-  }, [dashboard?.title, dashboardId]);
+  usePageTitle(dashboard?.title || dashboardId);
 
   // Fetch dashboard + tab list in parallel
   useEffect(() => {
@@ -292,7 +335,16 @@ const App: React.FC = () => {
     // snap every card back to ``…`` on every keystroke / drag step.
     if (bulkCtrl.current) bulkCtrl.current.abort();
     bulkCtrl.current = new AbortController();
-    bulkComputeCards(dashboardId, deferredFilters, cardIds)
+    bulkComputeCards(
+      dashboardId,
+      deferredFilters,
+      cardIds,
+      groupsApi.bulkOptions,
+      // Wired to the abort above: without it a slow superseded response (e.g.
+      // compare-on forces real Delta loads) could land after a fast newer one
+      // and resurrect stale card strips.
+      bulkCtrl.current.signal,
+    )
       .then((res) => {
         setCardValues(res.values);
         setCardSecondaryValues(res.secondary_values || {});
@@ -301,72 +353,182 @@ const App: React.FC = () => {
         if (err?.name !== 'AbortError') console.warn('[App] bulk-compute failed:', err);
       })
       .finally(() => setCardsLoading(false));
-  }, [dashboard, dashboardId, deferredFilterKey, refreshTick]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    dashboard,
+    dashboardId,
+    deferredFilterKey,
+    refreshTick,
+    // Undefined while compare is off, so group edits don't refire the fetch.
+    JSON.stringify(groupsApi.bulkOptions ?? null),
+  ]);
+
+  // ---- Cross-tab components: validate the hydrated filters -----------------
+  // Runs once the family's floating maps and persistent sections are known.
+  // Anything we seeded from storage that does not correspond to a
+  // still-floating map or a still-persistent filter control on *this*
+  // dashboard family is dropped: the component may have been deleted, its
+  // section un-marked persistent, or the viewer may have navigated to a
+  // different dashboard entirely (one browser tab, one storage entry).
+  const handleCrossTabResolved = useCallback((res: CrossTabComponentsResponse) => {
+    const familyId = res.parent_dashboard_id;
+    const floatIndices = new Set(res.floating.map((c) => c.metadata.index));
+    const persistentControls = new Map<string, StoredMetadata>();
+    for (const s of res.persistent_sections) {
+      if (s.kind !== 'filter') continue;
+      for (const c of s.components) persistentControls.set(c.metadata.index, c.metadata);
+    }
+
+    const stored = readCrossTabFilters();
+    const familyChanged =
+      stored != null && familyId != null && stored.parentDashboardId !== familyId;
+    const hydrated = hydratedIndicesRef.current ?? new Set<string>();
+    if (hydrated.size === 0) return;
+
+    setFilters((prev) =>
+      prev.filter((f) => {
+        if (!hydrated.has(f.index)) return true;
+        if (familyChanged) return false;
+        if (f.source === 'map_selection') return floatIndices.has(f.index);
+        // Only sourceless control values and map selections are ever
+        // persisted; anything else that got hydrated is a stale shape.
+        if (f.source !== undefined) return false;
+        const control = persistentControls.get(f.index);
+        if (!control) return false;
+        // The author may have re-pointed the control at another column or DC
+        // since the value was stored — a mismatched value must not keep
+        // filtering under the old meaning.
+        const storedDc = f.metadata?.dc_id;
+        if (storedDc && control.dc_id && storedDc !== control.dc_id) return false;
+        const storedCol = f.column_name ?? f.metadata?.column_name;
+        if (storedCol && control.column_name && storedCol !== control.column_name) return false;
+        return true;
+      }),
+    );
+    hydratedIndicesRef.current = new Set();
+    if (familyChanged) clearCrossTabFilters();
+  }, []);
+
+  // One request per page load for everything this tab renders on behalf of its
+  // siblings: floating maps + persistent sections.
+  const crossTab = useCrossTabComponents(dashboardId ?? '', handleCrossTabResolved);
+
+  const floatingIndices = useMemo(
+    () => new Set(crossTab.floating.map((c) => c.metadata.index)),
+    [crossTab.floating],
+  );
+  const persistentFilterIndices = useMemo(
+    () =>
+      new Set(
+        crossTab.persistentSections
+          .filter((s) => s.kind === 'filter')
+          .flatMap((s) => s.components.map((c) => c.metadata.index)),
+      ),
+    [crossTab.persistentSections],
+  );
+  // Persistent sections owned by *other* tabs. The current tab's own persistent
+  // sections render natively (grid ones in DashboardGrid, filter ones in the
+  // panel) — fanning them out too would draw them twice.
+  const foreignPersistentSections = useMemo(
+    () => crossTab.persistentSections.filter((s) => s.owner_dashboard_id !== dashboardId),
+    [crossTab.persistentSections, dashboardId],
+  );
+  const foreignFilterSections = useMemo(
+    () => foreignPersistentSections.filter((s) => s.kind === 'filter'),
+    [foreignPersistentSections],
+  );
+  // Grid sections split by the edge their author pinned them to. `pin` is
+  // unset on sections written before it existed, and 'top' is what they got.
+  const foreignGridSections = useMemo(
+    () => foreignPersistentSections.filter((s) => s.kind === 'grid'),
+    [foreignPersistentSections],
+  );
+  const topGridSections = useMemo(
+    () => foreignGridSections.filter((s) => s.spec.pin !== 'bottom'),
+    [foreignGridSections],
+  );
+  const bottomGridSections = useMemo(
+    () => foreignGridSections.filter((s) => s.spec.pin === 'bottom'),
+    [foreignGridSections],
+  );
+
+  /**
+   * What filter names, dc_ids and available-values are resolved against.
+   *
+   * The tab's own `stored_metadata` is not enough. A floating map or a
+   * persistent section is declared on one tab and present on every tab, so on
+   * any other tab its filters would have no component to look up — the
+   * active-filter summary fell back to the raw join column, and
+   * `enrichFilterWithDcId` could not attach the dc_id cross-DC link resolution
+   * needs. Unioning in the family's cross-tab components fixes all of that.
+   *
+   * `leftComponents` deliberately gets only the persistent *filter* members:
+   * grid members and maps are not panel controls and must not render as
+   * filter rows.
+   */
+  const summaryMetadata = useMemo(() => {
+    const own = dashboard?.stored_metadata || [];
+    const seen = new Set(own.map((m) => m.index));
+    const extras: StoredMetadata[] = [];
+    for (const c of crossTab.floating) {
+      if (seen.has(c.metadata.index)) continue;
+      seen.add(c.metadata.index);
+      extras.push(c.metadata);
+    }
+    for (const s of crossTab.persistentSections) {
+      for (const c of s.components) {
+        if (seen.has(c.metadata.index)) continue;
+        seen.add(c.metadata.index);
+        extras.push(c.metadata);
+      }
+    }
+    return extras.length ? [...own, ...extras] : own;
+  }, [dashboard, crossTab.floating, crossTab.persistentSections]);
 
   const handleFilterChange = useCallback(
     (update: InteractiveFilter) => {
-      const enriched = enrichFilterWithDcId(update, dashboard?.stored_metadata);
+      // Looked up against the family-wide union, not just this tab's own
+      // metadata: a control fanned out from a persistent filter section has no
+      // entry in `dashboard.stored_metadata` here.
+      const enriched = enrichFilterWithDcId(update, summaryMetadata);
       // Dedupe by (index, source) so chart selections coexist with the same
       // component's other filters. Mirrors mergeFiltersBySource in
       // packages/depictio-react-core/src/selection.ts.
       setFilters((prev) => mergeFiltersBySource(prev, enriched));
     },
-    [dashboard],
+    [summaryMetadata],
   );
 
-  const handleResetAllFilters = useCallback(() => setFilters([]), []);
+  const handleResetAllFilters = useCallback(() => {
+    setFilters([]);
+    // Group filters live outside the filter list but narrow the dashboard all
+    // the same — "Reset all" must release them too or the data stays filtered
+    // with no visible chip explaining why.
+    groupsApi.deactivateAllGroupFilters();
+  }, [groupsApi.deactivateAllGroupFilters]);
 
-  // ---- Floating panel: validate the hydrated cross-tab selection -----------
-  // Runs once the family's floating components are known. Anything we seeded
-  // from storage that does not correspond to a still-floating map on *this*
-  // dashboard family is dropped: the map may have been deleted, moved back
-  // into the grid, or the viewer may have navigated to a different dashboard
-  // entirely (one browser tab, one storage entry).
-  const handleFloatingResolved = useCallback(
-    (familyId: string | null, components: FloatingComponent[]) => {
-      const indices = new Set(components.map((c) => c.metadata.index));
-      setFloatingIndices(indices);
-      setFloatingFamilyId(familyId);
-
-      const stored = readFloatingFilters();
-      const familyChanged = stored != null && familyId != null && stored.parentDashboardId !== familyId;
-      const hydrated = hydratedIndicesRef.current ?? new Set<string>();
-      if (hydrated.size === 0) return;
-
-      setFilters((prev) =>
-        prev.filter((f) => {
-          if (!hydrated.has(f.index) || f.source !== 'map_selection') return true;
-          return !familyChanged && indices.has(f.index);
-        }),
-      );
-      hydratedIndicesRef.current = new Set();
-      if (familyChanged) clearFloatingFilters();
-    },
-    [],
-  );
-
-  // The dashboard-wide map panel: its own fetch of the tab family's floating
-  // maps, its own hidden/floating/docked state, shared by the header control
-  // and the panel itself.
+  // The dashboard-wide map panel: the tab family's floating maps, its own
+  // hidden/floating/docked state, shared by the header control and the panel
+  // itself.
   const mapPanel = useMapPanel({
-    dashboardId: dashboardId ?? '',
+    components: crossTab.floating,
+    familyId: crossTab.familyId,
     // Instant filters, not the debounced copy: the badge and the selection
     // summary should not lag behind the click that set them.
     filters,
     onFilterChange: handleFilterChange,
-    onComponentsResolved: handleFloatingResolved,
   });
 
-  // Persist the floating subset on every filter change. Deriving it from
+  // Persist the cross-tab subset on every filter change. Deriving it from
   // `filters` rather than tracking writes separately is what makes "Reset all"
   // and "Clear chart selections" clear the stored copy for free.
   useEffect(() => {
-    if (!floatingFamilyId || !floatingIndices) return;
-    writeFloatingFilters(
-      floatingFamilyId,
-      persistableFloatingFilters(filters, floatingIndices),
+    if (!crossTab.resolved || !crossTab.familyId) return;
+    writeCrossTabFilters(
+      crossTab.familyId,
+      persistableCrossTabFilters(filters, floatingIndices, persistentFilterIndices),
     );
-  }, [filters, floatingFamilyId, floatingIndices]);
+  }, [filters, crossTab.resolved, crossTab.familyId, floatingIndices, persistentFilterIndices]);
 
   // ---- Realtime: WebSocket subscription + UI toggle -------------------------
   // Mode toggle persisted to localStorage so the user's choice survives
@@ -519,27 +681,81 @@ const App: React.FC = () => {
     () => interactiveComponents.filter((m) => m.placement === 'top'),
     [interactiveComponents],
   );
-  const leftComponents = useMemo(
-    () => interactiveComponents.filter((m) => m.placement !== 'top'),
-    [interactiveComponents],
-  );
-  /**
-   * What the filter panel resolves a filter's *name* against.
-   *
-   * The tab's own `stored_metadata` is not enough. A floating map is declared on
-   * one tab and filters every tab, so on any other tab its selection has no
-   * component to look up — and the active-filter summary fell back to the raw
-   * join column, listing a map selection as "sample". Unioning in the family's
-   * floating components gives that row the map's actual title on every tab.
-   *
-   * `leftComponents` deliberately does not get them: they are not panel controls
-   * and must not be rendered as filter rows.
-   */
-  const summaryMetadata = useMemo(() => {
-    const own = dashboard?.stored_metadata || [];
+  const leftComponents = useMemo(() => {
+    const own = interactiveComponents.filter((m) => m.placement !== 'top');
     const seen = new Set(own.map((m) => m.index));
-    return [...own, ...mapPanel.components.map((c) => c.metadata).filter((m) => !seen.has(m.index))];
-  }, [dashboard, mapPanel.components]);
+    // Controls fanned out from sibling tabs' persistent filter sections render
+    // as ordinary panel rows: their renderers fetch options by dc_id/column,
+    // not by dashboard id, so no further plumbing is needed.
+    const foreign = foreignFilterSections
+      .flatMap((s) => s.components.map((c) => c.metadata))
+      .filter((m) => !seen.has(m.index) && m.placement !== 'top');
+    return foreign.length ? [...own, ...foreign] : own;
+  }, [interactiveComponents, foreignFilterSections]);
+  // Section chrome for the panel: the tab's own specs plus the foreign
+  // persistent ones its fanned-out controls belong to. Own specs win on a name
+  // clash — the members bucket by name either way.
+  const panelFilterSections = useMemo(() => {
+    const own = dashboard?.filter_sections ?? [];
+    const names = new Set(own.map((s) => s.name));
+    const foreign = foreignFilterSections
+      .map((s) => s.spec)
+      .filter((s) => !names.has(s.name));
+    return foreign.length ? [...own, ...foreign] : own;
+  }, [dashboard, foreignFilterSections]);
+  // Filter-active groups as removable active-filter summary rows.
+  const groupSummaryRows = groupsApi.summaryRows;
+  // Categorical columns offered by the global "Color by" select, and the
+  // stable palette for the currently selected column (built from the column's
+  // unfiltered universe so colors survive filtering).
+  const colorByColumns = useCategoricalColumns(dashboard?.stored_metadata);
+  const colorByColumnRender = useColorByColumnRender(groupsApi.colorBy, colorByColumns);
+  // Memoised: the grid keys its per-item render memo on this object's
+  // identity, so a fresh one per render would rebuild every cell.
+  const groupRender = useMemo(
+    () =>
+      resolveGroupRender(
+        groupsApi.colorBy,
+        groupsApi.renderGroups,
+        colorByColumnRender,
+        groupsApi.displayMode,
+        groupsApi.showOther,
+      ),
+    [
+      groupsApi.colorBy,
+      groupsApi.renderGroups,
+      colorByColumnRender,
+      groupsApi.displayMode,
+      groupsApi.showOther,
+    ],
+  );
+  // The Grouping panel's body. Mounted once, inside the header "Analysis"
+  // popover (GroupingHeaderControl) — the panel is dashboard-family state and
+  // has to stay reachable when the per-tab filter panel is collapsed.
+  const groupsSection = (
+    <SelectionGroupsPanel
+      filters={filters}
+      components={summaryMetadata}
+      groups={groupsApi.groups}
+      colorBy={groupsApi.colorBy}
+      colorByColumns={colorByColumns}
+      compareInCards={groupsApi.compareInCards}
+      onCreateGroup={groupsApi.createGroupFromFilter}
+      onClearSelection={handleFilterChange}
+      onUpdateGroup={groupsApi.updateGroup}
+      onDeleteGroup={groupsApi.deleteGroup}
+      onToggleGroupFilter={groupsApi.toggleGroupFilter}
+      onColorByChange={groupsApi.setColorBy}
+      onCompareInCardsChange={groupsApi.setCompareInCards}
+      displayMode={groupsApi.displayMode}
+      onDisplayModeChange={groupsApi.setDisplayMode}
+      showOther={groupsApi.showOther}
+      onShowOtherChange={groupsApi.setShowOther}
+      showOverall={groupsApi.showOverall}
+      onShowOverallChange={groupsApi.setShowOverall}
+      onResetAnalysis={groupsApi.resetAnalysis}
+    />
+  );
   const cardComponents = useMemo(
     () => (dashboard?.stored_metadata || []).filter((m) => m.component_type === 'card'),
     [dashboard],
@@ -567,16 +783,67 @@ const App: React.FC = () => {
   );
 
   // Same count the panel badges, hoisted so the narrow-screen header button can
-  // show it while the panel itself is off screen.
-  const activeFilterCount = countActiveFilters(filters);
+  // show it while the panel itself is off screen. Active group filters count
+  // too — one per group, matching the panel badge and the summary rows (the
+  // projected `groupFilters` merge same-column groups and would undercount).
+  const activeFilterCount = countActiveFilters(filters) + groupSummaryRows.length;
+
+  // In-place "save selection as group" on any component with a live selection
+  // (chart lasso, table rows, map polygon) — same create/clear flow as the
+  // Analysis panel, without the trip to the header.
+  // Analysis mode, tracked separately from whether the header panel is open.
+  // Mantine dismisses a Popover on mousedown outside it, and that mousedown is
+  // the one that starts a lasso — so tying the mode to `analysisOpen` would
+  // erase every capability marker exactly when the user acts on one. Opening
+  // the panel arms the mode; only the button (or a second click on it) ends it.
+  const [analysisOpen, setAnalysisOpen] = useState(false);
+  const [analysisArmed, setAnalysisArmed] = useState(false);
+  const handleAnalysisOpenChange = useCallback((next: boolean) => {
+    setAnalysisOpen(next);
+    if (next) setAnalysisArmed(true);
+  }, []);
+  const handleAnalysisToggle = useCallback(() => {
+    const next = !analysisOpen;
+    setAnalysisOpen(next);
+    setAnalysisArmed(next);
+  }, [analysisOpen]);
+
+  const saveGroupApi = useMemo(
+    () => ({
+      groups: groupsApi.groups,
+      createGroup: groupsApi.createGroupFromFilter,
+      clearSelection: handleFilterChange,
+      // "Engaged" spans both ways into analysis: the panel being open (the user
+      // is looking for where to act) and a grouping mode being on (the
+      // dashboard is already repainted by one). Outside those, capable
+      // components stay unmarked so ordinary viewing is unchanged.
+      analysisEngaged: analysisArmed || groupsApi.colorBy.kind !== 'none',
+    }),
+    [
+      groupsApi.groups,
+      groupsApi.createGroupFromFilter,
+      handleFilterChange,
+      analysisArmed,
+      groupsApi.colorBy.kind,
+    ],
+  );
 
   return (
     <AvailableFilterValuesProvider
-      dashboardMetadata={dashboard?.stored_metadata}
+      dashboardMetadata={summaryMetadata}
       projectId={dashboard?.project_id}
+      funnel={
+        dashboardId
+          ? { enabled: funnelEnabled, dashboardId, filters: deferredFilters }
+          : undefined
+      }
     >
       <DashboardLoadingProvider>
       <InspectorProviders control={inspectorControl}>
+      <SaveGroupContext.Provider value={saveGroupApi}>
+      {/* A dashboard that overrides the instance branding retints its own page
+          and nothing else — /dashboards and /admin stay on the instance look. */}
+      <BrandScope theme={dashboard?.brand_theme}>
       <AppShell
       header={{ height: 50 }}
       navbar={{
@@ -611,6 +878,18 @@ const App: React.FC = () => {
           }
           rightExtras={
             <>
+              {dashboard && (
+                <GroupingHeaderControl
+                  groupCount={groupsApi.groups.length}
+                  colorBy={groupsApi.colorBy}
+                  opened={analysisOpen}
+                  onOpenedChange={handleAnalysisOpenChange}
+                  armed={analysisArmed}
+                  onToggle={handleAnalysisToggle}
+                >
+                  {groupsSection}
+                </GroupingHeaderControl>
+              )}
               <MapPanelControl panel={mapPanel} />
               {realtimeEnabled && (
                 <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
@@ -639,7 +918,7 @@ const App: React.FC = () => {
       </AppShell.Header>
 
       <AppShell.Navbar p="md" data-tour-id="sidebar">
-        <Sidebar tabs={tabSiblings} activeId={dashboardId} />
+        <Sidebar tabs={tabSiblings} activeId={dashboardId} brandTheme={dashboard?.brand_theme} />
       </AppShell.Navbar>
 
       <AppShell.Main style={{ height: 'calc(100vh - 50px)' }}>
@@ -785,15 +1064,24 @@ const App: React.FC = () => {
                   onFilterChange={handleFilterChange}
                   onResetAllFilters={handleResetAllFilters}
                   layoutData={dashboard.left_panel_layout_data}
-                  filterSections={dashboard.filter_sections}
+                  filterSections={panelFilterSections}
                   dashboardId={dashboardId}
                   refreshTick={refreshTick}
                   collapsed={!filterPanelOpened}
                   onToggleCollapsed={toggleFilterPanel}
+                  funnel={{
+                    enabled: funnelEnabled,
+                    onToggle: () => setFunnelEnabled((v) => !v),
+                    onOpenView: () => setFunnelViewOpen(true),
+                  }}
+                  groupSummaryRows={groupSummaryRows}
                   footer={
                     <MapPanelDock
                       panel={mapPanel}
-                      filters={filters}
+                      // Docked maps render data, so they must see active group
+                      // filters too (instant copy: group toggles are single
+                      // clicks, no debounce needed).
+                      filters={combinedFilters}
                       onFilterChange={handleFilterChange}
                       refreshTick={refreshTick}
                     />
@@ -811,6 +1099,7 @@ const App: React.FC = () => {
             <Box
               px={4}
               py={4}
+              data-testid="dashboard-content"
               style={{
                 height: '100%',
                 minWidth: 0,
@@ -818,9 +1107,34 @@ const App: React.FC = () => {
                 overflowX: 'hidden',
                 display: 'flex',
                 flexDirection: 'column',
+                // Content font-size preference — scales the dashboard tiles
+                // below, never the surrounding chrome (header, sidebar, panel).
+                ...contentScaleStyle,
               }}
             >
-              <Box style={{ flex: 1, minHeight: 0 }}>
+              {/* Persistent grid sections owned by sibling tabs — the
+                  "always in view" slot a metadata table lands in on every tab.
+                  `pin: top` opens the tab with the family-wide context;
+                  `pin: bottom` puts it after this tab's own content, so a
+                  shared reference block does not precede the tab's own
+                  introduction. Sections this tab owns render inside
+                  DashboardGrid below, where they stay editable. */}
+              {topGridSections.length > 0 && (
+                <PersistentSectionsHost
+                  sections={topGridSections}
+                  familyId={crossTab.familyId}
+                  slot="top"
+                  filters={deferredFilters}
+                  onFilterChange={handleFilterChange}
+                  refreshTick={refreshTick}
+                  groupRender={groupRender}
+                  bulkOptions={groupsApi.bulkOptions}
+                />
+              )}
+              {/* Only claims the leftover height when nothing follows it —
+                  otherwise a short grid would push the bottom-pinned sections
+                  to the fold with a gap above them. */}
+              <Box style={{ flex: bottomGridSections.length > 0 ? '0 0 auto' : 1, minHeight: 0 }}>
                 {rightComponents.length === 0 ? (
                   <Center style={{ height: '100%', minHeight: 320 }}>
                     <Stack align="center" gap="md" maw={420}>
@@ -872,12 +1186,25 @@ const App: React.FC = () => {
                     cardValuesLoading={cardsLoading}
                     refreshTick={refreshTick}
                     activeHighlight={activeHighlight}
+                    groupRender={groupRender}
                     isDraggable={false}
                     isResizable={false}
                     editMode={false}
                   />
                 )}
               </Box>
+              {bottomGridSections.length > 0 && (
+                <PersistentSectionsHost
+                  sections={bottomGridSections}
+                  familyId={crossTab.familyId}
+                  slot="bottom"
+                  filters={deferredFilters}
+                  onFilterChange={handleFilterChange}
+                  refreshTick={refreshTick}
+                  groupRender={groupRender}
+                  bulkOptions={groupsApi.bulkOptions}
+                />
+              )}
             </Box>
           </div>
           {/* Full-width footer spanning both the filter panel and the content
@@ -895,12 +1222,14 @@ const App: React.FC = () => {
                 background: 'var(--mantine-color-body)',
               }}
             >
-              <TopPanel
-                components={topComponents}
-                filters={filters}
-                onFilterChange={handleFilterChange}
-                refreshTick={refreshTick}
-              />
+              <Box style={contentScaleStyle}>
+                <TopPanel
+                  components={topComponents}
+                  filters={filters}
+                  onFilterChange={handleFilterChange}
+                  refreshTick={refreshTick}
+                />
+              </Box>
             </Box>
           )}
           </div>
@@ -922,11 +1251,25 @@ const App: React.FC = () => {
               onFilterChange={handleFilterChange}
               onResetAllFilters={handleResetAllFilters}
               layoutData={dashboard.left_panel_layout_data}
-              filterSections={dashboard.filter_sections}
+              filterSections={panelFilterSections}
               dashboardId={dashboardId}
               refreshTick={refreshTick}
+              funnel={{
+                enabled: funnelEnabled,
+                onToggle: () => setFunnelEnabled((v) => !v),
+                onOpenView: () => setFunnelViewOpen(true),
+              }}
+              groupSummaryRows={groupSummaryRows}
             />
           </Drawer>
+        )}
+        {dashboardId && (
+          <FunnelView
+            opened={funnelViewOpen}
+            onClose={() => setFunnelViewOpen(false)}
+            dashboardId={dashboardId}
+            filters={deferredFilters}
+          />
         )}
         {dashboard && dashboardId && !inspectorEnabled && (
           <NotesFooter
@@ -938,7 +1281,9 @@ const App: React.FC = () => {
         {dashboard && dashboardId && (
           <MapPanelSurface
             panel={mapPanel}
-            filters={filters}
+            // Floating maps render data: give them group filters too (see the
+            // docked MapPanelDock above).
+            filters={combinedFilters}
             onFilterChange={handleFilterChange}
             refreshTick={refreshTick}
           />
@@ -957,6 +1302,8 @@ const App: React.FC = () => {
         dashboard={dashboard}
       />
     </AppShell>
+      </BrandScope>
+      </SaveGroupContext.Provider>
       </InspectorProviders>
       </DashboardLoadingProvider>
     </AvailableFilterValuesProvider>

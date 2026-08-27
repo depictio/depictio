@@ -18,12 +18,7 @@ import {
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import {
-  createProjectLink,
-  fetchMultiQCSampleMappings,
-  fetchSpecs,
-  updateProjectLink,
-} from 'depictio-react-core';
+import { createProjectLink, fetchMultiQCSampleMappings, fetchSpecs, updateProjectLink, useBrandAccents } from 'depictio-react-core';
 import type {
   CreateLinkInput,
   DCLink,
@@ -33,6 +28,8 @@ import type {
   ResolverInfo,
   UpdateLinkInput,
 } from 'depictio-react-core';
+
+import { LinkMappingInspector } from './LinkMappingInspector';
 
 interface DataCollectionOption {
   id: string;
@@ -96,6 +93,7 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
   onClose,
   onSaved,
 }) => {
+  const accent = useBrandAccents();
   const editing = !!link;
   const resolverList = resolvers.length ? resolvers : RESOLVER_FALLBACK;
 
@@ -276,11 +274,14 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
       };
     }
     if (resolver === 'sample_mapping') {
-      // Prefer the auto-loaded MultiQC mappings; otherwise parse JSON textarea.
+      // MultiQC targets: do NOT freeze the auto-loaded mappings into the
+      // link. The server re-fetches live mappings at resolution time when
+      // the link carries none — persisting a snapshot here meant a MultiQC
+      // re-ingest kept resolving against stale samples forever (#938). The
+      // table shown in the editor is a preview, not the stored config.
+      // Non-MultiQC targets keep the manual JSON path.
       let mappings: Record<string, string[]> | undefined;
-      if (autoMappings) {
-        mappings = autoMappings;
-      } else if (mappingsJson.trim()) {
+      if (targetType !== 'multiqc' && mappingsJson.trim()) {
         try {
           mappings = JSON.parse(mappingsJson);
         } catch (err) {
@@ -292,6 +293,10 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
         resolver,
         mappings,
         target_field: targetField || undefined,
+        // Sample names are matched case-insensitively in practice (MultiQC
+        // tools freely re-case names); the model default of `true` was never
+        // surfaced by this UI and silently made real-world links strict.
+        case_sensitive: false,
       };
     }
     return { resolver };
@@ -368,9 +373,9 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
           <Icon
             icon={editing ? 'mdi:link-edit' : 'mdi:link-plus'}
             width={32}
-            color="var(--mantine-color-teal-6)"
+            color={`var(--mantine-color-${accent.secondary}-6)`}
           />
-          <Title order={3} c="teal" m={0}>
+          <Title order={3} c={accent.secondary} m={0}>
             {editing ? 'Edit Cross-DC Link' : 'Create Cross-DC Link'}
           </Title>
         </Group>
@@ -510,6 +515,10 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
           />
         )}
 
+        {editing && link && (
+          <LinkMappingInspector projectId={projectId} linkId={link.id} />
+        )}
+
         <Textarea
           label="Description (optional)"
           value={description}
@@ -530,7 +539,7 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
             Cancel
           </Button>
           <Button
-            color="teal"
+            color={accent.secondary}
             onClick={handleSubmit}
             loading={submitting}
             leftSection={

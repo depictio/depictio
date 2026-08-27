@@ -101,6 +101,10 @@ _STYLE_PASSTHROUGH = frozenset(
         "color_continuous_scale", "range_color", "category_orders", "log_x", "log_y",
         "range_x", "range_y", "barmode", "boxmode", "violinmode",
         "height", "width", "opacity", "nbins", "nbinsx", "nbinsy", "text_auto",
+        # Panel wrap count only — the data reduction is per facet_col category
+        # either way. Refusing it would kick every Split-mode figure off the
+        # scan aggregation onto a full-frame load.
+        "facet_col_wrap",
     }
 )  # fmt: skip
 
@@ -228,6 +232,7 @@ def build_aggregated_figure(
     plan: AggPlan,
     theme: str = "light",
     render_stats: dict | None = None,
+    template_override: str | None = None,
 ) -> go.Figure | None:
     """Execute ``plan`` against ``scan`` and return the figure.
 
@@ -235,11 +240,14 @@ def build_aggregated_figure(
     at the data (missing column, cardinality blow-up); the caller then falls back
     to the px path. Never raises for data reasons — a fallback is always better
     than a failed render.
+
+    ``template_override`` pins an explicit Plotly template (component- or
+    dashboard-level choice); left ``None`` the figure follows the UI theme.
     """
     from depictio.api.v1.services.figure.mantine_templates import ensure_mantine_templates
 
     ensure_mantine_templates()
-    template = get_theme_template(theme)
+    template = template_override or get_theme_template(theme)
 
     try:
         available = set(scan.collect_schema().names())
@@ -338,7 +346,15 @@ def _trace_colors(plan: AggPlan, names: list[str]) -> list[str | None]:
     mapping = _as_json(plan.style.get("color_discrete_map")) or {}
     sequence = _as_json(plan.style.get("color_discrete_sequence"))
     if not isinstance(sequence, list) or not sequence:
-        sequence = list(px.colors.qualitative.Plotly)
+        from depictio.api.v1.services.branding import resolve_effective_brand_theme
+
+        # A branded instance re-tints the mantine templates' colorway, which
+        # the px path picks up implicitly — mirror it here so graph_objects
+        # builders don't fall back to Plotly's default palette on those
+        # deployments. Resolved theme = env defaults + admin overrides, with a
+        # colorway derived from the brand palette when none was set explicitly.
+        plots = resolve_effective_brand_theme().plots
+        sequence = (plots.colorway if plots else None) or list(px.colors.qualitative.Plotly)
     if not isinstance(mapping, dict):
         mapping = {}
     return [mapping.get(name) or sequence[i % len(sequence)] for i, name in enumerate(names)]

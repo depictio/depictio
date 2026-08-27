@@ -120,6 +120,27 @@ def test_unfitting_schema_recommends_nothing() -> None:
     assert recommended == [], f"expected nothing recommended, got {recommended}"
 
 
+def test_structural_only_kinds_are_not_recommended() -> None:
+    # A plain metadata table: a couple of labels and a coordinate pair. Nothing
+    # here is named after any viz role, so the only kind that matches at all is
+    # one whose gate is purely structural (sankey: >= 2 String columns and no
+    # statistic-looking floats). A structural-only match must stay under the
+    # recommended bar, or every metadata table advertises a Sankey it has no
+    # evidence for.
+    schema = {
+        "sample": "String",
+        "habitat": "String",
+        "city": "String",
+        "latitude": "Float64",
+        "longitude": "Float64",
+    }
+    suggestions = suggest_viz_kinds(schema)
+    recommended = [s for s in suggestions if s.score >= RECOMMENDED_SCORE]
+    assert recommended == [], f"expected nothing recommended, got {recommended}"
+    [sankey] = [s for s in suggestions if s.viz_kind == "sankey"]
+    assert 0.0 < sankey.score < RECOMMENDED_SCORE
+
+
 def test_phylogenetic_matches_on_taxon_aliases() -> None:
     # A String column whose name IS in the phylogenetic taxon alias set
     # (e.g. `taxon`, `tip_label`, `label`) should score phylogenetic highly.

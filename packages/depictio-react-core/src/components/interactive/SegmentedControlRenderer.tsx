@@ -3,8 +3,9 @@ import { Text, SegmentedControl } from '@mantine/core';
 import { CompactControlSlot } from 'depictio-components';
 
 import { fetchUniqueValues, InteractiveFilter, StoredMetadata } from '../../api';
-import { useAvailableSet } from '../../availableValues';
+import { useAvailableSet, useFunnelState } from '../../availableValues';
 import ComponentSkeleton from '../ComponentSkeleton';
+import { FunnelAvailabilityBadge, FunnelOptionMarker } from './funnelDecorations';
 import { INTERACTIVE_FRAME, InteractiveFrame, InteractiveTitle } from './frame';
 
 /**
@@ -86,7 +87,11 @@ const SegmentedControlRenderer: React.FC<{
   // segments whose value isn't present in any other joined DC as disabled.
   // Available segments come first, then unavailable; locale-aware natural
   // sort within each bucket so `Sample_2` precedes `Sample_10`.
-  const availableSet = useAvailableSet(metadata.dc_id, metadata.column_name);
+  const availableSet = useAvailableSet(metadata.dc_id, metadata.column_name, metadata.index);
+  const funnel = useFunnelState(metadata.index);
+  // With the funnel active, segments carry a colored dot: teal = still leads
+  // to a non-empty result set, dimmed grey = exhausted by the other filters.
+  const funnelHighlight = funnel.active && availableSet !== null;
   const data = useMemo(() => {
     const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
     const sorted = [...options].sort((a, b) => {
@@ -99,10 +104,17 @@ const SegmentedControlRenderer: React.FC<{
     });
     return sorted.map((v) => ({
       value: v,
-      label: v,
+      label: funnelHighlight ? (
+        <FunnelOptionMarker label={v} available={availableSet!.has(v)} />
+      ) : (
+        v
+      ),
       disabled: availableSet ? !availableSet.has(v) : false,
     }));
-  }, [options, availableSet]);
+  }, [options, availableSet, funnelHighlight]);
+  const availableCount = funnelHighlight
+    ? options.filter((v) => availableSet!.has(v)).length
+    : null;
 
   const handleChange = useCallback(
     (next: string) => {
@@ -161,6 +173,7 @@ const SegmentedControlRenderer: React.FC<{
   }
 
   return frame(
+      <>
       <SegmentedControl
         data={data}
         value={selectedValue ?? data[0]?.value}
@@ -194,6 +207,14 @@ const SegmentedControlRenderer: React.FC<{
           },
         }}
       />
+      {funnelHighlight && (
+        <FunnelAvailabilityBadge
+          available={availableCount ?? 0}
+          total={options.length}
+          truncated={funnel.state?.truncated}
+        />
+      )}
+      </>
     );
 };
 

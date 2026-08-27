@@ -6,12 +6,13 @@ import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Annotated, Any
 from uuid import UUID
 
 import yaml
 from bson import ObjectId
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
@@ -25,7 +26,6 @@ from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
     get_parent_dashboard_title,
     load_dashboards_from_db,
     reorder_child_tabs,
-    sync_tab_family_permissions,
 )
 from depictio.api.v1.endpoints.user_endpoints.routes import (
     get_current_user,
@@ -33,18 +33,26 @@ from depictio.api.v1.endpoints.user_endpoints.routes import (
     oauth2_scheme_optional,
 )
 from depictio.api.v1.filter_links import extend_filters_via_links
+from depictio.api.v1.services.branding import validate_logo_upload
 from depictio.api.v1.services.card_breakdown import (
     BREAKDOWN_LAYOUTS,
     compute_breakdown,
     evenness,
 )
 from depictio.api.v1.services.card_metrics import (
+    GROUP_COMPARABLE_LAYOUTS,
     NUMERIC_LAYOUTS,
+    compute_box_plot_stats,
+    compute_histogram,
+    compute_trend_on_grid,
+    trend_axis_grid,
 )
 from depictio.api.v1.services.card_metrics import (
     numeric_layout_payload as _numeric_layout_payload,
 )
+from depictio.api.v1.services.figure.figure_builder import merge_dashboard_brand_theme
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
+from depictio.models.models.branding import BrandTheme
 from depictio.models.models.dashboards import DashboardData, DashboardDataLite
 from depictio.models.models.users import User
 from depictio.models.timestamps import preserved_creation_time, utc_now_str
@@ -180,7 +188,8 @@ def check_project_permission(
         required_permission: "owner", "editor", or "viewer"
 
     Returns:
-        bool: True if user has required permission or project is public
+        bool: True if user has required permission, or the project is public
+        and only viewer access is required
     """
     if user.is_admin:
         return True
@@ -189,12 +198,13 @@ def check_project_permission(
     if not project:
         return False
 
-    # In anonymous mode, anonymous users can only access public projects
+    # A public project grants READ access only. Editor/owner must come from
+    # explicit permissions below — otherwise any signed-in visitor of a public
+    # (e.g. demo) project could edit or delete its dashboards.
     if hasattr(user, "is_anonymous") and user.is_anonymous:
-        return project.get("is_public", False)
+        return required_permission == "viewer" and project.get("is_public", False)
 
-    # Check if project is public
-    if project.get("is_public", False):
+    if project.get("is_public", False) and required_permission == "viewer":
         return True
 
     user_id = ObjectId(user.id)
@@ -216,6 +226,33 @@ def check_project_permission(
             or any(viewer.get("_id") == user_id for viewer in permissions.get("viewers", []))
             or "*" in permissions.get("viewers", [])
         )
+
+
+def is_dashboard_owner(dashboard_doc: dict, user: User) -> bool:
+    """
+    Check whether the user is an owner of the dashboard *document* itself.
+
+    Project permissions are the primary authorization model, but dashboards
+    duplicated by visitors of a public project (the demo walkthrough flow)
+    are owned by users who hold no role on the project. Document ownership
+    lets them keep editing/deleting their own copies without granting
+    project-wide editor rights to everyone on a public project.
+    """
+    if not user or getattr(user, "is_anonymous", False):
+        return False
+    user_id = str(user.id)
+    owners = (dashboard_doc.get("permissions") or {}).get("owners") or []
+    return any(str(owner.get("_id")) == user_id for owner in owners)
+
+
+def check_dashboard_mutation_permission(
+    dashboard_doc: dict, user: User, required_permission: str
+) -> bool:
+    """Project-level permission, with a bypass for the dashboard's own owners."""
+    project_id = dashboard_doc.get("project_id")
+    if project_id and check_project_permission(project_id, user, required_permission):
+        return True
+    return is_dashboard_owner(dashboard_doc, user)
 
 
 def get_project_visibility(project_id: PyObjectId) -> bool:
@@ -458,72 +495,6 @@ async def list_all_dashboards(
     return result["dashboards"]
 
 
-@dashboards_endpoint_router.post("/toggle_public_status/{dashboard_id}")
-async def make_dashboard_public(
-    dashboard_id: PyObjectId,
-    params: dict,
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Toggle dashboard visibility. Dashboard visibility now inherits from project visibility.
-    Only project owners can change project (and thus dashboard) visibility.
-    """
-    _public_status = params.get("is_public", None)
-    if _public_status is None:
-        return {
-            "success": False,
-            "message": "No public status provided. Use 'is_public' parameter.",
-        }
-
-    dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
-    if not dashboard:
-        raise HTTPException(
-            status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found."
-        )
-
-    project_id = dashboard.get("project_id")
-    if not project_id:
-        raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
-
-    if not check_project_permission(project_id, current_user, "owner"):
-        raise HTTPException(
-            status_code=403, detail="Only project owners can change dashboard visibility."
-        )
-
-    project_result = projects_collection.find_one_and_update(
-        {"_id": ObjectId(project_id)},
-        {"$set": {"is_public": _public_status}},
-        return_document=True,
-    )
-
-    if not project_result:
-        raise HTTPException(status_code=404, detail="Project not found.")
-
-    dashboards_update_result = dashboards_collection.update_many(
-        {"project_id": ObjectId(project_id)},
-        {"$set": {"is_public": _public_status}},
-    )
-
-    # Also sync child tab permissions for any main tabs in this project
-    # This ensures tab families have consistent permissions
-    main_tabs = dashboards_collection.find(
-        {"project_id": ObjectId(project_id), "is_main_tab": {"$ne": False}}
-    )
-    child_tabs_updated = 0
-    for main_tab in main_tabs:
-        child_tabs_updated += sync_tab_family_permissions(
-            main_tab["dashboard_id"], new_is_public=_public_status
-        )
-
-    return {
-        "success": True,
-        "message": f"Project and all its dashboards changed visibility to: {'public' if _public_status else 'private'}",
-        "is_public": _public_status,
-        "dashboards_updated": dashboards_update_result.modified_count,
-        "child_tabs_updated": child_tabs_updated,
-    }
-
-
 @dashboards_endpoint_router.post("/edit/{dashboard_id}")
 async def edit_dashboard(
     dashboard_id: PyObjectId,
@@ -565,7 +536,7 @@ async def edit_dashboard(
     if not project_id:
         raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
 
-    if not check_project_permission(project_id, current_user, "editor"):
+    if not check_dashboard_mutation_permission(dashboard, current_user, "editor"):
         raise HTTPException(
             status_code=403, detail="You don't have permission to edit this dashboard."
         )
@@ -643,10 +614,19 @@ async def save_dashboard(
                 status_code=500, detail="Dashboard is not associated with a project."
             )
 
-        if not check_project_permission(project_id, current_user, "editor"):
+        if not check_dashboard_mutation_permission(existing_dashboard, current_user, "editor"):
             raise HTTPException(
                 status_code=403, detail="You don't have permission to update this dashboard."
             )
+
+        # Visibility, permissions and project binding all have dedicated,
+        # owner-gated paths (project visibility toggle, creation-time
+        # stamping, no-move rule shared with /edit). The client round-trips
+        # the whole document, so leaving them in the payload would let any
+        # editor rewrite them — mass-assignment.
+        save_payload.pop("is_public", None)
+        save_payload.pop("permissions", None)
+        save_payload.pop("project_id", None)
 
         result = dashboards_collection.find_one_and_update(
             {"dashboard_id": dashboard_id},
@@ -654,6 +634,23 @@ async def save_dashboard(
             return_document=True,
         )
     else:
+        project_id = save_payload.get("project_id")
+        if not project_id:
+            raise HTTPException(
+                status_code=422, detail="Dashboard is not associated with a project."
+            )
+        # Creating (or duplicating) a dashboard requires at least read access
+        # to the target project; without this, any caller could write into a
+        # project it cannot even see.
+        if not check_project_permission(project_id, current_user, "viewer"):
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have permission to create a dashboard in this project.",
+            )
+        # Visibility is project-driven: dashboards are born with their
+        # project's flag, whatever the client sent.
+        save_payload["is_public"] = get_project_visibility(project_id)
+
         result = dashboards_collection.find_one_and_update(
             {"dashboard_id": dashboard_id},
             # `$setOnInsert` applies only when this upsert actually inserts, so
@@ -713,6 +710,102 @@ async def save_dashboard(
         raise HTTPException(status_code=404, detail="Failed to insert or update dashboard data.")
 
 
+# Dashboard logos — uploaded through the editor's Settings drawer and served
+# by the /static/dashboard_logos mount (api/main.py). Derived from __file__ so
+# the path holds both in Docker (/app/depictio/...) and local runs.
+_DASHBOARD_LOGOS_DIR = Path(__file__).resolve().parents[3] / "static" / "dashboard_logos"
+
+
+def _require_dashboard_editor(dashboard_id: PyObjectId, current_user: User) -> dict:
+    """The dashboard document, or the right HTTP error. Editor rights required."""
+    if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
+        if not settings.auth.is_single_user_mode:
+            raise HTTPException(
+                status_code=403,
+                detail="Anonymous users cannot modify dashboards. Please login to continue.",
+            )
+
+    dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard:
+        raise HTTPException(status_code=404, detail="Dashboard not found.")
+    project_id = dashboard.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "editor"):
+        raise HTTPException(
+            status_code=403, detail="You don't have permission to update this dashboard."
+        )
+    return dashboard
+
+
+@dashboards_endpoint_router.patch("/appearance/{dashboard_id}")
+async def update_dashboard_appearance(
+    dashboard_id: PyObjectId,
+    brand_theme: BrandTheme,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Replace a dashboard's brand override with ``brand_theme``.
+
+    Appearance edits used to ride the full-document `/save`, which is
+    last-writer-wins: opening the settings drawer while a layout save was in
+    flight could resurrect a stale grid. This touches one field, so the two
+    can't fight. An empty theme clears the override (the dashboard inherits
+    the instance branding again).
+    """
+    _require_dashboard_editor(dashboard_id, current_user)
+
+    payload = brand_theme.model_dump(exclude_none=True)
+    update = {"$set": {"brand_theme": payload}} if payload else {"$unset": {"brand_theme": ""}}
+    dashboards_collection.update_one({"dashboard_id": dashboard_id}, update)
+    logger.info(f"Dashboard {dashboard_id} appearance updated ({len(payload)} field(s))")
+    return {"brand_theme": payload or None}
+
+
+@dashboards_endpoint_router.post("/upload_logo/{dashboard_id}")
+async def upload_dashboard_logo(
+    dashboard_id: PyObjectId,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Store a dashboard logo image and stamp it on the document's brand theme.
+
+    File write and field update happen in one ownership-checked call so the
+    stored URL can never point at a file that was rejected. Removal goes
+    through `/appearance` (`logo_mode: "inherit"` or `"none"`); the file on
+    disk is simply overwritten by the next upload for this dashboard.
+
+    Validation is the shared one from `services/branding.py` — same PNG/JPEG/
+    WebP + magic-byte + 2MB rules as the instance logo, deliberately not a
+    second copy that can drift.
+    """
+    dashboard = _require_dashboard_editor(dashboard_id, current_user)
+
+    content = await file.read()
+    try:
+        ext = validate_logo_upload(file.content_type, content)
+    except ValueError as exc:
+        raise HTTPException(status_code=415, detail=str(exc))
+
+    _DASHBOARD_LOGOS_DIR.mkdir(parents=True, exist_ok=True)
+    # One logo per dashboard — drop whatever extension the previous upload had.
+    for old in _DASHBOARD_LOGOS_DIR.glob(f"{dashboard_id}.*"):
+        old.unlink(missing_ok=True)
+    (_DASHBOARD_LOGOS_DIR / f"{dashboard_id}{ext}").write_bytes(content)
+
+    # `?v=` cache-busts the browser after a replacement (same idiom as the
+    # screenshot thumbnails' `screenshot_ts`).
+    logo_url = f"/static/dashboard_logos/{dashboard_id}{ext}?v={int(time.time())}"
+    theme = BrandTheme(**(dashboard.get("brand_theme") or {}))
+    theme.logo_url = logo_url
+    # An upload is an unambiguous "use this logo", so it also lifts a prior
+    # "inherit the instance logo" / "no logo" choice.
+    theme.logo_mode = "custom"
+    dashboards_collection.update_one(
+        {"dashboard_id": dashboard_id},
+        {"$set": {"brand_theme": theme.model_dump(exclude_none=True)}},
+    )
+    logger.info(f"Dashboard {dashboard_id} logo updated ({len(content)} bytes, {ext})")
+    return {"logo_url": logo_url}
+
+
 @dashboards_endpoint_router.delete("/delete/{dashboard_id}")
 async def delete_dashboard(
     dashboard_id: PyObjectId,
@@ -737,7 +830,7 @@ async def delete_dashboard(
     if not project_id:
         raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
 
-    if not check_project_permission(project_id, current_user, "owner"):
+    if not check_dashboard_mutation_permission(dashboard, current_user, "owner"):
         raise HTTPException(
             status_code=404,
             detail=f"Dashboard with ID '{dashboard_id}' not found or access denied.",
@@ -809,7 +902,7 @@ async def update_tab(
     if not project_id:
         raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
 
-    if not check_project_permission(project_id, current_user, "editor"):
+    if not check_dashboard_mutation_permission(dashboard, current_user, "editor"):
         raise HTTPException(status_code=403, detail="You don't have permission to edit this tab.")
 
     # Build update fields based on what was provided
@@ -892,7 +985,7 @@ async def delete_tab(
     if not project_id:
         raise HTTPException(status_code=500, detail="Tab is not associated with a project.")
 
-    if not check_project_permission(project_id, current_user, "editor"):
+    if not check_dashboard_mutation_permission(dashboard, current_user, "editor"):
         raise HTTPException(status_code=403, detail="You don't have permission to delete this tab.")
 
     # Store parent dashboard ID for navigation after delete
@@ -967,7 +1060,7 @@ async def reorder_tabs(
     if not project_id:
         raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
 
-    if not check_project_permission(project_id, current_user, "editor"):
+    if not check_dashboard_mutation_permission(parent_dashboard, current_user, "editor"):
         raise HTTPException(status_code=403, detail="You don't have permission to reorder tabs.")
 
     # Perform the reorder
@@ -1506,47 +1599,11 @@ def _agg_value(col: Any, aggregation: str) -> Any:
             v = frame.select(factory(_pl.col(frame.columns[0]))).item()
             return float(v) if v is not None else None
         if agg == "box_plot_stats":
-            # Compound Tukey box-and-whisker payload, computed in one scan.
-            # Returns a dict that flows through `secondary_values[idx]` as the
-            # single value for this aggregation — React reads all 9 fields and
-            # renders whiskers + IQR box + median + mean + outlier dots.
-            import polars as _pl
-
-            numeric = col.cast(_pl.Float64, strict=False).drop_nulls()
-            if numeric.len() == 0:
-                return None
-            mn = float(numeric.min())
-            mx = float(numeric.max())
-            q1 = float(numeric.quantile(0.25, interpolation="linear"))
-            q3 = float(numeric.quantile(0.75, interpolation="linear"))
-            median = float(numeric.median())
-            mean = float(numeric.mean())
-            iqr = q3 - q1
-            fence_lo = q1 - 1.5 * iqr
-            fence_hi = q3 + 1.5 * iqr
-            # Whisker = most extreme data point that's still within the fence.
-            # Falls back to min/max when the fence excludes everything (e.g.
-            # constant column → iqr=0 → both fences land on q1=q3=median).
-            within = numeric.filter((numeric >= fence_lo) & (numeric <= fence_hi))
-            lower_w = float(within.min()) if within.len() else mn
-            upper_w = float(within.max()) if within.len() else mx
-            outliers_series = numeric.filter((numeric < fence_lo) | (numeric > fence_hi))
-            outlier_count = int(outliers_series.len())
-            # Cap the outlier list at 100 — beyond that the dots overlap into
-            # a solid bar at this card scale; the count is exposed separately.
-            outliers = outliers_series.head(100).to_list() if outlier_count else []
-            return {
-                "min": mn,
-                "max": mx,
-                "q1": q1,
-                "q3": q3,
-                "median": median,
-                "mean": mean,
-                "lower_whisker": lower_w,
-                "upper_whisker": upper_w,
-                "outliers": outliers,
-                "outlier_count": outlier_count,
-            }
+            # Compound Tukey box-and-whisker payload — one dict flowing through
+            # `secondary_values[idx]` as this aggregation's value. Centralised
+            # in card_metrics so the per-group comparison path reduces
+            # identically.
+            return compute_box_plot_stats(col)
         if agg == "mode":
             m = col.mode()
             return (
@@ -1912,10 +1969,26 @@ def bulk_compute_cards(
           card_component/callbacks/core.py remains the source of truth for the
           edit path; this endpoint mirrors its math.
     """
+    import polars as pl
+
     from depictio.api.v1.deltatables_utils import load_deltatable_lite
+    from depictio.api.v1.services.card_groups import compute_group_compare
+    from depictio.api.v1.services.figure.groups import (
+        group_source_columns,
+        sanitize_group_defs,
+    )
 
     filters = request.get("filters") or []
     requested_ids: list[str] | None = request.get("component_ids")
+    # "Compare groups in cards" (issue #89): sanitized at this trust boundary,
+    # reduced per group on the frame path below. ``include_other`` mirrors the
+    # figure toggle: False omits the "Other" bucket from the comparison strip.
+    group_defs = sanitize_group_defs(request.get("groups"))
+    compare_groups = bool(request.get("compare_groups")) and bool(group_defs)
+    include_other = request.get("include_other") is not False
+    # "Show overall (All)": an extra entry reduced over the whole frame, drawn
+    # as the reference row above the per-group rows. On by default.
+    include_overall = request.get("include_overall") is not False
 
     dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
     if not dashboard_data:
@@ -2072,6 +2145,10 @@ def bulk_compute_cards(
         # The expression is applied to the projected frame, so its columns have
         # to survive the projection even when no card displays them.
         key_cols |= _filter_expr_columns(card_filter_expr)
+        # Group comparison annotates the frame from the groups' real source
+        # columns — project them in (the loader schema-guards absent ones).
+        if compare_groups:
+            key_cols |= group_source_columns(group_defs)
 
     # Cards sharing a cache key share one Delta read; group them so the pushdown
     # below can answer all of their aggregations in a single query.
@@ -2208,12 +2285,12 @@ def bulk_compute_cards(
                             all_specs_present = False
                             break
                         sec[sa] = float(sv) if isinstance(sv, (int, float)) else sv
-                    if all_specs_present and not needs_breakdown:
+                    if all_specs_present and not needs_breakdown and not compare_groups:
                         secondary_values[idx] = sec
                         continue
                     # Fall through to slow path to compute secondary values
-                    # and/or the breakdown payload.
-                elif not needs_breakdown:
+                    # and/or the breakdown / group-compare payload.
+                elif not needs_breakdown and not compare_groups:
                     continue
                 # else: fall through to slow path so the breakdown gets
                 # computed even though the hero value came from specs.
@@ -2235,8 +2312,12 @@ def bulk_compute_cards(
 
         needs_breakdown_payload = _needs_server_payload(card)
         wanted_aggs = [aggregation] + list(secondary_aggs)
-        fully_pushed = not needs_breakdown_payload and all(
-            (idx, a) in pushdown_values for a in wanted_aggs
+        # Group comparison needs the frame in hand, so it disables the
+        # scalar-only pushdown short-circuit like a breakdown payload does.
+        fully_pushed = (
+            not needs_breakdown_payload
+            and not compare_groups
+            and all((idx, a) in pushdown_values for a in wanted_aggs)
         )
         if fully_pushed:
             values[idx] = pushdown_values[(idx, aggregation)]
@@ -2273,7 +2354,11 @@ def bulk_compute_cards(
                 logger.warning(
                     f"bulk_compute_cards: DC load failed for {cache_key}: {e}", exc_info=True
                 )
-                values[idx] = None
+                # Only null out cards the specs fast path didn't already serve:
+                # compare mode routes specs-served cards through this load too,
+                # and a comparison must never blank a good hero value (e.g. the
+                # corrupted-Delta case the specs path exists for).
+                values.setdefault(idx, None)
                 continue
             df_cache[cache_key] = df
 
@@ -2282,7 +2367,7 @@ def bulk_compute_cards(
                 f"bulk_compute_cards: column {column!r} not in df for {idx}; "
                 f"available cols (first 10): {df.columns[:10]}"
             )
-            values[idx] = None
+            values.setdefault(idx, None)
             continue
 
         values[idx] = _agg_value(df[column], aggregation)
@@ -2327,6 +2412,104 @@ def bulk_compute_cards(
                 logger.warning(
                     f"bulk_compute_cards: {sec_layout} on {column!r} failed for {idx}: {e}"
                 )
+
+        # Per-group comparison of the card's hero aggregation. `None` when the
+        # comparison can't be computed exactly for this card (group column not
+        # in the frame) — the card then renders without a strip rather than
+        # with wrong numbers. For layouts with a compact per-group form
+        # (GROUP_COMPARABLE_LAYOUTS) each entry additionally carries the same
+        # sub-payload shape the card's own secondary layout uses, computed over
+        # that group's partition, so the client can draw one mini-rendering per
+        # group in the group's color.
+        if compare_groups:
+            try:
+                payload_fn = None
+                gc_domain = None
+                # The tuple is the single gate: a layout absent from it keeps
+                # chips-only comparison no matter what the dispatch below could
+                # compute for it.
+                if sec_layout not in GROUP_COMPARABLE_LAYOUTS:
+                    pass
+                elif sec_layout in ("box_plot", "histogram"):
+                    # Shared domain over the whole (filtered) frame: the client
+                    # draws every group's slim box / sparkbars against one axis
+                    # — self-scaled shapes would render four identical forms
+                    # for four wildly different groups.
+                    numeric = df[column].cast(pl.Float64, strict=False).drop_nulls()
+                    if sec_layout == "box_plot":
+                        # Per-group outlier cap far below the hero's 100: the
+                        # payload is repeated once per group.
+                        payload_fn = lambda part: compute_box_plot_stats(  # noqa: E731
+                            part[column], max_outliers=20
+                        )
+                        if numeric.len() > 0:
+                            gc_domain = {"min": float(numeric.min()), "max": float(numeric.max())}
+                    elif numeric.len() > 1 and numeric.min() != numeric.max():
+                        h_lo, h_hi = float(numeric.min()), float(numeric.max())
+                        payload_fn = lambda part: compute_histogram(  # noqa: E731
+                            part, column, domain=(h_lo, h_hi)
+                        )
+                        gc_domain = {"min": h_lo, "max": h_hi}
+                elif (
+                    sec_layout in _BREAKDOWN_LAYOUTS
+                    and breakdown_col
+                    and breakdown_col in df.columns
+                ):
+                    # One breakdown per group partition: donut draws a mini-ring
+                    # per group, the other breakdown layouts a composition meter
+                    # per group (each is read alone at this scale, so divergent
+                    # category sets are acceptable).
+                    payload_fn = lambda part: compute_breakdown(  # noqa: E731
+                        part,
+                        column=column,
+                        breakdown_col=breakdown_col,
+                        aggregation=card.get("aggregation") or "count",
+                        top_n_count=int(card.get("top_n_count") or 3),
+                    )
+                elif sec_layout == "trend":
+                    trend_axis = card.get("trend_col")
+                    if trend_axis and str(trend_axis) in df.columns:
+                        # Same shared-scale rule as the histogram, on x: one
+                        # axis grid over the whole frame, every group's series
+                        # aligned on it so the client can overlay them.
+                        grid = trend_axis_grid(df, str(trend_axis))
+                        if grid is not None:
+                            trend_agg = str(card.get("aggregation") or "count")
+                            payload_fn = lambda part: compute_trend_on_grid(  # noqa: E731
+                                part, column, str(trend_axis), trend_agg, grid
+                            )
+                elif sec_layout in ("threshold", "completeness", "uniqueness"):
+                    payload_fn = lambda part: _numeric_layout_payload(  # noqa: E731
+                        part, card, column, sec_layout
+                    )
+                group_compare = compute_group_compare(
+                    df,
+                    group_defs,
+                    column,
+                    aggregation,
+                    _agg_expr,
+                    _coerce_agg_result,
+                    agg_value_fn=_agg_value,
+                    payload_fn=payload_fn,
+                    include_overall=include_overall,
+                )
+                if group_compare is not None:
+                    # The layout discriminator tells the client which compact
+                    # renderer the payloads belong to; coverage and gauge need
+                    # no server payload (value + the authored coverage_max
+                    # suffice) but still go through the tuple gate.
+                    if payload_fn is not None or (
+                        sec_layout in ("coverage", "gauge")
+                        and sec_layout in GROUP_COMPARABLE_LAYOUTS
+                    ):
+                        group_compare["layout"] = sec_layout
+                    if gc_domain is not None:
+                        group_compare["domain"] = gc_domain
+                    if not include_other:
+                        group_compare["other"] = None
+                    sec_results["__group_compare__"] = group_compare
+            except Exception as e:
+                logger.warning(f"bulk_compute_cards: group compare failed for {idx}: {e}")
 
         if sec_results:
             secondary_values[idx] = sec_results
@@ -2530,17 +2713,39 @@ async def render_figure_endpoint(
     code path on the worker.
 
     Request body:
-        {"filters": [...], "theme": "light" | "dark", "full_load": bool}
+        {"filters": [...], "theme": "light" | "dark", "full_load": bool,
+         "groups": [{name, column_name, values, color}], "color_by_group": bool,
+         "color_by_column": {"column_name": str, "color_map": {value: "#rrggbb"}},
+         "grouping_display": "color" | "facet",
+         "include_other": bool}
 
     ``full_load`` (default False) bypasses the point-plot row cap so the client
     can explicitly render every point on demand (slow on large datasets).
 
+    ``groups`` + ``color_by_group`` (optional) ask for the figure to be colored
+    by the caller's selection groups (issue #89); ``color_by_column`` asks for
+    the dashboard-global color-by-a-real-column override instead (groups win
+    when both are present). All sanitized here at the trust boundary, applied
+    in ``build_figure_preview``.
+
     Response:
         {"figure": <plotly fig dict>, "metadata": {visu_type, ...}}
     """
+    from depictio.api.v1.services.figure.groups import (
+        sanitize_color_by_column,
+        sanitize_group_defs,
+        sanitize_grouping_display,
+    )
+
     filters = request.get("filters") or []
     theme = request.get("theme") or "light"
     full_load = bool(request.get("full_load", False))
+    group_defs = sanitize_group_defs(request.get("groups"))
+    color_by_group = bool(request.get("color_by_group", False)) and bool(group_defs)
+    color_by_column = (
+        None if color_by_group else sanitize_color_by_column(request.get("color_by_column"))
+    )
+    grouping_display = sanitize_grouping_display(request.get("grouping_display"))
 
     dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
     if not dashboard_data:
@@ -2593,7 +2798,9 @@ async def render_figure_endpoint(
         "dc_id": str(dc_id),
         "dc_config": convert_objectid_to_str(dc_config),
         "visu_type": component.get("visu_type", "scatter"),
-        "dict_kwargs": component.get("dict_kwargs") or {},
+        "dict_kwargs": merge_dashboard_brand_theme(
+            dashboard_data.get("brand_theme"), component.get("dict_kwargs") or {}
+        ),
         "mode": mode,
         "code_content": component.get("code_content", ""),
         "selection_enabled": bool(component.get("selection_enabled", False)),
@@ -2622,6 +2829,15 @@ async def render_figure_endpoint(
         "theme": theme,
         "full_load": full_load,
     }
+    if color_by_group:
+        payload["groups"] = group_defs
+        payload["color_by_group"] = True
+        if request.get("include_other") is False:
+            payload["include_other"] = False
+    elif color_by_column:
+        payload["color_by_column"] = color_by_column
+    if (color_by_group or color_by_column) and grouping_display == "facet":
+        payload["grouping_display"] = "facet"
     import time as _time
 
     _t0 = _time.perf_counter()
@@ -3344,6 +3560,54 @@ def map_data_endpoint(
     }
 
 
+def _resolve_tab_family(
+    dashboard_id: PyObjectId,
+    current_user: User,
+    projection: dict[str, int],
+) -> tuple[PyObjectId, list[dict[str, Any]]]:
+    """Resolve a dashboard's whole tab family, permission-checked.
+
+    The family is the parent plus all its children; a main tab is its own
+    parent. Returns the family id and the tabs sorted by ``tab_order``.
+    Raises 404 for an unknown dashboard and 403 when the caller lacks viewer
+    permission on the owning project.
+    """
+    dashboard_data = dashboards_collection.find_one(
+        {"dashboard_id": dashboard_id},
+        {"project_id": 1, "parent_dashboard_id": 1},
+    )
+    if not dashboard_data:
+        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
+
+    project_id = dashboard_data.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(status_code=403, detail="Permission denied.")
+
+    parent_id = dashboard_data.get("parent_dashboard_id") or dashboard_id
+    family = dashboards_collection.find(
+        {"$or": [{"dashboard_id": parent_id}, {"parent_dashboard_id": parent_id}]},
+        projection,
+    )
+    tabs = sorted(family, key=lambda t: (t.get("tab_order") is None, t.get("tab_order") or 0))
+    return parent_id, tabs
+
+
+def _floating_components_of(tabs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The family's floating maps, each paired with its owning tab."""
+    components: list[dict[str, Any]] = []
+    for tab in tabs:
+        for meta in tab.get("stored_metadata") or []:
+            if meta.get("component_type") == "map" and meta.get("placement") == "floating":
+                components.append(
+                    {
+                        "dashboard_id": str(tab.get("dashboard_id")),
+                        "tab_title": tab.get("title"),
+                        "metadata": convert_objectid_to_str(meta),
+                    }
+                )
+    return components
+
+
 @dashboards_endpoint_router.get("/floating_components/{dashboard_id}")
 def get_floating_components(
     dashboard_id: PyObjectId,
@@ -3362,40 +3626,107 @@ def get_floating_components(
     parameter and gates on the same project-level permission, so rendering tab
     A's map while viewing tab B needs no special casing.
     """
-    dashboard_data = dashboards_collection.find_one(
-        {"dashboard_id": dashboard_id},
-        {"project_id": 1, "parent_dashboard_id": 1},
-    )
-    if not dashboard_data:
-        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
-
-    project_id = dashboard_data.get("project_id")
-    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
-        raise HTTPException(status_code=403, detail="Permission denied.")
-
-    # The family is the parent plus all its children; a main tab is its own parent.
-    parent_id = dashboard_data.get("parent_dashboard_id") or dashboard_id
-    family = dashboards_collection.find(
-        {"$or": [{"dashboard_id": parent_id}, {"parent_dashboard_id": parent_id}]},
+    parent_id, tabs = _resolve_tab_family(
+        dashboard_id,
+        current_user,
         {"dashboard_id": 1, "title": 1, "tab_order": 1, "stored_metadata": 1},
     )
-
-    components: list[dict[str, Any]] = []
-    for tab in sorted(family, key=lambda t: (t.get("tab_order") is None, t.get("tab_order") or 0)):
-        for meta in tab.get("stored_metadata") or []:
-            if meta.get("component_type") == "map" and meta.get("placement") == "floating":
-                components.append(
-                    {
-                        "dashboard_id": str(tab.get("dashboard_id")),
-                        "tab_title": tab.get("title"),
-                        "metadata": convert_objectid_to_str(meta),
-                    }
-                )
 
     # The viewer keys its per-dashboard panel state (and its cross-tab filter
     # persistence) on the family id, so hand it back rather than making the
     # client re-derive it from the dashboard list.
-    return {"parent_dashboard_id": str(parent_id), "components": components}
+    return {"parent_dashboard_id": str(parent_id), "components": _floating_components_of(tabs)}
+
+
+@dashboards_endpoint_router.get("/cross_tab_components/{dashboard_id}")
+def get_cross_tab_components(
+    dashboard_id: PyObjectId,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Return everything a tab renders on behalf of its siblings, in one request.
+
+    Supersedes ``/floating_components`` for the React viewer (that endpoint
+    stays for compatibility): alongside the family's floating maps, this
+    returns every section marked ``persistent: true`` in a tab's
+    ``grid_sections`` / ``filter_sections``, with its member components and —
+    for grid sections — the owner tab's layout entries for those members. Each
+    member carries its owning ``dashboard_id``, so render calls target the
+    owner tab exactly like floating maps do.
+
+    Sections are keyed ``(owner_dashboard_id, kind, name)``: two tabs each
+    declaring a persistent section with the same name stay two sections.
+    """
+    parent_id, tabs = _resolve_tab_family(
+        dashboard_id,
+        current_user,
+        {
+            "dashboard_id": 1,
+            "title": 1,
+            "tab_order": 1,
+            "stored_metadata": 1,
+            "grid_sections": 1,
+            "filter_sections": 1,
+            "right_panel_layout_data": 1,
+        },
+    )
+
+    persistent_sections: list[dict[str, Any]] = []
+    for tab in tabs:
+        metas = tab.get("stored_metadata") or []
+        for kind, spec_field in (("grid", "grid_sections"), ("filter", "filter_sections")):
+            for spec in tab.get(spec_field) or []:
+                if not spec.get("persistent"):
+                    continue
+                members = []
+                for meta in metas:
+                    if meta.get("section") != spec.get("name"):
+                        continue
+                    # Same membership rule as the viewer's `isFilterMember`:
+                    # interactive components live in filter sections, everything
+                    # else in grid sections. Floating maps are excluded — they
+                    # already fan out through `floating`.
+                    is_filter = meta.get("component_type") == "interactive"
+                    if is_filter != (kind == "filter"):
+                        continue
+                    if meta.get("component_type") == "map" and meta.get("placement") == "floating":
+                        continue
+                    members.append(
+                        {
+                            "dashboard_id": str(tab.get("dashboard_id")),
+                            "tab_title": tab.get("title"),
+                            "metadata": convert_objectid_to_str(meta),
+                        }
+                    )
+                member_indices = {m["metadata"].get("index") for m in members}
+                # Raw owner-tab layout entries, so the client reuses the exact
+                # parsing it already applies to its own `right_panel_layout_data`
+                # (`box-` prefixes and all). Only meaningful for grid sections.
+                layouts = (
+                    [
+                        convert_objectid_to_str(item)
+                        for item in tab.get("right_panel_layout_data") or []
+                        if isinstance(item, dict)
+                        and str(item.get("i", "")).removeprefix("box-") in member_indices
+                    ]
+                    if kind == "grid"
+                    else []
+                )
+                persistent_sections.append(
+                    {
+                        "kind": kind,
+                        "owner_dashboard_id": str(tab.get("dashboard_id")),
+                        "owner_tab_title": tab.get("title"),
+                        "spec": convert_objectid_to_str(spec),
+                        "components": members,
+                        "layouts": layouts,
+                    }
+                )
+
+    return {
+        "parent_dashboard_id": str(parent_id),
+        "floating": _floating_components_of(tabs),
+        "persistent_sections": persistent_sections,
+    }
 
 
 # ============================================================================
@@ -3595,54 +3926,66 @@ def _empty_gs_stub_figure(
     }
 
 
+MULTIQC_SAMPLE_FILTER_COLUMNS = {
+    "sample",
+    "sample_id",
+    "sample_name",
+    "sampleid",
+    "samplename",
+    "sample-id",
+    "sample-name",
+}
+
+
 def _resolve_multiqc_sample_filter(
     dashboard_data: dict,
     component: dict,
     filters: list[dict],
-) -> list[str]:
-    """Resolve a list of dashboard interactive filters into a sample-name list.
+) -> list[str] | None:
+    """Resolve dashboard interactive filters into the MultiQC sample-name set.
 
-    Mirrors the simple branch of ``patch_multiqc_plot_with_interactive_filtering``:
-      - filters on the MultiQC DC's own ``sample`` column → values used directly
-      - filters on a different metadata DC → load the metadata DC with the
-        filters applied, then extract the join column. The join column name is
-        looked up from the project's ``DCLink`` (``link.source_column``) when
-        defined; otherwise falls back to the first match in
-        (``sample``, ``sample_id``, ``sample_name``).
-      - if the link has resolver ``sample_mapping``, the canonical IDs from the
-        metadata DC are expanded into MultiQC sample variants using the live
-        ``sample_mappings`` from the multiqc reports.
+    Two kinds of filters contribute, and every active one is a *constraint*:
+      - filters on the MultiQC DC's own sample column (any spelling in
+        ``MULTIQC_SAMPLE_FILTER_COLUMNS``, matching the frontend allowlist)
+        -> the selected values, expanded to variants;
+      - filters on a linked metadata DC -> the metadata DC is loaded with that
+        DC's own filters applied, the link's ``source_column`` values are
+        extracted and expanded to variants. Every metadata DC with an enabled
+        link contributes, not just the first one seen.
 
-    Returns an empty list when no resolvable filters are present. Logs but does
-    not raise on metadata-DC load failures.
+    The result is the INTERSECTION of all constraint sets — each active filter
+    can only narrow the sample set further. (The previous implementation
+    unioned them, so adding a second filter *widened* the result, and dropped
+    filters from any metadata DC after the first, making the outcome depend on
+    filter ordering.)
+
+    Returns:
+        ``None`` when no applicable sample filters are active (render
+        unfiltered), or the sorted list of surviving sample names — possibly
+        empty, which means "active filters matched no sample" and must render
+        an empty figure rather than an unfiltered one.
+
+    Logs but does not raise on metadata-DC load failures; a DC whose filters
+    cannot be resolved is skipped (its constraint is dropped) rather than
+    silently matching nothing.
     """
     if not filters:
-        return []
+        return None
 
     wf_id = component.get("wf_id")
     if not wf_id:
-        return []
+        return None
 
     multiqc_dc_id_str = str(component.get("dc_id") or component.get("data_collection_id") or "")
     stored_meta_index = {
         str(m.get("index")): m for m in (dashboard_data.get("stored_metadata") or [])
     }
 
-    metadata_dc_id: str | None = None
-    # Track the metadata DC's own workflow id — load_deltatable_lite needs the
-    # workflow that owns the metadata DC, not the multiqc component's workflow,
-    # because real projects often have the metadata table on a different
-    # workflow than the multiqc report. Falls back to the multiqc component's
-    # `wf_id` only if the interactive component's stored_metadata doesn't
-    # carry one (legacy components).
-    metadata_wf_id: object | None = None
-    # The stored_metadata snapshot for the source interactive component — used
-    # to build the `init_data` for `load_deltatable_lite` so the metadata DC
-    # load doesn't fall back to an unauthenticated API hop (which 404/403's
-    # on non-public projects).
-    metadata_comp_meta: dict = {}
-    direct_sample_values: list[str] = []
-    indirect_filter_metadata: list[dict] = []
+    # One entry per direct sample filter (each is its own AND constraint).
+    direct_sample_filters: list[list[str]] = []
+    # Metadata DCs keyed by dc_id: each contributes one constraint computed
+    # from ALL of its own filters applied together.
+    indirect_by_dc: dict[str, dict] = {}
 
     for f in filters:
         value = f.get("value")
@@ -3653,30 +3996,38 @@ def _resolve_multiqc_sample_filter(
         comp_dc = str(comp_meta.get("dc_id") or comp_meta.get("data_collection_id") or "")
         column_name = f.get("column_name") or comp_meta.get("column_name")
 
-        if comp_dc == multiqc_dc_id_str and column_name == "sample":
+        if (
+            comp_dc == multiqc_dc_id_str
+            and str(column_name or "").lower() in MULTIQC_SAMPLE_FILTER_COLUMNS
+        ):
             values_list = value if isinstance(value, list) else [value]
-            direct_sample_values.extend(str(v) for v in values_list)
+            direct_sample_filters.append([str(v) for v in values_list])
             continue
 
         if comp_dc and comp_dc != multiqc_dc_id_str:
-            if metadata_dc_id is None:
-                metadata_dc_id = comp_dc
-                metadata_wf_id = comp_meta.get("wf_id") or comp_meta.get("workflow_id") or wf_id
-                metadata_comp_meta = comp_meta
-            if comp_dc == metadata_dc_id:
-                indirect_filter_metadata.append(
-                    {
-                        "interactive_component_type": f.get("interactive_component_type")
-                        or comp_meta.get("interactive_component_type"),
-                        "column_name": column_name,
-                        "value": value,
-                    }
-                )
+            entry = indirect_by_dc.setdefault(
+                comp_dc,
+                {
+                    "wf_id": comp_meta.get("wf_id") or comp_meta.get("workflow_id") or wf_id,
+                    "comp_meta": comp_meta,
+                    "filters": [],
+                },
+            )
+            entry["filters"].append(
+                {
+                    "interactive_component_type": f.get("interactive_component_type")
+                    or comp_meta.get("interactive_component_type"),
+                    "column_name": column_name,
+                    "value": value,
+                }
+            )
+
+    if not direct_sample_filters and not indirect_by_dc:
+        return None
 
     # Pull live sample_mappings from the MultiQC reports so canonical IDs
     # (e.g. ``NA12878``) get expanded into the variant names that actually
-    # appear in plot traces (``NA12878_R1``, ``NA12878_R2``). Mirrors the Dash
-    # flow which calls ``expand_canonical_samples_to_variants`` unconditionally.
+    # appear in plot traces (``NA12878_R1``, ``NA12878_R2``).
     sample_mappings: dict[str, list[str]] = {}
     try:
         from depictio.api.v1.db import multiqc_collection as _mc
@@ -3699,105 +4050,116 @@ def _resolve_multiqc_sample_filter(
         expand_canonical_samples_to_variants,
     )
 
-    selected_samples: list[str] = (
-        expand_canonical_samples_to_variants(
-            list(dict.fromkeys(direct_sample_values)), sample_mappings
-        )
-        if direct_sample_values
-        else []
-    )
+    # Each constraint is expressed in variant space so intersection is
+    # well-defined regardless of whether the filter emitted canonical IDs,
+    # variant names, or a mix.
+    constraint_sets: list[set[str]] = []
 
-    if metadata_dc_id and indirect_filter_metadata:
+    for values in direct_sample_filters:
+        expanded = expand_canonical_samples_to_variants(
+            list(dict.fromkeys(values)), sample_mappings
+        )
+        constraint_sets.append({str(s) for s in expanded})
+
+    if indirect_by_dc:
         from depictio.api.v1.db import projects_collection
         from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
-        # Cross-DC filtering requires an explicit DCLink (metadata_dc_id →
+        # Cross-DC filtering requires an explicit DCLink (metadata_dc_id ->
         # multiqc_dc_id). Without one we don't guess at conventional join-
         # column names — silently auto-mapping `sample` / `sample_id` /
         # `sample_name` produced surprising filter behavior when the user
-        # hadn't declared the relationship. Bail with a clear log line so the
-        # user can see why filtering didn't apply and create a link.
-        link_source_column: str | None = None
+        # hadn't declared the relationship. Skip that DC with a clear log line
+        # so the user can see why filtering didn't apply and create a link.
+        links_by_source: dict[str, str] = {}
         try:
             project_id = dashboard_data.get("project_id")
             if project_id:
                 project_doc = projects_collection.find_one({"_id": ObjectId(str(project_id))})
                 for lk in (project_doc or {}).get("links", []) or []:
                     if (
-                        str(lk.get("source_dc_id")) == str(metadata_dc_id)
-                        and str(lk.get("target_dc_id")) == multiqc_dc_id_str
+                        str(lk.get("target_dc_id")) == multiqc_dc_id_str
                         and lk.get("enabled", True)
+                        and lk.get("source_column")
                     ):
-                        link_source_column = lk.get("source_column")
-                        break
+                        links_by_source.setdefault(
+                            str(lk.get("source_dc_id")), str(lk.get("source_column"))
+                        )
         except Exception as e:
             logger.debug(f"_resolve_multiqc_sample_filter: project link lookup failed: {e}")
 
-        if not link_source_column:
-            logger.info(
-                f"_resolve_multiqc_sample_filter: no enabled DCLink from "
-                f"{metadata_dc_id} → {multiqc_dc_id_str}; cross-DC filter ignored. "
-                f"Create a link with the correct source_column to enable filtering."
-            )
-            return list(dict.fromkeys(selected_samples))
+        for metadata_dc_id, entry in indirect_by_dc.items():
+            link_source_column = links_by_source.get(str(metadata_dc_id))
+            if not link_source_column:
+                logger.info(
+                    f"_resolve_multiqc_sample_filter: no enabled DCLink from "
+                    f"{metadata_dc_id} → {multiqc_dc_id_str}; cross-DC filter ignored. "
+                    f"Create a link with the correct source_column to enable filtering."
+                )
+                continue
 
-        # Build init_data so load_deltatable_lite reads the metadata DC's
-        # delta_location directly instead of falling back to an unauthenticated
-        # internal API hop (which returns 404 on non-public projects and
-        # silently drops the cross-DC filter — what made metadata→MultiQC
-        # filtering quietly stop working). Prefer the stored_metadata's
-        # dc_config snapshot; fall back to deltatables_collection if it's
-        # missing (legacy components saved before dc_config was attached).
-        init_data: dict[str, dict] = {}
-        dc_config = metadata_comp_meta.get("dc_config") or {}
-        delta_loc = dc_config.get("delta_location")
-        if not delta_loc:
-            from depictio.api.v1.db import deltatables_collection as _dt_coll
+            metadata_comp_meta: dict = entry["comp_meta"]
+            # Build init_data so load_deltatable_lite reads the metadata DC's
+            # delta_location directly instead of falling back to an
+            # unauthenticated internal API hop (which returns 404 on
+            # non-public projects and silently drops the cross-DC filter).
+            init_data: dict[str, dict] = {}
+            dc_config = metadata_comp_meta.get("dc_config") or {}
+            delta_loc = dc_config.get("delta_location")
+            if not delta_loc:
+                from depictio.api.v1.db import deltatables_collection as _dt_coll
 
-            dt = _dt_coll.find_one({"data_collection_id": ObjectId(str(metadata_dc_id))})
-            if dt:
-                delta_loc = dt.get("delta_table_location")
-        if delta_loc:
-            init_data[str(metadata_dc_id)] = {
-                "delta_location": delta_loc,
-                "dc_type": dc_config.get("type") or "table",
-                "size_bytes": dc_config.get("size_bytes", 0),
-            }
+                dt = _dt_coll.find_one({"data_collection_id": ObjectId(str(metadata_dc_id))})
+                if dt:
+                    delta_loc = dt.get("delta_table_location")
+            if delta_loc:
+                init_data[str(metadata_dc_id)] = {
+                    "delta_location": delta_loc,
+                    "dc_type": dc_config.get("type") or "table",
+                    "size_bytes": dc_config.get("size_bytes", 0),
+                }
 
-        try:
-            wfid = metadata_wf_id or wf_id
-            meta_df = load_deltatable_lite(
-                workflow_id=ObjectId(str(wfid)) if not isinstance(wfid, ObjectId) else wfid,
-                data_collection_id=str(metadata_dc_id),
-                metadata=indirect_filter_metadata,
-                init_data=init_data or None,
-            )
-            if meta_df is not None and not meta_df.is_empty():
+            try:
+                wfid = entry["wf_id"]
+                meta_df = load_deltatable_lite(
+                    workflow_id=ObjectId(str(wfid)) if not isinstance(wfid, ObjectId) else wfid,
+                    data_collection_id=str(metadata_dc_id),
+                    metadata=entry["filters"],
+                    init_data=init_data or None,
+                )
+                if meta_df is None:
+                    continue
                 if link_source_column not in meta_df.columns:
                     logger.warning(
                         f"_resolve_multiqc_sample_filter: link.source_column "
                         f"{link_source_column!r} not in metadata DC {metadata_dc_id}; "
                         f"available columns={meta_df.columns}"
                     )
-                else:
-                    canonical = [str(s) for s in meta_df[link_source_column].unique().to_list()]
-                    # Always run the canonical→variants expansion. When no
-                    # mappings are available, this returns canonical unchanged.
-                    expanded = expand_canonical_samples_to_variants(canonical, sample_mappings)
-                    logger.debug(
-                        f"_resolve_multiqc_sample_filter: dc={metadata_dc_id} "
-                        f"join_col={link_source_column!r} canonical={len(canonical)} "
-                        f"expanded={len(expanded)} mappings_keys={len(sample_mappings)}"
-                    )
-                    selected_samples.extend(expanded)
-        except Exception as e:
-            logger.warning(
-                f"_resolve_multiqc_sample_filter: filter resolution on DC {metadata_dc_id} "
-                f"failed: {e}",
-                exc_info=True,
-            )
+                    continue
+                canonical = [str(s) for s in meta_df[link_source_column].unique().to_list()]
+                # Always run the canonical→variants expansion. When no
+                # mappings are available, this returns canonical unchanged.
+                expanded = expand_canonical_samples_to_variants(canonical, sample_mappings)
+                logger.debug(
+                    f"_resolve_multiqc_sample_filter: dc={metadata_dc_id} "
+                    f"join_col={link_source_column!r} canonical={len(canonical)} "
+                    f"expanded={len(expanded)} mappings_keys={len(sample_mappings)}"
+                )
+                # An empty set here is a real answer: the metadata filters
+                # matched no row, so no sample survives this constraint.
+                constraint_sets.append({str(s) for s in expanded})
+            except Exception as e:
+                logger.warning(
+                    f"_resolve_multiqc_sample_filter: filter resolution on DC {metadata_dc_id} "
+                    f"failed: {e}",
+                    exc_info=True,
+                )
 
-    return list(dict.fromkeys(selected_samples))
+    if not constraint_sets:
+        return None
+
+    surviving = set.intersection(*constraint_sets)
+    return sorted(surviving)
 
 
 @dashboards_endpoint_router.post("/render_multiqc/{dashboard_id}/{component_id}")
@@ -3918,11 +4280,14 @@ def render_multiqc_endpoint(
     try:
         selected_samples = _resolve_multiqc_sample_filter(dashboard_data, component, filters)
         timings["resolve_filter_ms"] = (_time.perf_counter() - t0) * 1000
-        filter_applied = bool(selected_samples)
+        # ``None`` = no sample filter; ``[]`` = filters matched no sample and
+        # the figure must come back empty — a distinct cache signature keeps
+        # the two from sharing an entry.
+        filter_applied = selected_samples is not None
         filter_sig: str | None = None
-        if filter_applied:
+        if selected_samples is not None:
             sorted_samples = sorted({str(s) for s in selected_samples})
-            filter_sig = "|".join(sorted_samples)
+            filter_sig = "|".join(sorted_samples) if sorted_samples else "__no_match__"
 
         # Salt the cache key with the latest aggregation_version for this DC
         # so realtime updates (which bump the version after the CLI rewrites
@@ -4178,7 +4543,9 @@ def render_multiqc_endpoint(
                 "plot": selected_plot,
                 "dataset_id": selected_dataset,
                 "filter_applied": filter_applied,
-                "selected_sample_count": len(selected_samples) if filter_applied else None,
+                "selected_sample_count": (
+                    len(selected_samples) if selected_samples is not None else None
+                ),
             },
         }
     except HTTPException:
@@ -4293,7 +4660,14 @@ def render_multiqc_general_stats_endpoint(
         # Mtime stat removed — same rationale as the figure cache: it fired a
         # filesystem stat on every request (even cache hits) and any S3-cache
         # refresh cold-evicted the payload. TTL handles invalidation.
-        filter_sig = "|".join(sorted(selected_samples)) if selected_samples else "all"
+        # ``None`` = unfiltered; ``[]`` = filters matched no sample (empty
+        # table) — distinct cache signatures so the two never share an entry.
+        if selected_samples is None:
+            filter_sig = "all"
+        elif selected_samples:
+            filter_sig = "|".join(sorted(selected_samples))
+        else:
+            filter_sig = "__no_match__"
         # Cover the FULL sorted s3_locations set in the key, not just
         # `raw_path` (= s3_locations[0]). Append-only mutations can leave
         # `[0]` pointing at the same parquet → key wouldn't change → stale
@@ -4333,10 +4707,10 @@ def render_multiqc_general_stats_endpoint(
         payload = build_general_stats_payload(
             parquet_path=parquet_paths,
             show_hidden=show_hidden,
-            selected_samples=selected_samples or None,
+            selected_samples=selected_samples,
         )
         timings["build_payload_ms"] = (_time.perf_counter() - _t_build0) * 1000
-        if selected_samples:
+        if selected_samples is not None:
             payload["filter_applied"] = True
             payload["selected_sample_count"] = len(selected_samples)
 
@@ -4759,11 +5133,50 @@ def _tab_has_visualization_components(
     return False
 
 
-def _tab_meets_minimum(dashboard_dict: dict, dc_meta: dict[str, dict] | None = None) -> bool:
+def _family_fans_out_a_filter(docs: list[dict]) -> bool:
+    """True if some document in the family declares a persistent filter section
+    that actually holds a control.
+
+    A persistent filter section renders in *every* tab's panel (see
+    `FilterSectionSpec.persistent`), so a tab can legitimately carry no filter of
+    its own and still be sliceable. Without this, such a tab looks filter-less to
+    `_tab_meets_minimum` and is dropped on import — which is what silently cost
+    the iris family its petal tab once that tab started relying on the overview's
+    shared variety picker.
+
+    Reads the *lite* YAML documents, since this runs before the per-tab dicts
+    exist. A section declared on a tab that is itself dropped is counted too:
+    that tab necessarily has filters of its own (its section's members live
+    there), so it only ever drops for want of visualisations, and the cost of the
+    approximation is a surviving filter-less tab rather than a lost one.
+    """
+    for doc in docs:
+        persistent = {
+            spec.get("name")
+            for spec in (doc.get("filter_sections") or [])
+            if spec.get("persistent") and spec.get("name")
+        }
+        if not persistent:
+            continue
+        for component in doc.get("components") or []:
+            if (
+                component.get("component_type") == "interactive"
+                and component.get("section") in persistent
+            ):
+                return True
+    return False
+
+
+def _tab_meets_minimum(
+    dashboard_dict: dict,
+    dc_meta: dict[str, dict] | None = None,
+    family_fans_out_a_filter: bool = False,
+) -> bool:
     """True if a (filtered) tab keeps at least one filter AND one standard component.
 
     Mandatory minimum for any surviving tab: a user can both *slice* (≥1 surviving
-    interactive component) and *see* (≥1 surviving non-metadata visualisation).
+    interactive component, or one reaching it from a persistent filter section
+    elsewhere in the family) and *see* (≥1 surviving non-metadata visualisation).
     Every tab's template is curated so at least one of its filters binds to a DC
     that survives the run's route (e.g. the MultiQC tab's sample filter binds to
     the always-present `multiqc_data` DC, Ordination carries a Phylum filter on
@@ -4771,7 +5184,7 @@ def _tab_meets_minimum(dashboard_dict: dict, dc_meta: dict[str, dict] | None = N
     genuinely absent — never a tab that still has analysis to show.
     """
     dc_meta = dc_meta or {}
-    has_filter = any(
+    has_filter = family_fans_out_a_filter or any(
         c.get("component_type") == "interactive" for c in dashboard_dict.get("stored_metadata", [])
     )
     return has_filter and _tab_has_visualization_components(dashboard_dict, dc_meta)
@@ -4818,6 +5231,10 @@ def _import_multi_tab_dashboard(
 
     main_dashboard_dict = main_lite.to_full()
     main_dashboard_dict["is_main_tab"] = True  # Ensure it's marked as main tab
+    # Visibility is project-driven; `to_full()` defaults to private, which
+    # would also reset an existing public dashboard on --overwrite.
+    project_is_public = get_project_visibility(project_id)
+    main_dashboard_dict["is_public"] = project_is_public
 
     # Set dashboard ID and project
     main_dashboard_id = existing_main["dashboard_id"] if existing_main else ObjectId()
@@ -4875,6 +5292,9 @@ def _import_multi_tab_dashboard(
     # Import child tabs
     imported_tabs = []
     dc_meta = _build_dc_meta(project_id)
+    family_filter = _family_fans_out_a_filter(
+        [main_dashboard_data, *(tabs_data or [])],
+    )
     for idx, tab_data in enumerate(tabs_data):
         tab_yaml = yaml.dump(tab_data, default_flow_style=False, allow_unicode=True)
         tab_lite = DashboardDataLite.from_yaml(tab_yaml)
@@ -4891,6 +5311,7 @@ def _import_multi_tab_dashboard(
             )
 
         tab_dashboard_dict = tab_lite.to_full()
+        tab_dashboard_dict["is_public"] = project_is_public
         tab_dashboard_dict["is_main_tab"] = False
         tab_dashboard_dict["parent_dashboard_id"] = main_dashboard_id
         tab_dashboard_dict["tab_order"] = idx + 1  # Start from 1 (main tab is 0)
@@ -4924,18 +5345,25 @@ def _import_multi_tab_dashboard(
         for component in tab_dashboard_dict.get("stored_metadata", []):
             _resolve_workflow_tags(component, project_id=project_id)
             _regenerate_component_fields(component)
+        before_filtering = len(tab_dashboard_dict.get("stored_metadata") or [])
         _filter_unresolved_components(tab_dashboard_dict, project_id=project_id)
+        was_pruned = len(tab_dashboard_dict.get("stored_metadata") or []) < before_filtering
         _regenerate_component_indices(tab_dashboard_dict)
 
-        # Self-adapting dashboard: a tab is only worth showing if filtering left it
-        # with at least one filter AND one non-metadata visualisation (its minimum
-        # useful form). A tab reduced below that — all its purpose-built DCs
-        # absent/unpopulated for this run (e.g. a taxonomy tab on a skip_qiime run
-        # reduced to the sample metadata table, or a QC tab left with one lonely
-        # plot and no filter) — is dropped. Tabs are separate docs, so "hidden" =
+        # Self-adapting dashboard: a tab *reduced* by filtering is only worth
+        # showing if it kept at least one filter AND one non-metadata
+        # visualisation (its minimum useful form). A tab reduced below that —
+        # all its purpose-built DCs absent/unpopulated for this run (e.g. a
+        # taxonomy tab on a skip_qiime run reduced to the sample metadata table,
+        # or a QC tab left with one lonely plot and no filter) — is dropped.
+        #
+        # Only when filtering actually removed something. A tab authored against
+        # a single `metatype: Metadata` collection (iris is one) is exactly what
+        # its author wrote, not the residue of a pruned one, and the unconditional
+        # gate dropped it on every import. Tabs are separate docs, so "hidden" =
         # "not inserted"; drop any stale existing copy on overwrite so re-imports
         # stay idempotent.
-        if not _tab_meets_minimum(tab_dashboard_dict, dc_meta):
+        if was_pruned and not _tab_meets_minimum(tab_dashboard_dict, dc_meta, family_filter):
             logger.info(
                 f"Skipping tab '{tab_lite.title}': below minimum (needs ≥1 filter + ≥1 "
                 "non-metadata component) after filtering — its data collections are "
@@ -5117,6 +5545,9 @@ async def import_dashboard_from_yaml(
         )
 
     dashboard_dict = lite.to_full()
+    # Visibility is project-driven; `to_full()` defaults to private, which
+    # would also reset an existing public dashboard on --overwrite.
+    dashboard_dict["is_public"] = get_project_visibility(project_id)
 
     # Handle tab relationships for child tabs
     if not lite.is_main_tab and lite.parent_dashboard_tag:
@@ -5956,3 +6387,385 @@ async def validate_json_import(
             )
 
     return validation_result
+
+
+# ============================================================================
+# Funnel filtering (issue #939)
+# ============================================================================
+
+# Bounds for the funnel endpoint: it recomputes one distinct-values query per
+# interactive component and one count per (stage x DC), so both axes are
+# capped to keep a pathological dashboard from turning the toggle into a DoS.
+FUNNEL_MAX_TARGETS = 32
+FUNNEL_MAX_VALUES = 1000
+FUNNEL_MAX_STAGES = 12
+
+
+def _funnel_filter_is_active(f: dict) -> bool:
+    """Mirrors the frontend's ``isFilterActive``: only values that narrow data count.
+
+    Membership in a tuple of empties cannot express this: ``0 in (None, [], "",
+    False)`` is True in Python, so a slider parked at 0 would be dropped here
+    while ``clean_filter_payload`` still applies it downstream. The stage list
+    is zipped positionally against the client's own active list, so the two
+    must agree exactly or every reorder row past a divergence mislabels.
+    """
+    value = f.get("value")
+    if value is None or value == "":
+        return False
+    if isinstance(value, list):
+        # A range control that was reset emits [None, None].
+        return any(v is not None for v in value)
+    return True
+
+
+def _funnel_init_data(dashboard_data: dict, dc_id: str) -> dict[str, dict] | None:
+    """init_data for ``load_deltatable_lite`` — stored dc_config first, DB fallback."""
+    for m in dashboard_data.get("stored_metadata") or []:
+        if str(m.get("dc_id")) != str(dc_id):
+            continue
+        dc_config = m.get("dc_config") or {}
+        delta_loc = dc_config.get("delta_location")
+        if delta_loc:
+            return {
+                str(dc_id): {
+                    "delta_location": delta_loc,
+                    "dc_type": dc_config.get("type") or "table",
+                    "size_bytes": dc_config.get("size_bytes", 0),
+                }
+            }
+    from depictio.api.v1.db import deltatables_collection as _dt_coll
+
+    try:
+        dt = _dt_coll.find_one({"data_collection_id": ObjectId(str(dc_id))})
+    except Exception:
+        dt = None
+    if dt and dt.get("delta_table_location"):
+        return {
+            str(dc_id): {
+                "delta_location": dt["delta_table_location"],
+                "dc_type": "table",
+                "size_bytes": 0,
+            }
+        }
+    return None
+
+
+def _funnel_is_multiqc_dc(dashboard_data: dict, dc_id: str) -> bool:
+    for m in dashboard_data.get("stored_metadata") or []:
+        if str(m.get("dc_id")) == str(dc_id):
+            dc_type = ((m.get("dc_config") or {}).get("type") or "").lower()
+            if dc_type:
+                return dc_type == "multiqc"
+            if m.get("component_type") == "multiqc":
+                return True
+    return False
+
+
+def _funnel_multiqc_canonical_universe(dc_id: str) -> tuple[list[str], dict[str, list[str]]]:
+    """Canonical sample list + mappings for a MultiQC DC (option universe)."""
+    from depictio.api.v1.db import multiqc_collection as _mc
+
+    mappings: dict[str, list[str]] = {}
+    canonical: list[str] = []
+    seen: set[str] = set()
+    try:
+        for rep in _mc.find(
+            {"data_collection_id": {"$in": [str(dc_id), ObjectId(str(dc_id))]}},
+            {"metadata.sample_mappings": 1, "metadata.canonical_samples": 1},
+        ):
+            md = rep.get("metadata") or {}
+            for k, vlist in (md.get("sample_mappings") or {}).items():
+                bucket = mappings.setdefault(str(k), [])
+                for v in vlist or []:
+                    sv = str(v)
+                    if sv not in bucket:
+                        bucket.append(sv)
+                if str(k) not in seen:
+                    seen.add(str(k))
+                    canonical.append(str(k))
+            for s in md.get("canonical_samples") or []:
+                if str(s) not in seen:
+                    seen.add(str(s))
+                    canonical.append(str(s))
+    except Exception as e:
+        logger.debug(f"funnel: multiqc universe fetch failed for {dc_id}: {e}")
+    return canonical, mappings
+
+
+def _funnel_target_values(
+    dashboard_data: dict,
+    project_id: Any,
+    access_token: str | None,
+    target_meta: dict,
+    remaining_filters: list[dict],
+) -> dict:
+    """Available values of one interactive component's column under the
+    current filter state MINUS that component's own selection.
+
+    Returns a dict with ``status`` one of:
+      - ``unrestricted``: no other active filter reaches this DC — every value
+        is available, no query was run;
+      - ``ok``: ``values`` holds the surviving values (may be empty);
+      - ``unsupported`` / ``error``: no funnel information for this component.
+    """
+    dc_id = str(target_meta.get("dc_id") or "")
+    column = str(target_meta.get("column_name") or "")
+    if not dc_id or not column:
+        return {"status": "unsupported"}
+
+    if _funnel_is_multiqc_dc(dashboard_data, dc_id):
+        # MultiQC DCs have no Delta table; their sample filter options are the
+        # canonical sample IDs. Reuse the sample-filter resolution (which
+        # already intersects every other constraint) and map the surviving
+        # variants back onto the canonical option list.
+        pseudo_component = {
+            "index": target_meta.get("index"),
+            "dc_id": dc_id,
+            "wf_id": target_meta.get("wf_id"),
+        }
+        resolved = _resolve_multiqc_sample_filter(
+            dashboard_data, pseudo_component, remaining_filters
+        )
+        if resolved is None:
+            return {"status": "unrestricted"}
+        resolved_set = {str(s) for s in resolved}
+        canonical, mappings = _funnel_multiqc_canonical_universe(dc_id)
+        available = [c for c in canonical if ({c, *(mappings.get(c) or [])} & resolved_set)]
+        return {
+            "status": "ok",
+            "values": available[:FUNNEL_MAX_VALUES],
+            "truncated": len(available) > FUNNEL_MAX_VALUES,
+        }
+
+    # Link resolution can raise LinkResolutionError (timeout, upstream HTTP
+    # error). This endpoint answers every registered component in one batch, so
+    # letting it escape would 500 the whole batch over one slow link and blank
+    # a decorative feature dashboard-wide.
+    try:
+        merged = _resolve_link_filters_cached(
+            filters=remaining_filters,
+            target_dc_id=dc_id,
+            project_id=project_id,
+            access_token=access_token,
+            component_type="funnel",
+        )
+    except Exception as e:
+        logger.warning(f"funnel: link resolution failed for {dc_id}:{column}: {e}")
+        return {"status": "error"}
+
+    filter_metadata = _build_filter_metadata(
+        [f for f in merged if str((f.get("metadata") or {}).get("dc_id") or "") == dc_id]
+    )
+    if not filter_metadata:
+        return {"status": "unrestricted"}
+
+    wf_id = target_meta.get("wf_id")
+    if not wf_id:
+        return {"status": "unsupported"}
+
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+    try:
+        df = load_deltatable_lite(
+            workflow_id=wf_id if isinstance(wf_id, ObjectId) else ObjectId(str(wf_id)),
+            data_collection_id=dc_id,
+            metadata=filter_metadata,
+            init_data=_funnel_init_data(dashboard_data, dc_id),
+            select_columns=[column],
+        )
+    except Exception as e:
+        logger.warning(f"funnel: value computation failed for {dc_id}:{column}: {e}")
+        return {"status": "error"}
+
+    if column not in df.columns:
+        return {"status": "unsupported"}
+    values = sorted({str(v) for v in df[column].drop_nulls().unique().to_list()})
+    return {
+        "status": "ok",
+        "values": values[:FUNNEL_MAX_VALUES],
+        "truncated": len(values) > FUNNEL_MAX_VALUES,
+    }
+
+
+def _funnel_stage_counts(
+    dashboard_data: dict,
+    project_id: Any,
+    access_token: str | None,
+    active_filters: list[dict],
+    stage_dcs: list[str],
+) -> tuple[dict[str, int | None], list[dict]]:
+    """Cumulative row counts per DC as each active filter is applied in turn.
+
+    Returns ``(initial_rows_by_dc, stages)`` where each stage carries the
+    filter it added and the per-DC row counts after applying filters[0..k].
+    ``None`` counts mark DCs whose load failed at that stage.
+    """
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+    stored_meta_index = {
+        str(m.get("index")): m for m in (dashboard_data.get("stored_metadata") or [])
+    }
+
+    def count_rows(dc_id: str, cumulative: list[dict]) -> int | None:
+        # As in _funnel_target_values: a raised LinkResolutionError here would
+        # abort the whole batch, so a failed stage degrades to an unknown count.
+        try:
+            merged = _resolve_link_filters_cached(
+                filters=cumulative,
+                target_dc_id=dc_id,
+                project_id=project_id,
+                access_token=access_token,
+                component_type="funnel",
+            )
+        except Exception as e:
+            logger.warning(f"funnel: link resolution failed for stage on {dc_id}: {e}")
+            return None
+
+        filter_metadata = _build_filter_metadata(
+            [f for f in merged if str((f.get("metadata") or {}).get("dc_id") or "") == dc_id]
+        )
+        wf_id = None
+        for m in dashboard_data.get("stored_metadata") or []:
+            if str(m.get("dc_id")) == dc_id and m.get("wf_id"):
+                wf_id = m.get("wf_id")
+                break
+        if not wf_id:
+            return None
+        try:
+            df = load_deltatable_lite(
+                workflow_id=wf_id if isinstance(wf_id, ObjectId) else ObjectId(str(wf_id)),
+                data_collection_id=dc_id,
+                metadata=filter_metadata,
+                init_data=_funnel_init_data(dashboard_data, dc_id),
+            )
+            return int(df.height)
+        except Exception as e:
+            logger.debug(f"funnel: stage count failed for {dc_id}: {e}")
+            return None
+
+    initial = {dc: count_rows(dc, []) for dc in stage_dcs}
+
+    stages: list[dict] = []
+    for k, f in enumerate(active_filters[:FUNNEL_MAX_STAGES]):
+        cumulative = active_filters[: k + 1]
+        meta = stored_meta_index.get(str(f.get("index") or "")) or {}
+        stages.append(
+            {
+                "index": f.get("index"),
+                "label": meta.get("title") or meta.get("column_name") or f.get("column_name"),
+                "column_name": f.get("column_name") or meta.get("column_name"),
+                "dc_id": str(meta.get("dc_id") or (f.get("metadata") or {}).get("dc_id") or ""),
+                "value": f.get("value"),
+                "rows_by_dc": {dc: count_rows(dc, cumulative) for dc in stage_dcs},
+            }
+        )
+    return initial, stages
+
+
+@dashboards_endpoint_router.post("/funnel_values/{dashboard_id}")
+def funnel_values_endpoint(
+    dashboard_id: PyObjectId,
+    request: dict,
+    current_user: User = Depends(get_user_or_anonymous),
+    access_token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
+):
+    """Compute funnel-filtering data for the React viewer (issue #939).
+
+    For each requested interactive component, answers: given every OTHER
+    active filter (the component's own selection excluded — a value you
+    already picked must never grey itself out), which of this component's
+    values still lead to a non-empty result set? Cross-DC filters are
+    translated through the project's DC links exactly like figure/table
+    renders do (``_resolve_link_filters_cached``), so the funnel works across
+    linked data collections.
+
+    Request body:
+        {
+            "filters": [...],                # current filter list (viewer shape)
+            "target_indexes": ["...", ...],  # interactive components to compute
+            "include_stages": bool           # also compute the funnel overview
+        }
+
+    Response:
+        {
+            "targets": {"<index>": {"status": "ok"|"unrestricted"|"unsupported"|"error",
+                                     "column": str, "dc_id": str,
+                                     "values": [...], "truncated": bool}},
+            "stages": [...] | None,          # cumulative per-DC row counts
+            "initial_rows_by_dc": {...} | None,
+            "dc_labels": {"<dc_id>": str},
+            "filter_count": int
+        }
+    """
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
+
+    project_id = dashboard_data.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(status_code=403, detail="Permission denied.")
+
+    filters = request.get("filters") or []
+    target_indexes = [str(i) for i in (request.get("target_indexes") or [])][:FUNNEL_MAX_TARGETS]
+    include_stages = bool(request.get("include_stages", False))
+
+    active_filters = [f for f in filters if _funnel_filter_is_active(f)]
+
+    stored_meta_index = {
+        str(m.get("index")): m for m in (dashboard_data.get("stored_metadata") or [])
+    }
+
+    targets: dict[str, dict] = {}
+    for index in target_indexes:
+        meta = stored_meta_index.get(index)
+        if not meta or meta.get("component_type") != "interactive":
+            targets[index] = {"status": "unsupported"}
+            continue
+        remaining = [f for f in active_filters if str(f.get("index") or "") != index]
+        result = _funnel_target_values(dashboard_data, project_id, access_token, meta, remaining)
+        result.setdefault("column", meta.get("column_name"))
+        result.setdefault("dc_id", str(meta.get("dc_id") or ""))
+        targets[index] = result
+
+    stages = None
+    initial_rows_by_dc = None
+    dc_labels: dict[str, str] = {}
+    if include_stages:
+        # The DCs worth charting: every delta-backed DC referenced by data
+        # components or active filters. MultiQC DCs are skipped — they have no
+        # row-level Delta table to count.
+        stage_dcs: list[str] = []
+        seen_dcs: set[str] = set()
+        data_types = {"figure", "table", "map", "image", "card", "interactive"}
+        for m in dashboard_data.get("stored_metadata") or []:
+            dc = str(m.get("dc_id") or "")
+            if not dc or dc in seen_dcs or m.get("component_type") not in data_types:
+                continue
+            if _funnel_is_multiqc_dc(dashboard_data, dc):
+                continue
+            seen_dcs.add(dc)
+            stage_dcs.append(dc)
+
+        initial_rows_by_dc, stages = _funnel_stage_counts(
+            dashboard_data, project_id, access_token, active_filters, stage_dcs
+        )
+
+        # Human-readable DC names for the funnel view.
+        try:
+            project_doc = projects_collection.find_one({"_id": ObjectId(str(project_id))})
+            for wf in (project_doc or {}).get("workflows", []) or []:
+                for dc in wf.get("data_collections", []) or []:
+                    dc_labels[str(dc.get("_id"))] = str(
+                        dc.get("data_collection_tag") or dc.get("tag") or dc.get("_id")
+                    )
+        except Exception as e:
+            logger.debug(f"funnel: dc label lookup failed: {e}")
+
+    return {
+        "targets": targets,
+        "stages": stages,
+        "initial_rows_by_dc": initial_rows_by_dc,
+        "dc_labels": dc_labels,
+        "filter_count": len(active_filters),
+    }

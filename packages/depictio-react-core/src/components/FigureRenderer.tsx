@@ -15,6 +15,7 @@ import Plot from 'react-plotly.js';
 import Plotly from 'plotly.js';
 
 import { renderFigure, InteractiveFilter, StoredMetadata, FigureResponse } from '../api';
+import type { GroupRenderState } from '../selectionGroups';
 import { enqueueFetch, isStaleFetch } from '../fetchQueue';
 import { extractScatterSelection } from '../selection';
 import { useInView } from '../hooks/useInView';
@@ -23,6 +24,7 @@ import { useTransientFlag } from '../hooks/useTransientFlag';
 import { ActiveHighlight } from '../highlight';
 import { asNumberArray, extractCustomdataIds } from '../plotlyData';
 import { adaptGlTraces, PlotlyTrace, useWebglSlot } from '../webglBudget';
+import { useUiScale } from '../uiScale';
 import RefetchOverlay from './RefetchOverlay';
 import ComponentSkeleton from './ComponentSkeleton';
 import { useReportLoadStatus } from './DashboardLoadingProvider';
@@ -43,6 +45,9 @@ interface FigureRendererProps {
   /** Reports the sample/full state so the chrome can render a "load all points"
    *  action icon. ``null`` when the figure isn't downsampled. */
   onLoadAllState?: (state: LoadAllState | null) => void;
+  /** Selection groups to color the figure by. Folded into the render request;
+   *  the server annotates rows and colors traces by group membership. */
+  groupRender?: GroupRenderState;
 }
 
 /**
@@ -65,6 +70,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   refreshTick,
   activeHighlight,
   onLoadAllState,
+  groupRender,
 }) => {
   const [figure, setFigure] = useState<{ data?: unknown[]; layout?: Record<string, unknown> } | null>(null);
   const [renderMeta, setRenderMeta] = useState<FigureResponse['metadata'] | null>(null);
@@ -75,6 +81,11 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   const [error, setError] = useState<string | null>(null);
   const { colorScheme } = useMantineColorScheme();
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
+  const uiScale = useUiScale();
+  // Per-figure font-size multiplier on top of the dashboard-wide preference.
+  const componentFontScale =
+    typeof metadata.font_scale === 'number' && metadata.font_scale > 0 ? metadata.font_scale : 1;
+  const effectiveFontScale = uiScale * componentFontScale;
   const [containerRef, inView] = useInView<HTMLDivElement>('200px');
 
   // Cross-filtering only fires meaningful events on scatter-like traces —
@@ -101,6 +112,11 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   // a lasso shrinks the chart to the selected points and the user can't lasso
   // again. Strip our own ``scatter_selection`` entry before fetching. Other
   // components still see it in their filters[] and narrow accordingly.
+  //
+  // Deliberately NOT stripped: a `group_filter` derived from a selection that
+  // was saved on this very figure. Once saved, a group is an ordinary
+  // dashboard filter (the live selection slot has been freed), so it narrows
+  // its source figure like everything else — see selectionGroups.ts.
   const filtersForFetch = useMemo(
     () =>
       filters.filter(
@@ -136,6 +152,15 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
           theme,
           fullLoad,
           ctrl.signal,
+          groupRender
+            ? {
+                groups: groupRender.groups,
+                colorByGroup: groupRender.colorByGroup,
+                colorByColumn: groupRender.colorByColumn,
+                display: groupRender.display,
+                showOther: groupRender.showOther,
+              }
+            : undefined,
         ),
       metadata.layout?.y ?? 0,
     )
@@ -163,7 +188,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
       ctrl.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, JSON.stringify(filtersForFetch), theme, inView, refreshTick, fullLoad]);
+  }, [dashboardId, metadata.index, JSON.stringify(filtersForFetch), theme, inView, refreshTick, fullLoad, JSON.stringify(groupRender ?? null)]);
 
   // First-paint loader vs refetch overlay: only show the big "Rendering…"
   // block until we have something to show; subsequent fetches keep the
@@ -393,6 +418,16 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
         ...((figure?.layout?.margin as Record<string, unknown>) || {}),
       },
     };
+    if (effectiveFontScale !== 1) {
+      // The mantine templates set font family only, so server figures land at
+      // Plotly's default 12px base. Scale it with the dashboard-wide font
+      // preference times this figure's own `font_scale` (labels, ticks and
+      // legend all inherit layout.font); per-figure size overrides (if any)
+      // are preserved by scaling whatever base the server sent.
+      const serverFont = (figure?.layout?.font as Record<string, unknown>) || {};
+      const serverSize = typeof serverFont.size === 'number' ? serverFont.size : 12;
+      base.font = { ...serverFont, size: serverSize * effectiveFontScale };
+    }
     if (selectionEnabled && !base.dragmode) {
       const mode =
         typeof metadata.selection_mode === 'string' ? metadata.selection_mode : 'lasso';
@@ -407,7 +442,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     // changes don't bump refreshTick, so zoom/pan still survive those.
     base.uirevision = `tick-${refreshTick ?? 0}`;
     return base;
-  }, [figure, selectionEnabled, metadata.selection_mode, refreshTick]);
+  }, [figure, selectionEnabled, metadata.selection_mode, refreshTick, effectiveFontScale]);
 
   // "N of M points" indicator. Passive/informational — the full-load toggle
   // itself lives in the component chrome (see the onLoadAllState effect below),
@@ -433,6 +468,20 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     }
     return null;
   }, [renderMeta, fullLoad]);
+
+  // "Grouped" / "by <column>" tag: the server confirmed it colored this figure
+  // by the user's selection groups or by the global Color-by column (it may
+  // decline, e.g. when the column isn't in this figure's data collection).
+  // Explicit because both modes temporarily override the figure's own `color`
+  // mapping.
+  let groupedBadgeLabel: string | null = null;
+  if (renderMeta?.group_colored) groupedBadgeLabel = 'grouped';
+  else if (renderMeta?.column_colored) groupedBadgeLabel = `by ${renderMeta.column_colored}`;
+  const groupedBadge = groupedBadgeLabel ? (
+    <Badge variant="light" color="blue" size="xs" radius="sm">
+      {groupedBadgeLabel}
+    </Badge>
+  ) : null;
 
   // Publish the sample/full state so the chrome can render the "load all points"
   // action icon in the same cluster as reset / fullscreen. Bidirectional: the
@@ -468,7 +517,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
         flexDirection: 'column',
       }}
     >
-      {(metadata.title || reductionBadge) && (
+      {(metadata.title || reductionBadge || groupedBadge) && (
         <Group gap="xs" mb="xs" wrap="nowrap">
           {metadata.title && (
             <Text fw={600} size="sm">
@@ -476,6 +525,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
             </Text>
           )}
           {reductionBadge}
+          {groupedBadge}
         </Group>
       )}
       {showInitialLoader && <ComponentSkeleton variant="block" />}

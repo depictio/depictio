@@ -15,11 +15,63 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.services.figure.error_figure import create_error_figure
 from depictio.api.v1.services.figure.heatmap import collect_heatmap_kwargs
 from depictio.api.v1.services.multiqc.themes import get_theme_template
+from depictio.models.models.branding import BrandTheme, resolve_brand_theme
 
 # Above this row count, per-marker plots are downsampled before being handed to
 # Plotly: a 1M-row scatter serialises to tens of MB of trace JSON that stalls the
 # browser, and beyond ~50k markers the extra points are visually indistinguishable.
 FIGURE_MAX_POINTS = 50_000
+
+# Template names that mean "follow the UI theme" rather than an explicit style
+# choice. Legacy components carry `template: "mantine_light"` as a stamped
+# default, so honoring it literally would lock them to light mode.
+_THEME_FOLLOW_TEMPLATES = frozenset({"mantine_light", "mantine_dark"})
+
+
+def resolve_template_override(requested: str | None) -> str | None:
+    """The explicit Plotly template a component/dashboard picked, if any.
+
+    Returns ``None`` for unset values and for the mantine sentinels — both mean
+    "use the theme-matched mantine template".
+    """
+    if requested and requested not in _THEME_FOLLOW_TEMPLATES:
+        return requested
+    return None
+
+
+def merge_dashboard_brand_theme(brand_theme: Any, dict_kwargs: dict) -> dict:
+    """Apply a dashboard's brand theme figure defaults to a figure's kwargs (#397).
+
+    ``brand_theme`` is a ``BrandTheme`` or its dict form (what Mongo stores).
+    It is resolved first, so a dashboard that only sets ``primary`` still hands
+    the figure a derived colorway — the same one the SPA received.
+
+    Component-explicit choices always win:
+    - ``colorway`` fills ``color_discrete_sequence`` only when the component
+      sets neither a sequence nor a ``color_discrete_map``.
+    - ``template`` applies only when the component's own template is unset or a
+      mantine sentinel (i.e. "follow the UI theme" — see
+      ``resolve_template_override``).
+    """
+    if not brand_theme:
+        return dict_kwargs
+
+    theme = brand_theme if isinstance(brand_theme, BrandTheme) else BrandTheme(**brand_theme)
+    plots = resolve_brand_theme(theme).plots
+    if not plots:
+        return dict_kwargs
+
+    merged = dict(dict_kwargs)
+    if (
+        plots.colorway
+        and not merged.get("color_discrete_sequence")
+        and not merged.get("color_discrete_map")
+    ):
+        merged["color_discrete_sequence"] = plots.colorway
+    if plots.template and resolve_template_override(merged.get("template")) is None:
+        merged["template"] = plots.template
+    return merged
+
 
 # Scatter-family plots — one marker per row, and the only types we force to WebGL.
 _POINT_PLOT_TYPES = frozenset(
@@ -334,7 +386,10 @@ def create_figure_from_data(
             elif v != "" and v != [] or (k in keep_empty_string_params and v == ""):
                 cleaned_kwargs[k] = v
 
-        cleaned_kwargs["template"] = template
+        # An explicit template choice (component picker or dashboard brand theme)
+        # wins; otherwise follow the UI theme (see resolve_template_override).
+        if resolve_template_override(cleaned_kwargs.get("template")) is None:
+            cleaned_kwargs["template"] = template
 
         if selection_enabled and selection_column and selection_column in plot_df.columns:
             existing_custom_data = cleaned_kwargs.get("custom_data", [])

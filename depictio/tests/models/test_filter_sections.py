@@ -179,6 +179,8 @@ class TestToFullPassthrough:
                 "color": "teal",
                 "description": None,
                 "collapsed": False,
+                "persistent": False,
+                "pin": "top",
             }
         ]
 
@@ -333,3 +335,168 @@ class TestGridSections:
         assert len(back.grid_sections) == 1
         assert back.grid_sections[0].name == "QC"
         assert back.grid_sections[0].collapsed is True
+
+
+# ---------------------------------------------------------------------------
+# `persistent` — cross-tab fan-out flag
+# ---------------------------------------------------------------------------
+
+
+class TestPersistentFlag:
+    """A section marked persistent renders on every tab of its dashboard family
+    (grid sections above the sibling tabs' grids, filter sections' controls in
+    every tab's panel). The flag is presentation-only server-side: it must
+    default off, parse from YAML, and survive both round-trip directions."""
+
+    def test_defaults_to_false(self):
+        assert FilterSectionSpec(name="Sample metadata").persistent is False
+
+    def test_parses_from_dashboard_yaml_shape(self):
+        dash = _dashboard(
+            [_figure("f", section="Sample metadata")],
+            grid_sections=[{"name": "Sample metadata", "persistent": True}],
+        )
+        assert dash.grid_sections[0].persistent is True
+
+    def test_reaches_the_full_dashboard(self):
+        dash = _dashboard(
+            [_interactive("a", section="Sample filters")],
+            filter_sections=[{"name": "Sample filters", "persistent": True}],
+        )
+        assert dash.to_full()["filter_sections"][0]["persistent"] is True
+
+    def test_survives_a_round_trip(self):
+        dash = _dashboard(
+            [_figure("f", section="Sample metadata")],
+            grid_sections=[{"name": "Sample metadata", "persistent": True}],
+        )
+        back = DashboardDataLite.from_full(dash.to_full())
+        assert back.grid_sections[0].persistent is True
+
+    def test_exported_yaml_carries_the_flag(self):
+        dash = _dashboard(
+            [_figure("f", section="Sample metadata")],
+            grid_sections=[{"name": "Sample metadata", "persistent": True}],
+        )
+        yaml_text = DashboardDataLite.from_full(dash.to_full()).to_yaml()
+        assert "persistent: true" in yaml_text
+
+
+class TestPinField:
+    """`pin` says which edge a persistent section sits at, on every tab of the
+    family including the one that owns it. It exists so "shows everywhere" and
+    "leads the page" stop being the same decision: a reference table wants the
+    first, not the second."""
+
+    def test_defaults_to_top(self):
+        """The placement persistent sections had before `pin` existed."""
+        assert FilterSectionSpec(name="Sample metadata").pin == "top"
+
+    def test_accepts_bottom(self):
+        assert FilterSectionSpec(name="Sample metadata", pin="bottom").pin == "bottom"
+
+    def test_rejects_any_other_edge(self):
+        with pytest.raises(ValidationError):
+            FilterSectionSpec(name="Sample metadata", pin="middle")  # type: ignore[arg-type]
+
+    def test_survives_a_round_trip(self):
+        dash = _dashboard(
+            [_figure("f", section="Sample metadata")],
+            grid_sections=[{"name": "Sample metadata", "persistent": True, "pin": "bottom"}],
+        )
+        back = DashboardDataLite.from_full(dash.to_full())
+        assert back.grid_sections[0].pin == "bottom"
+
+    def test_exported_yaml_carries_the_edge(self):
+        dash = _dashboard(
+            [_figure("f", section="Sample metadata")],
+            grid_sections=[{"name": "Sample metadata", "persistent": True, "pin": "bottom"}],
+        )
+        yaml_text = DashboardDataLite.from_full(dash.to_full()).to_yaml()
+        assert "pin: bottom" in yaml_text
+
+
+# ---------------------------------------------------------------------------
+# Text components carry no data binding through an export
+# ---------------------------------------------------------------------------
+
+
+class TestTextComponentExport:
+    """`to_full` binds neither a workflow nor a data collection to a text
+    component. An export that inherited a collection tag from a leftover
+    `dc_config` produced a component the import could not resolve — no
+    `workflow_tag` to resolve it against — so every text component was dropped
+    on the way back in, which is what broke the iris YAML round-trip."""
+
+    def _full_with_text(self, **extra) -> dict:
+        return {
+            "title": "Test",
+            "stored_metadata": [
+                {
+                    "index": "text-1",
+                    "component_type": "text",
+                    "title": "Intro",
+                    "data_collection_tag": "",
+                    "workflow_tag": "",
+                    **extra,
+                }
+            ],
+        }
+
+    def test_leftover_dc_config_is_not_exported(self):
+        full = self._full_with_text(dc_config={"data_collection_tag": "iris_table"})
+        comp = DashboardDataLite.from_full(full).components[0]
+        assert comp.data_collection_tag in (None, "")  # type: ignore[union-attr]
+        assert comp.workflow_tag in (None, "")  # type: ignore[union-attr]
+
+    def test_tag_survives_a_round_trip_through_the_export(self):
+        """The tag hash reads the bindings the export writes, not the ones the
+        stored document carries. A seeded text component keeps a `dc_config`
+        the import never writes back, so hashing the stored value gave it one
+        tag on the way out and a different one on the next cycle — the iris
+        round-trip failed on exactly that, comparing components by tag."""
+        seeded = self._full_with_text(dc_config={"data_collection_tag": "iris_table"})
+        reimported = self._full_with_text()  # what `to_full` writes back
+
+        assert (
+            DashboardDataLite.from_full(seeded).components[0].tag  # type: ignore[union-attr]
+            == DashboardDataLite.from_full(reimported).components[0].tag  # type: ignore[union-attr]
+        )
+
+    def test_a_bound_figure_keeps_its_historical_tag(self):
+        """Only text components lose their bindings before hashing, so a bound
+        component's tag must not move — those tags are already in exported
+        YAML and in the checked-in seeds."""
+        full = {
+            "title": "Test",
+            "stored_metadata": [
+                {
+                    "index": "fig-1",
+                    "component_type": "figure",
+                    "visu_type": "scatter",
+                    "workflow_tag": "python/iris_workflow",
+                    "dc_config": {"data_collection_tag": "iris_table"},
+                }
+            ],
+        }
+        assert (
+            DashboardDataLite.from_full(full).components[0].tag  # type: ignore[union-attr]
+            == "figure-fig-1-efd181"
+        )
+
+    def test_a_bound_figure_still_exports_its_tags(self):
+        full = {
+            "title": "Test",
+            "stored_metadata": [
+                {
+                    "index": "fig-1",
+                    "component_type": "figure",
+                    "visu_type": "scatter",
+                    "workflow_tag": "python/iris_workflow",
+                    "dc_config": {"data_collection_tag": "iris_table"},
+                }
+            ],
+        }
+        comp = DashboardDataLite.from_full(full).components[0]
+        assert comp.data_collection_tag == "iris_table"  # type: ignore[union-attr]
+        assert comp.workflow_tag == "python/iris_workflow"  # type: ignore[union-attr]

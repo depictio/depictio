@@ -237,6 +237,111 @@ def _prune_missing_optional_single_file_dcs(
     return config, sorted(removed)
 
 
+def prune_links_for_tags(config: dict[str, Any], tags: set[str]) -> None:
+    """Drop every link whose source or target is one of ``tags``. In place.
+
+    Removing a DC without removing the links that name it leaves the config
+    referencing a collection that no longer exists, so the two always move
+    together.
+    """
+    if not tags:
+        return
+    config["links"] = [
+        link
+        for link in config.get("links", [])
+        if link.get("source_dc_tag") not in tags and link.get("target_dc_tag") not in tags
+    ]
+
+
+def materialize_recipe_seeds(
+    config: dict[str, Any],
+    data_root: str,
+    *,
+    drop_missing: bool,
+) -> tuple[list[str], list[str]]:
+    """Rewrite ``source: transformed`` DCs into file scans over pre-computed seeds.
+
+    A reference template ships the output of each of its recipes as a committed
+    ``{data_root}/{dc_tag}.tsv``. When that seed is present the recipe is
+    short-circuited entirely: the ``transform`` block is dropped and replaced by a
+    single-file scan of the seed. This is what makes a bundled project ingestible
+    from its own directory even though it does not ship the recipes' raw inputs.
+
+    Shared by the boot-time reference seeding (``resolve_template_for_init``) and
+    the CLI's ``--template`` path so the two cannot drift. The seed always wins
+    over the recipe, which keeps both producers byte-identical.
+
+    Args:
+        config: Resolved project config dict. Modified in place.
+        data_root: Absolute path the seed convention is resolved against.
+        drop_missing: What to do with a recipe DC that has no seed. ``True``
+            removes it (and its links) — the init behaviour, where one missing
+            seed would otherwise abort the whole workflow scan. ``False`` leaves
+            it untouched so its recipe runs normally — the CLI behaviour.
+
+    Returns:
+        ``(materialized_tags, missing_seed_tags)``, both sorted.
+    """
+    materialized: list[str] = []
+    missing: set[str] = set()
+
+    for workflow in config.get("workflows", []):
+        surviving = []
+        for dc in workflow.get("data_collections", []):
+            dc_config = dc.get("config", {})
+            if dc_config.get("source") != "transformed" or "transform" not in dc_config:
+                surviving.append(dc)
+                continue
+
+            dc_tag = dc["data_collection_tag"]
+            # Convention: pre-computed files are named {dc_tag}.tsv
+            seed_path = str(Path(data_root) / f"{dc_tag}.tsv")
+            if not Path(seed_path).exists():
+                if drop_missing:
+                    missing.add(dc_tag)
+                    logger.warning(
+                        f"Seed resolver: skipping recipe DC '{dc_tag}' — "
+                        f"pre-computed seed not found at {seed_path}"
+                    )
+                    continue
+                # No seed and the caller wants the recipe: leave the DC exactly
+                # as the template declared it.
+                surviving.append(dc)
+                continue
+
+            # Keep ``source: transformed`` on the DC so the React viewer
+            # (data-source info card, admin panel, builder dropdown) surfaces the
+            # lineage — the data IS the output of a recipe, just materialised as a
+            # seed file rather than computed at scan time. Only the ``transform``
+            # step itself is dropped (it's been replaced with the file scan), and
+            # that absence is exactly what tells the CLI's deltatable path to treat
+            # the DC as a plain file scan.
+            dc_config.pop("transform", None)
+            dc_config["scan"] = {
+                "mode": "single",
+                "scan_parameters": {"filename": seed_path},
+            }
+            # Bundled recipe seeds are tab-separated by convention
+            # ({data_root}/{dc_tag}.tsv). The template's original
+            # `dc_specific_properties.format` describes the recipe's *input*
+            # source (e.g. summary_metrics consumes a real CSV from multiqc),
+            # which is irrelevant once we've replaced the recipe with a file
+            # scan. Force the seed format to TSV so polars uses the right
+            # separator — otherwise a CSV-declared, TSV-bundled DC parses the
+            # whole tab-row as one column.
+            dc_specific = dc_config.get("dc_specific_properties") or {}
+            dc_specific["format"] = "tsv"
+            dc_config["dc_specific_properties"] = dc_specific
+            materialized.append(dc_tag)
+            logger.debug(f"Seed resolver: converted recipe DC '{dc_tag}' → file scan: {seed_path}")
+            surviving.append(dc)
+
+        workflow["data_collections"] = surviving
+
+    prune_links_for_tags(config, missing)
+    return sorted(materialized), sorted(missing)
+
+
 def _collect_dc_superset(config: dict[str, Any]) -> list[dict[str, Any]]:
     """Snapshot every DC across all workflows as {tag, type, optional}.
 
@@ -451,7 +556,14 @@ def _check_dc_source_files(
     dc: dict[str, Any],
     data_root: str,
 ) -> str | None:
-    """Check if a DC's source files exist. Return missing path or None if all OK."""
+    """Check if a DC's source files exist. Return missing path or None if all OK.
+
+    Unused: recipe DCs are handled by `materialize_recipe_seeds`, which
+    short-circuits the recipe when a seed is present and otherwise leaves it to
+    fail loudly at processing time. Kept — with `_remove_dcs_with_missing_files`
+    and `_log_removal_report` — pending a decision on whether to wire up
+    source-existence pruning or delete the three of them.
+    """
     config = dc.get("config", {})
     source = config.get("source")
 
@@ -735,6 +847,7 @@ def resolve_template(
     4. Validates required variables; skips optional vars gracefully if absent
     5. Substitutes template variables in all paths
     6. Applies conditional rules (remove DCs, prune links, select dashboards)
+    6c. Materializes recipe DCs that ship a pre-computed seed
     7. Strips hardcoded IDs
     8. Sets project name
     9. Builds TemplateOrigin for DB tracking
@@ -873,6 +986,26 @@ def resolve_template(
         )
         for tag in pruned_optional:
             removal_reasons.setdefault(tag, "optional source file not found")
+
+    # 6c. Materialize recipe DCs that ship a pre-computed seed
+    #     ({data_root}/{dc_tag}.tsv). Parity with the boot-time reference
+    #     resolver: the seed short-circuits the recipe, so a bundled template is
+    #     ingestible from its own directory even though it does not ship the
+    #     recipes' raw inputs. A DC with no seed is left untouched and its recipe
+    #     runs exactly as before.
+    #
+    #     Placement is constrained on both sides: after `_apply_conditionals` so a
+    #     gated-out DC stays gated out even when a seed sits next to it, and
+    #     before `_strip_ids` / `_build_expected_dcs` so tags and links are still
+    #     intact and the manifest reflects the final config.
+    materialized_seeds, _ = materialize_recipe_seeds(
+        resolved_config, data_root_abs, drop_missing=False
+    )
+    if materialized_seeds:
+        logger.info(
+            f"Materialized {len(materialized_seeds)} recipe DC(s) from pre-computed seeds: "
+            f"{', '.join(materialized_seeds)}"
+        )
 
     # 7. Strip hardcoded IDs (fresh project gets new ones)
     resolved_config = _strip_ids(resolved_config)

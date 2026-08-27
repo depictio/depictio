@@ -19,7 +19,7 @@ Component Architecture:
 
 import re
 from pathlib import Path
-from typing import Any, ClassVar, Optional
+from typing import Any, ClassVar, Literal, Optional
 
 import yaml
 from pydantic import (
@@ -43,6 +43,7 @@ from depictio.models.components.lite import (
 )
 from depictio.models.logging import logger
 from depictio.models.models.base import MongoModel, PyObjectId, convert_objectid_to_str
+from depictio.models.models.branding import BrandTheme
 from depictio.models.models.users import Permission
 
 
@@ -154,6 +155,22 @@ class FilterSectionSpec(BaseModel):
         description="Start the section collapsed. Defaults to expanded so no filter is "
         "hidden on first visit.",
     )
+    persistent: bool = Field(
+        default=False,
+        description="Render this section on every tab of the dashboard family. Grid "
+        "sections appear read-only alongside each sibling tab's own content; filter "
+        "sections' controls appear in every tab's filter panel and their values "
+        "survive tab switches. No effect on single-tab dashboards.",
+    )
+    pin: Literal["top", "bottom"] = Field(
+        default="top",
+        description="Where a persistent section sits relative to the tab's other "
+        "sections: 'top' before them, 'bottom' after. Applied on every tab of the "
+        "family, the owning one included, so the section keeps the same place "
+        "wherever the viewer lands. 'bottom' is what a reference block (a raw-data "
+        "table, a legend) usually wants: present everywhere without preceding the "
+        "tab's own introduction. Ignored unless `persistent` is set.",
+    )
 
 
 class DashboardDataLite(BaseModel):
@@ -236,6 +253,18 @@ class DashboardDataLite(BaseModel):
         default=None, description="Workflow system (e.g., 'nf-core', 'snakemake')"
     )
 
+    # Funnel filtering (issue #939). On by default: knowing which values still
+    # lead somewhere is the point of a filter panel, so authors should have to
+    # opt *out*, not in. The cost is one extra availability query per filter
+    # change, which the author can turn off in the dashboard settings.
+    funnel_filtering: bool = Field(
+        default=True,
+        description="Enable funnel filtering: values in other interactive "
+        "components that no longer lead to a non-empty result set are "
+        "visually distinguished, and the cascading restriction can be "
+        "inspected in a funnel overview.",
+    )
+
     # Left filter panel presentation (ordering + icons for named sections)
     filter_sections: list[FilterSectionSpec] = Field(
         default_factory=list,
@@ -250,6 +279,15 @@ class DashboardDataLite(BaseModel):
         default_factory=list,
         description="Optional presentation for the main grid's sections. Same shape "
         "as `filter_sections`, applied to non-interactive components.",
+    )
+
+    # Dashboard-level brand override (#397). Same shape as the instance
+    # branding; unset fields inherit from it, so a dashboard only states what
+    # it wants to differ. Covers logo, palette, surfaces and figure defaults.
+    brand_theme: BrandTheme | None = Field(
+        default=None,
+        description="Optional per-dashboard brand override (logo, colors, surfaces, plot "
+        "template/colorway). Unset fields inherit the instance branding.",
     )
 
     # Components using Lite models
@@ -362,8 +400,10 @@ class DashboardDataLite(BaseModel):
         "icon_color",
         "icon_variant",
         "workflow_system",
+        "funnel_filtering",
         "filter_sections",
         "grid_sections",
+        "brand_theme",
     ]
 
     @staticmethod
@@ -737,6 +777,59 @@ class DashboardDataLite(BaseModel):
         except ValueError as e:
             return False, [{"type": "yaml_error", "msg": str(e)}]
 
+    #: Static mounts that only exist on the instance that uploaded the file.
+    _LOCAL_UPLOAD_PREFIXES: ClassVar[tuple[str, ...]] = (
+        "/static/dashboard_logos/",
+        "/static/branding/",
+    )
+
+    @classmethod
+    def _exportable_logo_url(cls, logo_url: Any) -> str | None:
+        """Only external logo URLs survive an export.
+
+        Uploaded logos live under instance-local static mounts, named after
+        this instance's ``dashboard_id`` (which imports re-mint) and never
+        shipped with the code — carrying the URL into a YAML/seed would render
+        a silently broken image on any other deployment. Hand-written external
+        URLs round-trip untouched.
+        """
+        if not logo_url or not isinstance(logo_url, str):
+            return None
+        if logo_url.startswith(cls._LOCAL_UPLOAD_PREFIXES):
+            return None
+        return logo_url
+
+    @classmethod
+    def _exportable_brand_theme(cls, brand_theme: Any) -> "BrandTheme | None":
+        """A dashboard brand theme safe to ship in a YAML/seed.
+
+        Strips instance-local logo uploads (see ``_exportable_logo_url``) and
+        drops a theme that carries nothing but defaults, so an untouched
+        dashboard exports no ``brand_theme:`` block at all.
+        """
+        if not brand_theme:
+            return None
+        theme = (
+            brand_theme
+            if isinstance(brand_theme, BrandTheme)
+            else BrandTheme(**brand_theme)
+            if isinstance(brand_theme, dict)
+            else None
+        )
+        if theme is None:
+            return None
+        theme = theme.model_copy(deep=True)
+        # Derived on every resolve, so shipping it would only let a stale copy
+        # travel with the YAML.
+        theme.palettes = None
+        theme.logo_url = cls._exportable_logo_url(theme.logo_url)
+        theme.logo_url_dark = cls._exportable_logo_url(theme.logo_url_dark)
+        if theme.logo_mode == "custom" and not theme.logo_url:
+            # The URL didn't survive the export, so "custom" would resolve to a
+            # broken image on the importing instance. Fall back to inheriting.
+            theme.logo_mode = None
+        return None if theme.is_empty else theme
+
     @classmethod
     def from_full(cls, dashboard_data: dict[str, Any]) -> "DashboardDataLite":
         """Convert full dashboard dict to lite format.
@@ -821,10 +914,6 @@ class DashboardDataLite(BaseModel):
         for idx, comp in enumerate(dashboard_data.get("stored_metadata", [])):
             comp_type = comp.get("component_type", "figure")
 
-            # Generate semantic tag with format: {type}-{semantic_id}-{hash[:6]}
-            # Uses existing index if available, otherwise generates from component data
-            tag = comp.get("tag") or generate_component_id(comp, idx)
-
             # Extract workflow and data collection tags (mandatory fields)
             workflow_tag = comp.get("workflow_tag") or comp.get("wf_tag", "")
             dc_config = comp.get("dc_config", {})
@@ -832,13 +921,43 @@ class DashboardDataLite(BaseModel):
                 "data_collection_tag", ""
             )
 
+            # Text components are stand-alone: `to_full` binds neither a workflow
+            # nor a data collection to them. Exporting a collection tag inherited
+            # from a leftover `dc_config` produced a component the import could
+            # not resolve — there is no `workflow_tag` to resolve it against — so
+            # every text component was silently dropped on the way back in.
+            if comp_type == "text":
+                workflow_tag = ""
+                data_collection_tag = ""
+
+            # Generate semantic tag with format: {type}-{semantic_id}-{hash[:6]}
+            # Uses existing index if available, otherwise generates from component data.
+            #
+            # The hash is fed the bindings this export actually writes, not the
+            # ones the stored document happens to carry. A text component whose
+            # stored `dc_config` still names a collection would otherwise hash
+            # with that collection here and without it after a round-trip — the
+            # import writes no binding back — so its tag changed on every cycle.
+            # Non-text components are unaffected: their resolved tags are what
+            # the hash already read.
+            tag = comp.get("tag") or generate_component_id(
+                {
+                    **comp,
+                    "workflow_tag": workflow_tag,
+                    "wf_tag": workflow_tag,
+                    "data_collection_tag": data_collection_tag,
+                    "dc_config": {},
+                },
+                idx,
+            )
+
             # Log warning if mandatory tags are missing
-            if not workflow_tag:
+            if comp_type != "text" and not workflow_tag:
                 logger.warning(
                     f"Component {tag} (type: {comp_type}) missing workflow_tag. "
                     f"Component has wf_id: {comp.get('wf_id') is not None}"
                 )
-            if not data_collection_tag:
+            if comp_type != "text" and not data_collection_tag:
                 logger.warning(
                     f"Component {tag} (type: {comp_type}) missing data_collection_tag. "
                     f"Component has dc_id: {comp.get('dc_id') is not None}"
@@ -883,14 +1002,18 @@ class DashboardDataLite(BaseModel):
                 figure_params = filter_dict_kwargs(comp.get("dict_kwargs", {}))
                 if figure_params:
                     lite_comp["figure_params"] = figure_params
-                # Export mode (ui/code), code_content, and selection_enabled
+                # Export mode (ui/code), code_content, and selection fields
                 lite_comp["mode"] = comp.get("mode", "ui")
                 if comp.get("code_content"):
                     lite_comp["code_content"] = comp["code_content"]
                 if comp.get("selection_enabled") is not None:
                     lite_comp["selection_enabled"] = comp["selection_enabled"]
+                if comp.get("selection_column"):
+                    lite_comp["selection_column"] = comp["selection_column"]
                 if comp.get("max_points") is not None:
                     lite_comp["max_points"] = comp["max_points"]
+                if comp.get("font_scale") and comp["font_scale"] != 1:
+                    lite_comp["font_scale"] = comp["font_scale"]
 
             elif comp_type == "card":
                 lite_comp["aggregation"] = comp.get("aggregation", "")
@@ -1027,6 +1150,8 @@ class DashboardDataLite(BaseModel):
             # "declared nowhere, sorted by first appearance".
             filter_sections=dashboard_data.get("filter_sections") or [],
             grid_sections=dashboard_data.get("grid_sections") or [],
+            funnel_filtering=bool(dashboard_data.get("funnel_filtering", True)),
+            brand_theme=cls._exportable_brand_theme(dashboard_data.get("brand_theme")),
             # Tab fields
             is_main_tab=dashboard_data.get("is_main_tab", True),
             tab_order=dashboard_data.get("tab_order", 0),
@@ -1095,6 +1220,10 @@ class DashboardDataLite(BaseModel):
             # order sections and render their icons.
             "filter_sections": [s.model_dump() for s in self.filter_sections],
             "grid_sections": [s.model_dump() for s in self.grid_sections],
+            "funnel_filtering": self.funnel_filtering,
+            "brand_theme": self.brand_theme.model_dump(exclude_none=True)
+            if self.brand_theme
+            else None,
             # parent_dashboard_tag is resolved to parent_dashboard_id during import
         }
 
@@ -1141,6 +1270,7 @@ class DashboardDataLite(BaseModel):
                         # Selection filtering fields
                         "selection_enabled": comp_dict.get("selection_enabled", False),
                         "selection_column": comp_dict.get("selection_column"),
+                        "font_scale": comp_dict.get("font_scale"),
                     }
                 )
 
@@ -1421,6 +1551,43 @@ class DashboardData(MongoModel):
     # sections existed, which renders exactly as it did then.
     filter_sections: list[FilterSectionSpec] = []
     grid_sections: list[FilterSectionSpec] = []
+    # Funnel filtering (issue #939). On by default; authors opt out per
+    # dashboard from the settings drawer.
+    funnel_filtering: bool = True
+    # Dashboard-level brand override (logo, palette, surfaces, figure
+    # defaults). None for dashboards saved before the feature existed — those
+    # inherit the instance branding exactly as they did before.
+    brand_theme: BrandTheme | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _fold_legacy_appearance(cls, data: Any) -> Any:
+        """Read the two appearance fields that predate `brand_theme`.
+
+        `logo_url` and `plot_theme` were separate top-level fields before the
+        brand theme absorbed them. The model forbids extras, so a document
+        still carrying them would fail to load and take the whole dashboard
+        down with a 500 rather than just losing its colours.
+        """
+        if not isinstance(data, dict):
+            return data
+        if "logo_url" not in data and "plot_theme" not in data:
+            return data
+
+        data = dict(data)
+        theme = dict(data.get("brand_theme") or {})
+        logo_url = data.pop("logo_url", None)
+        plot_theme = data.pop("plot_theme", None)
+        if logo_url and not theme.get("logo_url"):
+            theme["logo_url"] = logo_url
+            theme.setdefault("logo_mode", "custom")
+        if isinstance(plot_theme, dict) and not theme.get("plots"):
+            plots = {k: v for k, v in plot_theme.items() if k in ("template", "colorway")}
+            if plots:
+                theme["plots"] = plots
+        data["brand_theme"] = theme or None
+        return data
+
     buttons_data: dict = {
         "unified_edit_mode": True,  # Default edit mode ON for dashboard owners
         "add_components_button": {"count": 0},

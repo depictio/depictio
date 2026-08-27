@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
 import { ActionIcon, Group } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
@@ -9,6 +9,9 @@ import InspectButton from './InspectButton';
 import { useInspectorControl } from './InspectorContext';
 import DownloadButton from './DownloadButton';
 import ResetButton from './ResetButton';
+import SaveGroupAction, { SaveGroupContext, SelectionHintAction } from './SaveGroupAction';
+import { supportsSelectionGrouping } from '../../selection';
+import { useGroupingColorVar } from '../../selectionGroups';
 import './chrome.css';
 
 export type ChromeAction =
@@ -216,12 +219,75 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
     }
   };
 
+  // Analysis mode marks the components a selection can be saved from. Derived
+  // from the context rather than threaded as a prop because `wrapWithChrome`
+  // has ten call sites and only four component types can ever match — and the
+  // context being mounted at all is the same signal that this host is
+  // interactive (see the chromeExtras comment in ComponentRenderer).
+  const saveGroupApi = useContext(SaveGroupContext);
+  const selectionCapable =
+    Boolean(saveGroupApi?.analysisEngaged) &&
+    supportsSelectionGrouping(metadata, Boolean(saveGroupApi));
+  const groupingColorVar = useGroupingColorVar();
+
+  // Flatten `extraActions` once, then split the grouping action off the front.
+  // It leads the stack — above metadata and the rest — because it is the only
+  // action that answers "what can I do with this component *right now*"; the
+  // others are always-available utilities. Flattening fragments first is what
+  // lets `<>{save}{extras}</>` from ComponentRenderer contribute separately.
+  const extraChildren = React.useMemo(() => {
+    const collected: React.ReactNode[] = [];
+    const walk = (node: React.ReactNode) => {
+      if (node == null || node === false) return;
+      if (Array.isArray(node)) {
+        node.forEach(walk);
+        return;
+      }
+      if (React.isValidElement(node) && node.type === React.Fragment) {
+        React.Children.forEach((node.props as { children?: React.ReactNode }).children, walk);
+        return;
+      }
+      collected.push(node);
+    };
+    walk(extraActions);
+    return React.Children.toArray(collected);
+  }, [extraActions]);
+  const isGroupingAction = (child: React.ReactNode) =>
+    React.isValidElement(child) &&
+    (child.type === SelectionHintAction || child.type === SaveGroupAction);
+  const groupingActions = extraChildren.filter(isGroupingAction);
+  const otherActions = extraChildren.filter((c) => !isGroupingAction(c));
+
+  const wrapAction = (child: React.ReactNode, key: string, extraClass = '') => (
+    <span
+      key={key}
+      // The escape from the hover-only default has to live on THIS span, not on
+      // the action inside it: the rule that hides the row targets
+      // `.depictio-component-actions > *`, and `opacity` applies to the whole
+      // subtree — so a class on the inner button could never win. Same reason
+      // `depictio-active-reset` is set on the wrapper below.
+      className={'dgl-no-drag' + extraClass}
+      style={{ display: 'inline-flex', alignItems: 'center' }}
+      onMouseDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+    >
+      {child}
+    </span>
+  );
+
   return (
     <div
       ref={fullscreenRef as React.RefObject<HTMLDivElement>}
       className={
         'depictio-component-chrome' +
-        (isFullscreenActive ? ' fullscreen-active' : '')
+        (isFullscreenActive ? ' fullscreen-active' : '') +
+        (selectionCapable ? ' depictio-selection-capable' : '')
+      }
+      style={
+        selectionCapable
+          ? ({ '--depictio-grouping-color': groupingColorVar } as React.CSSProperties)
+          : undefined
       }
     >
       <Group
@@ -229,11 +295,28 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
         className={
           'depictio-component-actions' +
           (orientationFor(componentType) === 'vertical' ? ' depictio-actions-vertical' : '') +
-          (persistentReset ? ' has-active-reset' : '') +
+          // Cards only: the top-right corner is where a card draws its value's
+          // icon, so the row moves to the quiet bottom edge. Still horizontal.
+          (componentType === 'card' ? ' depictio-actions-bottom' : '') +
+          // Any icon that stays on screen without hover needs the backdrop to
+          // stay with it: the active-reset icon, and the analysis marker.
+          (persistentReset || selectionCapable ? ' has-persistent-action' : '') +
           (compact ? ' is-compact' : '')
         }
         wrap="nowrap"
       >
+        {/* Grouping action first (after the grip, which stays where authors
+         * expect it): the analysis marker / save-as-group action belongs above
+         * metadata, not buried at the end of the utility icons. */}
+        {groupingActions.map((child, i) =>
+          wrapAction(
+            child,
+            `grouping-${i}`,
+            child != null && React.isValidElement(child) && child.type === SelectionHintAction
+              ? ' depictio-selection-hint'
+              : '',
+          ),
+        )}
         {/* Drag handle sits alongside the other action icons. drag is gated
          * via `draggableHandle=".react-grid-dragHandle"` on the GridLayout;
          * non-handle icons stop propagation to prevent accidental drag. */}
@@ -249,7 +332,7 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
             style={{ display: 'inline-flex', alignItems: 'center' }}
           >
             <ActionIcon
-              variant="light"
+              variant="subtle"
               color="gray"
               size="sm"
               aria-label="Drag to move"
@@ -285,39 +368,7 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
          *  map / multiqc / advanced_viz). Wrapping all extras in a single
          *  span would force them to share one slot and break the vertical
          *  orientation. */}
-        {extraActions
-          ? React.Children.toArray(
-              // Flatten fragments so <>{a}{b}</> contributes two children.
-              ((): React.ReactNode[] => {
-                const collected: React.ReactNode[] = [];
-                const walk = (node: React.ReactNode) => {
-                  if (node == null || node === false) return;
-                  if (Array.isArray(node)) {
-                    node.forEach(walk);
-                    return;
-                  }
-                  if (React.isValidElement(node) && node.type === React.Fragment) {
-                    React.Children.forEach((node.props as any).children, walk);
-                    return;
-                  }
-                  collected.push(node);
-                };
-                walk(extraActions);
-                return collected;
-              })(),
-            ).map((child, i) => (
-              <span
-                key={`extra-${i}`}
-                className="dgl-no-drag"
-                style={{ display: 'inline-flex', alignItems: 'center' }}
-                onMouseDown={(e) => e.stopPropagation()}
-                onTouchStart={(e) => e.stopPropagation()}
-                onPointerDown={(e) => e.stopPropagation()}
-              >
-                {child}
-              </span>
-            ))
-          : null}
+        {otherActions.map((child, i) => wrapAction(child, `extra-${i}`))}
       </Group>
       {children}
     </div>

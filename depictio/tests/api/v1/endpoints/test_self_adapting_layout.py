@@ -15,6 +15,7 @@ from __future__ import annotations
 from depictio.api.v1.endpoints.dashboards_endpoints.routes import (
     _GRID_COLS,
     _component_has_data,
+    _family_fans_out_a_filter,
     _recompact_main_grid,
     _tab_has_visualization_components,
     _tab_meets_minimum,
@@ -260,3 +261,54 @@ def test_mqc_no_ingestion_record_keeps_component():
         _component_has_data(_mqc("snpeff", "Variant Effects by Impact"), _mqc_meta(None, None))
         is True
     )
+
+
+# --------------------------------------------------------------------------- #
+# _family_fans_out_a_filter
+# --------------------------------------------------------------------------- #
+
+
+def _doc(filter_sections=None, components=None) -> dict:
+    return {"filter_sections": filter_sections or [], "components": components or []}
+
+
+def test_family_filter_none_declared():
+    docs = [
+        _doc(
+            filter_sections=[{"name": "Sample", "persistent": False}],
+            components=[{"component_type": "interactive", "section": "Sample"}],
+        )
+    ]
+    assert _family_fans_out_a_filter(docs) is False
+
+
+def test_family_filter_persistent_section_with_a_control():
+    docs = [
+        _doc(
+            filter_sections=[{"name": "Variety", "persistent": True}],
+            components=[{"component_type": "interactive", "section": "Variety"}],
+        ),
+        _doc(components=[{"component_type": "figure", "section": "Petals"}]),
+    ]
+    assert _family_fans_out_a_filter(docs) is True
+
+
+def test_family_filter_persistent_section_without_members():
+    """A declared-but-empty persistent section fans nothing out."""
+    docs = [
+        _doc(
+            filter_sections=[{"name": "Variety", "persistent": True}],
+            components=[{"component_type": "figure", "section": "Variety"}],
+        )
+    ]
+    assert _family_fans_out_a_filter(docs) is False
+
+
+def test_tab_with_no_own_filter_survives_on_a_family_filter():
+    """The reason this exists: a tab can rely entirely on a persistent filter
+    section declared by another tab, and used to be dropped for looking
+    filter-less."""
+    tab = _tab({"component_type": "figure", "data_collection_tag": "taxonomy"})
+    dc_meta = {"taxonomy": {"metatype": "Aggregate"}}
+    assert _tab_meets_minimum(tab, dc_meta) is False
+    assert _tab_meets_minimum(tab, dc_meta, family_fans_out_a_filter=True) is True

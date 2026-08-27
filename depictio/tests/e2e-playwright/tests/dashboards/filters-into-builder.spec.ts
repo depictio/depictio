@@ -30,6 +30,15 @@ async function pickOption(page: Page, text: string | RegExp): Promise<void> {
     .click();
 }
 
+/** Open the component builder from the editor chrome.
+ *  "Add" is a menu (Component / Section), not a direct link, so reaching the
+ *  builder takes two clicks — the button, then the entry. */
+async function openComponentBuilder(page: Page): Promise<void> {
+  await page.locator("[data-tour-id='editor-add-component']").click();
+  await page.locator("[data-testid='add-component']").click();
+  await page.waitForURL(/\/component\/add\//, { timeout: 15_000 });
+}
+
 /** StepType: pick a component type card by its type, not by its text.
  *  Several cards mention another card's label in their description (Figure is
  *  "Interactive data visualizations", Image is an "Interactive image grid"), so
@@ -104,8 +113,7 @@ test.describe("Active filters propagate into the builder and new components", ()
     await page.waitForURL(/\/dashboard-edit\//, { timeout: 15_000 });
 
     // --- Add a MultiSelect interactive filter on `variety` via the builder ---
-    await page.locator("[data-tour-id='editor-add-component']").click();
-    await page.waitForURL(/\/component\/add\//, { timeout: 15_000 });
+    await openComponentBuilder(page);
     await pickComponentType(page, "interactive");
     await pickIrisDataCollection(page);
     await page.getByRole("button", { name: "Next Step" }).click();
@@ -125,8 +133,7 @@ test.describe("Active filters propagate into the builder and new components", ()
     await page.keyboard.press("Escape");
 
     // --- Add a Table component while the filter is active ---
-    await page.locator("[data-tour-id='editor-add-component']").click();
-    await page.waitForURL(/\/component\/add\//, { timeout: 15_000 });
+    await openComponentBuilder(page);
     await pickComponentType(page, "table");
     await pickIrisDataCollection(page);
     await page.getByRole("button", { name: "Next Step" }).click();

@@ -121,7 +121,19 @@ const DashboardInfoBody: React.FC<DashboardInfoBodyProps> = ({ dashboard, active
           color="teal"
           label="Project"
           value={
-            projectName ? (
+            projectName && projectId ? (
+              <Tooltip label={`Open project: ${projectName}`} withArrow withinPortal>
+                <Anchor
+                  href={`/projects/${projectId}`}
+                  size="sm"
+                  fw={500}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                >
+                  {projectName}
+                  <Icon icon="mdi:open-in-new" width={12} />
+                </Anchor>
+              </Tooltip>
+            ) : projectName ? (
               <Text size="sm" fw={500}>
                 {projectName}
               </Text>
@@ -140,7 +152,7 @@ const DashboardInfoBody: React.FC<DashboardInfoBodyProps> = ({ dashboard, active
             value={<TemplateChip parsed={parsedTemplate} verbose />}
           />
         )}
-        {parsedTemplate && projectId && (
+        {projectId && (
           <MetaRow
             icon="mdi:clipboard-check-outline"
             color="indigo"

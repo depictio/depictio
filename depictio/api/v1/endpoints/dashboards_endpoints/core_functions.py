@@ -42,6 +42,61 @@ def sync_tab_family_permissions(
     return result.modified_count
 
 
+def cascade_project_visibility(project_id: PyObjectId | str, is_public: bool) -> dict[str, int]:
+    """Propagate a project's visibility to every dashboard it contains.
+
+    Visibility is project-driven: `dashboard.is_public` is a derived flag kept
+    in sync so listings and badges can keep reading it. Child tabs are swept
+    both by the project-wide update and per tab family, because legacy child
+    tabs may lack a `project_id`.
+
+    Returns:
+        dict: counts of updated dashboards and child tabs
+    """
+    dashboards_result = dashboards_collection.update_many(
+        {"project_id": ObjectId(project_id)},
+        {"$set": {"is_public": is_public}},
+    )
+
+    child_tabs_updated = 0
+    main_tabs = dashboards_collection.find(
+        {"project_id": ObjectId(project_id), "is_main_tab": {"$ne": False}},
+        {"dashboard_id": 1},
+    )
+    for main_tab in main_tabs:
+        child_tabs_updated += sync_tab_family_permissions(
+            main_tab["dashboard_id"], new_is_public=is_public
+        )
+
+    return {
+        "dashboards_updated": dashboards_result.modified_count,
+        "child_tabs_updated": child_tabs_updated,
+    }
+
+
+def reconcile_dashboard_visibility() -> int:
+    """One-shot sync of every dashboard's `is_public` flag with its project.
+
+    Run at startup so deployments created before visibility became
+    project-driven converge without operator action (dashboards were
+    historically created private regardless of their project). Idempotent.
+
+    Returns:
+        int: Number of dashboards whose flag was corrected
+    """
+    corrected = 0
+    for project in projects_collection.find({}, {"_id": 1, "is_public": 1}):
+        result = dashboards_collection.update_many(
+            {
+                "project_id": project["_id"],
+                "is_public": {"$ne": project.get("is_public", False)},
+            },
+            {"$set": {"is_public": project.get("is_public", False)}},
+        )
+        corrected += result.modified_count
+    return corrected
+
+
 def get_child_tabs(parent_dashboard_id: PyObjectId) -> list[dict[str, Any]]:
     """Get all child tabs for a parent dashboard, sorted by tab_order.
 
@@ -195,8 +250,6 @@ def load_dashboards_from_db(owner, admin_mode=False, user=None, include_child_ta
             else:
                 # Anonymous users can access dashboards in any public project,
                 # consistent with how projects are listed (_async_get_all_projects).
-                # The dashboard-level filter below still restricts results to
-                # public dashboards, so private dashboards do not leak.
                 accessible_projects = list(
                     projects_collection.find(
                         {"is_public": True},
@@ -222,20 +275,13 @@ def load_dashboards_from_db(owner, admin_mode=False, user=None, include_child_ta
 
         accessible_project_ids = [project["_id"] for project in accessible_projects]
 
-        # Get dashboards belonging to accessible projects.
-        # Non-admin users only see dashboards they own or that are public.
-        # This prevents non-public dashboards (e.g. admin test dashboards)
-        # from leaking to anonymous/temporary users via public projects.
-        if not settings.auth.is_single_user_mode and user and not getattr(user, "is_admin", False):
-            query: dict = {
-                "project_id": {"$in": accessible_project_ids},
-                "$or": [
-                    {"permissions.owners._id": user_id},
-                    {"is_public": True},
-                ],
-            }
-        else:
-            query: dict = {"project_id": {"$in": accessible_project_ids}}
+        # Visibility is project-driven: being able to access a project means
+        # seeing all of its dashboards, exactly like GET /dashboards/get/{id}
+        # (which authorizes purely at the project level). The old extra
+        # dashboard-level `$or [owner, is_public]` filter made the listing
+        # diverge from fetch — project viewers/editors got an empty list for
+        # dashboards they could open by URL.
+        query: dict = {"project_id": {"$in": accessible_project_ids}}
         if not include_child_tabs:
             # Show only main tabs (backward compatible - default behavior)
             query["is_main_tab"] = {"$ne": False}

@@ -1,4 +1,22 @@
-# EMBL specific values with no authentication (values-embl-unauth.yaml)
+# EMBL Internal Dev Environment - dev.depictio.embl.org (values-embl-internal-dev.yaml)
+# Google OAuth (EMBL staff only, no public/demo mode). Mirrors
+# values-embl-internal-prod.yaml with dev hostnames/namespace, including
+# 3-replica Percona PSMDB HA mongo.
+#
+# Namespace: datasci-depictio-internal-dev
+#   (Tenant: datasci-depictio-internal, 64 CPU / 128 GiB, shared with -prod)
+#
+# IMPORTANT: DEPICTIO_AUTH_GOOGLE_OAUTH_REDIRECT_URI below must be registered
+# as an authorized redirect URI on the Google Cloud OAuth client (same client
+# ID as prod, per values-embl-secrets.yaml) — this file cannot do that part,
+# only the Google Cloud Console can. Until it's added there, login on this
+# environment will fail with redirect_uri_mismatch even though everything
+# else in this file is correct.
+
+# EMBL ops-k1 uses a custom cluster DNS domain (not cluster.local) — required
+# for the viewer nginx → backend proxy FQDN to resolve.
+clusterDomain: "ops-k1.embl.de"
+
 ## Storage
 storageClass: basic-csi
 persistence:
@@ -29,6 +47,24 @@ initContainerResources:
   limits:
     memory: "128Mi"
     cpu: "100m"
+
+# Viewer (nginx SPA) — stateless and tiny, so run 2 replicas for HA + a
+# zero-downtime rolling deploy. Mirrors values-embl-internal-prod.yaml.
+viewer:
+  replicas: 2
+  strategy: "RollingUpdate"
+
+# Protect the multi-replica workloads during node drains / cluster upgrades.
+# backend, viewer AND celery all run >1 replica once this file's changes
+# apply, so all three get a PDB (the template only emits one for components
+# with >1 replica — see values.yaml).
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Celery worker — same HA bump as prod.
+celery:
+  replicas: 2
 
 ## SecurityContext
 backend:
@@ -68,11 +104,28 @@ backend:
     # Celery Configuration - Disabled for now
     # DEPICTIO_CELERY_ENABLED: "false"
 
+# Client ID/secret come from values-embl-secrets.yaml's top-level `auth:` map
+# (same OAuth app across environments — deep-merged with this block). The
+# redirect URI is env-specific though, so it's set here, not in secrets — it
+# must match the ingress host below or Google rejects the callback. NOTE:
+# read from top-level .Values.auth, NOT backend.env (templates/configmaps.yaml:57).
+auth:
+  # Must be /auth/google/callback, not bare /auth — see values-embl-internal-prod.yaml
+  DEPICTIO_AUTH_GOOGLE_OAUTH_REDIRECT_URI: "https://dev.depictio.embl.org/auth/google/callback"
 
 mongo:
-  replicas: 1  # Temporarily single replica to get system working
+  useOperator: true     # Use Percona PSMDB Operator for HA replica set
+  replicas: 3           # 3-member replica set managed by the operator
+  auth:
+    enabled: true
+    username: depictio
+    # password must be set in values-embl-secrets.yaml (never commit)
+    password: ""
   image:
+    repository: percona/percona-server-mongodb
+    tag: "6.0.9-7"
     pullPolicy: Always
+  clusterServiceDNSSuffix: "svc.ops-k1.embl.de"
   resources:
     requests:
       memory: "1Gi"
@@ -80,6 +133,11 @@ mongo:
     limits:
       memory: "2Gi"
       cpu: "1"
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+    fsGroup: 999
   securityContext:
     runAsNonRoot: true
     runAsUser: 999
@@ -147,48 +205,30 @@ ingress:
   annotations:
     cert-manager.io/cluster-issuer: harica-issuer
 
-  # Host configuration for split frontend/backend setup
-  # NOTE: Two approaches are available:
-  # 1. Use the global.urlPattern configuration (set above) to auto-generate URLs
-  #    - Remove or comment out the 'hosts' section below
-  #    - The pattern will automatically generate URLs like:
-  #      * dev.demo.depictio.embl.org (frontend)
-  #      * dev.api.demo.depictio.embl.org (backend)
-  # 2. Explicitly define hosts (current approach - takes precedence over urlPattern)
-  #    - Keeps full control over exact hostnames
-  #    - Useful for non-standard patterns or multiple environments
   hosts:
-    - host: "depictio.embl.org"
+    - host: "dev.depictio.embl.org"
       paths:
         - path: /
           pathType: Prefix
           service:
             name: depictio-viewer
             portName: http
-    - host: "api.depictio.embl.org"
+    - host: "dev.api.depictio.embl.org"
       paths:
         - path: /
           pathType: Prefix
           service:
             name: depictio-backend
             portName: http
-    # - host: "minio.demo.depictio.embl.org"
-    #   paths:
-    #     - path: /
-    #       pathType: Prefix
-    #       service:
-    #         name: minio
-    #         portName: http
 
   # TLS configuration
-  # Note: The secret name should be created by cert-manager based on the cluster-issuer
-  # Format: {release-name}-depictio-tls allows deployment with any release name
+  # Note: distinct secretName from prod's depictio-tls — separate namespace
+  # so it wouldn't collide either way, but kept distinct for clarity.
   tls:
     - hosts:
-        - "depictio.embl.org"
-        - "api.depictio.embl.org"
-        # - "minio.depictio.embl.org"
-      secretName: depictio-tls  # Will be created by cert-manager with harica-issuer
+        - "dev.depictio.embl.org"
+        - "dev.api.depictio.embl.org"
+      secretName: dev-depictio-tls  # Will be created by cert-manager with harica-issuer
 
 global:
   domain: "depictio.embl.org"  # Global domain for all services
@@ -199,15 +239,14 @@ global:
   urlPattern:
     type: "custom"
     templates:
-      api: "api.depictio.embl.org"
-      frontend: "depictio.embl.org"
-      # minio: "minio.depictio.embl.org"  # In case MinIO is needed later
+      api: "dev.api.depictio.embl.org"
+      frontend: "dev.depictio.embl.org"
 
 
 # Example deployment command:
 # IMPORTANT: You must also load the secrets file (values-embl-secrets.yaml)
-# helm upgrade --install demo ./helm-charts/depictio \
+# helm upgrade --install devinternal ./helm-charts/depictio \
 #   -f ./helm-charts/depictio/values.yaml \
-#   -f ./helm-charts/depictio/values-embl-unauth.yaml \
+#   -f ./helm-charts/depictio/values-embl-internal-dev.yaml \
 #   -f ./helm-charts/depictio/values-embl-secrets.yaml \
-#   -n datasci-depictio-project-demo
+#   -n datasci-depictio-internal-dev
