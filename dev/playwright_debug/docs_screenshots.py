@@ -30,13 +30,14 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Awaitable, Callable
 
 import typer
 import yaml
-from playwright.async_api import Page, async_playwright
+from playwright.async_api import Locator, Page, async_playwright
 
 # Repo-rooted import so the script runs from anywhere (e.g. via `python
 # dev/playwright_debug/docs_screenshots.py ...`) without a packaged install.
@@ -509,6 +510,275 @@ async def _realtime_highlight(ctx: ShotContext) -> None:
     await ctx.page.mouse.move(150, 620)
     await ctx.page.wait_for_timeout(1_200)
     await _page_shot_current(ctx, _rb(f"realtime_highlight_{ctx.theme}"))
+
+
+# ---- Catalog picker shots -------------------------------------------------
+# The picker lives inside the Add-component route, and none of its surfaces
+# change the URL, so every shot re-enters through the same door: navigate to
+# /component/add/<fresh uuid>, then click through. A fresh uuid per entry keeps
+# shots independent — reusing one would let a component added by an earlier
+# shot be overwritten by a later one.
+
+# Generous: a cold dev server compiles the builder's module graph on first entry.
+_NAV_TIMEOUT_MS = 120_000
+
+# An output that offers four renders across two component types, so one row
+# demonstrates the render switcher, the `use:` snippet and the details popover.
+CATALOG_DEMO_OUTPUT = "ivar_variants_long"
+# Index of the `manhattan` render inside that output's renders_as.
+CATALOG_DEMO_RENDER = 2
+
+# Component added by _add_catalog_component, reused by the provenance shots so
+# they don't each append another tile to the dashboard.
+_added_component_id: str | None = None
+
+
+def _cat(name: str) -> str:
+    """Place catalog shots under a catalog/ subdir within --version."""
+    return f"catalog/{name}"
+
+
+async def _open_add_component(ctx: ShotContext) -> str:
+    """Navigate to a fresh Add-component route and return the component id."""
+    component_id = str(uuid.uuid4())
+    # `commit`, not `domcontentloaded`: a dev server compiles the builder's
+    # module graph on demand, and DOMContentLoaded waits on every deferred
+    # module of it. Waiting on the first rendered element instead keeps the
+    # navigation only as slow as the thing being shot.
+    await ctx.page.goto(
+        f"{ctx.viewer_url}/dashboard-edit/{ctx.dashboard_id}/component/add/{component_id}",
+        wait_until="commit",
+        timeout=_NAV_TIMEOUT_MS,
+    )
+    await ctx.page.get_by_test_id("component-source-catalog").wait_for(
+        state="visible", timeout=_NAV_TIMEOUT_MS
+    )
+    await ctx.page.wait_for_timeout(600)
+    await dismiss_notifications(ctx.page)
+    return component_id
+
+
+async def _open_catalog_browser(ctx: ShotContext) -> str:
+    """Enter the catalog browser and wait until compose has resolved."""
+    component_id = await _open_add_component(ctx)
+    await ctx.page.get_by_test_id("component-source-catalog").click()
+    # The preview panel only mounts once /catalog/project/{id}/compose has
+    # answered and a first row has been auto-selected.
+    await ctx.page.get_by_test_id("catalog-preview-panel").wait_for(
+        state="visible", timeout=_NAV_TIMEOUT_MS
+    )
+    await ctx.page.wait_for_timeout(2_500)
+    return component_id
+
+
+async def _park_cursor(ctx: ShotContext) -> None:
+    """Move the pointer off every interactive surface before a shot.
+
+    Rows, render tabs and the Filters button all carry tooltips, and leaving the
+    cursor over the preview iframe pops Plotly's modebar into the frame. The
+    bottom-left gutter sits outside both panels.
+    """
+    await ctx.page.mouse.move(16, 870)
+    await ctx.page.wait_for_timeout(600)
+
+
+async def _select_output(ctx: ShotContext, output_id: str, render_index: int | None = None) -> None:
+    """Click one offer, optionally switching to one of its render tabs."""
+    await ctx.page.locator(
+        f'[data-testid="catalog-match"][data-output-id="{output_id}"]'
+    ).first.click()
+    panel = ctx.page.locator(f'[data-testid="catalog-preview-panel"][data-output-id="{output_id}"]')
+    await panel.wait_for(state="visible", timeout=20_000)
+    if render_index is not None:
+        await ctx.page.locator(
+            f'[data-testid="catalog-render-tab"][data-render-index="{render_index}"]'
+        ).click()
+        await panel.and_(ctx.page.locator(f'[data-selected-index="{render_index}"]')).wait_for(
+            state="visible", timeout=20_000
+        )
+    # The preview is an iframe loading its own bundle; give it time to paint.
+    await ctx.page.wait_for_timeout(4_000)
+    await _park_cursor(ctx)
+
+
+@register("catalog_choice")
+async def _catalog_choice(ctx: ShotContext) -> None:
+    """Step 0 of Add component: build manually, or pick from the tools catalog."""
+    await _open_add_component(ctx)
+    await _page_shot_current(ctx, _cat("catalog_choice"))
+
+
+@register("catalog_browser")
+async def _catalog_browser(ctx: ShotContext) -> None:
+    """The catalog browser: offers grouped by tool on the left, live preview on the right."""
+    await _open_catalog_browser(ctx)
+    await _select_output(ctx, CATALOG_DEMO_OUTPUT)
+    await _page_shot_current(ctx, _cat("catalog_browser"))
+
+
+@register("catalog_search")
+async def _catalog_search(ctx: ShotContext) -> None:
+    """Search narrows the offer list across tool, output, description and collection."""
+    await _open_catalog_browser(ctx)
+    await ctx.page.get_by_test_id("catalog-search").fill("coverage")
+    await ctx.page.wait_for_timeout(1_200)
+    await _select_output(ctx, "mosdepth_genome_coverage")
+    await _page_shot_current(ctx, _cat("catalog_search"))
+
+
+@register("catalog_filters")
+async def _catalog_filters(ctx: ShotContext) -> None:
+    """The Filters popover: facets for component type and data collection, with counts."""
+    await _open_catalog_browser(ctx)
+    # Both facet groups together are taller than the default viewport, and a
+    # popover clipped at the fold reads as a broken list rather than a long one.
+    viewport = ctx.page.viewport_size or {"width": 1440, "height": 900}
+    await ctx.page.set_viewport_size({**viewport, "height": 1180})
+    await ctx.page.get_by_role("button", name="Filters").click()
+    await ctx.page.locator(".mantine-Popover-dropdown").first.wait_for(
+        state="visible", timeout=10_000
+    )
+    await _park_cursor(ctx)
+    await _page_shot_current(ctx, _cat("catalog_filters"))
+    await ctx.page.set_viewport_size(viewport)
+
+
+@register("catalog_render_tabs")
+async def _catalog_render_tabs(ctx: ShotContext) -> None:
+    """One output, several renders: the switcher reframes the preview at the target size."""
+    await _open_catalog_browser(ctx)
+    await _select_output(ctx, CATALOG_DEMO_OUTPUT, CATALOG_DEMO_RENDER)
+    await _shot(ctx, '[data-testid="catalog-preview-panel"]', _cat("catalog_render_tabs"))
+
+
+@register("catalog_details")
+async def _catalog_details(ctx: ShotContext) -> None:
+    """The details popover: which file matched, through which recipe, and where it is defined."""
+    await _open_catalog_browser(ctx)
+    await _select_output(ctx, CATALOG_DEMO_OUTPUT)
+    await ctx.page.locator('[aria-label="Output details"]').click()
+    dropdown = ctx.page.locator(".mantine-Popover-dropdown").first
+    await dropdown.wait_for(state="visible", timeout=10_000)
+    await ctx.page.wait_for_timeout(600)
+    await _shot(ctx, ".mantine-Popover-dropdown", _cat("catalog_details"))
+
+
+@register("catalog_use_snippet")
+async def _catalog_use_snippet(ctx: ShotContext) -> None:
+    """The copyable `use:` reference that addresses the same render from a dashboard YAML."""
+    await _open_catalog_browser(ctx)
+    await _select_output(ctx, CATALOG_DEMO_OUTPUT, CATALOG_DEMO_RENDER)
+    await ctx.page.locator('[aria-label="Show use snippet"]').click()
+    dropdown = ctx.page.locator(".mantine-Popover-dropdown").first
+    await dropdown.wait_for(state="visible", timeout=10_000)
+    await ctx.page.wait_for_timeout(600)
+    await _shot(ctx, ".mantine-Popover-dropdown", _cat("catalog_use_snippet"))
+
+
+@register("catalog_multiqc")
+async def _catalog_multiqc(ctx: ShotContext) -> None:
+    """MultiQC offers: one report, one row per section, each naming the tool it came from."""
+    await _open_catalog_browser(ctx)
+    await ctx.page.get_by_test_id("catalog-search").fill("multiqc")
+    await ctx.page.wait_for_timeout(1_200)
+    await _select_output(ctx, "multiqc_ivar")
+    await _page_shot_current(ctx, _cat("catalog_multiqc"))
+
+
+@register("catalog_design_step")
+async def _catalog_design_step(ctx: ShotContext) -> None:
+    """Edit drops the offer into the Design step, with Back to catalog preserving the browse."""
+    await _open_catalog_browser(ctx)
+    await _select_output(ctx, CATALOG_DEMO_OUTPUT, CATALOG_DEMO_RENDER)
+    await ctx.page.get_by_test_id("catalog-edit-add").click()
+    # "Back to catalog" only exists in the Design step, so it is the signal that
+    # the step has mounted; the settle after it covers the preview render.
+    await ctx.page.get_by_role("button", name="Back to catalog").wait_for(
+        state="visible", timeout=_NAV_TIMEOUT_MS
+    )
+    await ctx.page.wait_for_timeout(6_000)
+    await dismiss_notifications(ctx.page)
+    await _page_shot_current(ctx, _cat("catalog_design_step"))
+
+
+async def _add_catalog_component(ctx: ShotContext) -> str:
+    """Add one catalog offer to the dashboard and return to the editor.
+
+    Cached: the two provenance shots want the same tile, and running the picker
+    twice would leave two copies of it on the dashboard.
+    """
+    global _added_component_id
+    if _added_component_id:
+        return _added_component_id
+    component_id = await _open_catalog_browser(ctx)
+    await _select_output(ctx, CATALOG_DEMO_OUTPUT, CATALOG_DEMO_RENDER)
+    await ctx.page.get_by_test_id("catalog-add").click()
+    await ctx.page.wait_for_url(f"**/dashboard-edit/{ctx.dashboard_id}", timeout=30_000)
+    _added_component_id = component_id
+    return component_id
+
+
+async def _open_added_tile_action(ctx: ShotContext, aria_label: str) -> Locator:
+    """Scroll the freshly added tile into view, open one of its chrome actions,
+    and return the tile so a caller can frame it together with what it opened."""
+    component_id = await _add_catalog_component(ctx)
+    await ctx.page.goto(
+        f"{ctx.viewer_url}/dashboard-edit/{ctx.dashboard_id}",
+        wait_until="commit",
+        timeout=_NAV_TIMEOUT_MS,
+    )
+    tile = ctx.page.locator(f'[data-component-id="{component_id}"]')
+    await tile.wait_for(state="visible", timeout=_NAV_TIMEOUT_MS)
+    await tile.scroll_into_view_if_needed()
+    await ctx.page.wait_for_timeout(4_000)
+    await dismiss_notifications(ctx.page)
+    # The action row is hover-revealed, so the tile has to be under the cursor
+    # before its buttons are clickable.
+    await tile.hover()
+    await ctx.page.wait_for_timeout(400)
+    await tile.locator(f'[aria-label="{aria_label}"]').click()
+    await ctx.page.locator(".mantine-Popover-dropdown").first.wait_for(
+        state="visible", timeout=10_000
+    )
+    await ctx.page.wait_for_timeout(800)
+    return tile
+
+
+async def _union_clip(ctx: ShotContext, tile: Locator, dropdown: Locator) -> dict:
+    """Bounding box covering tile and dropdown, padded, clamped to the viewport.
+
+    Popovers render in a body-level portal, so an element screenshot of the tile
+    would drop the dropdown it just opened. A clip over both keeps the flag and
+    what it opens in one frame.
+    """
+    boxes = [box for box in (await tile.bounding_box(), await dropdown.bounding_box()) if box]
+    pad = 12
+    left = max(0, min(b["x"] for b in boxes) - pad)
+    top = max(0, min(b["y"] for b in boxes) - pad)
+    right = max(b["x"] + b["width"] for b in boxes) + pad
+    bottom = max(b["y"] + b["height"] for b in boxes) + pad
+    size = ctx.page.viewport_size or {"width": 1440, "height": 900}
+    return {
+        "x": left,
+        "y": top,
+        "width": min(right, size["width"]) - left,
+        "height": min(bottom, size["height"]) - top,
+    }
+
+
+@register("catalog_tile_flag")
+async def _catalog_tile_flag(ctx: ShotContext) -> None:
+    """A catalog-sourced tile keeps its origin: tool, output, `use:` reference, definition link."""
+    tile = await _open_added_tile_action(ctx, "Catalog origin")
+    dropdown = ctx.page.locator(".mantine-Popover-dropdown").first
+    await _clip_shot(ctx, await _union_clip(ctx, tile, dropdown), _cat("catalog_tile_flag"))
+
+
+@register("catalog_inspector")
+async def _catalog_inspector(ctx: ShotContext) -> None:
+    """The metadata inspector: identity, resolved configuration, data source, catalog origin."""
+    await _open_added_tile_action(ctx, "Component metadata")
+    await _shot(ctx, ".mantine-Popover-dropdown", _cat("catalog_inspector"))
 
 
 # ---- Cross-DC link inspection shots ---------------------------------------

@@ -96,7 +96,7 @@ unique within a tool — so when the same `kind` is rendered by several outputs
 each gets a distinct handle (`rarefaction_alpha` vs `rarefaction`).
 
 Don't know a recipe's output column names while writing `roles`?
-`depictio catalog columns <recipe>` prints them.
+`depictio dev catalog columns <recipe>` prints them.
 
 ## Catalog vs `projects/` — where a reshape lives
 
@@ -137,14 +137,27 @@ Live exceptions that prove the rule:
 
 ## Commands
 
+Browsing the catalog is user-facing; everything that maintains it sits behind the
+hidden `dev` group, so the two audiences don't share a namespace.
+
 ```bash
 depictio catalog list                 # every tool + output + render targets
 depictio catalog info qiime2          # one tool: URLs + outputs in detail
-depictio catalog columns <recipe.py>  # the recipe's output columns (to write roles)
-depictio catalog match path/to/run    # recognise tool outputs in a run dir
-depictio catalog validate             # CI gate: schema + roles vs recipe + nf-core/EDAM existence
-depictio catalog refresh-index        # (maintainer, needs network) refresh _index/ from nf-core + EDAM
-depictio catalog schema -o catalog.schema.json   # regenerate the JSON Schema
+depictio catalog preview <output_id>  # render one output's offers in a browser
+depictio catalog gallery              # every tool and output on one page
+```
+
+`preview` and `gallery` serve an ephemeral page and open it; `--out FILE` exports
+self-contained HTML instead. Both read a prebuilt bundle, so build it once with
+`cd depictio/viewer && pnpm run build:catalog-preview`.
+
+```bash
+depictio dev catalog columns <recipe.py>  # the recipe's output columns (to write roles)
+depictio dev catalog match path/to/run    # recognise tool outputs in a run dir
+depictio dev catalog compose path/to/run  # propose a dashboard from a run dir
+depictio dev catalog validate             # CI gate: schema + roles vs recipe + nf-core/EDAM existence
+depictio dev catalog refresh-index        # (maintainer, needs network) refresh _index/ from nf-core + EDAM
+depictio dev catalog schema -o catalog.schema.json   # regenerate the JSON Schema
 ```
 
 Identity validation is two-tier: `mode`/`description` are free; `nf_core_url`

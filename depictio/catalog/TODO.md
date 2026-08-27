@@ -18,7 +18,7 @@ pipeline-agnostic (see `docs/design/bioinformatics-catalog.md`).
 - Wire `compose_run_dir()` into the real ingestion/scan path so it actually
   builds/proposes a dashboard (today it's a CLI preview only).
 - `refresh-index`: the vendored `_index/{nf_core_modules,edam_terms}.txt` are
-  **seeds**; run `depictio catalog refresh-index` (needs network) to make them
+  **seeds**; run `depictio dev catalog refresh-index` (needs network) to make them
   authoritative so existence checks catch typos.
 
 ## Module-granular debt (v3)
@@ -56,7 +56,7 @@ pipeline-agnostic (see `docs/design/bioinformatics-catalog.md`).
   to its YAML), pipeline-agnostic, committed with the catalog — each module is a
   self-contained unit (identity + outputs + fixtures).
   `catalog validate` grounds renders against them (Level-3); they also feed
-  `preview`. A dedicated `catalog-ci` workflow + `depictio catalog validate` run
+  `preview`. A dedicated `catalog-ci` workflow + `depictio dev catalog validate` run
   on every catalog/recipe change.
 - **`catalog preview <output>`** — **separate PR (owned by maintainer)**: load
   the `fixture` → build the component (advanced_viz / figure / card) → render the
