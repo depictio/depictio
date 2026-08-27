@@ -151,9 +151,15 @@ test('advanced viz offers depictio\'s ranked kind picker and renders a bound kin
   await page.getByRole('option', { name: 'sample : String' }).click();
   await expect(binding('feature_id')).toHaveValue('sample : String');
 
-  // The preview is viewport-gated (ComponentRenderer lazy-mounts advanced viz),
-  // so scroll to it the way a user reaching the bindings would.
-  await page.getByText('Live preview').first().scrollIntoViewIfNeeded();
+  // Unlike the figure and interactive builders, the advanced-viz dialog has no
+  // preview pane of its own: picker, bindings table, role selects, buttons. The
+  // renderer only mounts in the render card, so the plot assertion belongs after
+  // the render is added, not inside the dialog.
+  await page.getByRole('button', { name: 'Add to output' }).click();
+
+  // ComponentRenderer lazy-mounts advanced viz on view, so bring the card into
+  // frame the way a user landing back on the list would.
+  await page.getByText('How this renders on a dashboard.').first().scrollIntoViewIfNeeded();
   // The real VolcanoRenderer draws a plotly figure from the shim's rows.
   await expect(page.locator('.js-plotly-plot').first()).toBeVisible({ timeout: 20_000 });
   expect(apiCalls).toEqual([]);
