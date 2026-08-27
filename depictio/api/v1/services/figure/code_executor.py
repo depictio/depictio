@@ -170,13 +170,15 @@ class SimpleCodeExecutor:
                 # Execute preprocessing
                 exec(preprocessing_bytecode, execution_globals, execution_locals)
 
-                # Verify some preprocessing variable was created
-                preprocessing_vars = [k for k in execution_locals.keys() if k.startswith("df")]
-                if not preprocessing_vars:
+                # Verify the preprocessing actually produced something. The
+                # check used to demand a name starting with "df", which is a
+                # convention, not a requirement: code whose intermediates were
+                # called anything else was rejected here even though it ran.
+                if not execution_locals:
                     return (
                         False,
                         None,
-                        "❌ Preprocessing failed: No dataframe variables created",
+                        "❌ Preprocessing failed: no variables were created",
                     )
 
             # Execute figure generation code
