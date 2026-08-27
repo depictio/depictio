@@ -14,7 +14,7 @@
  *     keep reading as meaning.
  */
 
-import { test, expect } from "@fixtures/auth";
+import { API_PREFIX, API_URL, loginAsTestUser, test, expect } from "@fixtures/auth";
 
 type Page = import("@playwright/test").Page;
 
@@ -37,6 +37,32 @@ test.describe("Instance brand theme", () => {
     process.env.UNAUTHENTICATED_MODE === "true",
     "The Branding panel is admin-only.",
   );
+
+  // This test has to start from the stock look to mean anything, so it resets
+  // the deployment's branding. That is harmless on a fresh CI stack and
+  // destructive anywhere else — running the suite against a configured
+  // instance used to silently wipe its brand. Snapshot the overrides first and
+  // put them back, whatever the test did in between.
+  let savedOverrides: Record<string, unknown> | null = null;
+
+  test.beforeEach(async ({ page, request }) => {
+    const { access_token } = await loginAsTestUser(page, request, "adminUser");
+    const response = await request.get(`${API_URL}${API_PREFIX}/utils/branding`, {
+      headers: { Authorization: `Bearer ${access_token}` },
+    });
+    savedOverrides = response.ok() ? ((await response.json()).overrides ?? null) : null;
+  });
+
+  test.afterEach(async ({ page, request }) => {
+    const { access_token } = await loginAsTestUser(page, request, "adminUser");
+    const headers = { Authorization: `Bearer ${access_token}` };
+    const url = `${API_URL}${API_PREFIX}/utils/branding`;
+    if (savedOverrides && Object.keys(savedOverrides).length > 0) {
+      await request.put(url, { headers, data: savedOverrides });
+    } else {
+      await request.delete(url, { headers });
+    }
+  });
 
   test("applying a preset re-tints the app and spares the status colors", async ({
     loginAsAdmin,
