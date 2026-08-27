@@ -17,6 +17,9 @@ importers:
       '@mantine/code-highlight':
         specifier: ^7.14.0
         version: 7.17.8(@mantine/core@7.17.8(@mantine/hooks@7.17.8(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@mantine/hooks@7.17.8(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@mantine/colors-generator':
+        specifier: ^7.17.8
+        version: 7.17.8(chroma-js@3.2.0)
       '@mantine/core':
         specifier: ^7.14.0
         version: 7.17.8(@mantine/hooks@7.17.8(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -237,6 +240,9 @@ importers:
       '@iconify/react':
         specifier: ^5.0.2
         version: 5.2.1(react@18.3.1)
+      '@mantine/colors-generator':
+        specifier: ^7.17.8
+        version: 7.17.8(chroma-js@3.2.0)
       '@mantine/core':
         specifier: ^7.14.0
         version: 7.17.8(@mantine/hooks@7.17.8(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -1108,6 +1114,11 @@ packages:
       react: ^18.x || ^19.x
       react-dom: ^18.x || ^19.x
 
+  '@mantine/colors-generator@7.17.8':
+    resolution: {integrity: sha512-uLUYkmdwv2kQtoNTizBDyOeVLMuCIQfR7UdZDKAPJP921RUu+B8sbW7TAY6jAScDswqZNDZNLKdo5icYYBF/2g==}
+    peerDependencies:
+      chroma-js: '>=2.4.2'
+
   '@mantine/core@7.17.8':
     resolution: {integrity: sha512-42sfdLZSCpsCYmLCjSuntuPcDg3PLbakSmmYfz5Auea8gZYLr+8SS5k647doVu0BRAecqYOytkX2QC5/u/8VHw==}
     peerDependencies:
@@ -1805,6 +1816,9 @@ packages:
   chalk@4.1.2:
     resolution: {integrity: sha512-oKnbhFyRIXpUuez8iBMmyEa4nbj4IOQyuhc/wy9kY7/WVPcwIO9VA668Pu8RkO7+0G76SLROeyw9CpQ061i4mA==}
     engines: {node: '>=10'}
+
+  chroma-js@3.2.0:
+    resolution: {integrity: sha512-os/OippSlX1RlWWr+QDPcGUZs0uoqr32urfxESG9U93lhUfbnlyckte84Q8P1UQY/qth983AS1JONKmLS4T0nw==}
 
   chrome-trace-event@1.0.4:
     resolution: {integrity: sha512-rNjApaLzuwaOTjCiT8lSDdGN1APCiqkChLMJxJPWLunPAt5fy8xgU9/jNOchV84wfIxrA0lRQB7oCT8jrn/wrQ==}
@@ -4409,6 +4423,10 @@ snapshots:
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
+  '@mantine/colors-generator@7.17.8(chroma-js@3.2.0)':
+    dependencies:
+      chroma-js: 3.2.0
+
   '@mantine/core@7.17.8(@mantine/hooks@7.17.8(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
       '@floating-ui/react': 0.26.28(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -5166,6 +5184,8 @@ snapshots:
     dependencies:
       ansi-styles: 4.3.0
       supports-color: 7.2.0
+
+  chroma-js@3.2.0: {}
 
   chrome-trace-event@1.0.4: {}
 

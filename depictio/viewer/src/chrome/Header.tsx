@@ -1,8 +1,9 @@
 import React from 'react';
 import { ActionIcon, Badge, Box, Button, Group, Loader, Menu, Title, Tooltip, useMantineColorScheme } from '@mantine/core';
+import { BRAND_PALETTES, useBrandAccent, useBranding } from 'depictio-react-core';
 import { Icon } from '@iconify/react';
 
-import type { DashboardData, DashboardSummary } from 'depictio-react-core';
+import type { BrandTheme, DashboardData, DashboardSummary } from 'depictio-react-core';
 import PoweredBy from './PoweredBy';
 
 /** True for path-like icon values (PNG/SVG file URLs) — these came from the
@@ -30,11 +31,20 @@ function rewriteMultiqcIcon(path: string, theme: 'light' | 'dark'): string {
 function resolveTabIcon(tab: DashboardSummary | null | undefined): string | null {
   return (tab?.tab_icon || tab?.icon) ?? null;
 }
-function resolveTabColor(tab: DashboardSummary | null | undefined): string | null {
+function resolveTabColor(
+  tab: DashboardSummary | null | undefined,
+  brand: BrandTheme | null,
+): string | null {
   // Match the Sidebar rule: MultiQC tabs render in neutral dark, regardless
   // of whatever colour the YAML/seed stamped.
   if (isMultiqcIcon(tab?.tab_icon) || isMultiqcIcon(tab?.icon)) return 'dark';
-  return (tab?.tab_icon_color || tab?.icon_color) ?? null;
+  // Same precedence as the sidebar pill this title names: the author's colour
+  // wins, and a tab that states none takes the brand. Still `null` when there
+  // is no brand — an unbranded deployment kept a colourless tab's title as
+  // plain body text, and this is not the place to change that.
+  return (
+    tab?.tab_icon_color || tab?.icon_color || (brand?.tertiary ? BRAND_PALETTES.tertiary : null)
+  );
 }
 
 interface HeaderProps {
@@ -116,7 +126,14 @@ const Header: React.FC<HeaderProps> = ({
   // Iconify names (mdi:..., bx:...) pass through unchanged.
   const tabIconImageSrc =
     tabIconIsImage && tabIconRaw ? rewriteMultiqcIcon(tabIconRaw, theme) : null;
-  const resolvedColor = resolveTabColor(activeTab);
+  // The header's three actions, as brand roles. The literals are what an
+  // unbranded deployment has always shown; an instance that names a brand gets
+  // its own hues here in either tint mode.
+  const brand = useBranding();
+  const addColor = useBrandAccent('primary', 'green');
+  const saveColor = useBrandAccent('secondary', 'teal');
+  const editColor = useBrandAccent('primary', 'blue');
+  const resolvedColor = resolveTabColor(activeTab, brand);
   const tabIconColor = resolvedColor || 'gray';
   // Title text color:
   //   - 'dark' (the MultiQC neutral scheme) → page text color (`#1a1b1e`
@@ -266,7 +283,7 @@ const Header: React.FC<HeaderProps> = ({
                 <Button
                   leftSection={<Icon icon="mdi:plus-circle" width={14} />}
                   rightSection={<Icon icon="mdi:chevron-down" width={14} />}
-                  color="green"
+                  color={addColor}
                   variant="filled"
                   size="xs"
                   disabled={!dashboardId || !isOwner}
@@ -304,7 +321,7 @@ const Header: React.FC<HeaderProps> = ({
           >
             <Button
               leftSection={<Icon icon="mdi:content-save" width={14} />}
-              color="teal"
+              color={saveColor}
               variant="filled"
               size="xs"
               onClick={onSave}
@@ -329,7 +346,7 @@ const Header: React.FC<HeaderProps> = ({
           >
             <Button
               leftSection={<Icon icon="mdi:pencil" width={14} />}
-              color="blue"
+              color={editColor}
               variant="filled"
               size="xs"
               onClick={handleEdit}

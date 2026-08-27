@@ -15,16 +15,7 @@ import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 
-import {
-  listDashboards,
-  listProjects,
-  createDashboard,
-  editDashboard as apiEditDashboard,
-  deleteDashboard as apiDeleteDashboard,
-  duplicateDashboard as apiDuplicateDashboard,
-  importDashboardJson,
-  exportDashboardJson,
-} from 'depictio-react-core';
+import { createDashboard, deleteDashboard as apiDeleteDashboard, duplicateDashboard as apiDuplicateDashboard, editDashboard as apiEditDashboard, exportDashboardJson, importDashboardJson, listDashboards, listProjects, useBrandAccents } from 'depictio-react-core';
 import type {
   CreateDashboardInput,
   DashboardListEntry,
@@ -40,6 +31,7 @@ import CreateDashboardModal from './CreateDashboardModal';
 import EditDashboardModal from './EditDashboardModal';
 import DeleteDashboardModal from './DeleteDashboardModal';
 import { recordOpen as recordDashboardOpen } from './lib/dashboardRecents';
+import { usePageTitle } from '../branding';
 
 /** Separate storage key from the per-dashboard sidebar (`sidebar-collapsed`)
  *  so the management page can default to OPEN regardless of the user's
@@ -71,6 +63,7 @@ function useDashboardsSidebar(): [boolean, () => void] {
 }
 
 const DashboardsApp: React.FC = () => {
+  const accent = useBrandAccents();
   const [dashboards, setDashboards] = useState<DashboardListEntry[]>([]);
   const [projects, setProjects] = useState<ProjectListEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -91,9 +84,7 @@ const DashboardsApp: React.FC = () => {
   // the first frame before `/auth/me/optional` resolves.
   const importDisabled = authLoading || isPublicMode || isDemoMode;
 
-  useEffect(() => {
-    document.title = 'Depictio — Dashboards';
-  }, []);
+  usePageTitle('Dashboards');
 
   useEffect(() => {
     setLoading(true);
@@ -292,14 +283,14 @@ const DashboardsApp: React.FC = () => {
             <Icon
               icon="material-symbols:dashboard"
               width={22}
-              color="var(--mantine-color-orange-6)"
+              color={`var(--mantine-color-${accent.tertiary}-6)`}
             />
-            <Title order={3} c="orange">
+            <Title order={3} c={accent.tertiary}>
               Dashboards
             </Title>
           </Group>
           <Button
-            color="orange"
+            color={accent.tertiary}
             variant="filled"
             size="md"
             onClick={openCreate}

@@ -27,16 +27,12 @@ import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 import type { ColDef, ICellRendererParams, CellValueChangedEvent } from 'ag-grid-community';
 
-import {
-  fetchProject,
-  listAllUsers,
-  toggleProjectVisibility,
-  updateProjectPermissions,
-} from 'depictio-react-core';
+import { fetchProject, listAllUsers, toggleProjectVisibility, updateProjectPermissions, useBrandAccents } from 'depictio-react-core';
 import type { AdminUser, ProjectListEntry } from 'depictio-react-core';
 
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { AppSidebar } from '../../chrome';
+import { usePageTitle } from '../../branding';
 
 interface UserRow {
   _id: string;
@@ -144,6 +140,7 @@ const VisibilityCard: React.FC<{
 };
 
 const PermissionsApp: React.FC = () => {
+  const accent = useBrandAccents();
   const projectId = readProjectIdFromPath();
   const { user } = useCurrentUser();
   const { colorScheme } = useMantineColorScheme();
@@ -169,9 +166,7 @@ const PermissionsApp: React.FC = () => {
   const [pendingPublic, setPendingPublic] = useState<boolean | null>(null);
   const [visibilityBusy, setVisibilityBusy] = useState(false);
 
-  useEffect(() => {
-    document.title = 'Depictio — Project Permissions';
-  }, []);
+  usePageTitle('Project Permissions');
 
   // Try to load the full user list once for the Autocomplete suggestions.
   // The endpoint is admin-only — for non-admins we silently fall back to
@@ -518,9 +513,9 @@ const PermissionsApp: React.FC = () => {
             <Icon
               icon="mdi:jira"
               width={22}
-              color="var(--mantine-color-teal-6)"
+              color={`var(--mantine-color-${accent.secondary}-6)`}
             />
-            <Title order={3} c="teal">
+            <Title order={3} c={accent.secondary}>
               Project Permissions
             </Title>
           </Group>
@@ -529,7 +524,7 @@ const PermissionsApp: React.FC = () => {
               component="a"
               href={`/projects/${projectId}`}
               variant="subtle"
-              color="teal"
+              color={accent.secondary}
               leftSection={<Icon icon="mdi:database-outline" width={16} />}
             >
               Data Collections
@@ -601,7 +596,7 @@ const PermissionsApp: React.FC = () => {
                       // Mantine — Mantine swaps to `color` only when checked
                       // (= public). For the unchecked private state we set
                       // a violet thumb via styles to match the Dash badge.
-                      color="teal"
+                      color={accent.secondary}
                       styles={{
                         track: !(pendingPublic !== null
                           ? pendingPublic
@@ -704,7 +699,7 @@ const PermissionsApp: React.FC = () => {
                       />
                       <Button
                         size="sm"
-                        color="teal"
+                        color={accent.secondary}
                         loading={adding}
                         onClick={handleAdd}
                         disabled={!emailInput.trim()}

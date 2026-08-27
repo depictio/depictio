@@ -20,7 +20,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
-import { stableColorMap } from '../../colors';
+import { resolveCategoricalPalette, stableColorMap } from '../../colors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
 import { ladderise, parseNewick, type PhyloNode, type PhyloTree, toNewick } from './phylo/newick';
@@ -55,7 +55,8 @@ interface Props {
   refreshTick?: number;
 }
 
-// Muted publication-friendly palette for categorical tip colouring.
+// Muted publication-friendly palette for categorical tip colouring, used
+// when the deployment states no brand of its own.
 const PALETTE = [
   '#4C72B0',
   '#DD8452',
@@ -78,6 +79,7 @@ const LAYOUTS: Array<{ value: Layout; label: string }> = [
 const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
+  const palette = resolveCategoricalPalette(theme, PALETTE);
   const config = (metadata.config || {}) as PhylogeneticConfig;
   const isDark = colorScheme === 'dark';
 
@@ -220,7 +222,7 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
     const colorByTip = new Map<string, string>();
     if (!tree) return { colorByTip, categories: [] };
     if (!colorCol || !meta) {
-      for (const leaf of tree.leaves) colorByTip.set(leaf.name ?? '', PALETTE[0]);
+      for (const leaf of tree.leaves) colorByTip.set(leaf.name ?? '', palette[0]);
       return { colorByTip, categories: [] };
     }
     // Build categorical palette keyed on the FULL distinct-value universe
@@ -240,7 +242,7 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
     const palettesByCol = config.category_palettes || {};
     const colourSource = stableColorMap(
       colorUniverse ?? uniqueValues,
-      PALETTE,
+      palette,
       colorCol ? palettesByCol[colorCol] || null : null,
     );
     for (const leaf of tree.leaves) {
@@ -410,7 +412,7 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
       tipYs.push(leaf.y!);
       tipLabels.push(name);
       tipIds.push(leaf.id);
-      tipColours.push(tipColors.colorByTip.get(name) ?? PALETTE[0]);
+      tipColours.push(tipColors.colorByTip.get(name) ?? palette[0]);
       const isHi = highlightedIds.has(leaf.id);
       const isSearchMatch = searchLc.length > 0 && name.toLowerCase().includes(searchLc);
       tipSizes.push(isSearchMatch ? 13 : isHi ? 10 : inScope ? 8 : 5);
@@ -635,7 +637,7 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
               // when the user filters down to a subset of categories).
               background: stableColorMap(
                 colorUniverse ?? tipColors.categories,
-                PALETTE,
+                palette,
                 colorCol ? (config.category_palettes || {})[colorCol] || null : null,
               ).get(cat),
               }}

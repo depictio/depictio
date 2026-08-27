@@ -193,13 +193,14 @@
  * than as the solid border of an active state, and offset inwards so it hugs
  * the Paper's own edge instead of bleeding into the grid gutter.
  *
- * The color must match `GROUPING_COLOR` in selectionGroups.ts (CSS cannot read
- * it) — deliberately NOT the theme primary, which is blue and would collide
- * with the Edit button the Analysis control sits beside. The `-filled` token
- * resolves per scheme, so this stays correct in light and dark. */
+ * `--depictio-grouping-color` is stamped on the element by ComponentChrome from
+ * `useGroupingColorVar`, so the hue is stated once — deliberately NOT the theme
+ * primary, which the Edit button beside the Analysis control already uses; on a
+ * branded instance it is the brand's tertiary instead. The `-filled` token
+ * behind it resolves per scheme, correct in light and dark. */
 .depictio-component-chrome.depictio-selection-capable > .mantine-Paper-root,
 .depictio-component-chrome.depictio-selection-capable > .depictio-fill {
-  outline: 2px dashed var(--mantine-color-violet-filled);
+  outline: 2px dashed var(--depictio-grouping-color);
   outline-offset: -2px;
   border-radius: var(--mantine-radius-md);
 }

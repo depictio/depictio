@@ -121,15 +121,41 @@ async def preview_figure(
         {
           "metadata": { ...full figure stored_metadata shape... },
           "filters": [...] (optional),
-          "theme": "light" | "dark" (default "light")
+          "theme": "light" | "dark" (default "light"),
+          "dashboard_id": "..." (optional)
         }
+
+    ``dashboard_id``, when supplied, pulls that dashboard's ``brand_theme``
+    defaults into the preview so it matches what the saved component will
+    render (#397).
     """
     metadata = request.get("metadata") or {}
     filters = request.get("filters") or []
     theme = request.get("theme") or "light"
+    preview_dashboard_id = request.get("dashboard_id")
 
     if not metadata or metadata.get("component_type") != "figure":
         raise HTTPException(status_code=400, detail="metadata must be a figure component.")
+
+    if preview_dashboard_id:
+        from bson import ObjectId
+
+        from depictio.api.v1.db import dashboards_collection
+        from depictio.api.v1.services.figure.figure_builder import merge_dashboard_brand_theme
+
+        try:
+            dashboard_doc = dashboards_collection.find_one(
+                {"dashboard_id": ObjectId(str(preview_dashboard_id))}
+            )
+        except Exception:
+            dashboard_doc = None
+        if dashboard_doc and dashboard_doc.get("brand_theme"):
+            metadata = {
+                **metadata,
+                "dict_kwargs": merge_dashboard_brand_theme(
+                    dashboard_doc["brand_theme"], metadata.get("dict_kwargs") or {}
+                ),
+            }
 
     wf_id = metadata.get("wf_id")
     dc_id = metadata.get("dc_id")

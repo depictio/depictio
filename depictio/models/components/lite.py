@@ -135,6 +135,14 @@ class FigureLiteComponent(BaseLiteComponent):
         default=None, description="Column to extract from selected points"
     )
 
+    # Per-figure font emphasis (rendered client-side by FigureRenderer)
+    font_scale: float | None = Field(
+        default=None,
+        gt=0,
+        description="Font-size multiplier applied to the whole figure layout font "
+        "(axis labels, ticks, legend). Unset/1 = default size.",
+    )
+
     @model_validator(mode="after")
     def validate_figure_constraints(self) -> "FigureLiteComponent":
         """Validate figure-specific cross-field constraints."""

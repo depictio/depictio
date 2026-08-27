@@ -56,8 +56,12 @@ import {
   startSessionKeepAlive,
   validateSession,
 } from 'depictio-react-core';
+import { UiScaleContext } from 'depictio-react-core';
 import BootSplash from './components/BootSplash';
-import { depictioTheme } from './theme';
+import { brandCssVariablesResolver, buildDepictioTheme } from './theme';
+import { readStoredScheme } from './hooks/useColorScheme';
+import { useUiScalePref } from './hooks/useUiScalePref';
+import { BrandingContext, getBranding, setBranding, subscribeBranding } from './branding';
 import { initGoogleAnalytics } from './googleAnalytics';
 import { WalkthroughHost } from './walkthrough';
 
@@ -117,18 +121,57 @@ function resolveTree(): React.ReactElement {
 }
 
 // Mirrors depictio/dash/layouts/shared_app_shell.py:create_app_shell MantineProvider config.
-// forceColorScheme initial value comes from localStorage — same key as the Dash app writes.
-// Defensive parse: stale/invalid stored value must NOT crash the SPA on boot.
-function readInitialColorScheme(): 'light' | 'dark' | 'auto' {
-  try {
-    const raw = localStorage.getItem('theme-store');
-    if (!raw) return 'light';
-    const parsed = JSON.parse(raw);
-    const scheme = parsed?.colorScheme;
-    return scheme === 'dark' || scheme === 'auto' ? scheme : 'light';
-  } catch {
-    return 'light';
-  }
+// Initial value comes from localStorage — same key/parser as useColorScheme, so
+// the boot-time read and the hook's hydration can never disagree.
+function readInitialColorScheme(): 'light' | 'dark' {
+  return readStoredScheme() ?? 'light';
+}
+
+/**
+ * Theme + UI-scale + branding root. Rebuilds the Mantine theme whenever the
+ * instance brand theme resolves (cached in localStorage for a flash-free first
+ * paint on return visits; the /utils/public-config fetch updates it
+ * in-flight). The font-size preference deliberately does NOT touch the theme:
+ * it scales dashboard content only (see useContentScaleStyle), never the app
+ * chrome. The numeric scale reaches the non-Mantine content surfaces (Plotly
+ * fonts, AG Grid row metrics) via UiScaleContext; the branding reaches
+ * logo/title consumers via BrandingContext.
+ *
+ * Surfaces (page/nav/section backgrounds, heading color) travel as CSS
+ * variables rather than theme fields: a brand needs a light *and* a dark value
+ * for each, which is exactly what `cssVariablesResolver` is for.
+ */
+function ThemeRoot({ children }: { children: React.ReactNode }) {
+  const { scale } = useUiScalePref();
+  const branding = React.useSyncExternalStore(subscribeBranding, getBranding);
+  const theme = React.useMemo(() => buildDepictioTheme({ brand: branding }), [branding]);
+  const cssVariablesResolver = React.useMemo(
+    () => brandCssVariablesResolver(branding),
+    [branding],
+  );
+
+  return (
+    <UiScaleContext.Provider value={scale}>
+      <BrandingContext.Provider value={branding}>
+        <MantineProvider
+          theme={theme}
+          cssVariablesResolver={cssVariablesResolver}
+          defaultColorScheme={readInitialColorScheme()}
+        >
+          {/* DatesProvider is required for @mantine/dates components to pick up
+              locale + first-day-of-week settings. Matches what DMC does
+              internally for ``dmc.DatePickerInput``. */}
+          <DatesProvider settings={{ locale: 'en', firstDayOfWeek: 1 }}>
+            <Notifications position="bottom-right" />
+            <ErrorBoundary>
+              <Suspense fallback={<BootSplash />}>{children}</Suspense>
+            </ErrorBoundary>
+            <WalkthroughHost />
+          </DatesProvider>
+        </MantineProvider>
+      </BrandingContext.Provider>
+    </UiScaleContext.Provider>
+  );
 }
 
 // Boot-time session bootstrap. Four jobs:
@@ -244,6 +287,12 @@ function bootstrapPublicConfig(): void {
       if (ga?.enabled && ga.tracking_id) {
         initGoogleAnalytics(ga.tracking_id);
       }
+      // Instance brand theme: push into the theme root's store + localStorage
+      // cache. `undefined` means an older backend without the field — leave
+      // whatever the cache holds rather than un-branding a live UI.
+      if (config.branding !== undefined) {
+        setBranding(config.branding);
+      }
     })
     .catch(() => undefined);
 }
@@ -266,20 +315,7 @@ if (isBareRoot) {
     startSessionKeepAlive();
     ReactDOM.createRoot(document.getElementById('root')!).render(
       <React.StrictMode>
-        <MantineProvider theme={depictioTheme} defaultColorScheme={readInitialColorScheme()}>
-          {/* DatesProvider is required for @mantine/dates components to pick up
-              locale + first-day-of-week settings. Matches what DMC does
-              internally for ``dmc.DatePickerInput``. */}
-          <DatesProvider settings={{ locale: 'en', firstDayOfWeek: 1 }}>
-            <Notifications position="bottom-right" />
-            <ErrorBoundary>
-              <Suspense fallback={<BootSplash />}>
-                {resolveTree()}
-              </Suspense>
-            </ErrorBoundary>
-            <WalkthroughHost />
-          </DatesProvider>
-        </MantineProvider>
+        <ThemeRoot>{resolveTree()}</ThemeRoot>
       </React.StrictMode>,
     );
   });

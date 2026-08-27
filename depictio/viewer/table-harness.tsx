@@ -8,6 +8,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { MantineProvider, Stack, Title } from '@mantine/core';
+import { depictioTheme } from './src/theme';
 import '@mantine/core/styles.css';
 
 import DashboardTableView from './src/dashboards/views/DashboardTableView';
@@ -74,7 +75,7 @@ const projects = [
 const noop = () => {};
 
 const App = () => (
-  <MantineProvider>
+  <MantineProvider theme={depictioTheme}>
     <Stack p="lg" gap="xl">
       <Title order={3}>Dashboards</Title>
       <DashboardTableView

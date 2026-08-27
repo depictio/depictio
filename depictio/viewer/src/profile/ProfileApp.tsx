@@ -30,6 +30,7 @@ import {
 import { AppSidebar } from '../chrome';
 import EditPasswordModal from './EditPasswordModal';
 import { brandColors } from './colors';
+import { usePageTitle } from '../branding';
 
 const SIDEBAR_KEY = 'profile-sidebar-collapsed';
 
@@ -83,9 +84,7 @@ const ProfileApp: React.FC = () => {
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [desktopOpened, toggleDesktop] = useProfileSidebar();
 
-  useEffect(() => {
-    document.title = 'Depictio — Profile';
-  }, []);
+  usePageTitle('Profile');
 
   useEffect(() => {
     let cancelled = false;

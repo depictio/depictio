@@ -9,9 +9,25 @@
   opacity: 0.75;
 }
 
-/* Keep tab labels readable in the vertical sidebar */
+/* Keep tab labels readable in the vertical sidebar.
+ *
+ * The ellipsis needs a constrained box to bite on, and a flex item's default
+ * `min-width: auto` refuses to shrink below its content — so a long dashboard
+ * name pushed the pill past the sidebar's right edge instead of truncating.
+ * Capping the tab and clearing `min-width` down the whole chain (tab → label
+ * slot → our span) is what makes the overflow resolve here. The full name is
+ * still reachable: `Sidebar` puts it in a tooltip whenever it is cut off. */
 .depictio-chrome-tab-label {
+  display: block;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.depictio-chrome-tabs .mantine-Tabs-tab {
+  max-width: 100%;
+}
+.depictio-chrome-tabs .mantine-Tabs-tabLabel {
+  min-width: 0;
+  overflow: hidden;
 }

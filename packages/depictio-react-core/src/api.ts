@@ -7,6 +7,7 @@
  * recovery. Do not attach the bearer by hand — see its docstring for why.
  */
 
+import type { BrandTheme } from './brandTheme';
 import { enqueueFetch } from './fetchQueue';
 import type { GroupingDisplay, GroupRenderDef } from './selectionGroups';
 
@@ -295,6 +296,10 @@ export interface StoredMetadata {
    *  When omitted, the renderer defaults to visible for ungrouped components and
    *  hidden for components inside a group (compact mode). */
   show_marks?: boolean;
+  /** Per-component font-size multiplier (figures: scales the whole Plotly
+   *  layout font — axis labels, ticks, legend). Multiplies the dashboard-wide
+   *  content scale; 1/undefined = no override. */
+  font_scale?: number;
   // Table
   /** Column allowlist for table components — when non-empty, only these
    *  columns are rendered (empty / undefined = show all columns). */
@@ -344,6 +349,9 @@ export interface DashboardData {
    *  dashboard. Absent on payloads cached before the field existed, which is
    *  why every reader tests `!== false` rather than `Boolean(...)`. */
   funnel_filtering?: boolean;
+  /** Per-dashboard brand override (#397): logo, palette, surfaces and figure
+   *  defaults. Unset fields inherit the instance branding. */
+  brand_theme?: BrandTheme | null;
   /** Project-level realtime config — only when ``enabled === true`` should
    *  the viewer mount the WebSocket subscription / live-updates indicator. */
   project_realtime?: { enabled: boolean; debounce_ms: number };
@@ -1688,6 +1696,10 @@ export interface PublicConfigResponse {
     enabled: boolean;
     tracking_id: string | null;
   };
+  /** Instance brand theme (#397), already resolved: derived figure colors
+   *  materialised and defaults made explicit, so the client never re-derives
+   *  a palette. Empty-ish object on an unbranded deployment. */
+  branding?: BrandTheme;
 }
 
 export async function fetchPublicConfig(): Promise<PublicConfigResponse> {
@@ -1970,6 +1982,9 @@ export interface FigurePreviewRequest {
   metadata: Record<string, unknown>;
   filters?: InteractiveFilter[];
   theme?: 'light' | 'dark';
+  /** Owning dashboard — lets the server fold the dashboard's `brand_theme`
+   *  figure defaults into the preview so it matches the saved render. */
+  dashboard_id?: string;
 }
 
 export async function previewFigure(
@@ -2260,6 +2275,132 @@ export async function saveDashboardNotes(
     body: JSON.stringify(payload),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to save dashboard notes');
+}
+
+// ---- Instance branding (admin panel) --------------------------------------
+
+/** Admin view of the three branding layers.
+ *
+ *  `overrides` is what the admin explicitly set (the form's value),
+ *  `env_defaults` what the deployment's DEPICTIO_BRANDING_* vars provide (the
+ *  form's placeholders), and `effective` the resolved result the rest of the
+ *  app sees — derived figure colors included. */
+export interface AdminBrandingState {
+  overrides: BrandTheme;
+  env_defaults: BrandTheme;
+  effective: BrandTheme;
+}
+
+/** A named starting palette offered by the Branding panel. */
+export interface BrandPreset {
+  id: string;
+  label: string;
+  /** What applying it writes into the form. */
+  theme: BrandTheme;
+  /** The same theme resolved, so the picker can show real swatches. */
+  preview: BrandTheme;
+}
+
+export async function fetchBrandingAdmin(): Promise<AdminBrandingState> {
+  const res = await authFetch(`${API_BASE}/utils/branding`);
+  if (!res.ok) await throwHttpError(res, 'Failed to load branding settings');
+  return res.json();
+}
+
+/** Replace the override set — omitted/null fields fall back to env defaults. */
+export async function updateBrandingAdmin(theme: BrandTheme): Promise<AdminBrandingState> {
+  const res = await authFetch(`${API_BASE}/utils/branding`, {
+    method: 'PUT',
+    body: JSON.stringify(theme),
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to save branding settings');
+  return res.json();
+}
+
+export async function resetBrandingAdmin(): Promise<AdminBrandingState> {
+  const res = await authFetch(`${API_BASE}/utils/branding`, { method: 'DELETE' });
+  if (!res.ok) await throwHttpError(res, 'Failed to reset branding settings');
+  return res.json();
+}
+
+/** Resolve a draft theme (derive its figure colors, make defaults explicit)
+ *  without saving it.
+ *
+ *  The derivation lives server-side so the two ends can't drift, so a live
+ *  preview of an unsaved draft has to ask for it. Cheap and pure — debounce
+ *  it, don't cache it. */
+export async function resolveBrandTheme(theme: BrandTheme): Promise<BrandTheme> {
+  const res = await authFetch(`${API_BASE}/utils/branding/resolve`, {
+    method: 'POST',
+    body: JSON.stringify(theme),
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to resolve brand theme');
+  return res.json();
+}
+
+/** The shipped brand presets. Public, like the login page's branding. */
+export async function fetchBrandPresets(): Promise<BrandPreset[]> {
+  try {
+    const res = await fetch(`${API_BASE}/utils/branding/presets`, { cache: 'no-cache' });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { presets?: BrandPreset[] };
+    return data.presets ?? [];
+  } catch {
+    // Presets are a convenience: an older backend without the route must not
+    // break the panel, the pickers still work.
+    return [];
+  }
+}
+
+/** Upload an instance logo variant; the server stores it under
+ *  /static/branding/ and points the matching override at it. */
+export async function uploadBrandingLogo(
+  variant: 'light' | 'dark',
+  file: File,
+): Promise<AdminBrandingState> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await authFetch(`${API_BASE}/utils/branding/logo/${variant}`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to upload branding logo');
+  return res.json();
+}
+
+// ---- Per-dashboard appearance ----------------------------------------------
+
+/** Replace a dashboard's brand override.
+ *
+ *  A targeted PATCH rather than the full-document `/save`: appearance edits
+ *  and an in-flight layout save would otherwise be last-writer-wins against
+ *  each other. An empty theme clears the override. */
+export async function updateDashboardAppearance(
+  dashboardId: string,
+  theme: BrandTheme | null,
+): Promise<BrandTheme | null> {
+  const res = await authFetch(`${API_BASE}/dashboards/appearance/${dashboardId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(theme ?? {}),
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to save dashboard appearance');
+  const data = (await res.json()) as { brand_theme: BrandTheme | null };
+  return data.brand_theme;
+}
+
+/** Upload a dashboard logo image. The server stores the file, stamps it on the
+ *  dashboard's brand theme (ownership-checked) and returns the cache-busted
+ *  URL. */
+export async function uploadDashboardLogo(dashboardId: string, file: File): Promise<string> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await authFetch(`${API_BASE}/dashboards/upload_logo/${dashboardId}`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to upload dashboard logo');
+  const data = (await res.json()) as { logo_url: string };
+  return data.logo_url;
 }
 
 export async function fetchCurrentUser(): Promise<CurrentUser | null> {

@@ -20,10 +20,12 @@ import { useCurrentUser } from '../hooks/useCurrentUser';
 import AdminUsersPanel from './AdminUsersPanel';
 import AdminProjectsPanel from './AdminProjectsPanel';
 import AdminDashboardsPanel from './AdminDashboardsPanel';
+import AdminBrandingPanel from './AdminBrandingPanel';
 import AdminMaintenancePanel from './AdminMaintenancePanel';
 import AdminMonitoringPanel from './AdminMonitoringPanel';
+import { usePageTitle } from '../branding';
 
-type AdminTab = 'users' | 'projects' | 'dashboards' | 'monitoring' | 'maintenance';
+type AdminTab = 'users' | 'projects' | 'dashboards' | 'branding' | 'monitoring' | 'maintenance';
 
 /** Persist the active tab so a refresh keeps the admin where they left off. */
 const TAB_KEY = 'admin-active-tab';
@@ -35,6 +37,7 @@ function readInitialTab(): AdminTab {
       raw === 'users' ||
       raw === 'projects' ||
       raw === 'dashboards' ||
+      raw === 'branding' ||
       raw === 'monitoring' ||
       raw === 'maintenance'
     ) {
@@ -56,9 +59,7 @@ const AdminApp: React.FC = () => {
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
   const [activeTab, setActiveTab] = useState<AdminTab>(readInitialTab);
 
-  useEffect(() => {
-    document.title = 'Depictio — Administration';
-  }, []);
+  usePageTitle('Administration');
 
   useEffect(() => {
     try {
@@ -120,6 +121,9 @@ const AdminApp: React.FC = () => {
           >
             Dashboards
           </Tabs.Tab>
+          <Tabs.Tab value="branding" leftSection={<Icon icon="mdi:palette-outline" width={16} />}>
+            Branding
+          </Tabs.Tab>
           {showMonitoring && (
             <Tabs.Tab
               value="monitoring"
@@ -141,6 +145,9 @@ const AdminApp: React.FC = () => {
         </Tabs.Panel>
         <Tabs.Panel value="dashboards" pt="md">
           <AdminDashboardsPanel />
+        </Tabs.Panel>
+        <Tabs.Panel value="branding" pt="md">
+          <AdminBrandingPanel />
         </Tabs.Panel>
         {showMonitoring && (
           <Tabs.Panel value="monitoring" pt="md">

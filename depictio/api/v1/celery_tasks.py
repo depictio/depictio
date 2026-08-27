@@ -330,6 +330,10 @@ def build_figure_preview(payload: dict) -> dict:
                 select_columns=select_columns,
             )
             if scan is not None:
+                from depictio.api.v1.services.figure.figure_builder import (
+                    resolve_template_override,
+                )
+
                 if color_by_group:
                     # Annotate on the LazyFrame so "split box/histogram by
                     # group" stays a scan-level pushdown — no rows materialise.
@@ -358,7 +362,13 @@ def build_figure_preview(payload: dict) -> dict:
                         dict_kwargs = original_dict_kwargs
                         agg_plan = plan_aggregation(visu_type, dict_kwargs)
                 if agg_plan is not None:
-                    agg_fig = build_aggregated_figure(scan, agg_plan, theme, render_stats)
+                    agg_fig = build_aggregated_figure(
+                        scan,
+                        agg_plan,
+                        theme,
+                        render_stats,
+                        template_override=resolve_template_override(dict_kwargs.get("template")),
+                    )
                 if agg_fig is None:
                     # The reduction fell through to the row loader below, which
                     # re-checks/re-applies the override itself — reset so it does.

@@ -16,7 +16,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
-import { stableColorMap, TAB10_PALETTE } from '../../colors';
+import { brandColorway, stableColorMap, TAB10_PALETTE } from '../../colors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyThemeFragment } from './plotlyTheme';
 
@@ -60,7 +60,13 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
   const [startRankIdx, setStartRankIdx] = useState<number>(0);
   const [colourByIdx, setColourByIdx] = useState<number>(0);
   const [maxDepth, setMaxDepth] = useState<number>(DEFAULT_DEPTH);
-  const [palette, setPalette] = useState<'tab10' | 'tab20'>('tab20');
+  // The instance (or dashboard) brand colorway, when there is one. It
+  // becomes an option here and the default, so a branded deployment's
+  // figures match its chrome without the viewer having to pick.
+  const brandPalette = brandColorway(theme);
+  const [palette, setPalette] = useState<'brand' | 'tab10' | 'tab20'>(
+    brandPalette ? 'brand' : 'tab20',
+  );
   const [showCounts, setShowCounts] = useState<boolean>(true);
   const [minPercent, setMinPercent] = useState<number>(0.5);
 
@@ -212,7 +218,10 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
       colourKeys.push(n.colourKey);
     });
 
-    const paletteArr = palette === 'tab10' ? TAB10_PALETTE : TAB20_PALETTE;
+    const paletteArr =
+      palette === 'brand' ? (brandPalette ?? TAB20_PALETTE)
+      : palette === 'tab10' ? TAB10_PALETTE
+      : TAB20_PALETTE;
     const colourSource = stableColorMap(
       colourRankUniverse ?? Array.from(new Set(colourKeys)),
       paletteArr as readonly string[],
@@ -291,8 +300,9 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
           size="xs"
           label="Palette"
           value={palette}
-          onChange={(v) => v && setPalette(v as 'tab10' | 'tab20')}
+          onChange={(v) => v && setPalette(v as 'brand' | 'tab10' | 'tab20')}
           data={[
+            ...(brandPalette ? [{ value: 'brand', label: 'Brand colours' }] : []),
             { value: 'tab20', label: 'tab20 (20 colours)' },
             { value: 'tab10', label: 'tab10 (10 colours)' },
           ]}

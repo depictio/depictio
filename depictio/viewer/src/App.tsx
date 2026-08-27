@@ -53,6 +53,7 @@ import {
   resolveGroupRender,
   SelectionGroupsPanel,
   SaveGroupContext,
+  BrandScope,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -81,6 +82,7 @@ const FILTER_DEBOUNCE_MS = 250;
 import { notifications } from '@mantine/notifications';
 import { Header, Sidebar, SettingsDrawer } from './chrome';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
+import { useContentScaleStyle } from './hooks/useUiScalePref';
 import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
 import { FILTER_PANEL_WIDTH_VAR, useFilterPanelWidth } from './hooks/useFilterPanelWidth';
 import { useCurrentUser } from './hooks/useCurrentUser';
@@ -93,6 +95,7 @@ import InspectorProviders from './chrome/inspector/InspectorProviders';
 import NotesFooter from './components/NotesFooter';
 import DashboardLoadIndicator from './components/DashboardLoadIndicator';
 import BootSplash from './components/BootSplash';
+import { usePageTitle } from './branding';
 
 /**
  * Top-level SPA. Layout:
@@ -200,6 +203,7 @@ const App: React.FC = () => {
   // `sidebar-collapsed` localStorage key the Dash app writes.
   const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
+  const contentScaleStyle = useContentScaleStyle();
   const { user: currentUser, inspectorEnabled } = useCurrentUser();
   const isOwner = isDashboardOwner(dashboard, currentUser?.email ?? null);
   // `control` is null while the flag is off, so no provider value reaches the
@@ -247,13 +251,7 @@ const App: React.FC = () => {
   const [ingestionBannerDismissed, setIngestionBannerDismissed] = useState(false);
 
   // Keep the browser tab title in sync with the dashboard name.
-  useEffect(() => {
-    if (dashboard?.title) {
-      document.title = `Depictio — ${dashboard.title}`;
-    } else if (dashboardId) {
-      document.title = `Depictio — ${dashboardId}`;
-    }
-  }, [dashboard?.title, dashboardId]);
+  usePageTitle(dashboard?.title || dashboardId);
 
   // Fetch dashboard + tab list in parallel
   useEffect(() => {
@@ -843,6 +841,9 @@ const App: React.FC = () => {
       <DashboardLoadingProvider>
       <InspectorProviders control={inspectorControl}>
       <SaveGroupContext.Provider value={saveGroupApi}>
+      {/* A dashboard that overrides the instance branding retints its own page
+          and nothing else — /dashboards and /admin stay on the instance look. */}
+      <BrandScope theme={dashboard?.brand_theme}>
       <AppShell
       header={{ height: 50 }}
       navbar={{
@@ -917,7 +918,7 @@ const App: React.FC = () => {
       </AppShell.Header>
 
       <AppShell.Navbar p="md" data-tour-id="sidebar">
-        <Sidebar tabs={tabSiblings} activeId={dashboardId} />
+        <Sidebar tabs={tabSiblings} activeId={dashboardId} brandTheme={dashboard?.brand_theme} />
       </AppShell.Navbar>
 
       <AppShell.Main style={{ height: 'calc(100vh - 50px)' }}>
@@ -1098,6 +1099,7 @@ const App: React.FC = () => {
             <Box
               px={4}
               py={4}
+              data-testid="dashboard-content"
               style={{
                 height: '100%',
                 minWidth: 0,
@@ -1105,6 +1107,9 @@ const App: React.FC = () => {
                 overflowX: 'hidden',
                 display: 'flex',
                 flexDirection: 'column',
+                // Content font-size preference — scales the dashboard tiles
+                // below, never the surrounding chrome (header, sidebar, panel).
+                ...contentScaleStyle,
               }}
             >
               {/* Persistent grid sections owned by sibling tabs — the
@@ -1217,12 +1222,14 @@ const App: React.FC = () => {
                 background: 'var(--mantine-color-body)',
               }}
             >
-              <TopPanel
-                components={topComponents}
-                filters={filters}
-                onFilterChange={handleFilterChange}
-                refreshTick={refreshTick}
-              />
+              <Box style={contentScaleStyle}>
+                <TopPanel
+                  components={topComponents}
+                  filters={filters}
+                  onFilterChange={handleFilterChange}
+                  refreshTick={refreshTick}
+                />
+              </Box>
             </Box>
           )}
           </div>
@@ -1295,6 +1302,7 @@ const App: React.FC = () => {
         dashboard={dashboard}
       />
     </AppShell>
+      </BrandScope>
       </SaveGroupContext.Provider>
       </InspectorProviders>
       </DashboardLoadingProvider>

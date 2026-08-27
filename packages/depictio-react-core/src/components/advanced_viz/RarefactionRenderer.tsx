@@ -18,7 +18,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
-import { stableColorMap, TAB10_PALETTE } from '../../colors';
+import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import {
   applyDataTheme,
@@ -108,12 +108,13 @@ const RarefactionPlot = React.memo<{
 RarefactionPlot.displayName = 'RarefactionPlot';
 
 // Shared tab10 palette via colors.ts so cross-viz colour assignments stay
-// in sync. The local alias keeps the index-based fallback ergonomic.
+// in sync — the fallback when the deployment states no brand of its own.
 const PALETTE = TAB10_PALETTE;
 
 const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
+  const palette = resolveCategoricalPalette(theme, PALETTE);
   const config = (metadata.config || {}) as RarefactionConfig;
   const isDark = colorScheme === 'dark';
 
@@ -295,7 +296,7 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
     // ordering when the unique-values endpoint hasn't responded yet.
     const colourSource = stableColorMap(
       groupUniverse ?? uniqGroups,
-      PALETTE,
+      palette,
       config.category_palette ?? null,
     );
     const colourForGroup = new Map<string, string>(
@@ -321,7 +322,7 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
       const group = groups ? sampleGroup.get(sid) ?? '—' : sid;
       const colour = groups
         ? colourForGroup.get(group)!
-        : PALETTE[i % PALETTE.length];
+        : palette[i % palette.length];
       const legendName = groups ? group : String(sid);
       const showInLegend = !groups || !seenGroupInLegend.has(group);
       if (showInLegend && groups) seenGroupInLegend.add(group);

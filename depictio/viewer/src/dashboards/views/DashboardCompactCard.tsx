@@ -17,6 +17,7 @@ import DashboardActionsMenu from '../DashboardActionsMenu';
 import type { CategoryInfo } from '../DashboardsList';
 import { coerceString, formatLastSaved, isImagePath } from '../lib/format';
 import { dashboardHref, dashboardLinkClickHandler } from '../lib/dashboardLinks';
+import { useBrandAccent, useBrandAccents } from 'depictio-react-core';
 
 export interface DashboardCompactCardProps {
   dashboard: DashboardListEntry;
@@ -49,8 +50,12 @@ const DashboardCompactCard: React.FC<DashboardCompactCardProps> = ({
   onExport,
   onTogglePin,
 }) => {
+  const accent = useBrandAccents();
+  // Same role as the project badge elsewhere, but this one has always been
+  // cyan rather than teal — the brand takes over, the unbranded hue stays put.
+  const cyanAccent = useBrandAccent('secondary', 'cyan');
   const icon = coerceString(dashboard.icon, 'mdi:view-dashboard');
-  const iconColor = coerceString(dashboard.icon_color, 'orange');
+  const iconColor = coerceString(dashboard.icon_color, accent.tertiary);
   const ownerEmail = dashboard.permissions?.owners?.[0]?.email ?? '';
   const isPublic = Boolean(dashboard.is_public);
   const lastSavedRaw = coerceString(dashboard.last_saved_ts, '');
@@ -62,7 +67,7 @@ const DashboardCompactCard: React.FC<DashboardCompactCardProps> = ({
   // status at a glance even before reading the badge text. Falls back to the
   // dashboard's own brand color when no category is provided (thumbnails view
   // already handles category via section headers).
-  const accent =
+  const stripeColor =
     category?.color ??
     (iconColor.startsWith('var(') || iconColor.startsWith('#')
       ? iconColor
@@ -74,7 +79,7 @@ const DashboardCompactCard: React.FC<DashboardCompactCardProps> = ({
       padding="xs"
       radius="sm"
       withBorder
-      style={{ borderLeft: `4px solid ${accent}`, height: '100%' }}
+      style={{ borderLeft: `4px solid ${stripeColor}`, height: '100%' }}
     >
       <Stack gap={6} h="100%">
         <Group wrap="nowrap" gap={6} align="center">
@@ -169,7 +174,7 @@ const DashboardCompactCard: React.FC<DashboardCompactCardProps> = ({
               const pid = (dashboard.project_id as string | undefined) || null;
               return (
                 <Badge
-                  color="cyan"
+                  color={cyanAccent}
                   variant="light"
                   size="sm"
                   component={pid ? 'a' : 'div'}
@@ -197,7 +202,7 @@ const DashboardCompactCard: React.FC<DashboardCompactCardProps> = ({
           </Badge>
           {childCount > 0 && (
             <Badge
-              color="orange"
+              color={accent.tertiary}
               variant="light"
               size="sm"
               leftSection={<Icon icon="mdi:tab" width={11} />}

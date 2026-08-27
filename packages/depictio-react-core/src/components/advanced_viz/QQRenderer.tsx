@@ -17,7 +17,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
-import { stableColorMap, TAB10_PALETTE } from '../../colors';
+import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 
@@ -166,7 +166,7 @@ const QQRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
     if (cats) {
       const allCats = Array.from(new Set(cats.map(String)));
       allCats.sort();
-      const colourSource = stableColorMap(categoryUniverse ?? allCats, TAB10_PALETTE);
+      const colourSource = stableColorMap(categoryUniverse ?? allCats, resolveCategoricalPalette(theme, TAB10_PALETTE));
       const allPs: number[] = [];
       for (const c of allCats) {
         const idxs: number[] = [];

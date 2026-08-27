@@ -1,6 +1,12 @@
 {
   "title": "Penguins Species Analysis",
   "subtitle": "Comparative morphology across Adelie, Chinstrap, and Gentoo on three islands",
+  "brand_theme": {
+    "primary": "#159090",
+    "secondary": "#a034f0",
+    "tertiary": "#ff8c00",
+    "tint_mode": "full"
+  },
   "version": 1,
   "icon": "/assets/images/icons/favicon.png",
   "icon_color": "orange",
