@@ -675,11 +675,28 @@ async def _bootstrap_admin_and_test_user() -> tuple[UserBeanie | None, dict | No
                     "(no DEPICTIO_BOOTSTRAP_ADMIN_* set)",
                     admin_email,
                 )
+            elif settings.auth.is_password_login_disabled and admin_email:
+                # Google OAuth is the only door in, so this admin's password
+                # can never be used to reach it: /auth/login refuses every
+                # attempt. Requiring one anyway would make an operator invent a
+                # secret whose only job is to be unusable. The email is still
+                # required — it is what the OAuth login matches the admin on
+                # (`create_or_get_user` looks the account up by email), so
+                # setting it to your own Google address is what makes you the
+                # admin without any seeded local account.
+                admin_password = secrets.token_urlsafe(32)
+                logger.info(
+                    "Password sign-in disabled: seeding admin '%s' with an unusable "
+                    "random password; sign in to it with Google",
+                    admin_email,
+                )
             else:
                 raise RuntimeError(
                     "No admin user exists in MongoDB and DEPICTIO_BOOTSTRAP_ADMIN_EMAIL / "
                     "DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD are not set. Set both env vars (via a "
-                    "Kubernetes Secret in production) so the first-boot admin can be created."
+                    "Kubernetes Secret in production) so the first-boot admin can be created. "
+                    "With DEPICTIO_AUTH_PASSWORD_LOGIN_DISABLED=true, the email alone is "
+                    "enough: set it to the Google address that should own the instance."
                 )
 
         logger.info(

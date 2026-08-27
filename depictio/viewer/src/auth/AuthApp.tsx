@@ -7,6 +7,7 @@ import AuthCard from './components/AuthCard';
 import GoogleOAuthCallback from './components/GoogleOAuthCallback';
 import MagicLinkCallback from './components/MagicLinkCallback';
 import LoginForm from './components/LoginForm';
+import PublicAccessGate from './components/PublicAccessGate';
 import RegisterForm from './components/RegisterForm';
 import { useAuthMode } from './hooks/useAuthMode';
 import './styles/auth.css';
@@ -38,7 +39,9 @@ export default function AuthApp() {
   //    owner.
   // 2. Public/demo mode — mint a fresh temporary user (no anonymous
   //    intermediate) and persist before navigating. Mirrors single-user
-  //    behavior so visitors land directly in /dashboards.
+  //    behavior so visitors land directly in /dashboards. Unless the
+  //    deployment sets a shared access code, in which case nothing is minted
+  //    here and PublicAccessGate asks for it first.
   // 3. Standard mode with an already-resolved session — bounce straight
   //    through without touching localStorage.
   useEffect(() => {
@@ -53,6 +56,9 @@ export default function AuthApp() {
           if (cancelled) return;
           persistSession(session);
         } else if (status.is_public_mode) {
+          // A protected public deployment asks for its shared code first, so
+          // the session is minted by the gate rather than on page load.
+          if (status.public_access_code_required) return;
           const session = await createTemporaryUser();
           if (cancelled) return;
           persistSession(session);
@@ -94,6 +100,10 @@ export default function AuthApp() {
           <AuthCard heading="Welcome to Depictio :">
             <Text c="red" ta="center">{error}</Text>
           </AuthCard>
+        ) : status?.is_public_mode && status?.public_access_code_required ? (
+          <AuthCard heading="Welcome to Depictio :">
+            <PublicAccessGate onSuccess={handleSuccess} />
+          </AuthCard>
         ) : status?.is_single_user_mode || status?.is_public_mode ? (
           <AuthCard heading="Welcome to Depictio :">
             <Stack align="center" gap="md">
@@ -122,6 +132,7 @@ export default function AuthApp() {
           <AuthCard heading="Welcome to Depictio :">
             <LoginForm
               googleEnabled={status?.google_oauth_enabled ?? false}
+              passwordLoginDisabled={status?.password_login_disabled ?? false}
               onSwitchToRegister={
                 status?.registration_disabled ? undefined : () => setView('register')
               }
