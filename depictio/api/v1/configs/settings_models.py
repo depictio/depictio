@@ -1,5 +1,6 @@
 import os
 import re
+import secrets
 from pathlib import Path
 from typing import Any, Literal, Optional
 
@@ -206,6 +207,13 @@ class MongoDBConfig(ServiceConfig):
         task_events_collection: str = Field(default="task_events")
         ingestion_runs_collection: str = Field(default="ingestion_runs")
         app_logs_collection: str = Field(default="app_logs")
+        # Instance branding: the singleton overrides document and the uploaded
+        # logo bytes. Named here so backup/restore can reach them like any other
+        # collection — a restored deployment that kept every dashboard's
+        # `brand_theme` but lost the instance brand they inherit from is worse
+        # than one that kept neither.
+        instance_settings_collection: str = Field(default="instance_settings")
+        branding_assets_collection: str = Field(default="branding_assets")
         # Holds the anonymous installation identity and the per-day send guards.
         # Deliberately its own collection: the wipe path in lifespan.py clears
         # everything except the init lock out of `initialization`, so an identity
@@ -323,6 +331,24 @@ class AuthConfig(BaseSettings):
         "pre-provisioned accounts can log in. Independent of public/single-user "
         "mode — use for private, login-required public-facing instances.",
     )
+    password_login_disabled: bool = Field(
+        default=False,
+        description="Block email + password sign-in. When True the /auth/login "
+        "endpoint returns 403 and the password form is hidden, leaving Google "
+        "OAuth as the only door in. Pairs with registration_disabled for an "
+        "instance whose accounts all come from one identity provider. Ignored "
+        "unless google_oauth_enabled is set, so a half-done configuration "
+        "cannot lock every user out.",
+    )
+    public_access_code: Optional[SecretStr] = Field(
+        default=None,
+        description="Shared access code gating public mode. Public mode otherwise "
+        "hands a temporary session to anyone who loads the page; with this set, a "
+        "visitor must enter the code first, so a deployment can be link-shareable "
+        "without being world-open. Ignored outside public/demo mode. It is a shared "
+        "secret, not an account: everyone who passes it still gets their own "
+        "throwaway user.",
+    )
     anonymous_user_email: str = Field(
         default="anonymous@depict.io",
         description="Default anonymous user email",
@@ -387,6 +413,10 @@ class AuthConfig(BaseSettings):
         if env_registration_disabled in ("true", "1", "yes"):
             object.__setattr__(self, "registration_disabled", True)
 
+        env_password_login_disabled = os.getenv("DEPICTIO_AUTH_PASSWORD_LOGIN_DISABLED", "").lower()
+        if env_password_login_disabled in ("true", "1", "yes"):
+            object.__setattr__(self, "password_login_disabled", True)
+
     @computed_field
     @property
     def is_single_user_mode(self) -> bool:
@@ -419,6 +449,39 @@ class AuthConfig(BaseSettings):
     def requires_anonymous_user(self) -> bool:
         """Returns True if any mode requiring anonymous user is enabled."""
         return self.is_single_user_mode or self.is_public_mode
+
+    @computed_field
+    @property
+    def is_public_access_code_required(self) -> bool:
+        """Returns True if public mode should ask for the shared access code.
+
+        Only meaningful in public mode: outside it the code gates nothing, and
+        reporting it as required would put a lock on a door that is not there.
+        """
+        return bool(self.public_access_code and self.is_public_mode)
+
+    def verify_public_access_code(self, candidate: str | None) -> bool:
+        """Constant-time check of a submitted access code."""
+        if not self.is_public_access_code_required:
+            return True
+        if not candidate:
+            return False
+        return secrets.compare_digest(
+            candidate,
+            self.public_access_code.get_secret_value(),  # type: ignore[possibly-unbound-attribute]
+        )
+
+    @computed_field
+    @property
+    def is_password_login_disabled(self) -> bool:
+        """Returns True if email + password sign-in should be refused.
+
+        Conditioned on Google OAuth actually being configured: the flag on its
+        own would leave a deployment with no way in at all, and an operator who
+        sets it while forgetting the OAuth vars should get their password form
+        back rather than a locked front door. Read this, not the raw flag.
+        """
+        return self.password_login_disabled and self.google_oauth_enabled
 
     @computed_field
     @property
@@ -1288,7 +1351,9 @@ class BrandingConfig(BaseSettings):
        no flat env var of their own.
     3. The flat vars below.
 
-    The "Powered by Depictio" header badge is deliberately not affected.
+    The "Powered by Depictio" attribution follows the logo: it is shown exactly
+    when the depictio wordmark is not, i.e. once a layer sets ``logo_mode`` to
+    ``custom`` or ``none``. A stock deployment shows the wordmark and no badge.
     """
 
     preset: Optional[str] = Field(

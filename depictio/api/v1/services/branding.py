@@ -28,7 +28,9 @@ in-process (other processes catch up within the TTL).
 
 from __future__ import annotations
 
+import base64
 import time
+from pathlib import Path
 from typing import Any, Optional
 
 import pymongo
@@ -42,6 +44,7 @@ from depictio.models.models.branding import (
     merge_brand_themes,
     resolve_brand_theme,
 )
+from depictio.version import get_api_version
 
 _DOC_ID = "branding"
 
@@ -52,14 +55,24 @@ _DOC_ID = "branding"
 # not stall every render for half a minute. Tests inject a fake here.
 instance_settings_collection: Any = None
 
+_client: Optional[pymongo.MongoClient] = None
+
+
+def _get_client() -> pymongo.MongoClient:
+    global _client
+    if _client is None:
+        _client = pymongo.MongoClient(
+            MONGODB_URL, serverSelectionTimeoutMS=2000, connectTimeoutMS=2000
+        )
+    return _client
+
 
 def _get_collection() -> Any:
     global instance_settings_collection
     if instance_settings_collection is None:
-        client: pymongo.MongoClient = pymongo.MongoClient(
-            MONGODB_URL, serverSelectionTimeoutMS=2000, connectTimeoutMS=2000
-        )
-        instance_settings_collection = client[settings.mongodb.db_name]["instance_settings"]
+        instance_settings_collection = _get_client()[settings.mongodb.db_name][
+            settings.mongodb.collections.instance_settings_collection
+        ]
     return instance_settings_collection
 
 
@@ -199,11 +212,216 @@ def validate_logo_upload(content_type: str | None, content: bytes) -> str:
     return ext
 
 
+# ── Uploaded logo storage ─────────────────────────────────────────────────────
+# Logos live in MongoDB, not on the API container's filesystem. A theme document
+# only ever holds a URL, and that URL used to point into
+# `depictio/api/static/branding/` (or `.../dashboard_logos/`): gitignored, with
+# no compose volume and no Helm PVC behind it, so a rebuild or a redeploy left
+# the document claiming a logo whose bytes were gone. `validate_logo_upload`
+# caps an upload at LOGO_MAX_BYTES, so an asset sits far under Mongo's 16MB
+# limit.
+
+#: Same dedicated-client rationale as `instance_settings_collection` above, and
+#: the same injection point for tests.
+branding_assets_collection: Any = None
+
+_API_PREFIX = f"/depictio/api/{get_api_version()}"
+#: Only reached by a document stored without one — every upload path goes
+#: through `validate_logo_upload`, which admits nothing but the LOGO_TYPES.
+_FALLBACK_CONTENT_TYPE = "application/octet-stream"
+
+
+def _get_assets_collection() -> Any:
+    global branding_assets_collection
+    if branding_assets_collection is None:
+        branding_assets_collection = _get_client()[settings.mongodb.db_name][
+            settings.mongodb.collections.branding_assets_collection
+        ]
+    return branding_assets_collection
+
+
+def instance_logo_key(variant: str) -> str:
+    """Asset key for an instance logo variant (``light`` / ``dark``)."""
+    return f"instance-{variant}"
+
+
+def dashboard_logo_key(dashboard_id: Any) -> str:
+    """Asset key for a dashboard's own logo."""
+    return f"dashboard-{dashboard_id}"
+
+
+def logo_asset_url(key: str) -> str:
+    """The URL serving ``key``, cache-busted so a replacement shows up at once.
+
+    ``?v=`` mirrors the screenshot thumbnails' `screenshot_ts` idiom: the path
+    is stable, so without it a browser keeps the previous logo after an upload.
+    """
+    if key.startswith("instance-"):
+        endpoint = f"utils/branding/logo/{key.removeprefix('instance-')}"
+    else:
+        endpoint = f"dashboards/logo/{key.removeprefix('dashboard-')}"
+    return f"{_API_PREFIX}/{endpoint}?v={int(time.time())}"
+
+
+#: What the logo endpoints answer with. Safe because `logo_asset_url` mints a
+#: fresh ``?v=`` on every upload: the bytes behind a given URL never change.
+LOGO_CACHE_CONTROL = "public, max-age=31536000, immutable"
+
+
+def store_logo_asset(key: str, content: bytes, content_type: str | None) -> str:
+    """Store (or replace) a logo's bytes. Returns the URL to put on the theme.
+
+    ``content_type`` is the upload's declared type, already checked against the
+    magic bytes by `validate_logo_upload`; it is optional only because
+    ``UploadFile.content_type`` is.
+
+    Base64 rather than BSON ``Binary`` so the document is plain JSON: the
+    backup endpoint serialises with ``json.dump(..., default=str)``, which
+    would turn raw bytes into an unrestorable ``repr``. The ~33% overhead on an
+    asset capped at LOGO_MAX_BYTES is worth a brand that survives a restore.
+    """
+    _get_assets_collection().replace_one(
+        {"_id": key},
+        {
+            "content_type": content_type or _FALLBACK_CONTENT_TYPE,
+            "data_b64": base64.b64encode(content).decode("ascii"),
+            "updated_at": int(time.time()),
+        },
+        upsert=True,
+    )
+    return logo_asset_url(key)
+
+
+def read_logo_asset(key: str) -> Optional[tuple[bytes, str]]:
+    """A stored logo's ``(bytes, content_type)``, or ``None`` when absent."""
+    doc = _get_assets_collection().find_one({"_id": key})
+    if not doc or not doc.get("data_b64"):
+        return None
+    return (
+        base64.b64decode(doc["data_b64"]),
+        doc.get("content_type") or _FALLBACK_CONTENT_TYPE,
+    )
+
+
+def delete_logo_asset(key: str) -> None:
+    """Drop a stored logo. Used when the thing it belonged to is deleted."""
+    _get_assets_collection().delete_one({"_id": key})
+
+
+def content_type_for_extension(ext: str) -> Optional[str]:
+    """Reverse of `LOGO_TYPES`, for importing files written before the rework."""
+    for content_type, (known_ext, _) in LOGO_TYPES.items():
+        if known_ext == ext.lower():
+            return content_type
+    return None
+
+
+# ── Migration off the filesystem ──────────────────────────────────────────────
+
+#: Where uploads landed before the bytes moved into MongoDB. Kept as a read
+#: source only. Derived from ``__file__`` so the path holds both in Docker
+#: (/app/depictio/...) and in a local run.
+_LEGACY_STATIC_DIR = Path(__file__).resolve().parents[2] / "static"
+_LEGACY_INSTANCE_URL_PREFIX = "/static/branding/"
+_LEGACY_DASHBOARD_URL_PREFIX = "/static/dashboard_logos/"
+
+
+def _import_legacy_file(key: str, path: Path) -> Optional[str]:
+    """Import one on-disk logo, returning its new URL (``None`` if unusable)."""
+    content_type = content_type_for_extension(path.suffix)
+    if content_type is None:
+        logger.warning(f"Skipping legacy logo with unsupported extension: {path.name}")
+        return None
+    return store_logo_asset(key, path.read_bytes(), content_type)
+
+
+def _migrate_instance_logos() -> int:
+    """Import the instance's own logo files. Returns how many moved."""
+    overrides = get_brand_theme_overrides()
+    migrated = 0
+    for variant, field in (("light", "logo_url"), ("dark", "logo_url_dark")):
+        current = getattr(overrides, field, None)
+        if not current or not current.startswith(_LEGACY_INSTANCE_URL_PREFIX):
+            continue
+        matches = sorted(_LEGACY_STATIC_DIR.glob(f"branding/logo_{variant}.*"))
+        if not matches:
+            logger.warning(
+                f"Instance {variant} logo points at {current} but the file is gone; "
+                "the brand keeps its other settings and the logo needs re-uploading."
+            )
+            continue
+        new_url = _import_legacy_file(instance_logo_key(variant), matches[0])
+        if new_url:
+            patch_brand_theme_overrides({field: new_url})
+            migrated += 1
+    return migrated
+
+
+def _migrate_dashboard_logos() -> int:
+    """Import per-dashboard logo files. Returns how many moved."""
+    from depictio.api.v1.db import dashboards_collection
+
+    migrated = 0
+    for doc in dashboards_collection.find(
+        {"brand_theme.logo_url": {"$regex": f"^{_LEGACY_DASHBOARD_URL_PREFIX}"}},
+        {"dashboard_id": 1, "brand_theme": 1},
+    ):
+        dashboard_id = doc["dashboard_id"]
+        matches = sorted(_LEGACY_STATIC_DIR.glob(f"dashboard_logos/{dashboard_id}.*"))
+        if not matches:
+            continue
+        new_url = _import_legacy_file(dashboard_logo_key(dashboard_id), matches[0])
+        if new_url:
+            dashboards_collection.update_one(
+                {"dashboard_id": dashboard_id},
+                {"$set": {"brand_theme.logo_url": new_url}},
+            )
+            migrated += 1
+    return migrated
+
+
+def migrate_legacy_logo_files() -> int:
+    """Move logos left on the container filesystem into MongoDB.
+
+    Picks up the documents still holding a ``/static/...`` URL from before the
+    move described above, and rewrites them to the new endpoints.
+
+    Runs on every boot and is a no-op once the directories are empty, which is
+    the steady state after the first migrated start. Never raises, and the two
+    halves are independent: a deployment must still come up if a logo cannot be
+    moved, and a dashboard that trips over something must not cost the instance
+    its own logo.
+    """
+    migrated = 0
+    for step, migrate in (
+        ("instance", _migrate_instance_logos),
+        ("dashboard", _migrate_dashboard_logos),
+    ):
+        try:
+            migrated += migrate()
+        except Exception as exc:
+            logger.warning(f"Migration of {step} logos to MongoDB skipped: {exc}")
+
+    if migrated:
+        logger.info(f"Migrated {migrated} uploaded logo(s) from the filesystem into MongoDB")
+    return migrated
+
+
 __all__ = [
     "HEX_COLOR_RE",
+    "LOGO_CACHE_CONTROL",
     "LOGO_MAX_BYTES",
     "LOGO_TYPES",
     "PALETTE_NAME_RE",
+    "branding_assets_collection",
+    "content_type_for_extension",
+    "dashboard_logo_key",
+    "delete_logo_asset",
+    "instance_logo_key",
+    "logo_asset_url",
+    "migrate_legacy_logo_files",
+    "read_logo_asset",
+    "store_logo_asset",
     "env_brand_theme",
     "get_brand_theme_overrides",
     "get_effective_brand_theme",

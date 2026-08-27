@@ -1,10 +1,17 @@
 import asyncio
-import time
 from datetime import datetime
-from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Header, HTTPException, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Header,
+    HTTPException,
+    Response,
+    UploadFile,
+)
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
@@ -149,9 +156,6 @@ async def public_config():
 # rule is enforced by the model's own validators (FastAPI turns their
 # ValueErrors into 422s) rather than by a hand-written mirror that can drift.
 
-# Uploaded branding logos; served by the /static/branding mount (api/main.py).
-_BRANDING_LOGOS_DIR = Path(__file__).resolve().parents[3] / "static" / "branding"
-
 
 def _require_admin(current_user) -> None:
     if not getattr(current_user, "is_admin", False):
@@ -250,22 +254,26 @@ async def upload_branding_logo(
     file: UploadFile = File(...),
     current_user=Depends(get_current_user),
 ):
-    """Store an instance logo (light or dark variant) and point the override at it."""
+    """Store an instance logo (light or dark variant) and point the override at it.
+
+    The bytes go to MongoDB, not to the container's filesystem: the theme
+    document survives a rebuild and its logo has to survive with it.
+    """
     _require_admin(current_user)
-    from depictio.api.v1.services.branding import patch_brand_theme_overrides, validate_logo_upload
+    from depictio.api.v1.services.branding import (
+        instance_logo_key,
+        patch_brand_theme_overrides,
+        store_logo_asset,
+        validate_logo_upload,
+    )
 
     content = await file.read()
     try:
-        ext = validate_logo_upload(file.content_type, content)
+        validate_logo_upload(file.content_type, content)
     except ValueError as exc:
         raise HTTPException(status_code=415, detail=str(exc))
 
-    _BRANDING_LOGOS_DIR.mkdir(parents=True, exist_ok=True)
-    for old in _BRANDING_LOGOS_DIR.glob(f"logo_{variant}.*"):
-        old.unlink(missing_ok=True)
-    (_BRANDING_LOGOS_DIR / f"logo_{variant}{ext}").write_bytes(content)
-
-    logo_url = f"/static/branding/logo_{variant}{ext}?v={int(time.time())}"
+    logo_url = store_logo_asset(instance_logo_key(variant), content, file.content_type)
     patch = {"logo_url" if variant == "light" else "logo_url_dark": logo_url}
     # An upload is an unambiguous "use this logo", so it also lifts a prior
     # "no logo" choice rather than silently storing an unused URL.
@@ -274,6 +282,31 @@ async def upload_branding_logo(
     patch_brand_theme_overrides(patch)
     logger.info(f"Branding logo ({variant}) updated by {getattr(current_user, 'email', '?')}")
     return _branding_admin_view()
+
+
+@utils_endpoint_router.get("/branding/logo/{variant}")
+async def get_branding_logo(variant: Literal["light", "dark"]):
+    """Serve a stored instance logo.
+
+    Deliberately unauthenticated: the login card renders the deployment's logo
+    before anyone has signed in, and this is the same image `/static/branding`
+    served to everyone before the bytes moved into MongoDB.
+    """
+    from depictio.api.v1.services.branding import (
+        LOGO_CACHE_CONTROL,
+        instance_logo_key,
+        read_logo_asset,
+    )
+
+    asset = read_logo_asset(instance_logo_key(variant))
+    if asset is None:
+        raise HTTPException(status_code=404, detail="No logo stored for this variant.")
+    content, content_type = asset
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={"Cache-Control": LOGO_CACHE_CONTROL},
+    )
 
 
 @utils_endpoint_router.get("/telemetry/preview")

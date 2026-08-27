@@ -20,6 +20,7 @@ from depictio.api.v1.configs.config import MONGODB_URL, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.initialization import run_initialization
 from depictio.api.v1.services.background_tasks import delayed_process_data_collections
+from depictio.api.v1.services.branding import migrate_legacy_logo_files
 from depictio.api.v1.services.events import event_service
 from depictio.api.v1.services.initialization import (
     check_and_set_initialization,
@@ -338,6 +339,10 @@ async def lifespan(_app: FastAPI):
     # Startup
     await init_motor_beanie()
     should_initialize = await handle_initialization()
+    # Deliberately outside the `should_initialize` branch: an already-initialised
+    # deployment never re-runs initialization, and it is exactly the deployment
+    # whose logos are still on the filesystem. No-op once they have moved.
+    migrate_legacy_logo_files()
     background_task = start_background_services(should_initialize)
     start_yaml_services(should_initialize)
     await start_event_services(should_initialize)

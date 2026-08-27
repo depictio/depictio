@@ -13,11 +13,13 @@ from pymongo.collection import Collection
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import (
+    branding_assets_collection,
     dashboards_collection,
     data_collections_collection,
     deltatables_collection,
     files_collection,
     groups_collection,
+    instance_settings_collection,
     projects_collection,
     runs_collection,
     users_collection,
@@ -179,6 +181,12 @@ async def _create_mongodb_backup(current_user: User) -> dict:
         "deltatables": {"collection": deltatables_collection, "exclude_filter": {}},
         "runs": {"collection": runs_collection, "exclude_filter": {}},
         "groups": {"collection": groups_collection, "exclude_filter": {}},
+        # Instance branding: the overrides singleton and the uploaded logo
+        # bytes it points at. Both are needed, or a restore brings back every
+        # dashboard's `brand_theme` while losing the instance identity those
+        # themes inherit from.
+        "instance_settings": {"collection": instance_settings_collection, "exclude_filter": {}},
+        "branding_assets": {"collection": branding_assets_collection, "exclude_filter": {}},
     }
 
     # First, get list of temporary user IDs to exclude their resources
@@ -594,6 +602,8 @@ async def restore_backup(
             "deltatables": deltatables_collection,
             "runs": runs_collection,
             "groups": groups_collection,
+            "instance_settings": instance_settings_collection,
+            "branding_assets": branding_assets_collection,
         }
 
         collections_to_restore = request.collections or list(data_section.keys())
