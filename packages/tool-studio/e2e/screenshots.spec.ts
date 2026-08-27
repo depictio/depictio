@@ -24,6 +24,15 @@ const shot = (name: string) => resolve(here, '..', 'docs', 'screenshots', `${nam
 const FIXTURE_URL =
   'https://github.com/MultiQC/test-data/blob/main/data/modules/kraken/bracken/v2.6.0/bracken_species_abundances.tsv';
 
+// An nf-core module that is neither in the catalog nor parsed by MultiQC, so the
+// import shot shows the importer alone. `kraken2/kraken2` was the obvious pick
+// and is the wrong one: `multiqcModuleFor` strips the trailing digit and lands
+// on MultiQC's `kraken`, so the yellow advisory covers half the shot. cnvkit
+// matches nothing, and its meta.yml declares twelve output channels, which is
+// what makes the picker worth photographing.
+const NF_CORE_MODULE_URL =
+  'https://github.com/nf-core/modules/tree/master/modules/nf-core/cnvkit/batch';
+
 /** Notifications stack in the corner and outlive the step that raised them, so
  *  a later shot inherits toasts about a file it is no longer showing. */
 async function dismissToasts(page: Page) {
@@ -64,10 +73,29 @@ test('capture documentation screenshots', async ({ page }) => {
   await page.screenshot({ path: shot('01-tool'), fullPage: true });
 
   // 1b) Recognition — retype the id of a tool already in the catalog; the
-  //     recognized entry (its outputs + renders) and the two actions appear.
-  await page.getByLabel('Tool id').fill('mosdepth');
-  await page.getByText('is already in the catalog').waitFor();
-  await page.screenshot({ path: shot('01b-recognized'), fullPage: true });
+  //     recognized entry (its outputs, each with the renders already committed
+  //     for it) and the two actions appear. `qiime2` on purpose: it is not a
+  //     MultiQC module, so the yellow advisory does not fire over this shot the
+  //     way it does for mosdepth, and its eight outputs carry real render
+  //     badges rather than "no renders yet".
+  await page.getByLabel('Tool id').fill('qiime2');
+  const recognized = page.getByText('is already in the catalog');
+  await recognized.waitFor();
+  // `fullPage` is useless in this app: the AppShell body is its own scroll
+  // container, so Playwright's page-height capture still crops at the viewport.
+  // Grow the viewport instead, and scroll the panel to the top so the eight
+  // outputs and their render badges are all in frame.
+  await page.setViewportSize({ width: 1440, height: 1220 });
+  // scrollIntoViewIfNeeded only nudges the panel just inside the fold, which
+  // leaves the Identity form eating half the frame. Pin the panel's top edge to
+  // the top of the viewport instead: this shot is about the recognized entry.
+  await recognized.evaluate((el) =>
+    el.closest('.mantine-Paper-root')?.scrollIntoView({ block: 'start' }),
+  );
+  await page.waitForTimeout(700);
+  await page.screenshot({ path: shot('01b-recognized') });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.waitForTimeout(300);
 
   // 1c) MultiQC advisory — `fastqc` is a MultiQC module but not a catalog tool
   //     of its own, so only the yellow advisory fires, with no recognition
@@ -76,8 +104,33 @@ test('capture documentation screenshots', async ({ page }) => {
   await page.getByText('MultiQC already parses').waitFor();
   await page.screenshot({ path: shot('01c-multiqc'), fullPage: true });
 
-  // Back to the new-tool flow for the remaining shots.
+  // 1d) Import from nf-core — paste a module URL, pull its meta.yml in the
+  //     browser, and open the output-channel picker the import populates. Kept
+  //     last of the Tool-step shots because Import overwrites the whole identity
+  //     half of the form, which would otherwise leak a foreign tool name into
+  //     `01b` and `01c`. The dropdown is portalled, so this is a viewport shot.
+  await page.getByLabel('nf-core module URL').fill(NF_CORE_MODULE_URL);
+  await page.getByRole('button', { name: 'Import' }).click();
+  // Mantine points the label at both the input and its listbox, so getByLabel is
+  // ambiguous here; target the textbox itself.
+  const channelPicker = page.getByRole('textbox', { name: 'Output channel' });
+  await channelPicker.waitFor({ timeout: 60_000 });
+  await channelPicker.click();
+  await page.getByRole('option').first().waitFor();
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: shot('01d-nfcore-import') });
+  await page.keyboard.press('Escape');
+  await dismissToasts(page);
+
+  // Back to the new-tool flow for the remaining shots. Clearing the visible
+  // fields is not enough: Import also sets `homepage` and `biotools_url`, which
+  // have no input on this step and would surface in the generated module.yaml in
+  // `06-export`. Switching source and back runs the store's full identity reset,
+  // which is the only thing that drops them.
+  await page.getByLabel('Snakemake wrapper').click();
+  await page.getByLabel('nf-core module').click();
   await page.getByLabel('Tool id').fill('mytool');
+  await page.getByLabel('Tool name').fill('My Tool');
   await page.getByRole('button', { name: 'Next', exact: true }).click();
 
   // 2b) Fixture from a URL — captured before the drop, since fetching replaces
@@ -121,6 +174,7 @@ test('capture documentation screenshots', async ({ page }) => {
   // 6) Export step — generated files + submit. Park the cursor first: Next sits
   //     under the stepper, whose tooltip otherwise hangs over the shot.
   await page.getByText('# yaml-language-server:').first().waitFor();
+  await dismissToasts(page);
   await page.mouse.move(720, 700);
   await page.waitForTimeout(400);
   await page.screenshot({ path: shot('06-export'), fullPage: true });

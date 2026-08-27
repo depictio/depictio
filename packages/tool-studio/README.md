@@ -42,9 +42,10 @@ whenever the draft is reset.
 | | |
 | --- | --- |
 | **0. Start** — what an entry does for people who run the tool, the four steps, and what it cannot describe yet (anything needing a parsing `recipe`). | ![Start screen](docs/screenshots/00-start.png) |
-| **1. Tool** — identity + the single output, 2-panel; nf-core **Import** auto-fills id/name/description **and** the output slug/glob from the module `meta.yml`. | ![Tool step](docs/screenshots/01-tool.png) |
-| **1b. Recognition** — when the id/name/nf-core module matches a catalog tool, its outputs + existing renders surface inline, with **Add a visualization here** (append to an output) and **Add a new output to this tool** (a fresh `<output>.yaml`). | ![Recognized tool](docs/screenshots/01b-recognized.png) |
+| **1. Tool** — identity + the single output, 2-panel. Type both halves by hand, or import them. | ![Tool step](docs/screenshots/01-tool.png) |
+| **1b. Recognition** — when the id/name/nf-core module matches a catalog tool, its outputs surface inline, each with the renders already committed for it, and with **Add a visualization here** (append to that output) and **Add a new output to this tool** (a fresh `<output>.yaml`). | ![Recognized tool](docs/screenshots/01b-recognized.png) |
 | **1c. MultiQC advisory** — when MultiQC already ships a module for the tool, say so: its metrics usually reach depictio through the MultiQC integration. Advisory only, nothing is blocked. | ![MultiQC advisory](docs/screenshots/01c-multiqc.png) |
+| **1d. Import from nf-core** — paste a module URL and **Import** pulls its `meta.yml` in the browser: id, name, description and links, plus every file output channel it declares, offered as a picker that auto-fills the slug, path glob and description. Snakemake wrappers and Galaxy tools import the same way. | ![Import from nf-core](docs/screenshots/01d-nfcore-import.png) |
 | **2. Fixture** — drop the output file; it's parsed client-side and shown in an ag-grid table (this file grounds the bindings in CI). | ![Fixture step](docs/screenshots/02-fixture.png) |
 | **2b. Fixture from a URL** — paste a link instead of a file. A `github.com` blob link is rewritten to raw; the host has to allow cross-origin requests, which the three corpora linked under the field do. | ![Fetch from a URL](docs/screenshots/02b-fetch-url.png) |
 | **3a. Add a visualization** — depictio's component-type grid (figure / card / table / interactive / advanced_viz). | ![Component types](docs/screenshots/03-component-types.png) |
