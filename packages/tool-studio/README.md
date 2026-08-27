@@ -41,13 +41,23 @@ whenever the draft is reset.
 
 | | |
 | --- | --- |
+| **0. Start** — what an entry does for people who run the tool, the four steps, and what it cannot describe yet (anything needing a parsing `recipe`). | ![Start screen](docs/screenshots/00-start.png) |
 | **1. Tool** — identity + the single output, 2-panel; nf-core **Import** auto-fills id/name/description **and** the output slug/glob from the module `meta.yml`. | ![Tool step](docs/screenshots/01-tool.png) |
 | **1b. Recognition** — when the id/name/nf-core module matches a catalog tool, its outputs + existing renders surface inline, with **Add a visualization here** (append to an output) and **Add a new output to this tool** (a fresh `<output>.yaml`). | ![Recognized tool](docs/screenshots/01b-recognized.png) |
+| **1c. MultiQC advisory** — when MultiQC already ships a module for the tool, say so: its metrics usually reach depictio through the MultiQC integration. Advisory only, nothing is blocked. | ![MultiQC advisory](docs/screenshots/01c-multiqc.png) |
 | **2. Fixture** — drop the output file; it's parsed client-side and shown in an ag-grid table (this file grounds the bindings in CI). | ![Fixture step](docs/screenshots/02-fixture.png) |
+| **2b. Fixture from a URL** — paste a link instead of a file. A `github.com` blob link is rewritten to raw; the host has to allow cross-origin requests, which the three corpora linked under the field do. | ![Fetch from a URL](docs/screenshots/02b-fetch-url.png) |
 | **3a. Add a visualization** — depictio's component-type grid (figure / card / table / interactive / advanced_viz). | ![Component types](docs/screenshots/03-component-types.png) |
 | **3b. Figure builder** — depictio's real UI (preview-left / properties-right) with a UI/Code toggle; Code Mode runs Plotly-Express in-browser via Pyodide. | ![Figure builder](docs/screenshots/04-figure-builder.png) |
 | **3c. Render card** — mirrors the depictio Catalog result, with tabs *For dashboard users* (preview + `use:` reuse snippet) and *For catalog developers* (render id + `renders_as`). | ![Render card](docs/screenshots/05-render-card.png) |
 | **4. Export** — the generated files for this tool + one-click PR (or zip). | ![Export step](docs/screenshots/06-export.png) |
+| **4b. Pull request opened** — the button becomes a link to the PR the app just opened against `depictio/depictio`. | ![Pull request opened](docs/screenshots/07-pr-opened.png) |
+| **4c. On GitHub** — the three files, under `depictio/catalog/<tool>/`, with a sectioned body and the YAML inline. CI's `catalog` job is what validates it. | ![The pull request on GitHub](docs/screenshots/08-github-pr.png) |
+
+Regenerate the shots with
+`CAPTURE_SHOTS=1 PW_DEV_SERVER=1 pnpm --filter tool-studio exec playwright test screenshots.spec.ts`.
+The last two are separately opt-in, since one of them opens a real pull request:
+see the header of `e2e/screenshots.spec.ts`.
 
 ## What it generates
 

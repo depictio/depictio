@@ -46,6 +46,12 @@ export default defineConfig({
     env: {
       VITE_GH_CLIENT_ID: 'e2e-client-id',
       VITE_GH_OAUTH_WORKER_URL: 'https://oauth-worker.test/exchange',
+      // Forwarded only when the caller sets it, for the opt-in `LIVE_PR=1`
+      // screenshot that opens a real pull request. It needs PW_DEV_SERVER=1
+      // too: `devToken()` is gated on `import.meta.env.DEV`, so a production
+      // build ignores it. Absent here, the Export step shows the label a real
+      // user sees ("Sign in with GitHub & open PR") rather than the signed-in one.
+      ...(process.env.VITE_GH_TOKEN ? { VITE_GH_TOKEN: process.env.VITE_GH_TOKEN } : {}),
     },
     url: BASE,
     reuseExistingServer: !process.env.CI,
