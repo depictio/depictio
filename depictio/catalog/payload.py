@@ -21,7 +21,7 @@ from typing import Any
 
 import yaml
 
-from depictio.models.components.advanced_viz.catalog import CATALOG_DIR
+from depictio.models.components.advanced_viz.catalog import CATALOG_DIR, role_config_key
 
 # Prebuilt single-file viewer bundle (`pnpm run build:catalog-preview`).
 TEMPLATE_PATH = CATALOG_DIR.parent / "viewer" / "dist-catalog-preview" / "catalog-preview.html"
@@ -223,22 +223,18 @@ _ADVANCED_VIZ_DISPATCH_KINDS = frozenset(
 def _advanced_viz_config_and_data(df, render) -> tuple[dict[str, Any], dict[str, Any]]:
     """Build the advanced-viz ``config`` blob + the projected role columns.
 
-    Mirrors ``buildAdvancedVizConfigBlob`` (``<role>_col`` per role; sunburst's
-    ``ranks`` → ``rank_cols``; ``compute_method`` stays scalar). The renderer
+    Role → config field comes from ``role_config_key``, the shared twin of
+    ``buildAdvancedVizConfigBlob``. The renderer
     fetches the role columns via ``fetchAdvancedVizData`` and plots client-side,
     so the payload is just those columns projected from the fixture.
     """
     config: dict[str, Any] = {"viz_kind": render.kind}
     columns: list[str] = []
     for role, col in (render.roles or {}).items():
-        if render.kind == "sunburst" and role == "ranks":
-            config["rank_cols"] = col
-            columns.extend(col if isinstance(col, list) else [col])
-        elif role == "compute_method":
-            config["compute_method"] = col
-        else:
-            config[f"{role}_col"] = col
-            columns.append(col)
+        config[role_config_key(render.kind, role)] = col
+        if role == "compute_method":
+            continue  # a setting (pca/umap/…), not a column to project
+        columns.extend(col if isinstance(col, list) else [col])
 
     # Sunburst needs ≥2 hierarchical rank columns. Catalog cards bind only
     # `abundance` and let the runtime auto-bind the taxonomy ranks by name;
@@ -512,6 +508,116 @@ def _empty_data() -> dict[str, Any]:
     }
 
 
+# ---------------------------------------------------------------------------
+# interactive + card secondary strips
+# ---------------------------------------------------------------------------
+
+# The interactive renderers read a column's bounds and distinct values from the
+# same endpoints the dashboard uses, which the offline shim keys as
+# ``"<dc_id>::<column>"``. `mockApi.fetchUniqueValues` / `fetchColumnRange` /
+# `fetchSpecs` have always looked here; until interactive renders existed there
+# was simply nothing to put in.
+_UNIQUE_VALUES_CAP = 200
+
+
+def _interactive_meta(df, render) -> dict[str, Any]:
+    """StoredMetadata fields the interactive renderers dispatch on."""
+    import polars as pl
+
+    column = render.column_name
+    if column not in df.columns:
+        raise CatalogPayloadError(
+            f"interactive column {column!r} absent from fixture {list(df.columns)}"
+        )
+    dtype = df.schema[column]
+    if dtype.is_numeric():
+        column_type = "int64" if dtype.is_integer() else "float64"
+    elif dtype in (pl.Date, pl.Datetime):
+        column_type = "datetime"
+    elif dtype == pl.Boolean:
+        column_type = "bool"
+    else:
+        column_type = "object"
+    return {
+        "interactive_component_type": render.interactive_type,
+        "column_name": column,
+        "column_type": column_type,
+        "_preview_height": 120,
+    }
+
+
+def _interactive_data(df, render, dc_id: str, data: dict[str, Any]) -> None:
+    """The distinct values / bounds / specs a filter control needs to draw."""
+    column = render.column_name
+    col = df[column]
+    key = f"{dc_id}::{column}"
+    # Capped: a Select over a key column is a mistake the author should see as
+    # a long list, not a reason to inline every row into the bundle.
+    data["unique"][key] = [str(v) for v in col.drop_nulls().unique().sort().to_list()][
+        :_UNIQUE_VALUES_CAP
+    ]
+    if col.dtype.is_numeric():
+        low, high = col.min(), col.max()
+        data["ranges"][key] = {
+            "min": float(low) if low is not None else None,
+            "max": float(high) if high is not None else None,
+        }
+    # `buildNumericScale` reads the dtype and the distinct count to decide
+    # whether a slider stops on whole values, so the specs carry both.
+    specs = data["specs"].setdefault(dc_id, {})
+    specs[column] = {
+        "type": _interactive_meta(df, render)["column_type"],
+        "unique": int(col.n_unique()),
+        "min": float(col.min()) if col.dtype.is_numeric() and col.min() is not None else None,
+        "max": float(col.max()) if col.dtype.is_numeric() and col.max() is not None else None,
+    }
+
+
+def _card_secondary(df, render, index: str, meta: dict[str, Any], data: dict[str, Any]) -> None:
+    """The card's secondary strip, computed by the same services the dashboard
+    uses (``card_metrics`` / ``card_breakdown``).
+
+    Without this only ``box_plot`` had a strip offline, so a catalog card
+    declaring ``histogram`` or ``top_n`` previewed as a bare number here while
+    rendering a full strip in depictio.
+    """
+    from depictio.api.v1.services.card_breakdown import BREAKDOWN_LAYOUTS, compute_breakdown
+    from depictio.api.v1.services.card_metrics import NUMERIC_LAYOUTS, numeric_layout_payload
+
+    layout = render.secondary_layout
+    if not layout:
+        return
+    meta["secondary_layout"] = layout
+    card = render.model_dump()
+    secondary: dict[str, Any] = {}
+
+    aggregations = [str(a) for a in (render.aggregations or [])]
+    for agg in aggregations:
+        secondary[agg] = _aggregate(df, render.column, agg)
+    if aggregations:
+        meta["aggregations"] = aggregations
+        data["cards"]["aggregations"][index] = aggregations
+
+    if layout in BREAKDOWN_LAYOUTS and render.breakdown_col:
+        secondary["__breakdown__"] = compute_breakdown(
+            df,
+            column=render.column,
+            breakdown_col=render.breakdown_col,
+            aggregation=render.aggregation or "count",
+            top_n_count=int(render.top_n_count or 3),
+        )
+    if layout in NUMERIC_LAYOUTS:
+        payload = numeric_layout_payload(df, card, render.column, layout)
+        if payload is not None:
+            secondary[f"__{layout}__"] = payload
+    # coverage / gauge read the card's own hero value against this denominator.
+    if render.coverage_max is not None:
+        meta["coverage_max"] = render.coverage_max
+
+    if secondary:
+        data["cards"]["secondary"][index] = secondary
+
+
 # Per-kind preview heights (advanced-viz plots vary a lot in vertical density).
 _AV_PREVIEW_HEIGHT = {
     "oncoplot": 700,
@@ -695,7 +801,11 @@ def _normalise_theme(theme: str) -> str:
     return "dark" if theme == "dark" else "light"
 
 
-_NON_TABULAR_COMPONENTS = frozenset({"image", "interactive", "text", "map"})
+# Components with no tabular preview path. ``interactive`` used to be here:
+# it had no catalog spelling, so there was nothing to render. Now that a render
+# names its widget and column, the real interactive renderers draw it from the
+# unique values / ranges / specs computed below.
+_NON_TABULAR_COMPONENTS = frozenset({"image", "text", "map"})
 
 
 def build_payload(output: Any, theme: str = "light", tool: Any = None) -> dict[str, Any]:
@@ -739,6 +849,9 @@ def build_payload(output: Any, theme: str = "light", tool: Any = None) -> dict[s
                     meta["mode"] = "code"  # code shown via the _yaml block
                 meta["_preview_height"] = _FIGURE_PREVIEW_HEIGHT
                 data["figures"][index] = _figure_payload(df, render)
+            elif comp == "interactive":
+                meta.update(_interactive_meta(df, render))
+                _interactive_data(df, render, dc_id, data)
             elif comp == "card":
                 meta["column_name"] = render.column
                 meta["icon_color"] = _CARD_ACCENTS[i % len(_CARD_ACCENTS)]
@@ -764,6 +877,7 @@ def build_payload(output: Any, theme: str = "light", tool: Any = None) -> dict[s
                     data["cards"]["values"][index] = _aggregate(
                         df, render.column, render.aggregation
                     )
+                    _card_secondary(df, render, index, meta, data)
             elif comp == "table":
                 data["tables"][index] = _table_payload(df)
             elif comp == "advanced_viz" and render.kind == "coverage_track":

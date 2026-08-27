@@ -15,8 +15,8 @@ dashboards when scanning a run**.
 
 ## Contribute a tool without writing YAML
 
-**[Catalog Studio](https://depictio.github.io/depictio/)** is a no-backend web app
-(source: [`packages/catalog-studio/`](../../packages/catalog-studio/)) that walks you
+**[Tool Studio](https://depictio.github.io/depictio-tool-studio/)** is a no-backend web app
+(source: [`packages/tool-studio/`](../../packages/tool-studio/)) that walks you
 through it: drop a CSV/TSV, bind columns to visualizations with live previews, then
 download a zip or open a PR into this folder. The authoritative check remains
 `depictio dev catalog validate` — the same one CI runs.
@@ -61,7 +61,14 @@ the **output** YAMLs, never in `module.yaml`.
   recipe: ivar/variants_long.py                      # optional reshape (module-owned, co-located here)
   renders_as:
     - { component: advanced_viz, kind: manhattan, roles: {chr: CHROM, pos: POS, score: AF} }
+    - { component: card, column: AF, aggregation: average, secondary_layout: histogram }
+    - { component: interactive, interactive_type: MultiSelect, column_name: GENE }
+    - { component: table, columns: [sample, GENE, AF], page_size: 25 }
 ```
+
+Each render is one dashboard component. `SCHEMA.md` lists every field and which
+component it belongs to; `dev catalog validate` rejects a field used on the
+wrong one.
 
 The golden rule for schemas — **one home, no duplication**:
 

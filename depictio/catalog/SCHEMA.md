@@ -12,7 +12,7 @@ red-underlines both halves):
 | `<output>.yaml` | `output.schema.json` | `depictio dev catalog schema --model output -o depictio/catalog/output.schema.json` |
 
 Put the matching `# yaml-language-server: $schema=../<file>` header at the top
-for live validation + autocomplete in the editor (Catalog Studio writes it for
+for live validation + autocomplete in the editor (Tool Studio writes it for
 you). All three are pinned to the models by a test. This page is the human
 companion.
 
@@ -86,7 +86,7 @@ existence-checking validates; the derived fields are trusted until a future
 |---|---|---|---|
 | `component` | **MUST** | real `ComponentType` (`advanced_viz`/`figure`/`card`/`table`/`interactive`/`text`/`jbrowse`/`image`/`map`) + `multiqc` | The dashboard component. |
 | `kind` | cond. | AdvancedVizKind | **Required iff** `component=advanced_viz`; forbidden otherwise. Role names MUST be valid for the kind. |
-| `roles` | cond. | dict[role,column] | `advanced_viz` binding (role → column). |
+| `roles` | cond. | dict[role, column \| column list] | `advanced_viz` binding. One column per role, except the ordered lists a few kinds bind: `sankey.steps` (≥2, required — nothing downstream can infer them), `sunburst.ranks`, and ComplexHeatmap's `value_columns` / `row_annotation_cols`. `embedding.compute_method` names a reduction (`pca`/`umap`/…), not a column, so it is not grounded. Every role a kind declares is accepted, required and optional alike. |
 | `visu_type` | cond. | `box`/`scatter`/`bar`/`histogram`/`line`/`heatmap` | `figure` **UI mode** (plotly express). |
 | `dict_kwargs` | CAN | dict[str,str] | `figure` UI mode: plotly-express kwargs (`x`,`y`,`color`,`facet_col`…); column-valued ones are grounded. |
 | `code` | cond. | str | `figure` **code mode**: inline Python that sets `fig` (depictio `code_content`). A figure needs `visu_type` **or** `code`. |
@@ -98,6 +98,10 @@ existence-checking validates; the derived fields are trusted until a future
 | `attrition_cols` | CAN | list[str] | `card`: the stages after the card's own column (`attrition` layout). |
 | `trend_col` | CAN | str | `card`: the ordered column the sparkline buckets along (`trend` layout). |
 | `filter_expr` | CAN | str | `card`: optional polars pre-filter before aggregation. |
+| `interactive_type` + `column_name` | cond. | `InteractiveType` / str | `interactive`: the widget (`Select`, `MultiSelect`, `SegmentedControl`, `Slider`, `RangeSlider`, `DateRangePicker`, `Timeline`, `Switch`) and the column it filters on. Both required — they are what depictio's interactive component needs to exist. |
+| `columns` | CAN | list[str] | `table`: the columns to display. Omit for all of them. |
+| `page_size` / `sortable` / `filterable` | CAN | int(1-500) / bool / bool | `table`: display options. |
+| `row_selection_enabled` / `row_selection_column` | CAN | bool / str | `table`: let row selection filter the rest of the dashboard, and which column it emits. |
 | `section` | CAN | str | e.g. the MultiQC section name. |
 
 ### `secondary_layout` and its companion field
@@ -116,9 +120,16 @@ and set what it asks for.
 | `attrition` | `attrition_cols` | stages after the card's own column |
 | `trend` | `trend_col` | ordered axis for the sparkline |
 
-Figure/card/roles fields are **component-scoped** (validated): `roles`/`kind`
-only for `advanced_viz`, `visu_type`/`dict_kwargs`/`code` only for `figure`,
-`column`/`aggregation` only for `card`.
+Every field is **component-scoped** (validated): `roles`/`kind` only for
+`advanced_viz`, `visu_type`/`dict_kwargs`/`code` only for `figure`,
+`column`/`aggregation` and the card companions only for `card`,
+`interactive_type`/`column_name` only for `interactive`, and the display
+options only for `table`.
+
+A `table` render needs none of its options — `{component: table}` still means
+"every column, defaults". An `interactive` render needs both of its fields:
+`InteractiveLiteComponent` cannot be instantiated without them, which is why
+the catalog held no interactive renders until it could express them.
 
 `AdvancedVizKind`: volcano, embedding, manhattan, stacked_taxonomy,
 phylogenetic, rarefaction, da_barplot, enrichment, complex_heatmap, upset_plot,

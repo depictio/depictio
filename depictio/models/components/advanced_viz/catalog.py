@@ -38,6 +38,7 @@ from depictio.models.components.types import (
     AggregationFunction,
     ChartType,
     ComponentType,
+    InteractiveType,
 )
 
 CATALOG_DIR = Path(__file__).resolve().parents[3] / "catalog"
@@ -115,6 +116,60 @@ ALLOWED_DTYPES: frozenset[str] = frozenset(
 )
 
 
+# Roles a kind binds as an ordered LIST of columns rather than a single one.
+# `buildAdvancedVizConfigBlob` (viewer) maps them onto the list-typed config
+# fields — `steps` → ``SankeyConfig.step_cols``, `ranks` → ``rank_cols``,
+# `value_columns` / `row_annotation_cols` → the ComplexHeatmap fields of the
+# same name. Mirrors depictio/viewer/src/builder/advanced_viz/configBlob.ts;
+# without them the builder could bind a sankey the catalog had no way to spell,
+# so the binding was dropped on export and the render could never work.
+_LIST_ROLES: dict[str, frozenset[str]] = {
+    "sankey": frozenset({"steps"}),
+    "sunburst": frozenset({"ranks"}),
+    "complex_heatmap": frozenset({"value_columns", "row_annotation_cols"}),
+}
+
+# Roles that pick a *setting* rather than a column, so they are accepted as
+# bindings but never grounded against the data shape.
+_NON_COLUMN_ROLES: dict[str, frozenset[str]] = {
+    "embedding": frozenset({"compute_method"}),
+}
+
+
+def role_config_key(kind: str | None, role: str) -> str:
+    """The per-kind config field a role binds to.
+
+    The Python twin of `buildAdvancedVizConfigBlob`
+    (depictio/viewer/src/builder/advanced_viz/configBlob.ts): most roles become
+    ``<role>_col``, the list-typed ones have their own field names, and
+    `compute_method` is a scalar setting. Kept here so the catalog preview
+    payload and the `use:` inheritance both spell a binding the same way the
+    builder does — a mismatch silently hands the renderer an unknown key.
+    """
+    if kind == "sunburst" and role == "ranks":
+        return "rank_cols"
+    if kind == "sankey" and role == "steps":
+        return "step_cols"
+    if kind == "complex_heatmap" and role == "index":
+        # ComplexHeatmapConfig's row-id field is `index_column`, not `index_col`.
+        return "index_column"
+    if role in ("value_columns", "row_annotation_cols", "compute_method"):
+        return role
+    return f"{role}_col"
+
+
+def _allowed_roles(kind: AdvancedVizKind) -> set[str]:
+    """Every role name a kind accepts: required + optional (the vocabulary the
+    builder's binding panel offers), plus its list-typed and setting roles."""
+    from depictio.models.components.advanced_viz.schemas import role_dtype_specs
+
+    return (
+        set(role_dtype_specs(kind))
+        | set(_LIST_ROLES.get(kind, frozenset()))
+        | set(_NON_COLUMN_ROLES.get(kind, frozenset()))
+    )
+
+
 # ---------------------------------------------------------------------------
 # Recognition: how to find the raw file in a scanned run (MultiQC-style)
 # ---------------------------------------------------------------------------
@@ -143,7 +198,10 @@ class Render(BaseModel):
       code mode (`code`: an inline snippet that sets `fig`, depictio's
       figure `code_content`).
     - `card` → `column` + `aggregation` (a metric/KPI).
-    - `multiqc`/`table`/… → no extra binding.
+    - `interactive` → `interactive_type` + `column_name`, the two fields
+      `InteractiveLiteComponent` requires to instantiate a filter control.
+    - `table` → optional display options mirroring `TableLiteComponent`.
+    - `multiqc`/`text`/… → no extra binding.
 
     An optional `id` makes the render a first-class, tool-unique handle so a
     dashboard can address it directly with ``use: <tool>/<render-id>`` — no need
@@ -157,7 +215,9 @@ class Render(BaseModel):
     component: ComponentKind
     # advanced_viz
     kind: AdvancedVizKind | None = None
-    roles: dict[str, str] = Field(default_factory=dict)  # viz role -> column
+    # viz role -> column, or -> ordered column list for the few list-typed
+    # roles (see `_LIST_ROLES`).
+    roles: dict[str, str | list[str]] = Field(default_factory=dict)
     # figure
     visu_type: ChartType | None = None  # UI mode: box/scatter/bar/histogram…
     dict_kwargs: dict[str, str] = Field(default_factory=dict)  # plotly-express kwargs
@@ -178,6 +238,19 @@ class Render(BaseModel):
     attrition_cols: list[str] = Field(default_factory=list)  # stages for =attrition
     trend_col: str | None = None  # ordered axis for secondary_layout=trend
     filter_expr: str | None = None  # optional polars pre-filter
+    # interactive — both are required by InteractiveLiteComponent, so a render
+    # carrying neither could not be turned into a filter control at all.
+    interactive_type: InteractiveType | None = None  # Select/MultiSelect/Slider/…
+    column_name: str | None = None  # column the control filters on
+    # table — optional display options, mirroring TableLiteComponent field for
+    # field. All default to "unset" so a bare `{component: table}` still means
+    # "every column, defaults", which is what the committed entries say.
+    columns: list[str] = Field(default_factory=list)  # displayed columns (empty = all)
+    page_size: int | None = Field(default=None, ge=1, le=500)
+    sortable: bool | None = None
+    filterable: bool | None = None
+    row_selection_enabled: bool | None = None  # row selection filters other components
+    row_selection_column: str | None = None  # column extracted from selected rows
     # multiqc
     section: str | None = None
 
@@ -185,7 +258,15 @@ class Render(BaseModel):
 
     def bound_columns(self) -> set[str]:
         """Columns this render binds to (for grounding against the data shape)."""
-        cols = set(self.roles.values())
+        cols: set[str] = set()
+        settings = _NON_COLUMN_ROLES.get(self.kind or "", frozenset())
+        for role, value in self.roles.items():
+            if role in settings:
+                continue  # a setting (e.g. embedding's reduction), not a column
+            if isinstance(value, list):
+                cols |= {c for c in value if c}
+            elif value:
+                cols.add(value)
         cols |= {v for k, v in self.dict_kwargs.items() if k in _FIGURE_COLUMN_KWARGS}
         if self.column:
             cols.add(self.column)
@@ -194,6 +275,11 @@ class Render(BaseModel):
         if self.trend_col:
             cols.add(self.trend_col)
         cols |= {c for c in self.attrition_cols if c}
+        if self.column_name:
+            cols.add(self.column_name)
+        cols |= {c for c in self.columns if c}
+        if self.row_selection_column:
+            cols.add(self.row_selection_column)
         return cols  # NB: `code`-mode figures are free-form → not grounded
 
     @model_validator(mode="after")
@@ -203,14 +289,38 @@ class Render(BaseModel):
         if c == "advanced_viz":
             if not self.kind:
                 raise ValueError("renders_as advanced_viz requires a 'kind'")
-            from depictio.models.components.advanced_viz.schemas import CANONICAL_SCHEMAS
-
-            unknown = set(self.roles) - set(CANONICAL_SCHEMAS.get(self.kind, {}))
+            # Validated against the kind's FULL role vocabulary — required and
+            # optional — because that is what the builder's binding panel
+            # offers. Checking only the canonical (required) roles rejected
+            # every optional binding a user could make there, e.g. a volcano's
+            # `label` or an embedding's `color`.
+            allowed = _allowed_roles(self.kind)
+            unknown = set(self.roles) - allowed
             if unknown:
                 raise ValueError(
                     f"renders_as {self.kind}: unknown role(s) {sorted(unknown)}; "
-                    f"valid roles: {sorted(CANONICAL_SCHEMAS.get(self.kind, {}))}"
+                    f"valid roles: {sorted(allowed)}"
                 )
+            list_roles = _LIST_ROLES.get(self.kind, frozenset())
+            for role, value in self.roles.items():
+                if isinstance(value, list) and role not in list_roles:
+                    raise ValueError(
+                        f"renders_as {self.kind}: role '{role}' binds one column, not a list"
+                    )
+                if role in list_roles and not isinstance(value, list):
+                    raise ValueError(
+                        f"renders_as {self.kind}: role '{role}' binds a list of columns"
+                    )
+            # A sankey without its steps cannot be built at all: `step_cols` is
+            # required with >=2 entries on SankeyConfig, and nothing downstream
+            # can infer them. Failing here says so while the entry is being
+            # authored rather than when the dashboard renders nothing.
+            if self.kind == "sankey":
+                steps = self.roles.get("steps")
+                if not isinstance(steps, list) or len(steps) < 2:
+                    raise ValueError(
+                        "renders_as sankey requires 'roles.steps' with at least 2 columns"
+                    )
         else:
             if self.kind is not None:
                 raise ValueError(f"'kind' is only valid for component=advanced_viz, not {c}")
@@ -266,6 +376,29 @@ class Render(BaseModel):
             )
         ):
             raise ValueError(f"card fields are only valid for component=card, not {c}")
+        # interactive: the widget + the column it filters on
+        if c == "interactive":
+            if not (self.interactive_type and self.column_name):
+                raise ValueError(
+                    "renders_as interactive requires 'interactive_type' and 'column_name'"
+                )
+        elif self.interactive_type or self.column_name:
+            raise ValueError(
+                f"interactive fields are only valid for component=interactive, not {c}"
+            )
+        # table: every option is optional, so there is nothing to require —
+        # only to keep off the other component types.
+        if c != "table" and any(
+            (
+                self.columns,
+                self.page_size,
+                self.sortable is not None,
+                self.filterable is not None,
+                self.row_selection_enabled is not None,
+                self.row_selection_column,
+            )
+        ):
+            raise ValueError(f"table fields are only valid for component=table, not {c}")
         return self
 
 
@@ -618,14 +751,20 @@ def ground_render_dtypes(out_id: str, render: Render, col_dtypes: dict[str, str]
 
     if render.component == "advanced_viz" and render.kind:
         specs = role_dtype_specs(render.kind)
-        for role, col in render.roles.items():
-            dt = col_dtypes.get(col)
+        settings = _NON_COLUMN_ROLES.get(render.kind, frozenset())
+        for role, value in render.roles.items():
+            if role in settings:
+                continue
             allowed = specs.get(role, {}).get("dtypes")
-            if dt and isinstance(allowed, list) and dt not in allowed:
-                problems.append(
-                    f"{out_id} render {render.kind}: role {role!r} → column {col!r} is "
-                    f"{dt}, but expects one of {allowed}"
-                )
+            if not isinstance(allowed, list):
+                continue  # a list-typed role: no per-column dtype table to check
+            for col in value if isinstance(value, list) else [value]:
+                dt = col_dtypes.get(col)
+                if dt and dt not in allowed:
+                    problems.append(
+                        f"{out_id} render {render.kind}: role {role!r} → column {col!r} is "
+                        f"{dt}, but expects one of {allowed}"
+                    )
 
     if render.component == "card" and render.column:
         dt = col_dtypes.get(render.column)

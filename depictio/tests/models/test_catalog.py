@@ -593,7 +593,7 @@ def test_cli_commands_smoke():
         ["schema", "--model", "output"],
         ["match", str(run)],
         ["compose", str(run)],
-        # The three snapshot generators catalog-studio's build depends on. They
+        # The three snapshot generators tool-studio's build depends on. They
         # were never smoke-tested, which is how `figure-params` shipped printing
         # a DEBUG line before its JSON.
         ["kinds"],
@@ -612,7 +612,7 @@ def test_cli_commands_smoke():
 def test_cli_json_output_is_machine_readable(command):
     """`--json` must put NOTHING on stdout but the payload.
 
-    catalog-studio's `genKinds.ts` only checks that stdout starts with `{`; a
+    tool-studio's `genKinds.ts` only checks that stdout starts with `{`; a
     stray log line in front means it silently keeps the committed snapshot
     instead of regenerating, so the drift check then passes against a stale
     file. `figure-params` did exactly this (depictio's logger writes to stdout).
@@ -821,7 +821,7 @@ def test_nf_core_module_ignores_a_non_module_url():
     ],
 )
 def test_card_layout_requires_its_companion_field(layout, companion):
-    """Each secondary_layout needs a companion field; catalog-studio mirrors this
+    """Each secondary_layout needs a companion field; tool-studio mirrors this
     table in `cardRules.ts` so the author is told before CI is."""
     from pydantic import ValidationError as PydanticValidationError
 
@@ -860,6 +860,167 @@ def test_card_bound_columns_include_the_layout_companions():
         attrition_cols=["trimmed", "mapped"],
     )
     assert {"raw", "trimmed", "mapped"} <= attrition.bound_columns()
+
+
+# ---------------------------------------------------------------------------
+# interactive + table renders
+# ---------------------------------------------------------------------------
+
+
+def test_interactive_render_requires_widget_and_column():
+    """`InteractiveLiteComponent` requires both, so a render missing either
+    could never be turned into a filter control."""
+    from pydantic import ValidationError as PydanticValidationError
+
+    from depictio.models.components.advanced_viz.catalog import Render
+
+    ok = Render(component="interactive", interactive_type="MultiSelect", column_name="variety")
+    assert ok.bound_columns() == {"variety"}
+
+    for incomplete in ({"column_name": "variety"}, {"interactive_type": "MultiSelect"}, {}):
+        with pytest.raises(PydanticValidationError):
+            Render(component="interactive", **incomplete)
+
+
+def test_table_render_options_are_all_optional():
+    """A bare `{component: table}` still means "every column, defaults" — that
+    is what every committed entry says, and it must keep validating."""
+    from depictio.models.components.advanced_viz.catalog import Render
+
+    assert Render(component="table").bound_columns() == set()
+    configured = Render(
+        component="table",
+        columns=["sample", "coverage"],
+        page_size=25,
+        sortable=False,
+        row_selection_enabled=True,
+        row_selection_column="sample",
+    )
+    # Displayed + selection columns are real column references, so grounding
+    # has to check them against the fixture like every other binding.
+    assert configured.bound_columns() == {"sample", "coverage"}
+
+
+def test_optional_roles_are_accepted():
+    """The builder's binding panel offers every role a kind declares, required
+    and optional. Validating only the canonical (required) ones rejected the
+    optional bindings a user could make there — a volcano's `label`, an
+    embedding's `color` — so they could be authored but never exported."""
+    from depictio.models.components.advanced_viz.catalog import Render
+
+    volcano = Render(
+        component="advanced_viz",
+        kind="volcano",
+        roles={
+            "feature_id": "gene",
+            "effect_size": "log2fc",
+            "significance": "pvalue",
+            "label": "gene",
+            "category": "class",
+        },
+    )
+    assert volcano.bound_columns() == {"gene", "log2fc", "pvalue", "class"}
+
+
+def test_list_typed_roles_bind_a_column_list():
+    """`steps` / `ranks` / the ComplexHeatmap column lists are list-typed in the
+    per-kind config, so `roles` has to carry a list for them and a single
+    column for everything else."""
+    from pydantic import ValidationError as PydanticValidationError
+
+    from depictio.models.components.advanced_viz.catalog import Render
+
+    sankey = Render(
+        component="advanced_viz", kind="sankey", roles={"steps": ["sample", "lineage", "clade"]}
+    )
+    assert sankey.bound_columns() == {"sample", "lineage", "clade"}
+
+    heatmap = Render(
+        component="advanced_viz",
+        kind="complex_heatmap",
+        roles={"index": "taxon", "value_columns": ["s1", "s2"]},
+    )
+    assert heatmap.bound_columns() == {"taxon", "s1", "s2"}
+
+    with pytest.raises(PydanticValidationError, match="binds one column, not a list"):
+        Render(
+            component="advanced_viz",
+            kind="volcano",
+            roles={"feature_id": ["a", "b"], "effect_size": "e", "significance": "p"},
+        )
+    with pytest.raises(PydanticValidationError, match="binds a list of columns"):
+        Render(component="advanced_viz", kind="sunburst", roles={"ranks": "kingdom"})
+
+
+def test_sankey_requires_at_least_two_steps():
+    """`SankeyConfig.step_cols` is required with >=2 entries and nothing
+    downstream can infer it, so a sankey without steps renders nothing."""
+    from pydantic import ValidationError as PydanticValidationError
+
+    from depictio.models.components.advanced_viz.catalog import Render
+
+    for roles in ({}, {"steps": ["only_one"]}):
+        with pytest.raises(PydanticValidationError, match="at least 2 columns"):
+            Render(component="advanced_viz", kind="sankey", roles=roles)
+
+
+def test_dtype_grounding_handles_list_and_setting_roles():
+    """`ground_render_dtypes` walks `roles` — a list value used to reach
+    `dict.get()` as a key and raise TypeError: unhashable type."""
+    from depictio.models.components.advanced_viz.catalog import Render, ground_render_dtypes
+
+    dtypes = {"sample": "String", "lineage": "String", "pc1": "Float64", "pc2": "Float64"}
+    sankey = Render(component="advanced_viz", kind="sankey", roles={"steps": ["sample", "lineage"]})
+    assert ground_render_dtypes("out", sankey, dtypes) == []
+
+    embedding = Render(
+        component="advanced_viz",
+        kind="embedding",
+        roles={"sample_id": "sample", "dim_1": "pc1", "dim_2": "pc2", "compute_method": "pca"},
+    )
+    assert ground_render_dtypes("out", embedding, dtypes) == []
+
+    # A real dtype mismatch is still reported.
+    wrong = Render(
+        component="advanced_viz",
+        kind="embedding",
+        roles={"sample_id": "sample", "dim_1": "lineage", "dim_2": "pc2"},
+    )
+    assert any("dim_1" in p for p in ground_render_dtypes("out", wrong, dtypes))
+
+
+def test_setting_roles_are_not_grounded_as_columns():
+    """`compute_method` picks the reduction algorithm, not a column — grounding
+    it would look for a column called "pca"."""
+    from depictio.models.components.advanced_viz.catalog import Render
+
+    embedding = Render(
+        component="advanced_viz",
+        kind="embedding",
+        roles={"sample_id": "sample", "dim_1": "pc1", "dim_2": "pc2", "compute_method": "pca"},
+    )
+    assert embedding.bound_columns() == {"sample", "pc1", "pc2"}
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        {"interactive_type": "Select"},
+        {"column_name": "variety"},
+        {"columns": ["a"]},
+        {"page_size": 10},
+        {"sortable": False},
+        {"row_selection_enabled": True},
+        {"row_selection_column": "a"},
+    ],
+)
+def test_interactive_and_table_fields_are_component_scoped(field):
+    from pydantic import ValidationError as PydanticValidationError
+
+    from depictio.models.components.advanced_viz.catalog import Render
+
+    with pytest.raises(PydanticValidationError):
+        Render(component="card", column="cov", aggregation="average", **field)
 
 
 # ---------------------------------------------------------------------------

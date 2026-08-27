@@ -34,7 +34,7 @@
     },
     "Render": {
       "additionalProperties": false,
-      "description": "One render target for an output: a dashboard component + its binding.\n\n- `advanced_viz` \u2192 `kind` + `roles` (role \u2192 column).\n- `figure` \u2192 either UI mode (`visu_type` + `dict_kwargs`, plotly-express) or\n  code mode (`code`: an inline snippet that sets `fig`, depictio's\n  figure `code_content`).\n- `card` \u2192 `column` + `aggregation` (a metric/KPI).\n- `multiqc`/`table`/\u2026 \u2192 no extra binding.\n\nAn optional `id` makes the render a first-class, tool-unique handle so a\ndashboard can address it directly with ``use: <tool>/<render-id>`` \u2014 no need\nto name the output and disambiguate with ``viz_kind``. Ids only need to be\nunique within a tool (enforced on the entry), and a render binds to its\nparent output's columns, so the id lives here, never in ``module.yaml``.",
+      "description": "One render target for an output: a dashboard component + its binding.\n\n- `advanced_viz` \u2192 `kind` + `roles` (role \u2192 column).\n- `figure` \u2192 either UI mode (`visu_type` + `dict_kwargs`, plotly-express) or\n  code mode (`code`: an inline snippet that sets `fig`, depictio's\n  figure `code_content`).\n- `card` \u2192 `column` + `aggregation` (a metric/KPI).\n- `interactive` \u2192 `interactive_type` + `column_name`, the two fields\n  `InteractiveLiteComponent` requires to instantiate a filter control.\n- `table` \u2192 optional display options mirroring `TableLiteComponent`.\n- `multiqc`/`text`/\u2026 \u2192 no extra binding.\n\nAn optional `id` makes the render a first-class, tool-unique handle so a\ndashboard can address it directly with ``use: <tool>/<render-id>`` \u2014 no need\nto name the output and disambiguate with ``viz_kind``. Ids only need to be\nunique within a tool (enforced on the entry), and a render binds to its\nparent output's columns, so the id lives here, never in ``module.yaml``.",
       "properties": {
         "id": {
           "anyOf": [
@@ -105,7 +105,17 @@
         },
         "roles": {
           "additionalProperties": {
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            ]
           },
           "title": "Roles",
           "type": "object"
@@ -356,6 +366,109 @@
           ],
           "default": null,
           "title": "Filter Expr"
+        },
+        "interactive_type": {
+          "anyOf": [
+            {
+              "enum": [
+                "Select",
+                "MultiSelect",
+                "SegmentedControl",
+                "Slider",
+                "RangeSlider",
+                "DateRangePicker",
+                "Timeline",
+                "Switch"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Interactive Type"
+        },
+        "column_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Column Name"
+        },
+        "columns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Columns",
+          "type": "array"
+        },
+        "page_size": {
+          "anyOf": [
+            {
+              "maximum": 500,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page Size"
+        },
+        "sortable": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sortable"
+        },
+        "filterable": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filterable"
+        },
+        "row_selection_enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Row Selection Enabled"
+        },
+        "row_selection_column": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Row Selection Column"
         },
         "section": {
           "anyOf": [

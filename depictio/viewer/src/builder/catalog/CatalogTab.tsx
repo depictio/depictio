@@ -30,6 +30,7 @@ const COMPONENT_COLORS: Record<string, string> = {
   figure:       'blue',
   card:         'teal',
   table:        'gray',
+  interactive:  'lime',
   advanced_viz: 'violet',
   multiqc:      'orange',
 };
@@ -53,8 +54,52 @@ function buildConfigFromRender(render: CatalogRender): Record<string, unknown> {
     };
   }
   if (render.component === 'card') {
-    // CardBuilder reads column_name (not column) from config
-    return { column_name: render.column ?? null, aggregation: render.aggregation ?? null };
+    // CardBuilder reads column_name (not column) from config. Everything after
+    // the first two lines is the secondary strip: the catalog can declare it and
+    // the preview renders it, so dropping it here made Add produce a plain
+    // number where the preview had just shown a box plot / histogram / top-N.
+    return {
+      column_name: render.column ?? null,
+      aggregation: render.aggregation ?? null,
+      ...(render.aggregations?.length ? { aggregations: render.aggregations } : {}),
+      ...(render.secondary_layout ? { secondary_layout: render.secondary_layout } : {}),
+      ...(render.breakdown_col ? { breakdown_col: render.breakdown_col } : {}),
+      ...(render.top_n_count != null ? { top_n_count: render.top_n_count } : {}),
+      ...(render.coverage_max != null ? { coverage_max: render.coverage_max } : {}),
+      ...(render.threshold_value != null ? { threshold_value: render.threshold_value } : {}),
+      ...(render.threshold_direction
+        ? { threshold_direction: render.threshold_direction }
+        : {}),
+      ...(render.threshold_warn != null ? { threshold_warn: render.threshold_warn } : {}),
+      ...(render.attrition_cols?.length ? { attrition_cols: render.attrition_cols } : {}),
+      ...(render.trend_col ? { trend_col: render.trend_col } : {}),
+      ...(render.filter_expr ? { filter_expr: render.filter_expr } : {}),
+    };
+  }
+  if (render.component === 'interactive') {
+    return {
+      interactive_component_type: render.interactive_type ?? null,
+      column_name: render.column_name ?? null,
+    };
+  }
+  if (render.component === 'table') {
+    // The builder keeps per-column visibility as a bag; the catalog states the
+    // visible list, so anything it doesn't name is hidden.
+    const colsJson = render.columns?.length
+      ? Object.fromEntries(
+          (render.columns ?? []).map((name) => [name, { hide: false }]),
+        )
+      : undefined;
+    return {
+      ...(colsJson ? { cols_json: colsJson } : {}),
+      ...(render.page_size != null ? { page_size: render.page_size } : {}),
+      ...(render.row_selection_enabled != null
+        ? { row_selection_enabled: render.row_selection_enabled }
+        : {}),
+      ...(render.row_selection_column
+        ? { row_selection_column: render.row_selection_column }
+        : {}),
+    };
   }
   return {};
 }
