@@ -6495,6 +6495,16 @@ def _funnel_init_data(dashboard_data: dict, dc_id: str) -> dict[str, dict] | Non
 
 
 def _funnel_is_multiqc_dc(dashboard_data: dict, dc_id: str) -> bool:
+    """Whether a DC is a MultiQC report — it has no Delta table to query.
+
+    The tab's own metadata answers this for a component the tab draws. It does
+    NOT answer it for a persistent filter fanned out from another tab: that
+    component's DC appears nowhere in this document, the check fell through to
+    False, and the funnel then tried to load a Delta table that does not exist
+    ("Error loading deltatable") — so the filter reported every value as still
+    available. Fall back to the MultiQC registry, which is what actually
+    decides the question.
+    """
     for m in dashboard_data.get("stored_metadata") or []:
         if str(m.get("dc_id")) == str(dc_id):
             dc_type = ((m.get("dc_config") or {}).get("type") or "").lower()
@@ -6502,7 +6512,19 @@ def _funnel_is_multiqc_dc(dashboard_data: dict, dc_id: str) -> bool:
                 return dc_type == "multiqc"
             if m.get("component_type") == "multiqc":
                 return True
-    return False
+
+    from depictio.api.v1.db import multiqc_collection as _mc
+
+    try:
+        return (
+            _mc.count_documents(
+                {"data_collection_id": {"$in": [str(dc_id), ObjectId(str(dc_id))]}}, limit=1
+            )
+            > 0
+        )
+    except Exception as exc:  # a registry hiccup must not blank the funnel
+        logger.debug(f"funnel: multiqc lookup failed for {dc_id}: {exc}")
+        return False
 
 
 def _funnel_multiqc_canonical_universe(dc_id: str) -> tuple[list[str], dict[str, list[str]]]:
@@ -6755,9 +6777,32 @@ def funnel_values_endpoint(
 
     active_filters = [f for f in filters if _funnel_filter_is_active(f)]
 
-    stored_meta_index = {
-        str(m.get("index")): m for m in (dashboard_data.get("stored_metadata") or [])
-    }
+    # Indexed over the whole tab FAMILY, not this document alone. A persistent
+    # filter section is declared on one tab and rendered on every tab of the
+    # family, so on any other tab its components are absent from this
+    # dashboard's `stored_metadata`: they were answered "unsupported", which
+    # the viewer reads as "no constraint" and shows every value as still
+    # available — on precisely the filters a reader is most likely to be
+    # narrowing. Floating components (the map panel) have the same shape and
+    # the same problem. `_funnel_init_data` already falls back to the Delta
+    # registry, so a foreign component's DC still resolves.
+    stored_meta_index: dict[str, dict] = {}
+    try:
+        _, family_tabs = _resolve_tab_family(
+            dashboard_id, current_user, {"stored_metadata": 1, "tab_order": 1}
+        )
+    except HTTPException:
+        family_tabs = []
+    for tab in family_tabs:
+        for m in tab.get("stored_metadata") or []:
+            index = str(m.get("index") or "")
+            if index and index not in stored_meta_index:
+                stored_meta_index[index] = m
+    # This tab wins any collision: the component it owns is the one on screen.
+    for m in dashboard_data.get("stored_metadata") or []:
+        index = str(m.get("index") or "")
+        if index:
+            stored_meta_index[index] = m
 
     targets: dict[str, dict] = {}
     for index in target_indexes:
