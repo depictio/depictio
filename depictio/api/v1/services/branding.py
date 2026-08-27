@@ -226,8 +226,9 @@ def validate_logo_upload(content_type: str | None, content: bytes) -> str:
 branding_assets_collection: Any = None
 
 _API_PREFIX = f"/depictio/api/{get_api_version()}"
-#: Only reached by a document stored without one — every upload path goes
-#: through `validate_logo_upload`, which admits nothing but the LOGO_TYPES.
+
+#: Only reached by a document stored without a content type — every upload path
+#: goes through `validate_logo_upload`, which admits nothing but the LOGO_TYPES.
 _FALLBACK_CONTENT_TYPE = "application/octet-stream"
 
 
