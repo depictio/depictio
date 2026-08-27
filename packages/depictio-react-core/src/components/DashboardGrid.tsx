@@ -571,7 +571,10 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
           </Button>
         </Group>
       )}
-      {beforeSections}
+      {/* Spaced, not glued: the pinned section belongs to another tab and the
+          sections below belong to this one — with no gap the two read as one
+          stack. */}
+      {beforeSections && <div style={{ marginBottom: 10 }}>{beforeSections}</div>}
       {named.length > 0 && (
         <SectionAccordion
           value={named.filter((s) => sectionCollapse.isOpen(s.key)).map((s) => s.key)}
