@@ -188,6 +188,10 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
     const cols = [config.sample_id_col, config.depth_col, config.metric_col].filter(Boolean) as string[];
     if (config.iter_col) cols.push(config.iter_col);
     if (config.group_col && !cols.includes(config.group_col)) cols.push(config.group_col);
+    // Whatever the user is grouping by right now — the projection is built from
+    // the roles, so a column picked in the control would otherwise never be
+    // requested and the curves would fall back to one trace.
+    if (groupBy && !cols.includes(groupBy)) cols.push(groupBy);
     // Pull additional metric columns so the user can switch without a refetch.
     for (const m of config.metric_options ?? []) {
       if (m && !cols.includes(m)) cols.push(m);
@@ -198,7 +202,7 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
       if (m && !cols.includes(m)) cols.push(m);
     }
     return cols;
-  }, [config, schemaMetricCols]);
+  }, [config, schemaMetricCols, groupBy]);
 
   const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -417,17 +421,46 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
     return Array.from(seed);
   }, [rows, config, schemaMetricCols]);
 
-  // Discover group/metric options from the rows once they arrive.
+  // Discover grouping options from the rows once they arrive: every
+  // categorical column the DC carries alongside the curve — locality,
+  // platform, season, whatever the run's metadata holds — so the curves can be
+  // coloured by any of them and not just by the one the YAML picked.
+  //
+  // Categorical *only*. Excluding the active metric was not enough: the other
+  // metrics, the iteration counter and any numeric metadata column were all
+  // offered as things to colour by, which either paints one curve per distinct
+  // float or silently does nothing.
   const groupOptions = useMemo(() => {
-    if (!rows) return [] as { value: string; label: string }[];
+    const NUMERIC_DTYPE_PREFIXES = ['Int', 'UInt', 'Float', 'Decimal'];
+    const skip = new Set<string>(
+      [config.sample_id_col, config.depth_col, config.iter_col, ...metricOptions].filter(
+        Boolean,
+      ) as string[],
+    );
     const out: { value: string; label: string }[] = [];
-    for (const c of Object.keys(rows)) {
-      if (c === config.sample_id_col || c === config.depth_col || c === config.metric_col)
-        continue;
-      out.push({ value: c, label: c });
+    if (dcSchema) {
+      for (const [col, dtype] of Object.entries(dcSchema)) {
+        if (skip.has(col)) continue;
+        if (NUMERIC_DTYPE_PREFIXES.some((p) => dtype.startsWith(p))) continue;
+        out.push({ value: col, label: col });
+      }
+    } else if (rows) {
+      // No schema endpoint: fall back to what arrived, which is at least the
+      // configured grouping column.
+      for (const c of Object.keys(rows)) {
+        if (skip.has(c)) continue;
+        const first = ((rows[c] || []) as unknown[]).find((v) => v != null);
+        if (typeof first === 'number') continue;
+        out.push({ value: c, label: c });
+      }
+    }
+    // The sample id is a legitimate grouping — one curve per sample is the
+    // plot's own default — so it goes back on the list, first.
+    if (config.sample_id_col) {
+      out.unshift({ value: config.sample_id_col, label: `${config.sample_id_col} (per sample)` });
     }
     return out;
-  }, [rows, config]);
+  }, [rows, dcSchema, config, metricOptions]);
 
   const controls = (
     <Stack gap="xs">
@@ -439,7 +472,7 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
           onChange={setGroupBy}
           data={groupOptions}
           clearable
-          description="Colour curves by metadata column"
+          description="Colour curves by any categorical column the run carries"
         />
       ) : null}
       <NumberInput
