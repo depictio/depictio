@@ -33,6 +33,7 @@ import { brandColors } from '../profile/colors';
 import CreateTokenModal from './CreateTokenModal';
 import DeleteTokenModal from './DeleteTokenModal';
 import DisplayTokenModal from './DisplayTokenModal';
+import { usePageTitle } from '../branding';
 
 const SIDEBAR_KEY = 'cli-agents-sidebar-collapsed';
 
@@ -75,9 +76,7 @@ const CliAgentsApp: React.FC = () => {
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [desktopOpened, toggleDesktop] = useCliAgentsSidebar();
 
-  useEffect(() => {
-    document.title = 'Depictio — CLI Agents';
-  }, []);
+  usePageTitle('CLI Agents');
 
   useEffect(() => {
     let cancelled = false;

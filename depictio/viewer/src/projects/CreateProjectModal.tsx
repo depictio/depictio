@@ -22,6 +22,7 @@ import {
 import { Icon } from '@iconify/react';
 
 import type { CreateProjectInput, CreateProjectResult } from 'depictio-react-core';
+import { useBrandAccents } from 'depictio-react-core';
 
 type Tab = 'create' | 'import';
 type ProjectType = 'basic' | 'advanced';
@@ -34,7 +35,7 @@ interface CreateProjectModalProps {
   onImport: (file: File, overwrite: boolean) => Promise<void>;
 }
 
-const TEAL_BORDER = 'var(--mantine-color-teal-6)';
+
 
 const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   opened,
@@ -43,6 +44,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   onCreate,
   onImport,
 }) => {
+  const accent = useBrandAccents();
   const [tab, setTab] = useState<Tab>('create');
   const [activeStep, setActiveStep] = useState(0);
   const [projectType, setProjectType] = useState<ProjectType | null>(null);
@@ -138,11 +140,11 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
             <Icon
               icon="mdi:folder-plus-outline"
               width={28}
-              color="var(--mantine-color-teal-6)"
+              color={`var(--mantine-color-${accent.secondary}-6)`}
             />
             <Title
               order={2}
-              c="teal"
+              c={accent.secondary}
               style={{ fontFamily: 'Virgil', fontWeight: 400 }}
             >
               Projects
@@ -155,7 +157,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
           value={tab}
           onChange={(v) => setTab((v as Tab) || 'create')}
           variant="pills"
-          color="teal"
+          color={accent.secondary}
         >
           <Tabs.List justify="center">
             <Tabs.Tab
@@ -177,7 +179,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               <Stepper
                 active={activeStep}
                 onStepClick={setActiveStep}
-                color="teal"
+                color={accent.secondary}
                 size="sm"
                 allowNextStepsSelect={false}
               >
@@ -252,7 +254,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                       description="Public projects are visible to all users"
                       checked={isPublic}
                       onChange={(e) => setIsPublic(e.currentTarget.checked)}
-                      color="teal"
+                      color={accent.secondary}
                     />
                   </Stack>
                 </Stepper.Step>
@@ -274,7 +276,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                 </Button>
                 {activeStep === 0 ? (
                   <Button
-                    color="teal"
+                    color={accent.secondary}
                     onClick={() => setActiveStep(1)}
                     disabled={!projectType}
                   >
@@ -282,7 +284,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                   </Button>
                 ) : (
                   <Button
-                    color="teal"
+                    color={accent.secondary}
                     onClick={handleCreate}
                     loading={submitting}
                     disabled={!canSubmit}
@@ -314,7 +316,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                     }}
                     style={{
                       cursor: 'pointer',
-                      border: `2px dashed ${TEAL_BORDER}`,
+                      border: `2px dashed var(--mantine-color-${accent.secondary}-6)`,
                       borderRadius: 12,
                       padding: 32,
                       textAlign: 'center' as const,
@@ -325,7 +327,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                       <Icon
                         icon="mdi:file-upload-outline"
                         width={36}
-                        color="var(--mantine-color-teal-6)"
+                        color={`var(--mantine-color-${accent.secondary}-6)`}
                       />
                       <Text fw={500}>
                         {importFile
@@ -349,7 +351,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                 }
                 checked={overwrite}
                 onChange={(e) => setOverwrite(e.currentTarget.checked)}
-                color="teal"
+                color={accent.secondary}
               />
               {error && (
                 <Alert color="red" variant="light">
@@ -357,7 +359,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                 </Alert>
               )}
               <Button
-                color="teal"
+                color={accent.secondary}
                 onClick={handleImport}
                 disabled={!importFile || submitting}
                 loading={submitting}
@@ -397,7 +399,9 @@ const ProjectTypeCard: React.FC<ProjectTypeCardProps> = ({
   disabled,
   onClick,
 }) => {
-  const accent =
+  // Project-type taxonomy, not a brand role — basic and advanced have to stay
+  // told apart, so these keep their own hues.
+  const typeAccent =
     type === 'basic' ? 'var(--mantine-color-teal-6)' : 'var(--mantine-color-orange-6)';
   return (
     <Paper
@@ -408,13 +412,13 @@ const ProjectTypeCard: React.FC<ProjectTypeCardProps> = ({
       style={{
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.55 : 1,
-        borderColor: active ? accent : undefined,
+        borderColor: active ? typeAccent : undefined,
         borderWidth: active ? 2 : 1,
         transition: 'border-color 120ms ease',
       }}
     >
       <Stack gap="sm" align="center">
-        <Icon icon={icon} width={42} height={42} color={accent} />
+        <Icon icon={icon} width={42} height={42} color={typeAccent} />
         <Title order={4} ta="center">
           {title}
         </Title>

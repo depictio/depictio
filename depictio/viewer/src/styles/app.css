@@ -32,7 +32,7 @@
  */
 :root {
   --app-bg-color: var(--mantine-color-body);
-  --app-surface-color: var(--mantine-color-body);
+  --app-surface-color: var(--depictio-section-bg, var(--mantine-color-body));
   --app-text-color: var(--mantine-color-text);
   --app-border-color: var(--mantine-color-default-border);
   --app-subtle-bg: var(--mantine-color-default-hover);
@@ -84,7 +84,17 @@ body {
   padding: 0;
   background: var(--app-bg-color);
   color: var(--app-text-color);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* Mantine's token, so a brand's `font_family` reaches plain text and every
+   * non-Mantine element too. The literal stack stays as the fallback for the
+   * first paint, before the theme's variables land. */
+  font-family: var(
+    --mantine-font-family,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif
+  );
   /* Hard cap horizontal overflow at the document root — anything that bleeds
    * beyond viewport (Plotly's modebar, AG Grid's scroll shadow, etc.) gets
    * clipped here instead of forcing the page to scroll horizontally. */
@@ -159,7 +169,7 @@ body.panel-transitioning .react-grid-layout {
 
 .dashboard-error {
   padding: 2rem;
-  color: #fa5252;
+  color: var(--mantine-color-red-6);
   text-align: center;
 }
 

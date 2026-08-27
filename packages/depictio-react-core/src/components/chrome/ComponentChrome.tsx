@@ -11,6 +11,7 @@ import DownloadButton from './DownloadButton';
 import ResetButton from './ResetButton';
 import SaveGroupAction, { SaveGroupContext, SelectionHintAction } from './SaveGroupAction';
 import { supportsSelectionGrouping } from '../../selection';
+import { useGroupingColorVar } from '../../selectionGroups';
 import './chrome.css';
 
 export type ChromeAction =
@@ -227,6 +228,7 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
   const selectionCapable =
     Boolean(saveGroupApi?.analysisEngaged) &&
     supportsSelectionGrouping(metadata, Boolean(saveGroupApi));
+  const groupingColorVar = useGroupingColorVar();
 
   // Flatten `extraActions` once, then split the grouping action off the front.
   // It leads the stack — above metadata and the rest — because it is the only
@@ -281,6 +283,11 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
         'depictio-component-chrome' +
         (isFullscreenActive ? ' fullscreen-active' : '') +
         (selectionCapable ? ' depictio-selection-capable' : '')
+      }
+      style={
+        selectionCapable
+          ? ({ '--depictio-grouping-color': groupingColorVar } as React.CSSProperties)
+          : undefined
       }
     >
       <Group

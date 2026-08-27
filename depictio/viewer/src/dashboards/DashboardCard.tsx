@@ -32,6 +32,7 @@ import {
 } from './lib/format';
 import { dashboardHrefFor, dashboardLinkClickHandler } from './lib/dashboardLinks';
 import { parseTemplateOrigin, TemplateChip } from '../projects/template';
+import { useBrandAccents } from 'depictio-react-core';
 
 interface DashboardCardProps {
   dashboard: DashboardListEntry;
@@ -57,12 +58,13 @@ const SingleThumbnail: React.FC<{
   dashboard: DashboardListEntry;
   theme: 'light' | 'dark';
 }> = ({ dashboard, theme }) => {
+  const accent = useBrandAccents();
   // No real screenshot yet (freshly created dashboard, or capture failed) →
   // fall straight back to the dashboard's own colored icon. No generic
   // placeholder image in between.
   const [fallback, setFallback] = useState<'none' | 'icon'>('none');
   const icon = coerceString(dashboard.icon, 'mdi:view-dashboard');
-  const color = coerceString(dashboard.icon_color, 'orange');
+  const color = coerceString(dashboard.icon_color, accent.tertiary);
 
   if (fallback === 'icon') {
     // When the dashboard's "icon" is actually an image logo, show that logo as
@@ -150,12 +152,13 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
   onDuplicate,
   onExport,
 }) => {
+  const accent = useBrandAccents();
   const parsedTemplate = parseTemplateOrigin(projectTemplateOrigin);
   const { colorScheme } = useMantineColorScheme();
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
 
   const dashboardIcon = coerceString(dashboard.icon, 'mdi:view-dashboard');
-  const dashboardIconColor = coerceString(dashboard.icon_color, 'orange');
+  const dashboardIconColor = coerceString(dashboard.icon_color, accent.tertiary);
   const subtitle = coerceString(dashboard.subtitle, '');
   const ownerEmail = dashboard.permissions?.owners?.[0]?.email ?? '';
   const isPublic = Boolean(dashboard.is_public);
@@ -337,7 +340,7 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
             const projectId = (dashboard.project_id as string | undefined) || null;
             const badge = (
               <Badge
-                color="teal"
+                color={accent.secondary}
                 component={projectId ? 'a' : 'div'}
                 href={projectId ? `/projects/${projectId}` : undefined}
                 onClick={(e: React.MouseEvent) => e.stopPropagation()}
@@ -400,7 +403,7 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
         </Tooltip>
         {hasMultipleTabs && (
           <Badge
-            color="orange"
+            color={accent.tertiary}
             variant="light"
             leftSection={<Icon icon="mdi:tab" width={14} />}
           >

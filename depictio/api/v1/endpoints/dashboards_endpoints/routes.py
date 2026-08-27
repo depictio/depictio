@@ -6,12 +6,13 @@ import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Annotated, Any
 from uuid import UUID
 
 import yaml
 from bson import ObjectId
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
@@ -32,6 +33,7 @@ from depictio.api.v1.endpoints.user_endpoints.routes import (
     oauth2_scheme_optional,
 )
 from depictio.api.v1.filter_links import extend_filters_via_links
+from depictio.api.v1.services.branding import validate_logo_upload
 from depictio.api.v1.services.card_breakdown import (
     BREAKDOWN_LAYOUTS,
     compute_breakdown,
@@ -48,7 +50,9 @@ from depictio.api.v1.services.card_metrics import (
 from depictio.api.v1.services.card_metrics import (
     numeric_layout_payload as _numeric_layout_payload,
 )
+from depictio.api.v1.services.figure.figure_builder import merge_dashboard_brand_theme
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
+from depictio.models.models.branding import BrandTheme
 from depictio.models.models.dashboards import DashboardData, DashboardDataLite
 from depictio.models.models.users import User
 from depictio.models.timestamps import preserved_creation_time, utc_now_str
@@ -704,6 +708,102 @@ async def save_dashboard(
         return {"message": message, "dashboard_id": dashboard_id_str}
     else:
         raise HTTPException(status_code=404, detail="Failed to insert or update dashboard data.")
+
+
+# Dashboard logos — uploaded through the editor's Settings drawer and served
+# by the /static/dashboard_logos mount (api/main.py). Derived from __file__ so
+# the path holds both in Docker (/app/depictio/...) and local runs.
+_DASHBOARD_LOGOS_DIR = Path(__file__).resolve().parents[3] / "static" / "dashboard_logos"
+
+
+def _require_dashboard_editor(dashboard_id: PyObjectId, current_user: User) -> dict:
+    """The dashboard document, or the right HTTP error. Editor rights required."""
+    if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
+        if not settings.auth.is_single_user_mode:
+            raise HTTPException(
+                status_code=403,
+                detail="Anonymous users cannot modify dashboards. Please login to continue.",
+            )
+
+    dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard:
+        raise HTTPException(status_code=404, detail="Dashboard not found.")
+    project_id = dashboard.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "editor"):
+        raise HTTPException(
+            status_code=403, detail="You don't have permission to update this dashboard."
+        )
+    return dashboard
+
+
+@dashboards_endpoint_router.patch("/appearance/{dashboard_id}")
+async def update_dashboard_appearance(
+    dashboard_id: PyObjectId,
+    brand_theme: BrandTheme,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Replace a dashboard's brand override with ``brand_theme``.
+
+    Appearance edits used to ride the full-document `/save`, which is
+    last-writer-wins: opening the settings drawer while a layout save was in
+    flight could resurrect a stale grid. This touches one field, so the two
+    can't fight. An empty theme clears the override (the dashboard inherits
+    the instance branding again).
+    """
+    _require_dashboard_editor(dashboard_id, current_user)
+
+    payload = brand_theme.model_dump(exclude_none=True)
+    update = {"$set": {"brand_theme": payload}} if payload else {"$unset": {"brand_theme": ""}}
+    dashboards_collection.update_one({"dashboard_id": dashboard_id}, update)
+    logger.info(f"Dashboard {dashboard_id} appearance updated ({len(payload)} field(s))")
+    return {"brand_theme": payload or None}
+
+
+@dashboards_endpoint_router.post("/upload_logo/{dashboard_id}")
+async def upload_dashboard_logo(
+    dashboard_id: PyObjectId,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Store a dashboard logo image and stamp it on the document's brand theme.
+
+    File write and field update happen in one ownership-checked call so the
+    stored URL can never point at a file that was rejected. Removal goes
+    through `/appearance` (`logo_mode: "inherit"` or `"none"`); the file on
+    disk is simply overwritten by the next upload for this dashboard.
+
+    Validation is the shared one from `services/branding.py` — same PNG/JPEG/
+    WebP + magic-byte + 2MB rules as the instance logo, deliberately not a
+    second copy that can drift.
+    """
+    dashboard = _require_dashboard_editor(dashboard_id, current_user)
+
+    content = await file.read()
+    try:
+        ext = validate_logo_upload(file.content_type, content)
+    except ValueError as exc:
+        raise HTTPException(status_code=415, detail=str(exc))
+
+    _DASHBOARD_LOGOS_DIR.mkdir(parents=True, exist_ok=True)
+    # One logo per dashboard — drop whatever extension the previous upload had.
+    for old in _DASHBOARD_LOGOS_DIR.glob(f"{dashboard_id}.*"):
+        old.unlink(missing_ok=True)
+    (_DASHBOARD_LOGOS_DIR / f"{dashboard_id}{ext}").write_bytes(content)
+
+    # `?v=` cache-busts the browser after a replacement (same idiom as the
+    # screenshot thumbnails' `screenshot_ts`).
+    logo_url = f"/static/dashboard_logos/{dashboard_id}{ext}?v={int(time.time())}"
+    theme = BrandTheme(**(dashboard.get("brand_theme") or {}))
+    theme.logo_url = logo_url
+    # An upload is an unambiguous "use this logo", so it also lifts a prior
+    # "inherit the instance logo" / "no logo" choice.
+    theme.logo_mode = "custom"
+    dashboards_collection.update_one(
+        {"dashboard_id": dashboard_id},
+        {"$set": {"brand_theme": theme.model_dump(exclude_none=True)}},
+    )
+    logger.info(f"Dashboard {dashboard_id} logo updated ({len(content)} bytes, {ext})")
+    return {"logo_url": logo_url}
 
 
 @dashboards_endpoint_router.delete("/delete/{dashboard_id}")
@@ -2698,7 +2798,9 @@ async def render_figure_endpoint(
         "dc_id": str(dc_id),
         "dc_config": convert_objectid_to_str(dc_config),
         "visu_type": component.get("visu_type", "scatter"),
-        "dict_kwargs": component.get("dict_kwargs") or {},
+        "dict_kwargs": merge_dashboard_brand_theme(
+            dashboard_data.get("brand_theme"), component.get("dict_kwargs") or {}
+        ),
         "mode": mode,
         "code_content": component.get("code_content", ""),
         "selection_enabled": bool(component.get("selection_enabled", False)),

@@ -29,7 +29,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
-import { stableColorMap, type StableColorMap } from '../../colors';
+import { resolveCategoricalPalette, stableColorMap, type StableColorMap } from '../../colors';
 import { filtersExcludingOwn } from '../../selection';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
@@ -78,7 +78,8 @@ interface Props {
   onFilterChange?: (filter: InteractiveFilter) => void;
 }
 
-// Muted publication-friendly palette for categorical tip colouring.
+// Muted publication-friendly palette for categorical tip colouring, used
+// when the deployment states no brand of its own.
 const PALETTE = [
   '#4C72B0',
   '#DD8452',
@@ -148,6 +149,7 @@ const LAYOUTS: Array<{ value: Layout; label: string }> = [
 const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilterChange }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
+  const palette = resolveCategoricalPalette(theme, PALETTE);
   const config = (metadata.config || {}) as PhylogeneticConfig;
   const isDark = colorScheme === 'dark';
 
@@ -382,19 +384,19 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
       universe.sort();
       const built = stableColorMap(
         col === colorCol && colorUniverse ? colorUniverse : universe,
-        PALETTE,
+        palette,
         (config.category_palettes || {})[col] || null,
       );
       cache.set(col, built);
       return built;
     };
-  }, [tree, valueAt, colorCol, colorUniverse, config.category_palettes]);
+  }, [tree, valueAt, colorCol, colorUniverse, palette, config.category_palettes]);
 
   const tipColors = useMemo<{ colorByTip: Map<string, string> }>(() => {
     const colorByTip = new Map<string, string>();
     if (!tree) return { colorByTip };
     if (!colorCol || !meta) {
-      for (const leaf of tree.leaves) colorByTip.set(leaf.name ?? '', PALETTE[0]);
+      for (const leaf of tree.leaves) colorByTip.set(leaf.name ?? '', palette[0]);
       return { colorByTip };
     }
     const scale = scaleForColumn(colorCol);
@@ -790,7 +792,7 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
         labelled == null || labelled === '' ? name : String(labelled),
       );
       tipIds.push(leaf.id);
-      tipColours.push(tipColors.colorByTip.get(name) ?? PALETTE[0]);
+      tipColours.push(tipColors.colorByTip.get(name) ?? palette[0]);
       const isHi = !spotlight || highlightedIds.has(leaf.id);
       const shown = tipLabels[tipLabels.length - 1];
       const isSearchMatch =
@@ -923,7 +925,7 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
         const sv = valueAt(leaf.name ?? '', col);
         xs.push(stripStart + i * stripStep);
         ys.push(leaf.y!);
-        colours.push(scale.get(sv) ?? PALETTE[0]);
+        colours.push(scale.get(sv) ?? palette[0]);
         labels.push(sv);
         opacities.push(
           !isInScope(leaf.name ?? '') ? 0.2 : spotlight && !highlightedIds.has(leaf.id) ? 0.28 : 1,

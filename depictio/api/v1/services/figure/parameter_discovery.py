@@ -13,6 +13,7 @@ import plotly.express as px
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.services.figure.models import (
+    PLOT_TEMPLATE_OPTIONS,
     ParameterCategory,
     ParameterDefinition,
     ParameterType,
@@ -89,18 +90,7 @@ class ParameterInspector:
         "template": {
             "type": ParameterType.SELECT,
             "label": "Theme",
-            "options": [
-                "mantine_light",
-                "mantine_dark",
-                "plotly",
-                "plotly_white",
-                "plotly_dark",
-                "ggplot2",
-                "seaborn",
-                "simple_white",
-                "presentation",
-                "none",
-            ],
+            "options": list(PLOT_TEMPLATE_OPTIONS),
             "description": "Plotly template that controls the plot's overall look (background, fonts, gridlines).",
             "default": None,
         },
@@ -1406,18 +1396,7 @@ def create_umap_visualization_definition() -> VisualizationDefinition:
             category=ParameterCategory.COMMON,
             label="Template",
             description="Plotly template",
-            options=[
-                "mantine_light",
-                "mantine_dark",
-                "plotly",
-                "plotly_white",
-                "plotly_dark",
-                "ggplot2",
-                "seaborn",
-                "simple_white",
-                "presentation",
-                "none",
-            ],
+            options=list(PLOT_TEMPLATE_OPTIONS),
             default=None,
             required=False,
         ),

@@ -223,6 +223,14 @@ depictio/dash/**/screenshots/**
 # copy-screenshot-files init container).
 depictio/api/static/screenshots/**
 
+# Dashboard logos are uploaded at runtime through the editor's Settings drawer
+# (POST /dashboards/upload_logo); the backend mkdir's the dir at boot.
+depictio/api/static/dashboard_logos/**
+
+# Instance branding logos are uploaded at runtime through the admin Branding
+# panel (POST /utils/branding/logo/{variant}); the backend mkdir's the dir.
+depictio/api/static/branding/**
+
 # Allow reference dashboard screenshots (iris, penguins, ampliseq)
 # Iris dashboard (6824cb3b89d2b72169309737)
 !depictio/dash/static/screenshots/6824cb3b89d2b72169309737.png

@@ -20,6 +20,7 @@ import ProjectTableView from './views/ProjectTableView';
 import { useProjectViewPrefs } from './hooks/useProjectViewPrefs';
 import { useProjectPins } from './hooks/useProjectPins';
 import { parseTemplate } from './template';
+import { useBrandAccents } from 'depictio-react-core';
 
 interface ProjectsListProps {
   projects: ProjectListEntry[];
@@ -46,6 +47,7 @@ const ProjectsList: React.FC<ProjectsListProps> = ({
   onEdit,
   onDelete,
 }) => {
+  const accent = useBrandAccents();
   const { prefs, setSearch, setFilters, setOnlyPinned, setDensity, clearFilters } =
     useProjectViewPrefs();
   const { pinnedIds, togglePin } = useProjectPins();
@@ -149,7 +151,7 @@ const ProjectsList: React.FC<ProjectsListProps> = ({
               withArrow
             >
               <Button
-                color="teal"
+                color={accent.secondary}
                 variant="filled"
                 onClick={onCreateClick}
                 disabled={createDisabled}

@@ -34,6 +34,7 @@ import {
   WORKFLOW_COLOR_MAP,
   isWorkflowSelected,
 } from './lib/workflowIcons';
+import { useBrandAccents } from 'depictio-react-core';
 
 const COLOR_OPTIONS: { value: string; label: string }[] = [
   { value: 'gray', label: 'Gray' },
@@ -88,6 +89,7 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
   onImport,
   disableImport = false,
 }) => {
+  const accent = useBrandAccents();
   const [tab, setTab] = useState<'create' | 'import'>('create');
 
   const [title, setTitle] = useState('');
@@ -219,9 +221,9 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
             icon="mdi:view-dashboard-outline"
             width={40}
             height={40}
-            color="var(--mantine-color-orange-6)"
+            color={`var(--mantine-color-${accent.tertiary}-6)`}
           />
-          <Title order={1} c="orange" m={0}>
+          <Title order={1} c={accent.tertiary} m={0}>
             New Dashboard
           </Title>
         </Group>
@@ -230,7 +232,7 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
           value={tab}
           onChange={(v) => setTab((v as 'create' | 'import') ?? 'create')}
           variant="pills"
-          color="orange"
+          color={accent.tertiary}
         >
           <Tabs.List justify="center" style={{ gap: 12 }}>
             <Tabs.Tab
@@ -427,7 +429,7 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
                 Cancel
               </Button>
               <Button
-                color="orange"
+                color={accent.tertiary}
                 radius="md"
                 leftSection={<Icon icon="mdi:plus" width={16} />}
                 loading={createSubmitting}
@@ -532,7 +534,7 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
                 Cancel
               </Button>
               <Button
-                color="orange"
+                color={accent.tertiary}
                 radius="md"
                 leftSection={<Icon icon="mdi:import" width={16} />}
                 loading={importSubmitting}

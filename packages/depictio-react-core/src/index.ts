@@ -187,6 +187,15 @@ export {
   fetchFigureVisualizationList,
   upsertComponent,
   saveDashboardNotes,
+  uploadDashboardLogo,
+  updateDashboardAppearance,
+  // Instance branding (admin panel)
+  fetchBrandingAdmin,
+  updateBrandingAdmin,
+  resetBrandingAdmin,
+  fetchBrandPresets,
+  resolveBrandTheme,
+  uploadBrandingLogo,
   // Auth helpers (React /auth page)
   fetchAuthStatus,
   loginUser,
@@ -292,6 +301,8 @@ export {
   fetchCatalogPreviewPayload,
 } from './api';
 export type {
+  AdminBrandingState,
+  BrandPreset,
   FloatingComponent,
   FloatingComponentsResponse,
   PersistentSection,
@@ -365,6 +376,8 @@ export {
   GROUP_FILTER_INDEX_PREFIX,
   MAX_GROUP_VALUES,
   GROUPING_COLOR,
+  useGroupingColor,
+  useGroupingColorVar,
   COLOR_BY_NONE,
   resolveGroupRender,
   selectableSelectionFilters,
@@ -414,6 +427,56 @@ export { useRealtimeJournal } from './hooks/useRealtimeJournal';
 export type { RealtimeJournalEntry } from './hooks/useRealtimeJournal';
 export { batchIdsFromPayload } from './highlight';
 export type { ActiveHighlight } from './highlight';
+
+// Dashboard-wide UI scale (font-size) preference. The viewer app owns the
+// provider; Plotly/AG Grid renderers consume the value for their non-Mantine
+// pixel metrics.
+export { UiScaleContext, useUiScale, UI_SCALE_STEPS, UI_SCALE_DEFAULT } from './uiScale';
+
+// Brand theme (#397): the shared shape and its mapping onto Mantine. Lives
+// here rather than in the viewer so every entry point that mounts its own
+// MantineProvider (catalog preview, dev harnesses) can build the same theme.
+export {
+  BRAND_PALETTES,
+  brandAccent,
+  BrandingContext,
+  brandCssVariablesResolver,
+  buildDepictioTheme,
+  depictioTheme,
+  isEmptyBrandTheme,
+  isHexColor,
+  mergeBrandThemes,
+  isMantinePaletteName,
+  resolveBrandLogo,
+  useBrandAccent,
+  useBrandAccents,
+  useBranding,
+} from './brandTheme';
+export type {
+  BrandPlots,
+  BrandRole,
+  BrandSurfaces,
+  BrandTheme,
+  DepictioThemeOptions,
+  LogoMode,
+  TintMode,
+} from './brandTheme';
+
+// Brand theme editor + live preview, shared by the /admin Branding panel and
+// the per-dashboard appearance panel — the two levels edit the same model, so
+// they share the controls rather than mirroring each other.
+export {
+  BrandScope,
+  BrandThemeForm,
+  BrandThemePreview,
+  PLOT_TEMPLATE_OPTIONS,
+  useResolvedBrandTheme,
+} from './components/branding';
+export type {
+  BrandFormScope,
+  BrandThemeFormProps,
+  BrandThemePreviewProps,
+} from './components/branding';
 
 // Render-fetch queue. Apps that own the filter state call
 // ``bumpFetchGeneration`` when it changes, so requests queued for the previous

@@ -5,6 +5,23 @@ title: "Penguins Species Analysis"
 subtitle: "Comparative morphology across Adelie, Chinstrap, and Gentoo on three islands"
 project_tag: "Palmer Penguins Species Comparison"
 
+# Per-dashboard brand override. Anything left out is inherited from the
+# instance branding (`DEPICTIO_BRANDING_*` and the /admin Branding panel), so
+# this states only the three hues and lets the figure colorway and the Mantine
+# shade ramps be derived from them server-side.
+#
+# The colors are the palmerpenguins package's own species palette — Gentoo
+# teal, Chinstrap purple, Adelie orange — which is what makes this dashboard a
+# useful demo of the feature: the chrome ends up matching the data.
+#
+# `tint_mode: full` lets the secondary and tertiary reach the app's existing
+# teal/orange accents too; the default, `accent`, re-tints only the primary.
+brand_theme:
+  primary: "#159090"
+  secondary: "#a034f0"
+  tertiary: "#ff8c00"
+  tint_mode: "full"
+
 # `filter_sections` and `grid_sections` are two independent lists: the first
 # groups the left panel's interactive controls, the second groups everything
 # else in the main grid. A name may appear in both — "Cohort" below is the

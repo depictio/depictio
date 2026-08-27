@@ -26,6 +26,7 @@ import {
   WORKFLOW_COLOR_MAP,
   isWorkflowSelected,
 } from './lib/workflowIcons';
+import { useBrandAccents } from 'depictio-react-core';
 
 /** Mantine palette options — empty string = "no override" / inherit. */
 const COLOR_OPTIONS: { value: string; label: string }[] = [
@@ -62,6 +63,7 @@ const EditDashboardModal: React.FC<EditDashboardModalProps> = ({
   onClose,
   onSubmit,
 }) => {
+  const accent = useBrandAccents();
   const [title, setTitle] = useState('');
   const [subtitle, setSubtitle] = useState('');
   const [icon, setIcon] = useState('');
@@ -143,9 +145,9 @@ const EditDashboardModal: React.FC<EditDashboardModalProps> = ({
             icon="mdi:square-edit-outline"
             width={40}
             height={40}
-            color="var(--mantine-color-orange-6)"
+            color={`var(--mantine-color-${accent.tertiary}-6)`}
           />
-          <Title order={1} c="orange" m={0}>
+          <Title order={1} c={accent.tertiary} m={0}>
             Edit Dashboard
           </Title>
         </Group>
@@ -297,7 +299,7 @@ const EditDashboardModal: React.FC<EditDashboardModalProps> = ({
             Cancel
           </Button>
           <Button
-            color="orange"
+            color={accent.tertiary}
             radius="md"
             leftSection={<Icon icon="mdi:content-save" width={16} />}
             onClick={handleSubmit}

@@ -2,6 +2,7 @@ import React from 'react';
 import { Switch } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
+import { useBrandAccent } from 'depictio-react-core';
 import { useColorScheme } from '../hooks/useColorScheme';
 
 /**
@@ -11,11 +12,14 @@ import { useColorScheme } from '../hooks/useColorScheme';
 const ThemeToggle: React.FC = () => {
   const { colorScheme, toggle } = useColorScheme();
   const checked = colorScheme === 'dark';
+  // Orange reads as "sun" on an unbranded instance; a brand that names a
+  // tertiary gets its accent here instead of a hue from nowhere.
+  const color = useBrandAccent('tertiary', 'orange');
 
   return (
     <Switch
       size="lg"
-      color="orange"
+      color={color}
       checked={checked}
       onChange={() => toggle()}
       onLabel={<Icon icon="ph:moon-fill" width={16} />}

@@ -7,14 +7,16 @@ import {
   ScrollArea,
   Stack,
   Text,
-  useComputedColorScheme,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
+import BrandLogo from './BrandLogo';
+import PoweredBy from './PoweredBy';
 import ThemeToggle from './ThemeToggle';
 import ServerStatusBadge from './ServerStatusBadge';
 import ProfileBadge from './ProfileBadge';
 import AuthModeBadge from './AuthModeBadge';
+import { brandAccent, useBranding, type BrandRole } from 'depictio-react-core';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 
 export type SidebarSection =
@@ -30,6 +32,9 @@ interface NavEntry {
   label: string;
   icon: string;
   href: string;
+  /** Brand role this entry takes when the instance defines one. */
+  role?: BrandRole;
+  /** Used when the brand leaves `role` unset — the historical hue. */
   color: string;
 }
 
@@ -42,6 +47,7 @@ const NAV_ENTRIES: NavEntry[] = [
     label: 'Dashboards',
     icon: 'material-symbols:dashboard',
     href: '/dashboards',
+    role: 'tertiary',
     color: 'orange',
   },
   {
@@ -49,6 +55,7 @@ const NAV_ENTRIES: NavEntry[] = [
     label: 'Projects',
     icon: 'mdi:jira',
     href: '/projects',
+    role: 'secondary',
     color: 'teal',
   },
   {
@@ -56,6 +63,7 @@ const NAV_ENTRIES: NavEntry[] = [
     label: 'Administration',
     icon: 'material-symbols:settings',
     href: '/admin',
+    role: 'primary',
     color: 'blue',
   },
   {
@@ -73,11 +81,8 @@ interface AppSidebarProps {
 }
 
 const AppSidebar: React.FC<AppSidebarProps> = ({ active }) => {
-  // useComputedColorScheme resolves 'auto' to the actual rendered scheme
-  // (dark/light) by reading prefers-color-scheme — useMantineColorScheme
-  // can return 'auto' which our equality check would never match.
-  const colorScheme = useComputedColorScheme('light', { getInitialValueInEffect: true });
   const { user } = useCurrentUser();
+  const brand = useBranding();
 
   // Show the Administration link only to admins (matches the Dash sidebar
   // visibility callback at sidebar.py:721-756).
@@ -90,21 +95,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ active }) => {
       <Stack gap="sm" align="stretch">
         <Center pt="md">
           <Anchor href="/" underline="never">
-            {/* Both `logo_black.svg` and `logo_white.svg` ship byte-identical
-                (base64-embedded PNG inside an SVG wrapper), so swapping `src`
-                does nothing. Apply a CSS filter in dark mode to invert the
-                raster while preserving brand hues — same trick as
-                `PoweredBy.tsx`. */}
-            <img
-              src="/dashboard/logos/logo_black.svg"
-              alt="depictio"
-              style={{
-                width: 185,
-                display: 'block',
-                filter:
-                  colorScheme === 'dark' ? 'invert(1) hue-rotate(180deg)' : undefined,
-              }}
-            />
+            <BrandLogo width={185} />
           </Anchor>
         </Center>
         <Divider />
@@ -126,7 +117,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ active }) => {
                 }
                 leftSection={<Icon icon={entry.icon} width={25} height={25} />}
                 active={isActive}
-                color={entry.color}
+                color={entry.role ? brandAccent(brand, entry.role, entry.color) : entry.color}
                 variant={isActive ? 'light' : 'subtle'}
                 styles={{ root: { padding: 20 } }}
               />
@@ -136,6 +127,11 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ active }) => {
       </ScrollArea>
 
       <Stack gap="xs" align="center">
+        {/* Attribution, below the operator's own logo at the top of the rail.
+            On a branded instance that top slot is the operator's, so without a
+            slot of its own the depictio wordmark disappears from the app
+            entirely. */}
+        <PoweredBy />
         <Divider w="100%" />
         <ThemeToggle />
         <ServerStatusBadge />

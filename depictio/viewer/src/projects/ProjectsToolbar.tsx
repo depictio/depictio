@@ -21,6 +21,7 @@ import type {
   ProjectTypeFilter,
   VisibilityFilter,
 } from './hooks/useProjectViewPrefs';
+import { useBrandAccents } from 'depictio-react-core';
 
 export interface ProjectsToolbarProps {
   prefs: ProjectViewPrefs;
@@ -49,6 +50,7 @@ const FilterPopover: React.FC<{
   templateSourceOptions: { value: string; label: string }[];
   setFilters: (f: ProjectFilters) => void;
 }> = ({ prefs, templateSourceOptions, setFilters }) => {
+  const accent = useBrandAccents();
   const activeCount =
     prefs.filters.types.length +
     prefs.filters.templateSources.length +
@@ -61,13 +63,13 @@ const FilterPopover: React.FC<{
           <Indicator
             label={activeCount}
             size={16}
-            color="orange"
+            color={accent.tertiary}
             disabled={activeCount === 0}
             offset={4}
           >
             <ActionIcon
               variant={activeCount > 0 ? 'light' : 'default'}
-              color={activeCount > 0 ? 'orange' : undefined}
+              color={activeCount > 0 ? accent.tertiary : undefined}
               size="lg"
               radius="md"
               aria-label={`Filters${activeCount > 0 ? ` (${activeCount} active)` : ''}`}
@@ -158,6 +160,7 @@ const ProjectsToolbar: React.FC<ProjectsToolbarProps> = ({
   setOnlyPinned,
   clearFilters,
 }) => {
+  const accent = useBrandAccents();
   const activeFilterChips: { key: string; label: string; onRemove: () => void }[] =
     [];
   for (const t of prefs.filters.types) {
@@ -265,12 +268,12 @@ const ProjectsToolbar: React.FC<ProjectsToolbarProps> = ({
             <Badge
               key={chip.key}
               variant="light"
-              color="orange"
+              color={accent.tertiary}
               rightSection={
                 <ActionIcon
                   size="xs"
                   variant="transparent"
-                  color="orange"
+                  color={accent.tertiary}
                   onClick={chip.onRemove}
                   aria-label={`Remove filter ${chip.label}`}
                 >

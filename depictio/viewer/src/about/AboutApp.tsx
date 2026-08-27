@@ -19,6 +19,7 @@ import { useDisclosure } from '@mantine/hooks';
 import { Icon } from '@iconify/react';
 
 import { AppSidebar } from '../chrome';
+import { usePageTitle } from '../branding';
 
 const LOGO_BASE = '/dashboard/logos';
 
@@ -123,9 +124,7 @@ const AboutApp: React.FC = () => {
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
 
-  useEffect(() => {
-    document.title = 'Depictio — About';
-  }, []);
+  usePageTitle('About');
 
   return (
     <AppShell

@@ -17,7 +17,7 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
-import { stableColorMap, TAB10_PALETTE } from '../../colors';
+import { brandColorway, stableColorMap, TAB10_PALETTE } from '../../colors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import {
   applyDataTheme,
@@ -63,7 +63,13 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
   const [scalePointsByEffect, setScalePointsByEffect] = useState<boolean>(true);
   const [showStems, setShowStems] = useState<boolean>(true);
   const [markerOutline, setMarkerOutline] = useState<boolean>(false);
-  const [palette, setPalette] = useState<'tab10' | 'tab20'>('tab10');
+  // The instance (or dashboard) brand colorway, when there is one. It
+  // becomes an option here and the default, so a branded deployment's
+  // figures match its chrome without the viewer having to pick.
+  const brandPalette = brandColorway(theme);
+  const [palette, setPalette] = useState<'brand' | 'tab10' | 'tab20'>(
+    brandPalette ? 'brand' : 'tab10',
+  );
   const [geneSort, setGeneSort] = useState<GeneSort>('count');
   const [topNLabels, setTopNLabels] = useState<number>(0);
 
@@ -183,7 +189,10 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
     if (genesToShow.length === 0) return null;
 
     const categories = Array.from(new Set(cv.map(String))).sort();
-    const paletteArr = palette === 'tab10' ? TAB10_PALETTE : TAB20_PALETTE;
+    const paletteArr =
+      palette === 'brand' ? (brandPalette ?? TAB10_PALETTE)
+      : palette === 'tab10' ? TAB10_PALETTE
+      : TAB20_PALETTE;
     const colourSource = stableColorMap(
       categoryUniverse ?? categories,
       paletteArr as readonly string[],
@@ -423,8 +432,9 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
           size="xs"
           label="Palette"
           value={palette}
-          onChange={(v) => v && setPalette(v as 'tab10' | 'tab20')}
+          onChange={(v) => v && setPalette(v as 'brand' | 'tab10' | 'tab20')}
           data={[
+            ...(brandPalette ? [{ value: 'brand', label: 'Brand colours' }] : []),
             { value: 'tab10', label: 'tab10 (10 colours)' },
             { value: 'tab20', label: 'tab20 (20 colours)' },
           ]}

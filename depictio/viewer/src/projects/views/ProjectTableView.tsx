@@ -20,6 +20,7 @@ import type { Density } from '../hooks/useProjectViewPrefs';
 import { coerceString } from '../../dashboards/lib/format';
 import ColumnPicker from '../../components/ColumnPicker';
 import { type ColumnDef, useTableColumns } from '../../lib/useTableColumns';
+import { useBrandAccents } from 'depictio-react-core';
 import {
   formatDateTime,
   formatDateTimeVerbose,
@@ -299,6 +300,7 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
   onDelete,
   onTogglePin,
 }) => {
+  const accent = useBrandAccents();
   const [sortKey, setSortKey] = useState<ColumnKey>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
 
@@ -470,7 +472,7 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
           <ActionIcon.Group>
             <ActionIcon
               variant={density === 'cozy' ? 'filled' : 'subtle'}
-              color={density === 'cozy' ? 'orange' : 'gray'}
+              color={density === 'cozy' ? accent.tertiary : 'gray'}
               onClick={() => onSetDensity('cozy')}
               aria-label="Cozy density"
             >
@@ -478,7 +480,7 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
             </ActionIcon>
             <ActionIcon
               variant={density === 'compact' ? 'filled' : 'subtle'}
-              color={density === 'compact' ? 'orange' : 'gray'}
+              color={density === 'compact' ? accent.tertiary : 'gray'}
               onClick={() => onSetDensity('compact')}
               aria-label="Compact density"
             >
@@ -553,7 +555,7 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
                       <Tooltip label="Workflows & data collections" withinPortal>
                         <ActionIcon
                           variant="subtle"
-                          color="cyan"
+                          color={accent.secondary}
                           size="sm"
                           component="a"
                           href={`/projects/${r.id}`}

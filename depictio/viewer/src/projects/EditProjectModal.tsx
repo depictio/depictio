@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Alert, Button, Group, Modal, Stack, Text, TextInput } from '@mantine/core';
 
 import type { EditProjectInput, ProjectListEntry } from 'depictio-react-core';
+import { useBrandAccents } from 'depictio-react-core';
 
 interface EditProjectModalProps {
   opened: boolean;
@@ -16,6 +17,7 @@ const EditProjectModal: React.FC<EditProjectModalProps> = ({
   onClose,
   onSubmit,
 }) => {
+  const accent = useBrandAccents();
   const [name, setName] = useState('');
   const [dmpUrl, setDmpUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -90,7 +92,7 @@ const EditProjectModal: React.FC<EditProjectModalProps> = ({
           <Button variant="default" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button color="teal" onClick={handleSubmit} loading={submitting}>
+          <Button color={accent.secondary} onClick={handleSubmit} loading={submitting}>
             Save changes
           </Button>
         </Group>

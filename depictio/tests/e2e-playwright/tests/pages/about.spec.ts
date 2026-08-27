@@ -16,12 +16,16 @@ test.describe("About Page", () => {
     await page.goto("/about");
     await expect(page).toHaveURL(/\/about/);
 
-    // Resource links are present.
+    // Resource links are present. Scoped to `AppShell.Main` (a `<main>`) so
+    // these assert the page's own resource cards: the sidebar's "Powered by
+    // Depictio" attribution links to the same docs URL, and an unscoped
+    // locator matches both and trips strict mode.
+    const content = page.locator("main");
     await expect(
-      page.locator("a[href='https://github.com/depictio/depictio']"),
+      content.locator("a[href='https://github.com/depictio/depictio']"),
     ).toBeVisible({ timeout: 15_000 });
     await expect(
-      page.locator("a[href='https://depictio.github.io/depictio-docs/']"),
+      content.locator("a[href='https://depictio.github.io/depictio-docs/']"),
     ).toBeVisible();
 
     // No error alert anywhere on the page.

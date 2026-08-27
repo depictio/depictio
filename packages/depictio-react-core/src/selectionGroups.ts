@@ -20,6 +20,7 @@
  */
 
 import type { InteractiveFilter } from './api';
+import { useBrandAccent } from './brandTheme';
 import { TAB10_PALETTE } from './colors';
 
 export interface SelectionGroup {
@@ -112,7 +113,7 @@ export const GROUP_FILTER_INDEX_PREFIX = '__depictio_group__:';
 export const MAX_GROUP_VALUES = 25_000;
 
 /**
- * The one Mantine color the whole grouping feature is drawn in: the header
+ * The unbranded color the whole grouping feature is drawn in: the header
  * "Analysis" button, the per-component capability marker, and the save action.
  *
  * Named rather than the theme primary because the primary is blue, which is
@@ -120,11 +121,29 @@ export const MAX_GROUP_VALUES = 25_000;
  * filled buttons in the same hue read as one control. Violet is clear of the
  * neighbours (Save is teal, Settings is gray).
  *
- * The chrome outline in `components/chrome/chrome.css` has to spell the same
- * choice as `--mantine-color-violet-filled`, since CSS cannot read this — keep
- * the two in step.
+ * A branded instance keeps that separation but in its own hues: see
+ * `useGroupingColor`, which hands the feature the brand's tertiary so Edit
+ * (primary), Save (secondary) and Analysis (tertiary) stay three distinct
+ * colors. Call that hook rather than this constant in anything the brand
+ * should reach — this is only its unbranded fallback.
  */
 export const GROUPING_COLOR = 'violet';
+
+/** The grouping color for the active branding: the brand's tertiary when the
+ *  instance names one, else `GROUPING_COLOR`. Returns a Mantine palette name,
+ *  so it drops straight into a `color=` prop. */
+export function useGroupingColor(): string {
+  return useBrandAccent('tertiary', GROUPING_COLOR);
+}
+
+/** `useGroupingColor` as a paintable CSS value, for the chrome outline in
+ *  `components/chrome/chrome.css` — which reads it via the
+ *  `--depictio-grouping-color` property `ComponentChrome` stamps, rather than
+ *  respelling the hue. */
+export function useGroupingColorVar(): string {
+  const name = useGroupingColor();
+  return `var(--mantine-color-${name}-filled)`;
+}
 
 /** Shown when `groupFromSelectionFilter` refuses a selection. Shared by the
  *  two save entry points (the Analysis panel and the per-component chrome
