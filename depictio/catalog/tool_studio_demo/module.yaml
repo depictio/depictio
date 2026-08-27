@@ -1,0 +1,3 @@
+# yaml-language-server: $schema=../module.schema.json
+id: tool_studio_demo
+name: "Tool Studio Demo"

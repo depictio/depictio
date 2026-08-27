@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=../output.schema.json
+id: tool_studio_demo_results
+find: {path_glob: "**/tool_studio_demo/*.csv"}
+fixture: golden.csv
+renders_as:
+  - id: figure_scatter
+    component: figure
+    visu_type: scatter
+    dict_kwargs:
+      x: log2fc
+      y: pvalue
