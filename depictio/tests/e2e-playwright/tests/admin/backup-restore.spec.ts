@@ -82,9 +82,11 @@ test.describe("admin backup & restore", () => {
       .setInputFiles(filePath!);
 
     // Upload runs validation server-side and opens the restore modal on the
-    // results step directly.
-    await expect(page.getByTestId("backup-restore-modal")).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByTestId("backup-validation-valid")).toBeVisible();
+    // results step directly. Assert on the modal's *content* testids: the
+    // Mantine Modal root carries the data-testid but is an unstyled wrapper
+    // whose overlay/content children are position-fixed, so the root itself
+    // has a zero-size bounding box and Playwright's toBeVisible() rejects it.
+    await expect(page.getByTestId("backup-validation-valid")).toBeVisible({ timeout: 60_000 });
     await expect(page.getByTestId("backup-validation-table")).toBeVisible();
 
     // -- typed confirmation + destructive restore ------------------------
