@@ -101,9 +101,15 @@ test.describe("admin backup & restore", () => {
 
     // The list now marks which snapshot the live data came from, so an admin
     // looking at several backups can tell which one is currently in effect.
-    await expect(page.getByTestId(`backup-restored-${backupId}`)).toBeVisible({
+    // The badge lands on the *uploaded* copy, not on `backupId`: an upload is
+    // stored as a first-class backup under a freshly minted id, and that copy
+    // is what the restore ran from. Assert the count instead of guessing the
+    // id — the marker is a single document, so exactly one row can carry it.
+    await expect(page.locator("[data-testid^='backup-restored-']")).toHaveCount(1, {
       timeout: 30_000,
     });
+    // ...and it is not the backup we created, which was never restored from.
+    await expect(page.getByTestId(`backup-restored-${backupId}`)).toHaveCount(0);
 
     // The app is still functional after the restore (the admin session
     // survives because tokens are never part of backups) — and the restored
