@@ -399,6 +399,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
           metadata={metadata}
           filters={filters}
           refreshTick={refreshTick}
+          onFilterChange={onFilterChange}
           extraActions={extraActions}
           showDragHandle={showDragHandle}
         />

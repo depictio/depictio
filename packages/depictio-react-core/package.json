@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "description": "Shared Depictio React grid + renderer code consumed by the SPA viewer and the Dash custom-component package.",
+  "scripts": {
+    "test": "vitest run"
+  },
   "//sideEffects": "Only stylesheets are imported for their side effects; every module's JS exports are pure. This lets bundlers tree-shake unused barrel re-exports (e.g. the plotly/ag-grid renderers) out of consumers that only pull light helpers from the index, instead of dragging the whole visualisation stack onto their boot path.",
   "sideEffects": [
     "**/*.css"
@@ -57,6 +60,7 @@
     "react-grid-layout": "^1.4.4",
     "react-plotly.js": "^2.6.0",
     "react-resizable": "^3.0.5",
-    "typescript": "^5.3.0"
+    "typescript": "^5.3.0",
+    "vitest": "^2.1.9"
   }
 }

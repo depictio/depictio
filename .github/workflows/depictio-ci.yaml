@@ -138,6 +138,31 @@ jobs:
           path: .quality-passed
           key: quality-${{ needs.check-quality-cache.outputs.code-hash }}
 
+  # Vitest unit suites in the pnpm workspace (pure-logic tests only —
+  # currently depictio-react-core's phylo/subtree-selection helpers). No
+  # Docker, no browser; DOM-level coverage lives in e2e-playwright.
+  js-unit:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run unit tests
+        run: pnpm --filter depictio-react-core test
+
   # Test pixi installation and basic functionality (no Docker required)
   pixi-install-test:
     runs-on: ubuntu-22.04

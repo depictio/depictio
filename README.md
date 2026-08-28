@@ -53,11 +53,4 @@ Depictio is a self-hosrd modern, interactive platform that enables dashboards cr
 
 **Homepage**: [depictio.github.io](https://depictio.github.io/depictio-docs/latest/)
 
-**Telemetry**: Depictio sends an anonymous daily heartbeat (a random installation
-ID, the version, how it was deployed, which features are enabled, and deployment
-size as coarse buckets) so the project can count installations. No personal data,
-names, hostnames or content are ever sent. See [docs/telemetry.md](docs/telemetry.md)
-for the exact payload, how to inspect it on your own deployment, and how to disable
-it (`DEPICTIO_TELEMETRY_ENABLED=false` or `DO_NOT_TRACK=1`).
-
 Copyright(c) 2023-2026 Thomas Weber <thomas.weber@embl.de> (see LICENSE)

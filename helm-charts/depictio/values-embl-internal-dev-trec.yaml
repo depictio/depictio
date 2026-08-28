@@ -1,0 +1,58 @@
+# EMBL Internal Dev, TREC skin - dev.depictio.embl.org
+#
+# Layered on top of:
+#   - values.yaml (base configuration)
+#   - values-embl-internal-dev.yaml (hosts, namespace, mongo/redis, sizing)
+#   - values-embl-internal-secrets.yaml (S3 + OAuth + mongo credentials)
+#
+# Deltas only. Everything about *where* this runs stays in
+# values-embl-internal-dev.yaml, which is deliberately kept generic so the
+# environment can be deployed unbranded by simply dropping this file from the
+# -f list. Drop it and you get plain Depictio back, with registration open.
+#
+# Example deployment command:
+# helm upgrade --install devinternal ./helm-charts/depictio \
+#   -f ./helm-charts/depictio/values.yaml \
+#   -f ./helm-charts/depictio/values-embl-internal-dev.yaml \
+#   -f ./helm-charts/depictio/values-embl-internal-secrets.yaml \
+#   -f ./helm-charts/depictio/values-embl-internal-dev-trec.yaml \
+#   -n datasci-depictio-internal-dev
+
+backend:
+  env:
+    # No self-service accounts. /register returns 403 and the Register button
+    # is hidden, AND the OAuth callback stops provisioning: the route passes
+    # allow_create=not registration_disabled, so an unknown Google email gets
+    # 403 rather than a new account. Google OAuth (enabled in the base file)
+    # stays a login-only door for people who already have an account here.
+    #
+    # Note this leaves email+password login itself open: there is no flag to
+    # make the instance OAuth-only. In practice OAuth-created accounts are
+    # stored with a placeholder that is not the bcrypt hash of any password,
+    # so only pre-existing password accounts can use the form.
+    DEPICTIO_AUTH_REGISTRATION_DISABLED: "true"
+
+    # ── TREC branding ────────────────────────────────────────────────────
+    # Deployment defaults only: /admin -> Branding overrides any of this live
+    # without a redeploy, and a dashboard can override it again for itself.
+    #
+    # The shipped preset carries the whole palette (primary #00a550, secondary
+    # #1a4f8f, tertiary #f5a11b, tint_mode full - see models/models/branding.py).
+    # Deliberately not restated as flat vars: sampling the official TREC tag
+    # gives #009f4d / #183e8f / #f49e17, within 2-3 units of the preset and
+    # indistinguishable on screen, so pinning a local copy would only stop this
+    # deployment from following a later correction to the preset.
+    DEPICTIO_BRANDING_PRESET: "trec"
+
+    # Substituted into the literal "Depictio" of the login heading
+    # (AuthCard.tsx: heading.replace('Depictio', app_name)), so the page reads
+    # "Welcome to Depictio for TREC :" rather than dropping Depictio's name.
+    # Also the browser tab title.
+    DEPICTIO_BRANDING_APP_NAME: "Depictio for TREC"
+
+    # Official TREC tag from embl.org. Remote https images are allowed by the
+    # CSP on both the API and the viewer's nginx, so no local copy is needed.
+    # It is a 620x620 JPEG on white, with no alpha, so it sits in a white
+    # square in dark mode - upload a transparent PNG via /admin -> Branding
+    # to fix that without touching this file.
+    DEPICTIO_BRANDING_LOGO_URL: "https://www.embl.org/about/info/trec/wp-content/uploads/2023/02/20230126_TREC_Tag_RGB-s.jpg"
