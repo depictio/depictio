@@ -222,6 +222,26 @@ export async function loginAsTestUser(
 }
 
 /**
+ * Same login and storage seed, but hands back the tokens rather than the
+ * credentials row.
+ *
+ * `loginAsTestUser` returns a `TestUser` (email / password / is_admin), which
+ * carries no `access_token`. A test that destructures one off it gets
+ * `undefined`, sends `Authorization: Bearer undefined`, and every call it
+ * guards comes back 401 — silently, unless the test asserts on the response.
+ * Use this when the test needs to call the API directly.
+ */
+export async function loginAsTestUserWithToken(
+  page: Page,
+  request: APIRequestContext,
+  userType: UserType = "testUser",
+): Promise<TokenBundle> {
+  await loginAsTestUser(page, request, userType);
+  // Populated by the call above, which caches before it returns.
+  return _tokenCache.get(userType)!;
+}
+
+/**
  * Playwright fixture: extends the default `test` with auth helpers.
  *
  * Usage:

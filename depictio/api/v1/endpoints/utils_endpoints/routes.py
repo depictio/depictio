@@ -143,7 +143,18 @@ async def public_config():
         # values (figure colorway, sequential scale) already materialised so
         # the SPA never re-derives them. Always emitted (an unbranded
         # instance sends the resolved defaults) so the contract is shape-stable.
-        "branding": resolve_effective_brand_theme().model_dump(exclude_none=True),
+        #
+        # Read past the cache. That cache is a per-process global with a 30s
+        # TTL, and `set_brand_theme_overrides` can only invalidate the worker
+        # that served the write — with the default 4 Gunicorn workers, three
+        # of them keep serving the previous theme for up to 30s, so an admin's
+        # save appeared to apply or not depending on which worker answered.
+        # This endpoint runs once per page load, not per render, so the
+        # find_one it costs is noise next to the rest of a page load; the
+        # cache still shields the figure render path, which is what it was
+        # added for. A store that is down still degrades to env defaults
+        # inside get_effective_brand_theme rather than failing the request.
+        "branding": resolve_effective_brand_theme(use_cache=False).model_dump(exclude_none=True),
     }
 
 
