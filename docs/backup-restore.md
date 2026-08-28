@@ -1,5 +1,9 @@
 # Backup and restore
 
+> Engineering reference. The user-facing page is
+> [Backup & Restore](https://depictio.github.io/depictio-docs/latest/usage/administration/backup/)
+> in depictio-docs; keep the two in step when this behaviour changes.
+
 Depictio stores state in two independent places, and they are backed up by two
 independent mechanisms. Reading this page as an operator, the one thing to take
 away is:
@@ -69,9 +73,17 @@ Retention offers two modes in the UI:
 
 - **Keep for a fixed time** — delete anything older than N days. `0` keeps
   everything forever.
-- **Smart retention** — grandfather-father-son thinning: keep every backup for N
-  days, then one per ISO week for 4 weeks, then one per calendar month for 12
-  months. Bounded output from unbounded input.
+- **Smart retention** — a single fixed grandfather-father-son policy, **30 days
+  / 4 weeks / 12 months**: every backup for 30 days, then one per ISO week for 4
+  weeks, then one per calendar month for 12 months. Nothing to configure.
+
+Smart is deliberately 30 days of full fidelity rather than the textbook 7, so
+that it is a strict superset of the default fixed policy (also 30 days).
+Switching a deployment to smart can only ever keep *more* history than it had,
+never less.
+
+The API accepts any tier sizes; the two modes are the UI's opinion about which
+policies are worth offering.
 
 Pruning runs after every backup, scheduled or manual. Nothing else prunes the
 directory, and **there is no delete action**: retention is currently the only

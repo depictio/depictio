@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActionIcon,
   Alert,
+  Anchor,
   Badge,
   Button,
   Card,
@@ -63,11 +64,20 @@ const ScheduleFact: React.FC<{ label: string; value: React.ReactNode }> = ({ lab
   </Group>
 );
 
-/** The tiers "Smart retention" turns on. Fixed rather than exposed as two more
- *  number inputs: the value of the mode is that an admin picks thinning without
- *  having to design a policy, and a wrong pair of tiers is worse than none. */
-const SMART_WEEKLY_WEEKS = 4;
-const SMART_MONTHLY_MONTHS = 12;
+/** The one policy "Smart retention" stands for. Fully fixed rather than exposed
+ *  as three number inputs: the value of the mode is that an admin picks thinning
+ *  without having to design a policy, and a badly chosen set of tiers is worse
+ *  than none.
+ *
+ *  30 days of full fidelity, not the textbook 7, so that switching from the
+ *  default fixed policy (also 30 days) can only ever keep *more* history than
+ *  before. A mode that silently shortened the window an admin already had would
+ *  be the wrong kind of surprise in a backup feature. */
+const SMART_RETENTION = {
+  retention_days: 30,
+  weekly_weeks: 4,
+  monthly_months: 12,
+} as const;
 
 type RetentionMode = 'simple' | 'smart';
 
@@ -104,6 +114,8 @@ const AdminBackupsPanel: React.FC = () => {
   const [draft, setDraft] = useState<ScheduleDraft | null>(null);
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [togglingSchedule, setTogglingSchedule] = useState(false);
+  /** The admin's own "keep for" value, parked while smart mode overrides it. */
+  const fixedTimeDays = useRef<number>(SMART_RETENTION.retention_days);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -183,20 +195,21 @@ const AdminBackupsPanel: React.FC = () => {
     }
   };
 
-  /** Switching mode only turns the weekly/monthly tiers on or off. The days
-   *  field is deliberately left alone: it means something in both modes (in
-   *  smart mode it is the window before thinning starts), so flipping the mode
-   *  never silently rewrites a number the admin chose. */
+  /** Smart mode forces the whole preset, including the days. Switching back
+   *  hands the admin their own number again rather than the preset's, so the
+   *  mode switch is not a one-way door for a value they chose. */
   const setRetentionMode = (draft: ScheduleDraft, mode: RetentionMode) => {
-    setDraft(
-      mode === 'smart'
-        ? {
-            ...draft,
-            weekly_weeks: SMART_WEEKLY_WEEKS,
-            monthly_months: SMART_MONTHLY_MONTHS,
-          }
-        : { ...draft, weekly_weeks: 0, monthly_months: 0 },
-    );
+    if (mode === 'smart') {
+      fixedTimeDays.current = draft.retention_days;
+      setDraft({ ...draft, ...SMART_RETENTION });
+      return;
+    }
+    setDraft({
+      ...draft,
+      retention_days: fixedTimeDays.current,
+      weekly_weeks: 0,
+      monthly_months: 0,
+    });
   };
 
   /** The header switch commits on the spot rather than waiting for Save: it is
@@ -342,27 +355,41 @@ const AdminBackupsPanel: React.FC = () => {
           ]}
         />
 
-        <NumberInput
-          label={retentionModeOf(d) === 'smart' ? 'Keep every backup for' : 'Keep backups for'}
-          description="0 keeps every backup forever"
-          suffix=" days"
-          min={0}
-          max={3650}
-          clampBehavior="strict"
-          allowDecimal={false}
-          value={d.retention_days}
-          onChange={(v) =>
-            setDraft({ ...d, retention_days: typeof v === 'number' ? v : d.retention_days })
-          }
-          disabled={savingSchedule}
-          data-testid="backup-schedule-retention"
-        />
+        {retentionModeOf(d) === 'smart' ? (
+          // Smart mode has nothing to configure, so it shows what it does
+          // instead of a disabled input the admin would try to edit.
+          <Stack gap={4} data-testid="backup-retention-smart">
+            <Text size="sm" fw={500}>
+              Keeps, from newest to oldest:
+            </Text>
+            <Text size="sm" c="dimmed">
+              every backup for {plural(SMART_RETENTION.retention_days, 'day')}, then one a week
+              for {plural(SMART_RETENTION.weekly_weeks, 'week')}, then one a month for{' '}
+              {plural(SMART_RETENTION.monthly_months, 'month')}.
+            </Text>
+          </Stack>
+        ) : (
+          <NumberInput
+            label="Keep backups for"
+            description="0 keeps every backup forever"
+            suffix=" days"
+            min={0}
+            max={3650}
+            clampBehavior="strict"
+            allowDecimal={false}
+            value={d.retention_days}
+            onChange={(v) =>
+              setDraft({ ...d, retention_days: typeof v === 'number' ? v : d.retention_days })
+            }
+            disabled={savingSchedule}
+            data-testid="backup-schedule-retention"
+          />
+        )}
 
         <Text size="xs" c="dimmed" data-testid="backup-retention-summary">
-          {describeRetention(d)}
-          {retentionModeOf(d) === 'smart' && d.retention_days > 0
-            ? ' Older snapshots stay reachable without the volume growing forever.'
-            : ''}
+          {retentionModeOf(d) === 'smart'
+            ? 'A year of history stays reachable without the backup volume growing forever.'
+            : describeRetention(d)}
         </Text>
 
         <Group justify="flex-end">
@@ -649,8 +676,16 @@ const AdminBackupsPanel: React.FC = () => {
               metadata pointing at your data. The data itself (Delta tables in S3 or MinIO) is
               not included and is not restored from here. Back it up separately, with your
               object store&apos;s own replication or with{' '}
-              <Code>depictio-cli backup create --include-s3-data</Code>. See{' '}
-              <Code>docs/backup-restore.md</Code>.
+              <Code>depictio-cli backup create --include-s3-data</Code>.{' '}
+              <Anchor
+                href="https://depictio.github.io/depictio-docs/latest/usage/administration/backup/"
+                target="_blank"
+                rel="noopener noreferrer"
+                size="sm"
+              >
+                Backup &amp; restore documentation
+              </Anchor>
+              .
             </Text>
           </Alert>
         </Stack>
