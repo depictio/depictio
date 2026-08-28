@@ -128,14 +128,30 @@ test('advanced viz offers depictio\'s ranked kind picker and renders a bound kin
 
   // depictio's picker: every kind, described, scored, split into recommended
   // and the rest. The Studio used to show a bare alphabetical Select.
-  await expect(page.getByText('Volcano plot')).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText('Effect size vs significance')).toBeVisible();
   // Ranked, not alphabetised: every kind carries a fit score.
-  await expect(page.getByText(/%\s*fit/i).first()).toBeVisible();
+  await expect(page.getByText(/%\s*fit/i).first()).toBeVisible({ timeout: 15_000 });
+
+  // The picker keeps its reference material collapsed: kinds scoring under the
+  // recommendation threshold, and the bindings table once every required role
+  // is already bound. A closed Mantine `Collapse` clips its children to zero
+  // height instead of removing them, so those elements still resolve and even
+  // read as visible - the click just lands on whatever is painted over them.
+  const expandSection = async (title: string | RegExp) => {
+    const header = page.getByRole('button', { name: title });
+    if ((await header.count()) && (await header.getAttribute('aria-expanded')) === 'false') {
+      await header.click();
+    }
+  };
+
+  // The golden fixture scores Volcano plot at 50% fit, so it is in the tail.
+  await expandSection(/Other visualisations/);
+  await expect(page.getByText('Volcano plot')).toBeVisible();
+  await expect(page.getByText('Effect size vs significance')).toBeVisible();
 
   // The kind tiles are clickable Papers, not buttons.
   await page.getByText('Volcano plot', { exact: true }).click();
   await expect(page.getByText('Column bindings')).toBeVisible();
+  await expandSection('Column bindings');
 
   // Every required role is pre-filled from the ranked candidates the
   // suggestion endpoint returns — the Studio computes that ranking itself, so
