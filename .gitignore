@@ -334,6 +334,9 @@ benchmark_datasets/
 # Sensitive Helm values files
 helm-charts/depictio/values-*-secrets.yaml
 helm-charts/depictio/*secrets*.yaml
+# Snapshots of live releases (helm get values/manifest) — carry the same
+# secrets the files above do, since the release has them already merged in.
+.helm-backups/
 
 # Profiling
 prof_files/

@@ -61,6 +61,19 @@ data:
   DEPICTIO_AUTH_GOOGLE_OAUTH_REDIRECT_URI: ""
   {{- end }}
 
+  # Instance branding (issue #397) — see examples/values-branding.yaml.
+  # Forwarded by prefix rather than as an explicit key list: BrandingConfig
+  # (api/v1/configs/settings_models.py, env_prefix DEPICTIO_BRANDING_) already
+  # owns which names are valid, and a second copy here would drift from it.
+  # Only keys the operator actually set are emitted — "" is not "unset" to
+  # pydantic, it is an invalid colour, and one of those discards the whole
+  # flat branding layer with a warning.
+  {{- range $key, $value := .Values.backend.env }}
+  {{- if and (hasPrefix "DEPICTIO_BRANDING_" $key) $value }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  {{- end }}
+
   # Performance
   DEPICTIO_FASTAPI_WORKERS: {{ .Values.backend.env.DEPICTIO_FASTAPI_WORKERS | quote }}
   # Analytics
@@ -145,6 +158,16 @@ data:
   DEPICTIO_AUTH_REGISTRATION_DISABLED: {{ .Values.backend.env.DEPICTIO_AUTH_REGISTRATION_DISABLED | default "false" | quote }}
   DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: {{ .Values.backend.env.DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL | default "anonymous@example.com" | quote }}
   DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: {{ .Values.backend.env.DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS | default "24" | quote }}
+
+  # Branding — must mirror the backend for the same reason the auth block
+  # does: the worker renders figures too, and the brand colorway/template is
+  # applied on that render path. Without these the worker would fall back to
+  # the stock palette and screenshots would not match the live dashboard.
+  {{- range $key, $value := .Values.backend.env }}
+  {{- if and (hasPrefix "DEPICTIO_BRANDING_" $key) $value }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  {{- end }}
 
   # Redis/Celery broker settings
   {{- if .Values.redis.enabled }}
