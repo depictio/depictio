@@ -267,9 +267,10 @@ def materialize_recipe_seeds(
 
     A reference template ships the output of each of its recipes as a committed
     ``{data_root}/{dc_tag}.tsv``. When that seed is present the recipe is
-    short-circuited entirely: the ``transform`` block is dropped and replaced by a
-    single-file scan of the seed. This is what makes a bundled project ingestible
-    from its own directory even though it does not ship the recipes' raw inputs.
+    short-circuited entirely: the ``transform`` block is flagged ``materialized``
+    and the DC gains a single-file scan of the seed. This is what makes a bundled
+    project ingestible from its own directory even though it does not ship the
+    recipes' raw inputs.
 
     Shared by the boot-time reference seeding (``resolve_template_for_init``) and
     the CLI's ``--template`` path so the two cannot drift. The seed always wins
@@ -293,7 +294,9 @@ def materialize_recipe_seeds(
         surviving = []
         for dc in workflow.get("data_collections", []):
             dc_config = dc.get("config", {})
-            if dc_config.get("source") != "transformed" or "transform" not in dc_config:
+            if dc_config.get("source") != "transformed" or not isinstance(
+                dc_config.get("transform"), dict
+            ):
                 surviving.append(dc)
                 continue
 
@@ -313,14 +316,17 @@ def materialize_recipe_seeds(
                 surviving.append(dc)
                 continue
 
-            # Keep ``source: transformed`` on the DC so the React viewer
-            # (data-source info card, admin panel, builder dropdown) surfaces the
-            # lineage — the data IS the output of a recipe, just materialised as a
-            # seed file rather than computed at scan time. Only the ``transform``
-            # step itself is dropped (it's been replaced with the file scan), and
-            # that absence is exactly what tells the CLI's deltatable path to treat
-            # the DC as a plain file scan.
-            dc_config.pop("transform", None)
+            # Keep ``source: transformed`` AND the ``transform`` block on the DC so
+            # the React viewer (data-source info card, admin panel, builder
+            # dropdown) surfaces the lineage — the data IS the output of a recipe,
+            # just materialised as a seed file rather than computed at scan time.
+            # ``materialized`` marks it as already computed: consumers must not
+            # re-run the recipe (see deltatables.process_data_collection) and must
+            # not try to resolve its raw SOURCES, which are absent from a seed.
+            # The catalog compose endpoint matches a collection to a catalog
+            # output on ``transform.recipe``, so dropping the block here would
+            # make every seeded recipe DC invisible to the catalog picker.
+            dc_config["transform"]["materialized"] = True
             dc_config["scan"] = {
                 "mode": "single",
                 "scan_parameters": {"filename": seed_path},
