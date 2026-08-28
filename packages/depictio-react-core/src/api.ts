@@ -4425,23 +4425,10 @@ export interface CatalogRender {
   threshold_warn?: number | null;
   attrition_cols?: string[];
   trend_col?: string | null;
+  filter_expr?: string | null;
   /** multiqc only: the report module this render surfaces. */
   section?: string;
   code?: string;
-  /** card: the secondary strip. A catalog card can declare all of these, and
-   *  the offline preview renders them — so Add has to carry them across or the
-   *  added component silently loses the strip the user just previewed. */
-  aggregations?: string[];
-  secondary_layout?: string;
-  breakdown_col?: string;
-  top_n_count?: number;
-  coverage_max?: number;
-  threshold_value?: number;
-  threshold_direction?: string;
-  threshold_warn?: number;
-  attrition_cols?: string[];
-  trend_col?: string;
-  filter_expr?: string;
   /** interactive: the widget and the column it filters on. */
   interactive_type?: string;
   column_name?: string;

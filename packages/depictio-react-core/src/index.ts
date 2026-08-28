@@ -207,7 +207,6 @@ export {
   fetchFigureParameterDiscovery,
   fetchFigureVisualizationList,
   upsertComponent,
-  defaultLayoutForType,
   saveDashboardNotes,
   uploadDashboardLogo,
   updateDashboardAppearance,

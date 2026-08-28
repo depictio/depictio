@@ -28,7 +28,7 @@ const MetadataPopover: React.FC<MetadataPopoverProps> = ({ metadata }) => {
         <Tooltip label="Component metadata" withArrow>
           <ActionIcon
             variant="subtle"
-            color={isCatalog ? 'violet' : 'cyan'}
+            color="cyan"
             size="sm"
             aria-label="Component metadata"
           >
