@@ -1,3 +1,4 @@
+import calendar
 import hashlib
 import json
 import os
@@ -172,19 +173,105 @@ def _write_backup_file(backup_payload: dict, backup_id: str) -> str:
     return backup_filename
 
 
+def _parse_backup_created(filename: str) -> datetime | None:
+    """Creation time of a backup from its filename, or None if it is not one.
+
+    The age comes from the ``backup_id`` in the filename rather than the file's
+    mtime: mtimes do not survive a volume restore or an rsync, and the id is the
+    creation timestamp by construction.
+    """
+    if not (filename.startswith("depictio_backup_") and filename.endswith(".json")):
+        return None
+    backup_id = filename[len("depictio_backup_") : -len(".json")]
+    if not _BACKUP_ID_PATTERN.fullmatch(backup_id):
+        return None
+    try:
+        return datetime.strptime(backup_id, "%Y%m%d_%H%M%S")
+    except ValueError:
+        return None
+
+
+def _subtract_months(moment: datetime, months: int) -> datetime:
+    """Step back whole calendar months, clamping the day to the target month.
+
+    The monthly tier is expressed in calendar months, so its boundary cannot be
+    a fixed number of days without drifting against the buckets it is meant to
+    bound (31 March minus one month is 28 February, not 3 March).
+    """
+    month_index = (moment.year * 12 + moment.month - 1) - months
+    year, month = divmod(month_index, 12)
+    day = min(moment.day, calendar.monthrange(year, month + 1)[1])
+    return moment.replace(year=year, month=month + 1, day=day)
+
+
+def select_expired_backups(
+    backups: list[tuple[datetime, str]],
+    now: datetime,
+    retention_days: int,
+    weekly_weeks: int,
+    monthly_months: int,
+) -> list[str]:
+    """Apply the grandfather-father-son policy; return the filenames to delete.
+
+    Three tiers, each covering the age range where the one before it stops:
+
+    - every backup younger than ``retention_days`` is kept;
+    - for the next ``weekly_weeks`` weeks, the newest backup of each ISO week;
+    - for the next ``monthly_months`` calendar months, the newest of each month.
+
+    Anything older than the last tier, or landing in a bucket a newer backup
+    already fills, is expired. With both tier sizes at 0 this reduces exactly to
+    a plain ``retention_days`` age cutoff, which is what a deployment that never
+    touches the tiers keeps getting. ``retention_days <= 0`` means keep forever.
+
+    A backup kept by an earlier tier also fills its week and month buckets, so a
+    week that still has a daily-tier survivor does not additionally retain a
+    weekly copy of itself.
+
+    Pure and total: takes the clock as an argument and touches no filesystem, so
+    the policy can be tested directly over a set of dates.
+    """
+    if retention_days <= 0:
+        return []
+
+    daily_cutoff = now - timedelta(days=retention_days)
+    weekly_cutoff = daily_cutoff - timedelta(weeks=weekly_weeks)
+    monthly_cutoff = _subtract_months(weekly_cutoff, monthly_months)
+
+    expired: list[str] = []
+    kept_weeks: set[tuple[int, int]] = set()
+    kept_months: set[tuple[int, int]] = set()
+
+    # Newest first: the first backup to reach a bucket is the one that fills it.
+    for created, filename in sorted(backups, reverse=True):
+        week = created.isocalendar()[:2]
+        month = (created.year, created.month)
+
+        if created >= daily_cutoff:
+            kept_weeks.add(week)
+            kept_months.add(month)
+        elif created >= weekly_cutoff and week not in kept_weeks:
+            kept_weeks.add(week)
+            kept_months.add(month)
+        elif monthly_cutoff <= created < weekly_cutoff and month not in kept_months:
+            kept_months.add(month)
+        else:
+            expired.append(filename)
+
+    return expired
+
+
 def prune_expired_backups() -> int:
-    """Delete backups older than ``backup_file_retention_days``; return the count.
+    """Delete the backups the retention policy no longer covers; return the count.
 
     Runs after every backup, scheduled or manual — nothing else prunes this
     directory, and each snapshot is the size of the whole database, so without
     this the backup volume grows without bound.
 
-    The age comes from the ``backup_id`` in the filename rather than the file's
-    mtime: mtimes do not survive a volume restore or an rsync, and the id is the
-    creation timestamp by construction. Files that do not parse are left alone.
-    Retention <= 0 means "keep forever". Never raises.
+    Files that do not parse as a backup are left alone. Never raises.
     """
-    retention_days = get_backup_schedule_config()["retention_days"]
+    config = get_backup_schedule_config()
+    retention_days = config["retention_days"]
     if retention_days <= 0:
         return 0
 
@@ -192,26 +279,28 @@ def prune_expired_backups() -> int:
     if not os.path.isdir(backup_dir):
         return 0
 
-    cutoff = datetime.now() - timedelta(days=retention_days)
-    removed = 0
     try:
         filenames = os.listdir(backup_dir)
     except OSError as exc:
         logger.warning(f"Backup retention: cannot list {backup_dir}: {exc}")
         return 0
 
+    backups = []
     for filename in filenames:
-        if not (filename.startswith("depictio_backup_") and filename.endswith(".json")):
-            continue
-        backup_id = filename[len("depictio_backup_") : -len(".json")]
-        if not _BACKUP_ID_PATTERN.fullmatch(backup_id):
-            continue
-        try:
-            created = datetime.strptime(backup_id, "%Y%m%d_%H%M%S")
-        except ValueError:
-            continue
-        if created >= cutoff:
-            continue
+        created = _parse_backup_created(filename)
+        if created is not None:
+            backups.append((created, filename))
+
+    expired = select_expired_backups(
+        backups,
+        datetime.now(),
+        retention_days,
+        config["weekly_weeks"],
+        config["monthly_months"],
+    )
+
+    removed = 0
+    for filename in expired:
         backup_path = os.path.join(backup_dir, filename)
         try:
             os.remove(backup_path)
@@ -224,7 +313,9 @@ def prune_expired_backups() -> int:
 
     if removed:
         logger.info(
-            f"Backup retention: removed {removed} backup(s) older than {retention_days} days"
+            f"Backup retention: removed {removed} backup(s) outside the policy "
+            f"(keep {retention_days}d, then {config['weekly_weeks']}w, "
+            f"then {config['monthly_months']}m)"
         )
     return removed
 
@@ -285,6 +376,44 @@ def claim_auto_backup_slot(interval_seconds: int) -> datetime | None:
     return now if claimed else None
 
 
+#: ``_id`` of the document naming the backup this deployment's data was last
+#: restored from. Lives beside the scheduler state, in a collection that restore
+#: never touches — a document inside a restored collection would be overwritten
+#: by the very restore it is meant to record.
+LAST_RESTORE_STATE_ID = "last_restore_state"
+
+
+def record_last_restore(backup_id: str, restored_by: str) -> None:
+    """Remember which backup was just restored. Never raises.
+
+    A bookkeeping failure must not turn a completed restore into an error the
+    caller sees, so this only logs.
+    """
+    try:
+        initialization_collection.update_one(
+            {"_id": LAST_RESTORE_STATE_ID},
+            {
+                "$set": {
+                    "backup_id": backup_id,
+                    "restored_at": datetime.now(timezone.utc),
+                    "restored_by": restored_by,
+                }
+            },
+            upsert=True,
+        )
+    except Exception as exc:
+        logger.warning(f"Could not record the last restore: {exc}")
+
+
+def get_last_restore_state() -> dict:
+    """Read the last-restore marker. Never raises."""
+    try:
+        return initialization_collection.find_one({"_id": LAST_RESTORE_STATE_ID}) or {}
+    except Exception as exc:
+        logger.warning(f"Could not read the last restore state: {exc}")
+        return {}
+
+
 def get_auto_backup_state() -> dict:
     """Read the scheduled-backup state document. Never raises."""
     try:
@@ -296,7 +425,13 @@ def get_auto_backup_state() -> dict:
 
 #: Schedule fields an admin can change from the Backups tab. Everything else
 #: about backups (paths, S3 targets, credentials) stays deployment configuration.
-SCHEDULE_FIELDS = ("enabled", "interval_hours", "retention_days")
+SCHEDULE_FIELDS = (
+    "enabled",
+    "interval_hours",
+    "retention_days",
+    "weekly_weeks",
+    "monthly_months",
+)
 
 
 def get_backup_schedule_config() -> dict:
@@ -315,6 +450,8 @@ def get_backup_schedule_config() -> dict:
         "enabled": settings.backup.auto_backup_enabled,
         "interval_hours": settings.backup.auto_backup_interval_hours,
         "retention_days": settings.backup.backup_file_retention_days,
+        "weekly_weeks": settings.backup.backup_retention_weekly_weeks,
+        "monthly_months": settings.backup.backup_retention_monthly_months,
     }
     state = get_auto_backup_state()
     overrides = {field: state[field] for field in SCHEDULE_FIELDS if field in state}
@@ -560,6 +697,10 @@ class BackupListItem(BaseModel):
     total_documents: int = 0
     collections: list[str] = []
     depictio_version: str | None = None
+    # Set only on the backup this deployment's data was last restored from, so
+    # the admin can tell which snapshot the live data actually came from.
+    restored_at: str | None = None
+    restored_by: str | None = None
     # False for legacy backups without a .sha256 sidecar — those can only be
     # restored with allow_unverified=true.
     has_checksum: bool = False
@@ -626,6 +767,9 @@ class BackupScheduleResponse(BaseModel):
     enabled: bool
     interval_hours: int
     retention_days: int
+    # Grandfather-father-son tiers past retention_days; 0 means the tier is off.
+    weekly_weeks: int = 0
+    monthly_months: int = 0
     last_run: str | None = None
     next_run: str | None = None
     # True once any field has been set from the Backups tab, so the UI can say
@@ -642,6 +786,10 @@ class BackupScheduleUpdate(BaseModel):
     interval_hours: int | None = Field(default=None, ge=1, le=8760)
     # 0 means "keep forever"; ten years is the ceiling.
     retention_days: int | None = Field(default=None, ge=0, le=3650)
+    # Retention tiers past retention_days. 0 turns a tier off; the ceilings are
+    # generous enough for any real policy while still rejecting typos.
+    weekly_weeks: int | None = Field(default=None, ge=0, le=520)
+    monthly_months: int | None = Field(default=None, ge=0, le=120)
 
 
 def _schedule_response() -> BackupScheduleResponse:
@@ -663,6 +811,8 @@ def _schedule_response() -> BackupScheduleResponse:
         enabled=config["enabled"],
         interval_hours=config["interval_hours"],
         retention_days=config["retention_days"],
+        weekly_weeks=config["weekly_weeks"],
+        monthly_months=config["monthly_months"],
         last_run=last_run.isoformat() if last_run else None,
         next_run=next_run.isoformat() if next_run else None,
         is_customized=config["is_customized"],
@@ -740,6 +890,11 @@ async def list_backups(
         if not os.path.exists(backup_dir):
             return BackupListResponse(success=True, backups=[], count=0)
 
+        # Read once for the whole listing rather than per row.
+        last_restore = get_last_restore_state()
+        restored_backup_id = last_restore.get("backup_id")
+        restored_at = _as_utc(last_restore.get("restored_at"))
+
         backup_files = []
         for filename in os.listdir(backup_dir):
             if filename.startswith("depictio_backup_") and filename.endswith(".json"):
@@ -767,6 +922,16 @@ async def list_backups(
                         depictio_version=metadata.get("depictio_version"),
                         has_checksum=has_checksum,
                         is_automatic=bool(metadata.get("automatic", False)),
+                        restored_at=(
+                            restored_at.isoformat()
+                            if restored_at and backup_id == restored_backup_id
+                            else None
+                        ),
+                        restored_by=(
+                            last_restore.get("restored_by")
+                            if backup_id == restored_backup_id
+                            else None
+                        ),
                     )
                 except Exception:
                     # If can't read metadata, just use file info
@@ -776,6 +941,16 @@ async def list_backups(
                         size_mb=round(file_stat.st_size / (1024 * 1024), 2),
                         created=datetime.fromtimestamp(file_stat.st_ctime).isoformat(),
                         has_checksum=has_checksum,
+                        restored_at=(
+                            restored_at.isoformat()
+                            if restored_at and backup_id == restored_backup_id
+                            else None
+                        ),
+                        restored_by=(
+                            last_restore.get("restored_by")
+                            if backup_id == restored_backup_id
+                            else None
+                        ),
                     )
 
                 backup_files.append(backup_info)
@@ -1219,6 +1394,12 @@ async def restore_backup(
                     "status": "failed",
                     "error": "restore failed",
                 }
+
+        # Mark the source only once the restore actually stuck: a partial
+        # restore leaves the deployment in a state no single backup describes,
+        # so labelling a row "restored" there would be a lie.
+        if not errors:
+            record_last_restore(request.backup_id, current_user.email)
 
         return BackupRestoreResponse(
             success=len(errors) == 0,

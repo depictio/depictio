@@ -97,6 +97,12 @@ test.describe("admin backup & restore", () => {
     await expect(page.getByTestId("backup-restore-success")).toBeVisible({ timeout: 120_000 });
     await page.getByRole("button", { name: "Close" }).click();
 
+    // The list now marks which snapshot the live data came from, so an admin
+    // looking at several backups can tell which one is currently in effect.
+    await expect(page.getByTestId(`backup-restored-${backupId}`)).toBeVisible({
+      timeout: 30_000,
+    });
+
     // The app is still functional after the restore (the admin session
     // survives because tokens are never part of backups) — and the restored
     // data is still queryable. Backups serialize every ObjectId to a string;

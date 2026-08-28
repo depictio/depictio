@@ -18,6 +18,8 @@ def backup_settings(tmp_path):
     mock_settings = MagicMock()
     mock_settings.backup.backup_path = str(tmp_path / "backups")
     mock_settings.backup.backup_file_retention_days = 30
+    mock_settings.backup.backup_retention_weekly_weeks = 0
+    mock_settings.backup.backup_retention_monthly_months = 0
     mock_settings.backup.auto_backup_enabled = True
     mock_settings.backup.auto_backup_interval_hours = 24
     mock_state = MagicMock()

@@ -1,15 +1,20 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
+  ActionIcon,
   Alert,
   Badge,
   Button,
   Card,
   Center,
   Code,
+  Divider,
   FileButton,
   Group,
   Loader,
   NumberInput,
+  Paper,
+  Popover,
+  SimpleGrid,
   Stack,
   Switch,
   Table,
@@ -35,22 +40,43 @@ import { formatDateTime } from '../lib/datetime';
 import RestoreBackupModal from './RestoreBackupModal';
 import type { RestoreTarget } from './RestoreBackupModal';
 
-/** The three schedule fields an admin can edit, as held while editing. */
+/** The schedule fields behind the Save button. `enabled` is deliberately not
+ *  one of them: the header switch is a single unambiguous action and saves on
+ *  the spot, while the numbers need a deliberate commit. */
 interface ScheduleDraft {
-  enabled: boolean;
   interval_hours: number;
   retention_days: number;
+  weekly_weeks: number;
+  monthly_months: number;
 }
 
-/** One labelled value in the Automated backups summary row. */
-const ScheduleFact: React.FC<{ label: string; value: string }> = ({ label, value }) => (
-  <Stack gap={0}>
-    <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
+/** One row of the status panel: a label on the left, its value on the right. */
+const ScheduleFact: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
+  <Group justify="space-between" wrap="nowrap" gap="md" align="baseline">
+    <Text size="xs" c="dimmed" tt="uppercase" fw={600} style={{ flexShrink: 0 }}>
       {label}
     </Text>
-    <Text size="sm">{value}</Text>
-  </Stack>
+    <Text size="sm" ta="right" style={{ minWidth: 0 }}>
+      {value}
+    </Text>
+  </Group>
 );
+
+/** Plain-language summary of the tiered retention policy, so an admin can read
+ *  back what the three numbers add up to without doing the arithmetic. */
+const describeRetention = (draft: ScheduleDraft): string => {
+  if (draft.retention_days <= 0) return 'Every backup is kept forever.';
+  const parts = [`every backup for ${draft.retention_days} day${draft.retention_days === 1 ? '' : 's'}`];
+  if (draft.weekly_weeks > 0) {
+    parts.push(`then one a week for ${draft.weekly_weeks} week${draft.weekly_weeks === 1 ? '' : 's'}`);
+  }
+  if (draft.monthly_months > 0) {
+    parts.push(
+      `then one a month for ${draft.monthly_months} month${draft.monthly_months === 1 ? '' : 's'}`,
+    );
+  }
+  return `Keeps ${parts.join(', ')}. Everything older is deleted.`;
+};
 
 /**
  * Admin > Backups tab. One-click server-side backup (create + download),
@@ -65,6 +91,7 @@ const AdminBackupsPanel: React.FC = () => {
    *  Save button can tell whether anything actually changed. */
   const [draft, setDraft] = useState<ScheduleDraft | null>(null);
   const [savingSchedule, setSavingSchedule] = useState(false);
+  const [togglingSchedule, setTogglingSchedule] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -75,18 +102,20 @@ const AdminBackupsPanel: React.FC = () => {
   const applySchedule = useCallback((next: BackupScheduleStatus) => {
     setSchedule(next);
     setDraft({
-      enabled: next.enabled,
       interval_hours: next.interval_hours,
       retention_days: next.retention_days,
+      weekly_weeks: next.weekly_weeks,
+      monthly_months: next.monthly_months,
     });
   }, []);
 
   const scheduleDirty =
     !!schedule &&
     !!draft &&
-    (draft.enabled !== schedule.enabled ||
-      draft.interval_hours !== schedule.interval_hours ||
-      draft.retention_days !== schedule.retention_days);
+    (draft.interval_hours !== schedule.interval_hours ||
+      draft.retention_days !== schedule.retention_days ||
+      draft.weekly_weeks !== schedule.weekly_weeks ||
+      draft.monthly_months !== schedule.monthly_months);
 
   const refresh = useCallback(async () => {
     setLoadError(null);
@@ -119,18 +148,17 @@ const AdminBackupsPanel: React.FC = () => {
     try {
       applySchedule(
         await updateBackupSchedule({
-          enabled: draft.enabled,
           intervalHours: draft.interval_hours,
           retentionDays: draft.retention_days,
+          weeklyWeeks: draft.weekly_weeks,
+          monthlyMonths: draft.monthly_months,
         }),
       );
       notifications.show({
         color: 'teal',
         title: 'Schedule saved',
-        message: draft.enabled
-          ? `Automatic backup every ${draft.interval_hours} h.`
-          : 'Automatic backups are off.',
-        autoClose: 2500,
+        message: `Automatic backup every ${draft.interval_hours} h. ${describeRetention(draft)}`,
+        autoClose: 3500,
       });
     } catch (err) {
       notifications.show({
@@ -140,6 +168,32 @@ const AdminBackupsPanel: React.FC = () => {
       });
     } finally {
       setSavingSchedule(false);
+    }
+  };
+
+  /** The header switch commits on the spot rather than waiting for Save: it is
+   *  a single unambiguous choice, and an admin who flips it to stop a runaway
+   *  backup loop should not have to find a second button to make it stick. */
+  const handleToggleSchedule = async (enabled: boolean) => {
+    setTogglingSchedule(true);
+    try {
+      applySchedule(await updateBackupSchedule({ enabled }));
+      notifications.show({
+        color: enabled ? 'teal' : 'gray',
+        title: enabled ? 'Automated backups on' : 'Automated backups off',
+        message: enabled
+          ? `The server will take a backup every ${schedule?.interval_hours ?? 24} hours.`
+          : 'Backups now only exist when an administrator creates one.',
+        autoClose: 2500,
+      });
+    } catch (err) {
+      notifications.show({
+        color: 'red',
+        title: 'Could not change the schedule',
+        message: err instanceof Error ? err.message : 'Failed to update the backup schedule',
+      });
+    } finally {
+      setTogglingSchedule(false);
     }
   };
 
@@ -209,6 +263,183 @@ const AdminBackupsPanel: React.FC = () => {
     }
   };
 
+  /** Left panel: the policy an admin edits. Interval and the three retention
+   *  tiers, committed together by Save. */
+  const renderPolicyPanel = (d: ScheduleDraft) => (
+    <Paper withBorder radius="sm" p="md">
+      <Stack gap="sm">
+        <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
+          Schedule &amp; retention
+        </Text>
+
+        <NumberInput
+          label="Interval"
+          description="How often the server takes a backup"
+          suffix=" hours"
+          min={1}
+          max={8760}
+          clampBehavior="strict"
+          allowDecimal={false}
+          value={d.interval_hours}
+          onChange={(v) =>
+            setDraft({ ...d, interval_hours: typeof v === 'number' ? v : d.interval_hours })
+          }
+          disabled={savingSchedule}
+          data-testid="backup-schedule-interval"
+        />
+
+        <Divider
+          my={4}
+          label={
+            <Group gap={6} wrap="nowrap">
+              <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
+                Retention policy
+              </Text>
+              <Tooltip
+                multiline
+                w={280}
+                label="Tiered retention: recent backups are all kept, then thinned to one a week, then one a month. Older snapshots stay available without the volume growing forever."
+              >
+                <Icon
+                  icon="mdi:help-circle-outline"
+                  width={14}
+                  color="var(--mantine-color-dimmed)"
+                />
+              </Tooltip>
+            </Group>
+          }
+          labelPosition="left"
+        />
+
+        <NumberInput
+          label="Keep every backup for"
+          description="0 keeps every backup forever"
+          suffix=" days"
+          min={0}
+          max={3650}
+          clampBehavior="strict"
+          allowDecimal={false}
+          value={d.retention_days}
+          onChange={(v) =>
+            setDraft({ ...d, retention_days: typeof v === 'number' ? v : d.retention_days })
+          }
+          disabled={savingSchedule}
+          data-testid="backup-schedule-retention"
+        />
+
+        {/* The tiers only mean anything past the daily window, so they follow
+            "keep forever" into being irrelevant rather than silently ignored. */}
+        <NumberInput
+          label="Then one a week for"
+          suffix=" weeks"
+          min={0}
+          max={520}
+          clampBehavior="strict"
+          allowDecimal={false}
+          value={d.weekly_weeks}
+          onChange={(v) =>
+            setDraft({ ...d, weekly_weeks: typeof v === 'number' ? v : d.weekly_weeks })
+          }
+          disabled={savingSchedule || d.retention_days <= 0}
+          data-testid="backup-schedule-weekly"
+        />
+
+        <NumberInput
+          label="Then one a month for"
+          suffix=" months"
+          min={0}
+          max={120}
+          clampBehavior="strict"
+          allowDecimal={false}
+          value={d.monthly_months}
+          onChange={(v) =>
+            setDraft({ ...d, monthly_months: typeof v === 'number' ? v : d.monthly_months })
+          }
+          disabled={savingSchedule || d.retention_days <= 0}
+          data-testid="backup-schedule-monthly"
+        />
+
+        <Text size="xs" c="dimmed" data-testid="backup-retention-summary">
+          {describeRetention(d)}
+        </Text>
+
+        <Group justify="flex-end">
+          <Button
+            onClick={() => void handleSaveSchedule()}
+            loading={savingSchedule}
+            disabled={!scheduleDirty}
+            data-testid="backup-schedule-save"
+          >
+            Save schedule
+          </Button>
+        </Group>
+      </Stack>
+    </Paper>
+  );
+
+  /** Right panel: what the schedule is actually doing, read-only. */
+  const renderStatusPanel = (s: BackupScheduleStatus, d: ScheduleDraft) => {
+    const totalMb = backups.reduce((sum, b) => sum + (b.size_mb ?? 0), 0);
+    const automatic = backups.filter((b) => b.is_automatic).length;
+
+    return (
+      <Paper withBorder radius="sm" p="md">
+        <Stack gap="sm">
+          <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
+            Status
+          </Text>
+
+          <ScheduleFact
+            label="Last automatic run"
+            value={s.last_run ? formatDateTime(s.last_run) : 'Never'}
+          />
+          <ScheduleFact
+            label="Next automatic run"
+            value={
+              s.enabled ? (
+                s.next_run ? (
+                  formatDateTime(s.next_run)
+                ) : (
+                  'As soon as a worker wakes'
+                )
+              ) : (
+                <Text size="sm" c="dimmed">
+                  Not scheduled
+                </Text>
+              )
+            }
+          />
+
+          <Divider my={4} />
+
+          <ScheduleFact
+            label="Backups on server"
+            value={`${backups.length}${automatic ? ` (${automatic} automatic)` : ''}`}
+          />
+          <ScheduleFact label="Disk used" value={`${totalMb.toFixed(1)} MB`} />
+          <ScheduleFact
+            label="Policy in force"
+            value={
+              d.retention_days <= 0
+                ? 'Keep forever'
+                : [
+                    `${d.retention_days}d`,
+                    d.weekly_weeks > 0 ? `${d.weekly_weeks}w` : null,
+                    d.monthly_months > 0 ? `${d.monthly_months}m` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' → ')
+            }
+          />
+          <ScheduleFact
+            label="Settings source"
+            value={s.is_customized ? 'Saved on this page' : 'Deployment environment'}
+          />
+        </Stack>
+      </Paper>
+    );
+  };
+
   const renderSchedule = () => {
     if (!schedule || !draft) {
       return (
@@ -218,85 +449,10 @@ const AdminBackupsPanel: React.FC = () => {
       );
     }
     return (
-      <Stack gap="md">
-        <Text size="sm" c="dimmed">
-          {schedule.enabled
-            ? `The server takes a backup on its own every ${schedule.interval_hours} hours.`
-            : 'Nothing is backing this deployment up on a schedule. Backups only exist when an administrator creates one here.'}{' '}
-          Old backups are pruned after every backup, scheduled or manual.
-        </Text>
-
-        <Switch
-          checked={draft.enabled}
-          onChange={(e) => setDraft({ ...draft, enabled: e.currentTarget.checked })}
-          label="Take a backup automatically"
-          description="Applies to every API worker within a few minutes. No restart needed."
-          disabled={savingSchedule}
-          data-testid="backup-schedule-enabled"
-        />
-
-        <Group gap="md" align="flex-start" wrap="wrap">
-          <NumberInput
-            label="Interval"
-            suffix=" hours"
-            min={1}
-            max={8760}
-            clampBehavior="strict"
-            allowDecimal={false}
-            w={150}
-            value={draft.interval_hours}
-            onChange={(v) =>
-              setDraft({ ...draft, interval_hours: typeof v === 'number' ? v : draft.interval_hours })
-            }
-            disabled={savingSchedule}
-            data-testid="backup-schedule-interval"
-          />
-          <NumberInput
-            label="Keep backups for"
-            suffix=" days"
-            description="0 keeps them forever"
-            min={0}
-            max={3650}
-            clampBehavior="strict"
-            allowDecimal={false}
-            w={190}
-            value={draft.retention_days}
-            onChange={(v) =>
-              setDraft({ ...draft, retention_days: typeof v === 'number' ? v : draft.retention_days })
-            }
-            disabled={savingSchedule}
-            data-testid="backup-schedule-retention"
-          />
-          <Button
-            mt={25}
-            onClick={() => void handleSaveSchedule()}
-            loading={savingSchedule}
-            disabled={!scheduleDirty}
-            data-testid="backup-schedule-save"
-          >
-            Save schedule
-          </Button>
-        </Group>
-
-        <Group gap="lg" wrap="wrap">
-          <ScheduleFact
-            label="Last automatic run"
-            value={schedule.last_run ? formatDateTime(schedule.last_run) : 'Never'}
-          />
-          <ScheduleFact
-            label="Next automatic run"
-            value={schedule.next_run ? formatDateTime(schedule.next_run) : 'Not scheduled'}
-          />
-        </Group>
-
-        <Text size="xs" c="dimmed">
-          {schedule.is_customized ? 'Saved here, overriding this' : 'Currently taken from this'}{' '}
-          deployment&apos;s <Code>DEPICTIO_BACKUP_AUTO_BACKUP_ENABLED</Code>,{' '}
-          <Code>DEPICTIO_BACKUP_AUTO_BACKUP_INTERVAL_HOURS</Code> and{' '}
-          <Code>DEPICTIO_BACKUP_BACKUP_FILE_RETENTION_DAYS</Code>. Anything saved on this page wins
-          over those defaults from then on.
-        </Text>
-      </Stack>
+      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
+        {renderPolicyPanel(draft)}
+        {renderStatusPanel(schedule, draft)}
+      </SimpleGrid>
     );
   };
 
@@ -328,10 +484,11 @@ const AdminBackupsPanel: React.FC = () => {
       );
     }
     return (
-      <Table.ScrollContainer minWidth={720}>
+      <Table.ScrollContainer minWidth={860}>
         <Table withTableBorder fz="sm" data-testid="backup-list-table">
           <Table.Thead>
             <Table.Tr>
+              <Table.Th>Backup</Table.Th>
               <Table.Th>Created</Table.Th>
               <Table.Th>Version</Table.Th>
               <Table.Th>Size</Table.Th>
@@ -343,6 +500,31 @@ const AdminBackupsPanel: React.FC = () => {
           <Table.Tbody>
             {backups.map((b) => (
               <Table.Tr key={b.backup_id} data-testid={`backup-row-${b.backup_id}`}>
+                {/* The id is the filename a download lands under, so it is
+                    what ties a file on the admin's disk back to a row here. */}
+                <Table.Td>
+                  <Group gap={6} wrap="nowrap">
+                    <Tooltip label={b.filename}>
+                      <Code>{b.backup_id}</Code>
+                    </Tooltip>
+                    {b.restored_at && (
+                      <Tooltip
+                        label={`This deployment's data was restored from this backup on ${formatDateTime(
+                          b.restored_at,
+                        )}${b.restored_by ? ` by ${b.restored_by}` : ''}`}
+                      >
+                        <Badge
+                          color="grape"
+                          variant="filled"
+                          size="xs"
+                          data-testid={`backup-restored-${b.backup_id}`}
+                        >
+                          restored
+                        </Badge>
+                      </Tooltip>
+                    )}
+                  </Group>
+                </Table.Td>
                 <Table.Td>
                   <Group gap={6} wrap="nowrap">
                     <Text size="sm">{formatDateTime(b.created)}</Text>
@@ -463,17 +645,58 @@ const AdminBackupsPanel: React.FC = () => {
 
       <Card withBorder radius="md" p="lg">
         <Stack gap="md">
-          <Group gap="xs">
-            <Icon icon="mdi:calendar-clock" width={20} color="var(--mantine-color-blue-6)" />
-            <Title order={5}>Automated backups</Title>
+          {/* Title and the master switch sit on one line: the switch is the
+              section's on/off, not one setting among the others, so it stays
+              out of the panel that needs a Save. */}
+          <Group justify="space-between" align="center" wrap="nowrap">
+            <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
+              <Icon icon="mdi:calendar-clock" width={20} color="var(--mantine-color-blue-6)" />
+              <Title order={5}>Automated backups</Title>
+              {schedule && (
+                <Badge
+                  color={schedule.enabled ? 'teal' : 'gray'}
+                  variant="light"
+                  data-testid="backup-schedule-status"
+                >
+                  {schedule.enabled ? 'Enabled' : 'Disabled'}
+                </Badge>
+              )}
+              {schedule && (
+                <Popover width={340} position="bottom-start" withArrow shadow="md">
+                  <Popover.Target>
+                    <ActionIcon
+                      variant="subtle"
+                      color="gray"
+                      aria-label="Where these settings come from"
+                      data-testid="backup-schedule-info"
+                    >
+                      <Icon icon="mdi:information-outline" width={18} />
+                    </ActionIcon>
+                  </Popover.Target>
+                  <Popover.Dropdown>
+                    <Text size="xs">
+                      {schedule.is_customized ? 'Saved here, overriding this' : 'Currently taken from this'}{' '}
+                      deployment&apos;s <Code>DEPICTIO_BACKUP_AUTO_BACKUP_ENABLED</Code>,{' '}
+                      <Code>DEPICTIO_BACKUP_AUTO_BACKUP_INTERVAL_HOURS</Code>,{' '}
+                      <Code>DEPICTIO_BACKUP_BACKUP_FILE_RETENTION_DAYS</Code>,{' '}
+                      <Code>DEPICTIO_BACKUP_BACKUP_RETENTION_WEEKLY_WEEKS</Code> and{' '}
+                      <Code>DEPICTIO_BACKUP_BACKUP_RETENTION_MONTHLY_MONTHS</Code>. Anything saved
+                      on this page wins over those defaults from then on, and applies to every API
+                      worker within a few minutes — no restart needed.
+                    </Text>
+                  </Popover.Dropdown>
+                </Popover>
+              )}
+            </Group>
             {schedule && (
-              <Badge
-                color={schedule.enabled ? 'teal' : 'gray'}
-                variant="light"
-                data-testid="backup-schedule-status"
-              >
-                {schedule.enabled ? 'Enabled' : 'Disabled'}
-              </Badge>
+              <Switch
+                checked={schedule.enabled}
+                onChange={(e) => void handleToggleSchedule(e.currentTarget.checked)}
+                disabled={togglingSchedule}
+                size="md"
+                aria-label="Take a backup automatically"
+                data-testid="backup-schedule-enabled"
+              />
             )}
           </Group>
           {renderSchedule()}

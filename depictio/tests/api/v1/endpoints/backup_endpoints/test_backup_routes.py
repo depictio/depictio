@@ -9,7 +9,10 @@ from fastapi.testclient import TestClient
 
 from depictio.api.v1.endpoints.backup_endpoints.routes import (
     _compute_file_sha256,
+    _subtract_months,
     backup_endpoint_router,
+    record_last_restore,
+    select_expired_backups,
 )
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.users import User
@@ -51,6 +54,8 @@ def backup_settings(tmp_path):
     mock_settings = MagicMock()
     mock_settings.backup.backup_path = str(tmp_path / "backups")
     mock_settings.backup.backup_file_retention_days = 30
+    mock_settings.backup.backup_retention_weekly_weeks = 0
+    mock_settings.backup.backup_retention_monthly_months = 0
     mock_settings.backup.auto_backup_enabled = False
     mock_settings.backup.auto_backup_interval_hours = 24
     with patch("depictio.api.v1.endpoints.backup_endpoints.routes.settings", mock_settings):
@@ -762,6 +767,144 @@ class TestBackupRetention:
 
         assert prune_expired_backups() == 0
         assert stray.exists()
+
+
+class TestGFSRetentionPolicy:
+    """Tiered retention, exercised directly over dates: `select_expired_backups`
+    takes the clock as an argument and touches no filesystem, so the policy can
+    be checked without writing hundreds of files."""
+
+    NOW = datetime(2026, 8, 28, 12, 0, 0)
+
+    def _daily_backups(self, days):
+        """One backup a day for the last `days` days, newest first."""
+        return [
+            (
+                self.NOW - timedelta(days=d),
+                f"depictio_backup_{(self.NOW - timedelta(days=d)).strftime('%Y%m%d_%H%M%S')}.json",
+            )
+            for d in range(days)
+        ]
+
+    def _kept(self, backups, **policy):
+        expired = set(select_expired_backups(backups, self.NOW, **policy))
+        return sorted((created for created, name in backups if name not in expired), reverse=True)
+
+    def test_tiers_off_is_a_plain_age_cutoff(self):
+        """The default for every existing deployment: unchanged behaviour."""
+        backups = self._daily_backups(40)
+        kept = self._kept(backups, retention_days=30, weekly_weeks=0, monthly_months=0)
+
+        # Day 0 through day 30 inclusive: a backup exactly at the cutoff is not
+        # yet older than the retention window.
+        assert len(kept) == 31
+        assert min(kept) >= self.NOW - timedelta(days=30)
+
+    def test_weekly_tier_keeps_one_backup_per_week(self):
+        backups = self._daily_backups(60)
+        kept = self._kept(backups, retention_days=7, weekly_weeks=4, monthly_months=0)
+
+        recent = [d for d in kept if d >= self.NOW - timedelta(days=7)]
+        weekly = [d for d in kept if d < self.NOW - timedelta(days=7)]
+
+        assert len(recent) == 8  # day 0 through day 7 inclusive
+        # One per ISO week, and no week represented twice.
+        weeks = [d.isocalendar()[:2] for d in weekly]
+        assert len(weeks) == len(set(weeks))
+        assert weekly, "the weekly tier kept nothing"
+        assert min(weekly) >= self.NOW - timedelta(days=7) - timedelta(weeks=4)
+
+    def test_monthly_tier_keeps_one_backup_per_month(self):
+        backups = self._daily_backups(400)
+        kept = self._kept(backups, retention_days=7, weekly_weeks=4, monthly_months=6)
+
+        monthly_start = self.NOW - timedelta(days=7) - timedelta(weeks=4)
+        monthly = [d for d in kept if d < monthly_start]
+        months = [(d.year, d.month) for d in monthly]
+
+        assert months, "the monthly tier kept nothing"
+        assert len(months) == len(set(months))
+        # Six months back from the weekly boundary, and nothing older survives.
+        assert min(monthly) >= _subtract_months(monthly_start, 6)
+
+    def test_a_year_of_dailies_collapses_to_a_bounded_set(self):
+        """The point of the policy: unbounded input, bounded output."""
+        backups = self._daily_backups(365)
+        kept = self._kept(backups, retention_days=7, weekly_weeks=4, monthly_months=12)
+
+        # 7 daily + at most 5 weekly buckets + at most 12 monthly buckets.
+        assert 7 <= len(kept) <= 24
+        # The newest backup is never a candidate for deletion.
+        assert max(kept) == self.NOW
+
+    def test_a_backup_kept_by_an_earlier_tier_fills_its_bucket(self):
+        """A week with a surviving daily backup does not also keep a weekly copy."""
+        # Two backups in the same ISO week, one either side of the daily cutoff.
+        inside = self.NOW - timedelta(days=6)
+        outside = self.NOW - timedelta(days=8)
+        assert inside.isocalendar()[:2] == outside.isocalendar()[:2]
+        backups = [
+            (inside, "depictio_backup_" + inside.strftime("%Y%m%d_%H%M%S") + ".json"),
+            (outside, "depictio_backup_" + outside.strftime("%Y%m%d_%H%M%S") + ".json"),
+        ]
+
+        expired = select_expired_backups(
+            backups, self.NOW, retention_days=7, weekly_weeks=4, monthly_months=0
+        )
+
+        assert expired == ["depictio_backup_" + outside.strftime("%Y%m%d_%H%M%S") + ".json"]
+
+    def test_keep_forever_ignores_the_tiers(self):
+        backups = self._daily_backups(500)
+        assert (
+            select_expired_backups(
+                backups, self.NOW, retention_days=0, weekly_weeks=1, monthly_months=1
+            )
+            == []
+        )
+
+    def test_subtract_months_clamps_to_the_shorter_month(self):
+        assert _subtract_months(datetime(2026, 3, 31), 1) == datetime(2026, 2, 28)
+        assert _subtract_months(datetime(2026, 1, 15), 13) == datetime(2024, 12, 15)
+
+
+class TestLastRestoreMarker:
+    """After a restore, the list marks which backup the live data came from."""
+
+    def test_a_successful_restore_records_its_source(self, backup_state):
+        record_last_restore("20260828_120000", "admin@example.com")
+
+        update = backup_state.update_one.call_args
+        assert update.args[0] == {"_id": "last_restore_state"}
+        stored = update.args[1]["$set"]
+        assert stored["backup_id"] == "20260828_120000"
+        assert stored["restored_by"] == "admin@example.com"
+
+    def test_bookkeeping_failure_does_not_raise(self, backup_state):
+        """A completed restore must not surface as an error because the marker
+        could not be written."""
+        backup_state.update_one.side_effect = RuntimeError("mongo is down")
+
+        record_last_restore("20260828_120000", "admin@example.com")
+
+    def test_list_marks_only_the_restored_backup(self, as_admin, backup_dir, backup_state):
+        _write_backup(backup_dir, "20260101_000000", {"projects": []})
+        _write_backup(backup_dir, "20260202_000000", {"projects": []})
+        backup_state.find_one.return_value = {
+            "_id": "last_restore_state",
+            "backup_id": "20260101_000000",
+            "restored_at": datetime(2026, 3, 1, 9, 0, 0),
+            "restored_by": "admin@example.com",
+        }
+
+        rows = as_admin.get("/backup/list").json()["backups"]
+        by_id = {row["backup_id"]: row for row in rows}
+
+        assert by_id["20260101_000000"]["restored_by"] == "admin@example.com"
+        # Naive UTC out of Mongo must be serialized with an offset, or the
+        # browser reads it as local time.
+        assert by_id["20260101_000000"]["restored_at"].endswith("+00:00")
+        assert by_id["20260202_000000"]["restored_at"] is None
 
 
 class TestBackupScheduleClaim:

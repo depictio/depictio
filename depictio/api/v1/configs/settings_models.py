@@ -798,8 +798,26 @@ class BackupConfig(BaseSettings):
     backup_file_retention_days: int = Field(
         default=30,
         description=(
-            "Days to retain backup files. Applied to the MongoDB backup directory after "
-            "every backup (scheduled or manual). Set to 0 to keep backups forever."
+            "Days to keep every backup file. First tier of the retention policy, applied "
+            "to the MongoDB backup directory after every backup (scheduled or manual). "
+            "Set to 0 to keep backups forever."
+        ),
+    )
+    backup_retention_weekly_weeks: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "Second retention tier: after backup_file_retention_days, keep one backup per "
+            "ISO week for this many weeks. 0 disables the tier, which makes retention a "
+            "plain age cutoff."
+        ),
+    )
+    backup_retention_monthly_months: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "Third retention tier: after the weekly tier, keep one backup per calendar "
+            "month for this many months. 0 disables the tier."
         ),
     )
     auto_backup_enabled: bool = Field(

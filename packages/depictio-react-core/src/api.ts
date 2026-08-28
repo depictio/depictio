@@ -3703,6 +3703,10 @@ export interface AdminBackupEntry {
   has_checksum?: boolean;
   /** True for snapshots taken by the scheduler rather than by an admin. */
   is_automatic?: boolean;
+  /** Set only on the backup this deployment's data was last restored from.
+   *  ISO timestamp with an explicit UTC offset. */
+  restored_at?: string | null;
+  restored_by?: string | null;
 }
 
 /** GET/PUT /backup/schedule — the scheduled-backup config in force.
@@ -3713,6 +3717,11 @@ export interface BackupScheduleStatus {
   interval_hours: number;
   /** 0 means backups are kept forever. */
   retention_days: number;
+  /** Grandfather-father-son tiers applied past retention_days: one backup kept
+   *  per ISO week for `weekly_weeks`, then one per calendar month for
+   *  `monthly_months`. 0 turns a tier off; both at 0 is a plain age cutoff. */
+  weekly_weeks: number;
+  monthly_months: number;
   /** ISO timestamps with an explicit UTC offset; null before the first run. */
   last_run: string | null;
   next_run: string | null;
@@ -3783,6 +3792,8 @@ export async function updateBackupSchedule(update: {
   enabled?: boolean;
   intervalHours?: number;
   retentionDays?: number;
+  weeklyWeeks?: number;
+  monthlyMonths?: number;
 }): Promise<BackupScheduleStatus> {
   const res = await authFetch(`${API_BASE}/backup/schedule`, {
     method: 'PUT',
@@ -3790,6 +3801,8 @@ export async function updateBackupSchedule(update: {
       enabled: update.enabled,
       interval_hours: update.intervalHours,
       retention_days: update.retentionDays,
+      weekly_weeks: update.weeklyWeeks,
+      monthly_months: update.monthlyMonths,
     }),
   });
   if (!res.ok) await throwHttpDetailError(res, 'Failed to update the backup schedule');
