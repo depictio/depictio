@@ -2,7 +2,7 @@
  * Anonymous browser telemetry.
  *
  * Shared deliberately rather than living in one app: the Tools Studio
- * (`packages/catalog-studio`) aliases `depictio-react-core` in its Vite config,
+ * (`packages/tool-studio`) aliases `depictio-react-core` in its Vite config,
  * so a client here is reachable from both the dashboard viewer and the Studio
  * without duplicating the consent logic — and consent logic duplicated is consent
  * logic that eventually disagrees with itself.

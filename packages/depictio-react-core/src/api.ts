@@ -2167,10 +2167,24 @@ export interface SaveComponentOptions {
     | { panel: 'left' | 'right'; x?: number; y?: number; w?: number; h?: number };
 }
 
+/** Grid geometry a dashboard box is measured in — the values `DashboardGrid`
+ *  passes react-grid-layout. Exported so a consumer that has to render one
+ *  component OUTSIDE a grid (a builder preview, Tool Studio's render list) can
+ *  give it the size it will actually have on a dashboard, instead of guessing a
+ *  pixel height. */
+export const GRID_COLS = 8;
+export const GRID_ROW_HEIGHT = 100;
+export const GRID_ROW_GAP = 4;
+
+/** Pixel height of a box `h` rows tall, gaps included. */
+export function gridBoxHeight(h: number): number {
+  return h * GRID_ROW_HEIGHT + Math.max(0, h - 1) * GRID_ROW_GAP;
+}
+
 // Default grid box for a freshly-created component. Sizes track the seeded
 // dashboards under depictio/projects/<project>/.db_seeds/dashboard*.json —
 // small KPI tiles for cards, full-width tables, medium plots elsewhere.
-function defaultLayoutForType(
+export function defaultLayoutForType(
   componentType: string,
   panel: 'left' | 'right',
   y: number,
@@ -4372,6 +4386,30 @@ export interface CatalogRender {
   column?: string;
   aggregation?: string;
   code?: string;
+  /** card: the secondary strip. A catalog card can declare all of these, and
+   *  the offline preview renders them — so Add has to carry them across or the
+   *  added component silently loses the strip the user just previewed. */
+  aggregations?: string[];
+  secondary_layout?: string;
+  breakdown_col?: string;
+  top_n_count?: number;
+  coverage_max?: number;
+  threshold_value?: number;
+  threshold_direction?: string;
+  threshold_warn?: number;
+  attrition_cols?: string[];
+  trend_col?: string;
+  filter_expr?: string;
+  /** interactive: the widget and the column it filters on. */
+  interactive_type?: string;
+  column_name?: string;
+  /** table: display options. */
+  columns?: string[];
+  page_size?: number;
+  sortable?: boolean;
+  filterable?: boolean;
+  row_selection_enabled?: boolean;
+  row_selection_column?: string;
   /** advanced_viz only: the pre-computed config blob (role bindings + data-derived
    *  viz-control defaults like manhattan `score_threshold`) the catalog preview
    *  rendered with. Persisting it verbatim makes the added component match its
