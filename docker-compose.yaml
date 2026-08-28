@@ -58,7 +58,7 @@ services:
     restart: unless-stopped
 
   depictio-backend:
-    image: ghcr.io/depictio/depictio-api:${DEPICTIO_VERSION:-1.8.1}
+    image: ghcr.io/depictio/depictio-api:${DEPICTIO_VERSION:-1.8.2}
     container_name: depictio-backend
     ports:
       # Loopback-only: front with a TLS proxy for external access.
@@ -112,7 +112,7 @@ services:
         required: false
 
   depictio-viewer:
-    image: ghcr.io/depictio/depictio-viewer:${DEPICTIO_VERSION:-1.8.1}
+    image: ghcr.io/depictio/depictio-viewer:${DEPICTIO_VERSION:-1.8.2}
     container_name: depictio-viewer
     ports:
       - 5080:8080
@@ -130,7 +130,7 @@ services:
   depictio-celery-worker:
     container_name: depictio-celery-worker
     # Always enabled — the dashboard editor (stepper / design mode) needs it.
-    image: ghcr.io/depictio/depictio-worker:${DEPICTIO_VERSION:-1.8.1}
+    image: ghcr.io/depictio/depictio-worker:${DEPICTIO_VERSION:-1.8.2}
     volumes:
       - depictio_keys:/app/depictio/keys
       # Shared with the backend (see above) — worker writes screenshots here.
