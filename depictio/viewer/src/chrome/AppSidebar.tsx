@@ -91,7 +91,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ active }) => {
   );
 
   return (
-    <Stack gap="sm" h="100%" justify="space-between">
+    <Stack gap="sm" h="100%" justify="space-between" data-testid="app-sidebar">
       <Stack gap="sm" align="stretch">
         <Center pt="md">
           <Anchor href="/" underline="never">
@@ -127,10 +127,10 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ active }) => {
       </ScrollArea>
 
       <Stack gap="xs" align="center">
-        {/* Attribution, below the operator's own logo at the top of the rail.
-            On a branded instance that top slot is the operator's, so without a
-            slot of its own the depictio wordmark disappears from the app
-            entirely. */}
+        {/* Attribution, below the logo at the top of the rail. It renders only
+            once that top slot stops showing the depictio wordmark (see
+            PoweredBy): on a branded instance it is the operator's, and without
+            this the wordmark would disappear from the app entirely. */}
         <PoweredBy />
         <Divider w="100%" />
         <ThemeToggle />

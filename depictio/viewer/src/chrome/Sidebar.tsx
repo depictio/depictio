@@ -18,7 +18,6 @@ import { Icon } from '@iconify/react';
 import { brandAccent, useBranding } from 'depictio-react-core';
 import type { BrandTheme, DashboardSummary } from 'depictio-react-core';
 import BrandLogo from './BrandLogo';
-import PoweredBy from './PoweredBy';
 import ThemeToggle from './ThemeToggle';
 import ServerStatusBadge from './ServerStatusBadge';
 import ProfileBadge from './ProfileBadge';
@@ -438,11 +437,8 @@ const Sidebar: React.FC<SidebarProps> = ({
           testId="dashboard-logo"
           style={{ maxWidth: '92%', maxHeight: 130, margin: '0 auto' }}
         />
-        {/* Attribution, below the brand's own mark. On a branded instance the
-            logo above belongs to the operator, so the depictio wordmark needs
-            a slot of its own or it disappears from the dashboard entirely —
-            the app sidebar that normally carries it is collapsed here. */}
-        <PoweredBy />
+        {/* No attribution here — the dashboard's single slot for it is the
+            header, and carrying it in both places showed it twice. */}
         <Divider w="100%" />
         <ThemeToggle />
         <ServerStatusBadge />

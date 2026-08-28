@@ -267,8 +267,10 @@ app.mount(
     name="dashboard-screenshots",
 )
 
-# Dashboard logos — uploaded via /dashboards/upload_logo (editor Settings
-# drawer) and referenced by the dashboard's `logo_url` field.
+# Dashboard logos — legacy mount. Uploads now go to MongoDB
+# (services/branding.py) and are served by /dashboards/logo/{id}; this stays so
+# that `logo_url`s written before that move still resolve on deployments where
+# the files happen to have survived. Removable once no stored URL points here.
 _DASHBOARD_LOGOS_DIR = Path(__file__).resolve().parent / "static" / "dashboard_logos"
 _DASHBOARD_LOGOS_DIR.mkdir(parents=True, exist_ok=True)
 app.mount(
@@ -277,8 +279,8 @@ app.mount(
     name="dashboard-logos",
 )
 
-# Instance branding logos — uploaded via /utils/branding/logo/{variant} (admin
-# Branding panel) and referenced by the branding overrides' logo URLs.
+# Instance branding logos — legacy mount, same story as the dashboard logos
+# above: uploads live in MongoDB and are served by /utils/branding/logo/{variant}.
 _BRANDING_DIR = Path(__file__).resolve().parent / "static" / "branding"
 _BRANDING_DIR.mkdir(parents=True, exist_ok=True)
 app.mount(

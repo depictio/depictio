@@ -6,7 +6,6 @@ import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -33,7 +32,14 @@ from depictio.api.v1.endpoints.user_endpoints.routes import (
     oauth2_scheme_optional,
 )
 from depictio.api.v1.filter_links import extend_filters_via_links
-from depictio.api.v1.services.branding import validate_logo_upload
+from depictio.api.v1.services.branding import (
+    LOGO_CACHE_CONTROL,
+    dashboard_logo_key,
+    delete_logo_asset,
+    read_logo_asset,
+    store_logo_asset,
+    validate_logo_upload,
+)
 from depictio.api.v1.services.card_breakdown import (
     BREAKDOWN_LAYOUTS,
     compute_breakdown,
@@ -710,12 +716,6 @@ async def save_dashboard(
         raise HTTPException(status_code=404, detail="Failed to insert or update dashboard data.")
 
 
-# Dashboard logos — uploaded through the editor's Settings drawer and served
-# by the /static/dashboard_logos mount (api/main.py). Derived from __file__ so
-# the path holds both in Docker (/app/depictio/...) and local runs.
-_DASHBOARD_LOGOS_DIR = Path(__file__).resolve().parents[3] / "static" / "dashboard_logos"
-
-
 def _require_dashboard_editor(dashboard_id: PyObjectId, current_user: User) -> dict:
     """The dashboard document, or the right HTTP error. Editor rights required."""
     if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
@@ -767,10 +767,10 @@ async def upload_dashboard_logo(
 ):
     """Store a dashboard logo image and stamp it on the document's brand theme.
 
-    File write and field update happen in one ownership-checked call so the
-    stored URL can never point at a file that was rejected. Removal goes
-    through `/appearance` (`logo_mode: "inherit"` or `"none"`); the file on
-    disk is simply overwritten by the next upload for this dashboard.
+    Asset write and field update happen in one ownership-checked call so the
+    stored URL can never point at an image that was rejected. Removal goes
+    through `/appearance` (`logo_mode: "inherit"` or `"none"`); the stored
+    bytes are simply overwritten by the next upload for this dashboard.
 
     Validation is the shared one from `services/branding.py` — same PNG/JPEG/
     WebP + magic-byte + 2MB rules as the instance logo, deliberately not a
@@ -780,19 +780,13 @@ async def upload_dashboard_logo(
 
     content = await file.read()
     try:
-        ext = validate_logo_upload(file.content_type, content)
+        validate_logo_upload(file.content_type, content)
     except ValueError as exc:
         raise HTTPException(status_code=415, detail=str(exc))
 
-    _DASHBOARD_LOGOS_DIR.mkdir(parents=True, exist_ok=True)
-    # One logo per dashboard — drop whatever extension the previous upload had.
-    for old in _DASHBOARD_LOGOS_DIR.glob(f"{dashboard_id}.*"):
-        old.unlink(missing_ok=True)
-    (_DASHBOARD_LOGOS_DIR / f"{dashboard_id}{ext}").write_bytes(content)
-
-    # `?v=` cache-busts the browser after a replacement (same idiom as the
-    # screenshot thumbnails' `screenshot_ts`).
-    logo_url = f"/static/dashboard_logos/{dashboard_id}{ext}?v={int(time.time())}"
+    # One asset per dashboard, keyed by its id, so a replacement overwrites the
+    # previous bytes.
+    logo_url = store_logo_asset(dashboard_logo_key(dashboard_id), content, file.content_type)
     theme = BrandTheme(**(dashboard.get("brand_theme") or {}))
     theme.logo_url = logo_url
     # An upload is an unambiguous "use this logo", so it also lifts a prior
@@ -802,8 +796,27 @@ async def upload_dashboard_logo(
         {"dashboard_id": dashboard_id},
         {"$set": {"brand_theme": theme.model_dump(exclude_none=True)}},
     )
-    logger.info(f"Dashboard {dashboard_id} logo updated ({len(content)} bytes, {ext})")
+    logger.info(f"Dashboard {dashboard_id} logo updated ({len(content)} bytes)")
     return {"logo_url": logo_url}
+
+
+@dashboards_endpoint_router.get("/logo/{dashboard_id}")
+async def get_dashboard_logo(dashboard_id: PyObjectId):
+    """Serve a dashboard's stored logo.
+
+    Unauthenticated, matching what `/static/dashboard_logos` served before the
+    bytes moved into MongoDB: the image is one an editor deliberately put on a
+    dashboard, and gating it would break the public/demo viewer.
+    """
+    asset = read_logo_asset(dashboard_logo_key(dashboard_id))
+    if asset is None:
+        raise HTTPException(status_code=404, detail="No logo stored for this dashboard.")
+    content, content_type = asset
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={"Cache-Control": LOGO_CACHE_CONTROL},
+    )
 
 
 @dashboards_endpoint_router.delete("/delete/{dashboard_id}")
@@ -848,6 +861,9 @@ async def delete_dashboard(
     result = dashboards_collection.delete_one({"dashboard_id": dashboard_id})
 
     if result.deleted_count > 0:
+        # The dashboard's uploaded logo has no other referent, so it goes with
+        # it rather than sitting in `branding_assets` forever.
+        delete_logo_asset(dashboard_logo_key(dashboard_id))
         message = f"Dashboard with ID '{str(dashboard_id)}' deleted successfully."
         if child_tabs_deleted > 0:
             message += f" Also deleted {child_tabs_deleted} child tabs."
