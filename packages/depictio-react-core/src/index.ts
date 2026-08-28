@@ -260,6 +260,13 @@ export {
   listAllDashboards,
   listExampleProjects,
   cleanExampleProjects,
+  // Admin backup & restore
+  listBackups,
+  createBackup,
+  downloadBackup,
+  uploadBackup,
+  validateBackup,
+  restoreBackup,
   // Admin monitoring (Log & Task)
   fetchMonitoringTasks,
   fetchMonitoringTask,
@@ -561,6 +568,13 @@ export type {
   AdminProject,
   AdminDashboard,
   ExampleProject,
+  // Admin backup & restore types
+  AdminBackupEntry,
+  BackupCollectionValidation,
+  BackupValidationResult,
+  BackupCreateResult,
+  BackupUploadResult,
+  BackupRestoreResult,
   // Admin monitoring types
   MonitoringTaskEvent,
   MonitoringIngestionRun,

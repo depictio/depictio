@@ -21,11 +21,19 @@ import AdminUsersPanel from './AdminUsersPanel';
 import AdminProjectsPanel from './AdminProjectsPanel';
 import AdminDashboardsPanel from './AdminDashboardsPanel';
 import AdminBrandingPanel from './AdminBrandingPanel';
+import AdminBackupsPanel from './AdminBackupsPanel';
 import AdminMaintenancePanel from './AdminMaintenancePanel';
 import AdminMonitoringPanel from './AdminMonitoringPanel';
 import { usePageTitle } from '../branding';
 
-type AdminTab = 'users' | 'projects' | 'dashboards' | 'branding' | 'monitoring' | 'maintenance';
+type AdminTab =
+  | 'users'
+  | 'projects'
+  | 'dashboards'
+  | 'branding'
+  | 'monitoring'
+  | 'backups'
+  | 'maintenance';
 
 /** Persist the active tab so a refresh keeps the admin where they left off. */
 const TAB_KEY = 'admin-active-tab';
@@ -39,6 +47,7 @@ function readInitialTab(): AdminTab {
       raw === 'dashboards' ||
       raw === 'branding' ||
       raw === 'monitoring' ||
+      raw === 'backups' ||
       raw === 'maintenance'
     ) {
       return raw;
@@ -55,6 +64,8 @@ const AdminApp: React.FC = () => {
   // always wins — it's a personal admin instance even if public_mode is also
   // set; only pure public/demo instances hide it.
   const showMonitoring = isSingleUserMode || (!isPublicMode && !isDemoMode);
+  // Full-DB backup/restore is likewise a trusted-deployment tool.
+  const showBackups = showMonitoring;
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
   const [activeTab, setActiveTab] = useState<AdminTab>(readInitialTab);
@@ -132,6 +143,15 @@ const AdminApp: React.FC = () => {
               Log &amp; Task
             </Tabs.Tab>
           )}
+          {showBackups && (
+            <Tabs.Tab
+              value="backups"
+              leftSection={<Icon icon="mdi:backup-restore" width={16} />}
+              data-testid="admin-tab-backups"
+            >
+              Backups
+            </Tabs.Tab>
+          )}
           <Tabs.Tab value="maintenance" leftSection={<Icon icon="mdi:broom" width={16} />}>
             Maintenance
           </Tabs.Tab>
@@ -152,6 +172,11 @@ const AdminApp: React.FC = () => {
         {showMonitoring && (
           <Tabs.Panel value="monitoring" pt="md">
             <AdminMonitoringPanel />
+          </Tabs.Panel>
+        )}
+        {showBackups && (
+          <Tabs.Panel value="backups" pt="md">
+            <AdminBackupsPanel />
           </Tabs.Panel>
         )}
         <Tabs.Panel value="maintenance" pt="md">

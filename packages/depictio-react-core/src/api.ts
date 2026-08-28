@@ -3682,6 +3682,141 @@ export async function cleanExampleProjects(): Promise<{ deleted: ExampleProject[
   return { deleted };
 }
 
+// ---- Admin backup & restore (/backup) -----------------------------------
+//
+// Back the admin Backups tab. All endpoints are admin-gated server side.
+// Restore is destructive (per-collection wipe-and-replace) — the UI runs
+// validation first and gates the real restore behind a typed confirmation.
+
+/** One entry from GET /backup/list. */
+export interface AdminBackupEntry {
+  backup_id: string;
+  filename: string;
+  size_mb: number;
+  created: string;
+  created_by: string;
+  total_documents: number;
+  collections: string[];
+  depictio_version?: string | null;
+  /** False for legacy backups without a .sha256 sidecar; restoring those
+   *  requires allow_unverified. */
+  has_checksum?: boolean;
+}
+
+export interface BackupCollectionValidation {
+  total: number;
+  valid: number;
+  invalid: number;
+  errors: string[];
+}
+
+export interface BackupValidationResult {
+  success: boolean;
+  message: string;
+  valid: boolean;
+  total_documents: number;
+  valid_documents: number;
+  invalid_documents: number;
+  collections_validated: Record<string, BackupCollectionValidation>;
+  errors: string[];
+  warnings: string[];
+}
+
+export interface BackupCreateResult {
+  success: boolean;
+  message: string;
+  backup_id: string | null;
+  total_documents: number;
+  collections_backed_up: string[];
+  filename: string | null;
+}
+
+export interface BackupUploadResult {
+  success: boolean;
+  message: string;
+  backup_id: string | null;
+  filename: string | null;
+  validation: BackupValidationResult | null;
+}
+
+export interface BackupRestoreResult {
+  success: boolean;
+  message: string;
+  restored_collections: Record<string, { count: number; status: string }>;
+  total_restored: number;
+  errors: string[];
+}
+
+export async function listBackups(): Promise<AdminBackupEntry[]> {
+  const res = await authFetch(`${API_BASE}/backup/list`);
+  if (!res.ok) await throwHttpError(res, 'Failed to list backups');
+  const data = await res.json();
+  return Array.isArray(data?.backups) ? (data.backups as AdminBackupEntry[]) : [];
+}
+
+export async function createBackup(): Promise<BackupCreateResult> {
+  const res = await authFetch(`${API_BASE}/backup/create`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to create backup');
+  return res.json();
+}
+
+/** Download a backup file to the browser (blob + anchor click, like
+ *  `exportProjectZip`). */
+export async function downloadBackup(backupId: string): Promise<void> {
+  const res = await authFetch(`${API_BASE}/backup/download/${backupId}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to download backup');
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `depictio_backup_${backupId}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/** Upload a backup file; the server stores it as a first-class backup and
+ *  returns the validation result alongside the new server-side backup_id. */
+export async function uploadBackup(file: File): Promise<BackupUploadResult> {
+  const fd = new FormData();
+  fd.append('file', file, file.name);
+  const res = await authFetch(`${API_BASE}/backup/upload`, { method: 'POST', body: fd });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to upload backup');
+  return res.json();
+}
+
+export async function validateBackup(backupId: string): Promise<BackupValidationResult> {
+  const res = await authFetch(`${API_BASE}/backup/validate`, {
+    method: 'POST',
+    body: JSON.stringify({ backup_id: backupId }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to validate backup');
+  return res.json();
+}
+
+/** Restore a backup. DESTRUCTIVE unless dryRun — wipes and replaces every
+ *  restored collection. The server refuses backups that fail Pydantic
+ *  validation (no skip escape hatch is exposed to the UI on purpose). */
+export async function restoreBackup(
+  backupId: string,
+  opts: { dryRun?: boolean; allowUnverified?: boolean } = {},
+): Promise<BackupRestoreResult> {
+  const res = await authFetch(`${API_BASE}/backup/restore`, {
+    method: 'POST',
+    body: JSON.stringify({
+      backup_id: backupId,
+      dry_run: opts.dryRun ?? false,
+      allow_unverified: opts.allowUnverified ?? false,
+    }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to restore backup');
+  return res.json();
+}
+
 // ---- Admin "Log & Task" monitoring (/monitoring) ------------------------
 //
 // Back the admin Monitoring tab. All read endpoints are admin-gated server
