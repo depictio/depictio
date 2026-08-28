@@ -12,6 +12,7 @@ import {
   FileButton,
   Group,
   Loader,
+  Modal,
   NumberInput,
   Paper,
   Popover,
@@ -26,6 +27,8 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { TimeInput } from '@mantine/dates';
+
+import UnstyledDropZone from '../components/UnstyledDropZone';
 import { Icon } from '@iconify/react';
 
 import {
@@ -123,6 +126,8 @@ const AdminBackupsPanel: React.FC = () => {
   const [creating, setCreating] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [restoreTarget, setRestoreTarget] = useState<RestoreTarget | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
 
   /** Store the server's answer and reset the editable copy to match it. */
   const applySchedule = useCallback((next: BackupScheduleStatus) => {
@@ -288,6 +293,7 @@ const AdminBackupsPanel: React.FC = () => {
     try {
       const result = await uploadBackup(file);
       await refresh();
+      setUploadOpen(false);
       if (result.backup_id) {
         // Open the restore modal directly on the validation results — the
         // upload endpoint already ran validation server-side.
@@ -568,7 +574,7 @@ const AdminBackupsPanel: React.FC = () => {
                 <Table.Td>
                   <Group gap={6} wrap="nowrap">
                     <Tooltip label={b.filename}>
-                      <Code>{b.backup_id}</Code>
+                      <Code style={{ minWidth: 0, whiteSpace: 'nowrap' }}>{b.backup_id}</Code>
                     </Tooltip>
                     {b.restored_at && (
                       <Tooltip
@@ -576,10 +582,15 @@ const AdminBackupsPanel: React.FC = () => {
                           b.restored_at,
                         )}${b.restored_by ? ` by ${b.restored_by}` : ''}`}
                       >
+                        {/* Without flexShrink the badge is the flex item that
+                            gives way to the id chip, and Mantine truncates a
+                            Badge's label rather than overflowing it, so it
+                            renders as "RESTO…". */}
                         <Badge
                           color="grape"
                           variant="filled"
                           size="xs"
+                          style={{ flexShrink: 0 }}
                           data-testid={`backup-restored-${b.backup_id}`}
                         >
                           restored
@@ -689,21 +700,14 @@ const AdminBackupsPanel: React.FC = () => {
                 section: both are "get a backup into this deployment", and the
                 upload is a one-click action once it is not a dropzone. */}
             <Group gap="sm" style={{ flexShrink: 0 }}>
-              <div data-testid="backup-upload-zone">
-                <FileButton onChange={(file) => void handleUpload(file)} accept="application/json">
-                  {(props) => (
-                    <Button
-                      {...props}
-                      variant="default"
-                      leftSection={<Icon icon="mdi:upload" width={16} />}
-                      loading={uploading}
-                      data-testid="backup-upload-button"
-                    >
-                      Restore from file
-                    </Button>
-                  )}
-                </FileButton>
-              </div>
+              <Button
+                variant="default"
+                leftSection={<Icon icon="mdi:upload" width={16} />}
+                onClick={() => setUploadOpen(true)}
+                data-testid="backup-upload-button"
+              >
+                Restore from file
+              </Button>
               <Button
                 leftSection={<Icon icon="mdi:database-plus" width={16} />}
                 onClick={() => void handleCreate()}
@@ -813,6 +817,57 @@ const AdminBackupsPanel: React.FC = () => {
           {renderSchedule()}
         </Stack>
       </Card>
+
+      <Modal
+        opened={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        title="Restore from file"
+        centered
+        data-testid="backup-upload-modal"
+      >
+        <Stack gap="md">
+          <Text size="sm" c="dimmed">
+            Upload a previously downloaded backup. It is stored on the server and validated
+            against the current data models before any restore is possible.
+          </Text>
+          {/* Drag handlers are React props rather than listeners attached in an
+              effect: under StrictMode an effect-attached listener closes over a
+              stale render and silently stops firing. */}
+          <div
+            data-testid="backup-upload-zone"
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragActive(true);
+            }}
+            onDragLeave={() => setDragActive(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragActive(false);
+              void handleUpload(e.dataTransfer.files?.[0] ?? null);
+            }}
+          >
+            <FileButton onChange={(file) => void handleUpload(file)} accept="application/json">
+              {(props) => (
+                <UnstyledDropZone {...props} active={dragActive} disabled={uploading}>
+                  {uploading ? (
+                    <Group gap="sm" data-testid="backup-upload-status">
+                      <Loader size="sm" />
+                      <Text size="sm" c="dimmed">
+                        Uploading and validating…
+                      </Text>
+                    </Group>
+                  ) : (
+                    <Stack align="center" gap={4}>
+                      <Icon icon="mdi:upload" width={28} color="var(--mantine-color-dimmed)" />
+                      <Text size="sm">Drop a backup JSON file here, or click to select one</Text>
+                    </Stack>
+                  )}
+                </UnstyledDropZone>
+              )}
+            </FileButton>
+          </div>
+        </Stack>
+      </Modal>
 
       <RestoreBackupModal
         opened={Boolean(restoreTarget)}

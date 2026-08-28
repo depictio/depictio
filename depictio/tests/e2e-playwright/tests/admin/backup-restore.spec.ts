@@ -77,6 +77,8 @@ test.describe("admin backup & restore", () => {
     expect(filePath).toBeTruthy();
 
     // -- upload the downloaded file --------------------------------------
+    // The drop zone lives in a modal now, so open it before reaching the input.
+    await page.getByTestId("backup-upload-button").click();
     await page
       .locator("[data-testid='backup-upload-zone'] input[type='file']")
       .setInputFiles(filePath!);
