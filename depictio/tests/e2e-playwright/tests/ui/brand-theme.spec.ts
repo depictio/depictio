@@ -14,7 +14,13 @@
  *     keep reading as meaning.
  */
 
-import { API_PREFIX, API_URL, loginAsTestUser, test, expect } from "@fixtures/auth";
+import {
+  API_PREFIX,
+  API_URL,
+  loginAsTestUserWithToken,
+  test,
+  expect,
+} from "@fixtures/auth";
 
 type Page = import("@playwright/test").Page;
 
@@ -46,7 +52,7 @@ test.describe("Instance brand theme", () => {
   let savedOverrides: Record<string, unknown> | null = null;
 
   test.beforeEach(async ({ page, request }) => {
-    const { access_token } = await loginAsTestUser(page, request, "adminUser");
+    const { access_token } = await loginAsTestUserWithToken(page, request, "adminUser");
     const response = await request.get(`${API_URL}${API_PREFIX}/utils/branding`, {
       headers: { Authorization: `Bearer ${access_token}` },
     });
@@ -54,7 +60,7 @@ test.describe("Instance brand theme", () => {
   });
 
   test.afterEach(async ({ page, request }) => {
-    const { access_token } = await loginAsTestUser(page, request, "adminUser");
+    const { access_token } = await loginAsTestUserWithToken(page, request, "adminUser");
     const headers = { Authorization: `Bearer ${access_token}` };
     const url = `${API_URL}${API_PREFIX}/utils/branding`;
     if (savedOverrides && Object.keys(savedOverrides).length > 0) {
@@ -124,7 +130,7 @@ test.describe("Instance brand theme", () => {
     page,
     request,
   }) => {
-    const { access_token } = await loginAsTestUser(page, request, "adminUser");
+    const { access_token } = await loginAsTestUserWithToken(page, request, "adminUser");
     const headers = { Authorization: `Bearer ${access_token}` };
     const url = `${API_URL}${API_PREFIX}/utils/branding`;
     const attribution = page.locator("[data-testid='powered-by']");
@@ -133,7 +139,11 @@ test.describe("Instance brand theme", () => {
 
     // Stock instance: the depictio wordmark is already in the rail, so a badge
     // repeating it would be noise.
-    await request.delete(url, { headers });
+    //
+    // Assert on the response. The first half of this test describes the
+    // default state, so it passes whether or not these calls land — a 401 here
+    // used to surface only much later, as an unexplained count of 0.
+    expect((await request.delete(url, { headers })).ok()).toBeTruthy();
     await page.goto("/dashboards");
     const rail = page.locator("[data-testid='app-sidebar']");
     await expect(rail).toBeVisible({ timeout: 15_000 });
@@ -148,7 +158,9 @@ test.describe("Instance brand theme", () => {
 
     // `logo_mode: "none"` takes the wordmark off the screen, which is exactly
     // when the attribution has to carry it instead.
-    await request.put(url, { headers, data: { logo_mode: "none" } });
+    expect(
+      (await request.put(url, { headers, data: { logo_mode: "none" } })).ok(),
+    ).toBeTruthy();
     await page.reload();
     await expect(attribution).toHaveCount(1);
   });
