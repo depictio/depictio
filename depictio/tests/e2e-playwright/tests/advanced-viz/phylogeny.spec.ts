@@ -36,32 +36,61 @@ async function xRange(page: Page): Promise<number[]> {
   );
 }
 
-/** Pixel position (page coords) of the i-th point of the invisible
- *  internal-node click-target trace. */
+/** Pixel position (viewport coords) of the i-th point of the invisible
+ *  internal-node click-target trace.
+ *
+ *  A tree with more tips than the fold can hold leaves the deepest node below
+ *  the viewport, and `page.mouse.click` only dispatches inside it — so the
+ *  point is scrolled into view before it is measured. The canvas scrolls in
+ *  its own container rather than the window, hence the ancestor walk. */
 async function internalNodePixel(
   page: Page,
   which: "first" | "deepest",
 ): Promise<{ x: number; y: number }> {
-  return page.evaluate(
-    ({ sel, which }) => {
-      const gd = document.querySelector(sel) as any;
-      const trace = gd._fullData.find((t: any) =>
-        String(t.hovertemplate ?? "").includes("highlight subtree"),
-      );
-      if (!trace) throw new Error("internal-node trace not found");
-      let i = 0;
-      if (which === "deepest") {
-        for (let k = 1; k < trace.x.length; k++) if (trace.x[k] > trace.x[i]) i = k;
+  const measure = () =>
+    page.evaluate(
+      ({ sel, which }) => {
+        const gd = document.querySelector(sel) as any;
+        const trace = gd._fullData.find((t: any) =>
+          String(t.hovertemplate ?? "").includes("highlight subtree"),
+        );
+        if (!trace) throw new Error("internal-node trace not found");
+        let i = 0;
+        if (which === "deepest") {
+          for (let k = 1; k < trace.x.length; k++) if (trace.x[k] > trace.x[i]) i = k;
+        }
+        const rect = gd.getBoundingClientRect();
+        const fl = gd._fullLayout;
+        return {
+          x: rect.left + fl.xaxis._offset + fl.xaxis.d2p(trace.x[i]),
+          y: rect.top + fl.yaxis._offset + fl.yaxis.d2p(trace.y[i]),
+        };
+      },
+      { sel: PLOT, which },
+    );
+
+  const pt = await measure();
+  const height = page.viewportSize()!.height;
+  // Leave a margin so a point flush against an edge still takes the click.
+  if (pt.y >= 8 && pt.y <= height - 8) return pt;
+
+  await page.evaluate(
+    ({ sel, dy }) => {
+      let el = document.querySelector(sel) as HTMLElement | null;
+      while (el) {
+        const overflowY = getComputedStyle(el).overflowY;
+        if (/(auto|scroll)/.test(overflowY) && el.scrollHeight > el.clientHeight) {
+          el.scrollTop += dy;
+          return;
+        }
+        el = el.parentElement;
       }
-      const rect = gd.getBoundingClientRect();
-      const fl = gd._fullLayout;
-      return {
-        x: rect.left + fl.xaxis._offset + fl.xaxis.d2p(trace.x[i]),
-        y: rect.top + fl.yaxis._offset + fl.yaxis.d2p(trace.y[i]),
-      };
+      window.scrollBy(0, dy);
     },
-    { sel: PLOT, which },
+    { sel: PLOT, dy: pt.y - height / 2 },
   );
+
+  return measure();
 }
 
 async function tipCount(page: Page): Promise<number> {
