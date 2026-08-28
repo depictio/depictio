@@ -62,7 +62,7 @@ export default function App() {
     // Header and footer are both AppShell slots, so both stay pinned while only
     // the wizard scrolls between them. AppShell reserves padding for each on the
     // main column, so no step can end up hidden underneath either bar.
-    <AppShell header={{ height: 56 }} footer={{ height: 52 }} padding={0}>
+    <AppShell header={{ height: 56 }} footer={{ height: 44 }} padding={0}>
       <AppShell.Header>
         <AppHeader />
       </AppShell.Header>

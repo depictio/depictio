@@ -1,4 +1,4 @@
-import { Anchor, Badge, Box, Group, Stack, Text } from '@mantine/core';
+import { Anchor, Badge, Box, Group, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 const LINKS = [
@@ -18,17 +18,18 @@ const LINKS = [
  * width it gave away is what squeezed the beta badge out of view and wrapped
  * "Report an issue" onto a second line. So everything on the right is `nowrap`
  * and unshrinkable, and the privacy note on the left is the single flexible
- * part — it truncates, then drops entirely below `md`.
+ * part: it truncates, then drops entirely below `md`.
  *
  * A static site published from a build has no other way to say *which* build
  * you are looking at, so the bar carries both versions: Tool Studio's own
  * (packages/tool-studio/package.json, bumped with `pnpm --filter tool-studio run
  * bump <patch|minor|major>`) and the depictio release it was cut from
  * (.bumpversion.cfg), which pins the catalog schema the export has to satisfy.
- * The deploy commit sits on a second line under the two, which read as one pair
- * rather than a three-part run-on; it appears only when the Pages workflow
- * provides GITHUB_SHA. All three are injected at build time, see vite.config.ts.
- * Those two lines are what the shell's footer height is sized to.
+ * The deploy commit follows them in parentheses on the same line, so the two
+ * versions read as one pair and the sha as their qualifier rather than a third
+ * peer; it appears only when the Pages workflow provides GITHUB_SHA. All three
+ * are injected at build time, see vite.config.ts. That single line is what the
+ * shell's footer height is sized to.
  *
  * The beta badge sits with those versions rather than in the header: it qualifies
  * this build, and the reader who wants to know how finished the app is looks in
@@ -51,16 +52,10 @@ export default function AppFooter() {
             <Badge size="xs" variant="light" color="brand" radius="sm" style={{ flexShrink: 0 }}>
               beta
             </Badge>
-            <Stack gap={0}>
-              <Text size="xs" c="dimmed" lh={1.35} style={{ whiteSpace: 'nowrap' }}>
-                Studio v{__STUDIO_VERSION__} · depictio v{__DEPICTIO_VERSION__}
-              </Text>
-              {sha && (
-                <Text size="xs" c="dimmed" lh={1.35} style={{ whiteSpace: 'nowrap' }}>
-                  {sha}
-                </Text>
-              )}
-            </Stack>
+            <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
+              Studio v{__STUDIO_VERSION__} · depictio v{__DEPICTIO_VERSION__}
+              {sha ? ` (${sha})` : ''}
+            </Text>
           </Group>
           {LINKS.map(({ label, href }) => (
             <Anchor
