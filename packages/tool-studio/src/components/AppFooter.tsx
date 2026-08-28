@@ -1,4 +1,4 @@
-import { Anchor, Box, Container, Group, Text } from '@mantine/core';
+import { Anchor, Badge, Box, Container, Group, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 /**
@@ -14,11 +14,15 @@ import { Icon } from '@iconify/react';
  *
  * A static site published from a build has no other way to say *which* build
  * you are looking at, so the bar carries both versions: Tool Studio's own
- * (packages/tool-studio/package.json, bumped by hand when the app changes)
- * and the depictio release it was cut from (.bumpversion.cfg), which pins the
- * catalog schema the export has to satisfy. The deploy commit is added when the
- * Pages workflow provides GITHUB_SHA. All three are injected at build time, see
- * vite.config.ts.
+ * (packages/tool-studio/package.json, bumped with `pnpm --filter tool-studio run
+ * bump <patch|minor|major>`) and the depictio release it was cut from
+ * (.bumpversion.cfg), which pins the catalog schema the export has to satisfy.
+ * The deploy commit is added when the Pages workflow provides GITHUB_SHA. All
+ * three are injected at build time, see vite.config.ts.
+ *
+ * The beta badge sits with those versions rather than in the header: it qualifies
+ * this build, and the reader who wants to know how finished the app is looks in
+ * the same place as the one asking which build they are on.
  */
 export default function AppFooter() {
   const sha = __BUILD_SHA__;
@@ -34,10 +38,15 @@ export default function AppFooter() {
             </Text>
           </Group>
           <Group gap="md" wrap="nowrap" ml="auto">
-            <Text size="xs" c="dimmed">
-              Studio v{__STUDIO_VERSION__} · depictio v{__DEPICTIO_VERSION__}
-              {sha ? ` · ${sha}` : ''}
-            </Text>
+            <Group gap={8} wrap="nowrap">
+              <Badge size="xs" variant="light" color="brand" radius="sm">
+                beta
+              </Badge>
+              <Text size="xs" c="dimmed">
+                Studio v{__STUDIO_VERSION__} · depictio v{__DEPICTIO_VERSION__}
+                {sha ? ` · ${sha}` : ''}
+              </Text>
+            </Group>
             <Anchor
               size="xs"
               c="dimmed"

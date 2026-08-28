@@ -165,6 +165,34 @@ CI's drift check regenerates and `git diff --exit-code`s all of these, with
 `TOOL_STUDIO_STRICT_GEN=1` so a regeneration that silently no-ops fails
 instead of leaving the check to pass against unchanged snapshots.
 
+### Versioning
+
+The footer states which build is live, and it carries two independent numbers.
+
+**Tool Studio's own version** is the `version` field of this `package.json`. It
+moves on the app's own cadence and is the one you bump when the app changes:
+
+```bash
+pnpm --filter tool-studio run bump patch    # 0.2.0 -> 0.2.1
+pnpm --filter tool-studio run bump minor    # 0.2.0 -> 0.3.0
+pnpm --filter tool-studio run bump 1.0.0    # or set it outright
+```
+
+That is the whole procedure. The script is `npm version --no-git-tag-version`,
+so it edits one field and stops: no commit, no tag, no lockfile churn. Commit
+the result with the change that earned the bump. `vite.config.ts` reads the
+field at build time and the footer renders it, so nothing else needs touching.
+
+**The depictio version** next to it comes from the repo's `.bumpversion.cfg` and
+is not bumped here. It records which release the build was cut from, which is
+what pins the catalog schema an export has to satisfy, so a depictio release
+carries into the site on its own.
+
+The footer also shows a **beta** badge. It is deliberately hardcoded rather than
+derived from the version number: it marks how finished the app is, which is a
+judgement, not an arithmetic fact about `0.x`. Remove it in `AppFooter.tsx` when
+the app stops being a beta, whatever the version says by then.
+
 ### Deployment (GitHub Pages)
 
 The app is built here and published to a **showcase repository**,

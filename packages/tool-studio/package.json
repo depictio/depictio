@@ -1,9 +1,9 @@
 {
   "name": "tool-studio",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Depictio Tool Studio \u2014 100% client-side web app to author a catalog tool entry (module.yaml + <output>.yaml + fixture) from a dropped CSV/TSV, preview visualizations, and export a zip or open a PR.",
+  "description": "Depictio Tool Studio — 100% client-side web app to author a catalog tool entry (module.yaml + <output>.yaml + fixture) from a dropped CSV/TSV, preview visualizations, and export a zip or open a PR.",
   "scripts": {
     "genkinds": "tsx scripts/genKinds.ts",
     "prebuild": "tsx scripts/genKinds.ts",
@@ -15,7 +15,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "bump": "npm version --no-git-tag-version"
   },
   "dependencies": {
     "@iconify/react": "^5.0.2",

@@ -5,8 +5,9 @@ import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import { apiShimPlugin } from '../depictio-react-core/viteApiShim';
 
-// The footer states which build is live. The Studio's own version is bumped by
-// hand in this package.json when the app changes; depictio's version comes from the
+// The footer states which build is live. The Studio's own version lives in this
+// package.json and moves on its own cadence, bumped with `pnpm --filter
+// tool-studio run bump <patch|minor|major>`; depictio's version comes from the
 // repo's bumpversion config, so a release bump carries into the site with
 // nothing to remember; the commit comes from the Pages workflow's GITHUB_SHA
 // and is simply absent for a local build.
