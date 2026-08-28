@@ -14,6 +14,7 @@ import {
   NumberInput,
   Paper,
   Popover,
+  SegmentedControl,
   SimpleGrid,
   Stack,
   Switch,
@@ -62,18 +63,29 @@ const ScheduleFact: React.FC<{ label: string; value: React.ReactNode }> = ({ lab
   </Group>
 );
 
-/** Plain-language summary of the tiered retention policy, so an admin can read
- *  back what the three numbers add up to without doing the arithmetic. */
+/** The tiers "Smart retention" turns on. Fixed rather than exposed as two more
+ *  number inputs: the value of the mode is that an admin picks thinning without
+ *  having to design a policy, and a wrong pair of tiers is worse than none. */
+const SMART_WEEKLY_WEEKS = 4;
+const SMART_MONTHLY_MONTHS = 12;
+
+type RetentionMode = 'simple' | 'smart';
+
+/** Smart mode is simply "some tier is on", so a policy set through the API or an
+ *  env var still reads back correctly here. */
+const retentionModeOf = (draft: ScheduleDraft): RetentionMode =>
+  draft.weekly_weeks > 0 || draft.monthly_months > 0 ? 'smart' : 'simple';
+
+const plural = (n: number, unit: string) => `${n} ${unit}${n === 1 ? '' : 's'}`;
+
+/** Plain-language summary, so an admin can read back what the policy keeps
+ *  without doing the arithmetic. */
 const describeRetention = (draft: ScheduleDraft): string => {
   if (draft.retention_days <= 0) return 'Every backup is kept forever.';
-  const parts = [`every backup for ${draft.retention_days} day${draft.retention_days === 1 ? '' : 's'}`];
-  if (draft.weekly_weeks > 0) {
-    parts.push(`then one a week for ${draft.weekly_weeks} week${draft.weekly_weeks === 1 ? '' : 's'}`);
-  }
+  const parts = [`every backup for ${plural(draft.retention_days, 'day')}`];
+  if (draft.weekly_weeks > 0) parts.push(`then one a week for ${plural(draft.weekly_weeks, 'week')}`);
   if (draft.monthly_months > 0) {
-    parts.push(
-      `then one a month for ${draft.monthly_months} month${draft.monthly_months === 1 ? '' : 's'}`,
-    );
+    parts.push(`then one a month for ${plural(draft.monthly_months, 'month')}`);
   }
   return `Keeps ${parts.join(', ')}. Everything older is deleted.`;
 };
@@ -169,6 +181,22 @@ const AdminBackupsPanel: React.FC = () => {
     } finally {
       setSavingSchedule(false);
     }
+  };
+
+  /** Switching mode only turns the weekly/monthly tiers on or off. The days
+   *  field is deliberately left alone: it means something in both modes (in
+   *  smart mode it is the window before thinning starts), so flipping the mode
+   *  never silently rewrites a number the admin chose. */
+  const setRetentionMode = (draft: ScheduleDraft, mode: RetentionMode) => {
+    setDraft(
+      mode === 'smart'
+        ? {
+            ...draft,
+            weekly_weeks: SMART_WEEKLY_WEEKS,
+            monthly_months: SMART_MONTHLY_MONTHS,
+          }
+        : { ...draft, weekly_weeks: 0, monthly_months: 0 },
+    );
   };
 
   /** The header switch commits on the spot rather than waiting for Save: it is
@@ -291,28 +319,31 @@ const AdminBackupsPanel: React.FC = () => {
         <Divider
           my={4}
           label={
-            <Group gap={6} wrap="nowrap">
-              <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
-                Retention policy
-              </Text>
-              <Tooltip
-                multiline
-                w={280}
-                label="Tiered retention: recent backups are all kept, then thinned to one a week, then one a month. Older snapshots stay available without the volume growing forever."
-              >
-                <Icon
-                  icon="mdi:help-circle-outline"
-                  width={14}
-                  color="var(--mantine-color-dimmed)"
-                />
-              </Tooltip>
-            </Group>
+            <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
+              Retention policy
+            </Text>
           }
           labelPosition="left"
         />
 
+        {/* Two modes rather than three tier inputs: an admin either caps by age
+            or asks for thinning, and the tier sizes behind "Smart" are not a
+            decision worth making per deployment. */}
+        <SegmentedControl
+          fullWidth
+          size="xs"
+          value={retentionModeOf(d)}
+          onChange={(value) => setRetentionMode(d, value as RetentionMode)}
+          disabled={savingSchedule}
+          data-testid="backup-retention-mode"
+          data={[
+            { label: 'Keep for a fixed time', value: 'simple' },
+            { label: 'Smart retention', value: 'smart' },
+          ]}
+        />
+
         <NumberInput
-          label="Keep every backup for"
+          label={retentionModeOf(d) === 'smart' ? 'Keep every backup for' : 'Keep backups for'}
           description="0 keeps every backup forever"
           suffix=" days"
           min={0}
@@ -327,40 +358,11 @@ const AdminBackupsPanel: React.FC = () => {
           data-testid="backup-schedule-retention"
         />
 
-        {/* The tiers only mean anything past the daily window, so they follow
-            "keep forever" into being irrelevant rather than silently ignored. */}
-        <NumberInput
-          label="Then one a week for"
-          suffix=" weeks"
-          min={0}
-          max={520}
-          clampBehavior="strict"
-          allowDecimal={false}
-          value={d.weekly_weeks}
-          onChange={(v) =>
-            setDraft({ ...d, weekly_weeks: typeof v === 'number' ? v : d.weekly_weeks })
-          }
-          disabled={savingSchedule || d.retention_days <= 0}
-          data-testid="backup-schedule-weekly"
-        />
-
-        <NumberInput
-          label="Then one a month for"
-          suffix=" months"
-          min={0}
-          max={120}
-          clampBehavior="strict"
-          allowDecimal={false}
-          value={d.monthly_months}
-          onChange={(v) =>
-            setDraft({ ...d, monthly_months: typeof v === 'number' ? v : d.monthly_months })
-          }
-          disabled={savingSchedule || d.retention_days <= 0}
-          data-testid="backup-schedule-monthly"
-        />
-
         <Text size="xs" c="dimmed" data-testid="backup-retention-summary">
           {describeRetention(d)}
+          {retentionModeOf(d) === 'smart' && d.retention_days > 0
+            ? ' Older snapshots stay reachable without the volume growing forever.'
+            : ''}
         </Text>
 
         <Group justify="flex-end">
@@ -605,32 +607,53 @@ const AdminBackupsPanel: React.FC = () => {
   return (
     <Stack gap="lg">
       <Card withBorder radius="md" p="lg">
-        {/* The button must not be a shrinkable flex item: Mantine clips a
-            Button's label rather than letting it overflow, so a nowrap Group
-            renders "Create backu". Let the description shrink instead, and let
-            the button wrap onto its own line once the card gets narrow. */}
-        <Group justify="space-between" align="flex-start">
-          <Stack gap={4} style={{ flex: '1 1 320px', minWidth: 0 }}>
-            <Group gap="xs">
-              <Icon icon="mdi:database-export" width={20} color="var(--mantine-color-blue-6)" />
-              <Title order={5}>Create backup</Title>
-            </Group>
-            <Text size="sm" c="dimmed">
-              Snapshots every MongoDB collection (users, projects, dashboards, workflows,
-              data collections, files, delta tables, runs, groups). Tokens and temporary
-              users are excluded, so sessions survive a later restore.
-            </Text>
-          </Stack>
-          <Button
-            leftSection={<Icon icon="mdi:database-plus" width={16} />}
-            onClick={() => void handleCreate()}
-            loading={creating}
-            style={{ flexShrink: 0 }}
-            data-testid="backup-create-button"
+        <Stack gap="md">
+          {/* The button must not be a shrinkable flex item: Mantine clips a
+              Button's label rather than letting it overflow, so a nowrap Group
+              renders "Create backu". Let the description shrink instead, and let
+              the button wrap onto its own line once the card gets narrow. */}
+          <Group justify="space-between" align="flex-start">
+            <Stack gap={4} style={{ flex: '1 1 320px', minWidth: 0 }}>
+              <Group gap="xs">
+                <Icon icon="mdi:database-export" width={20} color="var(--mantine-color-blue-6)" />
+                <Title order={5}>Create database backup</Title>
+              </Group>
+              <Text size="sm" c="dimmed">
+                Snapshots every MongoDB collection (users, projects, dashboards, workflows,
+                data collections, files, delta tables, runs, groups). Tokens and temporary
+                users are excluded, so sessions survive a later restore.
+              </Text>
+            </Stack>
+            <Button
+              leftSection={<Icon icon="mdi:database-plus" width={16} />}
+              onClick={() => void handleCreate()}
+              loading={creating}
+              style={{ flexShrink: 0 }}
+              data-testid="backup-create-button"
+            >
+              Create backup
+            </Button>
+          </Group>
+
+          {/* Naming the boundary here rather than in the docs alone: the page
+              is called "Backups", and an admin who reads that as "everything is
+              backed up" only finds out otherwise during a restore. */}
+          <Alert
+            variant="light"
+            color="blue"
+            icon={<Icon icon="mdi:information-outline" />}
+            data-testid="backup-scope-notice"
           >
-            Create backup
-          </Button>
-        </Group>
+            <Text size="sm">
+              This backs up the <strong>database only</strong>: dashboards, projects and the
+              metadata pointing at your data. The data itself (Delta tables in S3 or MinIO) is
+              not included and is not restored from here. Back it up separately, with your
+              object store&apos;s own replication or with{' '}
+              <Code>depictio-cli backup create --include-s3-data</Code>. See{' '}
+              <Code>docs/backup-restore.md</Code>.
+            </Text>
+          </Alert>
+        </Stack>
       </Card>
 
       <Card withBorder radius="md" p="lg">
@@ -662,7 +685,7 @@ const AdminBackupsPanel: React.FC = () => {
                 </Badge>
               )}
               {schedule && (
-                <Popover width={340} position="bottom-start" withArrow shadow="md">
+                <Popover width={480} position="bottom-start" withArrow shadow="md">
                   <Popover.Target>
                     <ActionIcon
                       variant="subtle"
