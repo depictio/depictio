@@ -138,9 +138,12 @@ test.describe("Instance brand theme", () => {
     const rail = page.locator("[data-testid='app-sidebar']");
     await expect(rail).toBeVisible({ timeout: 15_000 });
     // The rail is what carries the attribution, so its own theme toggle being
-    // painted means the footer stack rendered and a count of 0 is a real
-    // absence rather than a not-yet.
-    await expect(rail.locator("[data-testid='theme-toggle']")).toBeVisible();
+    // in the DOM means the footer stack rendered and a count of 0 is a real
+    // absence rather than a not-yet. Attached rather than visible: the testid
+    // sits on the Mantine Switch's <input>, which the track paints over and
+    // Playwright therefore reports as hidden (see theme-toggle.spec.ts, which
+    // asserts the same element the same way).
+    await expect(rail.locator("[data-testid='theme-toggle']")).toBeAttached();
     await expect(attribution).toHaveCount(0);
 
     // `logo_mode: "none"` takes the wordmark off the screen, which is exactly
