@@ -18,6 +18,7 @@ from depictio.api.v1.endpoints.backup_endpoints.routes import (
     _write_backup_file,
     claim_auto_backup_slot,
     get_backup_schedule_config,
+    parse_time_of_day,
     prune_expired_backups,
 )
 
@@ -38,7 +39,8 @@ async def run_scheduled_backup() -> str | None:
     config = get_backup_schedule_config()
     if not config["enabled"]:
         return None
-    if claim_auto_backup_slot(config["interval_hours"] * 3600) is None:
+    anchor_minutes = parse_time_of_day(config["time_of_day"])
+    if claim_auto_backup_slot(config["interval_hours"] * 3600, anchor_minutes) is None:
         return None
 
     backup = await _create_mongodb_backup("scheduler", automatic=True)

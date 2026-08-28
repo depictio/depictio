@@ -3722,6 +3722,9 @@ export interface BackupScheduleStatus {
    *  `monthly_months`. 0 turns a tier off; both at 0 is a plain age cutoff. */
   weekly_weeks: number;
   monthly_months: number;
+  /** "HH:MM" UTC anchor the schedule's slots sit on. Null means a rolling
+   *  schedule: due whenever an interval has passed since the last run. */
+  time_of_day: string | null;
   /** ISO timestamps with an explicit UTC offset; null before the first run. */
   last_run: string | null;
   next_run: string | null;
@@ -3794,6 +3797,8 @@ export async function updateBackupSchedule(update: {
   retentionDays?: number;
   weeklyWeeks?: number;
   monthlyMonths?: number;
+  /** "HH:MM" UTC. Pass the empty string to clear the anchor; omit to leave it. */
+  timeOfDay?: string;
 }): Promise<BackupScheduleStatus> {
   const res = await authFetch(`${API_BASE}/backup/schedule`, {
     method: 'PUT',
@@ -3803,6 +3808,7 @@ export async function updateBackupSchedule(update: {
       retention_days: update.retentionDays,
       weekly_weeks: update.weeklyWeeks,
       monthly_months: update.monthlyMonths,
+      time_of_day: update.timeOfDay,
     }),
   });
   if (!res.ok) await throwHttpDetailError(res, 'Failed to update the backup schedule');

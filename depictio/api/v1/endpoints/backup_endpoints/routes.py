@@ -343,7 +343,41 @@ def _as_utc(value: datetime | None) -> datetime | None:
     return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
-def claim_auto_backup_slot(interval_seconds: int) -> datetime | None:
+#: An "HH:MM" time-of-day anchor, 24-hour clock. Empty string clears the anchor.
+_TIME_OF_DAY_PATTERN = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
+
+
+def parse_time_of_day(value: str | None) -> int | None:
+    """Minutes from midnight UTC for an "HH:MM" anchor, or None if unset/invalid.
+
+    Invalid input degrades to "no anchor" rather than raising: a malformed value
+    in the environment should leave the schedule rolling, not stop it backing up.
+    """
+    if not value or not isinstance(value, str):
+        return None
+    match = _TIME_OF_DAY_PATTERN.fullmatch(value.strip())
+    if not match:
+        return None
+    return int(match.group(1)) * 60 + int(match.group(2))
+
+
+def scheduled_slot(now: datetime, interval_seconds: int, anchor_minutes: int) -> datetime:
+    """The most recent scheduled slot at or before ``now``.
+
+    Slots sit on a fixed grid anchored at the chosen time of day, so a daily
+    backup lands at that time every day, and a six-hourly one lands at that time
+    and every six hours after it. Anchoring to a fixed epoch rather than to the
+    last run is what stops the schedule drifting later and later: a run that
+    fires a few minutes late does not push tomorrow's slot back with it.
+    """
+    base = datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(minutes=anchor_minutes)
+    elapsed = (now - base).total_seconds()
+    return base + timedelta(seconds=(elapsed // interval_seconds) * interval_seconds)
+
+
+def claim_auto_backup_slot(
+    interval_seconds: int, anchor_minutes: int | None = None
+) -> datetime | None:
     """Claim the right to take the next scheduled backup, across all workers.
 
     Every API worker runs the scheduler loop — gating on the initialization
@@ -356,6 +390,12 @@ def claim_auto_backup_slot(interval_seconds: int) -> datetime | None:
     Returns the claim time, or None when the slot is not due or is already taken.
     """
     now = datetime.now(timezone.utc)
+    # Without an anchor the schedule stays rolling: due once an interval has
+    # passed since the last run, wherever in the day that lands.
+    if anchor_minutes is None:
+        due_filter = {"$lte": now - timedelta(seconds=interval_seconds)}
+    else:
+        due_filter = {"$lt": scheduled_slot(now, interval_seconds, anchor_minutes)}
     try:
         initialization_collection.update_one(
             {"_id": AUTO_BACKUP_STATE_ID},
@@ -363,10 +403,7 @@ def claim_auto_backup_slot(interval_seconds: int) -> datetime | None:
             upsert=True,
         )
         claimed = initialization_collection.find_one_and_update(
-            {
-                "_id": AUTO_BACKUP_STATE_ID,
-                "last_run_at": {"$lte": now - timedelta(seconds=interval_seconds)},
-            },
+            {"_id": AUTO_BACKUP_STATE_ID, "last_run_at": due_filter},
             {"$set": {"last_run_at": now}},
         )
     except Exception as exc:
@@ -431,6 +468,7 @@ SCHEDULE_FIELDS = (
     "retention_days",
     "weekly_weeks",
     "monthly_months",
+    "time_of_day",
 )
 
 
@@ -452,6 +490,7 @@ def get_backup_schedule_config() -> dict:
         "retention_days": settings.backup.backup_file_retention_days,
         "weekly_weeks": settings.backup.backup_retention_weekly_weeks,
         "monthly_months": settings.backup.backup_retention_monthly_months,
+        "time_of_day": settings.backup.auto_backup_time_of_day,
     }
     state = get_auto_backup_state()
     overrides = {field: state[field] for field in SCHEDULE_FIELDS if field in state}
@@ -770,6 +809,8 @@ class BackupScheduleResponse(BaseModel):
     # Grandfather-father-son tiers past retention_days; 0 means the tier is off.
     weekly_weeks: int = 0
     monthly_months: int = 0
+    # "HH:MM" UTC anchor for the schedule grid; null means a rolling schedule.
+    time_of_day: str | None = None
     last_run: str | None = None
     next_run: str | None = None
     # True once any field has been set from the Backups tab, so the UI can say
@@ -790,6 +831,9 @@ class BackupScheduleUpdate(BaseModel):
     # generous enough for any real policy while still rejecting typos.
     weekly_weeks: int | None = Field(default=None, ge=0, le=520)
     monthly_months: int | None = Field(default=None, ge=0, le=120)
+    # "HH:MM" on a 24-hour clock, UTC. The empty string clears the anchor and
+    # returns the schedule to rolling; null means "leave it as it is".
+    time_of_day: str | None = Field(default=None, pattern=r"^$|^([01]\d|2[0-3]):([0-5]\d)$")
 
 
 def _schedule_response() -> BackupScheduleResponse:
@@ -801,11 +845,24 @@ def _schedule_response() -> BackupScheduleResponse:
     if last_run is not None and last_run <= _NEVER_RAN:
         last_run = None
 
+    anchor_minutes = parse_time_of_day(config["time_of_day"])
+    interval_seconds = config["interval_hours"] * 3600
+
     next_run = None
     if config["enabled"]:
-        # With no run on record the first tick fires as soon as the loop wakes.
-        base = last_run or datetime.now(timezone.utc)
-        next_run = base + timedelta(hours=config["interval_hours"])
+        if anchor_minutes is None:
+            # With no run on record the first tick fires as soon as the loop wakes.
+            base = last_run or datetime.now(timezone.utc)
+            next_run = base + timedelta(seconds=interval_seconds)
+        else:
+            slot = scheduled_slot(datetime.now(timezone.utc), interval_seconds, anchor_minutes)
+            # An unclaimed current slot is itself the next run: it fires on the
+            # next poll rather than waiting a further interval.
+            next_run = (
+                slot
+                if last_run is None or last_run < slot
+                else slot + timedelta(seconds=interval_seconds)
+            )
 
     return BackupScheduleResponse(
         enabled=config["enabled"],
@@ -813,6 +870,7 @@ def _schedule_response() -> BackupScheduleResponse:
         retention_days=config["retention_days"],
         weekly_weeks=config["weekly_weeks"],
         monthly_months=config["monthly_months"],
+        time_of_day=config["time_of_day"] or None,
         last_run=last_run.isoformat() if last_run else None,
         next_run=next_run.isoformat() if next_run else None,
         is_customized=config["is_customized"],

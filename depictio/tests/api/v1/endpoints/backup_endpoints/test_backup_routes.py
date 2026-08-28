@@ -1,6 +1,6 @@
 import json
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -11,7 +11,10 @@ from depictio.api.v1.endpoints.backup_endpoints.routes import (
     _compute_file_sha256,
     _subtract_months,
     backup_endpoint_router,
+    claim_auto_backup_slot,
+    parse_time_of_day,
     record_last_restore,
+    scheduled_slot,
     select_expired_backups,
 )
 from depictio.models.models.base import PyObjectId
@@ -58,6 +61,7 @@ def backup_settings(tmp_path):
     mock_settings.backup.backup_retention_monthly_months = 0
     mock_settings.backup.auto_backup_enabled = False
     mock_settings.backup.auto_backup_interval_hours = 24
+    mock_settings.backup.auto_backup_time_of_day = None
     with patch("depictio.api.v1.endpoints.backup_endpoints.routes.settings", mock_settings):
         yield mock_settings
 
@@ -767,6 +771,95 @@ class TestBackupRetention:
 
         assert prune_expired_backups() == 0
         assert stray.exists()
+
+
+class TestScheduleTimeOfDay:
+    """An anchored schedule fires at a chosen time of day instead of drifting
+    forward from whenever the last run happened to land."""
+
+    def test_parses_a_valid_anchor(self):
+        assert parse_time_of_day("03:00") == 180
+        assert parse_time_of_day("23:59") == 23 * 60 + 59
+        assert parse_time_of_day("00:00") == 0
+
+    @pytest.mark.parametrize("value", [None, "", "  ", "24:00", "3:00", "03:60", "nope", 42])
+    def test_unusable_anchors_degrade_to_rolling(self, value):
+        """A malformed value must leave the schedule rolling, not stop backups."""
+        assert parse_time_of_day(value) is None
+
+    def test_daily_slots_land_on_the_anchor(self):
+        now = datetime(2026, 8, 28, 14, 30, tzinfo=timezone.utc)
+        slot = scheduled_slot(now, 24 * 3600, parse_time_of_day("03:00"))
+
+        assert slot == datetime(2026, 8, 28, 3, 0, tzinfo=timezone.utc)
+
+    def test_before_the_anchor_the_slot_is_yesterdays(self):
+        now = datetime(2026, 8, 28, 1, 0, tzinfo=timezone.utc)
+        slot = scheduled_slot(now, 24 * 3600, parse_time_of_day("03:00"))
+
+        assert slot == datetime(2026, 8, 27, 3, 0, tzinfo=timezone.utc)
+
+    def test_sub_daily_intervals_step_from_the_anchor(self):
+        """A six-hourly schedule anchored at 03:00 runs at 03, 09, 15 and 21."""
+        anchor = parse_time_of_day("03:00")
+        slots = {
+            scheduled_slot(datetime(2026, 8, 28, hour, 30, tzinfo=timezone.utc), 6 * 3600, anchor)
+            for hour in range(0, 24)
+        }
+
+        assert {s.hour for s in slots} == {3, 9, 15, 21}
+
+    def test_a_late_run_does_not_push_the_next_slot_back(self):
+        """The grid is anchored to a fixed epoch, not to the previous run, which
+        is what stops a daily backup creeping later every day."""
+        anchor = parse_time_of_day("03:00")
+        # A run that fired 40 minutes late still leaves tomorrow's slot at 03:00.
+        tomorrow = datetime(2026, 8, 29, 3, 5, tzinfo=timezone.utc)
+
+        assert scheduled_slot(tomorrow, 24 * 3600, anchor) == datetime(
+            2026, 8, 29, 3, 0, tzinfo=timezone.utc
+        )
+
+    def test_an_anchored_claim_compares_against_the_slot(self, backup_state, backup_settings):
+        backup_state.find_one_and_update.return_value = {"_id": "auto_backup_state"}
+
+        assert claim_auto_backup_slot(24 * 3600, parse_time_of_day("03:00")) is not None
+
+        query = backup_state.find_one_and_update.call_args.args[0]
+        # Strictly-before the slot, rather than the rolling "one interval old".
+        assert "$lt" in query["last_run_at"]
+        assert query["last_run_at"]["$lt"].hour == 3
+
+    def test_no_anchor_keeps_the_rolling_claim(self, backup_state, backup_settings):
+        backup_state.find_one_and_update.return_value = {"_id": "auto_backup_state"}
+
+        assert claim_auto_backup_slot(3600) is not None
+
+        query = backup_state.find_one_and_update.call_args.args[0]
+        assert "$lte" in query["last_run_at"]
+
+    def test_the_endpoint_reports_the_anchored_next_run(
+        self, backup_state, as_admin, backup_settings
+    ):
+        backup_settings.backup.auto_backup_enabled = True
+        backup_settings.backup.auto_backup_interval_hours = 24
+        backup_settings.backup.auto_backup_time_of_day = "03:00"
+
+        body = as_admin.get("/backup/schedule").json()
+
+        assert body["time_of_day"] == "03:00"
+        assert datetime.fromisoformat(body["next_run"]).hour == 3
+
+    def test_an_empty_string_clears_the_anchor(self, backup_state, as_admin, backup_settings):
+        """Null means "leave it alone", so clearing needs its own value."""
+        response = as_admin.put("/backup/schedule", json={"time_of_day": ""})
+
+        assert response.status_code == 200
+        stored = backup_state.update_one.call_args.args[1]["$set"]
+        assert stored["time_of_day"] == ""
+
+    def test_a_malformed_anchor_is_rejected(self, backup_state, as_admin, backup_settings):
+        assert as_admin.put("/backup/schedule", json={"time_of_day": "25:00"}).status_code == 422
 
 
 class TestGFSRetentionPolicy:

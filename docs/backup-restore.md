@@ -69,6 +69,15 @@ to every API worker within a few minutes without a restart. Every worker runs
 the loop; the due time is claimed with a single conditional MongoDB update, so
 exactly one worker takes each backup.
 
+A schedule can be **anchored to a time of day** (`HH:MM`, UTC). Slots then sit on
+a fixed grid running from that time: daily at 03:00 stays at 03:00, and a
+six-hourly schedule anchored at 03:00 runs at 03:00, 09:00, 15:00 and 21:00. The
+grid is anchored to a fixed epoch rather than to the previous run, which is what
+stops a run that fires a few minutes late from pushing every later run back with
+it. Leave the anchor empty for a rolling schedule: due whenever an interval has
+passed since the last run, wherever in the day that lands. Workers poll at most
+every 15 minutes, so an anchored backup starts within that of its slot.
+
 Retention offers two modes in the UI:
 
 - **Keep for a fixed time** — delete anything older than N days. `0` keeps
@@ -99,6 +108,7 @@ the next restart.
 | --- | --- | --- |
 | `DEPICTIO_BACKUP_AUTO_BACKUP_ENABLED` | `false` | Run scheduled backups |
 | `DEPICTIO_BACKUP_AUTO_BACKUP_INTERVAL_HOURS` | `24` | Hours between scheduled backups |
+| `DEPICTIO_BACKUP_AUTO_BACKUP_TIME_OF_DAY` | unset | `HH:MM` UTC anchor for the slot grid; unset means a rolling schedule |
 | `DEPICTIO_BACKUP_BACKUP_FILE_RETENTION_DAYS` | `30` | Keep every backup for this long; `0` keeps forever |
 | `DEPICTIO_BACKUP_BACKUP_RETENTION_WEEKLY_WEEKS` | `0` | Weekly tier length; `0` disables it |
 | `DEPICTIO_BACKUP_BACKUP_RETENTION_MONTHLY_MONTHS` | `0` | Monthly tier length; `0` disables it |

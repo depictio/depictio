@@ -25,6 +25,7 @@ import {
   Tooltip,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
+import { TimeInput } from '@mantine/dates';
 import { Icon } from '@iconify/react';
 
 import {
@@ -37,7 +38,6 @@ import {
 } from 'depictio-react-core';
 import type { AdminBackupEntry, BackupScheduleStatus } from 'depictio-react-core';
 
-import UnstyledDropZone from '../components/UnstyledDropZone';
 import { formatDateTime } from '../lib/datetime';
 import RestoreBackupModal from './RestoreBackupModal';
 import type { RestoreTarget } from './RestoreBackupModal';
@@ -50,6 +50,8 @@ interface ScheduleDraft {
   retention_days: number;
   weekly_weeks: number;
   monthly_months: number;
+  /** "HH:MM" UTC, or '' for a rolling schedule. */
+  time_of_day: string;
 }
 
 /** One row of the status panel: a label on the left, its value on the right. */
@@ -130,6 +132,7 @@ const AdminBackupsPanel: React.FC = () => {
       retention_days: next.retention_days,
       weekly_weeks: next.weekly_weeks,
       monthly_months: next.monthly_months,
+      time_of_day: next.time_of_day ?? '',
     });
   }, []);
 
@@ -139,7 +142,8 @@ const AdminBackupsPanel: React.FC = () => {
     (draft.interval_hours !== schedule.interval_hours ||
       draft.retention_days !== schedule.retention_days ||
       draft.weekly_weeks !== schedule.weekly_weeks ||
-      draft.monthly_months !== schedule.monthly_months);
+      draft.monthly_months !== schedule.monthly_months ||
+      draft.time_of_day !== (schedule.time_of_day ?? ''));
 
   const refresh = useCallback(async () => {
     setLoadError(null);
@@ -176,6 +180,7 @@ const AdminBackupsPanel: React.FC = () => {
           retentionDays: draft.retention_days,
           weeklyWeeks: draft.weekly_weeks,
           monthlyMonths: draft.monthly_months,
+          timeOfDay: draft.time_of_day,
         }),
       );
       notifications.show({
@@ -327,6 +332,35 @@ const AdminBackupsPanel: React.FC = () => {
           }
           disabled={savingSchedule}
           data-testid="backup-schedule-interval"
+        />
+
+        {/* Anchoring is optional: without it the schedule stays rolling, which
+            is the behaviour every existing deployment already has. */}
+        <TimeInput
+          label="Preferred time (UTC)"
+          description={
+            d.time_of_day
+              ? `Runs at ${d.time_of_day} UTC, then every ${plural(d.interval_hours, 'hour')}`
+              : 'Leave empty to run whenever an interval has passed'
+          }
+          value={d.time_of_day}
+          onChange={(e) => setDraft({ ...d, time_of_day: e.currentTarget.value })}
+          disabled={savingSchedule}
+          rightSection={
+            d.time_of_day ? (
+              <Tooltip label="Clear the anchor">
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  onClick={() => setDraft({ ...d, time_of_day: '' })}
+                  aria-label="Clear the preferred time"
+                >
+                  <Icon icon="mdi:close" width={14} />
+                </ActionIcon>
+              </Tooltip>
+            ) : undefined
+          }
+          data-testid="backup-schedule-time"
         />
 
         <Divider
@@ -651,15 +685,34 @@ const AdminBackupsPanel: React.FC = () => {
                 users are excluded, so sessions survive a later restore.
               </Text>
             </Stack>
-            <Button
-              leftSection={<Icon icon="mdi:database-plus" width={16} />}
-              onClick={() => void handleCreate()}
-              loading={creating}
-              style={{ flexShrink: 0 }}
-              data-testid="backup-create-button"
-            >
-              Create backup
-            </Button>
+            {/* Restoring from a file is a peer of creating one, not a separate
+                section: both are "get a backup into this deployment", and the
+                upload is a one-click action once it is not a dropzone. */}
+            <Group gap="sm" style={{ flexShrink: 0 }}>
+              <div data-testid="backup-upload-zone">
+                <FileButton onChange={(file) => void handleUpload(file)} accept="application/json">
+                  {(props) => (
+                    <Button
+                      {...props}
+                      variant="default"
+                      leftSection={<Icon icon="mdi:upload" width={16} />}
+                      loading={uploading}
+                      data-testid="backup-upload-button"
+                    >
+                      Restore from file
+                    </Button>
+                  )}
+                </FileButton>
+              </div>
+              <Button
+                leftSection={<Icon icon="mdi:database-plus" width={16} />}
+                onClick={() => void handleCreate()}
+                loading={creating}
+                data-testid="backup-create-button"
+              >
+                Create backup
+              </Button>
+            </Group>
           </Group>
 
           {/* Naming the boundary here rather than in the docs alone: the page
@@ -758,42 +811,6 @@ const AdminBackupsPanel: React.FC = () => {
             )}
           </Group>
           {renderSchedule()}
-        </Stack>
-      </Card>
-
-      <Card withBorder radius="md" p="lg">
-        <Stack gap="md">
-          <Stack gap={4}>
-            <Group gap="xs">
-              <Icon icon="mdi:database-import" width={20} color="var(--mantine-color-orange-6)" />
-              <Title order={5}>Restore from file</Title>
-            </Group>
-            <Text size="sm" c="dimmed">
-              Upload a previously downloaded backup. It is stored on the server and
-              validated against the current data models before any restore is possible.
-            </Text>
-          </Stack>
-          <div data-testid="backup-upload-zone">
-            <FileButton onChange={(file) => void handleUpload(file)} accept="application/json">
-              {(props) => (
-                <UnstyledDropZone {...props} disabled={uploading}>
-                  {uploading ? (
-                    <Group gap="sm" data-testid="backup-upload-status">
-                      <Loader size="sm" />
-                      <Text size="sm" c="dimmed">
-                        Uploading and validating…
-                      </Text>
-                    </Group>
-                  ) : (
-                    <Stack align="center" gap={4}>
-                      <Icon icon="mdi:upload" width={28} color="var(--mantine-color-dimmed)" />
-                      <Text size="sm">Click to select a backup JSON file</Text>
-                    </Stack>
-                  )}
-                </UnstyledDropZone>
-              )}
-            </FileButton>
-          </div>
         </Stack>
       </Card>
 

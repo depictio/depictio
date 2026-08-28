@@ -832,6 +832,15 @@ class BackupConfig(BaseSettings):
         ge=1,
         description="Hours between scheduled backups when auto_backup_enabled is true.",
     )
+    auto_backup_time_of_day: Optional[str] = Field(
+        default=None,
+        description=(
+            "Time of day to anchor scheduled backups to, as 'HH:MM' on a 24-hour clock "
+            "in UTC (e.g. '03:00'). Slots then sit on a fixed grid from that time, so a "
+            "daily backup lands at it every day. Unset leaves the schedule rolling: due "
+            "whenever an interval has passed since the last run."
+        ),
+    )
     migration_allowed_s3_endpoints: list[str] | str = Field(
         default_factory=list,
         description=(
