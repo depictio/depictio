@@ -509,6 +509,16 @@ spec:
                   name: {{ .Release.Name }}-depictio-secrets
                   key: DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD
                   optional: true
+            # Public-mode access code. Same reasoning as the bootstrap admin
+            # password: a shared secret has no business in the ConfigMap.
+            # optional, so an unset code leaves the var absent rather than
+            # empty, which is what the backend reads as "no code required".
+            - name: DEPICTIO_AUTH_PUBLIC_ACCESS_CODE
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-depictio-secrets
+                  key: DEPICTIO_AUTH_PUBLIC_ACCESS_CODE
+                  optional: true
             - name: DEPICTIO_BOOTSTRAP_SEED_TEST_USER
               valueFrom:
                 secretKeyRef:

@@ -75,6 +75,14 @@ secrets:
   seedTestUser: false
   testUserEmail: "test_user@example.com"
   testUserPassword: "test_pwd"
+  # Shared access code gating public mode (DEPICTIO_AUTH_PUBLIC_ACCESS_CODE).
+  # Only meaningful with backend.env.DEPICTIO_AUTH_PUBLIC_MODE=true, where it
+  # turns "anyone who loads the page gets a session" into "anyone who knows the
+  # code does". It lives under secrets (not backend.env) because it is a shared
+  # secret: ConfigMaps are readable by anything in-cluster and sit unencrypted
+  # in etcd by default. Everyone who enters it still gets their own throwaway
+  # user, so it is a door code, not an account.
+  publicAccessCode: ""
 
 local_development: false # Set to true for local development
 
