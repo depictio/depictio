@@ -15,7 +15,7 @@ from typing import Any, Literal, cast
 from urllib.parse import quote, urlsplit
 
 import boto3
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError, ClientError
 from bson import ObjectId
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
@@ -735,52 +735,82 @@ async def import_project_zip(
 
     contents = await file.read()
     buf = io.BytesIO(contents)
-    try:
-        with zipfile.ZipFile(buf) as zf:
-            bundle_data = json.loads(zf.read("bundle.json"))
-            migrate_metadata = json.loads(zf.read("migrate_metadata.json"))
 
-            # Restore S3 data files bundled in the ZIP back to MinIO at original paths
-            s3_keys = [n for n in zf.namelist() if n.startswith("s3_data/")]
-            if s3_keys and not dry_run:
-                s3_client = boto3.client(
-                    "s3",
-                    endpoint_url=settings.minio.endpoint_url,
-                    aws_access_key_id=settings.minio.aws_access_key_id,
-                    aws_secret_access_key=settings.minio.aws_secret_access_key,
-                    region_name="us-east-1",
-                    verify=settings.minio.verify_tls,
-                )
-                uploaded = 0
-                for zip_path in s3_keys:
-                    s3_key = zip_path[len("s3_data/") :]  # strip prefix to get original path
-                    if not s3_key:
-                        continue
-                    # Zip-slip guard: the ZIP can contain absolute paths or
-                    # ``..`` segments that would let an attacker upload arbitrary
-                    # objects outside the intended bundle prefix. Reject anything
-                    # that doesn't normalise to a clean relative S3 key.
-                    if (
-                        s3_key.startswith("/")
-                        or ".." in s3_key.split("/")
-                        or s3_key != os.path.normpath(s3_key).replace(os.sep, "/")
-                    ):
-                        logger.warning("Refusing to restore suspicious S3 key from ZIP: %s", s3_key)
-                        continue
-                    try:
-                        s3_client.put_object(
-                            Bucket=settings.minio.bucket,
-                            Key=s3_key,
-                            Body=zf.read(zip_path),
-                        )
-                        uploaded += 1
-                        logger.debug("Restored S3 object: %s", s3_key)
-                    except ClientError as e:
-                        logger.error("Failed to restore S3 object %s: %s", s3_key, e)
-                logger.info("Migrate import: restored %d S3 objects to MinIO", uploaded)
+    # Parsing the archive and restoring its payload to object storage are two
+    # different failures and are kept apart deliberately: they used to share one
+    # try block, so an unreachable S3 endpoint surfaced as "Invalid ZIP bundle"
+    # and sent the operator hunting a corrupt export that was in fact fine.
+    try:
+        zf = zipfile.ZipFile(buf)
+        bundle_data = json.loads(zf.read("bundle.json"))
+        migrate_metadata = json.loads(zf.read("migrate_metadata.json"))
     except Exception as e:
-        logger.error("migrate import-zip: failed to parse/restore ZIP bundle: %s", e)
+        logger.error("migrate import-zip: failed to parse ZIP bundle: %s", e)
         raise HTTPException(status_code=400, detail="Invalid ZIP bundle")
+
+    with zf:
+        # Restore S3 data files bundled in the ZIP back to MinIO at original paths
+        s3_keys = [n for n in zf.namelist() if n.startswith("s3_data/")]
+        if s3_keys and not dry_run:
+            s3_client = boto3.client(
+                "s3",
+                endpoint_url=settings.minio.endpoint_url,
+                aws_access_key_id=settings.minio.aws_access_key_id,
+                aws_secret_access_key=settings.minio.aws_secret_access_key,
+                region_name="us-east-1",
+                verify=settings.minio.verify_tls,
+            )
+            uploaded = 0
+            failures: list[str] = []
+            for zip_path in s3_keys:
+                s3_key = zip_path[len("s3_data/") :]  # strip prefix to get original path
+                if not s3_key:
+                    continue
+                # Zip-slip guard: the ZIP can contain absolute paths or
+                # ``..`` segments that would let an attacker upload arbitrary
+                # objects outside the intended bundle prefix. Reject anything
+                # that doesn't normalise to a clean relative S3 key.
+                if (
+                    s3_key.startswith("/")
+                    or ".." in s3_key.split("/")
+                    or s3_key != os.path.normpath(s3_key).replace(os.sep, "/")
+                ):
+                    logger.warning("Refusing to restore suspicious S3 key from ZIP: %s", s3_key)
+                    continue
+                try:
+                    s3_client.put_object(
+                        Bucket=settings.minio.bucket,
+                        Key=s3_key,
+                        Body=zf.read(zip_path),
+                    )
+                    uploaded += 1
+                    logger.debug("Restored S3 object: %s", s3_key)
+                except ClientError as e:
+                    logger.error("Failed to restore S3 object %s: %s", s3_key, e)
+                    failures.append(f"{s3_key}: {e}")
+                # BotoCoreError covers the connection-level failures ClientError
+                # does not, chiefly EndpointConnectionError from a dead or
+                # misconfigured endpoint. No later object recovers from that, so
+                # stop instead of paying the connect timeout once per file.
+                except BotoCoreError as e:
+                    logger.error("Aborting S3 restore, endpoint unusable: %s", e)
+                    failures.append(f"{s3_key}: {e}")
+                    break
+            logger.info("Migrate import: restored %d S3 objects to MinIO", uploaded)
+
+            # Abort before touching Mongo. Importing the metadata of a project
+            # whose data files never landed would leave a project that lists
+            # collections it cannot read, which is worse than not importing it.
+            if failures:
+                raise HTTPException(
+                    status_code=502,
+                    detail=(
+                        f"ZIP bundle is valid, but only {uploaded} of {len(s3_keys)} data "
+                        f"files could be written to object storage at "
+                        f"{settings.minio.endpoint_url}. Nothing was imported. "
+                        f"First error: {failures[0]}"
+                    ),
+                )
 
     bundle = {"data": bundle_data, "migrate_metadata": migrate_metadata}
     import_request = MigrateImportRequest(

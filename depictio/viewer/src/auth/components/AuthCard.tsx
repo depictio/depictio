@@ -24,9 +24,13 @@ interface Props {
 export default function AuthCard({ heading, children }: Props) {
   const branding = useBranding();
   const logoMode = useBrandLogoMode();
-  const resolvedHeading = branding?.app_name
-    ? heading.replace('Depictio', branding.app_name)
-    : heading;
+  // The space before the colon is a normal break opportunity, so a heading long
+  // enough to wrap (any instance name longer than "Depictio") leaves the colon
+  // stranded alone on the second line. A non-breaking space keeps it welded to
+  // the last word; the heading still wraps, just never on that final space.
+  const resolvedHeading = (
+    branding?.app_name ? heading.replace('Depictio', branding.app_name) : heading
+  ).replace(' :', '\u00A0:');
 
   return (
     <Paper
