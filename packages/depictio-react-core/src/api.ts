@@ -3706,6 +3706,202 @@ export async function cleanExampleProjects(): Promise<{ deleted: ExampleProject[
   return { deleted };
 }
 
+// ---- Admin backup & restore (/backup) -----------------------------------
+//
+// Back the admin Backups tab. All endpoints are admin-gated server side.
+// Restore is destructive (per-collection wipe-and-replace) — the UI runs
+// validation first and gates the real restore behind a typed confirmation.
+
+/** One entry from GET /backup/list. */
+export interface AdminBackupEntry {
+  backup_id: string;
+  filename: string;
+  size_mb: number;
+  created: string;
+  created_by: string;
+  total_documents: number;
+  collections: string[];
+  depictio_version?: string | null;
+  /** False for legacy backups without a .sha256 sidecar; restoring those
+   *  requires allow_unverified. */
+  has_checksum?: boolean;
+  /** True for snapshots taken by the scheduler rather than by an admin. */
+  is_automatic?: boolean;
+  /** Set only on the backup this deployment's data was last restored from.
+   *  ISO timestamp with an explicit UTC offset. */
+  restored_at?: string | null;
+  restored_by?: string | null;
+}
+
+/** GET/PUT /backup/schedule — the scheduled-backup config in force.
+ *  Env vars supply the deployment default; anything saved from the admin UI
+ *  overrides it and is what the running scheduler reads. */
+export interface BackupScheduleStatus {
+  enabled: boolean;
+  interval_hours: number;
+  /** 0 means backups are kept forever. */
+  retention_days: number;
+  /** Grandfather-father-son tiers applied past retention_days: one backup kept
+   *  per ISO week for `weekly_weeks`, then one per calendar month for
+   *  `monthly_months`. 0 turns a tier off; both at 0 is a plain age cutoff. */
+  weekly_weeks: number;
+  monthly_months: number;
+  /** "HH:MM" UTC anchor the schedule's slots sit on. Null means a rolling
+   *  schedule: due whenever an interval has passed since the last run. */
+  time_of_day: string | null;
+  /** ISO timestamps with an explicit UTC offset; null before the first run. */
+  last_run: string | null;
+  next_run: string | null;
+  /** True once a value has been saved from the UI, overriding the env default. */
+  is_customized?: boolean;
+}
+
+export interface BackupCollectionValidation {
+  total: number;
+  valid: number;
+  invalid: number;
+  errors: string[];
+}
+
+export interface BackupValidationResult {
+  success: boolean;
+  message: string;
+  valid: boolean;
+  total_documents: number;
+  valid_documents: number;
+  invalid_documents: number;
+  collections_validated: Record<string, BackupCollectionValidation>;
+  errors: string[];
+  warnings: string[];
+}
+
+export interface BackupCreateResult {
+  success: boolean;
+  message: string;
+  backup_id: string | null;
+  total_documents: number;
+  collections_backed_up: string[];
+  filename: string | null;
+}
+
+export interface BackupUploadResult {
+  success: boolean;
+  message: string;
+  backup_id: string | null;
+  filename: string | null;
+  validation: BackupValidationResult | null;
+}
+
+export interface BackupRestoreResult {
+  success: boolean;
+  message: string;
+  restored_collections: Record<string, { count: number; status: string }>;
+  total_restored: number;
+  errors: string[];
+}
+
+export async function listBackups(): Promise<AdminBackupEntry[]> {
+  const res = await authFetch(`${API_BASE}/backup/list`);
+  if (!res.ok) await throwHttpError(res, 'Failed to list backups');
+  const data = await res.json();
+  return Array.isArray(data?.backups) ? (data.backups as AdminBackupEntry[]) : [];
+}
+
+export async function getBackupSchedule(): Promise<BackupScheduleStatus> {
+  const res = await authFetch(`${API_BASE}/backup/schedule`);
+  if (!res.ok) await throwHttpError(res, 'Failed to load the backup schedule');
+  return res.json();
+}
+
+/** Change the schedule. Only the provided fields are updated; the response is
+ *  the schedule in force afterwards. Takes effect without an API restart. */
+export async function updateBackupSchedule(update: {
+  enabled?: boolean;
+  intervalHours?: number;
+  retentionDays?: number;
+  weeklyWeeks?: number;
+  monthlyMonths?: number;
+  /** "HH:MM" UTC. Pass the empty string to clear the anchor; omit to leave it. */
+  timeOfDay?: string;
+}): Promise<BackupScheduleStatus> {
+  const res = await authFetch(`${API_BASE}/backup/schedule`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      enabled: update.enabled,
+      interval_hours: update.intervalHours,
+      retention_days: update.retentionDays,
+      weekly_weeks: update.weeklyWeeks,
+      monthly_months: update.monthlyMonths,
+      time_of_day: update.timeOfDay,
+    }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to update the backup schedule');
+  return res.json();
+}
+
+export async function createBackup(): Promise<BackupCreateResult> {
+  const res = await authFetch(`${API_BASE}/backup/create`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to create backup');
+  return res.json();
+}
+
+/** Download a backup file to the browser (blob + anchor click, like
+ *  `exportProjectZip`). */
+export async function downloadBackup(backupId: string): Promise<void> {
+  const res = await authFetch(`${API_BASE}/backup/download/${backupId}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to download backup');
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `depictio_backup_${backupId}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/** Upload a backup file; the server stores it as a first-class backup and
+ *  returns the validation result alongside the new server-side backup_id. */
+export async function uploadBackup(file: File): Promise<BackupUploadResult> {
+  const fd = new FormData();
+  fd.append('file', file, file.name);
+  const res = await authFetch(`${API_BASE}/backup/upload`, { method: 'POST', body: fd });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to upload backup');
+  return res.json();
+}
+
+export async function validateBackup(backupId: string): Promise<BackupValidationResult> {
+  const res = await authFetch(`${API_BASE}/backup/validate`, {
+    method: 'POST',
+    body: JSON.stringify({ backup_id: backupId }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to validate backup');
+  return res.json();
+}
+
+/** Restore a backup. DESTRUCTIVE unless dryRun — wipes and replaces every
+ *  restored collection. The server refuses backups that fail Pydantic
+ *  validation (no skip escape hatch is exposed to the UI on purpose). */
+export async function restoreBackup(
+  backupId: string,
+  opts: { dryRun?: boolean; allowUnverified?: boolean } = {},
+): Promise<BackupRestoreResult> {
+  const res = await authFetch(`${API_BASE}/backup/restore`, {
+    method: 'POST',
+    body: JSON.stringify({
+      backup_id: backupId,
+      dry_run: opts.dryRun ?? false,
+      allow_unverified: opts.allowUnverified ?? false,
+    }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to restore backup');
+  return res.json();
+}
+
 // ---- Admin "Log & Task" monitoring (/monitoring) ------------------------
 //
 // Back the admin Monitoring tab. All read endpoints are admin-gated server

@@ -784,7 +784,12 @@ def api_validate_backup(CLI_config: CLIConfig, backup_id: str) -> dict:
 
 @validate_call
 def api_restore_backup(
-    CLI_config: CLIConfig, backup_id: str, dry_run: bool = True, collections: list | None = None
+    CLI_config: CLIConfig,
+    backup_id: str,
+    dry_run: bool = True,
+    collections: list | None = None,
+    allow_unverified: bool = False,
+    skip_validation: bool = False,
 ) -> dict:
     """
     Restore from a backup on the server.
@@ -794,6 +799,8 @@ def api_restore_backup(
         backup_id (str): ID of the backup to restore from.
         dry_run (bool): If True, only simulate the restore without actually changing data.
         collections (list): List of collection names to restore. If None, restore all collections.
+        allow_unverified (bool): Allow restoring a legacy backup without a checksum sidecar.
+        skip_validation (bool): Skip the server-side Pydantic validation gate before restore.
 
     Returns:
         dict: Response containing restore operation results.
@@ -804,6 +811,12 @@ def api_restore_backup(
     payload = {"backup_id": backup_id, "dry_run": dry_run}
     if collections:
         payload["collections"] = collections
+    # Only sent when set, so the CLI stays compatible with older servers that
+    # reject unknown fields.
+    if allow_unverified:
+        payload["allow_unverified"] = True
+    if skip_validation:
+        payload["skip_validation"] = True
 
     try:
         response = get_http_client().post(

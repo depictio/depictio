@@ -795,7 +795,52 @@ class BackupConfig(BaseSettings):
     backup_s3_secret_key: Optional[str] = Field(default=None, description="Backup S3 secret key")
     backup_s3_region: str = Field(default="us-east-1", description="Backup S3 region")
     compress_local_backups: bool = Field(default=True, description="Compress local S3 data backups")
-    backup_file_retention_days: int = Field(default=30, description="Days to retain backup files")
+    backup_file_retention_days: int = Field(
+        default=30,
+        description=(
+            "Days to keep every backup file. First tier of the retention policy, applied "
+            "to the MongoDB backup directory after every backup (scheduled or manual). "
+            "Set to 0 to keep backups forever."
+        ),
+    )
+    backup_retention_weekly_weeks: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "Second retention tier: after backup_file_retention_days, keep one backup per "
+            "ISO week for this many weeks. 0 disables the tier, which makes retention a "
+            "plain age cutoff."
+        ),
+    )
+    backup_retention_monthly_months: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "Third retention tier: after the weekly tier, keep one backup per calendar "
+            "month for this many months. 0 disables the tier."
+        ),
+    )
+    auto_backup_enabled: bool = Field(
+        default=False,
+        description=(
+            "Run scheduled MongoDB backups in the background. Opt-in: a deployment that "
+            "has not sized its backup volume should not start filling it on upgrade."
+        ),
+    )
+    auto_backup_interval_hours: int = Field(
+        default=24,
+        ge=1,
+        description="Hours between scheduled backups when auto_backup_enabled is true.",
+    )
+    auto_backup_time_of_day: Optional[str] = Field(
+        default=None,
+        description=(
+            "Time of day to anchor scheduled backups to, as 'HH:MM' on a 24-hour clock "
+            "in UTC (e.g. '03:00'). Slots then sit on a fixed grid from that time, so a "
+            "daily backup lands at it every day. Unset leaves the schedule rolling: due "
+            "whenever an interval has passed since the last run."
+        ),
+    )
     migration_allowed_s3_endpoints: list[str] | str = Field(
         default_factory=list,
         description=(

@@ -349,3 +349,79 @@ class TestBackupCLI:
 
         assert result.exit_code == 1
         assert "Coverage check failed" in result.stdout
+
+
+class TestRestoreCLI:
+    """Test the backup restore CLI command."""
+
+    @patch("depictio.cli.cli.commands.backup.load_depictio_config")
+    @patch("depictio.cli.cli.commands.backup.api_login")
+    def test_restore_declined_confirmation_exits_cleanly(
+        self, mock_api_login, mock_load_config, runner
+    ):
+        """Declining the confirmation prompt must exit 0, not report a failure."""
+        mock_load_config.return_value = Mock()
+        mock_api_login.return_value = {"success": True, "is_admin": True}
+
+        result = runner.invoke(app, ["restore", "20250101_010101"], input="n\n")
+
+        assert result.exit_code == 0
+        assert "Restore cancelled" in result.stdout
+        assert "Restore operation failed" not in result.stdout
+
+    @patch("depictio.cli.cli.utils.api_calls.api_restore_backup")
+    @patch("depictio.cli.cli.commands.backup.load_depictio_config")
+    @patch("depictio.cli.cli.commands.backup.api_login")
+    def test_restore_forwards_safety_flags(
+        self, mock_api_login, mock_load_config, mock_api_restore, runner
+    ):
+        """--allow-unverified and --skip-validation are forwarded to the API call."""
+        mock_load_config.return_value = Mock()
+        mock_api_login.return_value = {"success": True, "is_admin": True}
+        mock_api_restore.return_value = {
+            "success": True,
+            "message": "Restored 0 documents from backup",
+            "restored_collections": {},
+            "total_restored": 0,
+            "errors": [],
+        }
+
+        result = runner.invoke(
+            app,
+            [
+                "restore",
+                "20250101_010101",
+                "--force",
+                "--allow-unverified",
+                "--skip-validation",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert "Restore completed successfully" in result.stdout
+        _args, kwargs = mock_api_restore.call_args
+        assert kwargs["allow_unverified"] is True
+        assert kwargs["skip_validation"] is True
+
+    @patch("depictio.cli.cli.utils.api_calls.api_restore_backup")
+    @patch("depictio.cli.cli.commands.backup.load_depictio_config")
+    @patch("depictio.cli.cli.commands.backup.api_login")
+    def test_restore_refused_by_validation_gate(
+        self, mock_api_login, mock_load_config, mock_api_restore, runner
+    ):
+        """A server-side validation refusal surfaces the message and errors."""
+        mock_load_config.return_value = Mock()
+        mock_api_login.return_value = {"success": True, "is_admin": True}
+        mock_api_restore.return_value = {
+            "success": False,
+            "message": "Backup failed model validation: 2 invalid document(s) ...",
+            "restored_collections": {},
+            "total_restored": 0,
+            "errors": ["Document 0 in users: invalid email"],
+        }
+
+        result = runner.invoke(app, ["restore", "20250101_010101", "--force"])
+
+        assert result.exit_code == 1
+        assert "failed model validation" in result.stdout
+        assert "Document 0 in users" in result.stdout

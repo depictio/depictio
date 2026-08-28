@@ -33,6 +33,7 @@ from depictio.api.v1.services.yaml_sync import (
     start_yaml_sync_services,
     stop_yaml_sync_services,
 )
+from depictio.api.v1.tasks.backup_tasks import start_backup_tasks
 from depictio.api.v1.tasks.cleanup_tasks import start_cleanup_tasks
 from depictio.api.v1.utils import clean_screenshots
 from depictio.models.models.analytics import UserActivity, UserSession
@@ -132,6 +133,11 @@ def start_background_services(should_initialize: bool):
     # Start cleanup tasks on every worker
     logger.info(f"Worker {WORKER_ID}: Starting cleanup tasks")
     start_cleanup_tasks()
+
+    # Scheduled backups. Started on every worker even when the schedule is off,
+    # so enabling it from the admin UI takes effect without a restart; the due
+    # time is claimed in MongoDB, so only one worker takes each backup.
+    start_backup_tasks()
 
     return background_task
 
