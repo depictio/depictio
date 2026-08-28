@@ -13,6 +13,15 @@ import './styles/realtime-highlight.css';
 export { default as DashboardGrid } from './components/DashboardGrid';
 export { default as PersistentSectionsHost } from './components/PersistentSectionsHost';
 export type { PersistentSectionsHostProps } from './components/PersistentSectionsHost';
+// The grid's own geometry + per-type default box, for consumers that render a
+// single component outside a grid and want the size it would really have.
+export {
+  GRID_COLS,
+  GRID_ROW_HEIGHT,
+  GRID_ROW_GAP,
+  gridBoxHeight,
+  defaultLayoutForType,
+} from './api';
 export { default as ComponentRenderer } from './components/ComponentRenderer';
 export { default as ErrorBoundary } from './components/ErrorBoundary';
 export { default as ComponentSkeleton } from './components/ComponentSkeleton';
@@ -59,6 +68,9 @@ export type {
   AttritionPayload,
   TrendPayload,
   UniquenessPayload,
+  // Exported for the same reason as the rest: a consumer that computes these
+  // payloads itself (Tool Studio, with no backend) has to name their shapes.
+  BreakdownPayload,
 } from './components/card/SecondaryMetrics';
 
 // Interactive renderers

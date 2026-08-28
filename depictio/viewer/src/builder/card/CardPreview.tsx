@@ -175,7 +175,16 @@ function useNumericPreview(
   enabled: boolean,
   filters: InteractiveFilter[],
 ): { payload: Record<string, unknown> | null; loading: boolean; error: string | null } {
-  const [payload, setPayload] = useState<Record<string, unknown> | null>(null);
+  // The payload is kept WITH the layout it was fetched for. The caller labels
+  // whatever comes back as `__<current layout>__`, and a layout change renders
+  // once before this effect can run — so a payload held on its own is handed to
+  // the next layout's metric component for that render. That is not cosmetic:
+  // switching threshold → completeness gave CompletenessMetric a
+  // ThresholdPayload, which read `filled` off it and took the builder down.
+  const [fetched, setFetched] = useState<{
+    layout: SecondaryLayout;
+    payload: Record<string, unknown> | null;
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const configKey = JSON.stringify(layoutConfig);
@@ -183,7 +192,7 @@ function useNumericPreview(
 
   useEffect(() => {
     if (!enabled || !dcId || !column) {
-      setPayload(null);
+      setFetched(null);
       setError(null);
       setLoading(false);
       return;
@@ -193,12 +202,12 @@ function useNumericPreview(
     setError(null);
     fetchCardMetric(dcId, layout, column, JSON.parse(configKey), ctrl.signal, filters)
       .then((res) => {
-        setPayload(res);
+        setFetched({ layout, payload: res });
         setLoading(false);
       })
       .catch((err: unknown) => {
         if ((err as { name?: string })?.name === 'AbortError') return;
-        setPayload(null);
+        setFetched({ layout, payload: null });
         setError(err instanceof Error ? err.message : String(err));
         setLoading(false);
       });
@@ -206,7 +215,15 @@ function useNumericPreview(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, dcId, column, layout, configKey, filterKey]);
 
-  return { payload, loading, error };
+  // Only the payload fetched for the CURRENT layout is visible to the caller;
+  // anything else is still in flight, and the caller shows its "Computing…"
+  // hint rather than mislabelling the previous layout's numbers.
+  const settled = fetched?.layout === layout;
+  return {
+    payload: settled ? fetched.payload : null,
+    loading: loading || !settled,
+    error,
+  };
 }
 
 /** The hero scalar under active dashboard filters.

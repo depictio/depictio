@@ -1,0 +1,3 @@
+# Copy to `.dev.vars` (gitignored) for `wrangler dev`. Holds the OAuth App client
+# secret locally so you can test the full popup flow without deploying.
+GH_CLIENT_SECRET=your-oauth-app-client-secret

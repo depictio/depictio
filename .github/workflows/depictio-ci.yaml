@@ -1552,16 +1552,24 @@ jobs:
                    "$TARGET/data/qiime2/taxonomy" \
                    "$TARGET/data/qiime2/rel_abundance_tables"
 
+          # nf-core-awsmegatests is a public third-party bucket that intermittently
+          # answers 503 (SlowDown). Under `bash -e` a single blip on any one of these
+          # files kills the whole job, so every download goes through a retrying fetch.
+          fetch() {
+            curl -fsSL --retry 5 --retry-delay 2 --retry-all-errors \
+                 --connect-timeout 15 --max-time 300 \
+                 "$S3_URL/$1" -o "$TARGET/$2"
+          }
+
           # Download all files needed by recipes + template
-          curl -fsSL "$S3_URL/input/Metadata_full.tsv" -o "$TARGET/input/Metadata_full.tsv"
-          curl -fsSL "$S3_URL/multiqc/multiqc_data/multiqc.parquet" -o "$TARGET/multiqc/multiqc_data/multiqc.parquet"
-          curl -fsSL "$S3_URL/qiime2/diversity/alpha_diversity/faith_pd_vector/metadata.tsv" -o "$TARGET/qiime2/diversity/alpha_diversity/faith_pd_vector/metadata.tsv"
-          curl -fsSL "$S3_URL/qiime2/alpha-rarefaction/faith_pd.csv" -o "$TARGET/qiime2/alpha-rarefaction/faith_pd.csv"
-          curl -fsSL "$S3_URL/qiime2/barplot/level-2.csv" -o "$TARGET/qiime2/barplot/level-2.csv"
-          curl -fsSL "$S3_URL/qiime2/rel_abundance_tables/rel-table-2.tsv" -o "$TARGET/qiime2/rel_abundance_tables/rel-table-2.tsv"
+          fetch "input/Metadata_full.tsv" "input/Metadata_full.tsv"
+          fetch "multiqc/multiqc_data/multiqc.parquet" "multiqc/multiqc_data/multiqc.parquet"
+          fetch "qiime2/diversity/alpha_diversity/faith_pd_vector/metadata.tsv" "qiime2/diversity/alpha_diversity/faith_pd_vector/metadata.tsv"
+          fetch "qiime2/alpha-rarefaction/faith_pd.csv" "qiime2/alpha-rarefaction/faith_pd.csv"
+          fetch "qiime2/barplot/level-2.csv" "qiime2/barplot/level-2.csv"
+          fetch "qiime2/rel_abundance_tables/rel-table-2.tsv" "qiime2/rel_abundance_tables/rel-table-2.tsv"
           for f in lfc_slice.csv p_val_slice.csv q_val_slice.csv w_slice.csv se_slice.csv; do
-            curl -fsSL "$S3_URL/qiime2/ancombc/differentials/Category-habitat-level-2/$f" \
-              -o "$TARGET/qiime2/ancombc/differentials/Category-habitat-level-2/$f"
+            fetch "qiime2/ancombc/differentials/Category-habitat-level-2/$f" "qiime2/ancombc/differentials/Category-habitat-level-2/$f"
           done
 
           # Phase E (added in feat(ampliseq) funnel restructure, commit 7b7db7ccf):
@@ -1570,9 +1578,9 @@ jobs:
           # recipe consumes taxonomy.tsv + rel-table-ASV.tsv. Without these files
           # `depictio-cli run --template` fails at Project validation
           # (ScanSingle.filename: file does not exist) before any step runs.
-          curl -fsSL "$S3_URL/qiime2/phylogenetic_tree/tree.nwk" -o "$TARGET/data/qiime2/phylogenetic_tree/tree.nwk"
-          curl -fsSL "$S3_URL/qiime2/taxonomy/taxonomy.tsv" -o "$TARGET/data/qiime2/taxonomy/taxonomy.tsv"
-          curl -fsSL "$S3_URL/qiime2/rel_abundance_tables/rel-table-ASV.tsv" -o "$TARGET/data/qiime2/rel_abundance_tables/rel-table-ASV.tsv"
+          fetch "qiime2/phylogenetic_tree/tree.nwk" "data/qiime2/phylogenetic_tree/tree.nwk"
+          fetch "qiime2/taxonomy/taxonomy.tsv" "data/qiime2/taxonomy/taxonomy.tsv"
+          fetch "qiime2/rel_abundance_tables/rel-table-ASV.tsv" "data/qiime2/rel_abundance_tables/rel-table-ASV.tsv"
 
           # Generate samplesheet from Metadata_full.tsv (ID column → sampleID)
           echo "sampleID" > "$TARGET/samplesheet.csv"

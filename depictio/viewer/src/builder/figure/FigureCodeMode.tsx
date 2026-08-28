@@ -37,6 +37,7 @@ import { useBuilderStore } from '../store/useBuilderStore';
 import { useColorScheme } from '../../hooks/useColorScheme';
 import { useDashboardAccess } from '../../hooks/useDashboardAccess';
 import { buildMetadata } from '../buildMetadata';
+import { useCodeModeEnvironment } from './codeModeEnvironment';
 
 const SAMPLE_CODE = `# Enter your Python/Plotly code here...
 # Available: df (DataFrame), px (plotly.express), pd (pandas), pl (polars)
@@ -127,6 +128,7 @@ const FigureCodeMode: React.FC = () => {
   const setCodeStatus = state.setCodeStatus;
   const setLastCodeFigure = state.setLastCodeFigure;
   const { colorScheme } = useColorScheme();
+  const environment = useCodeModeEnvironment();
   // Gate code editing: read-only in public/demo deployments and for users
   // who aren't owners of the dashboard. Server still authorizes Execute,
   // but disabling the affordances avoids surprise 403s and signals intent.
@@ -478,8 +480,15 @@ const FigureCodeMode: React.FC = () => {
 
       {/* Help — collapsible, all closed by default so the panel stays compact.
        *  `multiple` lets the user keep more than one section open if they're
-       *  cross-referencing (e.g., columns + examples while writing code). */}
-      <Accordion variant="separated" radius="md" multiple defaultValue={[]}>
+       *  cross-referencing (e.g., columns + examples while writing code). A
+       *  host that runs snippets elsewhere can ask for "About" to start open,
+       *  so its note is read rather than found. */}
+      <Accordion
+        variant="separated"
+        radius="md"
+        multiple
+        defaultValue={environment?.openAbout ? ['about'] : []}
+      >
         <Accordion.Item value="about">
           <Accordion.Control icon={<Icon icon="mdi:shield-check" width={18} />}>
             <Text fw={700} size="sm">
@@ -488,9 +497,13 @@ const FigureCodeMode: React.FC = () => {
           </Accordion.Control>
           <Accordion.Panel>
             <Stack gap="sm">
+              {/* A host that runs the snippet somewhere else (Tool Studio runs
+                  it in the browser) says so first — everything below describes
+                  depictio's server-side sandbox. */}
+              {environment?.note}
               <Text size="xs">
                 Code Mode lets you author the figure as Python code instead of
-                clicking through visualization parameters. Your code runs
+                clicking through visualization parameters. In depictio your code runs
                 server-side inside a sandbox built on{' '}
                 <Anchor
                   href="https://restrictedpython.readthedocs.io/"

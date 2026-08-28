@@ -68,7 +68,13 @@ const FIXED_CATEGORIES: CategoryDef[] = [
   },
 ];
 
-const FigureUIMode: React.FC = () => {
+interface FigureUIModeProps {
+  /** Hide the scatter cross-filter section (e.g. public/demo deployments or
+   *  no-backend reuse where cross-filtering has no dashboard context). */
+  hideCrossFilter?: boolean;
+}
+
+const FigureUIMode: React.FC<FigureUIModeProps> = ({ hideCrossFilter = false }) => {
   const visuType = useBuilderStore((s) => s.visuType);
   const setVisuType = useBuilderStore((s) => s.setVisuType);
   const figureParamSpecs = useBuilderStore((s) => s.figureParamSpecs);
@@ -324,7 +330,9 @@ const FigureUIMode: React.FC = () => {
          *  per-bin envelopes with no useful filter target, so we hide the
          *  toggle entirely on those. FigureRenderer + ComponentRenderer
          *  enforce the same gate defensively for legacy metadata. */}
-        {cachedSpec && (visuType === 'scatter' || visuType === 'scatter_3d') && (
+        {cachedSpec &&
+          !hideCrossFilter &&
+          (visuType === 'scatter' || visuType === 'scatter_3d') && (
           <CrossFilterSection
             enabled={Boolean(config.selection_enabled)}
             onEnabledChange={(checked) =>

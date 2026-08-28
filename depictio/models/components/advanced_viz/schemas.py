@@ -15,7 +15,7 @@ from __future__ import annotations
 import difflib
 import re
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 from depictio.models.components.advanced_viz.configs import (
     EmbeddingConfig,
@@ -895,3 +895,140 @@ __all__ = [
     "suggest_viz_kinds",
     "validate_binding",
 ]
+
+# ---------------------------------------------------------------------------
+# Kind descriptors — what the builder's viz-kind picker shows
+# ---------------------------------------------------------------------------
+
+# Lives here rather than in the API route that serves it because two consumers
+# need it and only one of them can import FastAPI: `GET /advanced_viz/kinds`
+# (the running app) and `depictio dev catalog kinds --json` (the snapshot Tool
+# Studio ships, so its picker matches the app's with no backend). It is data,
+# not behaviour — label, one-line description, icon, and the "tool" flag for
+# the kinds that compute a statistic before plotting it.
+KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
+    "phylogenetic": {
+        "label": "Phylogenetic tree",
+        "description": "Newick tree + tip metadata (Microreact-style): 5 layouts, tip search, subtree highlight.",
+        "icon": "tabler:hierarchy-3",
+    },
+    "volcano": {
+        "label": "Volcano plot",
+        "description": "Effect size vs significance, threshold lines, search & top-N labels.",
+        "icon": "tabler:chart-scatter",
+    },
+    "embedding": {
+        "label": "Embedding / clustering",
+        "description": (
+            "2D/3D sample embedding (PCA / UMAP / t-SNE / PCoA) — accepts a "
+            "pre-computed DC (dim_1, dim_2 columns) or runs the reduction "
+            "live on a wide sample×feature matrix DC via Celery."
+        ),
+        "icon": "tabler:atom",
+    },
+    "manhattan": {
+        "label": "Manhattan plot",
+        "description": "chr / pos / score scatter — works for true GWAS, peak qvalues, and variant AF.",
+        "icon": "tabler:chart-histogram",
+        "category": "tool",
+    },
+    "stacked_taxonomy": {
+        "label": "Stacked taxonomy",
+        "description": "Per-sample stacked relative-abundance bar with rank dropdown.",
+        "icon": "tabler:chart-pie",
+    },
+    "rarefaction": {
+        "label": "Rarefaction curves",
+        "description": "Alpha-diversity vs sequencing depth — one line per sample with ±SE band and group colouring.",
+        "icon": "tabler:chart-line",
+    },
+    "da_barplot": {
+        "label": "Differential-abundance bars (tool)",
+        "description": (
+            'Ranked signed-LFC top-N features for differential abundance — `contrast_view: "all"` '
+            "(default) faceted small-multiples, or any specific contrast value for a single-panel drill-in. "
+            "Replaces the previous ancombc_differentials kind (auto-migrated)."
+        ),
+        "icon": "tabler:chart-bar-popular",
+        "category": "tool",
+    },
+    "enrichment": {
+        "label": "GSEA / pathway enrichment (tool)",
+        "description": "Dot plot: term on y, NES on x, dot size = gene-set size, colour = -log10(padj).",
+        "icon": "tabler:chart-dots",
+        "category": "tool",
+    },
+    "complex_heatmap": {
+        "label": "ComplexHeatmap (clustered)",
+        "description": "Clustered heatmap with dendrograms + annotation tracks. Server-side clustering via plotly-complexheatmap, dispatched as a Celery task.",
+        "icon": "tabler:grid-pattern",
+    },
+    "upset_plot": {
+        "label": "UpSet plot",
+        "description": "Set-intersection visualisation (alternative to Venn diagrams). Server-side compute via plotly-upset, dispatched as a Celery task.",
+        "icon": "tabler:chart-bar-popular",
+    },
+    "ma": {
+        "label": "MA plot",
+        "description": "Mean log intensity vs log2 fold change — same hits as a volcano, classic DE / proteomics layout.",
+        "icon": "tabler:chart-bell",
+    },
+    "dot_plot": {
+        "label": "Dot plot",
+        "description": "scanpy / Seurat marker dot plot: cluster × gene with size = fraction expressing, colour = mean expression.",
+        "icon": "tabler:circle-dot",
+    },
+    "lollipop": {
+        "label": "Lollipop / needle plot",
+        "description": "Variant tracks along genes: vertical stems coloured by consequence, marker size = effect.",
+        "icon": "tabler:chart-arcs",
+    },
+    "qq": {
+        "label": "QQ plot",
+        "description": "Quantile-quantile of -log10(p) vs uniform null — standard p-value distribution QC.",
+        "icon": "tabler:chart-line",
+    },
+    "sunburst": {
+        "label": "Sunburst",
+        "description": "Hierarchical taxonomy / pathway viewer — concentric rings from root to leaf.",
+        "icon": "tabler:sun",
+    },
+    "oncoplot": {
+        "label": "Oncoplot",
+        "description": "Sample × gene mutation matrix with discrete mutation-type colours and frequency strips.",
+        "icon": "tabler:grid-pattern",
+    },
+    "coverage_track": {
+        "label": "Coverage track",
+        "description": "Read depth / signal along a coordinate axis. Optional per-sample faceting and categorical annotation lane (gene region, peak class, …).",
+        "icon": "tabler:chart-area-line",
+    },
+    "sankey": {
+        "label": "Sankey (categorical flow)",
+        "description": "Flow across N ordered categorical levels (e.g. sample → lineage → clade). Server-side aggregation, client-side colour / opacity tweaks.",
+        "icon": "tabler:chart-sankey",
+    },
+}
+
+
+def kind_descriptors() -> list[dict[str, Any]]:
+    """Every advanced-viz kind as the builder's picker consumes it.
+
+    `roles` carries the per-role accepted dtypes (required + optional) so the
+    builder drives its binding dropdowns and validation from here rather than
+    duplicating the dtype tables in TypeScript. `required_roles` is kept for
+    backwards compatibility.
+    """
+    return [
+        {
+            "viz_kind": kind,
+            "label": meta["label"],
+            "description": meta["description"],
+            "icon": meta["icon"],
+            "required_roles": list(CANONICAL_SCHEMAS[kind].keys()),
+            "roles": role_dtype_specs(kind),
+            # Entries without an explicit category are pure visualisations.
+            "category": meta.get("category", "plot"),
+        }
+        for kind, meta in KIND_METADATA.items()
+    ]

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Signing in…</title>
+    <meta name="robots" content="noindex" />
+  </head>
+  <body style="font-family: system-ui, sans-serif; padding: 2rem; color: #555">
+    <p>Completing GitHub sign-in — you can close this window.</p>
+    <script>
+      // OAuth popup callback: hand the `code` (+ `state`) back to the opener and
+      // close. The opener (Tool Studio) validates `state`, exchanges the code
+      // for a token via the worker, and drives the PR — so the main window keeps
+      // all of the authored entry (no full-page redirect that would wipe it).
+      (function () {
+        var params = new URLSearchParams(window.location.search);
+        var payload = {
+          source: 'depictio-oauth',
+          code: params.get('code'),
+          state: params.get('state'),
+          error: params.get('error'),
+        };
+        if (window.opener) {
+          window.opener.postMessage(payload, window.location.origin);
+          window.close();
+        } else {
+          document.body.innerHTML =
+            '<p>Sign-in complete, but this window was not opened by Tool Studio. Please close it and retry.</p>';
+        }
+      })();
+    </script>
+  </body>
+</html>

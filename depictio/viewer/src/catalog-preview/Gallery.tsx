@@ -514,9 +514,24 @@ const Gallery: React.FC<{ tools: ToolEntry[]; onOpen: (id: string) => void; them
             </Text>
           </Box>
         </Group>
-        <Badge variant="light" size="lg" color={ACCENT} radius="sm">
-          {tools.length} tools · {totalOutputs} outputs
-        </Badge>
+        <Group gap="sm" wrap="nowrap">
+          <Badge variant="light" size="lg" color={ACCENT} radius="sm">
+            {tools.length} tools · {totalOutputs} outputs
+          </Badge>
+          {/* Tool Studio — the no-backend web app to author a new tool entry.
+              Hosted on GitHub Pages from the depictio-tool-studio showcase repo. */}
+          <Button
+            component="a"
+            href="https://depictio.github.io/depictio-tool-studio/"
+            target="_blank"
+            rel="noreferrer"
+            variant="light"
+            color={ACCENT}
+            leftSection={<Icon icon="mdi:plus-box-outline" width={18} />}
+          >
+            Contribute a tool
+          </Button>
+        </Group>
       </Group>
 
       <Paper withBorder radius="md" p="md" mt="md" bg="var(--mantine-color-default-hover)">

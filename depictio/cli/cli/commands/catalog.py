@@ -7,12 +7,30 @@ that grounds every `renders_as` role against the recipe's real output columns.
 
 from __future__ import annotations
 
+import contextlib
+import sys
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
 app = typer.Typer()
+
+
+@contextlib.contextmanager
+def _stdout_off_the_wire() -> Iterator[None]:
+    """Keep incidental library output off stdout while building a `--json` payload.
+
+    depictio's logger writes to stdout, so a single DEBUG line in front of the
+    payload makes the output unparseable. `genKinds.ts` only checks that stdout
+    starts with `{`, so a polluted stream is not an error there — it silently
+    falls back to the stale committed snapshot. Redirect during collection; the
+    payload itself is written after the block.
+    """
+    with contextlib.redirect_stdout(sys.stderr):
+        yield
+
 
 # Maintainer / CI commands (catalog authoring, index maintenance, schema export).
 # Mounted under the hidden top-level `dev` group — kept out of the user-facing
@@ -243,6 +261,50 @@ def catalog_columns(
     render_records_table([{"Column": c} for c in cols], title=f"Output columns of {recipe}")
 
 
+def _check_fixture_sanity(entries) -> list[str]:
+    """Catch fixtures that ground the bindings but say nothing about the tool.
+
+    Both cases have shipped: a fixture with a header and no data (grounds every
+    column name, proves nothing), and a demo table pasted in from somewhere else
+    — the same file under two different tools. Column-level relevance is a human
+    judgement, but "empty" and "this is literally another tool's fixture" are not.
+    """
+    import hashlib
+
+    problems: list[str] = []
+    # digest -> (tool id, output id) of the first output that used it.
+    by_digest: dict[str, tuple[str, str]] = {}
+    for entry in entries:
+        for out in entry.outputs:
+            path = out.fixture_file()
+            if not path:
+                continue
+            try:
+                data = path.read_bytes()
+            except OSError as exc:
+                problems.append(f"{out.id}: fixture {out.fixture} → {exc}")
+                continue
+            # Header + at least one data row. Parquet is binary; leave it alone.
+            if path.suffix in (".tsv", ".csv"):
+                rows = [line for line in data.splitlines() if line.strip()]
+                if len(rows) < 2:
+                    problems.append(
+                        f"{out.id}: fixture {out.fixture} has no data rows — it grounds every "
+                        "binding while showing nothing about the output"
+                    )
+            digest = hashlib.sha256(data).hexdigest()
+            twin = by_digest.get(digest)
+            # Sharing a fixture between two outputs of the SAME tool is normal
+            # (one file, two views of it); sharing across tools is a copy-paste.
+            if twin is not None and twin[0] != entry.id:
+                problems.append(
+                    f"{out.id}: fixture {out.fixture} is byte-identical to {twin[1]}'s — a "
+                    "fixture must be a sample of THIS output"
+                )
+            by_digest.setdefault(digest, (entry.id, out.id))
+    return problems
+
+
 @dev_app.command("validate")
 def catalog_validate(
     path: Annotated[
@@ -261,8 +323,9 @@ def catalog_validate(
         CATALOG_DIR,
         CatalogEntry,
         check_existence,
+        ground_render_dtypes,
         load_entries_from_dir,
-        read_fixture_columns,
+        read_fixture_schema,
         recipe_output_columns,
     )
     from depictio.models.components.advanced_viz.catalog import (
@@ -283,19 +346,28 @@ def catalog_validate(
 
     # nf-core module + EDAM term existence (against the vendored indices).
     problems: list[str] = check_existence(entries)
+    # A fixture is what every binding is grounded against, so a placeholder one
+    # makes the whole entry meaningless while still passing every other check.
+    problems.extend(_check_fixture_sanity(entries))
     # Ground each render's bound columns against the real data shape:
     # the fixture (most complete) > the recipe's EXPECTED_SCHEMA > declared columns.
+    # Beyond name existence, dtypes are checked too (advanced_viz roles + numeric
+    # card aggregations) via `ground_render_dtypes`.
     for entry in entries:
         for out in entry.outputs:
             source = ""
+            col_dtypes: dict[str, str] = {}
             fx = out.fixture_file()
             if fx:
                 try:
-                    available = set(read_fixture_columns(fx))
+                    col_dtypes = read_fixture_schema(fx)
+                    available = set(col_dtypes)
                     source = f"fixture {out.fixture}"
                 except Exception as exc:
                     problems.append(f"{out.id}: fixture {out.fixture} → {exc}")
                     continue
+                # Author-declared dtypes are authoritative over CSV inference.
+                col_dtypes.update(out.columns)
             elif out.recipe:
                 try:
                     available = set(recipe_output_columns(out.recipe))
@@ -304,7 +376,8 @@ def catalog_validate(
                     problems.append(f"{out.id}: recipe {out.recipe} → {exc}")
                     continue
             elif out.columns:
-                available = set(out.columns)
+                col_dtypes = dict(out.columns)
+                available = set(col_dtypes)
                 source = "declared columns"
             else:
                 continue  # nothing to ground against (non-tabular / binding-less)
@@ -315,6 +388,8 @@ def catalog_validate(
                         f"{out.id} render {r.kind or r.component}: binds "
                         f"{sorted(missing)} absent from {source} {sorted(available)}"
                     )
+                    continue
+                problems.extend(ground_render_dtypes(out.id, r, col_dtypes))
     if problems:
         typer.echo(f"  INVALID ({target}):")
         for p in problems:
@@ -382,8 +457,8 @@ def catalog_refresh_index() -> None:
     """Regenerate the vendored existence indices from authoritative sources.
 
     Needs network (run by a maintainer, not in offline CI): fetches the
-    nf-core/modules list and the EDAM term list, and rewrites
-    `depictio/catalog/_index/{nf_core_modules,edam_terms}.txt`.
+    nf-core/modules list, the EDAM term list and the MultiQC module list, and
+    rewrites `depictio/catalog/_index/{nf_core_modules,edam_terms,multiqc_modules}.txt`.
     """
     import csv
     import io
@@ -396,8 +471,29 @@ def catalog_refresh_index() -> None:
         with urllib.request.urlopen(url, timeout=60) as resp:  # noqa: S310
             return resp.read()
 
+    # Modules referenced by bundled catalog entries but absent from
+    # nf-core/modules master (e.g. ampliseq-local qiime2) live below this marker
+    # and are preserved across refreshes so a refresh doesn't invalidate them.
+    local_marker = "# --- catalog-local (preserved across refresh) ---"
+
+    def _preserved_local(path: Path) -> list[str]:
+        if not path.exists():
+            return []
+        after = False
+        kept: list[str] = []
+        for line in path.read_text().splitlines():
+            if line.startswith(local_marker):
+                after = True
+                continue
+            s = line.strip()
+            if after and s and not s.startswith("#"):
+                kept.append(s)
+        return kept
+
     # nf-core modules: paths like modules/nf-core/<module>/main.nf
     try:
+        nf_path = INDEX_DIR / "nf_core_modules.txt"
+        local = _preserved_local(nf_path)
         tree = json.loads(
             _get("https://api.github.com/repos/nf-core/modules/git/trees/master?recursive=1")
         )
@@ -408,12 +504,16 @@ def catalog_refresh_index() -> None:
                 if e["path"].startswith("modules/nf-core/") and e["path"].endswith("/main.nf")
             }
         )
-        (INDEX_DIR / "nf_core_modules.txt").write_text(
+        extras = sorted(m for m in local if m not in set(modules))
+        text = (
             "# Authoritative nf-core module paths (generated by `catalog refresh-index`).\n"
             + "\n".join(modules)
             + "\n"
         )
-        typer.echo(f"  nf_core_modules.txt: {len(modules)} modules")
+        if extras:
+            text += "\n" + local_marker + "\n" + "\n".join(extras) + "\n"
+        nf_path.write_text(text)
+        typer.echo(f"  nf_core_modules.txt: {len(modules)} modules (+{len(extras)} catalog-local)")
     except Exception as exc:
         typer.echo(f"  FAILED nf-core: {exc}")
         raise typer.Exit(code=1)
@@ -441,9 +541,58 @@ def catalog_refresh_index() -> None:
         typer.echo(f"  FAILED EDAM: {exc}")
         raise typer.Exit(code=1)
 
+    # MultiQC modules: one directory per supported tool under multiqc/modules/.
+    # A tool MultiQC already parses usually reaches depictio through the MultiQC
+    # integration, so Tool Studio warns before someone hand-authors a second,
+    # parallel entry for it. Advisory only: it never blocks authoring.
+    try:
+        tree = json.loads(
+            _get("https://api.github.com/repos/MultiQC/MultiQC/git/trees/main?recursive=1")
+        )
+        prefix = "multiqc/modules/"
+        mqc = sorted(
+            {
+                name
+                for e in tree.get("tree", [])
+                if e.get("type") == "tree"
+                and e["path"].startswith(prefix)
+                and "/" not in (name := e["path"][len(prefix) :])
+                and not name.startswith("__")
+            }
+        )
+        (INDEX_DIR / "multiqc_modules.txt").write_text(
+            "# MultiQC modules (generated by `catalog refresh-index`).\n"
+            "# Advisory index: a tool listed here is already parsed by MultiQC.\n"
+            + "\n".join(mqc)
+            + "\n"
+        )
+        typer.echo(f"  multiqc_modules.txt: {len(mqc)} modules")
+    except Exception as exc:
+        typer.echo(f"  FAILED MultiQC: {exc}")
+        raise typer.Exit(code=1)
+
+
+# The three shapes a catalog YAML can take, and the model that describes each.
+# A folder splits an entry across files, so `module.yaml` and `<output>.yaml`
+# each need their OWN schema: pointing them at the whole-entry schema (which
+# requires `outputs` and forbids extras) makes every editor flag them as invalid.
+_SCHEMA_MODELS = {
+    "entry": ("CatalogEntry", "a flat single-file entry (tool fields + `outputs`)"),
+    "module": ("CatalogTool", "a folder's `module.yaml` (tool identity only)"),
+    "output": ("CatalogOutput", "a folder's `<output>.yaml` (find/recipe/renders_as)"),
+}
+
 
 @dev_app.command("schema")
 def catalog_schema(
+    model: Annotated[
+        str,
+        typer.Option(
+            "--model",
+            "-m",
+            help=f"Which shape to describe: {', '.join(_SCHEMA_MODELS)} (default: entry).",
+        ),
+    ] = "entry",
     output: Annotated[
         str | None,
         typer.Option("--output", "-o", help="Write the JSON Schema here (default: stdout)"),
@@ -452,11 +601,274 @@ def catalog_schema(
     """Emit the JSON Schema for a catalog file (regenerate the committed copy)."""
     import json
 
-    from depictio.models.components.advanced_viz.catalog import CatalogEntry
+    import depictio.models.components.advanced_viz.catalog as catalog_models
 
-    text = json.dumps(CatalogEntry.model_json_schema(), indent=2) + "\n"
+    if model not in _SCHEMA_MODELS:
+        typer.echo(f"  Unknown --model {model!r}; expected one of {', '.join(_SCHEMA_MODELS)}")
+        raise typer.Exit(code=1)
+    class_name, _description = _SCHEMA_MODELS[model]
+    text = json.dumps(getattr(catalog_models, class_name).model_json_schema(), indent=2) + "\n"
     if output:
         Path(output).write_text(text)
-        typer.echo(f"  Wrote JSON Schema to {output}")
+        typer.echo(f"  Wrote {model} JSON Schema to {output}")
+    else:
+        typer.echo(text)
+
+
+# advanced_viz kinds whose renderer computes server-side (Celery / heavy libs),
+# so a purely client-side tool (e.g. tool-studio) cannot preview them — it
+# must show a "verify in depictio" badge instead of a live plot.
+_HEAVY_KINDS = frozenset({"embedding", "complex_heatmap", "upset_plot", "sankey", "oncoplot"})
+
+
+@dev_app.command("kinds")
+def catalog_kinds(
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Emit a machine-readable JSON map (for tool-studio)."),
+    ] = False,
+    output: Annotated[
+        str | None,
+        typer.Option("--output", "-o", help="Write the JSON here (default: stdout)"),
+    ] = None,
+) -> None:
+    """Emit the advanced_viz kind descriptors (source for tool-studio's kinds.json).
+
+    Shape: ``{"kinds": [ {viz_kind, label, description, icon, category,
+    required_roles, roles: {role: {required, dtypes, description}}, heavy} ]}``
+    — byte for byte what ``GET /advanced_viz/kinds`` returns, plus ``heavy``.
+
+    That equality is the point: Tool Studio has no backend, so its viz-kind
+    picker reads this snapshot where the app reads the endpoint. It used to
+    read a narrower map (roles flattened to a dtype list, a title-cased label,
+    no description or icon), which is why its picker could not be depictio's.
+    ``heavy`` and ``role_names`` are the studio's two additions: those kinds
+    are computed by a Celery worker and cannot be previewed client-side at all,
+    and the role-name aliases let a backend-less picker rank kinds the way
+    ``suggest_viz_kinds`` does server-side.
+    """
+    import json
+
+    from depictio.models.components.advanced_viz.schemas import ROLE_NAMES, kind_descriptors
+
+    kinds = [
+        {
+            **descriptor,
+            "heavy": descriptor["viz_kind"] in _HEAVY_KINDS,
+            # Column names each role commonly goes by. The server ranks kinds
+            # against a DC with `suggest_viz_kinds`; a backend-less consumer has
+            # to rank them itself, and dtype alone puts every kind at 100%.
+            "role_names": {
+                role: sorted(names)
+                for role, names in ROLE_NAMES.get(descriptor["viz_kind"], {}).items()
+            },
+        }
+        for descriptor in kind_descriptors()
+    ]
+    kinds.sort(key=lambda k: k["viz_kind"])
+
+    if not as_json:
+        # Human-readable summary.
+        for kind in kinds:
+            flag = " (heavy — no client preview)" if kind["heavy"] else ""
+            typer.echo(f"{kind['viz_kind']}{flag}: {', '.join(kind['roles'])}")
+        return
+
+    text = json.dumps({"kinds": kinds}, indent=2, sort_keys=True) + "\n"
+    if output:
+        Path(output).write_text(text)
+        typer.echo(f"  Wrote kinds JSON to {output}")
+    else:
+        typer.echo(text)
+
+
+@dev_app.command("manifest")
+def catalog_manifest(
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the machine-readable JSON (for tool-studio)."),
+    ] = False,
+    output: Annotated[
+        str | None,
+        typer.Option("--output", "-o", help="Write the JSON here (default: stdout)"),
+    ] = None,
+) -> None:
+    """Emit a JSON snapshot of the existing catalog (source for tool-studio's
+    catalog.json). Powers duplicate detection ("this tool already exists") and
+    "add a visualization to an existing tool" — so the web app can compare the
+    wizard against what is already in `depictio/catalog/` offline.
+
+    Per tool: identity + outputs; per output: id/slug/path_glob, declared
+    columns, existing `renders_as`, the repo-relative YAML path and its raw text
+    (so the app can append a render and open an update PR), and — when the
+    fixture is a small co-located CSV/TSV — its content, so new renders ground
+    and preview client-side exactly like an upload.
+    """
+    import json
+
+    import yaml as _yaml
+
+    from depictio.models.components.advanced_viz.catalog import (
+        CATALOG_DIR,
+        load_entries_from_dir,
+    )
+
+    repo_root = CATALOG_DIR.parents[1]
+
+    def _rel(path: Path | None) -> str | None:
+        if path is None:
+            return None
+        try:
+            return str(path.relative_to(repo_root))
+        except ValueError:
+            return str(path)
+
+    def _output_file(src_dir: Path | None, out_id: str) -> tuple[Path | None, str | None]:
+        """The output's own YAML file in a folder-based tool (matched by id)."""
+        if src_dir is None or not src_dir.is_dir():
+            return None, None
+        for path in sorted(src_dir.glob("*.yaml")):
+            if path.name == "module.yaml":
+                continue
+            try:
+                raw = path.read_text()
+                if isinstance(data := _yaml.safe_load(raw), dict) and data.get("id") == out_id:
+                    return path, raw
+            except Exception:
+                continue
+        return None, None
+
+    def _fixture_text(path: Path | None) -> str | None:
+        """Embed a representative sample of a co-located CSV/TSV fixture (header +
+        up to 200 rows) so new renders ground + preview client-side without
+        bloating the bundle. Parquet / non-text fixtures stay null."""
+        try:
+            if not (path and path.exists() and path.suffix.lower() in {".csv", ".tsv"}):
+                return None
+            lines = path.read_text().splitlines()
+            return "\n".join(lines[:201]) + "\n" if lines else None
+        except Exception:
+            return None
+
+    tools: list[dict[str, object]] = []
+    for entry in load_entries_from_dir(CATALOG_DIR):
+        outs: list[dict[str, object]] = []
+        tool_dir: Path | None = None
+        for o in entry.outputs:
+            tool_dir = o._source_dir or tool_dir
+            yaml_path, raw = _output_file(o._source_dir, o.id)
+            dump = o.model_dump(mode="json", exclude_none=True)
+            outs.append(
+                {
+                    **dump,
+                    "slug": o.id.removeprefix(f"{entry.id}_"),
+                    "path_glob": o.find.path_glob,
+                    "yamlPath": _rel(yaml_path),
+                    "rawYaml": raw,
+                    "fixtureContent": _fixture_text(o.fixture_file()),
+                }
+            )
+        tools.append(
+            {
+                "id": entry.id,
+                "name": entry.name,
+                "description": entry.description,
+                "homepage": entry.homepage,
+                "nf_core_url": entry.nf_core_url,
+                "biotools_url": entry.biotools_url,
+                "dir": _rel(tool_dir),
+                "outputs": outs,
+            }
+        )
+
+    payload = {"tools": tools}
+    if not as_json:
+        for t in tools:
+            n = sum(
+                len(o["renders_as"]) for o in t["outputs"] if isinstance(o.get("renders_as"), list)
+            )  # type: ignore[arg-type]
+            typer.echo(f"{t['id']}: {len(t['outputs'])} output(s), {n} render(s)")
+        return
+
+    text = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    if output:
+        Path(output).write_text(text)
+        typer.echo(f"  Wrote catalog manifest to {output}")
+    else:
+        typer.echo(text)
+
+
+@dev_app.command("figure-params")
+def catalog_figure_params(
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the machine-readable JSON (for tool-studio)."),
+    ] = False,
+    output: Annotated[
+        str | None,
+        typer.Option("--output", "-o", help="Write the JSON here (default: stdout)"),
+    ] = None,
+) -> None:
+    """Emit the figure builder's visualization list + per-viz parameter specs.
+
+    This is the exact payload the React figure builder fetches from
+    ``/figure/visualizations`` and ``/figure/parameter-discovery/{viz_type}``.
+    Tool Studio seeds its builder store with this snapshot so depictio's real
+    figure UI renders offline (no backend). Shape::
+
+        { "visualizations": [ {name, label, description, icon, group}, ... ],
+          "params": { "<viz_type>": <VisualizationDefinition JSON>, ... } }
+
+    Derived from the pure Plotly-Express introspection in
+    ``depictio/api/v1/services/figure/{definitions,parameter_discovery}.py`` —
+    the drift-free source the web app snapshots at build time.
+    """
+    import json
+
+    visualizations: list[dict[str, object]] = []
+    params: dict[str, object] = {}
+    failed: list[str] = []
+    # Parameter discovery logs to stdout on import; keep it off the JSON stream.
+    with _stdout_off_the_wire():
+        from depictio.api.v1.services.figure.definitions import (
+            get_available_visualizations,
+            get_visualization_definition,
+        )
+
+        for v in get_available_visualizations():
+            group = v.group.value if hasattr(v.group, "value") else str(v.group)
+            visualizations.append(
+                {
+                    "name": v.name,
+                    "label": v.label,
+                    "description": v.description,
+                    "icon": v.icon,
+                    "group": group,
+                }
+            )
+            try:
+                viz_def = get_visualization_definition(v.name.lower())
+                params[v.name.lower()] = viz_def.model_dump(mode="json")
+            except Exception as exc:  # a single bad viz shouldn't sink the snapshot
+                failed.append(v.name)
+                typer.echo(f"  WARN: parameter discovery failed for {v.name!r}: {exc}", err=True)
+    # A partial snapshot silently degrades the offline figure builder, so make it
+    # a hard failure rather than a warning nobody reads.
+    if failed:
+        typer.echo(f"  INVALID: parameter discovery failed for {sorted(failed)}", err=True)
+        raise typer.Exit(code=1)
+
+    payload = {"visualizations": visualizations, "params": params}
+
+    if not as_json:
+        for item in visualizations:
+            n = len(params.get(str(item["name"]).lower(), {}).get("parameters", []))  # type: ignore[union-attr]
+            typer.echo(f"{item['name']}: {n} parameters")
+        return
+
+    text = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    if output:
+        Path(output).write_text(text)
+        typer.echo(f"  Wrote figure-params JSON to {output}")
     else:
         typer.echo(text)

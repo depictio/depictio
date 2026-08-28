@@ -47,6 +47,10 @@
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/depictio/depictio)
 
+## Contribute a tool
+
+[![Tool Studio](https://img.shields.io/badge/tool%20studio-open-7C3AED?style=flat-square&logo=github)](https://depictio.github.io/depictio-tool-studio/)
+
 </div>
 
 Depictio is a self-hosrd modern, interactive platform that enables dashboards creation from bioinformatics workflows outputs.

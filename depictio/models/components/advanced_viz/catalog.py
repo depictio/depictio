@@ -38,6 +38,7 @@ from depictio.models.components.types import (
     AggregationFunction,
     ChartType,
     ComponentType,
+    InteractiveType,
 )
 
 CATALOG_DIR = Path(__file__).resolve().parents[3] / "catalog"
@@ -69,11 +70,14 @@ def _check_identity_urls(
     nf_core_url: str | None,
     biotools_url: str | None,
     edam: dict[str, list[str]],
+    source_url: str | None = None,
 ) -> None:
     """Validate identity references point at the right authority (offline check).
 
     Format-level only: guarantees well-formed bio.tools / nf-core / EDAM refs.
     Existence (the term/module is real) is a CI step against a vendored index.
+    `source_url` (Snakemake/Galaxy fetch origin) has no authority to check
+    against, so only its scheme is asserted.
     """
     if biotools_url and not biotools_url.startswith("https://bio.tools/"):
         raise ValueError(f"biotools_url must be a https://bio.tools/ URL, got {biotools_url!r}")
@@ -81,6 +85,8 @@ def _check_identity_urls(
         raise ValueError(
             f"nf_core_url must point at github.com/nf-core/modules/..., got {nf_core_url!r}"
         )
+    if source_url and not source_url.startswith(("http://", "https://")):
+        raise ValueError(f"source_url must be an http(s):// URL, got {source_url!r}")
     for category, urls in edam.items():  # category -> expected EDAM prefix
         for url in urls:
             if not url.startswith(f"http://edamontology.org/{category}_"):
@@ -108,6 +114,60 @@ ALLOWED_DTYPES: frozenset[str] = frozenset(
         "List",
     }
 )
+
+
+# Roles a kind binds as an ordered LIST of columns rather than a single one.
+# `buildAdvancedVizConfigBlob` (viewer) maps them onto the list-typed config
+# fields — `steps` → ``SankeyConfig.step_cols``, `ranks` → ``rank_cols``,
+# `value_columns` / `row_annotation_cols` → the ComplexHeatmap fields of the
+# same name. Mirrors depictio/viewer/src/builder/advanced_viz/configBlob.ts;
+# without them the builder could bind a sankey the catalog had no way to spell,
+# so the binding was dropped on export and the render could never work.
+_LIST_ROLES: dict[str, frozenset[str]] = {
+    "sankey": frozenset({"steps"}),
+    "sunburst": frozenset({"ranks"}),
+    "complex_heatmap": frozenset({"value_columns", "row_annotation_cols"}),
+}
+
+# Roles that pick a *setting* rather than a column, so they are accepted as
+# bindings but never grounded against the data shape.
+_NON_COLUMN_ROLES: dict[str, frozenset[str]] = {
+    "embedding": frozenset({"compute_method"}),
+}
+
+
+def role_config_key(kind: str | None, role: str) -> str:
+    """The per-kind config field a role binds to.
+
+    The Python twin of `buildAdvancedVizConfigBlob`
+    (depictio/viewer/src/builder/advanced_viz/configBlob.ts): most roles become
+    ``<role>_col``, the list-typed ones have their own field names, and
+    `compute_method` is a scalar setting. Kept here so the catalog preview
+    payload and the `use:` inheritance both spell a binding the same way the
+    builder does — a mismatch silently hands the renderer an unknown key.
+    """
+    if kind == "sunburst" and role == "ranks":
+        return "rank_cols"
+    if kind == "sankey" and role == "steps":
+        return "step_cols"
+    if kind == "complex_heatmap" and role == "index":
+        # ComplexHeatmapConfig's row-id field is `index_column`, not `index_col`.
+        return "index_column"
+    if role in ("value_columns", "row_annotation_cols", "compute_method"):
+        return role
+    return f"{role}_col"
+
+
+def _allowed_roles(kind: AdvancedVizKind) -> set[str]:
+    """Every role name a kind accepts: required + optional (the vocabulary the
+    builder's binding panel offers), plus its list-typed and setting roles."""
+    from depictio.models.components.advanced_viz.schemas import role_dtype_specs
+
+    return (
+        set(role_dtype_specs(kind))
+        | set(_LIST_ROLES.get(kind, frozenset()))
+        | set(_NON_COLUMN_ROLES.get(kind, frozenset()))
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -138,7 +198,10 @@ class Render(BaseModel):
       code mode (`code`: an inline snippet that sets `fig`, depictio's
       figure `code_content`).
     - `card` → `column` + `aggregation` (a metric/KPI).
-    - `multiqc`/`table`/… → no extra binding.
+    - `interactive` → `interactive_type` + `column_name`, the two fields
+      `InteractiveLiteComponent` requires to instantiate a filter control.
+    - `table` → optional display options mirroring `TableLiteComponent`.
+    - `multiqc`/`text`/… → no extra binding.
 
     An optional `id` makes the render a first-class, tool-unique handle so a
     dashboard can address it directly with ``use: <tool>/<render-id>`` — no need
@@ -152,7 +215,9 @@ class Render(BaseModel):
     component: ComponentKind
     # advanced_viz
     kind: AdvancedVizKind | None = None
-    roles: dict[str, str] = Field(default_factory=dict)  # viz role -> column
+    # viz role -> column, or -> ordered column list for the few list-typed
+    # roles (see `_LIST_ROLES`).
+    roles: dict[str, str | list[str]] = Field(default_factory=dict)
     # figure
     visu_type: ChartType | None = None  # UI mode: box/scatter/bar/histogram…
     dict_kwargs: dict[str, str] = Field(default_factory=dict)  # plotly-express kwargs
@@ -173,6 +238,19 @@ class Render(BaseModel):
     attrition_cols: list[str] = Field(default_factory=list)  # stages for =attrition
     trend_col: str | None = None  # ordered axis for secondary_layout=trend
     filter_expr: str | None = None  # optional polars pre-filter
+    # interactive — both are required by InteractiveLiteComponent, so a render
+    # carrying neither could not be turned into a filter control at all.
+    interactive_type: InteractiveType | None = None  # Select/MultiSelect/Slider/…
+    column_name: str | None = None  # column the control filters on
+    # table — optional display options, mirroring TableLiteComponent field for
+    # field. All default to "unset" so a bare `{component: table}` still means
+    # "every column, defaults", which is what the committed entries say.
+    columns: list[str] = Field(default_factory=list)  # displayed columns (empty = all)
+    page_size: int | None = Field(default=None, ge=1, le=500)
+    sortable: bool | None = None
+    filterable: bool | None = None
+    row_selection_enabled: bool | None = None  # row selection filters other components
+    row_selection_column: str | None = None  # column extracted from selected rows
     # multiqc
     section: str | None = None
 
@@ -180,7 +258,15 @@ class Render(BaseModel):
 
     def bound_columns(self) -> set[str]:
         """Columns this render binds to (for grounding against the data shape)."""
-        cols = set(self.roles.values())
+        cols: set[str] = set()
+        settings = _NON_COLUMN_ROLES.get(self.kind or "", frozenset())
+        for role, value in self.roles.items():
+            if role in settings:
+                continue  # a setting (e.g. embedding's reduction), not a column
+            if isinstance(value, list):
+                cols |= {c for c in value if c}
+            elif value:
+                cols.add(value)
         cols |= {v for k, v in self.dict_kwargs.items() if k in _FIGURE_COLUMN_KWARGS}
         if self.column:
             cols.add(self.column)
@@ -189,6 +275,11 @@ class Render(BaseModel):
         if self.trend_col:
             cols.add(self.trend_col)
         cols |= {c for c in self.attrition_cols if c}
+        if self.column_name:
+            cols.add(self.column_name)
+        cols |= {c for c in self.columns if c}
+        if self.row_selection_column:
+            cols.add(self.row_selection_column)
         return cols  # NB: `code`-mode figures are free-form → not grounded
 
     @model_validator(mode="after")
@@ -198,14 +289,38 @@ class Render(BaseModel):
         if c == "advanced_viz":
             if not self.kind:
                 raise ValueError("renders_as advanced_viz requires a 'kind'")
-            from depictio.models.components.advanced_viz.schemas import CANONICAL_SCHEMAS
-
-            unknown = set(self.roles) - set(CANONICAL_SCHEMAS.get(self.kind, {}))
+            # Validated against the kind's FULL role vocabulary — required and
+            # optional — because that is what the builder's binding panel
+            # offers. Checking only the canonical (required) roles rejected
+            # every optional binding a user could make there, e.g. a volcano's
+            # `label` or an embedding's `color`.
+            allowed = _allowed_roles(self.kind)
+            unknown = set(self.roles) - allowed
             if unknown:
                 raise ValueError(
                     f"renders_as {self.kind}: unknown role(s) {sorted(unknown)}; "
-                    f"valid roles: {sorted(CANONICAL_SCHEMAS.get(self.kind, {}))}"
+                    f"valid roles: {sorted(allowed)}"
                 )
+            list_roles = _LIST_ROLES.get(self.kind, frozenset())
+            for role, value in self.roles.items():
+                if isinstance(value, list) and role not in list_roles:
+                    raise ValueError(
+                        f"renders_as {self.kind}: role '{role}' binds one column, not a list"
+                    )
+                if role in list_roles and not isinstance(value, list):
+                    raise ValueError(
+                        f"renders_as {self.kind}: role '{role}' binds a list of columns"
+                    )
+            # A sankey without its steps cannot be built at all: `step_cols` is
+            # required with >=2 entries on SankeyConfig, and nothing downstream
+            # can infer them. Failing here says so while the entry is being
+            # authored rather than when the dashboard renders nothing.
+            if self.kind == "sankey":
+                steps = self.roles.get("steps")
+                if not isinstance(steps, list) or len(steps) < 2:
+                    raise ValueError(
+                        "renders_as sankey requires 'roles.steps' with at least 2 columns"
+                    )
         else:
             if self.kind is not None:
                 raise ValueError(f"'kind' is only valid for component=advanced_viz, not {c}")
@@ -261,6 +376,29 @@ class Render(BaseModel):
             )
         ):
             raise ValueError(f"card fields are only valid for component=card, not {c}")
+        # interactive: the widget + the column it filters on
+        if c == "interactive":
+            if not (self.interactive_type and self.column_name):
+                raise ValueError(
+                    "renders_as interactive requires 'interactive_type' and 'column_name'"
+                )
+        elif self.interactive_type or self.column_name:
+            raise ValueError(
+                f"interactive fields are only valid for component=interactive, not {c}"
+            )
+        # table: every option is optional, so there is nothing to require —
+        # only to keep off the other component types.
+        if c != "table" and any(
+            (
+                self.columns,
+                self.page_size,
+                self.sortable is not None,
+                self.filterable is not None,
+                self.row_selection_enabled is not None,
+                self.row_selection_column,
+            )
+        ):
+            raise ValueError(f"table fields are only valid for component=table, not {c}")
         return self
 
 
@@ -362,6 +500,10 @@ class CatalogTool(BaseModel):
     name: str
     description: str = ""
     homepage: str | None = None
+    # Where a non-nf-core source (Snakemake wrapper / Galaxy tool) was fetched
+    # from — kept distinct from `homepage` (the tool's own upstream page). No
+    # authority check: any source, so only well-formedness is asserted.
+    source_url: str | None = None
     nf_core_url: str | None = None
     biotools_url: str | None = None
     edam_topics: list[str] = Field(default_factory=list)
@@ -370,7 +512,12 @@ class CatalogTool(BaseModel):
 
     @model_validator(mode="after")
     def _identity_urls(self) -> CatalogTool:
-        _check_identity_urls(self.nf_core_url, self.biotools_url, {"topic": self.edam_topics})
+        _check_identity_urls(
+            self.nf_core_url,
+            self.biotools_url,
+            {"topic": self.edam_topics},
+            self.source_url,
+        )
         return self
 
 
@@ -483,7 +630,13 @@ def load_index(name: str) -> set[str]:
 
 def _nf_core_module(url: str | None) -> str | None:
     if url and "/modules/nf-core/" in url:
-        return url.split("/modules/nf-core/", 1)[1].rstrip("/")
+        module = url.split("/modules/nf-core/", 1)[1].rstrip("/")
+        # Accept a URL that points at the module's meta.yml / main.nf (what the
+        # nf-core docs link to) — the module path is the parent directory.
+        for suffix in ("/meta.yml", "/main.nf"):
+            if module.endswith(suffix):
+                module = module[: -len(suffix)]
+        return module
     return None
 
 
@@ -525,12 +678,35 @@ def check_existence(entries: tuple[CatalogEntry, ...] | list[CatalogEntry]) -> l
 
 def read_fixture_columns(path: Path) -> list[str]:
     """Read the column header of a fixture file (csv/tsv/parquet)."""
+    return list(read_fixture_schema(path).keys())
+
+
+def _dtype_name(dtype: object) -> str:
+    """Base polars dtype name, without its parameters.
+
+    ``str(pl.Datetime)`` renders as ``Datetime(time_unit='us', time_zone=None)``
+    and ``List(Int64)`` likewise, but `ALLOWED_DTYPES` and the role dtype specs
+    both speak base names. Left parametrised, a parquet fixture's datetime or
+    list column could never match anything, so every binding to one was reported
+    as a dtype error.
+    """
+    return str(dtype).split("(", 1)[0]
+
+
+def read_fixture_schema(path: Path) -> dict[str, str]:
+    """Read a fixture's ``{column: polars-dtype-name}`` schema (csv/tsv/parquet).
+
+    For text fixtures dtypes are polars-inferred (up to 10k rows). Used by
+    `validate` to ground each render's bindings against the real dtypes, not
+    just the column names.
+    """
     import polars as pl
 
     if path.suffix == ".parquet":
-        return list(pl.read_parquet_schema(path).keys())
+        return {name: _dtype_name(dtype) for name, dtype in pl.read_parquet_schema(path).items()}
     sep = "\t" if path.suffix == ".tsv" else ","
-    return pl.read_csv(path, separator=sep, n_rows=0).columns
+    schema = pl.read_csv(path, separator=sep, infer_schema_length=10_000).schema
+    return {name: _dtype_name(dtype) for name, dtype in schema.items()}
 
 
 def recipe_output_columns(recipe_ref: str) -> list[str]:
@@ -539,6 +715,66 @@ def recipe_output_columns(recipe_ref: str) -> list[str]:
 
     module = load_recipe(recipe_ref)
     return list(module.EXPECTED_SCHEMA.keys())
+
+
+# Aggregations that are only meaningful on a numeric column. min/max/count/
+# nunique/mode work on any dtype, so they're intentionally excluded.
+_NUMERIC_AGGREGATIONS: frozenset[str] = frozenset(
+    {
+        "sum",
+        "average",
+        "median",
+        "range",
+        "variance",
+        "std_dev",
+        "percentile",
+        "skewness",
+        "kurtosis",
+    }
+)
+_NUMERIC_DTYPES: frozenset[str] = frozenset(
+    {"Int8", "Int16", "Int32", "Int64", "UInt8", "UInt16", "UInt32", "UInt64", "Float32", "Float64"}
+)
+
+
+def ground_render_dtypes(out_id: str, render: Render, col_dtypes: dict[str, str]) -> list[str]:
+    """Check a render's bound columns have *compatible dtypes*, not merely that
+    the names exist. advanced_viz roles are grounded against `role_dtype_specs`
+    (the same table the web builder uses); numeric card aggregations require a
+    numeric column. An empty `col_dtypes` (e.g. a recipe output with no dtype
+    info) skips the checks. Returns a list of problem strings (empty = ok)."""
+    from depictio.models.components.advanced_viz.schemas import role_dtype_specs
+
+    problems: list[str] = []
+    if not col_dtypes:
+        return problems
+
+    if render.component == "advanced_viz" and render.kind:
+        specs = role_dtype_specs(render.kind)
+        settings = _NON_COLUMN_ROLES.get(render.kind, frozenset())
+        for role, value in render.roles.items():
+            if role in settings:
+                continue
+            allowed = specs.get(role, {}).get("dtypes")
+            if not isinstance(allowed, list):
+                continue  # a list-typed role: no per-column dtype table to check
+            for col in value if isinstance(value, list) else [value]:
+                dt = col_dtypes.get(col)
+                if dt and dt not in allowed:
+                    problems.append(
+                        f"{out_id} render {render.kind}: role {role!r} → column {col!r} is "
+                        f"{dt}, but expects one of {allowed}"
+                    )
+
+    if render.component == "card" and render.column:
+        dt = col_dtypes.get(render.column)
+        for agg in (a for a in [render.aggregation, *render.aggregations] if a):
+            if agg in _NUMERIC_AGGREGATIONS and dt and dt not in _NUMERIC_DTYPES:
+                problems.append(
+                    f"{out_id} render card: aggregation {agg!r} needs a numeric column, "
+                    f"but {render.column!r} is {dt}"
+                )
+    return problems
 
 
 # ---------------------------------------------------------------------------

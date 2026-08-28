@@ -29,11 +29,7 @@ from depictio.api.v1.endpoints.user_endpoints.routes import (
     oauth2_scheme_optional,
 )
 from depictio.models.components.advanced_viz.sampling import SamplingPolicy
-from depictio.models.components.advanced_viz.schemas import (
-    CANONICAL_SCHEMAS,
-    role_dtype_specs,
-)
-from depictio.models.components.types import AdvancedVizKind
+from depictio.models.components.advanced_viz.schemas import kind_descriptors
 from depictio.models.models.base import PyObjectId
 
 logger = logging.getLogger(__name__)
@@ -138,133 +134,16 @@ def _apply_link_filters_to_payload(
         payload["filter_metadata"] = resolved
 
 
-_KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
-    "phylogenetic": {
-        "label": "Phylogenetic tree",
-        "description": "Newick tree + tip metadata (Microreact-style): 5 layouts, tip search, subtree highlight.",
-        "icon": "tabler:hierarchy-3",
-    },
-    "volcano": {
-        "label": "Volcano plot",
-        "description": "Effect size vs significance, threshold lines, search & top-N labels.",
-        "icon": "tabler:chart-scatter",
-    },
-    "embedding": {
-        "label": "Embedding / clustering",
-        "description": (
-            "2D/3D sample embedding (PCA / UMAP / t-SNE / PCoA) — accepts a "
-            "pre-computed DC (dim_1, dim_2 columns) or runs the reduction "
-            "live on a wide sample×feature matrix DC via Celery."
-        ),
-        "icon": "tabler:atom",
-    },
-    "manhattan": {
-        "label": "Manhattan plot",
-        "description": "chr / pos / score scatter — works for true GWAS, peak qvalues, and variant AF.",
-        "icon": "tabler:chart-histogram",
-        "category": "tool",
-    },
-    "stacked_taxonomy": {
-        "label": "Stacked taxonomy",
-        "description": "Per-sample stacked relative-abundance bar with rank dropdown.",
-        "icon": "tabler:chart-pie",
-    },
-    "rarefaction": {
-        "label": "Rarefaction curves",
-        "description": "Alpha-diversity vs sequencing depth — one line per sample with ±SE band and group colouring.",
-        "icon": "tabler:chart-line",
-    },
-    "da_barplot": {
-        "label": "Differential-abundance bars (tool)",
-        "description": (
-            'Ranked signed-LFC top-N features for differential abundance — `contrast_view: "all"` '
-            "(default) faceted small-multiples, or any specific contrast value for a single-panel drill-in. "
-            "Replaces the previous ancombc_differentials kind (auto-migrated)."
-        ),
-        "icon": "tabler:chart-bar-popular",
-        "category": "tool",
-    },
-    "enrichment": {
-        "label": "GSEA / pathway enrichment (tool)",
-        "description": "Dot plot: term on y, NES on x, dot size = gene-set size, colour = -log10(padj).",
-        "icon": "tabler:chart-dots",
-        "category": "tool",
-    },
-    "complex_heatmap": {
-        "label": "ComplexHeatmap (clustered)",
-        "description": "Clustered heatmap with dendrograms + annotation tracks. Server-side clustering via plotly-complexheatmap, dispatched as a Celery task.",
-        "icon": "tabler:grid-pattern",
-    },
-    "upset_plot": {
-        "label": "UpSet plot",
-        "description": "Set-intersection visualisation (alternative to Venn diagrams). Server-side compute via plotly-upset, dispatched as a Celery task.",
-        "icon": "tabler:chart-bar-popular",
-    },
-    "ma": {
-        "label": "MA plot",
-        "description": "Mean log intensity vs log2 fold change — same hits as a volcano, classic DE / proteomics layout.",
-        "icon": "tabler:chart-bell",
-    },
-    "dot_plot": {
-        "label": "Dot plot",
-        "description": "scanpy / Seurat marker dot plot: cluster × gene with size = fraction expressing, colour = mean expression.",
-        "icon": "tabler:circle-dot",
-    },
-    "lollipop": {
-        "label": "Lollipop / needle plot",
-        "description": "Variant tracks along genes: vertical stems coloured by consequence, marker size = effect.",
-        "icon": "tabler:chart-arcs",
-    },
-    "qq": {
-        "label": "QQ plot",
-        "description": "Quantile-quantile of -log10(p) vs uniform null — standard p-value distribution QC.",
-        "icon": "tabler:chart-line",
-    },
-    "sunburst": {
-        "label": "Sunburst",
-        "description": "Hierarchical taxonomy / pathway viewer — concentric rings from root to leaf.",
-        "icon": "tabler:sun",
-    },
-    "oncoplot": {
-        "label": "Oncoplot",
-        "description": "Sample × gene mutation matrix with discrete mutation-type colours and frequency strips.",
-        "icon": "tabler:grid-pattern",
-    },
-    "coverage_track": {
-        "label": "Coverage track",
-        "description": "Read depth / signal along a coordinate axis. Optional per-sample faceting and categorical annotation lane (gene region, peak class, …).",
-        "icon": "tabler:chart-area-line",
-    },
-    "sankey": {
-        "label": "Sankey (categorical flow)",
-        "description": "Flow across N ordered categorical levels (e.g. sample → lineage → clade). Server-side aggregation, client-side colour / opacity tweaks.",
-        "icon": "tabler:chart-sankey",
-    },
-}
-
-
 @advanced_viz_endpoint_router.get("/kinds")
 def list_kinds(current_user=Depends(get_user_or_anonymous)) -> list[dict[str, Any]]:
-    """Return the metadata payload the React builder uses to populate the viz_kind picker.
+    """The metadata payload the React builder populates its viz_kind picker from.
 
-    `roles` carries the per-role accepted dtypes (required + optional) so the
-    builder drives its binding dropdowns + validation from the backend instead
-    of duplicating the dtype tables in TypeScript. `required_roles` is kept for
-    backwards compatibility.
+    Composed in ``models.components.advanced_viz.schemas`` so the offline
+    snapshot Tool Studio ships (``depictio dev catalog kinds --json``) is the
+    same payload this endpoint returns — its picker would otherwise be a
+    lookalike built from a narrower map.
     """
-    return [
-        {
-            "viz_kind": kind,
-            "label": meta["label"],
-            "description": meta["description"],
-            "icon": meta["icon"],
-            "required_roles": list(CANONICAL_SCHEMAS[kind].keys()),
-            "roles": role_dtype_specs(kind),
-            # Entries without an explicit category are pure visualisations.
-            "category": meta.get("category", "plot"),
-        }
-        for kind, meta in _KIND_METADATA.items()
-    ]
+    return kind_descriptors()
 
 
 def _hash_sample(scan: Any, projection: list[str], total: int, cap: int) -> Any | None:

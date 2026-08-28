@@ -20,13 +20,17 @@ export const logoFor = (theme?: string) => (theme === 'dark' ? LOGO_WHITE_SRC : 
 export const CATALOG_ACCENT = 'violet';
 
 /** Component type → badge style, mirrored from depictio/dash/component_metadata.py
- *  (colors/icons kept in sync by hand to stay Dash-free). */
+ *  (colors/icons kept in sync by hand to stay Dash-free).
+ *
+ *  advanced_viz follows the builder's type grid (`builder/componentTypes.ts`)
+ *  rather than the Dash original: the old orange was MultiQC's orange, so the
+ *  two component types were indistinguishable wherever both appear. */
 export const COMPONENT_META: Record<string, { name: string; color: string; icon: string }> = {
   figure: { name: 'Figure', color: '#9966cc', icon: 'mdi:graph-box' },
   card: { name: 'Card', color: '#45b8ac', icon: 'formkit:number' },
   interactive: { name: 'Interactive', color: '#8bc34a', icon: 'bx:slider-alt' },
   table: { name: 'Table', color: '#6495ed', icon: 'octicon:table-24' },
-  advanced_viz: { name: 'Advanced viz', color: '#f68b33', icon: 'mdi:chart-scatter-plot' },
+  advanced_viz: { name: 'Advanced viz', color: '#d6336c', icon: 'mdi:chart-scatter-plot-hexbin' },
   multiqc: { name: 'MultiQC', color: '#f68b33', icon: 'mdi:chart-line' },
   map: { name: 'Map', color: '#7a5dc7', icon: 'mdi:map-marker-multiple' },
   image: { name: 'Image', color: '#e6779f', icon: 'mdi:image-area' },

@@ -136,7 +136,7 @@ console.log('\n=== 2. Configured: sends a well-formed anonymous event ===');
 let firstBody;
 {
   const { sent } = installEnv();
-  initTelemetry({ apiKey: 'phc_browser_loopback', source: 'catalog-studio', version: '1.2.2' });
+  initTelemetry({ apiKey: 'phc_browser_loopback', source: 'tool-studio', version: '1.2.2' });
   capture('studio_export', { format: 'yaml' });
 
   if (check('exactly one request', sent.length === 1, `${sent.length}`)) {
@@ -151,7 +151,7 @@ let firstBody;
       'person profiles suppressed, matching the Python senders',
       body.properties.$process_person_profile === false,
     );
-    check('source tag', body.properties.source === 'catalog-studio');
+    check('source tag', body.properties.source === 'tool-studio');
     check('version', body.properties.version === '1.2.2');
     check('caller property preserved', body.properties.format === 'yaml');
     check('timestamp present', typeof body.timestamp === 'string');
