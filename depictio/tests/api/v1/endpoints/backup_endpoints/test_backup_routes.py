@@ -75,8 +75,12 @@ class TestBackupEndpoints:
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.deltatables_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.runs_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.groups_collection")
+    @patch("depictio.api.v1.endpoints.backup_endpoints.routes.instance_settings_collection")
+    @patch("depictio.api.v1.endpoints.backup_endpoints.routes.branding_assets_collection")
     def test_create_backup_success(
         self,
+        mock_branding_assets,
+        mock_instance_settings,
         mock_groups,
         mock_runs,
         mock_deltatables,
@@ -109,6 +113,8 @@ class TestBackupEndpoints:
         mock_deltatables.find.return_value = []
         mock_runs.find.return_value = []
         mock_groups.find.return_value = []
+        mock_instance_settings.find.return_value = []
+        mock_branding_assets.find.return_value = []
 
         try:
             response = client.post("/backup/create", json={"include_s3_data": False})
@@ -133,8 +139,12 @@ class TestBackupEndpoints:
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.deltatables_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.runs_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.groups_collection")
+    @patch("depictio.api.v1.endpoints.backup_endpoints.routes.instance_settings_collection")
+    @patch("depictio.api.v1.endpoints.backup_endpoints.routes.branding_assets_collection")
     def test_create_backup_with_temporary_users_exclusion(
         self,
+        mock_branding_assets,
+        mock_instance_settings,
         mock_groups,
         mock_runs,
         mock_deltatables,
@@ -175,6 +185,10 @@ class TestBackupEndpoints:
         mock_runs.count_documents.return_value = 0
         mock_groups.find.return_value = []
         mock_groups.count_documents.return_value = 0
+        mock_instance_settings.find.return_value = []
+        mock_instance_settings.count_documents.return_value = 0
+        mock_branding_assets.find.return_value = []
+        mock_branding_assets.count_documents.return_value = 0
 
         try:
             response = client.post("/backup/create", json={"include_s3_data": False})
@@ -198,8 +212,12 @@ class TestBackupEndpoints:
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.deltatables_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.runs_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.groups_collection")
+    @patch("depictio.api.v1.endpoints.backup_endpoints.routes.instance_settings_collection")
+    @patch("depictio.api.v1.endpoints.backup_endpoints.routes.branding_assets_collection")
     async def test_backup_metadata_records_real_version(
         self,
+        mock_branding_assets,
+        mock_instance_settings,
         mock_groups,
         mock_runs,
         mock_deltatables,
@@ -229,6 +247,8 @@ class TestBackupEndpoints:
             mock_deltatables,
             mock_runs,
             mock_groups,
+            mock_instance_settings,
+            mock_branding_assets,
         ):
             mock_collection.find.return_value = []
             mock_collection.count_documents.return_value = 0
