@@ -17,6 +17,8 @@ export interface MapPanel {
   state: MapPanelState;
   setMode: (mode: MapPanelMode) => void;
   setCardSize: (size: MapPanelCardSize) => void;
+  /** Committed corner-resize size in pixels; `null`s restore the preset. */
+  setCardDims: (width: number | null, height: number | null) => void;
   setPosition: (x: number, y: number) => void;
   /** Committed dock height in pixels; `null` restores the default. */
   setDockHeight: (height: number | null) => void;
@@ -76,6 +78,7 @@ export function useMapPanel({
     state,
     setMode,
     setCardSize,
+    setCardDims,
     setPosition,
     setDockHeight,
     setDockCollapsed,
@@ -107,6 +110,7 @@ export function useMapPanel({
     state,
     setMode,
     setCardSize,
+    setCardDims,
     setPosition,
     setDockHeight,
     setDockCollapsed,

@@ -4080,6 +4080,7 @@ def _resolve_multiqc_sample_filter(
     if indirect_by_dc:
         from depictio.api.v1.db import projects_collection
         from depictio.api.v1.deltatables_utils import load_deltatable_lite
+        from depictio.models.models.links import resolve_link_tag_refs
 
         # Cross-DC filtering requires an explicit DCLink (metadata_dc_id ->
         # multiqc_dc_id). Without one we don't guess at conventional join-
@@ -4092,6 +4093,8 @@ def _resolve_multiqc_sample_filter(
             project_id = dashboard_data.get("project_id")
             if project_id:
                 project_doc = projects_collection.find_one({"_id": ObjectId(str(project_id))})
+                if project_doc:
+                    resolve_link_tag_refs(project_doc)
                 for lk in (project_doc or {}).get("links", []) or []:
                     if (
                         str(lk.get("target_dc_id")) == multiqc_dc_id_str
@@ -4823,6 +4826,45 @@ def _resolve_workflow_tags(component: dict, project_id: PyObjectId | None = None
                             f"to geojson_dc_id {dc['_id']}"
                         )
                         break
+
+            # Advanced-viz configs may bind EXTRA data collections by tag
+            # (e.g. the phylogenetic viz's `tree_dc_tag` / `metadata_dc_tag`).
+            # Template dashboards cannot know a fresh project's ObjectIds, so
+            # any `<base>_dc_tag` in the config overwrites the corresponding
+            # `<base>_dc_id` / `<base>_wf_id` with ids resolved in this
+            # workflow — the ids shipped in the YAML are seed-era leftovers.
+            config = component.get("config")
+            if isinstance(config, dict):
+                for key in [k for k in config if k.endswith("_dc_tag")]:
+                    extra_tag = config.get(key)
+                    if not extra_tag:
+                        continue
+                    base = key[: -len("_dc_tag")]
+                    resolved = next(
+                        (
+                            dc
+                            for dc in wf.get("data_collections", [])
+                            if dc.get("data_collection_tag") == extra_tag
+                        ),
+                        None,
+                    )
+                    if resolved is not None:
+                        config[f"{base}_dc_id"] = str(resolved["_id"])
+                        config[f"{base}_wf_id"] = str(wf["_id"])
+                        logger.debug(
+                            f"Resolved config {key}='{extra_tag}' to {base}_dc_id {resolved['_id']}"
+                        )
+                    else:
+                        # A named DC this project never materialised (an
+                        # optional DC skipped at ingest). Stale seed ids would
+                        # silently fetch ANOTHER project's data — an explicit
+                        # missing binding is the honest failure mode.
+                        config[f"{base}_dc_id"] = None
+                        config[f"{base}_wf_id"] = None
+                        logger.info(
+                            f"Config {key}='{extra_tag}' not found in workflow "
+                            f"'{wf.get('name')}' — cleared {base}_dc_id/{base}_wf_id"
+                        )
 
             return
 
@@ -6468,6 +6510,16 @@ def _funnel_init_data(dashboard_data: dict, dc_id: str) -> dict[str, dict] | Non
 
 
 def _funnel_is_multiqc_dc(dashboard_data: dict, dc_id: str) -> bool:
+    """Whether a DC is a MultiQC report — it has no Delta table to query.
+
+    The tab's own metadata answers this for a component the tab draws. It does
+    NOT answer it for a persistent filter fanned out from another tab: that
+    component's DC appears nowhere in this document, the check fell through to
+    False, and the funnel then tried to load a Delta table that does not exist
+    ("Error loading deltatable") — so the filter reported every value as still
+    available. Fall back to the MultiQC registry, which is what actually
+    decides the question.
+    """
     for m in dashboard_data.get("stored_metadata") or []:
         if str(m.get("dc_id")) == str(dc_id):
             dc_type = ((m.get("dc_config") or {}).get("type") or "").lower()
@@ -6475,7 +6527,19 @@ def _funnel_is_multiqc_dc(dashboard_data: dict, dc_id: str) -> bool:
                 return dc_type == "multiqc"
             if m.get("component_type") == "multiqc":
                 return True
-    return False
+
+    from depictio.api.v1.db import multiqc_collection as _mc
+
+    try:
+        return (
+            _mc.count_documents(
+                {"data_collection_id": {"$in": [str(dc_id), ObjectId(str(dc_id))]}}, limit=1
+            )
+            > 0
+        )
+    except Exception as exc:  # a registry hiccup must not blank the funnel
+        logger.debug(f"funnel: multiqc lookup failed for {dc_id}: {exc}")
+        return False
 
 
 def _funnel_multiqc_canonical_universe(dc_id: str) -> tuple[list[str], dict[str, list[str]]]:
@@ -6728,9 +6792,32 @@ def funnel_values_endpoint(
 
     active_filters = [f for f in filters if _funnel_filter_is_active(f)]
 
-    stored_meta_index = {
-        str(m.get("index")): m for m in (dashboard_data.get("stored_metadata") or [])
-    }
+    # Indexed over the whole tab FAMILY, not this document alone. A persistent
+    # filter section is declared on one tab and rendered on every tab of the
+    # family, so on any other tab its components are absent from this
+    # dashboard's `stored_metadata`: they were answered "unsupported", which
+    # the viewer reads as "no constraint" and shows every value as still
+    # available — on precisely the filters a reader is most likely to be
+    # narrowing. Floating components (the map panel) have the same shape and
+    # the same problem. `_funnel_init_data` already falls back to the Delta
+    # registry, so a foreign component's DC still resolves.
+    stored_meta_index: dict[str, dict] = {}
+    try:
+        _, family_tabs = _resolve_tab_family(
+            dashboard_id, current_user, {"stored_metadata": 1, "tab_order": 1}
+        )
+    except HTTPException:
+        family_tabs = []
+    for tab in family_tabs:
+        for m in tab.get("stored_metadata") or []:
+            index = str(m.get("index") or "")
+            if index and index not in stored_meta_index:
+                stored_meta_index[index] = m
+    # This tab wins any collision: the component it owns is the one on screen.
+    for m in dashboard_data.get("stored_metadata") or []:
+        index = str(m.get("index") or "")
+        if index:
+            stored_meta_index[index] = m
 
     targets: dict[str, dict] = {}
     for index in target_indexes:

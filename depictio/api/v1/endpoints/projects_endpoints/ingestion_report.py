@@ -120,6 +120,20 @@ class IngestionVariable(BaseModel):
     value: str
 
 
+class ProvenanceReportEntry(BaseModel):
+    source: str
+    key: str
+    value: str
+    highlight: bool = False
+
+
+class ProvenanceReportGroup(BaseModel):
+    """One display group of run-provenance entries (Cutadapt, DADA2, ...)."""
+
+    group: str
+    entries: list[ProvenanceReportEntry] = Field(default_factory=list)
+
+
 class IngestionDataCollection(BaseModel):
     data_collection_tag: str
     type: str | None = None
@@ -176,6 +190,10 @@ class IngestionReport(BaseModel):
     template: IngestionTemplate | None = None
     manifest_source: str = SOURCE_LIVE
     variables: list[IngestionVariable] = Field(default_factory=list)
+    # Pipeline run provenance (parameters, filtering thresholds, tool
+    # versions), grouped as the template's ProvenanceSpec laid them out.
+    run_provenance: list[ProvenanceReportGroup] = Field(default_factory=list)
+    run_provenance_files: list[str] = Field(default_factory=list)
     data_collections: list[IngestionDataCollection] = Field(default_factory=list)
     runs: list[IngestionRun] = Field(default_factory=list)
     summary: IngestionSummary = Field(default_factory=IngestionSummary)
@@ -430,6 +448,22 @@ def build_ingestion_report(project: dict) -> IngestionReport:
         for name, value in (template_origin.get("variables") or {}).items()
     ]
 
+    # Group the flat, pre-ordered entry list (order is part of the stored data:
+    # spec groups first, catch-alls last) into display groups.
+    run_provenance: list[ProvenanceReportGroup] = []
+    for entry in template_origin.get("run_provenance") or []:
+        group_name = str(entry.get("group") or "Other")
+        if not run_provenance or run_provenance[-1].group != group_name:
+            run_provenance.append(ProvenanceReportGroup(group=group_name))
+        run_provenance[-1].entries.append(
+            ProvenanceReportEntry(
+                source=str(entry.get("source") or ""),
+                key=str(entry.get("key") or ""),
+                value=str(entry.get("value") or ""),
+                highlight=bool(entry.get("highlight")),
+            )
+        )
+
     return IngestionReport(
         project=IngestionReportProject(
             id=str(project.get("_id") or project.get("id") or ""),
@@ -439,6 +473,8 @@ def build_ingestion_report(project: dict) -> IngestionReport:
         template=template,
         manifest_source=manifest_source,
         variables=variables,
+        run_provenance=run_provenance,
+        run_provenance_files=[str(f) for f in (template_origin.get("run_provenance_files") or [])],
         data_collections=dc_entries,
         runs=runs,
         summary=summary,

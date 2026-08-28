@@ -107,6 +107,11 @@ export interface FilterPanelProps {
   filterSections?: FilterSectionSpec[];
   /** Persisted per dashboard, so collapse state survives a reload. */
   dashboardId?: string | null;
+  /** Storage scope for the per-section collapse state. The apps pass the
+   *  dashboard *family* id (each tab is its own dashboard document, and a
+   *  section folded on one tab should stay folded on its siblings); falls back
+   *  to `dashboardId` while the family id is still resolving. */
+  stateScopeId?: string | null;
   refreshTick?: number;
   editMode?: boolean;
   /** Editor-only per-component actions (edit / duplicate / delete). */
@@ -130,6 +135,11 @@ export interface FilterPanelProps {
   /** Omitted when the panel can't be collapsed (e.g. inside the mobile drawer),
    *  which also hides the collapse control. */
   onToggleCollapsed?: () => void;
+  /** Controls over dashboard-wide filtering surfaces that are not themselves
+   *  filter components — today the map panel. Rendered beside "Reset all" when
+   *  the panel is open and on the icon rail when it is collapsed, so a control
+   *  that carries a "this is filtering you" badge is never out of reach. */
+  headerActions?: React.ReactNode;
   /** Pinned below the filter list, outside its scroll area. Deliberately an
    *  opaque node: the apps put the docked map panel here, and this component
    *  has no business knowing that. */
@@ -168,6 +178,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   layoutData,
   filterSections,
   dashboardId,
+  stateScopeId,
   refreshTick,
   editMode = false,
   renderItemOverlay,
@@ -176,6 +187,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   onLayoutChange,
   collapsed = false,
   onToggleCollapsed,
+  headerActions,
   footer,
   funnel,
   groupSummaryRows,
@@ -194,7 +206,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   // so the losing side falls back to its default on the next load. Matches the
   // `grid-section-collapsed:` naming used by DashboardGrid.
   const collapse = useCollapseState(
-    `filter-panel-sections-collapsed:${dashboardId ?? 'unknown'}`,
+    `filter-panel-sections-collapsed:${stateScopeId ?? dashboardId ?? 'unknown'}`,
     collapsedByDefault,
   );
 
@@ -575,11 +587,10 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
             }
           >
             {named.map((s) => (
-              // No `color`: the panel's rails stay neutral so they don't pair
-              // up with the grid's. See `SectionAccordionItem`.
               <SectionAccordionItem
                 key={s.key}
                 value={s.key}
+                color={s.spec?.color}
                 actions={renderSectionActions?.(s.sectionName ?? null)}
               >
                 <Accordion.Control>{renderSectionHeader(s)}</Accordion.Control>
@@ -672,6 +683,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
             {activeCount}
           </Badge>
         )}
+        {headerActions}
         {/* Rotated so a 44px rail still says what it is. `vertical-rl` plus a
             180° turn reads bottom-to-top, the usual direction for a label on a
             left-hand edge. `aria-hidden` because the ActionIcon above already
@@ -839,6 +851,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
               </Menu.Item>
             </Menu.Dropdown>
           </Menu>
+          {headerActions}
           {onResetAllFilters && (
             <Button
               leftSection={<Icon icon="bx:reset" width={12} />}

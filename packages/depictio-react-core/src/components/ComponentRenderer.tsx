@@ -648,11 +648,15 @@ const CardRenderer: React.FC<{
     ((metadata.secondary_layout === 'coverage' || metadata.secondary_layout === 'gauge') &&
       coverageMax !== null);
   const showSecondaryMetrics = !groupCompareRich && hasSecondaryContent;
-  // Any card with a secondary view gets the compact one-line header (value
-  // beside the title, aggregation label on hover) so the strip owns the
-  // height — grouped or not, the layout reads the same. Bare title+value
-  // cards keep the classic stacked hero.
-  const compactHeader = groupCompareRich || hasSecondaryContent;
+  // The compact one-line header (value beside the title) buys height for a
+  // group-comparison strip, which stacks a row per group and would otherwise
+  // not fit. A plain secondary view — a box plot, a donut, a top-N list — is a
+  // single strip that fits under the normal header, so it keeps the stacked
+  // hero: same title position, same value size as a bare card standing next to
+  // it. Using the compact header for both made neighbouring cards disagree on
+  // where the value sits and how big it is, and clipped the title to buy space
+  // nothing needed.
+  const compactHeader = groupCompareRich;
 
   // Aggregation description line — sits in the existing card slot just below
   // the hero value. We enrich it with breakdown info when available so the

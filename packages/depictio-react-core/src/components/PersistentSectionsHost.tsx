@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Responsive as ResponsiveGridLayout } from 'react-grid-layout';
+import { GRID_BREAKPOINTS, GRID_COL_COUNTS } from '../gridConfig';
 import { Accordion } from '@mantine/core';
 
 import type { BulkComputeOptions, InteractiveFilter, PersistentSection } from '../api';
@@ -13,7 +14,7 @@ import {
   SectionHeader,
 } from './SectionAccordion';
 import ComponentRenderer from './ComponentRenderer';
-import { normalizeLayout } from './DashboardGrid';
+import { normalizeLayout, SectionSummary } from './DashboardGrid';
 
 export interface PersistentSectionsHostProps {
   /** Persistent *grid* sections owned by sibling tabs. The caller filters out
@@ -122,13 +123,14 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
   const [cardsLoading, setCardsLoading] = useState(false);
   const cardFetchId = useRef(0);
 
-  // Card ids per owning tab, restricted to sections whose grid is mounted —
-  // the same lazy rule the members below follow, so a folded section's cards
-  // cost nothing until it is opened.
+  // Card ids per owning tab. Deliberately NOT gated on the lazy-mount set:
+  // a folded section's header shows summary chips built from these values
+  // (see the `trailing` below), so the cards are fetched even while the
+  // section has never been opened. Cards are one cheap bulk call — the
+  // lazy-mount rule still spares the heavy members (tables, figures).
   const cardIdsByOwner = useMemo(() => {
     const byOwner = new Map<string, string[]>();
     for (const { section, members } of renderable) {
-      if (!renderedKeys.has(hostSectionKey(section))) continue;
       for (const m of members) {
         if (m.metadata.component_type !== 'card') continue;
         const list = byOwner.get(m.dashboard_id) ?? [];
@@ -137,7 +139,7 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
       }
     }
     return byOwner;
-  }, [renderable, renderedKeys]);
+  }, [renderable]);
   const cardIdsKey = useMemo(
     () =>
       [...cardIdsByOwner.entries()]
@@ -225,7 +227,27 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
               actions={renderSectionActions?.(section)}
             >
               <Accordion.Control>
-                <SectionHeader spec={section.spec} name={section.spec.name} />
+                <SectionHeader
+                  spec={section.spec}
+                  name={section.spec.name}
+                  // Folded, the section still tells you what it holds — same
+                  // chips as DashboardGrid's own sections. PersistentSection
+                  // members are adapted to the ComponentSection shape the
+                  // summary expects.
+                  trailing={
+                    !collapse.isOpen(key) ? (
+                      <SectionSummary
+                        section={{
+                          key,
+                          sectionName: section.spec.name,
+                          spec: section.spec,
+                          members: members.map((m) => m.metadata),
+                        }}
+                        cardValues={cardValues}
+                      />
+                    ) : undefined
+                  }
+                />
               </Accordion.Control>
               <Accordion.Panel>
                 {renderedKeys.has(key) && (
@@ -239,8 +261,8 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
                           false,
                         ),
                       }}
-                      breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480 }}
-                      cols={{ lg: 8, md: 6, sm: 4, xs: 2 }}
+                      breakpoints={GRID_BREAKPOINTS}
+                      cols={GRID_COL_COUNTS}
                       rowHeight={100}
                       width={Math.max(100, containerWidth - sectionInset)}
                       margin={[12, 4]}

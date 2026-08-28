@@ -208,6 +208,17 @@ def register_run_command(app: typer.Typer):
                 ),
             ),
         ] = [],
+        provenance_file: Annotated[
+            list[str] | None,
+            typer.Option(
+                "--provenance-file",
+                help=(
+                    "Extra provenance/recap file (json, yaml, or 2-column tsv of "
+                    "key/value) whose entries are listed in the project's run-"
+                    "provenance report under 'User provided'. Repeatable."
+                ),
+            ),
+        ] = None,
         dashboard: Annotated[
             list[str] | None,
             typer.Option(
@@ -452,6 +463,7 @@ def register_run_command(app: typer.Typer):
                     data_root=data_root,  # type: ignore[arg-type]
                     project_name=project_name,
                     extra_vars=extra_vars or None,
+                    provenance_files=provenance_file,
                 )
 
                 rich_print_checked_statement(

@@ -80,7 +80,7 @@ const ingestionBannerKey = (projectId: string) =>
  *  enough that a single deliberate change still feels immediate. */
 const FILTER_DEBOUNCE_MS = 250;
 import { notifications } from '@mantine/notifications';
-import { Header, Sidebar, SettingsDrawer } from './chrome';
+import { Header, Sidebar, SettingsDrawer, TabIntro } from './chrome';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useContentScaleStyle } from './hooks/useUiScalePref';
 import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
@@ -213,6 +213,63 @@ const App: React.FC = () => {
 
   const dashboardId = extractDashboardId();
 
+  // ---- Cross-tab components: validate the hydrated filters -----------------
+  // Runs once the family's floating maps and persistent sections are known.
+  // Anything we seeded from storage that does not correspond to a
+  // still-floating map or a still-persistent filter control on *this*
+  // dashboard family is dropped: the component may have been deleted, its
+  // section un-marked persistent, or the viewer may have navigated to a
+  // different dashboard entirely (one browser tab, one storage entry).
+  const handleCrossTabResolved = useCallback((res: CrossTabComponentsResponse) => {
+    const familyId = res.parent_dashboard_id;
+    const floatIndices = new Set(res.floating.map((c) => c.metadata.index));
+    const persistentControls = new Map<string, StoredMetadata>();
+    for (const s of res.persistent_sections) {
+      if (s.kind !== 'filter') continue;
+      for (const c of s.components) persistentControls.set(c.metadata.index, c.metadata);
+    }
+
+    const stored = readCrossTabFilters();
+    const familyChanged =
+      stored != null && familyId != null && stored.parentDashboardId !== familyId;
+    const hydrated = hydratedIndicesRef.current ?? new Set<string>();
+    if (hydrated.size === 0) return;
+
+    setFilters((prev) =>
+      prev.filter((f) => {
+        if (!hydrated.has(f.index)) return true;
+        if (familyChanged) return false;
+        if (f.source === 'map_selection') return floatIndices.has(f.index);
+        // Only sourceless control values and map selections are ever
+        // persisted; anything else that got hydrated is a stale shape.
+        if (f.source !== undefined) return false;
+        const control = persistentControls.get(f.index);
+        if (!control) return false;
+        // The author may have re-pointed the control at another column or DC
+        // since the value was stored — a mismatched value must not keep
+        // filtering under the old meaning.
+        const storedDc = f.metadata?.dc_id;
+        if (storedDc && control.dc_id && storedDc !== control.dc_id) return false;
+        const storedCol = f.column_name ?? f.metadata?.column_name;
+        if (storedCol && control.column_name && storedCol !== control.column_name) return false;
+        return true;
+      }),
+    );
+    hydratedIndicesRef.current = new Set();
+    if (familyChanged) clearCrossTabFilters();
+  }, []);
+
+  // One request per page load for everything this tab renders on behalf of its
+  // siblings: floating maps + persistent sections.
+  const crossTab = useCrossTabComponents(dashboardId ?? '', handleCrossTabResolved);
+
+  // Panel chrome state is scoped to the dashboard *family*: a tab switch is a
+  // full page navigation to a sibling dashboard document, so per-dashboard
+  // keys would reset the panel on every switch. Until the family id resolves
+  // (one fetch, see useCrossTabComponents) the tab's own id stands in, and the
+  // hooks re-read storage when the key changes underneath them.
+  const panelScopeId = crossTab.familyId ?? dashboardId;
+
   // Left filter panel chrome. Width first: the collapse swing is the width the
   // content column reclaims, which is everything but the icon rail.
   const {
@@ -221,12 +278,12 @@ const App: React.FC = () => {
     layoutRef: filterPanelLayoutRef,
     beginResize: beginFilterPanelResize,
     nudge: nudgeFilterPanelWidth,
-  } = useFilterPanelWidth(dashboardId);
+  } = useFilterPanelWidth(panelScopeId);
   // The swing spans both variable tracks: collapsing takes the panel down to
   // the rail *and* the drag handle down to nothing. The grid gaps don't move,
   // so they cancel out.
   const [filterPanelOpened, toggleFilterPanel] = useFilterPanelOpen(
-    dashboardId,
+    panelScopeId,
     filterPanelWidth + FILTER_PANEL_RESIZER_WIDTH - FILTER_PANEL_RAIL_WIDTH,
   );
   // Below `sm` the panel would leave the content column unusable, so it moves
@@ -363,55 +420,6 @@ const App: React.FC = () => {
     JSON.stringify(groupsApi.bulkOptions ?? null),
   ]);
 
-  // ---- Cross-tab components: validate the hydrated filters -----------------
-  // Runs once the family's floating maps and persistent sections are known.
-  // Anything we seeded from storage that does not correspond to a
-  // still-floating map or a still-persistent filter control on *this*
-  // dashboard family is dropped: the component may have been deleted, its
-  // section un-marked persistent, or the viewer may have navigated to a
-  // different dashboard entirely (one browser tab, one storage entry).
-  const handleCrossTabResolved = useCallback((res: CrossTabComponentsResponse) => {
-    const familyId = res.parent_dashboard_id;
-    const floatIndices = new Set(res.floating.map((c) => c.metadata.index));
-    const persistentControls = new Map<string, StoredMetadata>();
-    for (const s of res.persistent_sections) {
-      if (s.kind !== 'filter') continue;
-      for (const c of s.components) persistentControls.set(c.metadata.index, c.metadata);
-    }
-
-    const stored = readCrossTabFilters();
-    const familyChanged =
-      stored != null && familyId != null && stored.parentDashboardId !== familyId;
-    const hydrated = hydratedIndicesRef.current ?? new Set<string>();
-    if (hydrated.size === 0) return;
-
-    setFilters((prev) =>
-      prev.filter((f) => {
-        if (!hydrated.has(f.index)) return true;
-        if (familyChanged) return false;
-        if (f.source === 'map_selection') return floatIndices.has(f.index);
-        // Only sourceless control values and map selections are ever
-        // persisted; anything else that got hydrated is a stale shape.
-        if (f.source !== undefined) return false;
-        const control = persistentControls.get(f.index);
-        if (!control) return false;
-        // The author may have re-pointed the control at another column or DC
-        // since the value was stored — a mismatched value must not keep
-        // filtering under the old meaning.
-        const storedDc = f.metadata?.dc_id;
-        if (storedDc && control.dc_id && storedDc !== control.dc_id) return false;
-        const storedCol = f.column_name ?? f.metadata?.column_name;
-        if (storedCol && control.column_name && storedCol !== control.column_name) return false;
-        return true;
-      }),
-    );
-    hydratedIndicesRef.current = new Set();
-    if (familyChanged) clearCrossTabFilters();
-  }, []);
-
-  // One request per page load for everything this tab renders on behalf of its
-  // siblings: floating maps + persistent sections.
-  const crossTab = useCrossTabComponents(dashboardId ?? '', handleCrossTabResolved);
 
   const floatingIndices = useMemo(
     () => new Set(crossTab.floating.map((c) => c.metadata.index)),
@@ -452,6 +460,13 @@ const App: React.FC = () => {
     [foreignGridSections],
   );
 
+  // Persistent grid sections owned by sibling tabs — the "always in view"
+  // slot a metadata table lands in on every tab. `pin: top` renders through
+  // DashboardGrid's `beforeSections` slot: after the tab's own unsectioned
+  // components (its title / intro text) but before its named sections — the
+  // same order the owning tab draws. `pin: bottom` stays a sibling after the
+  // whole grid. Sections this tab owns render inside DashboardGrid itself,
+  // where they stay editable.
   /**
    * What filter names, dc_ids and available-values are resolved against.
    *
@@ -657,9 +672,15 @@ const App: React.FC = () => {
       (d) => d.dashboard_id === parentId || d.parent_dashboard_id === parentId,
     );
     return family.sort((a, b) => {
-      // Parent first, then children alphabetically by title
-      if (!a.parent_dashboard_id && b.parent_dashboard_id) return -1;
-      if (a.parent_dashboard_id && !b.parent_dashboard_id) return 1;
+      // Parent (tab_order=0) first, then children by `tab_order` — the order the
+      // dashboard YAML authored and the editor already honours. Sorting by title
+      // instead, as this did, meant a viewer never saw the reading order the
+      // author laid out: on the ampliseq template it put "Sampling Campaign"
+      // (tab_order 1) last, behind every alphabetically earlier analysis tab.
+      // Title stays as the tiebreaker for tabs that carry no order.
+      const ao = a.tab_order ?? (a.parent_dashboard_id ? 1 : 0);
+      const bo = b.tab_order ?? (b.parent_dashboard_id ? 1 : 0);
+      if (ao !== bo) return ao - bo;
       return (a.title || '').localeCompare(b.title || '');
     });
   }, [dashboard, allDashboards, dashboardId]);
@@ -729,6 +750,26 @@ const App: React.FC = () => {
       groupsApi.showOther,
     ],
   );
+
+  // Persistent grid sections owned by sibling tabs — the "always in view" slot
+  // a metadata table lands in on every tab. Handed to DashboardGrid as
+  // `beforeSections` so a `pin: top` section renders after this tab's own
+  // unsectioned components (its title and intro) rather than ahead of them.
+  // Declared here, below `groupRender` and `handleFilterChange`: it reads both.
+  const topSectionsHost =
+    topGridSections.length > 0 ? (
+      <PersistentSectionsHost
+        sections={topGridSections}
+        familyId={crossTab.familyId}
+        slot="top"
+        filters={deferredFilters}
+        onFilterChange={handleFilterChange}
+        refreshTick={refreshTick}
+        groupRender={groupRender}
+        bulkOptions={groupsApi.bulkOptions}
+      />
+    ) : null;
+
   // The Grouping panel's body. Mounted once, inside the header "Analysis"
   // popover (GroupingHeaderControl) — the panel is dashboard-family state and
   // has to stay reachable when the per-tab filter panel is collapsed.
@@ -876,7 +917,11 @@ const App: React.FC = () => {
               <DashboardLoadIndicator metadataList={rightComponents} cardsLoading={cardsLoading} />
             ) : undefined
           }
+          // Undefined rather than an empty fragment when realtime is off:
+          // the header rules this slot off from the action buttons, and an
+          // empty group would leave a divider with nothing beside it.
           rightExtras={
+            dashboard || realtimeEnabled ? (
             <>
               {dashboard && (
                 <GroupingHeaderControl
@@ -890,7 +935,6 @@ const App: React.FC = () => {
                   {groupsSection}
                 </GroupingHeaderControl>
               )}
-              <MapPanelControl panel={mapPanel} />
               {realtimeEnabled && (
                 <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
                   <RealtimeIndicator
@@ -913,6 +957,7 @@ const App: React.FC = () => {
                 </span>
               )}
             </>
+            ) : undefined
           }
         />
       </AppShell.Header>
@@ -1066,6 +1111,8 @@ const App: React.FC = () => {
                   layoutData={dashboard.left_panel_layout_data}
                   filterSections={panelFilterSections}
                   dashboardId={dashboardId}
+                  stateScopeId={panelScopeId}
+                  headerActions={<MapPanelControl panel={mapPanel} />}
                   refreshTick={refreshTick}
                   collapsed={!filterPanelOpened}
                   onToggleCollapsed={toggleFilterPanel}
@@ -1112,30 +1159,17 @@ const App: React.FC = () => {
                 ...contentScaleStyle,
               }}
             >
-              {/* Persistent grid sections owned by sibling tabs — the
-                  "always in view" slot a metadata table lands in on every tab.
-                  `pin: top` opens the tab with the family-wide context;
-                  `pin: bottom` puts it after this tab's own content, so a
-                  shared reference block does not precede the tab's own
-                  introduction. Sections this tab owns render inside
-                  DashboardGrid below, where they stay editable. */}
-              {topGridSections.length > 0 && (
-                <PersistentSectionsHost
-                  sections={topGridSections}
-                  familyId={crossTab.familyId}
-                  slot="top"
-                  filters={deferredFilters}
-                  onFilterChange={handleFilterChange}
-                  refreshTick={refreshTick}
-                  groupRender={groupRender}
-                  bulkOptions={groupsApi.bulkOptions}
-                />
-              )}
+              {/* The tab's own description, ahead of everything the canvas
+                  holds — including a foreign `pin: top` section, which would
+                  otherwise introduce another tab before this one is named. */}
+              <TabIntro dashboard={dashboard} activeTab={activeTab} />
               {/* Only claims the leftover height when nothing follows it —
                   otherwise a short grid would push the bottom-pinned sections
                   to the fold with a gap above them. */}
               <Box style={{ flex: bottomGridSections.length > 0 ? '0 0 auto' : 1, minHeight: 0 }}>
                 {rightComponents.length === 0 ? (
+                  <>
+                  {topSectionsHost}
                   <Center style={{ height: '100%', minHeight: 320 }}>
                     <Stack align="center" gap="md" maw={420}>
                       <Box
@@ -1173,12 +1207,14 @@ const App: React.FC = () => {
                       )}
                     </Stack>
                   </Center>
+                  </>
                 ) : (
                   <DashboardGrid
                     dashboardId={dashboardId!}
                     metadataList={rightComponents}
                     layoutData={dashboard.right_panel_layout_data}
                     gridSections={dashboard.grid_sections}
+                    beforeSections={topSectionsHost}
                     filters={deferredFilters}
                     onFilterChange={handleFilterChange}
                     cardValues={cardValues}
@@ -1253,6 +1289,7 @@ const App: React.FC = () => {
               layoutData={dashboard.left_panel_layout_data}
               filterSections={panelFilterSections}
               dashboardId={dashboardId}
+              stateScopeId={panelScopeId}
               refreshTick={refreshTick}
               funnel={{
                 enabled: funnelEnabled,
@@ -1260,6 +1297,7 @@ const App: React.FC = () => {
                 onOpenView: () => setFunnelViewOpen(true),
               }}
               groupSummaryRows={groupSummaryRows}
+              headerActions={<MapPanelControl panel={mapPanel} />}
             />
           </Drawer>
         )}

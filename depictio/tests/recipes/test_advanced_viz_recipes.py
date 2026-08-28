@@ -184,3 +184,46 @@ def test_validate_binding_per_kind_happy_path(kind, cfg) -> None:
     else:  # stacked_taxonomy
         schema = {"s": "String", "t": "String", "r": "String", "a": "Float64"}
     assert validate_binding(cfg, schema) == []
+
+
+# ---------------------------------------------------------------------------
+# ampliseq: upset — taxon attributes must survive the pivot
+# ---------------------------------------------------------------------------
+
+
+def test_ampliseq_upset_carries_taxon_attributes(tmp_path: Path) -> None:
+    """Rank columns come across; per-sample and metadata columns do not.
+
+    The presence matrix is `taxon` + one binary column per group. Without the
+    taxon attributes a dashboard filter on `Phylum` has no column to bite on
+    and the UpSet silently ignores it.
+    """
+    rel_abundance = pl.DataFrame(
+        {
+            "sample": ["S1", "S2", "S3", "S1", "S2", "S3"],
+            "taxonomy": ["Bacteria;Firmicutes"] * 3 + ["Bacteria;Bacteroidota"] * 3,
+            "rel_abundance": [0.5, 0.4, 0.0, 0.0, 0.3, 0.6],
+            "Kingdom": ["Bacteria"] * 6,
+            "Phylum": ["Firmicutes"] * 3 + ["Bacteroidota"] * 3,
+        }
+    )
+    metadata = pl.DataFrame({"ID": ["S1", "S2", "S3"], "locality": ["Athens", "Athens", "Naples"]})
+
+    result = execute_recipe(
+        "nf-core/ampliseq/upset_canonical.py",
+        tmp_path,
+        extra_sources={"rel_abundance": rel_abundance, "metadata": metadata},
+    )
+
+    assert result.columns[0] == "taxon"
+    # Sets: one per locality. Attributes: the taxonomic ranks, nothing else.
+    assert {"Athens", "Naples"}.issubset(result.columns)
+    assert {"Kingdom", "Phylum"}.issubset(result.columns)
+    # `sample` varies within a taxon, `locality` is the pivot itself — neither
+    # is a taxon attribute.
+    assert "sample" not in result.columns
+    assert "locality" not in result.columns
+    firmicutes = result.filter(pl.col("taxon") == "Bacteria;Firmicutes")
+    assert firmicutes["Phylum"].to_list() == ["Firmicutes"]
+    assert firmicutes["Athens"].to_list() == [1]
+    assert firmicutes["Naples"].to_list() == [0]

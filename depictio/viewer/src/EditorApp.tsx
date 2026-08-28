@@ -119,7 +119,7 @@ import GroupingHeaderControl from './components/GroupingHeaderControl';
 import SectionsModal from './components/sections/SectionsModal';
 import { applySectionOp, groupWith, sectionsFor } from './components/sections/sectionMutations';
 import type { SectionKind, SectionOp } from './components/sections/sectionMutations';
-import { Header, Sidebar, SettingsDrawer, TabModal } from './chrome';
+import { Header, Sidebar, SettingsDrawer, TabIntro, TabModal } from './chrome';
 import type { TabModalSubmitPayload } from './chrome';
 import NotesFooter from './components/NotesFooter';
 import './chrome/chrome.css';
@@ -281,6 +281,16 @@ const EditorApp: React.FC = () => {
       groupsApi.groupFilters.length > 0 ? [...filters, ...groupsApi.groupFilters] : filters,
     [filters, groupsApi.groupFilters],
   );
+  // Authors see the panel as viewers will. Cross-tab (floating) filter
+  // persistence is deliberately viewer-only: an editing session's filter state
+  // is scratch across dashboards, and carrying it between tabs would be
+  // surprising here. Same-dashboard persistence within this browser tab is a
+  // different matter — see editorFilters.ts, which keeps filters alive across
+  // the builder round-trip.
+  const crossTab = useCrossTabComponents(dashboardId ?? '');
+
+  // Same family scoping as the viewer — see App.tsx `panelScopeId`.
+  const panelScopeId = crossTab.familyId ?? dashboardId;
 
   // Left filter panel chrome — same hooks and same storage keys as the viewer,
   // so collapsing or resizing in one mode carries over to the other.
@@ -290,12 +300,12 @@ const EditorApp: React.FC = () => {
     layoutRef: filterPanelLayoutRef,
     beginResize: beginFilterPanelResize,
     nudge: nudgeFilterPanelWidth,
-  } = useFilterPanelWidth(dashboardId);
+  } = useFilterPanelWidth(panelScopeId);
   // The swing spans both variable tracks: collapsing takes the panel down to
   // the rail *and* the drag handle down to nothing. The grid gaps don't move,
   // so they cancel out.
   const [filterPanelOpened, toggleFilterPanel] = useFilterPanelOpen(
-    dashboardId,
+    panelScopeId,
     filterPanelWidth + FILTER_PANEL_RESIZER_WIDTH - FILTER_PANEL_RAIL_WIDTH,
   );
   const isNarrow = useMediaQuery('(max-width: 48em)', false, { getInitialValueInEffect: false });
@@ -465,13 +475,6 @@ const EditorApp: React.FC = () => {
     ],
   );
 
-  // Authors see the panel as viewers will. Cross-tab (floating) filter
-  // persistence is deliberately viewer-only: an editing session's filter state
-  // is scratch across dashboards, and carrying it between tabs would be
-  // surprising here. Same-dashboard persistence within this browser tab is a
-  // different matter — see editorFilters.ts, which keeps filters alive across
-  // the builder round-trip.
-  const crossTab = useCrossTabComponents(dashboardId ?? '');
 
   // Persistent sections owned by *sibling* tabs. They render here exactly as
   // the viewer draws them — read-only, on their own surfaces — so an author
@@ -500,6 +503,12 @@ const EditorApp: React.FC = () => {
     () => foreignGridSections.filter((s) => s.spec.pin === 'bottom'),
     [foreignGridSections],
   );
+
+  // The viewer's fan-out, previewed: read-only surfaces of their own, so a
+  // foreign `pin: top` section is visible while laying this tab out without
+  // ever entering its editable grid. Rendered through the grid's
+  // `beforeSections` slot so it sits after this tab's own unsectioned
+  // components (title / intro text), exactly as the viewer draws it.
   const mapPanel = useMapPanel({
     components: crossTab.floating,
     familyId: crossTab.familyId,
@@ -1545,6 +1554,25 @@ const EditorApp: React.FC = () => {
       onActivate={() => goToOwnerTab(section.owner_dashboard_id)}
     />
   );
+  // The viewer's fan-out, previewed: read-only surfaces of their own, so a
+  // foreign section is visible while laying this tab out without ever entering
+  // its editable grid. Handed to the grid as `beforeSections` so it lands after
+  // this tab's own unsectioned components. Declared here, below the section
+  // action renderer and `groupRender`: it reads both.
+  const topSectionsHost =
+    topGridSections.length > 0 ? (
+      <PersistentSectionsHost
+        sections={topGridSections}
+        familyId={crossTab.familyId}
+        slot="top"
+        filters={filters}
+        onFilterChange={handleFilterChange}
+        groupRender={groupRender}
+        bulkOptions={groupsApi.bulkOptions}
+        renderSectionActions={renderPersistentSectionAction}
+      />
+    ) : null;
+
   // The panel's list also holds the persistent sections a sibling tab owns.
   // Those get the jump instead of this tab's editor: the modal only knows this
   // dashboard's own specs. The grid needs no such branch — its foreign sections
@@ -1651,7 +1679,11 @@ const EditorApp: React.FC = () => {
           onAddSection={handleAddSection}
           onSave={handleForceSave}
           isOwner={isOwner}
+          // Undefined rather than an empty fragment when realtime is off:
+          // the header rules this slot off from the action buttons, and an
+          // empty group would leave a divider with nothing beside it.
           rightExtras={
+            dashboard || realtimeEnabled ? (
             <>
               {dashboard && (
                 <GroupingHeaderControl
@@ -1665,7 +1697,6 @@ const EditorApp: React.FC = () => {
                   {groupsSection}
                 </GroupingHeaderControl>
               )}
-              <MapPanelControl panel={mapPanel} />
               {realtimeEnabled && (
                 <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
                   <RealtimeIndicator
@@ -1688,6 +1719,7 @@ const EditorApp: React.FC = () => {
                 </span>
               )}
             </>
+            ) : undefined
           }
         />
       </AppShell.Header>
@@ -1780,6 +1812,8 @@ const EditorApp: React.FC = () => {
                   readOnlySections={readOnlyPanelSections}
                   renderSectionActions={renderPanelSectionAction}
                   dashboardId={dashboardId}
+                  stateScopeId={panelScopeId}
+                  headerActions={<MapPanelControl panel={mapPanel} />}
                   // No refreshTick: the editor threads no realtime refresh
                   // counter into any of its grids, so the left panel matches
                   // RightComponentGrid rather than inventing state here.
@@ -1823,22 +1857,11 @@ const EditorApp: React.FC = () => {
                 ...contentScaleStyle,
               }}
             >
-              {/* The viewer's fan-out, previewed: read-only surfaces of their
-                  own, so a foreign section is visible while laying this tab
-                  out without ever entering its editable grid. */}
-              {topGridSections.length > 0 && (
-                <PersistentSectionsHost
-                  sections={topGridSections}
-                  familyId={crossTab.familyId}
-                  slot="top"
-                  filters={filters}
-                  onFilterChange={handleFilterChange}
-                  groupRender={groupRender}
-                  bulkOptions={groupsApi.bulkOptions}
-                  renderSectionActions={renderPersistentSectionAction}
-                />
-              )}
+              {/* Same placement as the viewer: the tab's description leads
+                  the canvas, ahead of any foreign pinned section. */}
+              <TabIntro dashboard={dashboard} activeTab={activeTab} />
               <RightComponentGrid
+                beforeSections={topSectionsHost}
                 dashboardId={dashboardId!}
                 cardComponents={cardComponents}
                 otherComponents={otherComponents}
@@ -1921,6 +1944,8 @@ const EditorApp: React.FC = () => {
               filterSections={panelFilterSections}
               dashboardId={dashboardId}
               groupSummaryRows={groupSummaryRows}
+              stateScopeId={panelScopeId}
+              headerActions={<MapPanelControl panel={mapPanel} />}
             />
           </Drawer>
         )}
@@ -1999,6 +2024,9 @@ export default EditorApp;
 // ---------------------------------------------------------------------------
 
 interface RightComponentGridProps {
+  /** Forwarded to `DashboardGrid.beforeSections` (and shown above the empty
+   *  state) — the foreign `pin: top` persistent sections. */
+  beforeSections?: React.ReactNode;
   dashboardId: string;
   cardComponents: StoredMetadata[];
   otherComponents: StoredMetadata[];
@@ -2036,6 +2064,7 @@ interface RightComponentGridProps {
  * per-cell edit menu.
  */
 const RightComponentGrid: React.FC<RightComponentGridProps> = ({
+  beforeSections,
   dashboardId,
   cardComponents,
   otherComponents,
@@ -2064,6 +2093,8 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
 
   if (allComponents.length === 0) {
     return (
+      <>
+      {beforeSections}
       <Center style={{ height: '100%', minHeight: 320 }}>
         <Stack align="center" gap="md" maw={400}>
           <Box
@@ -2096,6 +2127,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
           </Button>
         </Stack>
       </Center>
+      </>
     );
   }
 
@@ -2105,6 +2137,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
       metadataList={allComponents}
       layoutData={layoutData}
       gridSections={gridSections}
+      beforeSections={beforeSections}
       filters={filters}
       onFilterChange={onFilterChange}
       cardValues={cardValues}

@@ -1,5 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Responsive as ResponsiveGridLayout } from 'react-grid-layout';
+import {
+  GRID_BREAKPOINTS,
+  GRID_COL_COUNTS,
+  GRID_MAX_COLS,
+  GRID_WIDEST_BREAKPOINT,
+} from '../gridConfig';
 import type { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -27,6 +33,11 @@ import {
   SectionHeader,
 } from './SectionAccordion';
 import ComponentRenderer, { formatValue, inferCardTitle } from './ComponentRenderer';
+
+/** Bucket key for what is left of the unsectioned components once the tab's
+ *  opening text has been split off — never a real section name, so it can't
+ *  collide with `sectionKey(name)`. */
+const UNSECTIONED_REST_KEY = '\u0000unsectioned-rest';
 
 interface DashboardGridProps {
   dashboardId: string;
@@ -76,6 +87,15 @@ interface DashboardGridProps {
    *  grid's accordion sections. Empty means no sections, i.e. one flat grid. */
   gridSections?: FilterSectionSpec[];
   /**
+   * Rendered between the unsectioned bucket and this tab's named sections —
+   * the slot the apps put the cross-tab `PersistentSectionsHost` (`pin: top`)
+   * in, so a family-wide section lands after the tab's own title/intro text
+   * (the unsectioned components) instead of above it, matching the order its
+   * owning tab draws. Opaque on purpose: its members must never enter this
+   * grid's layout merge.
+   */
+  beforeSections?: React.ReactNode;
+  /**
    * Host-provided per-section actions, beside the fold control rather than
    * inside it. Called with the section name (`null` for the unsectioned grid,
    * which has no header). The editor puts its "…" here, so a section is edited
@@ -114,13 +134,14 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   onLayoutChange,
   renderItemOverlay,
   gridSections,
+  beforeSections,
   renderSectionActions,
 }) => {
   // Memoised because it feeds the deps of everything below: rebuilding this
   // array on every render (a panel toggle, a collapse click) would invalidate
   // the memoised grid cells and re-render every Plotly figure on the dashboard.
   const layouts = useMemo(
-    () => normalizeLayout(metadataList, layoutData, isDraggable || isResizable),
+    () => normalizeLayout(metadataList, layoutData, isDraggable || isResizable, false),
     [metadataList, layoutData, isDraggable, isResizable],
   );
 
@@ -273,10 +294,46 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   // manager has no members yet, and skipping it would make the act of creating
   // one look like it did nothing. A published dashboard still never shows an
   // empty band.
-  const sections = useMemo(
-    () => sectionComponents(metadataList, gridSections, editMode),
-    [metadataList, gridSections, editMode],
-  );
+  const sections = useMemo(() => {
+    const buckets = sectionComponents(metadataList, gridSections, editMode);
+    // Split the unsectioned bucket after its opening text, so a persistent
+    // section fanned out from a sibling tab can land between the two.
+    //
+    // A pinned section is the family's shared content: it has to sit in the
+    // same place on every tab. Rendered after the whole unsectioned bucket it
+    // did on a tab with sections of its own — but on a tab that sections
+    // nothing, the bucket IS the tab, and the pinned section fell to the very
+    // bottom. Rendered before it, it jumps ahead of the intro text that says
+    // what the tab is. The intro belongs first, the shared metadata second.
+    //
+    // Edit mode keeps the single flat bucket: splitting it would put the intro
+    // text in a grid of its own, where it could no longer be dragged next to
+    // the components below it.
+    if (editMode) return buckets;
+    const flatIdx = new Map(layouts.map((l, i) => [l.i, i]));
+    const at = (m: StoredMetadata) => {
+      const l = layouts.find((x) => x.i === m.index);
+      return l ? [l.y, l.x, flatIdx.get(m.index) ?? 0] : [0, 0, flatIdx.get(m.index) ?? 0];
+    };
+    return buckets.flatMap((b) => {
+      if (b.sectionName || b.members.length === 0) return [b];
+      const ordered = [...b.members].sort((a, c) => {
+        const [ay, ax, ai] = at(a);
+        const [cy, cx, ci] = at(c);
+        return ay - cy || ax - cx || ai - ci;
+      });
+      let lead = 0;
+      while (lead < ordered.length && ordered[lead].component_type === 'text') lead += 1;
+      // No opening text: the whole bucket is "the rest", so the pinned section
+      // still renders above it rather than below the tab's entire content.
+      if (lead === 0) return [{ ...b, key: UNSECTIONED_REST_KEY }];
+      if (lead === ordered.length) return [b];
+      return [
+        { ...b, members: ordered.slice(0, lead) },
+        { ...b, key: UNSECTIONED_REST_KEY, members: ordered.slice(lead) },
+      ];
+    });
+  }, [metadataList, gridSections, editMode, layouts]);
   /**
    * Sections whose grid is actually rendered: the ones open now, plus every one
    * that has been open at some point since mount.
@@ -333,9 +390,13 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       // and closes the gaps the other sections' members left behind. In edit mode
       // react-grid-layout would converge to the same packing on its own; doing it
       // up front means the first paint is already right.
-      return compactVerticallyForStatic(mine);
+      const packed = compactVerticallyForStatic(mine);
+      // Lone-row widening runs HERE, against the section's own members — never
+      // against the flat union, where co-authored rows from sibling sections
+      // overlap and shove each other apart (see `normalizeLayout`'s pack flag).
+      return isDraggable || isResizable ? packed : widenLoneRows(packed);
     },
-    [layouts],
+    [layouts, isDraggable, isResizable],
   );
 
   const handleSectionLayoutChange = useCallback(
@@ -344,7 +405,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       // narrowed layout. Persisting that would silently overwrite the desktop
       // arrangement with its 2-column fallback the first time someone opened
       // the dashboard on a small screen.
-      if (breakpointRef.current !== 'lg') return;
+      if (breakpointRef.current !== GRID_WIDEST_BREAKPOINT) return;
       sectionLayoutsRef.current.set(sectionKey, current);
 
       const merged: Layout[] = [];
@@ -465,11 +526,12 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     <ResponsiveGridLayout
       className="layout"
       layouts={{ lg: layoutsForSection(section.members) }}
-      // `lg` matches the historical hard-coded 8 columns, so nothing changes on
-      // a desktop. Below it the grid degrades to fewer, wider columns instead of
-      // squeezing eight of them into a phone's width.
-      breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480 }}
-      cols={{ lg: 8, md: 6, sm: 4, xs: 2 }}
+      // Shared geometry (see gridConfig.ts): `lg` keeps the authoring 8-column
+      // grid down to narrow content widths so opening the panels shrinks
+      // components instead of wrapping them; fewer columns are a phone-only
+      // fallback.
+      breakpoints={GRID_BREAKPOINTS}
+      cols={GRID_COL_COUNTS}
       onBreakpointChange={(bp) => {
         breakpointRef.current = bp;
       }}
@@ -512,12 +574,69 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     </ResponsiveGridLayout>
     );
 
-  const unsectioned = sections.find((s) => !s.sectionName);
+  const leadBucket = sections.find((s) => !s.sectionName && s.key !== UNSECTIONED_REST_KEY);
+  const restBucket = sections.find((s) => s.key === UNSECTIONED_REST_KEY);
   const named = sections.filter((s) => s.sectionName);
+  // A persistent section is family-wide content: it has to land in the same
+  // place on the tab that owns it and on every tab it fans out to. On a foreign
+  // tab it arrives through `beforeSections`; here it would otherwise keep its
+  // declared position among this tab's own sections, which on a tab with no
+  // sections is below everything. Hoisting it out of `named` puts both copies
+  // in the one place: under the tab's opening text, above everything else.
+  const isPinnedTop = (s: ComponentSection) =>
+    Boolean(s.spec?.persistent) && s.spec?.pin !== 'bottom';
+  const pinnedTop = named.filter(isPinnedTop);
+  const ownSections = named.filter((s) => !isPinnedTop(s));
   // Drives one button rather than a pair: "collapse all" until nothing is open,
   // then "expand all". A single control can't be in the dead state where the
   // one you want is the one already applied.
   const anySectionOpen = named.some((s) => sectionCollapse.isOpen(s.key));
+
+  const renderSections = (list: ComponentSection[]) =>
+    list.length === 0 ? null : (
+      <SectionAccordion
+        value={list.filter((s) => sectionCollapse.isOpen(s.key)).map((s) => s.key)}
+        onChange={(open) =>
+          applyAccordionValue(
+            open,
+            list.map((s) => s.key),
+            sectionCollapse,
+          )
+        }
+      >
+        {list.map((section) => (
+          <SectionAccordionItem
+            key={section.key}
+            value={section.key}
+            color={section.spec?.color}
+            actions={renderSectionActions?.(section.sectionName ?? null)}
+          >
+            <Accordion.Control>
+              <SectionHeader
+                spec={section.spec}
+                name={section.sectionName}
+                // Only while folded: expanded, these numbers are already on
+                // screen as the cards themselves. Folding a section must not
+                // cost you the figures it was showing.
+                trailing={
+                  !sectionCollapse.isOpen(section.key) ? (
+                    <SectionSummary section={section} cardValues={cardValues} />
+                  ) : undefined
+                }
+              />
+            </Accordion.Control>
+            <Accordion.Panel>
+              {/* Plain wrapper so the width available inside the section box
+                  can be read off the DOM — see `sectionInset`. Absent until
+                  the section has been opened once: see `renderedSections`. */}
+              {renderedSections.has(section.key) && (
+                <div data-section-grid>{renderGrid(section)}</div>
+              )}
+            </Accordion.Panel>
+          </SectionAccordionItem>
+        ))}
+      </SectionAccordion>
+    );
 
   return (
     <div
@@ -525,7 +644,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       className={rootClass}
       style={{ width: '100%', overflowX: 'hidden' }}
     >
-      {unsectioned && renderGrid(unsectioned)}
+      {leadBucket && renderGrid(leadBucket)}
       {named.length > 0 && (
         <Group justify="flex-end" mb={4}>
           <Button
@@ -546,50 +665,19 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
           </Button>
         </Group>
       )}
-      {named.length > 0 && (
-        <SectionAccordion
-          value={named.filter((s) => sectionCollapse.isOpen(s.key)).map((s) => s.key)}
-          onChange={(open) =>
-            applyAccordionValue(
-              open,
-              named.map((s) => s.key),
-              sectionCollapse,
-            )
-          }
-        >
-          {named.map((section) => (
-            <SectionAccordionItem
-              key={section.key}
-              value={section.key}
-              color={section.spec?.color}
-              actions={renderSectionActions?.(section.sectionName ?? null)}
-            >
-              <Accordion.Control>
-                <SectionHeader
-                  spec={section.spec}
-                  name={section.sectionName}
-                  // Only while folded: expanded, these numbers are already on
-                  // screen as the cards themselves. Folding a section must not
-                  // cost you the figures it was showing.
-                  trailing={
-                    !sectionCollapse.isOpen(section.key) ? (
-                      <SectionSummary section={section} cardValues={cardValues} />
-                    ) : undefined
-                  }
-                />
-              </Accordion.Control>
-              <Accordion.Panel>
-                {/* Plain wrapper so the width available inside the section box
-                    can be read off the DOM — see `sectionInset`. Absent until
-                    the section has been opened once: see `renderedSections`. */}
-                {renderedSections.has(section.key) && (
-                  <div data-section-grid>{renderGrid(section)}</div>
-                )}
-              </Accordion.Panel>
-            </SectionAccordionItem>
-          ))}
-        </SectionAccordion>
+      {/* Straight after the tab's opening text and the section toolbar that
+          governs it too, ahead of everything else the tab draws — whether the
+          pinned section is owned here (`pinnedTop`) or fanned out from a
+          sibling tab (`beforeSections`). Spaced from what follows so the two
+          don't read as one stack. */}
+      {(beforeSections || pinnedTop.length > 0) && (
+        <div style={{ marginBottom: 10 }}>
+          {beforeSections}
+          {renderSections(pinnedTop)}
+        </div>
       )}
+      {restBucket && renderGrid(restBucket)}
+      {renderSections(ownSections)}
     </div>
   );
 };
@@ -609,7 +697,7 @@ const SUMMARY_CHIP_LIMIT = 4;
  * reads as those two numbers once folded — which is what makes folding a
  * section a way to simplify the dashboard rather than to hide it.
  */
-const SectionSummary: React.FC<{
+export const SectionSummary: React.FC<{
   section: ComponentSection;
   cardValues?: Record<string, unknown>;
 }> = ({ section, cardValues }) => {
@@ -672,6 +760,15 @@ export function normalizeLayout(
   metadataList: StoredMetadata[],
   layoutData: unknown,
   interactive: boolean,
+  /**
+   * Whether to shelf-pack and widen the flat array here. DashboardGrid passes
+   * `false`: its sections each render their own grid, and the stored y values
+   * REPEAT across sections (every section starts near y=0 of its own canvas),
+   * so packing the flat union makes items from different sections collide,
+   * shove each other down, and leave singletons for `widenLoneRows` to blow up
+   * to full width. It packs per section instead (`layoutsForSection`).
+   */
+  pack = true,
 ): Layout[] {
   // Dash stores layouts as a list of { i: "box-<index>", x, y, w, h } OR as
   // { breakpoint: [...] } keyed dict. Try both shapes.
@@ -683,7 +780,7 @@ export function normalizeLayout(
   // Also clamp w/x into the 8-col grid: positions saved by an earlier React
   // editor pass (when we briefly used cols=12) would be off-grid otherwise
   // and react-grid-layout would stack everything at y=0.
-  const COLS = 8;
+  const COLS = GRID_MAX_COLS;
   const matched = items
     .map((it) => {
       const w = Math.max(1, Math.min(it.w ?? 1, COLS));
@@ -750,7 +847,8 @@ export function normalizeLayout(
   // already stored before that pass and anything hidden only at render time.)
   // In editor mode (interactive=true) we leave the layout untouched: items are
   // non-static there, RGL compacts naturally after every drag/resize.
-  return interactive ? merged : widenLoneRows(compactVerticallyForStatic(merged));
+  if (interactive || !pack) return merged;
+  return widenLoneRows(compactVerticallyForStatic(merged));
 }
 
 /**
@@ -780,7 +878,7 @@ function compactVerticallyForStatic(items: Layout[]): Layout[] {
  * items are touched, and nothing is reordered. Mirrors the server's
  * `_recompact_main_grid` lone-row rule for layouts the server didn't re-pack.
  */
-function widenLoneRows(items: Layout[], cols = 8): Layout[] {
+function widenLoneRows(items: Layout[], cols = GRID_MAX_COLS): Layout[] {
   const overlapsVertically = (a: Layout, b: Layout) =>
     !(a.y + a.h <= b.y || b.y + b.h <= a.y);
   return items.map((item) => {

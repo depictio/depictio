@@ -162,10 +162,7 @@ function buildFormatContext(min: number, max: number): FormatContext {
   return { spansYears, spansDays: !sameDay };
 }
 
-/**
- * 4 evenly-spaced labeled marks (start, 1/3, 2/3, end) — keeps labels readable
- * without overlap even at the narrowest panel widths.
- */
+
 // Label for a per-timestamp mark. Picks precision from the total span so
 // acquisitions that are seconds apart still get distinct labels (formatAt's
 // coarsest unit is the minute, which would collide for a sub-minute run).
@@ -185,6 +182,74 @@ const MAX_STAMP_MARKS = 80;
 // overlapping, unreadable labels.
 const MAX_STAMP_LABELS = 12;
 
+/** Calendar boundaries of `scale` (year/month/day/hour/minute starts) inside
+ *  [min, max], in local time. Empty when the range fits inside one unit. */
+function boundariesWithin(scale: Timescale, min: number, max: number): number[] {
+  const d = new Date(min);
+  // Snap up to the first boundary at or after `min`.
+  switch (scale) {
+    case 'year':
+      d.setMonth(0, 1);
+      d.setHours(0, 0, 0, 0);
+      if (d.getTime() < min) d.setFullYear(d.getFullYear() + 1);
+      break;
+    case 'month':
+      d.setDate(1);
+      d.setHours(0, 0, 0, 0);
+      if (d.getTime() < min) d.setMonth(d.getMonth() + 1);
+      break;
+    case 'day':
+      d.setHours(0, 0, 0, 0);
+      if (d.getTime() < min) d.setDate(d.getDate() + 1);
+      break;
+    case 'hour':
+      d.setMinutes(0, 0, 0);
+      if (d.getTime() < min) d.setHours(d.getHours() + 1);
+      break;
+    case 'minute':
+      d.setSeconds(0, 0);
+      if (d.getTime() < min) d.setMinutes(d.getMinutes() + 1);
+      break;
+  }
+  const out: number[] = [];
+  while (d.getTime() <= max) {
+    out.push(d.getTime());
+    switch (scale) {
+      case 'year':
+        d.setFullYear(d.getFullYear() + 1);
+        break;
+      case 'month':
+        d.setMonth(d.getMonth() + 1);
+        break;
+      case 'day':
+        d.setDate(d.getDate() + 1);
+        break;
+      case 'hour':
+        d.setHours(d.getHours() + 1);
+        break;
+      case 'minute':
+        d.setMinutes(d.getMinutes() + 1);
+        break;
+    }
+  }
+  return out;
+}
+
+/** Ticks past this are thinned by stride so labels stay readable at the
+ *  narrowest panel widths. */
+const MAX_SCALE_MARKS = 6;
+
+/**
+ * Marks snapped to calendar boundaries of the chosen timescale, deduplicated
+ * by rendered label.
+ *
+ * The previous implementation placed 4 marks at fixed fractions of the raw
+ * millisecond span and formatted each through the timescale — so a range
+ * living inside a single unit (a one-season campaign at Year scale) rendered
+ * the same label four times ("2024, 2024, 2024, 2024"). Boundaries make the
+ * ticks land where the unit actually changes, and the label dedupe collapses
+ * whatever the endpoints still repeat.
+ */
 function buildMarks(
   min: number,
   max: number,
@@ -192,11 +257,20 @@ function buildMarks(
   ctx: FormatContext,
 ): { value: number; label: string }[] {
   if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return [];
-  const NMARKS = 3;
+  let bounds = boundariesWithin(scale, min, max);
+  if (bounds.length > MAX_SCALE_MARKS) {
+    const stride = Math.ceil(bounds.length / MAX_SCALE_MARKS);
+    bounds = bounds.filter((_, i) => i % stride === 0);
+  }
+  // Endpoints frame the range even when no boundary falls inside it.
+  const values = [min, ...bounds, max];
+  const seen = new Set<string>();
   const out: { value: number; label: string }[] = [];
-  for (let i = 0; i <= NMARKS; i++) {
-    const v = min + ((max - min) * i) / NMARKS;
-    out.push({ value: v, label: formatAt(scale, v, ctx) });
+  for (const v of values) {
+    const label = formatAt(scale, v, ctx);
+    if (seen.has(label)) continue;
+    seen.add(label);
+    out.push({ value: v, label });
   }
   return out;
 }

@@ -12,5 +12,6 @@ export { default as AuthModeBadge } from './AuthModeBadge';
 export { default as PoweredBy } from './PoweredBy';
 export { useBrandLogoMode } from './useBrandLogoMode';
 export { default as SettingsDrawer } from './SettingsDrawer';
+export { default as TabIntro } from './TabIntro';
 export { default as TabModal } from './TabModal';
 export type { TabModalSubmitPayload } from './TabModal';

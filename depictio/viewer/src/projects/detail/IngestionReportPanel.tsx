@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Accordion,
   ActionIcon,
   Alert,
   Anchor,
@@ -14,8 +15,10 @@ import {
   Paper,
   SimpleGrid,
   Stack,
+  Switch,
   Table,
   Text,
+  TextInput,
   ThemeIcon,
   Title,
   Tooltip,
@@ -30,6 +33,7 @@ import {
   type RegisteredFile,
 } from 'depictio-react-core';
 import { DcTypeIcon } from '../dcTypeIcon';
+import RunProvenanceCard from './RunProvenanceCard';
 
 /** Visual treatment per DC display-status. Colors are Mantine palette names
  *  (theme tokens), not literals — they recolor with the active theme. */
@@ -653,6 +657,14 @@ const IngestionReportPanel: React.FC<IngestionReportPanelProps> = ({
             </Table.Tbody>
           </Table>
         </Card>
+      )}
+
+      {/* Run provenance — pipeline parameters / thresholds / tool versions */}
+      {(report.run_provenance?.length ?? 0) > 0 && (
+        <RunProvenanceCard
+          groups={report.run_provenance}
+          files={report.run_provenance_files ?? []}
+        />
       )}
 
       {/* Runs */}

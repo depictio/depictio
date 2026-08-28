@@ -113,28 +113,36 @@ def analyze_constrained_code(code: str) -> dict[str, Any]:
             if post_figure_open_parens == 0:
                 post_figure_lines.append("\n".join(post_figure_parts))
                 in_post_figure_statement = False
-        elif "df_modified" in line or line.startswith("df_"):
-            # Start of preprocessing statement
-            if not in_preprocessing_statement:
-                in_preprocessing_statement = True
-                preprocessing_parts = [line]
-                preprocessing_open_parens = line.count("(") - line.count(")")
-
-                # Check if it's complete single-line
-                if preprocessing_open_parens == 0:
-                    preprocessing_lines.append(line)
-                    in_preprocessing_statement = False
-            else:
-                # Shouldn't happen, but handle gracefully
-                preprocessing_lines.append(line)
         elif in_preprocessing_statement:
-            # Continue collecting preprocessing statement
+            # Continue collecting a multi-line preprocessing statement. Checked
+            # BEFORE the generic case below, which would otherwise swallow the
+            # continuation lines as if each were a statement of its own.
             preprocessing_parts.append(line)
             preprocessing_open_parens += line.count("(") - line.count(")")
+            preprocessing_open_parens += line.count("[") - line.count("]")
 
-            # Check if statement is complete
             if preprocessing_open_parens == 0:
                 preprocessing_lines.append("\n".join(preprocessing_parts))
+                in_preprocessing_statement = False
+        elif figure_line is None:
+            # Everything before the figure statement is preprocessing.
+            #
+            # This used to require the line to mention `df_modified` or start
+            # with `df_`, and silently DROPPED anything else — a helper list, a
+            # threshold, an intermediate frame under any other name. The code
+            # then ran without those lines and failed on the first name it could
+            # no longer resolve ("name 'gain' is not defined"), pointing at the
+            # figure line, which is not where the problem was. Naming a variable
+            # is not a signal about what the code is for.
+            in_preprocessing_statement = True
+            preprocessing_parts = [line]
+            preprocessing_open_parens = line.count("(") - line.count(")")
+            # Brackets too: `agg([` spans lines just as `agg(` does, and
+            # counting only parentheses closed the statement one line early.
+            preprocessing_open_parens += line.count("[") - line.count("]")
+
+            if preprocessing_open_parens == 0:
+                preprocessing_lines.append(line)
                 in_preprocessing_statement = False
 
     # Combine figure creation with post-figure customization (fig.update_*, fig.add_*, etc.)
@@ -164,12 +172,23 @@ def analyze_constrained_code(code: str) -> dict[str, Any]:
         )
         logger.debug(f"Figure line for validation: {figure_line}")
 
-        # Check if figure line uses ANY df variable (df, df_temp, df_filtered, etc.)
-        # This is more permissive - allow intermediate variable names
-        # Use more precise checks to avoid false matches (e.g., "pdf", "undefined")
-        # Match df as a word boundary or followed by . or _ or inside parentheses
+        # Does the figure use anything the preprocessing produced?
+        #
+        # The check used to look for a `df`-shaped name in the figure line, so
+        # preprocessing that ended in a variable called anything else was
+        # rejected as unused even though the figure was built from it. Read the
+        # names the preprocessing actually assigns and look for those instead —
+        # `df` itself still counts, since a figure may use the frame directly
+        # alongside a helper.
+        assigned_names = set()
+        for prep_line in preprocessing_lines:
+            match = re.match(r"\s*([A-Za-z_]\w*)\s*=(?!=)", prep_line)
+            if match:
+                assigned_names.add(match.group(1))
         df_pattern = r"\bdf[\.\(,\)]|df_\w+"
-        uses_any_df_var = bool(re.search(df_pattern, figure_line))
+        uses_any_df_var = bool(re.search(df_pattern, figure_line)) or any(
+            re.search(rf"\b{re.escape(name)}\b", figure_line) for name in assigned_names
+        )
 
         logger.debug(f"uses_any_df_var check result: {uses_any_df_var}")
 

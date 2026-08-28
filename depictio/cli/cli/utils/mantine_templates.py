@@ -71,17 +71,42 @@ _SEQUENTIAL_COLORS = [
 _SEQUENTIAL = [[i / (len(_SEQUENTIAL_COLORS) - 1), c] for i, c in enumerate(_SEQUENTIAL_COLORS)]
 
 
-def _build(colorway: list[str], bg: str, grid: str) -> go.layout.Template:
-    axis = dict(gridcolor=grid, gridwidth=0.5, zerolinecolor=grid)
+# Transparent, not a painted rectangle. Every server-rendered figure sits on a
+# card the app has already painted, and the client-side advanced-viz renderers
+# theme themselves that way (`plotlyTheme.ts`) — a figure that paints its own
+# opaque `#1a1b1e` reads as a darker block sitting inside the card, which is
+# exactly how a code-mode figure and an advanced viz stopped matching in dark
+# mode. Text and grid colours mirror the same file so both paths land on one
+# appearance.
+_TRANSPARENT = "rgba(0,0,0,0)"
+_LIGHT_TEXT = "#343a40"  # gray[8]
+_DARK_TEXT = "#e9ecef"  # gray[2]
+_LIGHT_GRID = "rgba(0,0,0,0.08)"
+_DARK_GRID = "rgba(255,255,255,0.08)"
+_LIGHT_ZERO = "rgba(0,0,0,0.35)"
+_DARK_ZERO = "rgba(255,255,255,0.35)"
+
+
+def _build(colorway: list[str], text: str, grid: str, zeroline: str) -> go.layout.Template:
+    # `color` covers the axis line and tick labels; a template that sets only
+    # `font.family` leaves Plotly's built-in `#444`, which is unreadable on a
+    # dark card.
+    axis = dict(
+        gridcolor=grid,
+        gridwidth=0.5,
+        zerolinecolor=zeroline,
+        linecolor=grid,
+        color=text,
+    )
     return go.layout.Template(
         layout=dict(
             colorway=colorway,
-            paper_bgcolor=bg,
-            plot_bgcolor=bg,
-            font=dict(family=_FONT_FAMILY),
+            paper_bgcolor=_TRANSPARENT,
+            plot_bgcolor=_TRANSPARENT,
+            font=dict(family=_FONT_FAMILY, color=text),
             xaxis=axis,
             yaxis=axis,
-            geo=dict(bgcolor=bg),
+            geo=dict(bgcolor=_TRANSPARENT),
             colorscale=dict(sequential=_SEQUENTIAL),
         )
     )
@@ -94,9 +119,11 @@ def ensure_mantine_templates() -> None:
     point (mirrors the old dmc guard). Replaces ``dmc.add_figure_templates()``.
     """
     if "mantine_light" not in pio.templates:
-        pio.templates["mantine_light"] = _build(_LIGHT_COLORWAY, "#ffffff", "#dee2e6")
+        pio.templates["mantine_light"] = _build(
+            _LIGHT_COLORWAY, _LIGHT_TEXT, _LIGHT_GRID, _LIGHT_ZERO
+        )
     if "mantine_dark" not in pio.templates:
-        pio.templates["mantine_dark"] = _build(_DARK_COLORWAY, "#1a1b1e", "#343a40")
+        pio.templates["mantine_dark"] = _build(_DARK_COLORWAY, _DARK_TEXT, _DARK_GRID, _DARK_ZERO)
 
 
 def get_theme_template(theme: str) -> str:

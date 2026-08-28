@@ -85,12 +85,14 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
     // identifiable on a single line.
     <Group
       gap={8}
-      align="baseline"
+      // Top, not baseline: the title may wrap to a second line and the value
+      // has to stay level with the first one.
+      align="flex-start"
       wrap="nowrap"
       justify="space-between"
       style={{ marginLeft: -2, minWidth: 0 }}
     >
-      <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
+      <Group gap={6} wrap="nowrap" align="flex-start" style={{ minWidth: 0 }}>
         {/* The watermark icon has no corner left in the compact layout, so it
             moves beside the title — small, full-opacity, in its own color. */}
         {icon_name && (
@@ -98,15 +100,25 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
             icon={icon_name}
             width={16}
             height={16}
-            style={{ color: icon_color || title_color || 'currentColor', flexShrink: 0 }}
+            style={{
+              color: icon_color || title_color || 'currentColor',
+              flexShrink: 0,
+              // Optically centred on the title's first line now that the row
+              // is top-aligned.
+              marginTop: 2,
+            }}
           />
         )}
         <Text
           size={title_font_size}
           fw={700}
           c={title_color || undefined}
-          truncate
-          style={{ margin: 0, minWidth: 0 }}
+          // Two lines rather than one truncated one. The value keeps its
+          // natural width, so on a narrow card a single clipped line left
+          // titles as "Shann…" — unreadable, and the tooltip that carries the
+          // full text only helps a reader who already suspects what it says.
+          lineClamp={2}
+          style={{ margin: 0, minWidth: 0, lineHeight: 1.25, overflowWrap: 'break-word' }}
         >
           {title}
         </Text>
@@ -116,7 +128,17 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
       <Text
         fw={700}
         c={title_color || undefined}
-        style={{ margin: 0, flexShrink: 0, fontSize: 28, lineHeight: 1 }}
+        style={{
+          margin: 0,
+          flexShrink: 0,
+          // Scales with the card, not fixed at 28px: on a two-column card a
+          // hero-sized number took most of the row and left the title breaking
+          // mid-word ("Tempera / ture at…"). The container query unit is the
+          // card's own width — see the `container-type: inline-size` wrapper in
+          // DepictioCard.css.
+          fontSize: 'clamp(18px, 11cqw, 28px)',
+          lineHeight: 1,
+        }}
       >
         {value !== null && value !== undefined ? value : '—'}
       </Text>

@@ -1,13 +1,19 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Accordion,
   Anchor,
   Badge,
   Code,
   CopyButton,
   Divider,
   Group,
+  Modal,
+  ScrollArea,
   Stack,
+  Switch,
+  Table,
   Text,
+  TextInput,
   Tooltip,
   ActionIcon,
 } from '@mantine/core';
@@ -16,7 +22,13 @@ import { Icon } from '@iconify/react';
 import type { DashboardData } from 'depictio-react-core';
 import { fetchProject } from 'depictio-react-core';
 import { parseTemplateOrigin, TemplateChip } from '../projects/template';
+import RunProvenanceCard from '../projects/detail/RunProvenanceCard';
 import { formatDateTime } from '../lib/datetime';
+import {
+  isUnsetProvenanceValue,
+  matchesProvenanceQuery,
+  type ProvenanceEntryLike,
+} from '../lib/provenance';
 
 interface DashboardInfoBodyProps {
   dashboard: DashboardData | null;
@@ -98,6 +110,37 @@ const DashboardInfoBody: React.FC<DashboardInfoBodyProps> = ({ dashboard, active
 
   const parsedTemplate = parseTemplateOrigin(projectTemplateOrigin);
 
+  // The run-provenance keys the template flagged as highlights — the primer /
+  // truncation / filtering settings a reader needs to interpret the dashboard.
+  // The complete listing lives in the ingestion report; this is the digest.
+  const runProvenance: ProvenanceEntryLike[] = (() => {
+    const origin = projectTemplateOrigin as {
+      run_provenance?: Array<{
+        source?: string;
+        key?: string;
+        value?: string;
+        group?: string;
+        highlight?: boolean;
+      }>;
+    } | null;
+    if (!origin || !Array.isArray(origin.run_provenance)) return [];
+    return origin.run_provenance
+      .filter((e) => e && e.key)
+      .map((e) => ({
+        source: String(e.source ?? ''),
+        key: String(e.key),
+        value: String(e.value ?? ''),
+        group: String(e.group ?? 'Other'),
+        highlight: Boolean(e.highlight),
+      }));
+  })();
+
+  const runProvenanceFiles: string[] = (() => {
+    const origin = projectTemplateOrigin as { run_provenance_files?: unknown } | null;
+    const files = origin?.run_provenance_files;
+    return Array.isArray(files) ? files.map(String) : [];
+  })();
+
   return (
     <Stack gap="md">
       {title && (
@@ -161,6 +204,20 @@ const DashboardInfoBody: React.FC<DashboardInfoBodyProps> = ({ dashboard, active
               <Anchor href={`/projects/${projectId}#ingestion`} size="sm" fw={500}>
                 View ingestion report
               </Anchor>
+            }
+          />
+        )}
+        {runProvenance.length > 0 && (
+          <MetaRow
+            icon="mdi:tune-variant"
+            color="orange"
+            label="Run parameters"
+            value={
+              <RunParameters
+                entries={runProvenance}
+                files={runProvenanceFiles}
+                projectId={projectId}
+              />
             }
           />
         )}
@@ -262,5 +319,117 @@ const CopyableId: React.FC<{ label: string; value: string }> = ({ label, value }
     </CopyButton>
   </Group>
 );
+
+/**
+ * The pipeline's own settings, from a 400px drawer.
+ *
+ * Two levels, because the two readings want different room. The template's
+ * `provenance.highlight` keys stay inline — the handful of settings needed to
+ * read the dashboard at all (primers, truncation, filtering thresholds), short
+ * enough for a key/value table at panel width. Everything else opens in a
+ * modal running the SAME component as the ingestion report, rather than a
+ * cramped copy of it: a 235-row grouped table needs the width, and one
+ * implementation means one behaviour to learn.
+ *
+ * Highlighting therefore decides the ORDER of discovery, not what exists —
+ * which is what keeps the mechanism honest for a pipeline whose template
+ * names no highlight at all.
+ */
+const RunParameters: React.FC<{
+  entries: ProvenanceEntryLike[];
+  files: string[];
+  projectId: string | null;
+}> = ({ entries, files, projectId }) => {
+  const [modalOpen, setModalOpen] = useState(false);
+  const highlights = useMemo(() => entries.filter((e) => e.highlight), [entries]);
+
+  // Re-group the flat entry list the way the report's endpoint already does —
+  // consecutive runs of the same group, in collection order.
+  const groups = useMemo(() => {
+    const out: Array<{ group: string; entries: ProvenanceEntryLike[] }> = [];
+    for (const e of entries) {
+      const name = e.group || 'Other';
+      const last = out[out.length - 1];
+      if (last && last.group === name) last.entries.push(e);
+      else out.push({ group: name, entries: [e] });
+    }
+    return out;
+  }, [entries]);
+
+  return (
+    <>
+      <Accordion
+        variant="default"
+        chevronPosition="left"
+        styles={{
+          item: { border: 'none' },
+          control: { padding: 0 },
+          content: { padding: 0 },
+          label: { padding: 0 },
+        }}
+      >
+        <Accordion.Item value="run-params">
+          <Accordion.Control>
+            <Text size="sm" fw={500}>
+              {highlights.length > 0
+                ? `${highlights.length} key settings`
+                : `${entries.length} parameters`}
+            </Text>
+          </Accordion.Control>
+          <Accordion.Panel>
+            {highlights.length > 0 && (
+              <Table verticalSpacing={2} withRowBorders={false}>
+                <Table.Tbody>
+                  {highlights.map((e) => (
+                    <Table.Tr key={e.key}>
+                      <Table.Td px={0} w={150}>
+                        <Text size="xs" fw={500} style={{ overflowWrap: 'anywhere' }}>
+                          {e.key}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td px={0}>
+                        <Code fz={11} style={{ overflowWrap: 'anywhere' }}>
+                          {e.value}
+                        </Code>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            )}
+            <Group gap="sm" mt={6} wrap="nowrap">
+              <Anchor
+                component="button"
+                type="button"
+                size="xs"
+                fw={500}
+                onClick={() => setModalOpen(true)}
+              >
+                All {entries.length} parameters →
+              </Anchor>
+              {projectId && (
+                <Anchor href={`/projects/${projectId}#ingestion`} size="xs" fw={500}>
+                  Ingestion report →
+                </Anchor>
+              )}
+            </Group>
+          </Accordion.Panel>
+        </Accordion.Item>
+      </Accordion>
+
+      <Modal
+        opened={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title="Run parameters"
+        size="xl"
+        // Above the Settings drawer that opened it.
+        zIndex={400}
+        scrollAreaComponent={ScrollArea.Autosize}
+      >
+        <RunProvenanceCard groups={groups} files={files} withCard={false} />
+      </Modal>
+    </>
+  );
+};
 
 export default DashboardInfoBody;

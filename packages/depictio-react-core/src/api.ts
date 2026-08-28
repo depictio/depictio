@@ -2955,6 +2955,14 @@ export interface IngestionReport {
    */
   manifest_source: 'template_manifest' | 'live_project';
   variables: Array<{ name: string; value: string }>;
+  /** Pipeline run provenance (parameters, thresholds, tool versions), grouped
+   *  as the template's ProvenanceSpec laid them out. Empty for projects
+   *  ingested before provenance collection existed. */
+  run_provenance: Array<{
+    group: string;
+    entries: Array<{ source: string; key: string; value: string; highlight: boolean }>;
+  }>;
+  run_provenance_files: string[];
   data_collections: IngestionDataCollection[];
   runs: IngestionRun[];
   summary: IngestionSummary;
