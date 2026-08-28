@@ -2,11 +2,12 @@ import hashlib
 import json
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from pymongo.collection import Collection
 
@@ -30,6 +31,10 @@ from depictio.models.models.users import User
 from depictio.version import get_version
 
 backup_endpoint_router = APIRouter()
+
+# Uploaded backup files are read fully into memory before being written to the
+# backup directory, so cap their size. Module-level so tests can patch it.
+MAX_BACKUP_UPLOAD_BYTES = 200 * 1024 * 1024  # 200 MB
 
 # Backup IDs are generated as ``datetime.strftime("%Y%m%d_%H%M%S")`` in
 # ``_create_mongodb_backup`` (e.g. ``20250627_123456``). Enforcing this strict
@@ -156,6 +161,9 @@ class BackupResponse(BaseModel):
     collections_backed_up: list = []
     timestamp: str | None = None
     filename: str | None = None
+    # Populated only when include_s3_data was requested. Must be a declared
+    # field — response_model filtering silently drops undeclared keys.
+    s3_backup_metadata: dict | None = None
 
 
 async def _create_mongodb_backup(current_user: User) -> dict:
@@ -372,9 +380,23 @@ async def create_backup(
         raise HTTPException(status_code=500, detail="Backup creation failed.")
 
 
+class BackupListItem(BaseModel):
+    backup_id: str
+    filename: str
+    size_mb: float
+    created: str
+    created_by: str = "unknown"
+    total_documents: int = 0
+    collections: list[str] = []
+    depictio_version: str | None = None
+    # False for legacy backups without a .sha256 sidecar — those can only be
+    # restored with allow_unverified=true.
+    has_checksum: bool = False
+
+
 class BackupListResponse(BaseModel):
     success: bool
-    backups: list
+    backups: list[BackupListItem]
     count: int
 
 
@@ -391,6 +413,17 @@ class BackupValidateResponse(BaseModel):
     invalid_documents: int = 0
     collections_validated: dict = {}
     errors: list = []
+    warnings: list = []
+
+
+class BackupUploadResponse(BaseModel):
+    success: bool
+    message: str
+    backup_id: str | None = None
+    filename: str | None = None
+    # Validation runs automatically on upload; the file is stored either way —
+    # the restore endpoint's validation gate is what protects the database.
+    validation: BackupValidateResponse | None = None
 
 
 class BackupRestoreRequest(BaseModel):
@@ -400,6 +433,9 @@ class BackupRestoreRequest(BaseModel):
     # Escape hatch for legacy backups created before checksum sidecars existed.
     # Only bypasses a *missing* checksum; a checksum *mismatch* is never bypassable.
     allow_unverified: bool = False
+    # Escape hatch for the pre-restore Pydantic validation gate. Restoring
+    # documents that fail model validation can leave the app broken.
+    skip_validation: bool = False
 
 
 class BackupRestoreResponse(BaseModel):
@@ -435,6 +471,7 @@ async def list_backups(
 
                 # Extract backup ID from filename
                 backup_id = filename.replace("depictio_backup_", "").replace(".json", "")
+                has_checksum = os.path.exists(f"{file_path}.sha256")
 
                 # Try to read metadata
                 try:
@@ -442,37 +479,56 @@ async def list_backups(
                         data = json.load(f)
                         metadata = data.get("backup_metadata", {})
 
-                    backup_info = {
-                        "backup_id": backup_id,
-                        "filename": filename,
-                        "size_mb": round(file_stat.st_size / (1024 * 1024), 2),
-                        "created": datetime.fromtimestamp(file_stat.st_ctime).isoformat(),
-                        "created_by": metadata.get("created_by", "unknown"),
-                        "total_documents": metadata.get("total_documents", 0),
-                        "collections": metadata.get("collections", []),
-                    }
+                    backup_info = BackupListItem(
+                        backup_id=backup_id,
+                        filename=filename,
+                        size_mb=round(file_stat.st_size / (1024 * 1024), 2),
+                        created=datetime.fromtimestamp(file_stat.st_ctime).isoformat(),
+                        created_by=metadata.get("created_by", "unknown"),
+                        total_documents=metadata.get("total_documents", 0),
+                        collections=metadata.get("collections", []),
+                        depictio_version=metadata.get("depictio_version"),
+                        has_checksum=has_checksum,
+                    )
                 except Exception:
                     # If can't read metadata, just use file info
-                    backup_info = {
-                        "backup_id": backup_id,
-                        "filename": filename,
-                        "size_mb": round(file_stat.st_size / (1024 * 1024), 2),
-                        "created": datetime.fromtimestamp(file_stat.st_ctime).isoformat(),
-                        "created_by": "unknown",
-                        "total_documents": 0,
-                        "collections": [],
-                    }
+                    backup_info = BackupListItem(
+                        backup_id=backup_id,
+                        filename=filename,
+                        size_mb=round(file_stat.st_size / (1024 * 1024), 2),
+                        created=datetime.fromtimestamp(file_stat.st_ctime).isoformat(),
+                        has_checksum=has_checksum,
+                    )
 
                 backup_files.append(backup_info)
 
         # Sort by creation time (newest first)
-        backup_files.sort(key=lambda x: x["created"], reverse=True)
+        backup_files.sort(key=lambda x: x.created, reverse=True)
 
         return BackupListResponse(success=True, backups=backup_files, count=len(backup_files))
 
     except Exception as e:
         logger.error(f"Failed to list backups: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to list backups.")
+
+
+def _build_validate_response(result: dict) -> BackupValidateResponse:
+    """Map a ``validate_backup_file`` result dict onto the API response model.
+
+    Shared by ``/validate`` and ``/upload`` so both surfaces report validation
+    identically.
+    """
+    return BackupValidateResponse(
+        success=True,
+        message="Validation completed",
+        valid=result.get("valid", False),
+        total_documents=result.get("total_documents", 0),
+        valid_documents=result.get("valid_documents", 0),
+        invalid_documents=result.get("invalid_documents", 0),
+        collections_validated=result.get("collections_validated", {}),
+        errors=result.get("errors", []),
+        warnings=result.get("warnings", []),
+    )
 
 
 @backup_endpoint_router.post("/validate", response_model=BackupValidateResponse)
@@ -506,22 +562,155 @@ async def validate_backup(
         # Validate the backup
         result = validate_backup_file(backup_path)
 
-        return BackupValidateResponse(
-            success=True,
-            message="Validation completed",
-            valid=result.get("valid", False),
-            total_documents=result.get("total_documents", 0),
-            valid_documents=result.get("valid_documents", 0),
-            invalid_documents=result.get("invalid_documents", 0),
-            collections_validated=result.get("collections_validated", {}),
-            errors=result.get("errors", []),
-        )
+        return _build_validate_response(result)
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Backup validation failed: {str(e)}")
         raise HTTPException(status_code=500, detail="Backup validation failed.")
+
+
+@backup_endpoint_router.get("/download/{backup_id}")
+async def download_backup(
+    backup_id: str,
+    current_user: User = Depends(get_current_user),
+) -> FileResponse:
+    """Download a backup file from the server.
+
+    Streams the backup JSON as an attachment so admins can keep off-server
+    copies (and re-upload them later via ``/upload``).
+    """
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=403, detail="Access denied: Only administrators can download backups"
+        )
+
+    # Reject malformed backup_id before it touches the filesystem.
+    _validate_backup_id(backup_id)
+
+    backup_dir = settings.backup.backup_path
+    backup_path = _resolve_backup_path(backup_dir, backup_id)
+
+    if not os.path.exists(backup_path):
+        raise HTTPException(status_code=404, detail=f"Backup not found: {backup_id}")
+
+    # The filename is derived from the strictly validated backup_id, so it is
+    # plain ASCII — no RFC 5987 encoding needed (unlike migrate's export_project
+    # which embeds user-controlled project names).
+    return FileResponse(
+        backup_path,
+        media_type="application/json",
+        filename=f"depictio_backup_{backup_id}.json",
+    )
+
+
+def _mint_upload_backup_id(backup_dir: str) -> str:
+    """Mint a fresh server-side backup_id for an uploaded file.
+
+    Uses the same ``YYYYMMDD_HHMMSS`` convention as ``/create``; bumps by one
+    second while the target path already exists so rapid uploads cannot
+    overwrite each other.
+    """
+    timestamp = datetime.now()
+    while True:
+        backup_id = timestamp.strftime("%Y%m%d_%H%M%S")
+        if not os.path.exists(os.path.join(backup_dir, f"depictio_backup_{backup_id}.json")):
+            return backup_id
+        timestamp += timedelta(seconds=1)
+
+
+@backup_endpoint_router.post("/upload", response_model=BackupUploadResponse)
+async def upload_backup(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    """Upload a backup file to the server and validate it.
+
+    The uploaded file is stored in the backup directory under a freshly minted
+    server-side backup_id (with a SHA-256 sidecar), making it a first-class
+    backup: it appears in ``/list`` and can be validated, downloaded, and
+    restored like any server-created backup. Validation runs automatically and
+    its result is returned; a failing validation does not reject the upload —
+    the restore endpoint refuses invalid backups by default.
+    """
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=403, detail="Access denied: Only administrators can upload backups"
+        )
+
+    try:
+        # Read fully into memory (matches the repo's upload pattern); the size
+        # cap bounds memory usage.
+        body = await file.read()
+        if len(body) > MAX_BACKUP_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"Uploaded backup exceeds the maximum allowed size of "
+                    f"{MAX_BACKUP_UPLOAD_BYTES // (1024 * 1024)} MB."
+                ),
+            )
+
+        try:
+            payload = json.loads(body)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            raise HTTPException(status_code=400, detail="Uploaded file is not valid JSON.")
+
+        if (
+            not isinstance(payload, dict)
+            or "data" not in payload
+            or not isinstance(payload["data"], dict)
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Not a depictio backup file (missing 'data' section).",
+            )
+
+        backup_dir = settings.backup.backup_path
+        os.makedirs(backup_dir, exist_ok=True)
+
+        # Assign a server-side id so the filename-derived id and the metadata
+        # agree; everything else in the file is preserved.
+        backup_id = _mint_upload_backup_id(backup_dir)
+        metadata = payload.setdefault("backup_metadata", {})
+        if isinstance(metadata, dict):
+            metadata["backup_id"] = backup_id
+
+        backup_filename = f"depictio_backup_{backup_id}.json"
+        backup_path = _resolve_backup_path(backup_dir, backup_id)
+
+        with open(backup_path, "w") as backup_file:
+            json.dump(payload, backup_file, indent=2, default=str)
+
+        # Same sidecar convention as /create; computed over the re-serialized
+        # file so the checksum always matches what is on disk.
+        backup_checksum = _compute_file_sha256(backup_path)
+        with open(f"{backup_path}.sha256", "w") as checksum_file:
+            checksum_file.write(f"{backup_checksum}  {backup_filename}\n")
+
+        logger.info(
+            f"Admin user {current_user.email} uploaded backup {backup_filename} ({len(body)} bytes)"
+        )
+
+        from depictio.cli.cli.utils.backup_validation import validate_backup_file
+
+        validation = _build_validate_response(validate_backup_file(backup_path))
+
+        return BackupUploadResponse(
+            success=True,
+            message="Backup uploaded"
+            + (" and validated" if validation.valid else "; validation found errors"),
+            backup_id=backup_id,
+            filename=backup_filename,
+            validation=validation,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Backup upload failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Backup upload failed.")
 
 
 def _convert_complex_objects_to_strings(obj):
@@ -549,6 +738,10 @@ async def restore_backup(
 
     WARNING: This is a destructive operation that will replace existing data.
     Use dry_run=True to preview what would be restored.
+
+    Before any data is touched, the backup is validated against the current
+    Pydantic models (same validator as /validate); restores of invalid backups
+    are refused unless skip_validation=true.
     """
 
     # Check if user is admin
@@ -632,6 +825,37 @@ async def restore_backup(
                 total_restored=total_restored,
                 errors=errors,
             )
+
+        # Validation gate: refuse to wipe collections for documents that fail
+        # Pydantic model validation. Same validator as /validate and the CLI,
+        # so UI and CLI share one "validate then restore" path. Scoped to the
+        # collections actually being restored, so a partial restore is not
+        # blocked by unrelated broken documents.
+        if not request.skip_validation:
+            from depictio.cli.cli.utils.backup_validation import validate_backup_file
+
+            validation_result = validate_backup_file(backup_path)
+            per_collection = validation_result.get("collections_validated", {})
+            invalid_selected = sum(
+                per_collection.get(name, {}).get("invalid", 0) for name in collections_to_restore
+            )
+            if invalid_selected > 0:
+                # validate_backup_file formats errors as "Document {i} in {collection}: ..."
+                selected_errors = [
+                    err
+                    for err in validation_result.get("errors", [])
+                    if any(f" in {name}:" in err for name in collections_to_restore)
+                ]
+                return BackupRestoreResponse(
+                    success=False,
+                    message=(
+                        f"Backup failed model validation: {invalid_selected} invalid "
+                        "document(s) in the selected collections. Refusing to restore. "
+                        "Run validation for details, or set skip_validation=true to "
+                        "override at your own risk."
+                    ),
+                    errors=selected_errors[:25],
+                )
 
         for collection_name in collections_to_restore:
             if collection_name not in data_section:

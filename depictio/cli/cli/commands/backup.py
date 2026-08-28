@@ -123,6 +123,8 @@ def create(
                 )
                 raise typer.Exit(1)
 
+    except typer.Exit:
+        raise
     except Exception as e:
         rich_print_checked_statement(f"Backup operation failed: {e}", "error")
         raise typer.Exit(1)
@@ -171,6 +173,8 @@ def list(
             )
             raise typer.Exit(1)
 
+    except typer.Exit:
+        raise
     except Exception as e:
         rich_print_checked_statement(f"Failed to list backups: {e}", "error")
         raise typer.Exit(1)
@@ -225,6 +229,11 @@ def validate(
                     "collections_validated": validation_result.get("collections_validated", {}),
                 }
                 rich_print_json("Validation details:", validation_details)
+                warnings = validation_result.get("warnings", [])
+                if warnings:
+                    rich_print_checked_statement("Validation warnings:", "warning")
+                    for warning in warnings:
+                        rich_print_checked_statement(f"  • {warning}", "warning")
             else:
                 rich_print_checked_statement("Backup file validation failed", "error")
                 errors = validation_result.get("errors", [])
@@ -239,6 +248,8 @@ def validate(
             )
             raise typer.Exit(1)
 
+    except typer.Exit:
+        raise
     except Exception as e:
         rich_print_checked_statement(f"Backup validation failed: {e}", "error")
         raise typer.Exit(1)
@@ -319,6 +330,8 @@ def check_coverage(
         if not coverage_report["valid"]:
             raise typer.Exit(1)
 
+    except typer.Exit:
+        raise
     except Exception as e:
         rich_print_checked_statement(f"Coverage check failed: {e}", "error")
         raise typer.Exit(1)
@@ -342,6 +355,23 @@ def restore(
     force: Annotated[
         bool, typer.Option("--force", help="Skip confirmation prompt (use with caution!)")
     ] = False,
+    allow_unverified: Annotated[
+        bool,
+        typer.Option(
+            "--allow-unverified",
+            help=(
+                "Allow restoring a legacy backup without a checksum sidecar. "
+                "Checksum mismatches are never bypassable."
+            ),
+        ),
+    ] = False,
+    skip_validation: Annotated[
+        bool,
+        typer.Option(
+            "--skip-validation",
+            help="Skip the server-side Pydantic validation gate before restore (dangerous!)",
+        ),
+    ] = False,
 ):
     """
     Restore data from a backup file.
@@ -349,12 +379,18 @@ def restore(
     WARNING: This is a destructive operation that will replace existing data!
     Use --dry-run to preview what would be restored without making changes.
 
+    Before restoring, the server validates the backup against the current
+    Pydantic models and refuses to restore invalid backups unless
+    --skip-validation is passed.
+
     Args:
         backup_id: ID of the backup to restore from
         CLI_config_path: Path to the CLI configuration file
         dry_run: If True, only simulate the restore
         collections: Comma-separated list of collections to restore (if not specified, restore all)
         force: Skip confirmation prompt
+        allow_unverified: Allow restoring a backup that has no checksum sidecar
+        skip_validation: Skip the server-side validation gate before restore
     """
     rich_print_command_usage("backup restore")
 
@@ -405,7 +441,14 @@ def restore(
         else:
             rich_print_checked_statement(f"Restoring from backup {backup_id}...", "warning")
 
-        restore_result = api_restore_backup(CLI_config, backup_id, dry_run, collections_list)
+        restore_result = api_restore_backup(
+            CLI_config,
+            backup_id,
+            dry_run,
+            collections_list,
+            allow_unverified=allow_unverified,
+            skip_validation=skip_validation,
+        )
 
         if restore_result.get("success", False):
             if dry_run:
@@ -431,8 +474,16 @@ def restore(
             rich_print_checked_statement(
                 f"Restore failed: {restore_result.get('message', 'Unknown error')}", "error"
             )
+            errors = restore_result.get("errors", [])
+            if errors:
+                for error in errors:
+                    rich_print_checked_statement(f"  • {error}", "error")
             raise typer.Exit(1)
 
+    except typer.Exit:
+        # Deliberate exits (declined confirmation, handled failures) must keep
+        # their exit code instead of being reported as unexpected errors.
+        raise
     except Exception as e:
         rich_print_checked_statement(f"Restore operation failed: {e}", "error")
         raise typer.Exit(1)
