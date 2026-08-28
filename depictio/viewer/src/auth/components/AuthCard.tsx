@@ -1,6 +1,8 @@
 import { Center, Paper, Stack, Title } from '@mantine/core';
 
 import BrandLogo from '../../chrome/BrandLogo';
+import PoweredBy from '../../chrome/PoweredBy';
+import { useBrandLogoMode } from '../../chrome/useBrandLogoMode';
 import { useBranding } from '../../branding';
 
 interface Props {
@@ -21,6 +23,7 @@ interface Props {
  */
 export default function AuthCard({ heading, children }: Props) {
   const branding = useBranding();
+  const logoMode = useBrandLogoMode();
   const resolvedHeading = branding?.app_name
     ? heading.replace('Depictio', branding.app_name)
     : heading;
@@ -34,9 +37,16 @@ export default function AuthCard({ heading, children }: Props) {
       style={{ width: 480, maxWidth: '90vw' }}
     >
       <Stack gap="md">
-        <Center>
-          <BrandLogo height={60} />
-        </Center>
+        {/* A custom mark gets the room the depictio wordmark does not need: the
+            wordmark is a wide lockup that reads fine at 60, a custom logo is as
+            often a square badge that looks incidental at that height. Width
+            stays capped by BrandLogo's `maxWidth: 100%`. The attribution sits
+            under the mark it qualifies, and renders itself only once that mark
+            is no longer the depictio one (see PoweredBy). */}
+        <Stack gap={6} align="center">
+          <BrandLogo height={logoMode === 'custom' ? 110 : 60} />
+          <PoweredBy />
+        </Stack>
         <Center>
           <Title
             order={2}

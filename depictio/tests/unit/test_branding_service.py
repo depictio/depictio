@@ -1,5 +1,7 @@
 """Instance brand theme service: env/DB merge, derivation, cache, upload rules."""
 
+import json
+
 import pytest
 
 from depictio.api.v1.services import branding as branding_svc
@@ -167,3 +169,164 @@ class TestLogoUploadValidation:
         big = PNG + b"0" * branding_svc.LOGO_MAX_BYTES
         with pytest.raises(ValueError, match="too large"):
             branding_svc.validate_logo_upload("image/png", big)
+
+
+@pytest.fixture()
+def fake_assets(monkeypatch):
+    fake = FakeCollection()
+    monkeypatch.setattr(branding_svc, "branding_assets_collection", fake)
+    return fake
+
+
+class TestLogoAssetStore:
+    """Uploaded logos live in MongoDB, so a rebuild cannot orphan the theme."""
+
+    def test_round_trip_preserves_bytes_and_type(self, fake_assets):
+        branding_svc.store_logo_asset("instance-light", PNG, "image/png")
+        assert branding_svc.read_logo_asset("instance-light") == (PNG, "image/png")
+
+    def test_missing_asset_reads_as_none(self, fake_assets):
+        assert branding_svc.read_logo_asset("instance-dark") is None
+
+    def test_replacing_keeps_one_document_per_key(self, fake_assets):
+        branding_svc.store_logo_asset("instance-light", PNG, "image/png")
+        branding_svc.store_logo_asset("instance-light", JPEG, "image/jpeg")
+        assert branding_svc.read_logo_asset("instance-light") == (JPEG, "image/jpeg")
+        assert len(fake_assets.docs) == 1
+
+    def test_delete_removes_the_asset(self, fake_assets):
+        branding_svc.store_logo_asset("dashboard-abc", PNG, "image/png")
+        branding_svc.delete_logo_asset("dashboard-abc")
+        assert branding_svc.read_logo_asset("dashboard-abc") is None
+
+    def test_stored_document_is_json_serialisable(self, fake_assets):
+        """The backup endpoint dumps with `json.dump(..., default=str)`, which
+        turns raw bytes into an unrestorable repr. Base64 is what keeps a
+        backed-up brand restorable."""
+        branding_svc.store_logo_asset("instance-light", PNG, "image/png")
+        doc = fake_assets.docs["instance-light"]
+        assert isinstance(doc["data_b64"], str)
+        assert json.loads(json.dumps(doc)) == doc
+
+    def test_urls_point_at_the_serving_endpoints(self, fake_assets):
+        instance_url = branding_svc.store_logo_asset("instance-dark", PNG, "image/png")
+        dashboard_url = branding_svc.store_logo_asset("dashboard-42", PNG, "image/png")
+        assert instance_url.startswith("/depictio/api/")
+        assert "/utils/branding/logo/dark?v=" in instance_url
+        assert "/dashboards/logo/42?v=" in dashboard_url
+
+    def test_keys_are_scoped_by_owner(self):
+        assert branding_svc.instance_logo_key("light") == "instance-light"
+        assert branding_svc.dashboard_logo_key("abc123") == "dashboard-abc123"
+
+    def test_content_type_lookup_is_the_inverse_of_validation(self):
+        assert branding_svc.content_type_for_extension(".png") == "image/png"
+        assert branding_svc.content_type_for_extension(".JPG") == "image/jpeg"
+        assert branding_svc.content_type_for_extension(".svg") is None
+
+
+class FakeDashboards:
+    """Minimal `find` / `update_one` over a list, for the migration pass."""
+
+    def __init__(self, docs):
+        self.docs = docs
+
+    def find(self, query, _projection=None):
+        prefix = query["brand_theme.logo_url"]["$regex"].lstrip("^")
+        return [
+            d
+            for d in self.docs
+            if (d.get("brand_theme") or {}).get("logo_url", "").startswith(prefix)
+        ]
+
+    def update_one(self, query, update):
+        for doc in self.docs:
+            if doc["dashboard_id"] == query["dashboard_id"]:
+                for key, value in update["$set"].items():
+                    parent, _, child = key.partition(".")
+                    doc.setdefault(parent, {})[child] = value
+
+
+class TestLegacyLogoMigration:
+    """Logos left on the container filesystem move into MongoDB on boot."""
+
+    @pytest.fixture()
+    def legacy_dir(self, tmp_path, monkeypatch):
+        (tmp_path / "branding").mkdir()
+        (tmp_path / "dashboard_logos").mkdir()
+        monkeypatch.setattr(branding_svc, "_LEGACY_STATIC_DIR", tmp_path)
+        return tmp_path
+
+    @pytest.fixture()
+    def fake_dashboards(self, monkeypatch):
+        """Patched by default so no test reaches for a real Mongo connection."""
+        fake = FakeDashboards([])
+        monkeypatch.setattr("depictio.api.v1.db.dashboards_collection", fake)
+        return fake
+
+    def test_instance_logo_moves_and_url_is_rewritten(
+        self, fake_store, fake_assets, fake_dashboards, legacy_dir
+    ):
+        (legacy_dir / "branding" / "logo_light.png").write_bytes(PNG)
+        branding_svc.set_brand_theme_overrides(
+            BrandTheme(logo_url="/static/branding/logo_light.png?v=1", logo_mode="custom")
+        )
+
+        assert branding_svc.migrate_legacy_logo_files() == 1
+
+        overrides = branding_svc.get_brand_theme_overrides()
+        assert "/utils/branding/logo/light" in overrides.logo_url
+        # The rest of the brand is untouched by the rewrite.
+        assert overrides.logo_mode == "custom"
+        assert branding_svc.read_logo_asset("instance-light") == (PNG, "image/png")
+
+    def test_already_migrated_instance_is_left_alone(
+        self, fake_store, fake_assets, fake_dashboards, legacy_dir
+    ):
+        (legacy_dir / "branding" / "logo_light.png").write_bytes(PNG)
+        branding_svc.set_brand_theme_overrides(
+            BrandTheme(logo_url="/depictio/api/v1/utils/branding/logo/light?v=1")
+        )
+        assert branding_svc.migrate_legacy_logo_files() == 0
+        assert fake_assets.docs == {}
+
+    def test_missing_file_leaves_the_rest_of_the_brand_intact(
+        self, fake_store, fake_assets, fake_dashboards, legacy_dir
+    ):
+        """The orphaned case: the URL survived, the file did not."""
+        branding_svc.set_brand_theme_overrides(
+            BrandTheme(logo_url="/static/branding/logo_light.png", app_name="Core Facility")
+        )
+        assert branding_svc.migrate_legacy_logo_files() == 0
+        assert branding_svc.get_brand_theme_overrides().app_name == "Core Facility"
+
+    def test_dashboard_logo_moves_and_url_is_rewritten(
+        self, fake_store, fake_assets, fake_dashboards, legacy_dir
+    ):
+        (legacy_dir / "dashboard_logos" / "abc123.png").write_bytes(PNG)
+        fake_dashboards.docs = [
+            {
+                "dashboard_id": "abc123",
+                "brand_theme": {
+                    "logo_url": "/static/dashboard_logos/abc123.png",
+                    "logo_mode": "custom",
+                },
+            },
+            {"dashboard_id": "untouched", "brand_theme": {"primary": "#123456"}},
+        ]
+
+        assert branding_svc.migrate_legacy_logo_files() == 1
+        assert "/dashboards/logo/abc123" in fake_dashboards.docs[0]["brand_theme"]["logo_url"]
+        assert fake_dashboards.docs[1]["brand_theme"] == {"primary": "#123456"}
+        assert branding_svc.read_logo_asset("dashboard-abc123") == (PNG, "image/png")
+
+    def test_one_half_failing_neither_raises_nor_stops_the_other(self, monkeypatch):
+        """A deployment must still boot, and a dashboard tripping over
+        something must not cost the instance its own logo."""
+
+        def boom():
+            raise RuntimeError("mongo down")
+
+        monkeypatch.setattr(branding_svc, "_migrate_instance_logos", boom)
+        monkeypatch.setattr(branding_svc, "_migrate_dashboard_logos", lambda: 1)
+        assert branding_svc.migrate_legacy_logo_files() == 1

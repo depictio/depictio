@@ -5,7 +5,7 @@ from typing import Annotated, Any
 
 from beanie import PydanticObjectId
 from bson import ObjectId
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr
 
@@ -174,6 +174,17 @@ async def login(
             raise HTTPException(status_code=500, detail="Failed to create session token")
         token.logged_in = True
         return token
+
+    # Instances that source every account from one identity provider can close
+    # this door (`DEPICTIO_AUTH_PASSWORD_LOGIN_DISABLED`). Checked after the
+    # single-user branch above, which has no password to refuse, and read
+    # through the computed property so it only bites when Google OAuth is
+    # actually configured.
+    if settings.auth.is_password_login_disabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Password sign-in is disabled on this instance. Use Google sign-in.",
+        )
 
     password_valid = await _check_password(login_request.username, login_request.password)
     if not password_valid:
@@ -650,6 +661,13 @@ async def get_current_user_info_optional(
         "is_single_user_mode": settings.auth.is_single_user_mode,
         "is_demo_mode": getattr(settings.auth, "is_demo_mode", False),
         "registration_disabled": getattr(settings.auth, "registration_disabled", False),
+        # Effective, not the raw flag: the SPA must not hide the password form
+        # on an instance where Google OAuth was never configured.
+        "password_login_disabled": getattr(settings.auth, "is_password_login_disabled", False),
+        # Whether public mode asks for the shared code — never the code itself.
+        "public_access_code_required": getattr(
+            settings.auth, "is_public_access_code_required", False
+        ),
         "is_dev_mode": is_dev_mode,
         "walkthrough_disabled": walkthrough_disabled,
         "unauthenticated_mode": getattr(settings.auth, "unauthenticated_mode", False),
@@ -789,12 +807,18 @@ async def cleanup_expired_temporary_users_endpoint(
 
 
 @auth_endpoint_router.post("/public/create_temporary_user", include_in_schema=True)
-async def create_temporary_user_public(request: Request) -> dict:
+async def create_temporary_user_public(request: Request, body: dict | None = Body(None)) -> dict:
     """Create a temporary user for the React /auth SPA in public mode.
 
     Public-facing variant of ``/create_temporary_user`` (no API key). Disabled
     outside public mode and rate-limited per IP. Expiry is taken from settings
     so the SPA doesn't need to (and shouldn't be able to) override it.
+
+    When ``DEPICTIO_AUTH_PUBLIC_ACCESS_CODE`` is set, the request must carry it
+    as ``access_code``. That is what separates a link-shareable deployment from
+    a world-open one: without it, public mode hands a session to anyone who
+    loads the page. The check is server-side because the SPA hiding a form
+    would stop nobody from calling this endpoint directly.
     """
     if not settings.auth.is_public_mode:
         raise HTTPException(
@@ -802,7 +826,13 @@ async def create_temporary_user_public(request: Request) -> dict:
             detail="Temporary users only available in public mode",
         )
 
+    # Rate-limited before the code check so the shared secret cannot be
+    # brute-forced any faster than any other credential on this endpoint.
     enforce_rate_limit(request, "public/create_temporary_user")
+
+    if not settings.auth.verify_public_access_code((body or {}).get("access_code")):
+        logger.warning("Public access code rejected for temporary-user request")
+        raise HTTPException(status_code=403, detail="Invalid access code.")
 
     temp_user = await _create_temporary_user(
         expiry_hours=settings.auth.temporary_user_expiry_hours,

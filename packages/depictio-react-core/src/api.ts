@@ -2450,6 +2450,15 @@ export interface AuthStatusResponse {
    *  allow pre-provisioned accounts to log in. Older backends omit this —
    *  treat absent as `false`. */
   registration_disabled?: boolean;
+  /** Email + password sign-in is disabled — hide the credentials form and
+   *  leave Google OAuth as the only way in. Already accounts for whether
+   *  Google OAuth is actually configured. Older backends omit this — treat
+   *  absent as `false`. */
+  password_login_disabled?: boolean;
+  /** Public mode is gated by a shared access code — do not auto-mint a
+   *  temporary session, ask for the code first. Older backends omit this —
+   *  treat absent as `false`. */
+  public_access_code_required?: boolean;
   google_oauth_enabled: boolean;
   /** Development mode (DEPICTIO_DEV_MODE). Suppresses the walkthrough. */
   is_dev_mode?: boolean;
@@ -2591,11 +2600,17 @@ export async function registerUser(email: string, password: string): Promise<Reg
   return { success: Boolean(body.success), message: body.message };
 }
 
-/** Public-mode "Continue as temporary user" — the React modal calls this. */
-export async function createTemporaryUser(): Promise<SessionPayload> {
+/** Public-mode "Continue as temporary user" — the React modal calls this.
+ *
+ *  `accessCode` is the shared secret a protected public deployment asks for
+ *  (`DEPICTIO_AUTH_PUBLIC_ACCESS_CODE`). Omit it on an open one; the server
+ *  rejects a missing or wrong code with 403 either way, so this is a
+ *  convenience for the form rather than the check itself. */
+export async function createTemporaryUser(accessCode?: string): Promise<SessionPayload> {
   const res = await fetch(`${API_BASE}/auth/public/create_temporary_user`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(accessCode ? { access_code: accessCode } : {}),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to create temporary user');
   return (await res.json()) as SessionPayload;

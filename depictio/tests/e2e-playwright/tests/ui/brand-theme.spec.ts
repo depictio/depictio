@@ -118,4 +118,35 @@ test.describe("Instance brand theme", () => {
     await page.locator("[data-testid='branding-reset']").click();
     await expect.poll(() => cssVar(page, "--mantine-color-blue-6")).not.toBe(TREC_PRIMARY);
   });
+
+  test("the attribution appears only once the depictio logo is gone", async ({
+    loginAsAdmin,
+    page,
+    request,
+  }) => {
+    const { access_token } = await loginAsTestUser(page, request, "adminUser");
+    const headers = { Authorization: `Bearer ${access_token}` };
+    const url = `${API_URL}${API_PREFIX}/utils/branding`;
+    const attribution = page.locator("[data-testid='powered-by']");
+
+    await loginAsAdmin();
+
+    // Stock instance: the depictio wordmark is already in the rail, so a badge
+    // repeating it would be noise.
+    await request.delete(url, { headers });
+    await page.goto("/dashboards");
+    const rail = page.locator("[data-testid='app-sidebar']");
+    await expect(rail).toBeVisible({ timeout: 15_000 });
+    // The rail is what carries the attribution, so its own theme toggle being
+    // painted means the footer stack rendered and a count of 0 is a real
+    // absence rather than a not-yet.
+    await expect(rail.locator("[data-testid='theme-toggle']")).toBeVisible();
+    await expect(attribution).toHaveCount(0);
+
+    // `logo_mode: "none"` takes the wordmark off the screen, which is exactly
+    // when the attribution has to carry it instead.
+    await request.put(url, { headers, data: { logo_mode: "none" } });
+    await page.reload();
+    await expect(attribution).toHaveCount(1);
+  });
 });

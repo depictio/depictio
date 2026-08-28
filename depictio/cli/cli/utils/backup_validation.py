@@ -2,6 +2,8 @@ import json
 from datetime import datetime
 from typing import Any, Dict, List
 
+from pydantic import BaseModel, ConfigDict
+
 from depictio.cli.cli_logging import logger
 from depictio.models.models.dashboards import DashboardData
 from depictio.models.models.data_collections import DataCollection
@@ -10,6 +12,28 @@ from depictio.models.models.files import File
 from depictio.models.models.projects import Project
 from depictio.models.models.users import GroupBeanie, User
 from depictio.models.models.workflows import Workflow, WorkflowRun
+
+
+class InstanceSettingsBackupDoc(BaseModel):
+    """Loose shape for the `instance_settings` singleton.
+
+    Written today as `{"_id": "branding", "theme": {...BrandTheme...}}`
+    (see `depictio.api.v1.services.branding.set_brand_theme_overrides`), but
+    `extra="allow"` also tolerates documents the pre-rework admin panel wrote
+    as flat fields, so an older backup still round-trips.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+
+class BrandingAssetBackupDoc(BaseModel):
+    """A stored logo's bytes, as written by `branding.store_logo_asset`."""
+
+    model_config = ConfigDict(extra="allow")
+
+    content_type: str
+    data_b64: str
+    updated_at: int
 
 
 def validate_backup_file(backup_path: str) -> Dict[str, Any]:
@@ -64,6 +88,8 @@ def validate_backup_file(backup_path: str) -> Dict[str, Any]:
             # "tokens": TokenBeanie,  # Excluded to avoid circular dependency
             "deltatables": DeltaTableAggregated,
             "groups": GroupBeanie,
+            "instance_settings": InstanceSettingsBackupDoc,
+            "branding_assets": BrandingAssetBackupDoc,
         }
 
         # Validate each collection
@@ -180,6 +206,8 @@ EXPECTED_BACKUP_COLLECTIONS = [
     # "tokens",  # Excluded to avoid circular dependency in backup/restore
     "deltatables",
     "groups",
+    "instance_settings",
+    "branding_assets",
 ]
 
 
@@ -216,6 +244,8 @@ def check_backup_collections_coverage() -> Dict[str, Any]:
             # "tokens": TokenBeanie,  # Excluded to avoid circular dependency
             "deltatables": DeltaTableAggregated,
             "groups": GroupBeanie,
+            "instance_settings": InstanceSettingsBackupDoc,
+            "branding_assets": BrandingAssetBackupDoc,
         }
 
         # Check against expected collections

@@ -261,6 +261,13 @@ async function bootstrapSession(): Promise<void> {
       return;
     }
     if (status.is_public_mode) {
+      // A protected public instance has no session to hand out until the
+      // visitor has passed the shared code, so go to the gate rather than
+      // spend a round-trip on a mint the backend is going to refuse.
+      if (status.public_access_code_required) {
+        window.location.replace('/auth');
+        return;
+      }
       const session = await createTemporaryUser();
       persistSession(session);
       return;

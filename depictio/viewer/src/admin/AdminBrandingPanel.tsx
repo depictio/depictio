@@ -41,6 +41,19 @@ function applyEffective(state: AdminBrandingState) {
   setBranding(state.effective);
 }
 
+/** The logo fields of the current draft, carried across a palette-shaped
+ *  change: a preset and an imported theme file are both a palette, not an
+ *  identity, so neither drops an uploaded logo unless it names one itself. */
+function carriedLogos(
+  draft: BrandTheme | null,
+): Pick<BrandTheme, 'logo_mode' | 'logo_url' | 'logo_url_dark'> {
+  return {
+    logo_mode: draft?.logo_mode,
+    logo_url: draft?.logo_url,
+    logo_url_dark: draft?.logo_url_dark,
+  };
+}
+
 const LogoField: React.FC<{
   label: string;
   hint: string;
@@ -191,12 +204,10 @@ const AdminBrandingPanel: React.FC = () => {
   };
 
   /** A preset seeds the form; it is not applied until Save, like every other
-   *  edit here. Logos are left alone — a palette is not an identity. */
+   *  edit here. Logos and the instance name are left alone. */
   const applyPreset = (preset: BrandPreset) =>
     setForm((prev) => ({
-      logo_mode: prev?.logo_mode,
-      logo_url: prev?.logo_url,
-      logo_url_dark: prev?.logo_url_dark,
+      ...carriedLogos(prev),
       app_name: prev?.app_name,
       ...preset.theme,
     }));
@@ -220,7 +231,10 @@ const AdminBrandingPanel: React.FC = () => {
       }
       // Seeded into the form, not saved: the admin still sees it in the
       // preview and decides. Unknown keys are rejected server-side on Save.
-      setForm(parsed as BrandTheme);
+      // Carrying the logos matters here because Save replaces the whole
+      // document: without it an import dropped `logo_url` and left the
+      // uploaded image behind, orphaned.
+      setForm((prev) => ({ ...carriedLogos(prev), ...(parsed as BrandTheme) }));
       notifications.show({ message: 'Theme imported — review the preview, then Save.' });
     } catch (err) {
       notifications.show({

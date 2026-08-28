@@ -369,6 +369,95 @@ async def test_register_blocked_when_registration_disabled():
 
 
 @pytest.mark.asyncio
+async def test_login_blocked_when_password_login_disabled():
+    """With DEPICTIO_AUTH_PASSWORD_LOGIN_DISABLED set (and Google OAuth
+    configured), /login must 403 before checking any credential, so the
+    password door is closed rather than merely hidden in the UI."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from fastapi import HTTPException
+
+    from depictio.api.v1.endpoints.user_endpoints import routes as user_routes
+
+    mock_settings = MagicMock()
+    mock_settings.auth.is_single_user_mode = False
+    mock_settings.auth.is_password_login_disabled = True
+
+    login_request = MagicMock(username="someone@example.com", password="hunter2hunter2")
+    check_password = AsyncMock(return_value=True)
+    with (
+        patch.object(user_routes, "settings", mock_settings),
+        patch.object(user_routes, "enforce_rate_limit"),
+        patch.object(user_routes, "_check_password", check_password),
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await user_routes.login(MagicMock(), login_request)
+
+    assert exc_info.value.status_code == 403  # type: ignore[unresolved-attribute]
+    # Refused before the credential is even looked at — a valid password must
+    # not be a way around the setting.
+    check_password.assert_not_awaited()
+
+
+def test_password_login_disabled_is_ignored_without_oauth():
+    """The flag alone would leave a deployment with no way in, so the computed
+    property only reports it as disabled once Google OAuth is configured."""
+    from depictio.api.v1.configs.settings_models import AuthConfig
+
+    assert AuthConfig(password_login_disabled=True).is_password_login_disabled is False
+    assert (
+        AuthConfig(
+            password_login_disabled=True, google_oauth_enabled=True
+        ).is_password_login_disabled
+        is True
+    )
+
+
+@pytest.mark.asyncio
+async def test_public_temporary_user_requires_the_access_code():
+    """A protected public deployment must refuse a session to a caller that
+    does not present the shared code, whatever the SPA chose to render."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from fastapi import HTTPException
+
+    from depictio.api.v1.endpoints.user_endpoints import routes as user_routes
+
+    mock_settings = MagicMock()
+    mock_settings.auth.is_public_mode = True
+    mock_settings.auth.verify_public_access_code.return_value = False
+
+    create_temp = AsyncMock()
+    with (
+        patch.object(user_routes, "settings", mock_settings),
+        patch.object(user_routes, "enforce_rate_limit"),
+        patch.object(user_routes, "_create_temporary_user", create_temp),
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await user_routes.create_temporary_user_public(MagicMock(), {"access_code": "wrong"})
+
+    assert exc_info.value.status_code == 403  # type: ignore[unresolved-attribute]
+    create_temp.assert_not_awaited()
+
+
+def test_public_access_code_gates_only_public_mode():
+    """The code is meaningless outside public mode, and an open public
+    deployment must keep working with no code at all."""
+    from depictio.api.v1.configs.settings_models import AuthConfig
+
+    gated = AuthConfig(public_mode=True, public_access_code="s3cret")
+    assert gated.is_public_access_code_required is True
+    assert gated.verify_public_access_code("s3cret") is True
+    assert gated.verify_public_access_code("nope") is False
+    assert gated.verify_public_access_code(None) is False
+
+    # Not public: the code gates nothing, so it must not report as required.
+    assert AuthConfig(public_access_code="s3cret").is_public_access_code_required is False
+    # Public with no code: unchanged, anyone gets a session.
+    assert AuthConfig(public_mode=True).verify_public_access_code(None) is True
+
+
+@pytest.mark.asyncio
 async def test_oauth_create_or_get_user_blocks_unknown_when_create_disallowed():
     """With registration disabled, OAuth must not provision a new account for
     an unknown email — create_or_get_user(allow_create=False) returns

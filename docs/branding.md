@@ -94,7 +94,38 @@ everything it fills in stays editable, and the flat env vars override it field
 by field.
 
 **Export** writes the current theme as JSON and **Import** reads one back, so a
-brand can be reviewed, version-controlled and moved between deployments.
+brand can be reviewed, version-controlled and moved between deployments. An
+imported file keeps the instance's uploaded logos unless it names logos of its
+own, on the same reasoning as a preset: a theme file is a palette, not an
+identity.
+
+## Where the logos live
+
+Uploaded logos are stored in MongoDB, in a `branding_assets` collection, and
+served from the API (`/utils/branding/logo/{variant}` for the instance,
+`/dashboards/logo/{id}` for a dashboard). Nothing is written to the container's
+filesystem, so a rebuild or a pod redeploy cannot leave a theme pointing at an
+image that no longer exists, and no volume or PVC has to be provisioned for
+them. They are capped at 2 MB each (PNG, JPEG or WebP; SVG is refused because
+it can carry scripts and would be served same-origin).
+
+Both `branding_assets` and the overrides document in `instance_settings` are
+part of the backup set, so a restore brings back the instance identity that
+every dashboard's own theme inherits from.
+
+Deployments branded before this moved keep working: logos still on disk are
+imported into the database at startup and their stored URLs rewritten, once.
+
+## The "Powered by Depictio" attribution
+
+The badge is not always shown. It appears exactly when the Depictio wordmark
+does not: on a stock deployment the wordmark is already in the app rail and on
+the login card, so a badge repeating it would be noise, and on a branded one it
+is the only thing left saying what the app is built on.
+
+Concretely, it renders when the logo in scope resolves to `custom` or `none`,
+and it appears once per surface: on the login card under the logo, in the app
+rail outside dashboards, and in the header of a dashboard.
 
 ## A dashboard override
 
