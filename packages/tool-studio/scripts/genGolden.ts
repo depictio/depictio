@@ -7,7 +7,7 @@
  * Usage: tsx scripts/genGolden.ts <outDir>
  */
 import { mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseFixture } from '../src/catalog/parseFixture';
 import { generateEntry } from '../src/catalog/yamlGen';
@@ -16,6 +16,10 @@ import type { RenderSpec } from '../src/types';
 const here = dirname(fileURLToPath(import.meta.url));
 const pkgRoot = resolve(here, '..');
 const outDir = process.argv[2] ?? resolve(pkgRoot, '.golden-out');
+// `catalog validate` requires a tool's id to equal its folder name — the id is
+// the address the viewer, the docs and the conformance project all build paths
+// from. Derive it so the round-trip obeys the same rule a real entry does.
+const toolId = basename(outDir);
 
 const fixtureName = 'golden.csv';
 const raw = readFileSync(join(pkgRoot, 'e2e', 'golden', fixtureName), 'utf8');
@@ -90,7 +94,7 @@ const renders: RenderSpec[] = [
 ];
 
 const entry = generateEntry({
-  tool: { id: 'golden_tool', name: 'Golden Tool', source: 'nf-core' },
+  tool: { id: toolId, name: 'Golden Tool', source: 'nf-core' },
   output: { slug: 'results', path_glob: '**/golden/*.csv', description: 'Golden round-trip fixture.' },
   fixtureFileName: fixture.fileName,
   fixtureContent: fixture.raw,
