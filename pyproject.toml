@@ -217,6 +217,10 @@ check_untyped_defs = true
 python_files = "test_*.py"
 testpaths = [
   "depictio/tests/api",
+  # The catalog's project-level tests: they hold the generated conformance
+  # project and the CLI smoke project to what the catalog currently declares.
+  # catalog-ci covers the catalog itself but not the projects built from it.
+  "depictio/tests/catalog",
   "depictio/tests/models",
   "depictio/tests/cli",
   "depictio/tests/unit",

@@ -20,6 +20,7 @@ import {
 import { adaptGlTrace, useWebglSlot } from '../../webglBudget';
 import AdvancedVizFrame, { TIER_COLORS } from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
+import { usePersistedVizControl } from './usePersistedVizControl';
 
 type Highlight = 'above' | 'below' | 'none';
 
@@ -78,25 +79,43 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
   const isDark = colorScheme === 'dark';
   const config = (metadata.config || {}) as ManhattanConfig;
 
-  const [scoreThreshold, setScoreThreshold] = useState<number | undefined>(
-    config.score_threshold ?? undefined,
+  const [scoreThreshold, setScoreThreshold] = usePersistedVizControl<number | undefined>(
+    metadata,
+    'score_threshold',
+    undefined,
   );
-  const [topNLabels, setTopNLabels] = useState<number>(
-    config.top_n_labels ?? 8,
+  const [topNLabels, setTopNLabels] = usePersistedVizControl<number>(
+    metadata,
+    'top_n_labels',
+    8,
   );
+  // A narrowed chromosome set is what the reader is looking at now, not what
+  // the plot is, so it stays local.
   const [selectedChrs, setSelectedChrs] = useState<string[]>([]);
-  const [markerSizeAbove, setMarkerSizeAbove] = useState<number>(
-    config.marker_size_above ?? 6,
+  const [markerSizeAbove, setMarkerSizeAbove] = usePersistedVizControl<number>(
+    metadata,
+    'marker_size_above',
+    6,
   );
-  const [markerSizeBelow, setMarkerSizeBelow] = useState<number>(
-    config.marker_size_below ?? 4,
+  const [markerSizeBelow, setMarkerSizeBelow] = usePersistedVizControl<number>(
+    metadata,
+    'marker_size_below',
+    4,
   );
-  const [markerSizeUniform, setMarkerSizeUniform] = useState<number>(
-    config.marker_size_uniform ?? 5,
+  const [markerSizeUniform, setMarkerSizeUniform] = usePersistedVizControl<number>(
+    metadata,
+    'marker_size_uniform',
+    5,
   );
-  const [highlight, setHighlight] = useState<Highlight>(config.highlight ?? 'above');
-  const [colorBy, setColorBy] = useState<string>(
-    (config as { default_color_by?: string }).default_color_by ?? COLOR_BY_CHROMOSOME,
+  const [highlight, setHighlight] = usePersistedVizControl<Highlight>(
+    metadata,
+    'highlight',
+    'above',
+  );
+  const [colorBy, setColorBy] = usePersistedVizControl<string>(
+    metadata,
+    'default_color_by',
+    COLOR_BY_CHROMOSOME,
   );
 
   const requiredCols = useMemo(() => {

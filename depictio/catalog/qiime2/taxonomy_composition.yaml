@@ -1,0 +1,13 @@
+id: qiime2_taxonomy_composition
+name: Taxon counts per sample
+mode: taxa/barplot
+description: >-
+  Long-format taxon counts per sample, melted from the taxa barplot export, with
+  the taxonomy string split back into its ranks.
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/barplot
+find: { path_glob: "**/qiime2/barplot/level-*.csv" }
+recipe: qiime2/taxonomy_composition.py
+fixture: taxonomy_composition.tsv
+renders_as:
+  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: count, color: Phylum} }
+  - { component: table }

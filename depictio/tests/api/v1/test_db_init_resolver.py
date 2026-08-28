@@ -4,10 +4,11 @@ The init resolver converts recipe-based DCs (`source: "transformed"` with a
 `transform.recipe` block) into file_scan DCs pointing at a bundled
 `{data_root}/{dc_tag}.tsv` seed. Two things must be true after conversion:
 
-1. The DC keeps `source: "transformed"` so the viewer's data-source info
-   card / admin panel still surfaces the recipe lineage (see also
-   ``deltatables.py:process_data_collection`` which falls through to
-   file-scan when ``source == "transformed"`` *and* ``transform is None``).
+1. The DC keeps `source: "transformed"` *and* its `transform` block, now
+   flagged `materialized`, so the viewer's data-source info card / admin
+   panel and the tools catalog still see which recipe produced the data
+   (see also ``deltatables.py:process_data_collection``, which falls through
+   to file-scan when that flag is set instead of re-running the recipe).
 2. ``dc_specific_properties.format`` must be ``"tsv"`` regardless of what
    the template declared — the template's original format hint described
    the recipe's *input* source (e.g. summary_metrics' input is a real CSV
@@ -74,7 +75,10 @@ def test_recipe_dc_conversion_forces_tsv_format() -> None:
         assert dc_cfg["source"] == "transformed", (
             "recipe lineage must survive conversion (viewer reads source=transformed)"
         )
-        assert "transform" not in dc_cfg, "transform block must be popped after conversion"
+        assert dc_cfg["transform"] == {"recipe": "test/demo.py", "materialized": True}, (
+            "transform block must survive conversion, flagged materialized, so the "
+            "catalog can still tell which recipe produced the seed"
+        )
         assert dc_cfg["scan"]["mode"] == "single"
         assert dc_cfg["scan"]["scan_parameters"]["filename"] == str(data_root / "demo.tsv")
         assert dc_cfg["dc_specific_properties"]["format"] == "tsv", (

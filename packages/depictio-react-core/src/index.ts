@@ -126,6 +126,13 @@ export type { PanelToggleDetail } from './utils/panelToggle';
 export { AdvancedVizInspectorProvider } from './components/advanced_viz/AdvancedVizInspectorBridge';
 export type { AdvancedVizInspectorPublisher } from './components/advanced_viz/AdvancedVizInspectorBridge';
 export type { AdvancedVizExtrasPayload } from './components/advanced_viz/AdvancedVizExtras';
+// Advanced-viz config write-back. Separate module for the same reason as the
+// inspector bridge: a provider can be mounted without the lazy renderer chunk.
+export { AdvancedVizConfigDraftProvider } from './components/advanced_viz/AdvancedVizConfigDraft';
+export type {
+  VizConfigDraftSink,
+  VizConfigPatch,
+} from './components/advanced_viz/AdvancedVizConfigDraft';
 // The shared show-data grid, so the inspector can dock the same table the
 // renderers' popovers show.
 export { default as DataGridBody } from './components/data/DataGridBody';
@@ -142,6 +149,8 @@ export {
   ComponentChrome,
   MetadataPopover,
   MetadataBody,
+  CatalogButton,
+  CatalogOrigin,
   FullscreenButton,
   DownloadButton,
   ResetButton,
@@ -335,6 +344,7 @@ export type {
   CatalogPreviewRender,
   CatalogPreviewPayload,
   BreakdownPayloadDTO,
+  CatalogSource,
 } from './api';
 // Selection-as-filter helpers (Plotly/AG Grid → InteractiveFilter)
 export {
@@ -599,3 +609,8 @@ export type {
 // package in its Vite config so both apps use one consent implementation.
 export { capture, initTelemetry, isOptedOut, setOptOut } from './telemetry';
 export type { TelemetryConfig } from './telemetry';
+
+export { COMPONENT_TYPE_VISUALS, componentTypeVisual } from './componentTypeMeta';
+export type { ComponentTypeVisual } from './componentTypeMeta';
+export { brandColors } from './brandColors';
+export { catalogToolUrl } from './catalogLinks';

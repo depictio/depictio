@@ -33,6 +33,15 @@ const SCAN_DIRS = [
 ];
 
 const SCAN_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx']);
+
+// Individual files outside those trees that *declare* icons the UI renders from
+// data. The advanced-viz kind registry lives in the API and its `icon` values
+// reach the browser over the wire, so nothing in the TS sources mentions them
+// and they would resolve against the Iconify API, which the CSP blocks.
+const SCAN_FILES = [
+  join(REPO, 'depictio/api/v1/endpoints/advanced_viz_endpoints/routes.py'),
+];
+
 const OUT_FILE = join(VIEWER, 'src/generated/iconSubset.ts');
 
 // Collections installed as devDependencies. A prefix outside this list is
@@ -86,20 +95,27 @@ const ICON_CONTEXT = /icon\s*[:=]\s*\{?\s*$/i;
 async function collectUsedNames() {
   // name -> { files: Set<string>, iconContext: boolean } for actionable output
   const found = new Map();
-  for (const dir of SCAN_DIRS) {
-    for await (const file of walk(dir)) {
-      const source = await readFile(file, 'utf8');
-      for (const match of source.matchAll(ICON_LITERAL)) {
-        const name = match[1];
-        if (!found.has(name)) found.set(name, { files: new Set(), iconContext: false });
-        const entry = found.get(name);
-        entry.files.add(relative(REPO, file));
-        if (ICON_CONTEXT.test(source.slice(Math.max(0, match.index - 16), match.index))) {
-          entry.iconContext = true;
-        }
+  const scan = async (file) => {
+    let source;
+    try {
+      source = await readFile(file, 'utf8');
+    } catch {
+      return; // listed file absent (partial checkout) — nothing to scan
+    }
+    for (const match of source.matchAll(ICON_LITERAL)) {
+      const name = match[1];
+      if (!found.has(name)) found.set(name, { files: new Set(), iconContext: false });
+      const entry = found.get(name);
+      entry.files.add(relative(REPO, file));
+      if (ICON_CONTEXT.test(source.slice(Math.max(0, match.index - 16), match.index))) {
+        entry.iconContext = true;
       }
     }
+  };
+  for (const dir of SCAN_DIRS) {
+    for await (const file of walk(dir)) await scan(file);
   }
+  for (const file of SCAN_FILES) await scan(file);
   return found;
 }
 

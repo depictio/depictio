@@ -418,10 +418,11 @@ class TestMaterializeRecipeSeeds:
 
         assert (materialized, missing) == (["taxonomy"], [])
         dc_config = config["workflows"][0]["data_collections"][0]["config"]
-        # `source` survives so the viewer still shows the recipe lineage; the
-        # absent `transform` is what marks the DC as materialised.
+        # `source` and `transform` both survive so the viewer still shows the
+        # recipe lineage and the catalog can still match the DC on
+        # `transform.recipe`; `materialized` is what marks it as already computed.
         assert dc_config["source"] == "transformed"
-        assert "transform" not in dc_config
+        assert dc_config["transform"] == {"recipe": "some_recipe", "materialized": True}
         assert dc_config["scan"] == {
             "mode": "single",
             "scan_parameters": {"filename": str(tmp_path / "taxonomy.tsv")},

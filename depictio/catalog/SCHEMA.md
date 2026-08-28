@@ -64,7 +64,9 @@ existence-checking validates; the derived fields are trusted until a future
 | Field | MUST/CAN | Type | Notes |
 |---|---|---|---|
 | `id` | **MUST** | str | Globally-unique. |
+| `name` | **MUST** | str | Short display label, e.g. `Amplicon coverage`. What a picker or gallery lists — `description` is the full sentence behind it and is too long to scan. Optional on the model so a third-party catalog can omit it; every bundled output declares one, and must be unique within its tool. |
 | `find` | **MUST** | Find | How to recognise the raw file. |
+| `origin_tool` | CAN | str | The tool that actually produced the numbers, when the catalog tool aggregates other tools' output. Set on MultiQC sections (`Cutadapt`, `FastQC`, …) so a picker can show "Adapter trimming (Cutadapt)"; left unset when the tool is the producer, and when the section is pipeline-generated custom content. Declared rather than derived: MultiQC persists anchors, and the report's own module names are decorated by the pipeline. |
 | `mode` | CAN | str | Running mode / subcommand. |
 | `description` | CAN | str | |
 | `recipe` | CAN | str | Reshape that **owns the output columns**. Module-owned (preferred): `<module>/<name>.py`, co-located in this catalog folder, e.g. `qiime2/ancombc.py`. Pipeline-keyed legacy still resolves (`nf-core/<pipeline>/<name>.py`) for pipeline-version-specific reshapes. |
@@ -92,11 +94,10 @@ existence-checking validates; the derived fields are trusted until a future
 | `code` | cond. | str | `figure` **code mode**: inline Python that sets `fig` (depictio `code_content`). A figure needs `visu_type` **or** `code`. |
 | `column` + `aggregation` | cond. | str / `AggregationFunction` | `card`: the metric column + **hero** aggregation. |
 | `aggregations` | CAN | list[`AggregationFunction`] | `card`: **secondary** aggregations → a **multi-metric** card (e.g. `[median, min, max, std_dev]`). |
-| `secondary_layout` | CAN | see the layout table below | `card`: how the secondary strip renders. Most layouts require a companion field. |
-| `breakdown_col` / `top_n_count` / `coverage_max` | CAN | str / int(1-5) / float | `card`: companions for the breakdown / coverage layouts. |
-| `threshold_value` / `threshold_direction` / `threshold_warn` | CAN | float / `min`\|`max` / float | `card`: QC cut-off, which side passes, optional warn band (`threshold` layout). |
-| `attrition_cols` | CAN | list[str] | `card`: the stages after the card's own column (`attrition` layout). |
-| `trend_col` | CAN | str | `card`: the ordered column the sparkline buckets along (`trend` layout). |
+| `secondary_layout` | CAN | one of `vertical`, `compact`, `grid`, `box_plot`, `histogram`, `threshold`, `completeness`, `uniqueness`, `attrition`, `trend`, `coverage`, `gauge`, `top_n`, `concentration`, `composition`, `donut` | `card`: how the secondary strip renders. Set on **every** bundled card — a bare hero number says nothing about spread or composition. The list is taken from `CardLiteComponent`, not respelled, so the two cannot drift. `vertical`/`compact`/`grid` and `box_plot` are driven by `aggregations` (a `box_plot` card **must** declare `aggregations: [box_plot_stats]` — the server keys the computation off that list); `top_n`/`concentration`/`composition`/`donut` need `breakdown_col` (+`top_n_count`); `coverage`/`gauge` need `coverage_max`; `threshold` needs `threshold_value`; `trend` needs `trend_col`; `attrition` needs `attrition_cols`; `histogram`/`completeness`/`uniqueness` need nothing further. |
+| `breakdown_col` / `top_n_count` / `coverage_max` | CAN | str / int(1-5) / float | `card`: params for the categorical and progress layouts (see above). |
+| `threshold_value` / `threshold_direction` / `threshold_warn` | CAN | float / `min`\|`max` / float | `card`: the QC cut-off for `secondary_layout: threshold`. `min` = at-least (higher is better). |
+| `attrition_cols` / `trend_col` | CAN | list[str] / str | `card`: the ordered stages for `attrition`, the ordered axis for `trend`. |
 | `filter_expr` | CAN | str | `card`: optional polars pre-filter before aggregation. |
 | `interactive_type` + `column_name` | cond. | `InteractiveType` / str | `interactive`: the widget (`Select`, `MultiSelect`, `SegmentedControl`, `Slider`, `RangeSlider`, `DateRangePicker`, `Timeline`, `Switch`) and the column it filters on. Both required — they are what depictio's interactive component needs to exist. |
 | `columns` | CAN | list[str] | `table`: the columns to display. Omit for all of them. |
@@ -146,6 +147,12 @@ ma, dot_plot, lollipop, qq, sunburst, oncoplot, coverage_track, sankey.
   and `roles` bind to them.
 - Non-tabular / role-less renders (`table`, `multiqc_plot`, `figure`) need
   neither a recipe nor `columns`.
+- **Which collection an output binds to follows the same split.** The picker
+  offers a recipe output only on the collection that recipe produced, and a
+  recipe-free output only on the collection that scanned the file `find`
+  describes (`_match_dc_to_catalog`). An output cannot be offered on the raw
+  file its recipe eats: the renders are authored against the recipe's schema, so
+  a renaming recipe would bind columns the raw file does not have.
 
 Use `depictio dev catalog columns <recipe>` to see a recipe's output column names
 while writing `roles`.

@@ -1,0 +1,402 @@
+# GENERATED FILE — do not edit by hand.
+#
+# Rebuild with:
+#   uv run python -m depictio.projects.init.catalog_conformance.scripts.generate_project
+#
+# A template rather than a plain project config: only a template.yaml goes
+# through `resolve_template_for_init`, which is what converts each recipe
+# collection below into a scan of its bundled {dc_tag}.tsv seed.
+#
+# Every data collection below is derived from depictio/catalog/: one per distinct
+# recipe, one per recipe-free output, plus a single synthetic MultiQC report that
+# backs all of that tool's section outputs. Adding a catalog output and rerunning
+# the generator is the whole procedure for extending this project.
+
+template:
+  template_id: init/catalog_conformance
+  description: Every catalog output, staged from the catalog's own fixtures
+  version: 1.0.0
+  variables:
+  - name: DATA_ROOT
+    description: Project directory holding the recipe seeds and the run tree
+    required: true
+  dashboards:
+  - dashboards/overview.yaml
+id: fc9a651d95d98a4baedb8315
+name: Catalog Conformance
+project_type: advanced
+is_public: true
+workflows:
+- id: 045f1f968289500c09ea3939
+  name: catalog_conformance
+  engine:
+    name: python
+    version: '3.12'
+  description: Every catalog output, staged from the catalog's own fixtures
+  data_location:
+    structure: sequencing-runs
+    runs_regex: run_.*
+    locations:
+    - '{DATA_ROOT}'
+  data_collections:
+  - id: f7cf57984ff91bc0a9c56aa2
+    data_collection_tag: ivar_variants_long
+    description: Variant calls — recipe output (ivar/variants_long.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: ivar/variants_long.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 125be31f418373fc3af51f4d
+    data_collection_tag: mosdepth_amplicon_heatmap
+    description: Amplicon coverage matrix — recipe output (mosdepth/complex_heatmap_canonical.py), seeded
+      from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: mosdepth/complex_heatmap_canonical.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: e74743af38abd00631cdb34e
+    data_collection_tag: mosdepth_genome_coverage
+    description: Genome coverage — recipe output (mosdepth/coverage_track_canonical.py), seeded from the
+      catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: mosdepth/coverage_track_canonical.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 3cf123b9eb22bf9491168b2d
+    data_collection_tag: multiqc_summary_metrics
+    description: Variant-calling summary — recipe output (multiqc/summary_metrics.py), seeded from the
+      catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: multiqc/summary_metrics.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 08a79b4e8079f80a7509bc8e
+    data_collection_tag: nextclade_report
+    description: Clade assignment — recipe output (nextclade/nextclade_results.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: nextclade/nextclade_results.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 6d60044d1cca13f5dfab8456
+    data_collection_tag: qiime2_bray_curtis
+    description: Sample distance matrix — recipe output (nf-core/ampliseq/bray_curtis_canonical.py), seeded
+      from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: nf-core/ampliseq/bray_curtis_canonical.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 9525f9aeb7255a53004b6273
+    data_collection_tag: qiime2_clustered_heatmap
+    description: Clustered abundance heatmap — recipe output (nf-core/ampliseq/complex_heatmap_canonical.py),
+      seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: nf-core/ampliseq/complex_heatmap_canonical.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 1304ff22d61cd7d217491544
+    data_collection_tag: qiime2_ma
+    description: Differential-abundance MA plot — recipe output (nf-core/ampliseq/ma_canonical.py), seeded
+      from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: nf-core/ampliseq/ma_canonical.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: a61dbb35ce24950dac9c240a
+    data_collection_tag: qiime2_sunburst_canonical
+    description: Taxonomic hierarchy — recipe output (nf-core/ampliseq/sunburst_canonical.py), seeded
+      from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: nf-core/ampliseq/sunburst_canonical.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 40d0e43149b0392ea5b2d98a
+    data_collection_tag: qiime2_rel_abundance
+    description: Relative abundance — recipe output (nf-core/ampliseq/taxonomy_rel_abundance.py), seeded
+      from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: nf-core/ampliseq/taxonomy_rel_abundance.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 21d7e662493c672338b43566
+    data_collection_tag: qiime2_tree_metadata
+    description: ASV taxonomy table — recipe output (nf-core/ampliseq/tree_metadata_canonical.py), seeded
+      from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: nf-core/ampliseq/tree_metadata_canonical.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 1dcce553641691a85fef1ef7
+    data_collection_tag: ivar_oncoplot_matrix
+    description: Mutation matrix — recipe output (nf-core/viralrecon/oncoplot_canonical.py), seeded from
+      the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: nf-core/viralrecon/oncoplot_canonical.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 503f301de57d976501111a94
+    data_collection_tag: pangolin_report
+    description: Lineage report — recipe output (pangolin/pangolin_lineages.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: pangolin/pangolin_lineages.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 5d8c077c82bf9cf520696a31
+    data_collection_tag: qiime2_alpha_diversity
+    description: Alpha diversity — recipe output (qiime2/alpha_diversity_multi_canonical.py), seeded from
+      the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: qiime2/alpha_diversity_multi_canonical.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: fc135f0717eafe511f9f0e92
+    data_collection_tag: qiime2_alpha_rarefaction
+    description: Alpha rarefaction — recipe output (qiime2/alpha_rarefaction.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: qiime2/alpha_rarefaction.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: a66102058930b45a0d14e53a
+    data_collection_tag: qiime2_ancombc
+    description: Differential abundance — recipe output (qiime2/ancombc.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: qiime2/ancombc.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 25858881944e9dca5d327606
+    data_collection_tag: qiime2_embedding_pcoa
+    description: Beta-diversity ordination — recipe output (qiime2/embedding_pcoa.py), seeded from the
+      catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: qiime2/embedding_pcoa.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 509a3ae1bc75b630fc256f9a
+    data_collection_tag: qiime2_rarefaction_canonical
+    description: Rarefaction curves — recipe output (qiime2/rarefaction_canonical.py), seeded from the
+      catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: qiime2/rarefaction_canonical.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 699d5b99fbfd6ea1284b97db
+    data_collection_tag: qiime2_stacked_taxonomy_canonical
+    description: Taxonomic composition, Taxa barplot — recipe output (qiime2/stacked_taxonomy_canonical.py),
+      seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: qiime2/stacked_taxonomy_canonical.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 05f969cd3e8e71e3f5f44e03
+    data_collection_tag: qiime2_taxonomy_composition
+    description: Taxon counts per sample — recipe output (qiime2/taxonomy_composition.py), seeded from
+      the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: qiime2/taxonomy_composition.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 91160b8b0941b0eabd936b82
+    data_collection_tag: qiime2_taxonomy_heatmap
+    description: Abundance matrix — recipe output (qiime2/taxonomy_heatmap.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: qiime2/taxonomy_heatmap.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 1a4e0ceb9acb74eb0809fde7
+    data_collection_tag: metaphlan_profile
+    description: Taxonomic profile — raw MetaPhlAn output, recognised by find
+    config:
+      type: Table
+      metatype: Aggregate
+      scan:
+        mode: recursive
+        scan_parameters:
+          regex_config:
+            pattern: metaphlan/sample_01_profile\.txt
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+        columns_description:
+          clade_name: String
+          NCBI_tax_id: String
+          relative_abundance: Float64
+          additional_species: String
+  - id: 514e95803abf5b1bcbc9f60d
+    data_collection_tag: mosdepth_amplicon_coverage
+    description: Amplicon coverage — raw mosdepth output, recognised by find
+    config:
+      type: Table
+      metatype: Aggregate
+      scan:
+        mode: recursive
+        scan_parameters:
+          regex_config:
+            pattern: mosdepth/amplicon/all_samples\.mosdepth\.coverage\.tsv
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+        columns_description:
+          chrom: String
+          start: Int64
+          end: Int64
+          region: String
+          coverage: Float64
+          sample: String
+  - id: 7a60dd03a5c6749cc2bfea48
+    data_collection_tag: multiqc_report
+    description: Synthetic MultiQC report carrying every section the catalog declares
+    config:
+      type: MultiQC
+      scan:
+        mode: recursive
+        scan_parameters:
+          regex_config:
+            pattern: multiqc/multiqc_data/multiqc\.parquet
+      dc_specific_properties:
+        s3_location: null
+        modules:
+        - bcftools
+        - bowtie2
+        - cutadapt
+        - fastp
+        - fastqc
+        - iVar
+        - kraken
+        - mosdepth
+        - multiqc_software_versions
+        - quast
+        - samtools
+        - snpeff
+        - summary_conformance_metrics
+        plots: {}

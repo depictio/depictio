@@ -188,11 +188,13 @@ def _dataset_of_dashboard(name: str) -> str:
         return "advanced_viz_showcase"
     if name.startswith("viralrecon"):
         return "viralrecon"
+    if name.startswith("catalog_conformance"):
+        return "catalog_conformance"
     return name
 
 
 async def create_initial_dashboards(
-    admin_user: UserBeanie, only: set[str] | None = None
+    admin_user: UserBeanie, only: set[str] | None = None, extra: set[str] | None = None
 ) -> list[dict | None]:
     """Create all initial demo dashboards for reference datasets.
 
@@ -200,6 +202,8 @@ async def create_initial_dashboards(
         admin_user: Admin user to set as dashboard owner
         only: Optional allowlist of dataset names (from DEPICTIO_SEED_PROJECTS).
             ``None`` creates dashboards for all datasets.
+        extra: Optional dataset names to include on top of the allowlist (from
+            DEPICTIO_SEED_EXTRA_PROJECTS).
 
     Returns:
         List of dashboard creation responses
@@ -211,7 +215,14 @@ async def create_initial_dashboards(
     # below references the same dataset up to 23 times (advanced_viz_showcase).
     rel_paths = {
         name: ReferenceDatasetRegistry.resolve_dataset_rel_path(name)
-        for name in ("iris", "penguins", "ampliseq", "advanced_viz_showcase", "viralrecon")
+        for name in (
+            "iris",
+            "penguins",
+            "ampliseq",
+            "advanced_viz_showcase",
+            "viralrecon",
+            "catalog_conformance",
+        )
     }
 
     dashboards_config = [
@@ -380,11 +391,37 @@ async def create_initial_dashboards(
                 "sample_qc",
             )
         ),
+        # Optional (DEPICTIO_SEED_EXTRA_PROJECTS) — filtered out below unless the
+        # conformance project itself was seeded. Multi-DC, so DC ids come from
+        # the JSON rather than being forced to one collection.
+        {
+            "name": "catalog_conformance_overview",
+            "json_path": os.path.join(
+                projects_base,
+                rel_paths["catalog_conformance"],
+                ".db_seeds",
+                "dashboard.json",
+            ),
+            "static_dc_id": None,
+        },
+    ]
+
+    # Optional datasets are opt-in in both directions: their dashboards are
+    # skipped unless the project itself was seeded, or they would be created
+    # pointing at a project that does not exist.
+    from depictio.api.v1.db_init_reference_datasets import OPTIONAL_DATASETS
+
+    dashboards_config = [
+        cfg
+        for cfg in dashboards_config
+        if _dataset_of_dashboard(str(cfg["name"])) not in OPTIONAL_DATASETS
+        or _dataset_of_dashboard(str(cfg["name"])) in (extra or set())
     ]
 
     if only is not None:
+        allowed = only | (extra or set())
         dashboards_config = [
-            cfg for cfg in dashboards_config if _dataset_of_dashboard(str(cfg["name"])) in only
+            cfg for cfg in dashboards_config if _dataset_of_dashboard(str(cfg["name"])) in allowed
         ]
 
     results = []
@@ -848,9 +885,15 @@ async def initialize_db(wipe: bool = False) -> UserBeanie | None:
         from depictio.api.v1.db_init_reference_datasets import create_reference_datasets
 
         seed_filter = settings.seed_projects_filter
+        # Additive, and separate from the allowlist above: an optional project is
+        # a test fixture, so asking for one must not drop the default set.
+        seed_extra = settings.seed_extra_projects_filter
 
         created_projects = await create_reference_datasets(
-            admin_user=admin_user, token_payload=token_payload, only=seed_filter
+            admin_user=admin_user,
+            token_payload=token_payload,
+            only=seed_filter,
+            extra=seed_extra,
         )
 
         # Note: ampliseq-base shell project removed — only the extended (full) variant is loaded
@@ -872,7 +915,7 @@ async def initialize_db(wipe: bool = False) -> UserBeanie | None:
 
         # Create dashboards for all reference datasets (same allowlist filter)
         dashboard_payloads = await create_initial_dashboards(
-            admin_user=admin_user, only=seed_filter
+            admin_user=admin_user, only=seed_filter, extra=seed_extra
         )
         logger.info(f"Created {len([p for p in dashboard_payloads if p])} dashboards")
 

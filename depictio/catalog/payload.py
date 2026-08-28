@@ -38,6 +38,20 @@ _DEPICTIO_COLORWAY = [
     "#7A5DC7",
 ]
 _CARD_ACCENTS = ["#45B8AC", "#7A5DC7", "#6495ED", "#8BC34A", "#F68B33", "#E6779F"]
+# Card fields that configure the secondary strip rather than the hero number.
+# Copied verbatim onto the preview metadata — `SecondaryMetrics` reads them
+# from there, exactly as it does for a saved card.
+_CARD_STRIP_META = (
+    "secondary_layout",
+    "breakdown_col",
+    "top_n_count",
+    "coverage_max",
+    "threshold_value",
+    "threshold_direction",
+    "threshold_warn",
+    "attrition_cols",
+    "trend_col",
+)
 _TABLE_PREVIEW_ROWS = 1000
 
 
@@ -325,12 +339,15 @@ def _coverage_track_payload(df, render) -> tuple[dict[str, Any], dict[str, Any]]
 _MULTIQC_MAX_PLOTS = 3
 
 
-def _multiqc_module(anchor: str) -> str:
+def multiqc_module(anchor: str) -> str:
     """MultiQC module that owns a plot anchor — its leading token.
 
     Anchors are prefixed by the producing module: ``fastqc_*``, ``samtools-*``,
     ``bcftools_stats_*``, ``mosdepth-*``, … One catalog output per module keys
     off this so each ``section: <module>`` card surfaces only that tool's plots.
+
+    Public because the compose endpoint normalises an ingested report's anchor
+    list with the same rule before deciding which sections a project offers.
     """
     import re
 
@@ -356,7 +373,7 @@ def _multiqc_payload(df, render) -> list[dict[str, Any]]:
     rows_sorted = [
         r
         for r in plot_rows.iter_rows(named=True)
-        if section == "report" or _multiqc_module(r["anchor"]) == section
+        if section == "report" or multiqc_module(r["anchor"]) == section
     ]
 
     results = []
@@ -491,6 +508,50 @@ def _complex_heatmap_payload(df, render) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def _card_secondary_payload(df, render) -> tuple[dict[str, Any], list[str]]:
+    """A card's secondary strip, computed on the fixture.
+
+    Returns ``(secondary_values, aggregations)`` in the shape
+    ``bulkComputeCards`` returns for a saved card, so the picker's preview and
+    the component the picker adds render the same strip.
+
+    The categorical and QC/progress layouts delegate to the two services the
+    saved card's compute path uses, rather than re-deriving them here — the same
+    "preview and saved self cannot disagree" rule those modules were factored
+    out for. Imported at call time: this module is otherwise free of API-layer
+    imports and the CLI reaches it too (``depictio catalog preview``).
+    """
+    layout = render.secondary_layout
+    aggregations = list(render.aggregations or [])
+    # Tukey: one synthetic aggregation, computed locally (the server's own
+    # box_plot_stats path is not a frame-level service).
+    if layout == "box_plot" or "box_plot_stats" in aggregations:
+        return {"box_plot_stats": _box_plot_stats(df, render.column)}, ["box_plot_stats"]
+    if not layout or layout in ("coverage", "gauge"):
+        # coverage/gauge draw from the hero value + `coverage_max` alone.
+        return {}, []
+
+    from depictio.api.v1.services.card_breakdown import BREAKDOWN_LAYOUTS, compute_breakdown
+    from depictio.api.v1.services.card_metrics import NUMERIC_LAYOUTS, numeric_layout_payload
+
+    if layout in BREAKDOWN_LAYOUTS:
+        if not render.breakdown_col:
+            return {}, []
+        breakdown = compute_breakdown(
+            df,
+            render.column,
+            render.breakdown_col,
+            render.aggregation or "count",
+            render.top_n_count or 3,
+        )
+        return {"__breakdown__": breakdown}, []
+    if layout in NUMERIC_LAYOUTS:
+        payload = numeric_layout_payload(df, render.model_dump(), render.column, layout)
+        return ({f"__{layout}__": payload}, []) if payload is not None else ({}, [])
+    # vertical / compact / grid — the declared scalar aggregations.
+    return {a: _aggregate(df, render.column, a) for a in aggregations}, aggregations
+
+
 def _empty_data() -> dict[str, Any]:
     return {
         "figures": {},
@@ -571,51 +632,6 @@ def _interactive_data(df, render, dc_id: str, data: dict[str, Any]) -> None:
         "min": float(col.min()) if col.dtype.is_numeric() and col.min() is not None else None,
         "max": float(col.max()) if col.dtype.is_numeric() and col.max() is not None else None,
     }
-
-
-def _card_secondary(df, render, index: str, meta: dict[str, Any], data: dict[str, Any]) -> None:
-    """The card's secondary strip, computed by the same services the dashboard
-    uses (``card_metrics`` / ``card_breakdown``).
-
-    Without this only ``box_plot`` had a strip offline, so a catalog card
-    declaring ``histogram`` or ``top_n`` previewed as a bare number here while
-    rendering a full strip in depictio.
-    """
-    from depictio.api.v1.services.card_breakdown import BREAKDOWN_LAYOUTS, compute_breakdown
-    from depictio.api.v1.services.card_metrics import NUMERIC_LAYOUTS, numeric_layout_payload
-
-    layout = render.secondary_layout
-    if not layout:
-        return
-    meta["secondary_layout"] = layout
-    card = render.model_dump()
-    secondary: dict[str, Any] = {}
-
-    aggregations = [str(a) for a in (render.aggregations or [])]
-    for agg in aggregations:
-        secondary[agg] = _aggregate(df, render.column, agg)
-    if aggregations:
-        meta["aggregations"] = aggregations
-        data["cards"]["aggregations"][index] = aggregations
-
-    if layout in BREAKDOWN_LAYOUTS and render.breakdown_col:
-        secondary["__breakdown__"] = compute_breakdown(
-            df,
-            column=render.column,
-            breakdown_col=render.breakdown_col,
-            aggregation=render.aggregation or "count",
-            top_n_count=int(render.top_n_count or 3),
-        )
-    if layout in NUMERIC_LAYOUTS:
-        payload = numeric_layout_payload(df, card, render.column, layout)
-        if payload is not None:
-            secondary[f"__{layout}__"] = payload
-    # coverage / gauge read the card's own hero value against this denominator.
-    if render.coverage_max is not None:
-        meta["coverage_max"] = render.coverage_max
-
-    if secondary:
-        data["cards"]["secondary"][index] = secondary
 
 
 # Per-kind preview heights (advanced-viz plots vary a lot in vertical density).
@@ -855,29 +871,38 @@ def build_payload(output: Any, theme: str = "light", tool: Any = None) -> dict[s
             elif comp == "card":
                 meta["column_name"] = render.column
                 meta["icon_color"] = _CARD_ACCENTS[i % len(_CARD_ACCENTS)]
-                if render.secondary_layout == "box_plot":
-                    # Tukey box-plot card: hero = declared aggregation (defaults to
-                    # median), distribution in the strip.
-                    stats = _box_plot_stats(df, render.column)
+                secondary, aggregations = _card_secondary_payload(df, render)
+                is_box_plot = "box_plot_stats" in aggregations
+                # A box_plot render need not name an aggregation — the strip is
+                # the point — but `_aggregate` has no default, so the hero falls
+                # back to the median the strip already computed.
+                if is_box_plot:
                     meta["title"] = render.column
                     meta["aggregation"] = render.aggregation or "median"
-                    meta["aggregations"] = ["box_plot_stats"]
-                    meta["secondary_layout"] = "box_plot"
                     meta["icon_name"] = "mdi:chart-box-outline"
-                    data["cards"]["values"][index] = (
+                    hero = (
                         _aggregate(df, render.column, render.aggregation)
                         if render.aggregation
-                        else stats["median"]
+                        else secondary["box_plot_stats"]["median"]
                     )
-                    data["cards"]["secondary"][index] = {"box_plot_stats": stats}
-                    data["cards"]["aggregations"][index] = ["box_plot_stats"]
                 else:
                     meta["aggregation"] = render.aggregation
                     meta["icon_name"] = "mdi:chart-line"
-                    data["cards"]["values"][index] = _aggregate(
-                        df, render.column, render.aggregation
-                    )
-                    _card_secondary(df, render, index, meta, data)
+                    hero = _aggregate(df, render.column, render.aggregation)
+                # The renderer reads the strip's config off the metadata, so the
+                # layout and its parameters travel with it — the payload alone
+                # would draw a `vertical` list of whatever keys it found.
+                for key in _CARD_STRIP_META:
+                    value = getattr(render, key, None)
+                    if value not in (None, [], {}):
+                        meta[key] = value
+                if aggregations:
+                    meta["aggregations"] = aggregations
+                data["cards"]["values"][index] = hero
+                if secondary:
+                    data["cards"]["secondary"][index] = secondary
+                if aggregations:
+                    data["cards"]["aggregations"][index] = aggregations
             elif comp == "table":
                 data["tables"][index] = _table_payload(df)
             elif comp == "advanced_viz" and render.kind == "coverage_track":
@@ -1033,36 +1058,57 @@ def _logo_data_uris() -> dict[str, str]:
     return result
 
 
-def _json_safe(o: Any) -> Any:
-    """Replace non-finite floats (NaN / ±Infinity) with ``None``.
+def json_safe(o: Any) -> Any:
+    """Make a computed payload serialisable: no non-finite floats, no numpy.
 
     Plotly figures and computed stats can carry NaN/Inf; Python's ``json`` emits
     them as bare ``NaN``/``Infinity`` tokens, which are valid for ``json.loads``
     but make the browser's ``JSON.parse`` throw — blanking the embedded bundle.
+
+    Public because the same payload is also served as JSON by the preview
+    endpoint, where FastAPI's serialiser raises outright on a numpy array
+    instead of blanking anything.
     """
     if isinstance(o, dict):
-        return {k: _json_safe(v) for k, v in o.items()}
+        return {k: json_safe(v) for k, v in o.items()}
     if isinstance(o, (list, tuple)):
-        return [_json_safe(v) for v in o]
+        return [json_safe(v) for v in o]
     # numpy arrays / scalars — Plotly UI-mode figures (px.* on a pandas frame)
     # keep numpy in their traces; json.dumps(default=str) would stringify an
     # ndarray into a useless "['a' 'b']" blob. Convert to plain Python first.
     if hasattr(o, "dtype") and hasattr(o, "tolist"):
-        return _json_safe(o.tolist())
+        return json_safe(o.tolist())
     if isinstance(o, float):
         return o if math.isfinite(o) else None
     return o
 
 
-def _inject(payload: dict[str, Any]) -> str:
-    """Embed a computed payload into the prebuilt single-file bundle."""
+def _inject(payload: dict[str, Any], nonce: str | None = None) -> str:
+    """Embed a computed payload into the prebuilt single-file bundle.
+
+    ``nonce`` stamps the bundle's module script so a caller serving this over
+    HTTP can admit exactly that script through a `script-src` policy. Opening
+    the file from disk needs no nonce, which is why it is optional.
+    """
     if not TEMPLATE_PATH.exists():
         raise CatalogPayloadError(
             f"catalog-preview bundle not built: {TEMPLATE_PATH} is missing — run "
             f"`cd depictio/viewer && pnpm run build:catalog-preview`"
         )
-    blob = json.dumps(_json_safe(payload), default=str).replace("</", "<\\/")
+    blob = json.dumps(json_safe(payload), default=str).replace("</", "<\\/")
     html = TEMPLATE_PATH.read_text().replace("__CATALOG_PAYLOAD__", blob)
+    if nonce is not None:
+        # Only the module tag: it is the bundle's sole executable script, and
+        # matching bare "<script" would also rewrite the tag strings that appear
+        # inside its own inlined JS. The payload <script> is application/json,
+        # which never executes, so it needs no nonce.
+        marker = '<script type="module"'
+        if marker not in html:
+            raise CatalogPayloadError(
+                f"catalog-preview bundle at {TEMPLATE_PATH} has no {marker!r} tag to "
+                "nonce — rebuild it with `cd depictio/viewer && pnpm run build:catalog-preview`"
+            )
+        html = html.replace(marker, f'<script nonce="{nonce}" type="module"', 1)
     # Patch server-relative logo paths → inline data URIs so they render offline.
     for server_path, data_uri in _logo_data_uris().items():
         html = html.replace(server_path, data_uri)
@@ -1074,6 +1120,7 @@ def render_html(
     theme: str = "light",
     tool: Any = None,
     render_id: str | None = None,
+    nonce: str | None = None,
 ) -> str:
     """Inject a single output (wrapped as a one-item gallery) into the bundle.
 
@@ -1109,9 +1156,9 @@ def render_html(
         "tools": [tool_group],
         "data": blob["data"],
     }
-    return _inject(payload)
+    return _inject(payload, nonce)
 
 
-def render_gallery_html(entries: Any, theme: str = "light") -> str:
+def render_gallery_html(entries: Any, theme: str = "light", nonce: str | None = None) -> str:
     """Inject the whole catalog (gallery + every output's live payload)."""
-    return _inject(build_gallery_payload(entries, theme))
+    return _inject(build_gallery_payload(entries, theme), nonce)

@@ -19,6 +19,7 @@ import {
 import { brandColorway, stableColorMap, TAB10_PALETTE } from '../../colors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyThemeFragment } from './plotlyTheme';
+import { usePersistedVizControl } from './usePersistedVizControl';
 
 interface SunburstConfig {
   rank_cols: string[];
@@ -57,34 +58,36 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
   // `startRankIdx` picks which rank is the innermost ring. Choosing a deeper
   // start (e.g. Kingdom instead of Habitat) collapses the outer split — useful
   // for "all habitats mixed" taxonomy views.
-  const [startRankIdx, setStartRankIdx] = useState<number>(0);
-  const [colourByIdx, setColourByIdx] = useState<number>(0);
-  const [maxDepth, setMaxDepth] = useState<number>(DEFAULT_DEPTH);
+  // The two rank pickers are stored as rank *names*, not indices. rank_cols can
+  // be re-bound in the builder, and a stored index would then quietly point at a
+  // different rank than the author chose. Names also make the index a derived
+  // value, and deriving it is what clamps it: the two effects that used to reset
+  // these on a rank change are gone, which matters because an effect that
+  // corrects persisted state would write to the store on every data change.
+  const [startRank, setStartRank] = usePersistedVizControl<string | null>(metadata, 'start_rank', null);
+  const [colourByRank, setColourByRank] = usePersistedVizControl<string | null>(metadata, 'colour_by_rank', null);
+  const [maxDepth, setMaxDepth] = usePersistedVizControl<number>(metadata, 'max_depth', DEFAULT_DEPTH);
   // The instance (or dashboard) brand colorway, when there is one. It
   // becomes an option here and the default, so a branded deployment's
   // figures match its chrome without the viewer having to pick.
   const brandPalette = brandColorway(theme);
-  const [palette, setPalette] = useState<'brand' | 'tab10' | 'tab20'>(
+  const [palette, setPalette] = usePersistedVizControl<'brand' | 'tab10' | 'tab20'>(
+    metadata,
+    'palette',
     brandPalette ? 'brand' : 'tab20',
   );
-  const [showCounts, setShowCounts] = useState<boolean>(true);
-  const [minPercent, setMinPercent] = useState<number>(0.5);
+  const [showCounts, setShowCounts] = usePersistedVizControl<boolean>(metadata, 'show_counts', true);
+  const [minPercent, setMinPercent] = usePersistedVizControl<number>(metadata, 'min_percent', 0.5);
 
-  useEffect(() => {
-    setMaxDepth(Math.min(3, ranks.length));
-    setStartRankIdx((prev) => (prev >= ranks.length ? 0 : prev));
-    setColourByIdx((prev) => (prev >= ranks.length ? 0 : prev));
-  }, [ranks.length]);
-
-  // Keep colour-by inside the visible window when start/depth changes.
-  useEffect(() => {
+  // An unset or no-longer-present name falls back to the outermost rank.
+  const startRankIdx = Math.max(0, ranks.indexOf(startRank ?? ''));
+  // Colour-by has to stay inside the visible window; anything outside it reads
+  // as the innermost visible ring.
+  const colourByIdx = (() => {
+    const idx = ranks.indexOf(colourByRank ?? '');
     const end = Math.min(ranks.length, startRankIdx + maxDepth);
-    setColourByIdx((prev) => {
-      if (prev < startRankIdx) return startRankIdx;
-      if (prev >= end) return Math.max(startRankIdx, end - 1);
-      return prev;
-    });
-  }, [startRankIdx, maxDepth, ranks.length]);
+    return idx < startRankIdx || idx >= end ? startRankIdx : idx;
+  })();
 
   const requiredCols = useMemo(
     () => [...ranks, config.abundance_col].filter(Boolean) as string[],
@@ -264,9 +267,7 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
   const controls = useMemo(
     () => {
       const visibleEnd = Math.min(ranks.length, startRankIdx + maxDepth);
-      const colourOptions = ranks
-        .map((r, i) => ({ value: String(i), label: r, idx: i }))
-        .filter((o) => o.idx >= startRankIdx && o.idx < visibleEnd);
+      const colourOptions = ranks.filter((_, i) => i >= startRankIdx && i < visibleEnd);
       const maxDepthAllowed = Math.max(1, ranks.length - startRankIdx);
       return (
       <Stack gap="xs">
@@ -274,17 +275,17 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
           size="xs"
           label="Start from rank"
           description="Innermost ring — pick a deeper rank to collapse outer splits"
-          value={String(startRankIdx)}
-          onChange={(v) => v != null && setStartRankIdx(Number(v))}
-          data={ranks.map((r, i) => ({ value: String(i), label: r }))}
+          value={ranks[startRankIdx] ?? null}
+          onChange={(v) => v != null && setStartRank(v)}
+          data={ranks}
           allowDeselect={false}
         />
         <Select
           size="xs"
           label="Colour by rank"
-          value={String(colourByIdx)}
-          onChange={(v) => v != null && setColourByIdx(Number(v))}
-          data={colourOptions.map(({ value, label }) => ({ value, label }))}
+          value={ranks[colourByIdx] ?? null}
+          onChange={(v) => v != null && setColourByRank(v)}
+          data={colourOptions}
           allowDeselect={false}
         />
         <NumberInput

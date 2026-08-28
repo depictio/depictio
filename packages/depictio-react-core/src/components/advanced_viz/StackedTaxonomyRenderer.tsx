@@ -19,6 +19,7 @@ import {
 import { isStaleFetch } from '../../fetchQueue';
 import { resolveCategoricalPalette, stableColorMap } from '../../colors';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { usePersistedVizControl } from './usePersistedVizControl';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 
 /** Generic per-sample categorical annotation strip drawn above/below the
@@ -70,13 +71,17 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
   const config = (metadata.config || {}) as StackedTaxonomyConfig;
   const palette = resolveCategoricalPalette(theme, PALETTE);
 
-  const [rank, setRank] = useState<string | null>(config.default_rank ?? null);
-  const [topN, setTopN] = useState<number>(config.top_n ?? 20);
-  const [normalise, setNormalise] = useState<boolean>(config.normalise_to_one ?? true);
+  const [rank, setRank] = usePersistedVizControl<string | null>(metadata, 'default_rank', null);
+  const [topN, setTopN] = usePersistedVizControl<number>(metadata, 'top_n', 20);
+  const [normalise, setNormalise] = usePersistedVizControl<boolean>(
+    metadata,
+    'normalise_to_one',
+    true,
+  );
   type SampleSort = 'input' | 'total_abundance' | 'first_taxon';
-  const [sampleSort, setSampleSort] = useState<SampleSort>('input');
-  const [showLegend, setShowLegend] = useState<boolean>(true);
-  const [logY, setLogY] = useState<boolean>(false);
+  const [sampleSort, setSampleSort] = usePersistedVizControl<SampleSort>(metadata, 'sample_sort', 'input');
+  const [showLegend, setShowLegend] = usePersistedVizControl(metadata, 'show_legend', true);
+  const [logY, setLogY] = usePersistedVizControl(metadata, 'log_y', false);
 
   // Stable taxon→colour universe so a habitat filter doesn't shuffle the
   // top-N taxon colours. Pulled from the DC's unique values for taxon_col;

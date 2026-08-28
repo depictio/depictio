@@ -421,7 +421,7 @@ const EditorApp: React.FC = () => {
 
   // Mirror the live filters into the per-tab store so they survive the
   // builder's full-page round-trip (see editorFilters.ts). Writing on every
-  // change (rather than at the navigation sites) keeps AddComponentButton /
+  // change (rather than at the navigation sites) keeps the add-component and
   // GridItemEditOverlay free of filter plumbing; clearing all filters removes
   // the entry, so "Reset" leaves nothing behind.
   useEffect(() => {

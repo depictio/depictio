@@ -1,4 +1,5 @@
 id: ivar_variants_long
+name: Variant calls
 mode: variants
 description: Per-sample annotated variant calls (long table).
 find: { filename: "variants_long_table.csv" } # raw nf-core file

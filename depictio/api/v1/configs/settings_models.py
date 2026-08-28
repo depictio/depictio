@@ -1632,6 +1632,19 @@ class Settings(BaseSettings):
         ),
     )
 
+    seed_extra_projects: str = Field(
+        default="",
+        description=(
+            "Comma-separated list of *optional* reference projects to seed in "
+            "addition to the default set, e.g. 'catalog_conformance'. Empty (the "
+            "default) seeds none of them. This is additive, unlike "
+            "DEPICTIO_SEED_PROJECTS which narrows the default set — an optional "
+            "project is a test fixture, so it stays out of ordinary deployments "
+            "until something asks for it. Ignored when "
+            "DEPICTIO_DISABLE_EXAMPLE_DASHBOARDS is true."
+        ),
+    )
+
     enable_dev_endpoints: bool = Field(
         default=False,
         description=(
@@ -1659,6 +1672,15 @@ class Settings(BaseSettings):
         """
         names = {name.strip() for name in self.seed_projects.split(",") if name.strip()}
         return names or None
+
+    @property
+    def seed_extra_projects_filter(self) -> set[str]:
+        """Optional reference projects to seed on top of the default set.
+
+        Parses ``DEPICTIO_SEED_EXTRA_PROJECTS``. Empty means none: an optional
+        project only exists because something (the e2e suite) asked for it.
+        """
+        return {name.strip() for name in self.seed_extra_projects.split(",") if name.strip()}
 
     @model_validator(mode="after")
     def _enforce_server_secrets(self) -> "Settings":

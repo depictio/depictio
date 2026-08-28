@@ -1,4 +1,6 @@
 id: multiqc_quast
+name: Assembly quality
+origin_tool: QUAST
 mode: quast
 description: Genome-assembly quality metrics (contig counts, lengths) — QUAST, surfaced via MultiQC.
 find: { path_glob: "**/multiqc/multiqc_data/multiqc.parquet" }

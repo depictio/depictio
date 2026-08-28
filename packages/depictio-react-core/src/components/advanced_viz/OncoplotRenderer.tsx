@@ -23,6 +23,7 @@ import {
   plotlyThemeColors,
   plotlyThemeFragment,
 } from './plotlyTheme';
+import { usePersistedVizControl } from './usePersistedVizControl';
 
 interface OncoplotConfig {
   sample_id_col: string;
@@ -42,7 +43,7 @@ const OncoplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
   const isDark = colorScheme === 'dark';
   const config = (metadata.config || {}) as OncoplotConfig;
 
-  const [sortByFreq, setSortByFreq] = useState<boolean>(true);
+  const [sortByFreq, setSortByFreq] = usePersistedVizControl(metadata, 'sort_by_freq', true);
 
   const requiredCols = useMemo(
     () =>

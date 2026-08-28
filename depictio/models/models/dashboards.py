@@ -1197,6 +1197,14 @@ class DashboardDataLite(BaseModel):
             for header_field in ("description", "title_size", "title_align"):
                 if comp_dict.get(header_field):
                     base[header_field] = comp_dict[header_field]
+            # Catalog provenance. The picker writes `catalog_source` straight into
+            # stored_metadata client-side, and the chrome reads it to draw the
+            # catalog button and the origin block. A YAML-authored component can
+            # declare the same thing, so carry it through: without this an
+            # imported dashboard built entirely from catalog outputs claims none.
+            for provenance_field in ("catalog_source", "use"):
+                if comp_dict.get(provenance_field):
+                    base[provenance_field] = comp_dict[provenance_field]
             return base
 
         full_dict: dict[str, Any] = {

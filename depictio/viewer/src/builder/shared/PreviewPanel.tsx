@@ -6,27 +6,10 @@
  * each builder doesn't reimplement them.
  */
 import React from 'react';
-import { Card, Center, Group, Loader, Stack, Text } from '@mantine/core';
+import { Card, Center, Group, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-/**
- * The app's one "a preview is being produced" treatment: a centred spinner over
- * a dimmed label. Exported so surfaces that can't use the whole panel — the
- * catalog's bare iframe, for one — still show the same thing rather than
- * inventing a second spinner.
- */
-export const PreviewLoading: React.FC<{ label?: string }> = ({
-  label = 'Updating preview…',
-}) => (
-  <Center style={{ position: 'absolute', inset: 0, zIndex: 2 }}>
-    <Stack align="center" gap={4}>
-      <Loader size="sm" />
-      <Text size="xs" c="dimmed">
-        {label}
-      </Text>
-    </Stack>
-  </Center>
-);
+import PreviewLoading from './PreviewLoading';
 
 interface Props {
   loading?: boolean;

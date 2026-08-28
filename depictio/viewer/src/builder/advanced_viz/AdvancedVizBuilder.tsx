@@ -13,10 +13,11 @@
  *      so the TS side never duplicates the schema. A castable-but-inexact dtype
  *      (e.g. Int for a Float role) is a tolerant warning, not a blocker.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Badge,
+  Collapse,
   Divider,
   Group,
   MultiSelect,
@@ -29,6 +30,7 @@ import {
   TextInput,
   Title,
   Tooltip,
+  UnstyledButton,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
@@ -42,6 +44,7 @@ import {
 } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
 import AdvancedVizPreview from './AdvancedVizPreview';
+import { mergedPresetConfig, rolesFromConfigBlob } from './configBlob';
 
 /** Acceptable polars dtype names per canonical role (mirrors
  *  depictio/models/components/advanced_viz/schemas.py). */
@@ -62,6 +65,54 @@ const STRING_LIKE = ['String', 'Utf8'];
 // Score at/above which a kind is surfaced under "Recommended" (mirrors
 // RECOMMENDED_SCORE in depictio/models/components/advanced_viz/schemas.py).
 const RECOMMENDED_SCORE = 0.8;
+
+/** A titled block that starts collapsed.
+ *
+ *  Both places this is used are reference material rather than the next thing
+ *  to do: the long tail of visualisation kinds once the recommended ones are
+ *  on screen, and the binding table once every required role already has a
+ *  column (which is always the case when the component came from the
+ *  catalog). Collapsed they cost one line each; the header keeps them
+ *  discoverable, and the count says what is inside.
+ *
+ *  Module scope on purpose: declared inside the builder it would be a fresh
+ *  component type on every render, so React would remount it and snap it shut
+ *  the moment anything else changed - picking a kind, typing a filter, binding
+ *  a column.
+ *
+ *  `forceOpen` overrides the collapsed state without consuming it: a filter
+ *  that leaves its own matches hidden behind a closed section reads as a broken
+ *  filter, and the section returns to whatever the user left it on once the
+ *  filter clears. */
+const Disclosure: React.FC<{
+  title: string;
+  count?: number;
+  defaultOpen?: boolean;
+  forceOpen?: boolean;
+  children: React.ReactNode;
+}> = ({ title, count, defaultOpen = false, forceOpen = false, children }) => {
+  const [open, setOpen] = useState(defaultOpen);
+  const shown = open || forceOpen;
+  return (
+    <Stack gap={6}>
+      <UnstyledButton onClick={() => setOpen(!shown)} aria-expanded={shown}>
+        <Group gap={6} wrap="nowrap">
+          <Icon
+            icon={shown ? 'mdi:chevron-down' : 'mdi:chevron-right'}
+            width={16}
+            color="var(--mantine-color-dimmed)"
+          />
+          <Text fw={600} size="sm">{title}</Text>
+          {count != null && (
+            <Badge size="xs" variant="light" color="gray" radius="sm">{count}</Badge>
+          )}
+        </Group>
+      </UnstyledButton>
+      <Collapse in={shown}>{children}</Collapse>
+    </Stack>
+  );
+};
+
 
 // Dtype compatibility for a chosen column, mirroring the cast tiers in the
 // backend scoring engine (schemas.py `_dtype_score`): an Int column feeds a
@@ -217,9 +268,29 @@ const AdvancedVizBuilder: React.FC = () => {
     column_mapping?: Record<string, string | string[]>;
     preset_config?: Record<string, unknown> | null;
     config?: Record<string, unknown> | null;
+    viz_overrides?: Record<string, unknown> | null;
   };
   const patchConfig = useBuilderStore((s) => s.patchConfig);
   const setPreviewReady = useBuilderStore((s) => s.setPreviewReady);
+
+  // Tier-2 edits made in the preview's own settings popover.
+  //
+  // Read through getState() rather than the subscribed `config` so this keeps a
+  // single identity for the life of the builder: it ends up as a context value
+  // in the preview, and an unstable one would re-render the whole preview
+  // subtree on every keystroke in a binding Select.
+  //
+  // Written synchronously, never debounced: handleDirectAdd in CatalogTab reads
+  // the store immediately after seeding it, so a deferred write would be a race
+  // that loses the author's last edit on a fast Save.
+  const setVizOverride = useCallback(
+    (patch: Record<string, unknown>) => {
+      const current = (useBuilderStore.getState().config as { viz_overrides?: Record<string, unknown> | null })
+        .viz_overrides ?? {};
+      patchConfig({ viz_overrides: { ...current, ...patch } });
+    },
+    [patchConfig],
+  );
 
   const [kinds, setKinds] = useState<AdvancedVizKindDescriptor[] | null>(null);
   const [schema, setSchema] = useState<Record<string, string> | null>(null);
@@ -329,34 +400,43 @@ const AdvancedVizBuilder: React.FC = () => {
     [config.column_mapping],
   );
 
-  // Edit-mode unpack: when a saved component is loaded, derive the role map
-  // from the persisted `config.config.<role>_col` (and `rank_cols` for the
-  // sunburst special case).
+  // The preview must render exactly what Save will persist, so both go through
+  // the one merge helper rather than each spelling the layering out.
+  const mergedPreset = useMemo(
+    () => mergedPresetConfig(config),
+    [config.preset_config, config.config, config.viz_overrides],
+  );
+
+  // Unpack a config blob back into the role map: a saved component being edited
+  // (`config.config`) or a catalog offer's grounded preset (`preset_config`).
+  // `rolesFromConfigBlob` is the inverse of the mapping the save path applies,
+  // so the two directions live together and cannot drift.
+  //
+  // Fills in only the roles the mapping is *missing*, rather than bailing as
+  // soon as it holds anything. A catalog offer arrives with its declared roles
+  // already set, while the binding it had no way to declare lives only in the
+  // preset: a sunburst declares `abundance` and has its rank hierarchy inferred
+  // server-side. Bailing on the non-empty mapping is what made an offer that
+  // previews correctly report "needs at least 2 rank columns" once opened.
+  //
+  // Seeded once per blob, tracked by identity rather than by diffing against
+  // the current mapping on every render. The blob never changes, so a re-diff
+  // would treat a role the user had just cleared as "missing" and put it
+  // straight back, making an optional binding impossible to unbind.
+  const seededBlob = useRef<object | null>(null);
   useEffect(() => {
-    if (Object.keys(columnMapping).length > 0) return;
-    const persistedConfig = (config as unknown as { config?: Record<string, unknown> })
-      .config;
-    if (!persistedConfig || typeof persistedConfig !== 'object') return;
-    const recovered: Record<string, string | string[]> = {};
-    for (const [k, v] of Object.entries(persistedConfig)) {
-      if (k === 'rank_cols' && Array.isArray(v)) {
-        recovered.ranks = v as string[];
-      } else if (k === 'step_cols' && Array.isArray(v)) {
-        recovered.steps = v as string[];
-      } else if (k === 'index_column' && typeof v === 'string') {
-        recovered.index = v;
-      } else if ((k === 'value_columns' || k === 'row_annotation_cols') && Array.isArray(v)) {
-        recovered[k] = v as string[];
-      } else if (k === 'compute_method' && typeof v === 'string') {
-        recovered.compute_method = v;
-      } else if (k.endsWith('_col') && typeof v === 'string') {
-        recovered[k.slice(0, -'_col'.length)] = v;
-      }
+    const blob = config.preset_config ?? config.config;
+    if (!blob || typeof blob !== 'object') return;
+    if (seededBlob.current === blob) return;
+    seededBlob.current = blob;
+    const recovered = rolesFromConfigBlob(selectedKind ?? undefined, blob);
+    const missing = Object.fromEntries(
+      Object.entries(recovered).filter(([role]) => !(role in columnMapping)),
+    );
+    if (Object.keys(missing).length > 0) {
+      patchConfig({ column_mapping: { ...columnMapping, ...missing } });
     }
-    if (Object.keys(recovered).length > 0) {
-      patchConfig({ column_mapping: recovered });
-    }
-  }, [config, columnMapping, patchConfig]);
+  }, [config, columnMapping, patchConfig, selectedKind]);
 
   // Embedding live vs precomputed: when the picked DC has no precomputed
   // dim_1/dim_2 columns but has a wide feature matrix, the renderer needs to
@@ -399,7 +479,22 @@ const AdvancedVizBuilder: React.FC = () => {
   const setKind = (kind: AdvancedVizKind | null) => {
     // Re-picking a kind invalidates the catalog/saved preset (its control
     // extras belonged to the previous kind), so drop it.
-    patchConfig({ viz_kind: kind || undefined, column_mapping: {}, preset_config: null });
+    // The overrides go with it: `top_n` means something on a taxonomy bar and
+    // nothing on a volcano, and a foreign key would be rejected outright by the
+    // new kind's config model.
+    //
+    // `config` is the blob of the component being edited, and it goes too. The
+    // role-recovery effect below falls back to it, and its `<role>_col` keys
+    // carry no record of which kind they came from, so a Manhattan edited into
+    // a Volcano would otherwise inherit chromosome/position/score bindings and
+    // save a config the Volcano model rejects outright.
+    patchConfig({
+      viz_kind: kind || undefined,
+      column_mapping: {},
+      preset_config: null,
+      viz_overrides: null,
+      config: null,
+    });
   };
 
   const setRole = (role: string, value: string | string[] | null) => {
@@ -543,6 +638,19 @@ const AdvancedVizBuilder: React.FC = () => {
     return { recommendedKinds: rec, otherKinds: rest };
   }, [matchedKinds, scoreMap, suggestions]);
 
+  // Every required role already has a column — which is the state a component
+  // arrives in when it came from the catalog, and the state a manual build ends
+  // in. Nothing left to do here, so the bindings block starts collapsed.
+  const allRequiredBound = useMemo(
+    () =>
+      requiredRoles.length > 0 &&
+      requiredRoles.every(([role]) => {
+        const v = columnMapping[role];
+        return Array.isArray(v) ? v.length > 0 : Boolean(v);
+      }),
+    [requiredRoles, columnMapping],
+  );
+
   /** Render a titled grid of kind tiles with a fit-score badge. Tiles are
    *  always selectable; a tooltip surfaces which roles are missing/weak. */
   const renderKindSection = (
@@ -642,18 +750,27 @@ const AdvancedVizBuilder: React.FC = () => {
         recommendedKinds.length ? 'Recommended for this data collection' : null,
         recommendedKinds,
       )}
-      {renderKindSection(
-        recommendedKinds.length ? 'Other visualisations' : 'Visualisations',
-        otherKinds,
+      {recommendedKinds.length ? (
+        otherKinds.length > 0 && (
+          <Disclosure
+            title="Other visualisations"
+            count={otherKinds.length}
+            forceOpen={Boolean(search.trim())}
+          >
+            {renderKindSection(null, otherKinds)}
+          </Disclosure>
+        )
+      ) : (
+        renderKindSection('Visualisations', otherKinds)
       )}
 
       {selectedKind ? (
         <Paper withBorder p="md" radius="md">
-          <Stack gap="xs">
-            <Text fw={600}>Column bindings</Text>
+          <Disclosure title="Column bindings" defaultOpen={!allRequiredBound}>
+           <Stack gap="xs">
             <Paper withBorder p="xs" radius="sm">
               <Stack gap={4}>
-                <Text size="xs" fw={500}>Bindings overview</Text>
+                <Text size="xs" fw={500}>Roles reference</Text>
                 <Text size="xs" c="dimmed">
                   The roles this visualization binds. Hover a binding below for full details.
                 </Text>
@@ -901,7 +1018,8 @@ const AdvancedVizBuilder: React.FC = () => {
                 ) : null}
               </>
             )}
-          </Stack>
+           </Stack>
+          </Disclosure>
         </Paper>
       ) : null}
 
@@ -913,7 +1031,8 @@ const AdvancedVizBuilder: React.FC = () => {
           dcId={dcId}
           bindingsValid={validation.ok}
           onReady={setPreviewReady}
-          presetConfig={config.preset_config ?? config.config ?? null}
+          presetConfig={mergedPreset}
+          onVizControlChange={setVizOverride}
         />
       ) : null}
     </Stack>

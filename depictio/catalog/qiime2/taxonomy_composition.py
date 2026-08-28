@@ -16,6 +16,8 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "taxonomy": pl.Utf8,
     "count": pl.Float64,
+    "Kingdom": pl.Utf8,
+    "Phylum": pl.Utf8,
 }
 # Metadata columns (e.g. habitat) are user-defined and passed through dynamically.
 OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
@@ -59,6 +61,15 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     # Filter out zero/null counts
     df = df.filter(pl.col("count").is_not_null() & (pl.col("count") > 0))
 
+    # Split the lineage back into ranks. The barplot export carries the whole
+    # lineage in the column *name*, so the ranks only exist once it is melted —
+    # and a taxon-count chart is read by rank, not by lineage string. Mirrors
+    # nf-core/ampliseq/taxonomy_rel_abundance.py, which splits the same strings.
+    df = df.with_columns(
+        pl.col("taxonomy").str.split(";").list.get(0).alias("Kingdom"),
+        pl.col("taxonomy").str.split(";").list.get(1).fill_null("Unclassified").alias("Phylum"),
+    )
+
     # Core columns first, then any metadata columns appended
-    core = ["sample", "taxonomy", "count"]
+    core = ["sample", "taxonomy", "count", "Kingdom", "Phylum"]
     return df.select(core + metadata_cols)

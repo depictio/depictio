@@ -113,3 +113,15 @@ class TestTransformConfig:
     def test_extra_fields_forbidden(self) -> None:
         with pytest.raises(Exception):
             TransformConfig.model_validate({"recipe": "test.py", "extra": "bad"})
+
+    def test_materialized_defaults_to_false(self) -> None:
+        assert TransformConfig(recipe="vendor/pipeline/transform.py").materialized is False
+
+    def test_materialized_round_trips(self) -> None:
+        """Set by reference seeding: the recipe output already exists as a seed
+        file, so the lineage is kept but the recipe must never be re-run."""
+        config = TransformConfig.model_validate(
+            {"recipe": "vendor/pipeline/transform.py", "materialized": True}
+        )
+        assert config.materialized is True
+        assert config.model_dump()["materialized"] is True

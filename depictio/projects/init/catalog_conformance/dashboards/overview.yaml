@@ -1,0 +1,206 @@
+# Catalog conformance overview — the seeded landing board for the generated
+# conformance project.
+#
+# Import with:
+#   depictio dashboard import depictio/projects/init/catalog_conformance/dashboards/overview.yaml
+#
+# Deliberately small. The exhaustive board — every offer the catalog makes, added
+# through the real picker — is built and torn down by
+# depictio/tests/e2e-playwright/tests/catalog/catalog-modules-on-dashboard.spec.ts,
+# because generating it here would mean reimplementing the picker's
+# render-to-config translation in Python and letting the two drift.
+#
+# What this board is for: one tile of every component type the catalog emits,
+# drawn from four different tools and from both matching lanes, so opening the
+# project shows at a glance whether catalog-derived collections render at all.
+# Every binding below is what `advanced_viz_persist_config` produces for that
+# output's catalog render — copied, not invented, so this board and the picker
+# agree.
+#
+# Unlike the rest of the project this file is hand-written: it names specific
+# outputs, so the generator has no business rewriting it. Keep it bound to
+# long-lived outputs and it survives the catalog growing.
+
+version: 1
+title: "Catalog Conformance"
+subtitle: "One tile per component type, from catalog-derived collections"
+project_tag: "Catalog Conformance"
+
+components:
+  - tag: text-intro
+    component_type: text
+    workflow_tag: python/catalog_conformance
+    data_collection_tag: metaphlan_profile
+    title: What this project is
+    title_size: h3
+    alignment: left
+    body: >
+      Every data collection here is generated from **depictio/catalog/**: one per
+      distinct recipe, one per recipe-free output, plus a synthetic MultiQC
+      report. It exists so the catalog e2e suite covers every module the catalog
+      declares, rather than whatever the nf-core reference projects happen to
+      ingest. Regenerate with `scripts/generate_project.py` after adding a module.
+    layout: { x: 0, y: 0, w: 8, h: 1 }
+
+  # --- cards: four across, so the row is full -----------------------------
+  - tag: card-amplicon-coverage
+    catalog_source:
+      toolId: mosdepth
+      toolName: mosdepth
+      outputId: mosdepth_amplicon_coverage
+      description: "Per-amplicon coverage depth, aggregated across all samples (bindable as-is)."
+    component_type: card
+    workflow_tag: python/catalog_conformance
+    data_collection_tag: mosdepth_amplicon_coverage
+    title: Amplicon coverage
+    column_name: coverage
+    column_type: float64
+    aggregation: median
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:chart-bell-curve
+    layout: { x: 0, y: 1, w: 2, h: 2 }
+
+  - tag: card-asv-taxa
+    catalog_source:
+      toolId: qiime2
+      toolName: QIIME 2
+      outputId: qiime2_tree_metadata
+      description: "Per-ASV classification: the assigned taxon, its rank columns and the classifier confidence. Annotates the phylogenetic tree, and stands on its own as the taxonomy assignment table."
+    component_type: card
+    workflow_tag: python/catalog_conformance
+    data_collection_tag: qiime2_tree_metadata
+    title: Distinct taxa
+    column_name: taxon
+    column_type: object
+    aggregation: nunique
+    secondary_layout: uniqueness
+    display:
+      icon_name: mdi:family-tree
+    layout: { x: 2, y: 1, w: 2, h: 2 }
+
+  - tag: card-classifier-confidence
+    catalog_source:
+      toolId: qiime2
+      toolName: QIIME 2
+      outputId: qiime2_tree_metadata
+      description: "Per-ASV classification: the assigned taxon, its rank columns and the classifier confidence. Annotates the phylogenetic tree, and stands on its own as the taxonomy assignment table."
+    component_type: card
+    workflow_tag: python/catalog_conformance
+    data_collection_tag: qiime2_tree_metadata
+    title: Classifier confidence
+    column_name: confidence
+    column_type: float64
+    aggregation: average
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:check-decagram
+    layout: { x: 4, y: 1, w: 2, h: 2 }
+
+  - tag: card-shannon
+    catalog_source:
+      toolId: qiime2
+      toolName: QIIME 2
+      outputId: qiime2_alpha_diversity
+      description: "Multi-metric alpha-diversity per sample (shannon, evenness, faith_pd…)."
+    component_type: card
+    workflow_tag: python/catalog_conformance
+    data_collection_tag: qiime2_alpha_diversity
+    title: Shannon diversity
+    column_name: shannon
+    column_type: float64
+    aggregation: median
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:leaf
+    layout: { x: 6, y: 1, w: 2, h: 2 }
+
+  # --- the raw lane: a report and a profile recognised by their find block --
+  - tag: multiqc-fastqc-counts
+    catalog_source:
+      toolId: multiqc
+      toolName: MultiQC
+      outputId: multiqc_fastqc
+      description: "Raw-read sequencing QC (per-base quality, GC content, duplication, adapter content) — FastQC plots aggregated by MultiQC."
+    component_type: multiqc
+    workflow_tag: python/catalog_conformance
+    data_collection_tag: multiqc_report
+    title: FastQC sequence counts
+    description: From the synthetic report — the raw lane, matched on path_glob.
+    title_size: h3
+    selected_module: fastqc
+    selected_plot: Sequence Counts
+    layout: { x: 0, y: 3, w: 4, h: 3 }
+
+  - tag: adv-metaphlan-stacked
+    catalog_source:
+      toolId: metaphlan
+      toolName: MetaPhlAn
+      outputId: metaphlan_profile
+      description: "Per-sample taxonomic relative-abundance profile."
+    component_type: advanced_viz
+    workflow_tag: python/catalog_conformance
+    data_collection_tag: metaphlan_profile
+    title: MetaPhlAn taxonomic profile
+    description: The one catalog tool no reference project ingests.
+    title_size: h3
+    viz_kind: stacked_taxonomy
+    config:
+      viz_kind: stacked_taxonomy
+      sample_id_col: sample_id
+      taxon_col: taxon
+      rank_col: rank
+      abundance_col: relative_abundance
+    layout: { x: 4, y: 3, w: 4, h: 3 }
+
+  # --- the recipe lane -----------------------------------------------------
+  - tag: adv-ancombc-volcano
+    catalog_source:
+      toolId: qiime2
+      toolName: QIIME 2
+      outputId: qiime2_ancombc
+      description: "ANCOM-BC differential-abundance results. The tool writes one CSV per statistic per contrast; the recipe joins + melts them into a long table."
+    component_type: advanced_viz
+    workflow_tag: python/catalog_conformance
+    data_collection_tag: qiime2_ancombc
+    title: Differential abundance
+    description: Recipe-matched collection — qiime2/ancombc.py.
+    title_size: h3
+    viz_kind: volcano
+    config:
+      viz_kind: volcano
+      feature_id_col: id
+      effect_size_col: lfc
+      significance_col: q_val
+    layout: { x: 0, y: 6, w: 4, h: 3 }
+
+  - tag: figure-taxonomy-composition
+    catalog_source:
+      toolId: qiime2
+      toolName: QIIME 2
+      outputId: qiime2_taxonomy_composition
+      description: "Long-format taxon counts per sample, melted from the taxa barplot export, with the taxonomy string split back into its ranks."
+    component_type: figure
+    workflow_tag: python/catalog_conformance
+    data_collection_tag: qiime2_taxonomy_composition
+    title: Taxon counts per sample
+    title_size: h3
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: count
+      color: Phylum
+    layout: { x: 4, y: 6, w: 4, h: 3 }
+
+  - tag: table-metaphlan-profile
+    catalog_source:
+      toolId: metaphlan
+      toolName: MetaPhlAn
+      outputId: metaphlan_profile
+      description: "Per-sample taxonomic relative-abundance profile."
+    component_type: table
+    workflow_tag: python/catalog_conformance
+    data_collection_tag: metaphlan_profile
+    title: MetaPhlAn profile rows
+    title_size: h3
+    layout: { x: 0, y: 9, w: 8, h: 3 }

@@ -406,6 +406,21 @@ class CatalogOutput(BaseModel):
     """One file a tool emits → one or more dashboard renders."""
 
     id: str
+    # Short display label, e.g. "Amplicon coverage". This is what a picker or a
+    # gallery lists; `description` is the full sentence behind it and is too long
+    # to scan. Declared per output rather than derived from `id` so the wording is
+    # the catalog's to choose. Optional for third-party catalogs; every bundled
+    # output declares one (enforced by the catalog tests).
+    name: str | None = None
+    # The third-party tool the output actually comes from, when the catalog tool
+    # is an aggregator rather than the producer: a MultiQC section is MultiQC's
+    # file but FastQC's or Cutadapt's numbers, and a picker that only says
+    # "Raw-read QC" hides which tool ran. Declared, not derived: MultiQC persists
+    # anchors (`fastqc`, `samtools_bowtie2`), the report's own display names are
+    # decorated by the pipeline ("PREPROCESS: FastQC (raw reads)"), and the
+    # MultiQC package ships no anchor-to-name registry. Left unset when the tool
+    # itself is the producer, or when the section is pipeline-generated content.
+    origin_tool: str | None = None
     mode: str | None = None
     description: str = ""
 
@@ -439,6 +454,10 @@ class CatalogOutput(BaseModel):
     # `fixture` is resolved relative to it → fixtures are co-located with the
     # module's YAML.
     _source_dir: Path | None = PrivateAttr(default=None)
+    # The YAML file itself (set by the loader). `_source_dir` alone only gets a
+    # caller as far as the tool folder, and the picker links to the module's own
+    # definition.
+    _source_file: Path | None = PrivateAttr(default=None)
 
     def fixture_file(self) -> Path | None:
         """Resolved path of the co-located fixture, if any."""
@@ -568,11 +587,23 @@ def _load_tool_dir(directory: Path) -> CatalogEntry:
     if not module_path.exists():
         raise ValueError(f"tool folder {directory} is missing {_MODULE_FILE}")
     tool = CatalogTool.model_validate(yaml.safe_load(module_path.read_text()))
+    if tool.id != directory.name:
+        # The folder name is the tool's address: the viewer builds the "browse this
+        # tool on GitHub" link from the tool id alone, and the docs and the
+        # conformance project both address a tool by that path. An id that
+        # disagreed with its folder would send all three somewhere that does not
+        # exist, so it is rejected here rather than half-working downstream.
+        raise ValueError(
+            f"tool folder {directory} declares id {tool.id!r}; "
+            f"the id must match the folder name ({directory.name!r})"
+        )
     outputs: list[CatalogOutput] = []
     for path in sorted(directory.glob("*.yaml")):
         if path.name == _MODULE_FILE:
             continue
-        outputs.append(CatalogOutput.model_validate(yaml.safe_load(path.read_text())))
+        output = CatalogOutput.model_validate(yaml.safe_load(path.read_text()))
+        output._source_file = path
+        outputs.append(output)
     if not outputs:
         raise ValueError(f"tool folder {directory} has no output files")
     entry = CatalogEntry(**tool.model_dump(), outputs=outputs)
@@ -598,6 +629,7 @@ def load_entries_from_dir(directory: Path) -> list[CatalogEntry]:
                     entry = CatalogEntry.model_validate(raw)
                     for out in entry.outputs:
                         out._source_dir = path.parent  # fixtures next to the flat file
+                        out._source_file = path  # a flat file holds the whole tool
                     entries.append(entry)
         except Exception as exc:
             raise ValueError(f"invalid catalog entry {path}: {exc}") from exc

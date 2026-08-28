@@ -971,7 +971,7 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
     "ma": {
         "label": "MA plot",
         "description": "Mean log intensity vs log2 fold change — same hits as a volcano, classic DE / proteomics layout.",
-        "icon": "tabler:chart-bell",
+        "icon": "tabler:chart-bubble",  # tabler has no chart-bell; that one rendered blank
     },
     "dot_plot": {
         "label": "Dot plot",

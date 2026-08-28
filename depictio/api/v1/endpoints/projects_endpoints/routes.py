@@ -64,11 +64,27 @@ def _cascade_delete_project(project_id: PyObjectId, project_name: str) -> None:
                 {"$match": {"_id": ObjectId(project_id)}},
                 {"$unwind": "$workflows"},
                 {"$unwind": "$workflows.data_collections"},
-                {"$project": {"_id": 0, "dc_id": "$workflows.data_collections._id"}},
+                {
+                    "$project": {
+                        "_id": 0,
+                        "dc_id": "$workflows.data_collections._id",
+                        "wf_id": "$workflows._id",
+                    }
+                },
             ]
         )
     )
     dc_ids: list[ObjectId] = [r["dc_id"] for r in dc_agg if isinstance(r.get("dc_id"), ObjectId)]
+    # A run belongs to a workflow, not to a collection: `WorkflowRun` has a
+    # `workflow_id` and no `data_collection_id` at all. This cascade used to
+    # delete runs by collection, which could never match, so run documents
+    # outlived their project. Not just litter: a scan skips runs it has already
+    # registered, so re-creating a project on the same (static) workflow id
+    # inherited the stale runs and silently registered no files for any
+    # recursive-scan collection.
+    wf_ids: list[ObjectId] = list(
+        {r["wf_id"] for r in dc_agg if isinstance(r.get("wf_id"), ObjectId)}
+    )
 
     # S3 cleanup is best-effort — Mongo cascade still runs even if MinIO is down.
     if dc_ids:
@@ -103,10 +119,14 @@ def _cascade_delete_project(project_id: PyObjectId, project_name: str) -> None:
         dc_query: dict = {"$in": dc_ids + [str(dc_id) for dc_id in dc_ids]}
         files_collection.delete_many({"data_collection_id": dc_query})
         deltatables_collection.delete_many({"data_collection_id": dc_query})
-        runs_collection.delete_many({"data_collection_id": dc_query})
         multiqc_collection.delete_many({"data_collection_id": dc_query})
         jbrowse_collection.delete_many({"data_collection_id": dc_query})
         data_collections_collection.delete_many({"_id": {"$in": dc_ids}})
+
+    if wf_ids:
+        runs_collection.delete_many(
+            {"workflow_id": {"$in": wf_ids + [str(wf_id) for wf_id in wf_ids]}}
+        )
 
     dashboards_collection.delete_many({"project_id": ObjectId(project_id)})
     projects_collection.delete_one({"_id": ObjectId(project_id)})

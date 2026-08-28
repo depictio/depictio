@@ -23,6 +23,7 @@ import {
 } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
+import { usePersistedVizControl } from './usePersistedVizControl';
 
 interface UpsetPlotConfig {
   /** Deprecated/unused: data comes from the component's resolved dc_id
@@ -57,22 +58,19 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   const theme = useMantineTheme();
   const isDark = colorScheme === 'dark';
 
-  const [sortBy, setSortBy] = useState<NonNullable<UpsetPlotConfig['sort_by']>>(
-    config.sort_by ?? 'cardinality',
-  );
-  const [sortOrder, setSortOrder] = useState<NonNullable<UpsetPlotConfig['sort_order']>>(
-    config.sort_order ?? 'descending',
-  );
-  const [minSize, setMinSize] = useState<number>(config.min_size ?? 1);
-  const [colorBy, setColorBy] = useState<NonNullable<UpsetPlotConfig['color_intersections_by']>>(
-    config.color_intersections_by ?? 'none',
-  );
-  const [showSetSizes, setShowSetSizes] = useState<boolean>(config.show_set_sizes ?? true);
-  const [showValues, setShowValues] = useState<boolean>(false);
+  type SortBy = NonNullable<UpsetPlotConfig['sort_by']>;
+  type SortOrder = NonNullable<UpsetPlotConfig['sort_order']>;
+  type ColorBy = NonNullable<UpsetPlotConfig['color_intersections_by']>;
+  const [sortBy, setSortBy] = usePersistedVizControl<SortBy>(metadata, 'sort_by', 'cardinality');
+  const [sortOrder, setSortOrder] = usePersistedVizControl<SortOrder>(metadata, 'sort_order', 'descending');
+  const [minSize, setMinSize] = usePersistedVizControl(metadata, 'min_size', 1);
+  const [colorBy, setColorBy] = usePersistedVizControl<ColorBy>(metadata, 'color_intersections_by', 'none');
+  const [showSetSizes, setShowSetSizes] = usePersistedVizControl(metadata, 'show_set_sizes', true);
+  const [showValues, setShowValues] = usePersistedVizControl(metadata, 'show_values', false);
   // Master toggle that gates both annotation switches. When OFF, the
   // dispatch sends false for both (regardless of granular state) so the
   // UpSet renders as a bare dot-matrix.
-  const [showAnnotations, setShowAnnotations] = useState<boolean>(true);
+  const [showAnnotations, setShowAnnotations] = usePersistedVizControl(metadata, 'show_annotations', true);
   const effectiveShowSetSizes = showAnnotations && showSetSizes;
   const effectiveShowValues = showAnnotations && showValues;
 
@@ -80,9 +78,7 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   // them through UpSetPlot.from_dataframe(annotations=...). Library
   // auto-detects numeric vs categorical and renders one extra track per
   // column. Gated by the master annotations switch.
-  const [annotationCols, setAnnotationCols] = useState<string[]>(
-    config.default_annotation_cols ?? [],
-  );
+  const [annotationCols, setAnnotationCols] = usePersistedVizControl<string[]>(metadata, 'default_annotation_cols', []);
   const [dcSchema, setDcSchema] = useState<Record<string, string> | null>(null);
 
   useEffect(() => {

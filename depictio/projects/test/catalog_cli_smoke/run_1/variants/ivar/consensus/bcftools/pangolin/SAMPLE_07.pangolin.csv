@@ -1,0 +1,2 @@
+taxon,lineage,conflict,ambiguity_score,scorpio_call,scorpio_support,scorpio_conflict,scorpio_notes,pangolin_version,note,qc_status
+SAMPLE_07.consensus_threshold_0.75_quality_20,B.1.1.7,0.0,,Alpha (B.1.1.7-like),0.91,0.09,scorpio call: Alt alleles 21; Ref alleles 2; Amb alleles 0; Oth alleles 0,4.3.1,Usher placements: B.1.1.7(1/1),pass

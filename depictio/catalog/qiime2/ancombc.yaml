@@ -1,4 +1,5 @@
 id: qiime2_ancombc
+name: Differential abundance
 mode: composition/ancombc
 description: >-
   ANCOM-BC differential-abundance results. The tool writes one CSV per statistic

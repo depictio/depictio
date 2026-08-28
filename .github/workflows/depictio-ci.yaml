@@ -2722,8 +2722,15 @@ jobs:
           sed -i 's/^DEPICTIO_AUTH_PUBLIC_MODE=.*/DEPICTIO_AUTH_PUBLIC_MODE=${{ matrix.public_mode }}/' docker-compose/.env
           sed -i 's/^DEPICTIO_AUTH_DEMO_MODE=.*/DEPICTIO_AUTH_DEMO_MODE=${{ matrix.demo_mode }}/' docker-compose/.env
           sed -i 's/^#* *DEPICTIO_DEV_MODE=.*/DEPICTIO_DEV_MODE=true/' docker-compose/.env
-          mkdir -p data/depictioDB data/minio_data data/prof_files data/cache data/redis
-          chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache data/redis
+          # Seed the catalog conformance project on top of the default set. It is
+          # opt-in because it is a test fixture, and the catalog coverage spec is
+          # the only thing that needs it.
+          echo "DEPICTIO_SEED_EXTRA_PROJECTS=catalog_conformance" >> docker-compose/.env
+          # `multiqc_prerender` is bind-mounted into the backend and the worker,
+          # both of which run as $UID:$GID. Left to Docker to create, it lands
+          # root-owned and every MultiQC render 500s on the cache write.
+          mkdir -p data/depictioDB data/minio_data data/prof_files data/cache data/redis data/multiqc_prerender
+          chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache data/redis data/multiqc_prerender
 
       - name: Log in and start services
         run: |
@@ -2803,6 +2810,7 @@ jobs:
       - name: Run Playwright tests (${{ matrix.auth_mode }})
         run: |
           cd depictio/tests/e2e-playwright
+          CATALOG_CONFORMANCE_REQUIRED=1 \
           PLAYWRIGHT_BASE_URL=http://localhost:5080 \
           PLAYWRIGHT_API_URL=http://localhost:8058 \
           npx playwright test

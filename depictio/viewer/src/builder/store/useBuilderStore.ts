@@ -53,6 +53,10 @@ export interface ColumnSpec {
   specs?: Record<string, unknown>;
 }
 
+/** Which surface the Add-component page is showing. Named because the page's
+ *  history entries carry it too. */
+export type SourceMode = 'unset' | 'manual' | 'catalog';
+
 export interface BuilderState {
   // Mode + ids
   mode: 'create' | 'edit';
@@ -102,12 +106,20 @@ export interface BuilderState {
   applyDashboardFilters: boolean;
 
   // 'unset' = mode choice screen; 'manual' = stepper; 'catalog' = catalog browser or pre-fill
-  sourceMode: 'unset' | 'manual' | 'catalog';
+  sourceMode: SourceMode;
   // Set true when the builder was initiated from a catalog suggestion. Steps
   // 0 and 1 are skipped; the design step shows a dismissable catalog banner.
   catalogMode: boolean;
-  // When catalogMode, the tool+output that supplied the pre-fill (for the banner).
-  catalogSource: { toolName: string; outputId: string; description?: string } | null;
+  // When catalogMode, the tool+output that supplied the pre-fill (for the banner,
+  // the "from catalog" flag, and the metadata inspector). `use` is the
+  // `<tool>/<ref>` snippet the render maps to (advanced_viz), when applicable.
+  catalogSource: {
+    toolId?: string;
+    toolName: string;
+    outputId: string;
+    description?: string;
+    use?: string;
+  } | null;
 
   // UI status flags
   saving: boolean;
@@ -146,14 +158,20 @@ export interface BuilderActions {
     fig: { data: unknown[]; layout: Record<string, unknown> } | null,
   ) => void;
   setCodeStatus: (s: { title: string; color: string; message: string }) => void;
-  setSourceMode: (mode: 'unset' | 'manual' | 'catalog') => void;
+  setSourceMode: (mode: SourceMode) => void;
   initFromCatalog: (patch: {
     componentType: ComponentType;
     wfId: string;
     dcId: string;
     projectId: string;
     config: Record<string, unknown>;
-    source: { toolName: string; outputId: string; description?: string };
+    source: {
+      toolId?: string;
+      toolName: string;
+      outputId: string;
+      description?: string;
+      use?: string;
+    };
   }) => void;
   loadExisting: (m: StoredMetadata) => void;
   setApplyDashboardFilters: (b: boolean) => void;

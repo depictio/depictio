@@ -6,6 +6,7 @@ import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../a
 import { isStaleFetch } from '../../fetchQueue';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
+import { usePersistedVizControl } from './usePersistedVizControl';
 
 interface DaBarplotConfig {
   feature_id_col: string;
@@ -37,8 +38,8 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
   const config = (metadata.config || {}) as DaBarplotConfig;
   const isDark = colorScheme === 'dark';
 
-  const [topN, setTopN] = useState<number>(config.top_n ?? 15);
-  const [sigThreshold, setSigThreshold] = useState<number>(config.significance_threshold ?? 0.05);
+  const [topN, setTopN] = usePersistedVizControl(metadata, 'top_n', 15);
+  const [sigThreshold, setSigThreshold] = usePersistedVizControl(metadata, 'significance_threshold', 0.05);
   const [activeTab, setActiveTab] = useState<string | null>(null);
 
   const requiredCols = useMemo(() => {

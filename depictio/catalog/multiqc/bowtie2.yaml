@@ -1,4 +1,6 @@
 id: multiqc_bowtie2
+name: Alignment summary
+origin_tool: Bowtie 2
 mode: bowtie2
 description: Read-alignment summary against the reference (paired-end alignment rates) — Bowtie2, via MultiQC.
 find: { path_glob: "**/multiqc/multiqc_data/multiqc.parquet" }

@@ -1,4 +1,6 @@
 id: multiqc_bcftools
+name: Variant-call statistics
+origin_tool: BCFtools
 mode: bcftools
 description: Variant-call statistics (substitution types, indel lengths, variant-quality counts) — bcftools stats, via MultiQC.
 find: { path_glob: "**/multiqc/multiqc_data/multiqc.parquet" }

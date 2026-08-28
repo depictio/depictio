@@ -1,4 +1,5 @@
 id: pangolin_report
+name: Lineage report
 mode: run
 description: Per-sample PANGO lineage report.
 find: { filename: "*.pangolin.csv" }

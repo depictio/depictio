@@ -1,4 +1,5 @@
 id: nextclade_report
+name: Clade assignment
 mode: run
 description: Per-sample clade assignment + sequence QC.
 find: { path_glob: "**/nextclade/*.csv" }
@@ -6,5 +7,5 @@ recipe: nextclade/nextclade_results.py
 fixture: report.tsv
 renders_as:
   - { component: figure, visu_type: histogram, dict_kwargs: {x: clade, color: qc_overallStatus} } # clade calls
-  - { component: card, column: coverage, aggregation: average } # mean genome coverage
+  - { component: card, column: coverage, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot } # genome coverage
   - { component: table }

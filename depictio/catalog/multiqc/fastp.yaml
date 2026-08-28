@@ -1,4 +1,6 @@
 id: multiqc_fastp
+name: Read pre-processing
+origin_tool: fastp
 mode: fastp
 description: Read pre-processing QC (quality/adapter filtering, insert size, GC/N content) — fastp, via MultiQC.
 find: { path_glob: "**/multiqc/multiqc_data/multiqc.parquet" }

@@ -151,6 +151,10 @@ dump.rdb
 !depictio/projects/nf-core/ampliseq/*/multiqc/multiqc_data/multiqc.parquet
 # Allow nf-core viralrecon bundled run_1 (multiqc.parquet only — TSVs allow-listed below)
 !depictio/projects/nf-core/viralrecon/*/run_1/multiqc/multiqc_data/multiqc.parquet
+# Allow the catalog conformance project's synthetic MultiQC report (~70 KB,
+# generated from stub logs so the e2e suite can exercise the MultiQC catalog
+# outputs without vendoring a reference pipeline's 24 MB parquet)
+!depictio/projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 *.gz
 *.csv
 *.tsv
@@ -169,6 +173,16 @@ dump.rdb
 !depictio/projects/nf-core/viralrecon/*/*.tsv
 # Allow advanced_viz_showcase synthetic fixtures
 !depictio/projects/init/advanced_viz_showcase/data/*.tsv
+# Allow the catalog conformance project's generated data. Every file here is a
+# copy of a catalog fixture, staged either as a recipe seed at the project root
+# or inside the fake run tree — see scripts/generate_project.py.
+!depictio/projects/init/catalog_conformance/*.tsv
+!depictio/projects/init/catalog_conformance/run_1/**/*.tsv
+# Allow the catalog CLI smoke project's staged raw tool output. Small, derived
+# from the catalog's own fixtures, and the input the CLI runs the recipes on —
+# see scripts/generate_fixtures.py.
+!depictio/projects/test/catalog_cli_smoke/run_1/**/*.tsv
+!depictio/projects/test/catalog_cli_smoke/run_1/**/*.csv
 # Allow catalog fixtures (small samples co-located in each module folder)
 !depictio/catalog/**/*.tsv
 !depictio/catalog/**/*.csv

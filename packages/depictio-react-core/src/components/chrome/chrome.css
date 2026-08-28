@@ -21,6 +21,9 @@
   display: flex;
   flex-direction: column;
 }
+/* Hover-only action row, top-right, above the renderer's own Paper. Everything
+ * a tile offers lives here, the catalog-origin flag included: a badge pinned
+ * top-left would sit exactly where a figure draws its title. */
 .depictio-component-actions {
   position: absolute;
   top: 12px;
