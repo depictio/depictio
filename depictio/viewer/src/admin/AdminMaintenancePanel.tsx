@@ -91,8 +91,11 @@ const AdminMaintenancePanel: React.FC = () => {
     <Stack gap="lg">
       <Card withBorder radius="md" p="lg">
         <Stack gap="md">
-          <Group justify="space-between" align="flex-start" wrap="nowrap">
-            <Stack gap={4}>
+          {/* Same shape as the Backups tab's create card: a nowrap Group lets
+              the button shrink, and Mantine clips a Button's label instead of
+              overflowing it, so the label renders as "Delete example proje". */}
+          <Group justify="space-between" align="flex-start">
+            <Stack gap={4} style={{ flex: '1 1 320px', minWidth: 0 }}>
               <Group gap="xs">
                 <Icon icon="mdi:broom" width={20} color="var(--mantine-color-orange-6)" />
                 <Title order={5}>Clean example projects</Title>
@@ -110,6 +113,7 @@ const AdminMaintenancePanel: React.FC = () => {
               leftSection={<Icon icon="tabler:trash" width={16} />}
               onClick={openConfirm}
               disabled={loading || examples.length === 0}
+              style={{ flexShrink: 0 }}
             >
               Delete example projects
             </Button>

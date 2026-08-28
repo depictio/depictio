@@ -1,15 +1,17 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActionIcon,
   Alert,
   Badge,
   Button,
   Card,
   Center,
+  Code,
   FileButton,
   Group,
   Loader,
+  NumberInput,
   Stack,
+  Switch,
   Table,
   Text,
   Title,
@@ -18,13 +20,37 @@ import {
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 
-import { createBackup, downloadBackup, listBackups, uploadBackup } from 'depictio-react-core';
-import type { AdminBackupEntry } from 'depictio-react-core';
+import {
+  createBackup,
+  downloadBackup,
+  getBackupSchedule,
+  listBackups,
+  updateBackupSchedule,
+  uploadBackup,
+} from 'depictio-react-core';
+import type { AdminBackupEntry, BackupScheduleStatus } from 'depictio-react-core';
 
 import UnstyledDropZone from '../components/UnstyledDropZone';
 import { formatDateTime } from '../lib/datetime';
 import RestoreBackupModal from './RestoreBackupModal';
 import type { RestoreTarget } from './RestoreBackupModal';
+
+/** The three schedule fields an admin can edit, as held while editing. */
+interface ScheduleDraft {
+  enabled: boolean;
+  interval_hours: number;
+  retention_days: number;
+}
+
+/** One labelled value in the Automated backups summary row. */
+const ScheduleFact: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+  <Stack gap={0}>
+    <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
+      {label}
+    </Text>
+    <Text size="sm">{value}</Text>
+  </Stack>
+);
 
 /**
  * Admin > Backups tab. One-click server-side backup (create + download),
@@ -34,11 +60,33 @@ import type { RestoreTarget } from './RestoreBackupModal';
  */
 const AdminBackupsPanel: React.FC = () => {
   const [backups, setBackups] = useState<AdminBackupEntry[]>([]);
+  const [schedule, setSchedule] = useState<BackupScheduleStatus | null>(null);
+  /** Editable copy of the schedule; `schedule` stays the server's answer so the
+   *  Save button can tell whether anything actually changed. */
+  const [draft, setDraft] = useState<ScheduleDraft | null>(null);
+  const [savingSchedule, setSavingSchedule] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [restoreTarget, setRestoreTarget] = useState<RestoreTarget | null>(null);
+
+  /** Store the server's answer and reset the editable copy to match it. */
+  const applySchedule = useCallback((next: BackupScheduleStatus) => {
+    setSchedule(next);
+    setDraft({
+      enabled: next.enabled,
+      interval_hours: next.interval_hours,
+      retention_days: next.retention_days,
+    });
+  }, []);
+
+  const scheduleDirty =
+    !!schedule &&
+    !!draft &&
+    (draft.enabled !== schedule.enabled ||
+      draft.interval_hours !== schedule.interval_hours ||
+      draft.retention_days !== schedule.retention_days);
 
   const refresh = useCallback(async () => {
     setLoadError(null);
@@ -52,9 +100,53 @@ const AdminBackupsPanel: React.FC = () => {
     }
   }, []);
 
+  /** Loaded separately from the backup list, and deliberately not re-read by
+   *  refresh(): the last/next run only move when the *scheduler* runs, so
+   *  re-reading after a manual backup would discard an in-progress edit for
+   *  nothing. A failure here must not blank the list, so it skips loadError. */
+  const loadSchedule = useCallback(async () => {
+    try {
+      applySchedule(await getBackupSchedule());
+    } catch {
+      setSchedule(null);
+      setDraft(null);
+    }
+  }, [applySchedule]);
+
+  const handleSaveSchedule = async () => {
+    if (!draft) return;
+    setSavingSchedule(true);
+    try {
+      applySchedule(
+        await updateBackupSchedule({
+          enabled: draft.enabled,
+          intervalHours: draft.interval_hours,
+          retentionDays: draft.retention_days,
+        }),
+      );
+      notifications.show({
+        color: 'teal',
+        title: 'Schedule saved',
+        message: draft.enabled
+          ? `Automatic backup every ${draft.interval_hours} h.`
+          : 'Automatic backups are off.',
+        autoClose: 2500,
+      });
+    } catch (err) {
+      notifications.show({
+        color: 'red',
+        title: 'Could not save the schedule',
+        message: err instanceof Error ? err.message : 'Failed to update the backup schedule',
+      });
+    } finally {
+      setSavingSchedule(false);
+    }
+  };
+
   useEffect(() => {
     void refresh();
-  }, [refresh]);
+    void loadSchedule();
+  }, [refresh, loadSchedule]);
 
   const handleCreate = async () => {
     setCreating(true);
@@ -117,6 +209,97 @@ const AdminBackupsPanel: React.FC = () => {
     }
   };
 
+  const renderSchedule = () => {
+    if (!schedule || !draft) {
+      return (
+        <Text size="sm" c="dimmed">
+          Schedule status unavailable.
+        </Text>
+      );
+    }
+    return (
+      <Stack gap="md">
+        <Text size="sm" c="dimmed">
+          {schedule.enabled
+            ? `The server takes a backup on its own every ${schedule.interval_hours} hours.`
+            : 'Nothing is backing this deployment up on a schedule. Backups only exist when an administrator creates one here.'}{' '}
+          Old backups are pruned after every backup, scheduled or manual.
+        </Text>
+
+        <Switch
+          checked={draft.enabled}
+          onChange={(e) => setDraft({ ...draft, enabled: e.currentTarget.checked })}
+          label="Take a backup automatically"
+          description="Applies to every API worker within a few minutes. No restart needed."
+          disabled={savingSchedule}
+          data-testid="backup-schedule-enabled"
+        />
+
+        <Group gap="md" align="flex-start" wrap="wrap">
+          <NumberInput
+            label="Interval"
+            suffix=" hours"
+            min={1}
+            max={8760}
+            clampBehavior="strict"
+            allowDecimal={false}
+            w={150}
+            value={draft.interval_hours}
+            onChange={(v) =>
+              setDraft({ ...draft, interval_hours: typeof v === 'number' ? v : draft.interval_hours })
+            }
+            disabled={savingSchedule}
+            data-testid="backup-schedule-interval"
+          />
+          <NumberInput
+            label="Keep backups for"
+            suffix=" days"
+            description="0 keeps them forever"
+            min={0}
+            max={3650}
+            clampBehavior="strict"
+            allowDecimal={false}
+            w={190}
+            value={draft.retention_days}
+            onChange={(v) =>
+              setDraft({ ...draft, retention_days: typeof v === 'number' ? v : draft.retention_days })
+            }
+            disabled={savingSchedule}
+            data-testid="backup-schedule-retention"
+          />
+          <Button
+            mt={25}
+            onClick={() => void handleSaveSchedule()}
+            loading={savingSchedule}
+            disabled={!scheduleDirty}
+            data-testid="backup-schedule-save"
+          >
+            Save schedule
+          </Button>
+        </Group>
+
+        <Group gap="lg" wrap="wrap">
+          <ScheduleFact
+            label="Last automatic run"
+            value={schedule.last_run ? formatDateTime(schedule.last_run) : 'Never'}
+          />
+          <ScheduleFact
+            label="Next automatic run"
+            value={schedule.next_run ? formatDateTime(schedule.next_run) : 'Not scheduled'}
+          />
+        </Group>
+
+        <Text size="xs" c="dimmed">
+          {schedule.is_customized ? 'Saved here, overriding this' : 'Currently taken from this'}{' '}
+          deployment&apos;s <Code>DEPICTIO_BACKUP_AUTO_BACKUP_ENABLED</Code>,{' '}
+          <Code>DEPICTIO_BACKUP_AUTO_BACKUP_INTERVAL_HOURS</Code> and{' '}
+          <Code>DEPICTIO_BACKUP_BACKUP_FILE_RETENTION_DAYS</Code>. Anything saved on this page wins
+          over those defaults from then on.
+        </Text>
+      </Stack>
+    );
+  };
+
   const renderList = () => {
     if (loading) {
       return (
@@ -163,6 +346,13 @@ const AdminBackupsPanel: React.FC = () => {
                 <Table.Td>
                   <Group gap={6} wrap="nowrap">
                     <Text size="sm">{formatDateTime(b.created)}</Text>
+                    {b.is_automatic && (
+                      <Tooltip label="Taken by the backup scheduler">
+                        <Badge color="blue" variant="light" size="xs">
+                          auto
+                        </Badge>
+                      </Tooltip>
+                    )}
                     {!b.has_checksum && (
                       <Tooltip label="No integrity checksum — restore proceeds unverified">
                         <Badge color="yellow" variant="light" size="xs">
@@ -189,21 +379,26 @@ const AdminBackupsPanel: React.FC = () => {
                   </Text>
                 </Table.Td>
                 <Table.Td>
+                  {/* Both row actions are labelled icon buttons of the same
+                      size: an icon-only download next to a text-only restore
+                      read as two different kinds of control. Colour escalates
+                      with consequence — neutral download, orange restore (it
+                      replaces data), red only on the modal's final confirm. */}
                   <Group gap="xs" justify="flex-end" wrap="nowrap">
-                    <Tooltip label="Download backup file">
-                      <ActionIcon
-                        variant="subtle"
-                        aria-label={`Download backup ${b.backup_id}`}
-                        onClick={() => void handleDownload(b.backup_id)}
-                        data-testid={`backup-download-${b.backup_id}`}
-                      >
-                        <Icon icon="mdi:download" width={18} />
-                      </ActionIcon>
-                    </Tooltip>
                     <Button
-                      color="red"
+                      variant="default"
+                      size="xs"
+                      leftSection={<Icon icon="mdi:download" width={14} />}
+                      onClick={() => void handleDownload(b.backup_id)}
+                      data-testid={`backup-download-${b.backup_id}`}
+                    >
+                      Download
+                    </Button>
+                    <Button
+                      color="orange"
                       variant="light"
                       size="xs"
+                      leftSection={<Icon icon="mdi:backup-restore" width={14} />}
                       onClick={() =>
                         setRestoreTarget({
                           backupId: b.backup_id,
@@ -228,8 +423,12 @@ const AdminBackupsPanel: React.FC = () => {
   return (
     <Stack gap="lg">
       <Card withBorder radius="md" p="lg">
-        <Group justify="space-between" align="flex-start" wrap="nowrap">
-          <Stack gap={4}>
+        {/* The button must not be a shrinkable flex item: Mantine clips a
+            Button's label rather than letting it overflow, so a nowrap Group
+            renders "Create backu". Let the description shrink instead, and let
+            the button wrap onto its own line once the card gets narrow. */}
+        <Group justify="space-between" align="flex-start">
+          <Stack gap={4} style={{ flex: '1 1 320px', minWidth: 0 }}>
             <Group gap="xs">
               <Icon icon="mdi:database-export" width={20} color="var(--mantine-color-blue-6)" />
               <Title order={5}>Create backup</Title>
@@ -244,6 +443,7 @@ const AdminBackupsPanel: React.FC = () => {
             leftSection={<Icon icon="mdi:database-plus" width={16} />}
             onClick={() => void handleCreate()}
             loading={creating}
+            style={{ flexShrink: 0 }}
             data-testid="backup-create-button"
           >
             Create backup
@@ -258,6 +458,25 @@ const AdminBackupsPanel: React.FC = () => {
             <Title order={5}>Backups on the server</Title>
           </Group>
           {renderList()}
+        </Stack>
+      </Card>
+
+      <Card withBorder radius="md" p="lg">
+        <Stack gap="md">
+          <Group gap="xs">
+            <Icon icon="mdi:calendar-clock" width={20} color="var(--mantine-color-blue-6)" />
+            <Title order={5}>Automated backups</Title>
+            {schedule && (
+              <Badge
+                color={schedule.enabled ? 'teal' : 'gray'}
+                variant="light"
+                data-testid="backup-schedule-status"
+              >
+                {schedule.enabled ? 'Enabled' : 'Disabled'}
+              </Badge>
+            )}
+          </Group>
+          {renderSchedule()}
         </Stack>
       </Card>
 

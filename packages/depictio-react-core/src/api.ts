@@ -3701,6 +3701,23 @@ export interface AdminBackupEntry {
   /** False for legacy backups without a .sha256 sidecar; restoring those
    *  requires allow_unverified. */
   has_checksum?: boolean;
+  /** True for snapshots taken by the scheduler rather than by an admin. */
+  is_automatic?: boolean;
+}
+
+/** GET/PUT /backup/schedule — the scheduled-backup config in force.
+ *  Env vars supply the deployment default; anything saved from the admin UI
+ *  overrides it and is what the running scheduler reads. */
+export interface BackupScheduleStatus {
+  enabled: boolean;
+  interval_hours: number;
+  /** 0 means backups are kept forever. */
+  retention_days: number;
+  /** ISO timestamps with an explicit UTC offset; null before the first run. */
+  last_run: string | null;
+  next_run: string | null;
+  /** True once a value has been saved from the UI, overriding the env default. */
+  is_customized?: boolean;
 }
 
 export interface BackupCollectionValidation {
@@ -3752,6 +3769,31 @@ export async function listBackups(): Promise<AdminBackupEntry[]> {
   if (!res.ok) await throwHttpError(res, 'Failed to list backups');
   const data = await res.json();
   return Array.isArray(data?.backups) ? (data.backups as AdminBackupEntry[]) : [];
+}
+
+export async function getBackupSchedule(): Promise<BackupScheduleStatus> {
+  const res = await authFetch(`${API_BASE}/backup/schedule`);
+  if (!res.ok) await throwHttpError(res, 'Failed to load the backup schedule');
+  return res.json();
+}
+
+/** Change the schedule. Only the provided fields are updated; the response is
+ *  the schedule in force afterwards. Takes effect without an API restart. */
+export async function updateBackupSchedule(update: {
+  enabled?: boolean;
+  intervalHours?: number;
+  retentionDays?: number;
+}): Promise<BackupScheduleStatus> {
+  const res = await authFetch(`${API_BASE}/backup/schedule`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      enabled: update.enabled,
+      interval_hours: update.intervalHours,
+      retention_days: update.retentionDays,
+    }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to update the backup schedule');
+  return res.json();
 }
 
 export async function createBackup(): Promise<BackupCreateResult> {

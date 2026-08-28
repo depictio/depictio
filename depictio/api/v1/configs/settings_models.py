@@ -795,7 +795,25 @@ class BackupConfig(BaseSettings):
     backup_s3_secret_key: Optional[str] = Field(default=None, description="Backup S3 secret key")
     backup_s3_region: str = Field(default="us-east-1", description="Backup S3 region")
     compress_local_backups: bool = Field(default=True, description="Compress local S3 data backups")
-    backup_file_retention_days: int = Field(default=30, description="Days to retain backup files")
+    backup_file_retention_days: int = Field(
+        default=30,
+        description=(
+            "Days to retain backup files. Applied to the MongoDB backup directory after "
+            "every backup (scheduled or manual). Set to 0 to keep backups forever."
+        ),
+    )
+    auto_backup_enabled: bool = Field(
+        default=False,
+        description=(
+            "Run scheduled MongoDB backups in the background. Opt-in: a deployment that "
+            "has not sized its backup volume should not start filling it on upgrade."
+        ),
+    )
+    auto_backup_interval_hours: int = Field(
+        default=24,
+        ge=1,
+        description="Hours between scheduled backups when auto_backup_enabled is true.",
+    )
     migration_allowed_s3_endpoints: list[str] | str = Field(
         default_factory=list,
         description=(

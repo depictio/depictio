@@ -262,6 +262,8 @@ export {
   cleanExampleProjects,
   // Admin backup & restore
   listBackups,
+  getBackupSchedule,
+  updateBackupSchedule,
   createBackup,
   downloadBackup,
   uploadBackup,
@@ -570,6 +572,7 @@ export type {
   ExampleProject,
   // Admin backup & restore types
   AdminBackupEntry,
+  BackupScheduleStatus,
   BackupCollectionValidation,
   BackupValidationResult,
   BackupCreateResult,

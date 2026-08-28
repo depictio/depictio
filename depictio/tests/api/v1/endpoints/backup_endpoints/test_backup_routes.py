@@ -1,8 +1,10 @@
 import json
 import re
+from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
+from bson import ObjectId
 from fastapi.testclient import TestClient
 
 from depictio.api.v1.endpoints.backup_endpoints.routes import (
@@ -39,12 +41,43 @@ def _write_backup(backup_dir, backup_id, data, with_sidecar=True, metadata=None)
 
 
 @pytest.fixture
-def backup_dir(tmp_path):
-    """Point the routes module's settings at a temporary backup directory."""
+def backup_settings(tmp_path):
+    """Point the routes module's settings at a temporary backup directory.
+
+    Backup-related fields are set to real values rather than left as MagicMock
+    attributes: retention and the schedule are compared numerically, and a
+    MagicMock silently compares truthy in either direction.
+    """
     mock_settings = MagicMock()
     mock_settings.backup.backup_path = str(tmp_path / "backups")
+    mock_settings.backup.backup_file_retention_days = 30
+    mock_settings.backup.auto_backup_enabled = False
+    mock_settings.backup.auto_backup_interval_hours = 24
     with patch("depictio.api.v1.endpoints.backup_endpoints.routes.settings", mock_settings):
-        yield tmp_path / "backups"
+        yield mock_settings
+
+
+@pytest.fixture
+def backup_state():
+    """Isolate the schedule state document from a real MongoDB.
+
+    The effective schedule is read from Mongo on every retention pass and every
+    /schedule call; without this a test that never mentions the scheduler still
+    blocks for the full 30s connection timeout.
+    """
+    mock_collection = MagicMock()
+    mock_collection.find_one.return_value = None
+    with patch(
+        "depictio.api.v1.endpoints.backup_endpoints.routes.initialization_collection",
+        mock_collection,
+    ):
+        yield mock_collection
+
+
+@pytest.fixture
+def backup_dir(backup_settings, backup_state, tmp_path):
+    """The temporary backup directory ``backup_settings`` points the routes at."""
+    return tmp_path / "backups"
 
 
 @pytest.fixture
@@ -151,6 +184,7 @@ class TestBackupEndpoints:
         mock_users,
         client,
         admin_user,
+        backup_dir,
     ):
         """Test successful backup creation by admin user."""
         from depictio.api.v1.endpoints.backup_endpoints.routes import get_current_user
@@ -215,6 +249,7 @@ class TestBackupEndpoints:
         mock_users,
         client,
         admin_user,
+        backup_dir,
     ):
         """Test that temporary users and their resources are excluded from backup."""
         from depictio.api.v1.endpoints.backup_endpoints.routes import get_current_user
@@ -598,3 +633,266 @@ class TestRestoreValidationGate:
         )
         assert allowed.status_code == 200
         assert allowed.json()["success"] is True
+
+
+@patch("depictio.api.v1.endpoints.backup_endpoints.routes.dashboards_collection")
+@patch("depictio.api.v1.endpoints.backup_endpoints.routes.projects_collection")
+class TestRestoreObjectIdRehydration:
+    """Backups serialize every ObjectId to a string; restore has to undo that.
+
+    Writing the ids back as strings leaves documents Mongo can no longer join:
+    the dashboard listing filters on an ObjectId ``project_id``, so a restored
+    instance shows no dashboards at all.
+    """
+
+    DASHBOARD_OID = "6824cb3b89d2b72169309737"
+    PROJECT_OID = "646b0f3c1e4a2d7f8e5b8c9a"
+    OWNER_OID = "67658ba033c8b59ad489d7c7"
+    DC_OID = "646b0f3c1e4a2d7f8e5b8c9c"
+
+    def _dashboard(self):
+        return {
+            "_id": self.DASHBOARD_OID,
+            "dashboard_id": self.DASHBOARD_OID,
+            "project_id": self.PROJECT_OID,
+            "title": "Iris",
+            "permissions": {
+                "owners": [{"_id": self.OWNER_OID, "email": "admin@example.com"}],
+                "viewers": ["*"],
+            },
+            "stored_metadata": [{"index": "0", "dc_id": self.DC_OID}],
+        }
+
+    def _restore(self, as_admin, backup_dir, data):
+        _write_backup(backup_dir, "20250101_010101", data)
+        return as_admin.post(
+            "/backup/restore",
+            json={
+                "backup_id": "20250101_010101",
+                "dry_run": False,
+                "skip_validation": True,
+                "collections": ["dashboards"],
+            },
+        )
+
+    def test_nested_ids_come_back_as_objectids(
+        self, mock_projects, mock_dashboards, as_admin, backup_dir
+    ):
+        response = self._restore(as_admin, backup_dir, {"dashboards": [self._dashboard()]})
+
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+
+        (inserted,), _ = mock_dashboards.insert_many.call_args
+        doc = inserted[0]
+        assert doc["_id"] == ObjectId(self.DASHBOARD_OID)
+        assert doc["project_id"] == ObjectId(self.PROJECT_OID)
+        assert doc["permissions"]["owners"][0]["_id"] == ObjectId(self.OWNER_OID)
+        assert doc["stored_metadata"][0]["dc_id"] == ObjectId(self.DC_OID)
+
+    def test_non_id_strings_are_left_alone(
+        self, mock_projects, mock_dashboards, as_admin, backup_dir
+    ):
+        self._restore(as_admin, backup_dir, {"dashboards": [self._dashboard()]})
+
+        (inserted,), _ = mock_dashboards.insert_many.call_args
+        doc = inserted[0]
+        assert doc["title"] == "Iris"
+        assert doc["permissions"]["viewers"] == ["*"]
+        assert doc["stored_metadata"][0]["index"] == "0"
+
+    def test_failed_insert_rolls_the_collection_back(
+        self, mock_projects, mock_dashboards, as_admin, backup_dir
+    ):
+        """A wipe-and-replace that fails half way must not leave an empty collection."""
+        existing = [{"_id": ObjectId(self.DASHBOARD_OID), "title": "before restore"}]
+        mock_dashboards.find.return_value = existing
+        mock_dashboards.insert_many.side_effect = [Exception("insert failed"), None]
+
+        response = self._restore(as_admin, backup_dir, {"dashboards": [self._dashboard()]})
+
+        assert response.status_code == 200
+        result = response.json()
+        assert result["success"] is False
+        assert result["restored_collections"]["dashboards"]["status"] == "failed"
+        # Second call is the rollback, re-inserting exactly what was there before.
+        assert mock_dashboards.insert_many.call_args_list[-1].args[0] == existing
+
+
+class TestBackupRetention:
+    """`backup_file_retention_days` was declared but never applied — nothing
+    pruned the backup directory, so it grew by one full database snapshot per
+    backup, forever."""
+
+    def _write(self, backup_dir, backup_id, with_sidecar=True):
+        return _write_backup(backup_dir, backup_id, {"projects": []}, with_sidecar=with_sidecar)
+
+    def test_prunes_backups_past_retention(self, backup_settings, backup_dir):
+        from depictio.api.v1.endpoints.backup_endpoints.routes import prune_expired_backups
+
+        backup_settings.backup.backup_file_retention_days = 30
+        old_id = (datetime.now() - timedelta(days=45)).strftime("%Y%m%d_%H%M%S")
+        recent_id = (datetime.now() - timedelta(days=2)).strftime("%Y%m%d_%H%M%S")
+        old_path = self._write(backup_dir, old_id)
+        recent_path = self._write(backup_dir, recent_id)
+
+        assert prune_expired_backups() == 1
+        assert not old_path.exists()
+        # The sidecar is worthless without its backup and goes with it.
+        assert not (backup_dir / f"{old_path.name}.sha256").exists()
+        assert recent_path.exists()
+
+    def test_zero_retention_keeps_everything(self, backup_settings, backup_dir):
+        from depictio.api.v1.endpoints.backup_endpoints.routes import prune_expired_backups
+
+        backup_settings.backup.backup_file_retention_days = 0
+        old_path = self._write(backup_dir, "20200101_000000")
+
+        assert prune_expired_backups() == 0
+        assert old_path.exists()
+
+    def test_unparseable_filenames_are_left_alone(self, backup_settings, backup_dir):
+        """Only files whose id parses as a timestamp have a knowable age."""
+        from depictio.api.v1.endpoints.backup_endpoints.routes import prune_expired_backups
+
+        backup_settings.backup.backup_file_retention_days = 1
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        stray = backup_dir / "depictio_backup_manual-copy.json"
+        stray.write_text("{}")
+
+        assert prune_expired_backups() == 0
+        assert stray.exists()
+
+
+class TestBackupScheduleClaim:
+    """Every API worker runs the scheduler loop, so the due time is claimed in
+    MongoDB — the initialization election has no winner after the first boot."""
+
+    def test_claim_matches_only_a_due_slot(self, backup_state, backup_settings):
+        from depictio.api.v1.endpoints.backup_endpoints.routes import claim_auto_backup_slot
+
+        backup_state.find_one_and_update.return_value = {"_id": "auto_backup_state"}
+        claimed = claim_auto_backup_slot(3600)
+
+        assert claimed is not None
+        query = backup_state.find_one_and_update.call_args.args[0]
+        assert query["_id"] == "auto_backup_state"
+        # The filter is what makes the claim exclusive: a worker only wins when
+        # the recorded run is at least one interval old.
+        assert "$lte" in query["last_run_at"]
+
+    def test_losing_worker_gets_nothing(self, backup_state, backup_settings):
+        from depictio.api.v1.endpoints.backup_endpoints.routes import claim_auto_backup_slot
+
+        backup_state.find_one_and_update.return_value = None
+        assert claim_auto_backup_slot(3600) is None
+
+    def test_unreachable_mongo_declines_rather_than_raising(self, backup_state, backup_settings):
+        from depictio.api.v1.endpoints.backup_endpoints.routes import claim_auto_backup_slot
+
+        backup_state.update_one.side_effect = Exception("mongo down")
+        assert claim_auto_backup_slot(3600) is None
+
+
+class TestBackupScheduleEndpoint:
+    def test_requires_admin(self, backup_state, as_regular_user, backup_settings):
+        assert as_regular_user.get("/backup/schedule").status_code == 403
+        assert as_regular_user.put("/backup/schedule", json={"enabled": True}).status_code == 403
+
+    def test_reports_the_environment_defaults(self, backup_state, as_admin, backup_settings):
+        result = as_admin.get("/backup/schedule").json()
+
+        assert result["enabled"] is False
+        assert result["retention_days"] == 30
+        assert result["last_run"] is None
+        # Nothing is scheduled, so there is no next run to promise.
+        assert result["next_run"] is None
+        # Nothing has been saved from the UI, so the env values are in force.
+        assert result["is_customized"] is False
+
+    def test_next_run_follows_the_last_run(self, backup_state, as_admin, backup_settings):
+        backup_settings.backup.auto_backup_enabled = True
+        backup_settings.backup.auto_backup_interval_hours = 6
+        # pymongo hands back naive UTC datetimes; the response must still carry
+        # an offset or the browser reads it as local time.
+        backup_state.find_one.return_value = {"last_run_at": datetime(2026, 1, 1, 12, 0, 0)}
+
+        result = as_admin.get("/backup/schedule").json()
+
+        assert result["enabled"] is True
+        assert result["last_run"] == "2026-01-01T12:00:00+00:00"
+        assert result["next_run"] == "2026-01-01T18:00:00+00:00"
+
+
+class TestBackupScheduleUpdate:
+    """The schedule is editable from the admin UI; the environment only supplies
+    the default, so a saved value has to survive and win."""
+
+    def test_saving_overrides_the_environment_default(
+        self, backup_state, as_admin, backup_settings
+    ):
+        backup_settings.backup.auto_backup_enabled = False
+        backup_settings.backup.auto_backup_interval_hours = 24
+        # What the endpoint just wrote is what the next read returns.
+        backup_state.find_one.return_value = {"enabled": True, "interval_hours": 6}
+
+        result = as_admin.put(
+            "/backup/schedule", json={"enabled": True, "interval_hours": 6}
+        ).json()
+
+        assert result["enabled"] is True
+        assert result["interval_hours"] == 6
+        # Retention was not part of the update, so it still comes from settings.
+        assert result["retention_days"] == 30
+        assert result["is_customized"] is True
+
+    def test_creates_the_state_document_with_a_claimable_due_time(
+        self, backup_state, as_admin, backup_settings
+    ):
+        """Upserting only the schedule fields would leave last_run_at missing,
+        and the claim filter never matches a missing field — the scheduler would
+        be enabled and silently never fire."""
+        as_admin.put("/backup/schedule", json={"enabled": True})
+
+        update = backup_state.update_one.call_args.args[1]
+        assert update["$set"] == {"enabled": True}
+        assert "last_run_at" in update["$setOnInsert"]
+        assert backup_state.update_one.call_args.kwargs["upsert"] is True
+
+    def test_omitted_fields_are_left_alone(self, backup_state, as_admin, backup_settings):
+        as_admin.put("/backup/schedule", json={"retention_days": 7})
+
+        assert backup_state.update_one.call_args.args[1]["$set"] == {"retention_days": 7}
+
+    def test_empty_update_is_rejected(self, backup_state, as_admin, backup_settings):
+        assert as_admin.put("/backup/schedule", json={}).status_code == 422
+        backup_state.update_one.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {"interval_hours": 0},  # a snapshot is the whole database
+            {"interval_hours": 100000},
+            {"retention_days": -1},
+        ],
+    )
+    def test_out_of_range_values_are_rejected(
+        self, backup_state, as_admin, backup_settings, payload
+    ):
+        assert as_admin.put("/backup/schedule", json=payload).status_code == 422
+        backup_state.update_one.assert_not_called()
+
+    def test_retention_pruning_follows_the_saved_value(
+        self, backup_state, backup_settings, backup_dir
+    ):
+        """Retention is read through the same override, so changing it in the UI
+        changes what the next prune deletes."""
+        from depictio.api.v1.endpoints.backup_endpoints.routes import prune_expired_backups
+
+        backup_settings.backup.backup_file_retention_days = 3650
+        backup_state.find_one.return_value = {"retention_days": 1}
+        old_id = (datetime.now() - timedelta(days=5)).strftime("%Y%m%d_%H%M%S")
+        old_path = _write_backup(backup_dir, old_id, {"projects": []})
+
+        assert prune_expired_backups() == 1
+        assert not old_path.exists()

@@ -2,13 +2,14 @@ import hashlib
 import json
 import os
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, cast
 
+from bson import DBRef, ObjectId
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pymongo.collection import Collection
 
 from depictio.api.v1.configs.config import settings
@@ -20,6 +21,7 @@ from depictio.api.v1.db import (
     deltatables_collection,
     files_collection,
     groups_collection,
+    initialization_collection,
     instance_settings_collection,
     projects_collection,
     runs_collection,
@@ -144,6 +146,183 @@ def _verify_backup_integrity(backup_path: str, allow_unverified: bool) -> None:
         )
 
 
+def _write_backup_file(backup_payload: dict, backup_id: str) -> str:
+    """Write a backup payload and its SHA-256 sidecar; return the filename.
+
+    Shared by the ``/create`` endpoint and the scheduled backup task so both
+    produce byte-identical artefacts — including the sidecar, without which a
+    later restore refuses to run unless the admin passes allow_unverified.
+    """
+    backup_dir = settings.backup.backup_path
+    os.makedirs(backup_dir, exist_ok=True)
+
+    backup_filename = f"depictio_backup_{backup_id}.json"
+    backup_path = os.path.join(backup_dir, backup_filename)
+
+    with open(backup_path, "w") as backup_file:
+        json.dump(backup_payload, backup_file, indent=2, default=str)
+
+    # Integrity: store a SHA-256 sidecar so restores can verify the backup
+    # file has not been tampered with or truncated. The sidecar is written
+    # after the backup file so the digest reflects the final contents.
+    backup_checksum = _compute_file_sha256(backup_path)
+    with open(f"{backup_path}.sha256", "w") as checksum_file:
+        checksum_file.write(f"{backup_checksum}  {backup_filename}\n")
+
+    return backup_filename
+
+
+def prune_expired_backups() -> int:
+    """Delete backups older than ``backup_file_retention_days``; return the count.
+
+    Runs after every backup, scheduled or manual — nothing else prunes this
+    directory, and each snapshot is the size of the whole database, so without
+    this the backup volume grows without bound.
+
+    The age comes from the ``backup_id`` in the filename rather than the file's
+    mtime: mtimes do not survive a volume restore or an rsync, and the id is the
+    creation timestamp by construction. Files that do not parse are left alone.
+    Retention <= 0 means "keep forever". Never raises.
+    """
+    retention_days = get_backup_schedule_config()["retention_days"]
+    if retention_days <= 0:
+        return 0
+
+    backup_dir = settings.backup.backup_path
+    if not os.path.isdir(backup_dir):
+        return 0
+
+    cutoff = datetime.now() - timedelta(days=retention_days)
+    removed = 0
+    try:
+        filenames = os.listdir(backup_dir)
+    except OSError as exc:
+        logger.warning(f"Backup retention: cannot list {backup_dir}: {exc}")
+        return 0
+
+    for filename in filenames:
+        if not (filename.startswith("depictio_backup_") and filename.endswith(".json")):
+            continue
+        backup_id = filename[len("depictio_backup_") : -len(".json")]
+        if not _BACKUP_ID_PATTERN.fullmatch(backup_id):
+            continue
+        try:
+            created = datetime.strptime(backup_id, "%Y%m%d_%H%M%S")
+        except ValueError:
+            continue
+        if created >= cutoff:
+            continue
+        backup_path = os.path.join(backup_dir, filename)
+        try:
+            os.remove(backup_path)
+            # The sidecar is worthless on its own; drop it with the backup.
+            if os.path.exists(f"{backup_path}.sha256"):
+                os.remove(f"{backup_path}.sha256")
+            removed += 1
+        except OSError as exc:
+            logger.warning(f"Backup retention: failed to delete {filename}: {exc}")
+
+    if removed:
+        logger.info(
+            f"Backup retention: removed {removed} backup(s) older than {retention_days} days"
+        )
+    return removed
+
+
+#: ``_id`` of the document holding the scheduled-backup state. Lives in the
+#: initialization collection alongside the other cross-worker coordination
+#: documents (the init lock, the YAML watcher lock).
+AUTO_BACKUP_STATE_ID = "auto_backup_state"
+
+#: Sentinel for "never ran". A fresh deployment is therefore due immediately,
+#: while a restart of an existing one resumes its schedule instead of firing a
+#: backup on every boot.
+_NEVER_RAN = datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+
+def _as_utc(value: datetime | None) -> datetime | None:
+    """Attach UTC to a naive datetime read back from MongoDB.
+
+    The pymongo client is not tz-aware, so stored UTC datetimes come back naive.
+    Serializing those without an offset makes the browser read them as local
+    time, which is how a "next run" lands hours away from where it should be.
+    """
+    if value is None:
+        return None
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+def claim_auto_backup_slot(interval_seconds: int) -> datetime | None:
+    """Claim the right to take the next scheduled backup, across all workers.
+
+    Every API worker runs the scheduler loop — gating on the initialization
+    election would not work, because that election has no winner once a
+    deployment has booted before. Instead the due time lives in MongoDB and the
+    claim is a single conditional update: the first worker whose update matches
+    moves ``last_run_at`` forward, and every other worker's update matches
+    nothing and returns None.
+
+    Returns the claim time, or None when the slot is not due or is already taken.
+    """
+    now = datetime.now(timezone.utc)
+    try:
+        initialization_collection.update_one(
+            {"_id": AUTO_BACKUP_STATE_ID},
+            {"$setOnInsert": {"last_run_at": _NEVER_RAN}},
+            upsert=True,
+        )
+        claimed = initialization_collection.find_one_and_update(
+            {
+                "_id": AUTO_BACKUP_STATE_ID,
+                "last_run_at": {"$lte": now - timedelta(seconds=interval_seconds)},
+            },
+            {"$set": {"last_run_at": now}},
+        )
+    except Exception as exc:
+        # Declining to back up is the safe failure: the next tick retries.
+        logger.warning(f"Scheduled backup: could not claim slot: {exc}")
+        return None
+    return now if claimed else None
+
+
+def get_auto_backup_state() -> dict:
+    """Read the scheduled-backup state document. Never raises."""
+    try:
+        return initialization_collection.find_one({"_id": AUTO_BACKUP_STATE_ID}) or {}
+    except Exception as exc:
+        logger.warning(f"Scheduled backup: could not read state: {exc}")
+        return {}
+
+
+#: Schedule fields an admin can change from the Backups tab. Everything else
+#: about backups (paths, S3 targets, credentials) stays deployment configuration.
+SCHEDULE_FIELDS = ("enabled", "interval_hours", "retention_days")
+
+
+def get_backup_schedule_config() -> dict:
+    """Resolve the schedule an admin actually gets: stored values over settings.
+
+    The environment supplies the *default*; a value stored from the Backups tab
+    overrides it. Read this way round, an admin's click is never silently
+    reverted on the next restart by an env var they cannot see from the page,
+    while a deployment that never touches the UI keeps behaving exactly as its
+    Helm values say.
+
+    Read fresh on every use rather than cached at startup, so enabling the
+    schedule from the UI takes effect without restarting the API.
+    """
+    config = {
+        "enabled": settings.backup.auto_backup_enabled,
+        "interval_hours": settings.backup.auto_backup_interval_hours,
+        "retention_days": settings.backup.backup_file_retention_days,
+    }
+    state = get_auto_backup_state()
+    overrides = {field: state[field] for field in SCHEDULE_FIELDS if field in state}
+    config.update(overrides)
+    config["is_customized"] = bool(overrides)
+    return config
+
+
 class BackupRequest(BaseModel):
     """Request model for backup creation with optional S3 data."""
 
@@ -166,9 +345,13 @@ class BackupResponse(BaseModel):
     s3_backup_metadata: dict | None = None
 
 
-async def _create_mongodb_backup(current_user: User) -> dict:
+async def _create_mongodb_backup(created_by: str, *, automatic: bool = False) -> dict:
     """
     Create a MongoDB backup with standard exclusions.
+
+    ``created_by`` is the admin's email for a manual backup and ``"scheduler"``
+    for one the background task took; ``automatic`` records the same distinction
+    as a flag so the UI can label rows without parsing the email.
 
     Returns a dictionary containing backup data and metadata.
     """
@@ -259,7 +442,8 @@ async def _create_mongodb_backup(current_user: User) -> dict:
     mongodb_backup = {
         "backup_metadata": {
             "timestamp": timestamp.isoformat(),
-            "created_by": current_user.email,
+            "created_by": created_by,
+            "automatic": automatic,
             "depictio_version": get_version(),
             "total_documents": total_documents,
             "excluded_documents": excluded_documents,
@@ -300,7 +484,7 @@ async def create_backup(
 
     try:
         # Create MongoDB backup
-        mongodb_backup = await _create_mongodb_backup(current_user)
+        mongodb_backup = await _create_mongodb_backup(current_user.email)
 
         # Add S3 backup if requested
         if request.include_s3_data:
@@ -337,23 +521,10 @@ async def create_backup(
         else:
             enhanced_backup = mongodb_backup
 
-        backup_dir = settings.backup.backup_path
-        os.makedirs(backup_dir, exist_ok=True)
-
-        backup_id_str = mongodb_backup["backup_metadata"]["backup_id"]
-        backup_filename = f"depictio_backup_{backup_id_str}.json"
-        backup_path = os.path.join(backup_dir, backup_filename)
-
-        with open(backup_path, "w") as backup_file:
-            json.dump(enhanced_backup, backup_file, indent=2, default=str)
-
-        # Integrity: store a SHA-256 sidecar so restores can verify the backup
-        # file has not been tampered with or truncated. The sidecar is written
-        # after the backup file so the digest reflects the final contents.
-        backup_checksum = _compute_file_sha256(backup_path)
-        checksum_path = f"{backup_path}.sha256"
-        with open(checksum_path, "w") as checksum_file:
-            checksum_file.write(f"{backup_checksum}  {backup_filename}\n")
+        backup_filename = _write_backup_file(
+            enhanced_backup, mongodb_backup["backup_metadata"]["backup_id"]
+        )
+        prune_expired_backups()
 
         logger.info(f"Backup created successfully: {backup_filename}")
 
@@ -392,6 +563,9 @@ class BackupListItem(BaseModel):
     # False for legacy backups without a .sha256 sidecar — those can only be
     # restored with allow_unverified=true.
     has_checksum: bool = False
+    # True for snapshots the scheduler took. Absent in backups written before
+    # scheduled backups existed, which read back as manual.
+    is_automatic: bool = False
 
 
 class BackupListResponse(BaseModel):
@@ -446,6 +620,109 @@ class BackupRestoreResponse(BaseModel):
     errors: list = []
 
 
+class BackupScheduleResponse(BaseModel):
+    """The schedule in force, plus when it last ran and when it runs next."""
+
+    enabled: bool
+    interval_hours: int
+    retention_days: int
+    last_run: str | None = None
+    next_run: str | None = None
+    # True once any field has been set from the Backups tab, so the UI can say
+    # why this deployment's env vars are no longer what is in force.
+    is_customized: bool = False
+
+
+class BackupScheduleUpdate(BaseModel):
+    """Partial update of the schedule. Omitted fields are left as they are."""
+
+    enabled: bool | None = None
+    # One hour is the floor because a snapshot is the size of the whole
+    # database; a year is a generous ceiling that still rejects typos.
+    interval_hours: int | None = Field(default=None, ge=1, le=8760)
+    # 0 means "keep forever"; ten years is the ceiling.
+    retention_days: int | None = Field(default=None, ge=0, le=3650)
+
+
+def _schedule_response() -> BackupScheduleResponse:
+    """Build the schedule payload from the config in force."""
+    config = get_backup_schedule_config()
+
+    last_run = _as_utc(get_auto_backup_state().get("last_run_at"))
+    # _NEVER_RAN is a sentinel, not a real run: report it as "never".
+    if last_run is not None and last_run <= _NEVER_RAN:
+        last_run = None
+
+    next_run = None
+    if config["enabled"]:
+        # With no run on record the first tick fires as soon as the loop wakes.
+        base = last_run or datetime.now(timezone.utc)
+        next_run = base + timedelta(hours=config["interval_hours"])
+
+    return BackupScheduleResponse(
+        enabled=config["enabled"],
+        interval_hours=config["interval_hours"],
+        retention_days=config["retention_days"],
+        last_run=last_run.isoformat() if last_run else None,
+        next_run=next_run.isoformat() if next_run else None,
+        is_customized=config["is_customized"],
+    )
+
+
+@backup_endpoint_router.get("/schedule", response_model=BackupScheduleResponse)
+async def get_backup_schedule(
+    current_user: User = Depends(get_current_user),
+):
+    """Report whether scheduled backups run, how often, and when they last did."""
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied: Only administrators can view the backup schedule",
+        )
+    return _schedule_response()
+
+
+@backup_endpoint_router.put("/schedule", response_model=BackupScheduleResponse)
+async def update_backup_schedule(
+    request: BackupScheduleUpdate,
+    current_user: User = Depends(get_current_user),
+):
+    """Turn scheduled backups on or off, and set the interval and retention.
+
+    Stored in MongoDB rather than pushed back into the environment: the running
+    scheduler re-reads this on every tick, so a change takes effect without a
+    restart, and every worker picks it up at once.
+    """
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied: Only administrators can change the backup schedule",
+        )
+
+    updates = {
+        field: value
+        for field, value in request.model_dump().items()
+        if field in SCHEDULE_FIELDS and value is not None
+    }
+    if not updates:
+        raise HTTPException(status_code=422, detail="No schedule fields to update.")
+
+    try:
+        initialization_collection.update_one(
+            {"_id": AUTO_BACKUP_STATE_ID},
+            # last_run_at must exist for the claim query to ever match, and this
+            # update can be what creates the document.
+            {"$set": updates, "$setOnInsert": {"last_run_at": _NEVER_RAN}},
+            upsert=True,
+        )
+    except Exception as exc:
+        logger.error(f"Failed to update the backup schedule: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to update the backup schedule.")
+
+    logger.info(f"Admin user {current_user.email} updated the backup schedule: {updates}")
+    return _schedule_response()
+
+
 @backup_endpoint_router.get("/list", response_model=BackupListResponse)
 async def list_backups(
     current_user: User = Depends(get_current_user),
@@ -489,6 +766,7 @@ async def list_backups(
                         collections=metadata.get("collections", []),
                         depictio_version=metadata.get("depictio_version"),
                         has_checksum=has_checksum,
+                        is_automatic=bool(metadata.get("automatic", False)),
                     )
                 except Exception:
                     # If can't read metadata, just use file info
@@ -715,8 +993,6 @@ async def upload_backup(
 
 def _convert_complex_objects_to_strings(obj):
     """Convert DBRef and ObjectId to strings for JSON serialization."""
-    from bson import DBRef, ObjectId
-
     if isinstance(obj, DBRef):
         return str(obj.id)
     if isinstance(obj, ObjectId):
@@ -725,6 +1001,32 @@ def _convert_complex_objects_to_strings(obj):
         return {key: _convert_complex_objects_to_strings(value) for key, value in obj.items()}
     if isinstance(obj, list):
         return [_convert_complex_objects_to_strings(item) for item in obj]
+    return obj
+
+
+def _restore_complex_objects(obj):
+    """Re-hydrate the ObjectIds that backup serialization flattened to strings.
+
+    Backups are plain JSON, so ``_convert_complex_objects_to_strings`` turns
+    *every* ObjectId in a document into a string, not just the top-level
+    ``_id``: ``dashboards.project_id``, ``permissions.owners[]._id``,
+    ``projects.workflows[].data_collections[]._id``,
+    ``stored_metadata[].dc_id`` and so on. Inserting those back as strings
+    produces documents Mongo can no longer join — the dashboard listing filters
+    on ``{"project_id": {"$in": [<ObjectId>]}}``, which matches nothing, so
+    every dashboard silently disappears after a restore.
+
+    The rule mirrors ``MongoModel.mongo()``, the writer the application itself
+    uses: any string that is a valid ObjectId is one. DBRefs cannot be rebuilt
+    (the backup only kept ``str(ref.id)``, dropping the collection name) and
+    come back as plain ObjectIds, which is the shape ``db_init`` writes.
+    """
+    if isinstance(obj, dict):
+        return {key: _restore_complex_objects(value) for key, value in obj.items()}
+    if isinstance(obj, list):
+        return [_restore_complex_objects(item) for item in obj]
+    if isinstance(obj, str) and ObjectId.is_valid(obj):
+        return ObjectId(obj)
     return obj
 
 
@@ -868,24 +1170,39 @@ async def restore_backup(
 
             try:
                 collection = collection_map[collection_name]
-                documents = data_section[collection_name]
-                from bson import ObjectId
+                documents = [_restore_complex_objects(doc) for doc in data_section[collection_name]]
 
                 for doc in documents:
+                    # Backups written from Mongo carry ``_id``; documents dumped
+                    # through a Pydantic model carry ``id``. Accept both.
                     if "id" in doc:
-                        doc["_id"] = ObjectId(doc.pop("id"))
-                    if "_id" in doc and isinstance(doc["_id"], str):
-                        doc["_id"] = ObjectId(doc["_id"])
+                        doc["_id"] = doc.pop("id")
 
+                # Restore is wipe-and-replace, so a failed insert would leave
+                # the collection empty. Keep the previous contents in memory and
+                # put them back if the insert fails, rather than losing both the
+                # old and the new data.
+                previous_documents = list(collection.find({}))
+                collection.delete_many({})
                 if documents:
                     try:
-                        collection.delete_many({})
                         collection.insert_many(documents)
                     except Exception as e:
                         logger.error(f"Failed to restore {collection_name}: {e}")
+                        try:
+                            collection.delete_many({})
+                            if previous_documents:
+                                collection.insert_many(previous_documents)
+                            logger.warning(
+                                f"Rolled {collection_name} back to its pre-restore contents "
+                                f"({len(previous_documents)} documents)"
+                            )
+                        except Exception as rollback_error:
+                            logger.error(
+                                f"Rollback of {collection_name} failed after a failed restore; "
+                                f"the collection may be empty: {rollback_error}"
+                            )
                         raise
-                else:
-                    collection.delete_many({})
 
                 restored_collections[collection_name] = {
                     "count": len(documents),

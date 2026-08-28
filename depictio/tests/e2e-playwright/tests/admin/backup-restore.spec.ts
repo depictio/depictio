@@ -36,6 +36,21 @@ test.describe("admin backup & restore", () => {
     await page.getByTestId("admin-tab-backups").click();
     await expect(page.getByTestId("backup-create-button")).toBeVisible({ timeout: 20_000 });
 
+    // Dashboards visible before the restore — the same listing has to still
+    // hold them afterwards (see the post-restore assertion below).
+    const dashboardCards = page.locator("[data-testid='dashboard-card']");
+    await page.goto("/dashboards");
+    await expect(page.locator(".mantine-AppShell-root")).toBeVisible({ timeout: 15_000 });
+    // Give the listing fetch a chance to paint before counting; a stack with
+    // no seeded dashboards legitimately stays at zero and skips the check.
+    await dashboardCards
+      .first()
+      .waitFor({ state: "visible", timeout: 15_000 })
+      .catch(() => {});
+    const dashboardsBefore = await dashboardCards.count();
+    await page.goto("/admin");
+    await page.getByTestId("admin-tab-backups").click();
+
     // -- create ----------------------------------------------------------
     const rows = page.locator("[data-testid^='backup-row-']");
     // Wait for the initial list fetch to settle before counting.
@@ -83,8 +98,16 @@ test.describe("admin backup & restore", () => {
     await page.getByRole("button", { name: "Close" }).click();
 
     // The app is still functional after the restore (the admin session
-    // survives because tokens are never part of backups).
+    // survives because tokens are never part of backups) — and the restored
+    // data is still queryable. Backups serialize every ObjectId to a string;
+    // a restore that fails to re-hydrate them writes documents whose
+    // project_id no longer matches the listing's ObjectId filter, so the page
+    // loads with zero dashboards instead of an error.
     await page.goto("/dashboards");
     await expect(page).toHaveURL(/\/dashboards/);
+    if (dashboardsBefore > 0) {
+      await expect(dashboardCards.first()).toBeVisible({ timeout: 30_000 });
+      await expect(dashboardCards).toHaveCount(dashboardsBefore, { timeout: 30_000 });
+    }
   });
 });
