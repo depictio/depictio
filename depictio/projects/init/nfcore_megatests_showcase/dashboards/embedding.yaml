@@ -1,0 +1,105 @@
+# Embedding (rnaseq PCA) — one tab of the nf-core megatests showcase.
+#
+# Regenerate the seed after editing:
+#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds nfcore_megatests_showcase
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'Embedding (rnaseq PCA)'
+subtitle: 'DESeq2 PCA from nf-core/rnaseq, coloured by condition'
+icon: 'mdi:atom'
+icon_color: 'grape'
+icon_variant: filled
+workflow_system: nf-core
+dashboard_id: '646b0f3c1e4a2d7f8e5b8e24'
+is_main_tab: false
+tab_order: 5
+parent_dashboard_tag: volcano
+tab_icon: 'mdi:atom'
+tab_icon_color: 'grape'
+
+# Left-panel filter section. Deliberately not `persistent`: the 10 tabs of
+# this family read different collections whose column names collide while their
+# value domains do not overlap, so a control fanned out from one tab would show
+# up everywhere and bite on nothing.
+filter_sections:
+  - name: 'Sample scope'
+    icon: 'mdi:filter-variant'
+    color: 'grape'
+    description: 'Restricts which samples are projected'
+
+grid_sections:
+  - name: 'Sample projection'
+    icon: 'mdi:chart-scatter-plot'
+    color: 'grape'
+    description: 'DESeq2 PCA of the rnaseq run, coloured by condition'
+
+components:
+  - tag: text-embedding
+    index: embedding-text
+    component_type: text
+    title: 'PCA projection'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Sample projection'
+    body: |
+      The DESeq2 vst() PCA from an nf-core/rnaseq run. With five samples the question is
+      not whether clusters exist but whether replicates of the same condition land
+      together, which is the first thing to check before believing any differential
+      call.
+    layout: { x: 0, y: 0, w: 8, h: 1 }
+
+  - tag: viz-embedding
+    index: 'nfcore-embedding'
+    component_type: advanced_viz
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'rnaseq_pca'
+    title: 'Embedding — nf-core/rnaseq DESeq2 PCA'
+    description: 'Sample projection from DESeq2 vst() PCA (5 samples × 3 conditions). The condition column is derived from the sample naming convention (WT / RAP1_UNINDUCED / RAP1_IAA_30M) to drive cluster colouring.'
+    section: 'Sample projection'
+    viz_kind: 'embedding'
+    config:
+      viz_kind: "embedding"
+      sample_id_col: "Sample"
+      dim_1_col: "x"
+      dim_2_col: "y"
+      cluster_col: "condition"
+      color_col: "condition"
+    layout: { x: 0, y: 1, w: 8, h: 8 }
+
+  - tag: filter-embedding-condition
+    index: embedding-f-condition
+    component_type: interactive
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'rnaseq_pca'
+    interactive_component_type: MultiSelect
+    column_name: 'condition'
+    column_type: 'object'
+    title: 'Condition'
+    placement: left
+    section: 'Sample scope'
+    group: 'Sample filters'
+    display:
+      title_size: md
+      custom_color: '#8E44AD'
+      icon_name: 'mdi:form-select'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-embedding-sample
+    index: embedding-f-sample
+    component_type: interactive
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'rnaseq_pca'
+    interactive_component_type: MultiSelect
+    column_name: 'Sample'
+    column_type: 'object'
+    title: 'Sample'
+    placement: left
+    section: 'Sample scope'
+    group: 'Sample filters'
+    display:
+      title_size: md
+      custom_color: '#1976D2'
+      icon_name: 'mdi:flask'
+    layout: { x: 0, y: 3, w: 1, h: 3 }

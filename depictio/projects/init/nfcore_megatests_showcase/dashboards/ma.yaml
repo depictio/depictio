@@ -1,0 +1,107 @@
+# MA (DESeq2) — one tab of the nf-core megatests showcase.
+#
+# Regenerate the seed after editing:
+#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds nfcore_megatests_showcase
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'MA (DESeq2)'
+subtitle: 'DESeq2 MA plot'
+icon: 'mdi:chart-bell-curve-cumulative'
+icon_color: 'blue'
+icon_variant: filled
+workflow_system: nf-core
+dashboard_id: '646b0f3c1e4a2d7f8e5b8e21'
+is_main_tab: false
+tab_order: 2
+parent_dashboard_tag: volcano
+tab_icon: 'mdi:chart-bell-curve-cumulative'
+tab_icon_color: 'blue'
+
+# Left-panel filter section. Deliberately not `persistent`: the 10 tabs of
+# this family read different collections whose column names collide while their
+# value domains do not overlap, so a control fanned out from one tab would show
+# up everywhere and bite on nothing.
+filter_sections:
+  - name: 'Gene scope'
+    icon: 'mdi:filter-variant'
+    color: 'blue'
+    description: 'Restricts the gene set drawn'
+
+grid_sections:
+  - name: 'Intensity vs effect'
+    icon: 'mdi:chart-bell-curve'
+    color: 'blue'
+    description: 'The same calls read against mean expression'
+
+components:
+  - tag: text-ma
+    index: ma-text
+    component_type: text
+    title: 'MA plot'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Intensity vs effect'
+    body: |
+      The same DESeq2 table as the volcano tab, with mean expression on the x axis. A
+      fold change that only appears at low expression is usually noise, and it shows up
+      here as a funnel opening to the left; the volcano cannot show that. Read the two
+      together.
+    layout: { x: 0, y: 0, w: 8, h: 1 }
+
+  - tag: viz-ma
+    index: 'nfcore-ma'
+    component_type: advanced_viz
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'deseq2_results'
+    title: 'MA — DESeq2 baseMean × log2FoldChange'
+    description: 'Bland-Altman view of the same DESeq2 results: baseMean on x, log2FoldChange on y.'
+    section: 'Intensity vs effect'
+    viz_kind: 'ma'
+    config:
+      viz_kind: "ma"
+      feature_id_col: "gene_id"
+      avg_log_intensity_col: "baseMean"
+      log2_fold_change_col: "log2FoldChange"
+      significance_col: "padj"
+      significance_threshold: 0.05
+      top_n_labels: 15
+      fold_change_threshold: 0.5
+    layout: { x: 0, y: 1, w: 8, h: 8 }
+
+  - tag: filter-ma-basemean
+    index: ma-f-basemean
+    component_type: interactive
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'deseq2_results'
+    interactive_component_type: RangeSlider
+    column_name: 'baseMean'
+    column_type: 'float64'
+    title: 'Mean expression'
+    placement: left
+    section: 'Gene scope'
+    group: 'Result filters'
+    display:
+      title_size: md
+      custom_color: '#1976D2'
+      icon_name: 'mdi:chart-bell-curve'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-ma-lfc
+    index: ma-f-lfc
+    component_type: interactive
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'deseq2_results'
+    interactive_component_type: RangeSlider
+    column_name: 'log2FoldChange'
+    column_type: 'float64'
+    title: 'Log2 fold change'
+    placement: left
+    section: 'Gene scope'
+    group: 'Result filters'
+    display:
+      title_size: md
+      custom_color: '#45B8AC'
+      icon_name: 'mdi:trending-up'
+    layout: { x: 0, y: 3, w: 1, h: 3 }

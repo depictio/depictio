@@ -59,7 +59,8 @@ const VARIANT_ICONS: Record<string, string> = {
   Checkbox: 'mdi:checkbox-marked-outline',
 };
 
-// Mirrors design_ui.py:111-159 icon list verbatim.
+// Started as a verbatim copy of the Dash builder's list (design_ui.py), which
+// no longer exists — this is the list now.
 const ICON_OPTIONS: { value: string; label: string }[] = [
   { value: 'bx:slider-alt', label: 'Slider Alt' },
   { value: 'mdi:chart-line', label: 'Chart Line' },
@@ -95,6 +96,14 @@ const ICON_OPTIONS: { value: string; label: string }[] = [
   { value: 'mdi:checkbox-marked', label: 'Checkbox' },
   { value: 'mdi:toggle-switch', label: 'Switch' },
   { value: 'mdi:calendar-range', label: 'Calendar' },
+  // Domain icons the shipped reference dashboards use, for the same reason as
+  // the card builder's list: a filter authored in YAML must stay editable.
+  { value: 'mdi:bacteria', label: 'Bacteria' },
+  { value: 'mdi:virus', label: 'Virus' },
+  { value: 'mdi:family-tree', label: 'Phylogeny' },
+  { value: 'mdi:city', label: 'City' },
+  { value: 'mdi:waves', label: 'Waves' },
+  { value: 'mdi:image-filter', label: 'Image Filter' },
 ];
 
 interface InteractiveConfig {

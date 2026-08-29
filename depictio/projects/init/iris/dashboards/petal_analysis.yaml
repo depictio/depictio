@@ -14,6 +14,8 @@ project_tag: "Iris Dataset Project Data Analysis"
 is_main_tab: false
 parent_dashboard_tag: "Iris Dataset Analysis"
 tab_order: 1
+tab_icon: "mdi:leaf"
+tab_icon_color: "grape"
 
 # `filter_sections` and `grid_sections` are two independent lists: the first
 # groups the left panel's interactive controls, the second groups everything
@@ -57,11 +59,21 @@ components:
   # ── Narrative intro ────────────────────────────────────────────────
   - tag: text-petal-intro
     component_type: text
+    section: "Petal geometry"
     title: "Petal Geometry as a Species Signal"
     order: 2
     alignment: left
-    body: "Petal length × width is the cleanest variety separator in Fisher's dataset. The first row summarises the two petal columns; the second asks how much of the classification a single threshold buys."
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    body: "Petal length × width is the cleanest variety separator in Fisher's dataset. These four cards summarise the two petal columns and put sepal length beside them for contrast — the sepal spread overlaps across all three varieties where the petal spread does not. Note the `Raw Data` section at the bottom of this tab: it is declared on the Overview and follows you here, cards included."
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: text-variety-separation
+    component_type: text
+    section: "Variety separation"
+    title: "How much one threshold buys"
+    order: 2
+    alignment: left
+    body: "The cards ask what a single petal-length cut-off actually classifies, and the figures show what it costs. A cut at 4 cm keeps every *Virginica* and one *Versicolor*; pushing it higher trades recall for purity. The box plots below are where that trade is visible — the *Versicolor* and *Virginica* boxes overlap on length far more than on width."
+    layout: { x: 0, y: 0, w: 8, h: 2 }
 
   # ── Petal geometry cards — one row of four, w=2 each ───────────────
   - tag: card-petal-length
@@ -79,7 +91,7 @@ components:
     title_font_size: md
     value_font_size: xl
     title: "Petal Length"
-    layout: {x: 0, y: 1, w: 2, h: 2}
+    layout: { x: 0, y: 2, w: 2, h: 2 }
 
   - tag: card-petal-width
     component_type: card
@@ -97,7 +109,7 @@ components:
     title_font_size: md
     value_font_size: xl
     title: "Petal Width"
-    layout: {x: 2, y: 1, w: 2, h: 2}
+    layout: { x: 2, y: 2, w: 2, h: 2 }
 
   # The pair above is deliberate: the histogram shows the two petal-length
   # clusters a five-number summary cannot, and the box beside it shows the
@@ -118,7 +130,7 @@ components:
     title_font_size: md
     value_font_size: xl
     title: "Sepal Length"
-    layout: {x: 4, y: 1, w: 2, h: 2}
+    layout: { x: 4, y: 2, w: 2, h: 2 }
 
   # ``uniqueness`` counts what is *repeated*: petal width takes far fewer
   # distinct values than there are flowers, because it was recorded to the
@@ -138,7 +150,7 @@ components:
     title_font_size: md
     value_font_size: xl
     title: "Petal width values"
-    layout: {x: 6, y: 1, w: 2, h: 2}
+    layout: { x: 6, y: 2, w: 2, h: 2 }
 
   # ── Variety separation cards — one row of four, w=2 each ───────────
   - tag: card-varieties
@@ -158,7 +170,7 @@ components:
     title_font_size: md
     value_font_size: xl
     title: "Varieties"
-    layout: {x: 0, y: 3, w: 2, h: 2}
+    layout: { x: 0, y: 2, w: 2, h: 2 }
 
   # ``threshold`` returns a verdict rather than a shape. 2.5 cm sits above every
   # Setosa petal and below every other flower's, so pass/fail here *is* the
@@ -180,7 +192,7 @@ components:
     title_font_size: md
     value_font_size: xl
     title: "Petal length cut-off"
-    layout: {x: 2, y: 3, w: 2, h: 2}
+    layout: { x: 2, y: 2, w: 2, h: 2 }
 
   # ``filter_expr`` narrows the rows before the hero aggregation. Pushing the
   # cut to 4 cm no longer splits the data cleanly — this dial is what that
@@ -202,7 +214,7 @@ components:
     title_font_size: md
     value_font_size: xl
     title: "Petals > 4 cm"
-    layout: {x: 4, y: 3, w: 2, h: 2}
+    layout: { x: 4, y: 2, w: 2, h: 2 }
 
   # ``filter_expr`` and a breakdown on the same card: the composition bar is
   # computed over the pre-filtered rows, so it reports what the long-petal
@@ -225,7 +237,7 @@ components:
     title_font_size: md
     value_font_size: xl
     title: "Varieties > 4 cm"
-    layout: {x: 6, y: 3, w: 2, h: 2}
+    layout: { x: 6, y: 2, w: 2, h: 2 }
 
   # Two `group`s inside one section: the panel nests section → group → control,
   # so "Measurements" holds a Petal card and a Sepal card rather than four
@@ -242,7 +254,7 @@ components:
     custom_color: "#55A467"
     icon_name: mdi:ruler
     title: "Petal length (cm)"
-    layout: {x: 0, y: 3, w: 1, h: 3}
+    layout: { x: 0, y: 0, w: 1, h: 3 }
 
   - tag: petal-width-filter
     component_type: interactive
@@ -256,7 +268,7 @@ components:
     custom_color: "#8172B2"
     icon_name: mdi:ruler
     title: "Petal width (cm)"
-    layout: {x: 0, y: 6, w: 1, h: 3}
+    layout: { x: 0, y: 3, w: 1, h: 3 }
 
   - tag: sepal-length-filter
     component_type: interactive
@@ -270,7 +282,7 @@ components:
     custom_color: "#4C72B0"
     icon_name: mdi:ruler
     title: "Sepal length (cm)"
-    layout: {x: 0, y: 9, w: 1, h: 3}
+    layout: { x: 0, y: 6, w: 1, h: 3 }
 
   - tag: sepal-width-filter
     component_type: interactive
@@ -284,7 +296,7 @@ components:
     custom_color: "#937860"
     icon_name: mdi:ruler
     title: "Sepal width (cm)"
-    layout: {x: 0, y: 12, w: 1, h: 3}
+    layout: { x: 0, y: 9, w: 1, h: 3 }
 
   # `filter_expr` narrows the rows the dropdown's options are computed from, so
   # this one lists only the varieties that have a flower with a petal over 4 cm
@@ -301,49 +313,70 @@ components:
     custom_color: "#C44E52"
     icon_name: mdi:filter-cog-outline
     title: "Variety (petal > 4 cm)"
-    layout: {x: 0, y: 15, w: 1, h: 3}
+    layout: { x: 0, y: 12, w: 1, h: 3 }
 
   # ── Petal geometry figure ──────────────────────────────────────────
-  - tag: petal-scatter
+  # Density contours rather than a second plain scatter: the Overview tab
+  # already plots these two columns point by point, so this one reads the same
+  # plane as mass. The points stay underneath at low opacity so the contours
+  # can be checked against the flowers that produced them.
+  - tag: petal-density
     component_type: figure
     section: "Petal geometry"
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
     visu_type: scatter
-    title: "Petal Length vs Width"
-    description: "Colour + symbol = variety, size = sepal length. Top marginal = violin, right marginal = rug ticks. The gap in both marginals is the same cut the threshold card scores."
+    mode: code
+    title: "Petal Length vs Width — where the mass sits"
+    description: "Filled contours are per-variety density; the dots underneath are the individual flowers. Setosa occupies a small, tight island; Versicolor and Virginica form one elongated ridge that the contours show meeting rather than overlapping."
     title_size: h3
-    dict_kwargs:
-      x: petal.length
-      y: petal.width
-      color: variety
-      size: sepal.length
-      symbol: variety
-      size_max: 16
-      marginal_x: violin
-      marginal_y: rug
-      opacity: 0.85
-      color_discrete_map: '{"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}'
-    layout: {x: 0, y: 5, w: 8, h: 5}
+    code_content: |
+      df_pd = df.to_pandas()
+      palette = {'Setosa': '#4C72B0', 'Versicolor': '#DD8452', 'Virginica': '#55A467'}
+      fig = px.density_contour(
+          df_pd, x='petal.length', y='petal.width', color='variety',
+          color_discrete_map=palette,
+          labels={'petal.length': 'Petal length (cm)', 'petal.width': 'Petal width (cm)'},
+      )
+      fig.update_traces(contours_coloring='fill', contours_showlines=False, opacity=0.45)
+      for name, colour in palette.items():
+          sub = df_pd[df_pd['variety'] == name]
+          fig.add_scatter(
+              x=sub['petal.length'], y=sub['petal.width'], mode='markers', name=name,
+              marker=dict(size=5, color=colour, opacity=0.55,
+                          line=dict(width=0.4, color='white')),
+              showlegend=False,
+          )
+    layout: { x: 0, y: 4, w: 8, h: 5 }
 
   # ── Variety separation figures ─────────────────────────────────────
-  - tag: petal-length-box
+  # An ECDF rather than a fourth box plot: the Overview tab already carries the
+  # box of petal length by variety, and the question this section asks is what a
+  # single cut buys. On an ECDF that is read straight off the y axis — the share
+  # of each variety below any x — which a box cannot show.
+  - tag: petal-length-ecdf
     component_type: figure
     section: "Variety separation"
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
-    visu_type: box
-    title: "Petal Length by Variety"
-    description: "Box + all points; notched to show median CIs. Setosa is detached, while Versicolor and Virginica touch at their whiskers — the overlap a 4 cm cut runs into."
+    visu_type: scatter
+    mode: code
+    title: "Petal Length — cumulative share by variety"
+    description: "Each curve is the share of that variety at or below a given petal length. Where a curve is flat, no flowers occupy that range. The dashed line marks the 4 cm cut the filter above uses: read off each curve to see what it keeps."
     title_size: h3
-    dict_kwargs:
-      x: variety
-      y: petal.length
-      color: variety
-      points: all
-      notched: true
-      color_discrete_map: '{"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}'
-    layout: {x: 0, y: 10, w: 4, h: 5}
+    code_content: |
+      fig = px.ecdf(
+          df.to_pandas(),
+          x='petal.length',
+          color='variety',
+          color_discrete_map={'Setosa': '#4C72B0', 'Versicolor': '#DD8452', 'Virginica': '#55A467'},
+          labels={'petal.length': 'Petal length (cm)'},
+      )
+      fig.add_vline(x=4, line_dash='dash', line_color='#8C8C8C',
+                    annotation_text='4 cm cut', annotation_position='top left')
+      fig.update_traces(line=dict(width=2.5))
+      fig.update_yaxes(title_text='Cumulative share')
+    layout: { x: 0, y: 4, w: 4, h: 5 }
 
   - tag: petal-width-box
     component_type: figure
@@ -361,7 +394,7 @@ components:
       points: all
       notched: true
       color_discrete_map: '{"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}'
-    layout: {x: 4, y: 10, w: 4, h: 5}
+    layout: { x: 4, y: 4, w: 4, h: 5 }
 
   - tag: petal-width-histogram
     component_type: figure
@@ -379,4 +412,4 @@ components:
       barmode: overlay
       opacity: 0.7
       color_discrete_map: '{"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}'
-    layout: {x: 0, y: 15, w: 8, h: 5}
+    layout: { x: 0, y: 9, w: 8, h: 5 }

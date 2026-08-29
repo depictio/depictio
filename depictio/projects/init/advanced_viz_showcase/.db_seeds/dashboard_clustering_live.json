@@ -9,10 +9,30 @@
     "$oid": "646b0f3c1e4a2d7f8e5b8d19"
   },
   "version": 1,
-  "tmp_children_data": [],
-  "stored_layout_data": [],
-  "stored_children_data": [],
   "stored_metadata": [
+    {
+      "index": "live-text",
+      "component_type": "text",
+      "title": "Live clustering",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Live clustering",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "The only projection on this showcase computed at request time rather than read\nfrom a precomputed table: it takes the raw feature matrix and runs the reduction\nwith the parameters set in the settings menu, so changing the neighbour count or\nthe metric re-runs it. The cost is latency; the gain is that the parameter is a\ncontrol rather than a decision someone made upstream.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
     {
       "index": "live-embedding",
       "component_type": "advanced_viz",
@@ -28,7 +48,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Feature matrix \u2014 input for live Celery dim-reduction",
+        "description": "Sample \u00d7 feature matrix used as input to live Celery clustering",
         "data_collection_tag": "embedding_features",
         "dc_specific_properties": null,
         "_id": {
@@ -38,35 +58,170 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Tune method + parameters in Settings \u2699 \u2014 the API dispatches a Celery task and renders the result; (DC, method, params, filters) tuples are cached so a second run on the same combo is instant.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Live clustering",
       "viz_kind": "embedding",
       "config": {
         "viz_kind": "embedding",
         "sample_id_col": "sample_id",
         "dim_1_col": "dim_1",
         "dim_2_col": "dim_2",
+        "dim_3_col": null,
         "cluster_col": "cluster",
         "color_col": "color",
+        "category_palette": null,
         "compute_method": "umap",
         "umap_n_neighbors": 15,
         "umap_min_dist": 0.1,
-        "tsne_perplexity": 30,
+        "tsne_perplexity": 30.0,
         "tsne_n_iter": 1000,
         "pcoa_distance": "bray_curtis",
+        "show_density": false,
         "point_size": 7,
-        "show_density": false
+        "marker_outline_width": 1.5,
+        "plot_style": "default",
+        "default_color_by": null,
+        "show_centroids": false,
+        "marker_outline": false,
+        "legend_pos": "right",
+        "ncontours": 14,
+        "density_opacity": 0.45,
+        "view_3d": false,
+        "reverse_scale": true,
+        "hover_cols": []
       },
-      "wf_tag": "python/advanced_viz_demo",
-      "description": "Tune method + parameters in Settings \u2699 \u2014 the API dispatches a Celery task and renders the result; (DC, method, params, filters) tuples are cached so a second run on the same combo is instant."
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "live-f-cluster",
+      "component_type": "interactive",
+      "title": "Cluster",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "embedding_features",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d0b"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample \u00d7 feature matrix used as input to live Celery clustering",
+        "data_collection_tag": "embedding_features",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d0b"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Feature scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "cluster",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Point filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#8E44AD",
+      "icon_name": "mdi:scatter-plot",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "live-f-color",
+      "component_type": "interactive",
+      "title": "Continuous value",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "embedding_features",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d0b"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample \u00d7 feature matrix used as input to live Celery clustering",
+        "data_collection_tag": "embedding_features",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d0b"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Feature scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "color",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Point filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#00BCD4",
+      "icon_name": "mdi:blur",
+      "wf_tag": "python/advanced_viz_demo"
     }
   ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
   "stored_edit_dashboard_mode_button": [],
-  "left_panel_layout_data": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-live-f-cluster",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-live-f-color",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
   "right_panel_layout_data": [
+    {
+      "i": "box-live-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
     {
       "i": "box-live-embedding",
       "x": 0,
-      "y": 0,
-      "w": 12,
+      "y": 2,
+      "w": 8,
       "h": 8,
       "static": false,
       "resizeHandles": [
@@ -122,9 +277,33 @@
   "parent_dashboard_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8d00"
   },
-  "tab_order": 9,
+  "tab_order": 8,
   "main_tab_name": null,
   "tab_icon": "mdi:lightning-bolt",
   "tab_icon_color": "grape",
-  "parent_dashboard_title": null
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Feature scope",
+      "icon": "mdi:filter-variant",
+      "color": "grape",
+      "description": "Restricts the rows the reduction is computed on",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Live clustering",
+      "icon": "mdi:tune",
+      "color": "grape",
+      "description": "The projection recomputed in the browser as you change its parameters",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
 }

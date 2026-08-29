@@ -1,0 +1,90 @@
+# UpSet plot — one tab of the advanced-visualisation showcase.
+#
+# Regenerate the seed after editing:
+#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'UpSet plot'
+subtitle: 'Alternative to Venn diagrams for >3 sets. Server-side compute via packages/plotly-upset; cached by (DC, params, filters).'
+icon: 'mdi:set-merge'
+icon_color: 'yellow'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8d29'
+is_main_tab: false
+tab_order: 15
+parent_dashboard_tag: volcano
+tab_icon: 'mdi:set-merge'
+tab_icon_color: 'yellow'
+
+# Left-panel filter section. Deliberately not `persistent`: the 23 tabs of
+# this family read different collections whose column names collide while their
+# value domains do not overlap, so a control fanned out from one tab would show
+# up everywhere and bite on nothing.
+filter_sections:
+  - name: 'Set scope'
+    icon: 'mdi:filter-variant'
+    color: 'yellow'
+    description: 'Restricts which features are counted into the intersections'
+
+grid_sections:
+  - name: 'Set overlap'
+    icon: 'mdi:set-merge'
+    color: 'yellow'
+    description: 'Intersections between feature sets, ranked by size'
+
+components:
+  - tag: text-upset
+    index: ups-text
+    component_type: text
+    title: 'UpSet plot'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Set overlap'
+    body: |
+      The readable alternative to a five-way Venn diagram: bars count the features in
+      each intersection, and the dot matrix underneath names which sets the intersection
+      belongs to. Sorting by cardinality puts the largest overlaps first; sorting by
+      degree groups the exclusives together.
+    layout: { x: 0, y: 0, w: 8, h: 1 }
+
+  - tag: viz-upset
+    index: 'ups-upset'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'upset_demo'
+    title: 'UpSet plot'
+    description: 'Set-intersection visualisation (alternative to Venn diagrams). Server-side compute via packages/plotly-upset; Settings ⚙ tunes Sort / Min size / Colour / set-size bars. Cached by (DC, params).'
+    section: 'Set overlap'
+    viz_kind: 'upset_plot'
+    config:
+      viz_kind: "upset_plot"
+      matrix_wf_id: "646b0f3c1e4a2d7f8e5b8d01"
+      matrix_dc_id: "646b0f3c1e4a2d7f8e5b8d28"
+      set_columns: ["contrastA", "contrastB", "contrastC", "contrastD", "contrastE"]
+      sort_by: "cardinality"
+      sort_order: "descending"
+      min_size: 1
+      show_set_sizes: true
+      color_intersections_by: "degree"
+    layout: { x: 0, y: 1, w: 8, h: 8 }
+
+  - tag: filter-upset-group
+    index: ups-f-group
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'upset_demo'
+    interactive_component_type: MultiSelect
+    column_name: 'feature_group'
+    column_type: 'object'
+    title: 'Feature group'
+    placement: left
+    section: 'Set scope'
+    group: 'Set filters'
+    display:
+      title_size: md
+      custom_color: '#F68B33'
+      icon_name: 'mdi:form-select'
+    layout: { x: 0, y: 0, w: 1, h: 3 }

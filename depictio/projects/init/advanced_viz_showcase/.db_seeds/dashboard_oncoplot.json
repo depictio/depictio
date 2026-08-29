@@ -9,10 +9,30 @@
     "$oid": "646b0f3c1e4a2d7f8e5b8d45"
   },
   "version": 1,
-  "tmp_children_data": [],
-  "stored_layout_data": [],
-  "stored_children_data": [],
   "stored_metadata": [
+    {
+      "index": "onc-text",
+      "component_type": "text",
+      "title": "Oncoplot",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Mutation matrix",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Samples on one axis, genes on the other, each cell coloured by the class of the\nmutation it carries. Rows and columns are reordered so that co-occurring mutations\nline up into blocks, which is the pattern the plot exists to surface. Filtering to\none mutation class shows which genes carry it.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
     {
       "index": "onc-plot",
       "component_type": "advanced_viz",
@@ -28,7 +48,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Oncoplot fixture",
+        "description": "Synthetic cancer cohort: 40 samples \u00d7 30 genes \u00d7 5 mutation types (sparse)",
         "data_collection_tag": "oncoplot_demo",
         "dc_specific_properties": null,
         "_id": {
@@ -37,26 +57,149 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-13T00:00:00.000000",
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Discrete heatmap by mutation type, with per-sample and per-gene mutation count strips.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Mutation matrix",
       "viz_kind": "oncoplot",
       "config": {
         "viz_kind": "oncoplot",
         "sample_id_col": "sample_id",
         "gene_col": "gene",
-        "mutation_type_col": "mutation_type"
+        "mutation_type_col": "mutation_type",
+        "sort_by_freq": true
       },
-      "wf_tag": "python/advanced_viz_demo",
-      "description": "Discrete heatmap by mutation type, with per-sample and per-gene mutation count strips."
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "onc-f-type",
+      "component_type": "interactive",
+      "title": "Mutation class",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "oncoplot_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d32"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic cancer cohort: 40 samples \u00d7 30 genes \u00d7 5 mutation types (sparse)",
+        "data_collection_tag": "oncoplot_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d32"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Mutation scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "mutation_type",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Mutation filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#E74C3C",
+      "icon_name": "mdi:form-select",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "onc-f-gene",
+      "component_type": "interactive",
+      "title": "Gene",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "oncoplot_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d32"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic cancer cohort: 40 samples \u00d7 30 genes \u00d7 5 mutation types (sparse)",
+        "data_collection_tag": "oncoplot_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d32"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Mutation scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "gene",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Mutation filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#7B1FA2",
+      "icon_name": "mdi:dna",
+      "wf_tag": "python/advanced_viz_demo"
     }
   ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
   "stored_edit_dashboard_mode_button": [],
-  "left_panel_layout_data": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-onc-f-type",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-onc-f-gene",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
   "right_panel_layout_data": [
+    {
+      "i": "box-onc-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
     {
       "i": "box-onc-plot",
       "x": 0,
-      "y": 0,
-      "w": 12,
+      "y": 1,
+      "w": 8,
       "h": 8,
       "static": false,
       "resizeHandles": [
@@ -104,7 +247,7 @@
     "viewers": []
   },
   "is_public": true,
-  "last_saved_ts": "2026-05-13 00:00:00",
+  "last_saved_ts": "2026-05-12 00:00:00",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8d00"
   },
@@ -116,5 +259,29 @@
   "main_tab_name": null,
   "tab_icon": "mdi:grid",
   "tab_icon_color": "red",
-  "parent_dashboard_title": null
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Mutation scope",
+      "icon": "mdi:filter-variant",
+      "color": "red",
+      "description": "Restricts which genes and mutation classes are drawn",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Mutation matrix",
+      "icon": "mdi:relation-many-to-many",
+      "color": "red",
+      "description": "Samples against genes, coloured by mutation class",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
 }

@@ -224,6 +224,11 @@ testpaths = [
   "depictio/tests/models",
   "depictio/tests/cli",
   "depictio/tests/unit",
+  # The recipe tests were written but never run in CI: `pytest -xvs -n auto`
+  # takes its paths from this list, and this directory was not on it. They pin
+  # the canonical-seed transforms, including the annotation carry-over whose
+  # absence from the shipped seed nothing else would notice.
+  "depictio/tests/recipes",
 ]
 markers = [
   "no_db: mark test to skip database setup",

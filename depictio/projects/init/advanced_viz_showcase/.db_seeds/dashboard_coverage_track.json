@@ -9,10 +9,30 @@
     "$oid": "646b0f3c1e4a2d7f8e5b8d46"
   },
   "version": 1,
-  "tmp_children_data": [],
-  "stored_layout_data": [],
-  "stored_children_data": [],
   "stored_metadata": [
+    {
+      "index": "cov-text",
+      "component_type": "text",
+      "title": "Coverage track",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Coverage track",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Per-position depth along the reference, one lane per sample, with an annotation\nlane naming the regions underneath. A dropout reads as a gap in one lane; a region\nthe assay never covers reads as a gap in all of them. The log axis in the settings\nmenu is what makes both visible at once.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
     {
       "index": "cov-track",
       "component_type": "advanced_viz",
@@ -28,7 +48,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Coverage tracks",
+        "description": "SARS-CoV-2 coverage tracks (200 bp bins) for ~50 samples with SARS-CoV-2 gene-region annotation; sourced from a viralrecon-bowtie2-mosdepth run",
         "data_collection_tag": "coverage_track_demo",
         "dc_specific_properties": null,
         "_id": {
@@ -37,7 +57,11 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-14T00:00:00.000000",
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Read-depth tracks along the SARS-CoV-2 reference. Sample multi-select faceting, gene-region colouring lane, log/linear y-scale, rolling-mean smoothing \u2014 all live in the Settings \u2699 popover.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Coverage track",
       "viz_kind": "coverage_track",
       "config": {
         "viz_kind": "coverage_track",
@@ -50,20 +74,193 @@
         "y_scale": "linear",
         "smoothing_window": 0,
         "color_by": "category",
-        "show_annotation_lane": true
+        "show_annotation_lane": true,
+        "annotation_id": null,
+        "chromosomes_filter": null,
+        "samples_filter": null,
+        "view_mode": null,
+        "show_individuals": true
       },
-      "wf_tag": "python/advanced_viz_demo",
-      "description": "Read-depth tracks along the SARS-CoV-2 reference. Sample multi-select faceting, gene-region colouring lane, log/linear y-scale, rolling-mean smoothing \u2014 all live in the Settings \u2699 popover."
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "cov-f-sample",
+      "component_type": "interactive",
+      "title": "Sample",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "coverage_track_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d50"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "SARS-CoV-2 coverage tracks (200 bp bins) for ~50 samples with SARS-CoV-2 gene-region annotation; sourced from a viralrecon-bowtie2-mosdepth run",
+        "data_collection_tag": "coverage_track_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d50"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Track scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Track filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#1976D2",
+      "icon_name": "mdi:flask",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "cov-f-region",
+      "component_type": "interactive",
+      "title": "Region",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "coverage_track_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d50"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "SARS-CoV-2 coverage tracks (200 bp bins) for ~50 samples with SARS-CoV-2 gene-region annotation; sourced from a viralrecon-bowtie2-mosdepth run",
+        "data_collection_tag": "coverage_track_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d50"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Track scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "gene_region",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Track filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#45B8AC",
+      "icon_name": "mdi:map-marker-path",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "cov-f-coverage",
+      "component_type": "interactive",
+      "title": "Depth",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "coverage_track_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d50"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "SARS-CoV-2 coverage tracks (200 bp bins) for ~50 samples with SARS-CoV-2 gene-region annotation; sourced from a viralrecon-bowtie2-mosdepth run",
+        "data_collection_tag": "coverage_track_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d50"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Track scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "coverage",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Track filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#00BCD4",
+      "icon_name": "mdi:chart-line",
+      "wf_tag": "python/advanced_viz_demo"
     }
   ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
   "stored_edit_dashboard_mode_button": [],
-  "left_panel_layout_data": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-cov-f-sample",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-cov-f-region",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-cov-f-coverage",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
   "right_panel_layout_data": [
+    {
+      "i": "box-cov-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
     {
       "i": "box-cov-track",
       "x": 0,
-      "y": 0,
-      "w": 12,
+      "y": 1,
+      "w": 8,
       "h": 8,
       "static": false,
       "resizeHandles": [
@@ -111,7 +308,7 @@
     "viewers": []
   },
   "is_public": true,
-  "last_saved_ts": "2026-05-14 00:00:00",
+  "last_saved_ts": "2026-05-12 00:00:00",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8d00"
   },
@@ -123,5 +320,29 @@
   "main_tab_name": null,
   "tab_icon": "mdi:chart-areaspline-variant",
   "tab_icon_color": "blue",
-  "parent_dashboard_title": null
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Track scope",
+      "icon": "mdi:filter-variant",
+      "color": "blue",
+      "description": "Restricts which lanes and which depth range are drawn",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Coverage track",
+      "icon": "mdi:chart-line",
+      "color": "blue",
+      "description": "Depth along a reference, one lane per sample",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
 }

@@ -1,0 +1,102 @@
+# QQ (DESeq2) — one tab of the nf-core megatests showcase.
+#
+# Regenerate the seed after editing:
+#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds nfcore_megatests_showcase
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'QQ (DESeq2)'
+subtitle: 'p-value distribution QC'
+icon: 'mdi:chart-line-stacked'
+icon_color: 'violet'
+icon_variant: filled
+workflow_system: nf-core
+dashboard_id: '646b0f3c1e4a2d7f8e5b8e22'
+is_main_tab: false
+tab_order: 3
+parent_dashboard_tag: volcano
+tab_icon: 'mdi:chart-line-stacked'
+tab_icon_color: 'violet'
+
+# Left-panel filter section. Deliberately not `persistent`: the 10 tabs of
+# this family read different collections whose column names collide while their
+# value domains do not overlap, so a control fanned out from one tab would show
+# up everywhere and bite on nothing.
+filter_sections:
+  - name: 'Test scope'
+    icon: 'mdi:filter-variant'
+    color: 'violet'
+    description: 'Restricts which tests enter the quantile comparison'
+
+grid_sections:
+  - name: 'Test calibration'
+    icon: 'mdi:chart-line'
+    color: 'violet'
+    description: 'Observed p-values against the uniform null'
+
+components:
+  - tag: text-qq
+    index: qq-text
+    component_type: text
+    title: 'QQ plot'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Test calibration'
+    body: |
+      Raw DESeq2 p-values against what a null distribution predicts. This is a QC view
+      rather than a result: a curve that leaves the diagonal only at the top is signal,
+      while one that lifts off along its whole length means the test is miscalibrated
+      and nothing downstream of it should be trusted.
+    layout: { x: 0, y: 0, w: 8, h: 1 }
+
+  - tag: viz-qq
+    index: 'nfcore-qq'
+    component_type: advanced_viz
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'deseq2_results'
+    title: 'QQ — DESeq2 p-value distribution'
+    description: 'Quantile-quantile plot of DESeq2 raw p-values vs. uniform null. Inflation / deflation flag QC.'
+    section: 'Test calibration'
+    viz_kind: 'qq'
+    config:
+      viz_kind: "qq"
+      p_value_col: "pvalue"
+      feature_id_col: "gene_id"
+    layout: { x: 0, y: 1, w: 8, h: 8 }
+
+  - tag: filter-qq-pvalue
+    index: qq-f-pvalue
+    component_type: interactive
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'deseq2_results'
+    interactive_component_type: RangeSlider
+    column_name: 'pvalue'
+    column_type: 'float64'
+    title: 'Raw p-value'
+    placement: left
+    section: 'Test scope'
+    group: 'Result filters'
+    display:
+      title_size: md
+      custom_color: '#7B1FA2'
+      icon_name: 'mdi:target'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-qq-basemean
+    index: qq-f-basemean
+    component_type: interactive
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'deseq2_results'
+    interactive_component_type: RangeSlider
+    column_name: 'baseMean'
+    column_type: 'float64'
+    title: 'Mean expression'
+    placement: left
+    section: 'Test scope'
+    group: 'Result filters'
+    display:
+      title_size: md
+      custom_color: '#45B8AC'
+      icon_name: 'mdi:chart-bell-curve'
+    layout: { x: 0, y: 3, w: 1, h: 3 }

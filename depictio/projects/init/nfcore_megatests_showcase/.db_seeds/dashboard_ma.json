@@ -9,10 +9,30 @@
     "$oid": "646b0f3c1e4a2d7f8e5b8e21"
   },
   "version": 1,
-  "tmp_children_data": [],
-  "stored_layout_data": [],
-  "stored_children_data": [],
   "stored_metadata": [
+    {
+      "index": "ma-text",
+      "component_type": "text",
+      "title": "MA plot",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Intensity vs effect",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "The same DESeq2 table as the volcano tab, with mean expression on the x axis. A\nfold change that only appears at low expression is usually noise, and it shows up\nhere as a funnel opening to the left; the volcano cannot show that. Read the two\ntogether.\n",
+      "wf_tag": "nf-core/nfcore_megatests"
+    },
     {
       "index": "nfcore-ma",
       "component_type": "advanced_viz",
@@ -28,7 +48,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "nf-core fixture: deseq2_results",
+        "description": "DESeq2 results table from nf-core/differentialabundance (Condition_treatment-Control-Treated).",
         "data_collection_tag": "deseq2_results",
         "dc_specific_properties": null,
         "_id": {
@@ -37,7 +57,11 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-18T00:00:00.000000",
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Bland-Altman view of the same DESeq2 results: baseMean on x, log2FoldChange on y.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Intensity vs effect",
       "viz_kind": "ma",
       "config": {
         "viz_kind": "ma",
@@ -45,23 +69,142 @@
         "avg_log_intensity_col": "baseMean",
         "log2_fold_change_col": "log2FoldChange",
         "significance_col": "padj",
-        "log_intensity_is_log": false,
+        "label_col": null,
         "significance_threshold": 0.05,
-        "effect_threshold": 0.5,
-        "top_n_labels": 15
+        "fold_change_threshold": 0.5,
+        "top_n_labels": 15,
+        "show_labels": true
       },
-      "wf_tag": "nf-core/nfcore_megatests",
-      "description": "Bland-Altman view of the same DESeq2 results: baseMean on x, log2FoldChange on y."
+      "wf_tag": "nf-core/nfcore_megatests"
+    },
+    {
+      "index": "ma-f-basemean",
+      "component_type": "interactive",
+      "title": "Mean expression",
+      "workflow_tag": "nfcore_megatests",
+      "data_collection_tag": "deseq2_results",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e10"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "DESeq2 results table from nf-core/differentialabundance (Condition_treatment-Control-Treated).",
+        "data_collection_tag": "deseq2_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8e10"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Gene scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "baseMean",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Result filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#1976D2",
+      "icon_name": "mdi:chart-bell-curve",
+      "wf_tag": "nf-core/nfcore_megatests"
+    },
+    {
+      "index": "ma-f-lfc",
+      "component_type": "interactive",
+      "title": "Log2 fold change",
+      "workflow_tag": "nfcore_megatests",
+      "data_collection_tag": "deseq2_results",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e10"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "DESeq2 results table from nf-core/differentialabundance (Condition_treatment-Control-Treated).",
+        "data_collection_tag": "deseq2_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8e10"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Gene scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "log2FoldChange",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Result filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#45B8AC",
+      "icon_name": "mdi:trending-up",
+      "wf_tag": "nf-core/nfcore_megatests"
     }
   ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
   "stored_edit_dashboard_mode_button": [],
-  "left_panel_layout_data": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-ma-f-basemean",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-ma-f-lfc",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
   "right_panel_layout_data": [
+    {
+      "i": "box-ma-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
     {
       "i": "box-nfcore-ma",
       "x": 0,
-      "y": 0,
-      "w": 12,
+      "y": 1,
+      "w": 8,
       "h": 8,
       "static": false,
       "resizeHandles": [
@@ -109,17 +252,41 @@
     "viewers": []
   },
   "is_public": true,
-  "last_saved_ts": "2026-05-18 14:49:24",
+  "last_saved_ts": "2026-05-12 00:00:00",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8e00"
   },
   "is_main_tab": false,
   "parent_dashboard_id": {
-    "$oid": "646b0f3c1e4a2d7f8e5b8e00"
+    "$oid": "646b0f3c1e4a2d7f8e5b8e20"
   },
   "tab_order": 2,
   "main_tab_name": null,
   "tab_icon": "mdi:chart-bell-curve-cumulative",
   "tab_icon_color": "blue",
-  "parent_dashboard_title": null
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Gene scope",
+      "icon": "mdi:filter-variant",
+      "color": "blue",
+      "description": "Restricts the gene set drawn",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Intensity vs effect",
+      "icon": "mdi:chart-bell-curve",
+      "color": "blue",
+      "description": "The same calls read against mean expression",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
 }
