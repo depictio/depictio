@@ -1,0 +1,105 @@
+# Rarefaction (QIIME2 Shannon) — one tab of the nf-core megatests showcase.
+#
+# Regenerate the seed after editing:
+#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds nfcore_megatests_showcase
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'Rarefaction (QIIME2 Shannon)'
+subtitle: 'Alpha-diversity vs sequencing depth'
+icon: 'mdi:chart-line'
+icon_color: 'cyan'
+icon_variant: filled
+workflow_system: nf-core
+dashboard_id: '646b0f3c1e4a2d7f8e5b8e26'
+is_main_tab: false
+tab_order: 7
+parent_dashboard_tag: volcano
+tab_icon: 'mdi:chart-line'
+tab_icon_color: 'cyan'
+
+# Left-panel filter section. Deliberately not `persistent`: the 10 tabs of
+# this family read different collections whose column names collide while their
+# value domains do not overlap, so a control fanned out from one tab would show
+# up everywhere and bite on nothing.
+filter_sections:
+  - name: 'Curve scope'
+    icon: 'mdi:filter-variant'
+    color: 'cyan'
+    description: 'Restricts which curves are drawn and over what depth range'
+
+grid_sections:
+  - name: 'Rarefaction curves'
+    icon: 'mdi:chart-line'
+    color: 'cyan'
+    description: 'QIIME2 Shannon diversity against subsampling depth'
+
+components:
+  - tag: text-rarefaction
+    index: rarefaction-text
+    component_type: text
+    title: 'Rarefaction curves'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Rarefaction curves'
+    body: |
+      Shannon diversity recomputed at thirty subsampling depths, ten iterations each,
+      with the spread drawn as a band. A curve that flattens means the sample was
+      sequenced deeply enough; one still climbing means the diversity estimate is
+      bounded by depth rather than by biology.
+    layout: { x: 0, y: 0, w: 8, h: 1 }
+
+  - tag: viz-rarefaction
+    index: 'nfcore-rarefaction'
+    component_type: advanced_viz
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'qiime2_rarefaction'
+    title: 'Rarefaction — QIIME2 Shannon alpha-diversity'
+    description: 'Shannon diversity vs subsampling depth (5 samples × 30 depths × 10 iterations), pre-melted from QIIME2''s wide alpha-rarefaction output.'
+    section: 'Rarefaction curves'
+    viz_kind: 'rarefaction'
+    config:
+      viz_kind: "rarefaction"
+      sample_id_col: "sample_id"
+      depth_col: "depth"
+      metric_col: "metric"
+      iter_col: "iter"
+      show_ci: true
+    layout: { x: 0, y: 1, w: 8, h: 8 }
+
+  - tag: filter-rarefaction-sample
+    index: rarefaction-f-sample
+    component_type: interactive
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'qiime2_rarefaction'
+    interactive_component_type: MultiSelect
+    column_name: 'sample_id'
+    column_type: 'object'
+    title: 'Sample'
+    placement: left
+    section: 'Curve scope'
+    group: 'Curve filters'
+    display:
+      title_size: md
+      custom_color: '#00BCD4'
+      icon_name: 'mdi:flask'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-rarefaction-depth
+    index: rarefaction-f-depth
+    component_type: interactive
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'qiime2_rarefaction'
+    interactive_component_type: RangeSlider
+    column_name: 'depth'
+    column_type: 'int64'
+    title: 'Depth'
+    placement: left
+    section: 'Curve scope'
+    group: 'Curve filters'
+    display:
+      title_size: md
+      custom_color: '#45B8AC'
+      icon_name: 'mdi:chart-line'
+    layout: { x: 0, y: 3, w: 1, h: 3 }

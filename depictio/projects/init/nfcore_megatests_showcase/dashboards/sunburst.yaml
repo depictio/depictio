@@ -1,0 +1,102 @@
+# Sunburst (Bracken) — one tab of the nf-core megatests showcase.
+#
+# Regenerate the seed after editing:
+#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds nfcore_megatests_showcase
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'Sunburst (Bracken)'
+subtitle: 'Per-sample taxonomy abundance'
+icon: 'mdi:sun-wireless'
+icon_color: 'yellow'
+icon_variant: filled
+workflow_system: nf-core
+dashboard_id: '646b0f3c1e4a2d7f8e5b8e29'
+is_main_tab: false
+tab_order: 10
+parent_dashboard_tag: volcano
+tab_icon: 'mdi:sun-wireless'
+tab_icon_color: 'yellow'
+
+# Left-panel filter section. Deliberately not `persistent`: the 10 tabs of
+# this family read different collections whose column names collide while their
+# value domains do not overlap, so a control fanned out from one tab would show
+# up everywhere and bite on nothing.
+filter_sections:
+  - name: 'Taxon scope'
+    icon: 'mdi:filter-variant'
+    color: 'yellow'
+    description: 'Restricts which ranks and abundances build the rings'
+
+grid_sections:
+  - name: 'Taxonomic hierarchy'
+    icon: 'mdi:chart-donut'
+    color: 'yellow'
+    description: 'Bracken per-sample taxonomy as concentric rings'
+
+components:
+  - tag: text-sunburst
+    index: sunburst-text
+    component_type: text
+    title: 'Sunburst'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Taxonomic hierarchy'
+    body: |
+      Bracken output from an nf-core/taxprofiler run, drawn as rings from rank outwards.
+      Bracken reports one rank per row rather than a full lineage, so the hierarchy here
+      is rank then taxon rather than kingdom to species. Clicking a wedge zooms into it;
+      the left panel is what narrows the data behind it.
+    layout: { x: 0, y: 0, w: 8, h: 1 }
+
+  - tag: viz-sunburst
+    index: 'nfcore-sunburst'
+    component_type: advanced_viz
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'bracken_taxonomy'
+    title: 'Sunburst — Bracken per-sample taxonomy'
+    description: 'Bracken per-sample taxonomy from nf-core/taxprofiler. Single-rank (taxonomy_lvl) sunburst — multi-rank lineage needs a taxonkit join.'
+    section: 'Taxonomic hierarchy'
+    viz_kind: 'sunburst'
+    config:
+      viz_kind: "sunburst"
+      rank_cols: ["taxonomy_lvl", "name"]
+      abundance_col: "new_est_reads"
+    layout: { x: 0, y: 1, w: 8, h: 8 }
+
+  - tag: filter-sunburst-level
+    index: sunburst-f-level
+    component_type: interactive
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'bracken_taxonomy'
+    interactive_component_type: MultiSelect
+    column_name: 'taxonomy_lvl'
+    column_type: 'object'
+    title: 'Rank'
+    placement: left
+    section: 'Taxon scope'
+    group: 'Taxon filters'
+    display:
+      title_size: md
+      custom_color: '#F9A825'
+      icon_name: 'mdi:form-select'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-sunburst-fraction
+    index: sunburst-f-fraction
+    component_type: interactive
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'bracken_taxonomy'
+    interactive_component_type: RangeSlider
+    column_name: 'fraction_total_reads'
+    column_type: 'float64'
+    title: 'Relative abundance'
+    placement: left
+    section: 'Taxon scope'
+    group: 'Taxon filters'
+    display:
+      title_size: md
+      custom_color: '#F68B33'
+      icon_name: 'mdi:water-percent'
+    layout: { x: 0, y: 3, w: 1, h: 3 }

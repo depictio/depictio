@@ -1,0 +1,125 @@
+# Coverage track (mosdepth) — one tab of the nf-core megatests showcase.
+#
+# Regenerate the seed after editing:
+#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds nfcore_megatests_showcase
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'Coverage track (mosdepth)'
+subtitle: 'Per-region read depth from viralrecon'
+icon: 'mdi:chart-areaspline'
+icon_color: 'teal'
+icon_variant: filled
+workflow_system: nf-core
+dashboard_id: '646b0f3c1e4a2d7f8e5b8e23'
+is_main_tab: false
+tab_order: 4
+parent_dashboard_tag: volcano
+tab_icon: 'mdi:chart-areaspline'
+tab_icon_color: 'teal'
+
+# Left-panel filter section. Deliberately not `persistent`: the 10 tabs of
+# this family read different collections whose column names collide while their
+# value domains do not overlap, so a control fanned out from one tab would show
+# up everywhere and bite on nothing.
+filter_sections:
+  - name: 'Track scope'
+    icon: 'mdi:filter-variant'
+    color: 'teal'
+    description: 'Restricts which lanes and which depth range are drawn'
+
+grid_sections:
+  - name: 'Coverage track'
+    icon: 'mdi:chart-line'
+    color: 'teal'
+    description: 'mosdepth read depth along the viral reference'
+
+components:
+  - tag: text-coverage_track
+    index: coverage_track-text
+    component_type: text
+    title: 'Coverage track'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Coverage track'
+    body: |
+      Per-region read depth from a real nf-core/viralrecon mosdepth run, one lane per
+      sample. A dropout reads as a gap in one lane; a region the amplicon scheme never
+      covers reads as a gap in all of them. Pick a few samples on the left before
+      reading it: every lane at once is a wall.
+    layout: { x: 0, y: 0, w: 8, h: 1 }
+
+  - tag: viz-coverage_track
+    index: 'nfcore-coverage_track'
+    component_type: advanced_viz
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'mosdepth_coverage'
+    title: 'Coverage — mosdepth per-region'
+    description: 'Read depth along the MN908947.3 reference, mosdepth output from nf-core/viralrecon.'
+    section: 'Coverage track'
+    viz_kind: 'coverage_track'
+    config:
+      viz_kind: "coverage_track"
+      chromosome_col: "chrom"
+      position_col: "start"
+      end_col: "end"
+      value_col: "coverage"
+      sample_col: "sample"
+      y_scale: "linear"
+      smoothing_window: 0
+    layout: { x: 0, y: 1, w: 8, h: 8 }
+
+  - tag: filter-coverage_track-sample
+    index: coverage_track-f-sample
+    component_type: interactive
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'mosdepth_coverage'
+    interactive_component_type: MultiSelect
+    column_name: 'sample'
+    column_type: 'object'
+    title: 'Sample'
+    placement: left
+    section: 'Track scope'
+    group: 'Track filters'
+    display:
+      title_size: md
+      custom_color: '#45B8AC'
+      icon_name: 'mdi:flask'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-coverage_track-chrom
+    index: coverage_track-f-chrom
+    component_type: interactive
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'mosdepth_coverage'
+    interactive_component_type: MultiSelect
+    column_name: 'chrom'
+    column_type: 'object'
+    title: 'Reference'
+    placement: left
+    section: 'Track scope'
+    group: 'Track filters'
+    display:
+      title_size: md
+      custom_color: '#3F51B5'
+      icon_name: 'mdi:dna'
+    layout: { x: 0, y: 3, w: 1, h: 3 }
+
+  - tag: filter-coverage_track-coverage
+    index: coverage_track-f-coverage
+    component_type: interactive
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'mosdepth_coverage'
+    interactive_component_type: RangeSlider
+    column_name: 'coverage'
+    column_type: 'float64'
+    title: 'Depth'
+    placement: left
+    section: 'Track scope'
+    group: 'Track filters'
+    display:
+      title_size: md
+      custom_color: '#00BCD4'
+      icon_name: 'mdi:chart-line'
+    layout: { x: 0, y: 6, w: 1, h: 3 }

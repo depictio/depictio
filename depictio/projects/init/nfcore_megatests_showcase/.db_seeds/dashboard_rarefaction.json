@@ -9,10 +9,30 @@
     "$oid": "646b0f3c1e4a2d7f8e5b8e26"
   },
   "version": 1,
-  "tmp_children_data": [],
-  "stored_layout_data": [],
-  "stored_children_data": [],
   "stored_metadata": [
+    {
+      "index": "rarefaction-text",
+      "component_type": "text",
+      "title": "Rarefaction curves",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Rarefaction curves",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Shannon diversity recomputed at thirty subsampling depths, ten iterations each,\nwith the spread drawn as a band. A curve that flattens means the sample was\nsequenced deeply enough; one still climbing means the diversity estimate is\nbounded by depth rather than by biology.\n",
+      "wf_tag": "nf-core/nfcore_megatests"
+    },
     {
       "index": "nfcore-rarefaction",
       "component_type": "advanced_viz",
@@ -28,7 +48,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "nf-core fixture: qiime2_rarefaction",
+        "description": "Shannon alpha-rarefaction curves from nf-core/ampliseq QIIME2.",
         "data_collection_tag": "qiime2_rarefaction",
         "dc_specific_properties": null,
         "_id": {
@@ -37,28 +57,154 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-18T00:00:00.000000",
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Shannon diversity vs subsampling depth (5 samples \u00d7 30 depths \u00d7 10 iterations), pre-melted from QIIME2's wide alpha-rarefaction output.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Rarefaction curves",
       "viz_kind": "rarefaction",
       "config": {
         "viz_kind": "rarefaction",
         "sample_id_col": "sample_id",
         "depth_col": "depth",
         "metric_col": "metric",
+        "metric_options": null,
         "iter_col": "iter",
-        "show_ci": true
+        "group_col": null,
+        "category_palette": null,
+        "show_ci": true,
+        "top_n": 60
       },
-      "wf_tag": "nf-core/nfcore_megatests",
-      "description": "Shannon diversity vs subsampling depth (5 samples \u00d7 30 depths \u00d7 10 iterations), pre-melted from QIIME2's wide alpha-rarefaction output."
+      "wf_tag": "nf-core/nfcore_megatests"
+    },
+    {
+      "index": "rarefaction-f-sample",
+      "component_type": "interactive",
+      "title": "Sample",
+      "workflow_tag": "nfcore_megatests",
+      "data_collection_tag": "qiime2_rarefaction",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e15"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Shannon alpha-rarefaction curves from nf-core/ampliseq QIIME2.",
+        "data_collection_tag": "qiime2_rarefaction",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8e15"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Curve scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "sample_id",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Curve filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#00BCD4",
+      "icon_name": "mdi:flask",
+      "wf_tag": "nf-core/nfcore_megatests"
+    },
+    {
+      "index": "rarefaction-f-depth",
+      "component_type": "interactive",
+      "title": "Depth",
+      "workflow_tag": "nfcore_megatests",
+      "data_collection_tag": "qiime2_rarefaction",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e15"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Shannon alpha-rarefaction curves from nf-core/ampliseq QIIME2.",
+        "data_collection_tag": "qiime2_rarefaction",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8e15"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Curve scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "depth",
+      "column_type": "int64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Curve filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#45B8AC",
+      "icon_name": "mdi:chart-line",
+      "wf_tag": "nf-core/nfcore_megatests"
     }
   ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
   "stored_edit_dashboard_mode_button": [],
-  "left_panel_layout_data": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-rarefaction-f-sample",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-rarefaction-f-depth",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
   "right_panel_layout_data": [
+    {
+      "i": "box-rarefaction-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
     {
       "i": "box-nfcore-rarefaction",
       "x": 0,
-      "y": 0,
-      "w": 12,
+      "y": 1,
+      "w": 8,
       "h": 8,
       "static": false,
       "resizeHandles": [
@@ -106,17 +252,41 @@
     "viewers": []
   },
   "is_public": true,
-  "last_saved_ts": "2026-05-18 14:49:24",
+  "last_saved_ts": "2026-05-12 00:00:00",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8e00"
   },
   "is_main_tab": false,
   "parent_dashboard_id": {
-    "$oid": "646b0f3c1e4a2d7f8e5b8e00"
+    "$oid": "646b0f3c1e4a2d7f8e5b8e20"
   },
   "tab_order": 7,
   "main_tab_name": null,
   "tab_icon": "mdi:chart-line",
   "tab_icon_color": "cyan",
-  "parent_dashboard_title": null
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Curve scope",
+      "icon": "mdi:filter-variant",
+      "color": "cyan",
+      "description": "Restricts which curves are drawn and over what depth range",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Rarefaction curves",
+      "icon": "mdi:chart-line",
+      "color": "cyan",
+      "description": "QIIME2 Shannon diversity against subsampling depth",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
 }

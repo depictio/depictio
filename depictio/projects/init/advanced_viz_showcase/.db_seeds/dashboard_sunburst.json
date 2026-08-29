@@ -9,10 +9,30 @@
     "$oid": "646b0f3c1e4a2d7f8e5b8d44"
   },
   "version": 1,
-  "tmp_children_data": [],
-  "stored_layout_data": [],
-  "stored_children_data": [],
   "stored_metadata": [
+    {
+      "index": "sun-text",
+      "component_type": "text",
+      "title": "Sunburst",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Hierarchy",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "The same taxonomy the stacked bars show, drawn as concentric rings from kingdom\noutwards. Clicking a wedge zooms into it rather than filtering the dashboard, so\nit is a way to read the hierarchy rather than to select from it. The left panel is\nwhat narrows the other tiles.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
     {
       "index": "sun-plot",
       "component_type": "advanced_viz",
@@ -28,7 +48,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Stacked taxonomy fixture (with hierarchical rank columns)",
+        "description": "Synthetic taxonomy: 18 samples x 9 taxa, two ranks (Phylum + Genus)",
         "data_collection_tag": "stacked_taxonomy_demo",
         "dc_specific_properties": null,
         "_id": {
@@ -37,7 +57,11 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-13T00:00:00.000000",
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Hierarchical taxonomic composition \u2014 Kingdom \u2192 Genus, arc size = abundance.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Hierarchy",
       "viz_kind": "sunburst",
       "config": {
         "viz_kind": "sunburst",
@@ -49,20 +73,145 @@
           "Family",
           "Genus"
         ],
-        "abundance_col": "abundance"
+        "abundance_col": "abundance",
+        "category_palette": null,
+        "start_rank": null,
+        "colour_by_rank": null,
+        "max_depth": 3,
+        "palette": "tab20",
+        "show_counts": true,
+        "min_percent": 0.5
       },
-      "wf_tag": "python/advanced_viz_demo",
-      "description": "Hierarchical taxonomic composition \u2014 Kingdom \u2192 Genus, arc size = abundance."
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "sun-f-phylum",
+      "component_type": "interactive",
+      "title": "Phylum",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "stacked_taxonomy_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d05"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic taxonomy: 18 samples x 9 taxa, two ranks (Phylum + Genus)",
+        "data_collection_tag": "stacked_taxonomy_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d05"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Taxonomic scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "Phylum",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Taxonomy",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#F68B33",
+      "icon_name": "mdi:bacteria",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "sun-f-genus",
+      "component_type": "interactive",
+      "title": "Genus",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "stacked_taxonomy_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d05"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic taxonomy: 18 samples x 9 taxa, two ranks (Phylum + Genus)",
+        "data_collection_tag": "stacked_taxonomy_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d05"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Taxonomic scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "Genus",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Taxonomy",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#2E7D32",
+      "icon_name": "mdi:bacteria",
+      "wf_tag": "python/advanced_viz_demo"
     }
   ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
   "stored_edit_dashboard_mode_button": [],
-  "left_panel_layout_data": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-sun-f-phylum",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-sun-f-genus",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
   "right_panel_layout_data": [
+    {
+      "i": "box-sun-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
     {
       "i": "box-sun-plot",
       "x": 0,
-      "y": 0,
-      "w": 12,
+      "y": 1,
+      "w": 8,
       "h": 8,
       "static": false,
       "resizeHandles": [
@@ -110,7 +259,7 @@
     "viewers": []
   },
   "is_public": true,
-  "last_saved_ts": "2026-05-13 00:00:00",
+  "last_saved_ts": "2026-05-12 00:00:00",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8d00"
   },
@@ -122,5 +271,29 @@
   "main_tab_name": null,
   "tab_icon": "mdi:weather-sunny",
   "tab_icon_color": "orange",
-  "parent_dashboard_title": null
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Taxonomic scope",
+      "icon": "mdi:filter-variant",
+      "color": "orange",
+      "description": "Restricts which lineages the rings are built from",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Hierarchy",
+      "icon": "mdi:chart-donut",
+      "color": "orange",
+      "description": "The taxonomy as concentric rings, drillable in place",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
 }

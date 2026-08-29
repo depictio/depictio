@@ -9,10 +9,30 @@
     "$oid": "646b0f3c1e4a2d7f8e5b8d42"
   },
   "version": 1,
-  "tmp_children_data": [],
-  "stored_layout_data": [],
-  "stored_children_data": [],
   "stored_metadata": [
+    {
+      "index": "lol-text",
+      "component_type": "text",
+      "title": "Lollipop plot",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Positional effects",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Effects placed at their position along a sequence, stem height encoding magnitude\nand colour encoding class. It is the view that makes a mutational hotspot visible\nas a cluster of stems rather than a row in a table.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
     {
       "index": "lol-plot",
       "component_type": "advanced_viz",
@@ -28,7 +48,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Variant tracks fixture",
+        "description": "Synthetic variant tracks: 4 cancer genes \u00d7 50\u201380 variants \u00d7 5 consequence categories",
         "data_collection_tag": "lollipop_demo",
         "dc_specific_properties": null,
         "_id": {
@@ -37,7 +57,11 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-13T00:00:00.000000",
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Per-gene variant tracks coloured by consequence. Marker size encodes effect strength.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Positional effects",
       "viz_kind": "lollipop",
       "config": {
         "viz_kind": "lollipop",
@@ -45,20 +69,146 @@
         "position_col": "position",
         "category_col": "category",
         "effect_col": "effect",
-        "max_subplot_genes": 6
+        "max_subplot_genes": 6,
+        "point_size": 8,
+        "stem_width": 1.2,
+        "scale_points_by_effect": true,
+        "show_stems": true,
+        "marker_outline": false,
+        "palette": "tab10",
+        "gene_sort": "count",
+        "top_n_labels": 0
       },
-      "wf_tag": "python/advanced_viz_demo",
-      "description": "Per-gene variant tracks coloured by consequence. Marker size encodes effect strength."
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "lol-f-category",
+      "component_type": "interactive",
+      "title": "Effect class",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "lollipop_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d31"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic variant tracks: 4 cancer genes \u00d7 50\u201380 variants \u00d7 5 consequence categories",
+        "data_collection_tag": "lollipop_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d31"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Position scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "category",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Effect filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#1976D2",
+      "icon_name": "mdi:form-select",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "lol-f-effect",
+      "component_type": "interactive",
+      "title": "Effect",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "lollipop_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d31"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic variant tracks: 4 cancer genes \u00d7 50\u201380 variants \u00d7 5 consequence categories",
+        "data_collection_tag": "lollipop_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d31"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Position scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "effect",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Effect filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#E74C3C",
+      "icon_name": "mdi:trending-up",
+      "wf_tag": "python/advanced_viz_demo"
     }
   ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
   "stored_edit_dashboard_mode_button": [],
-  "left_panel_layout_data": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-lol-f-category",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-lol-f-effect",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
   "right_panel_layout_data": [
+    {
+      "i": "box-lol-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
     {
       "i": "box-lol-plot",
       "x": 0,
-      "y": 0,
-      "w": 12,
+      "y": 1,
+      "w": 8,
       "h": 8,
       "static": false,
       "resizeHandles": [
@@ -106,7 +256,7 @@
     "viewers": []
   },
   "is_public": true,
-  "last_saved_ts": "2026-05-13 00:00:00",
+  "last_saved_ts": "2026-05-12 00:00:00",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8d00"
   },
@@ -118,5 +268,29 @@
   "main_tab_name": null,
   "tab_icon": "mdi:chart-timeline-variant",
   "tab_icon_color": "blue",
-  "parent_dashboard_title": null
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Position scope",
+      "icon": "mdi:filter-variant",
+      "color": "blue",
+      "description": "Restricts which effect classes and magnitudes are drawn",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Positional effects",
+      "icon": "mdi:chart-timeline-variant",
+      "color": "blue",
+      "description": "Effects placed along a sequence coordinate",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
 }

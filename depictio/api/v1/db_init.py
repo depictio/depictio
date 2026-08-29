@@ -179,9 +179,16 @@ def _dataset_of_dashboard(name: str) -> str:
     Dashboard names are consistently prefixed by their dataset, e.g.
     ``ampliseq_multiqc`` → ``ampliseq``, ``advanced_viz_volcano`` →
     ``advanced_viz_showcase``, ``viralrecon_variants`` → ``viralrecon``.
+
+    Every arm is a prefix match, including iris/penguins: their child tabs
+    (``iris_petal``, ``penguins_island_season``) are dashboards in their own
+    right, and an equality test mapped them to themselves — so
+    ``DEPICTIO_SEED_PROJECTS=iris`` silently dropped the tab it was asked for.
     """
-    if name in ("iris", "penguins"):
-        return name
+    if name.startswith("iris"):
+        return "iris"
+    if name.startswith("penguins"):
+        return "penguins"
     if name.startswith("ampliseq"):
         return "ampliseq"
     if name.startswith("advanced_viz"):
@@ -261,6 +268,19 @@ async def create_initial_dashboards(
             "static_dc_id": STATIC_IDS["penguins"]["data_collections"]["penguins_complete"],
         },
         {
+            # Child tab of the penguins overview. It is what makes that
+            # dashboard's persistent sections observable at all: `persistent`
+            # is a documented no-op while a family has only one tab.
+            "name": "penguins_island_season",
+            "json_path": os.path.join(
+                projects_base,
+                ReferenceDatasetRegistry.DATASET_PATHS["penguins"],
+                ".db_seeds",
+                "dashboard_island_season.json",
+            ),
+            "static_dc_id": STATIC_IDS["penguins"]["data_collections"]["penguins_complete"],
+        },
+        {
             "name": "ampliseq_multiqc",
             "json_path": os.path.join(
                 projects_base,
@@ -323,6 +343,30 @@ async def create_initial_dashboards(
                 rel_paths["ampliseq"],
                 ".db_seeds",
                 "dashboard_phylogeny.json",
+            ),
+            "static_dc_id": None,
+        },
+        # The two demo tabs the reference project adds on top of the nf-core
+        # template (build_reference_dashboard.py). They bind the coordinates,
+        # sampling date and CTD readings only this dataset's metadata carries,
+        # so a real `depictio run --template` never receives them.
+        {
+            "name": "ampliseq_sampling_campaign",
+            "json_path": os.path.join(
+                projects_base,
+                rel_paths["ampliseq"],
+                ".db_seeds",
+                "dashboard_sampling_campaign.json",
+            ),
+            "static_dc_id": None,
+        },
+        {
+            "name": "ampliseq_environment",
+            "json_path": os.path.join(
+                projects_base,
+                rel_paths["ampliseq"],
+                ".db_seeds",
+                "dashboard_environment.json",
             ),
             "static_dc_id": None,
         },

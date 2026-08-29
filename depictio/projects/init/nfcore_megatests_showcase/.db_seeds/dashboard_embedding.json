@@ -9,10 +9,30 @@
     "$oid": "646b0f3c1e4a2d7f8e5b8e24"
   },
   "version": 1,
-  "tmp_children_data": [],
-  "stored_layout_data": [],
-  "stored_children_data": [],
   "stored_metadata": [
+    {
+      "index": "embedding-text",
+      "component_type": "text",
+      "title": "PCA projection",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sample projection",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "The DESeq2 vst() PCA from an nf-core/rnaseq run. With five samples the question is\nnot whether clusters exist but whether replicates of the same condition land\ntogether, which is the first thing to check before believing any differential\ncall.\n",
+      "wf_tag": "nf-core/nfcore_megatests"
+    },
     {
       "index": "nfcore-embedding",
       "component_type": "advanced_viz",
@@ -28,7 +48,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "nf-core fixture: rnaseq_pca",
+        "description": "PCA projection of DESeq2 vst() from nf-core/rnaseq MultiQC (5 samples \u00d7 2 PCs \u00d7 3 conditions).",
         "data_collection_tag": "rnaseq_pca",
         "dc_specific_properties": null,
         "_id": {
@@ -37,29 +57,171 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-18T00:00:00.000000",
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Sample projection from DESeq2 vst() PCA (5 samples \u00d7 3 conditions). The condition column is derived from the sample naming convention (WT / RAP1_UNINDUCED / RAP1_IAA_30M) to drive cluster colouring.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sample projection",
       "viz_kind": "embedding",
       "config": {
         "viz_kind": "embedding",
-        "mode": "precomputed",
         "sample_id_col": "Sample",
         "dim_1_col": "x",
         "dim_2_col": "y",
+        "dim_3_col": null,
         "cluster_col": "condition",
-        "color_col": "condition"
+        "color_col": "condition",
+        "category_palette": null,
+        "compute_method": null,
+        "umap_n_neighbors": 15,
+        "umap_min_dist": 0.1,
+        "tsne_perplexity": 30.0,
+        "tsne_n_iter": 1000,
+        "pcoa_distance": "bray_curtis",
+        "show_density": false,
+        "point_size": 6,
+        "marker_outline_width": 1.5,
+        "plot_style": "default",
+        "default_color_by": null,
+        "show_centroids": false,
+        "marker_outline": false,
+        "legend_pos": "right",
+        "ncontours": 14,
+        "density_opacity": 0.45,
+        "view_3d": false,
+        "reverse_scale": true,
+        "hover_cols": []
       },
-      "wf_tag": "nf-core/nfcore_megatests",
-      "description": "Sample projection from DESeq2 vst() PCA (5 samples \u00d7 3 conditions). The condition column is derived from the sample naming convention (WT / RAP1_UNINDUCED / RAP1_IAA_30M) to drive cluster colouring."
+      "wf_tag": "nf-core/nfcore_megatests"
+    },
+    {
+      "index": "embedding-f-condition",
+      "component_type": "interactive",
+      "title": "Condition",
+      "workflow_tag": "nfcore_megatests",
+      "data_collection_tag": "rnaseq_pca",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e13"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "PCA projection of DESeq2 vst() from nf-core/rnaseq MultiQC (5 samples \u00d7 2 PCs \u00d7 3 conditions).",
+        "data_collection_tag": "rnaseq_pca",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8e13"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Sample scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "condition",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Sample filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#8E44AD",
+      "icon_name": "mdi:form-select",
+      "wf_tag": "nf-core/nfcore_megatests"
+    },
+    {
+      "index": "embedding-f-sample",
+      "component_type": "interactive",
+      "title": "Sample",
+      "workflow_tag": "nfcore_megatests",
+      "data_collection_tag": "rnaseq_pca",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e13"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "PCA projection of DESeq2 vst() from nf-core/rnaseq MultiQC (5 samples \u00d7 2 PCs \u00d7 3 conditions).",
+        "data_collection_tag": "rnaseq_pca",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8e13"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Sample scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "Sample",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Sample filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#1976D2",
+      "icon_name": "mdi:flask",
+      "wf_tag": "nf-core/nfcore_megatests"
     }
   ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
   "stored_edit_dashboard_mode_button": [],
-  "left_panel_layout_data": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-embedding-f-condition",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-embedding-f-sample",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
   "right_panel_layout_data": [
+    {
+      "i": "box-embedding-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
     {
       "i": "box-nfcore-embedding",
       "x": 0,
-      "y": 0,
-      "w": 12,
+      "y": 1,
+      "w": 8,
       "h": 8,
       "static": false,
       "resizeHandles": [
@@ -107,17 +269,41 @@
     "viewers": []
   },
   "is_public": true,
-  "last_saved_ts": "2026-05-18 14:49:24",
+  "last_saved_ts": "2026-05-12 00:00:00",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8e00"
   },
   "is_main_tab": false,
   "parent_dashboard_id": {
-    "$oid": "646b0f3c1e4a2d7f8e5b8e00"
+    "$oid": "646b0f3c1e4a2d7f8e5b8e20"
   },
   "tab_order": 5,
   "main_tab_name": null,
   "tab_icon": "mdi:atom",
   "tab_icon_color": "grape",
-  "parent_dashboard_title": null
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Sample scope",
+      "icon": "mdi:filter-variant",
+      "color": "grape",
+      "description": "Restricts which samples are projected",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Sample projection",
+      "icon": "mdi:chart-scatter-plot",
+      "color": "grape",
+      "description": "DESeq2 PCA of the rnaseq run, coloured by condition",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
 }

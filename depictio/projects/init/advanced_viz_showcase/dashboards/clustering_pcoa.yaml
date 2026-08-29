@@ -1,0 +1,108 @@
+# Clustering: PCoA — one tab of the advanced-visualisation showcase.
+#
+# Regenerate the seed after editing:
+#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'Clustering: PCoA'
+subtitle: 'PCoA via Bray–Curtis distance on a non-negative shift of the matrix'
+icon: 'mdi:relation-many-to-many'
+icon_color: 'cyan'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8d17'
+is_main_tab: false
+tab_order: 7
+parent_dashboard_tag: volcano
+tab_icon: 'mdi:relation-many-to-many'
+tab_icon_color: 'cyan'
+
+# Left-panel filter section. Deliberately not `persistent`: the 23 tabs of
+# this family read different collections whose column names collide while their
+# value domains do not overlap, so a control fanned out from one tab would show
+# up everywhere and bite on nothing.
+filter_sections:
+  - name: 'Projection scope'
+    icon: 'mdi:filter-variant'
+    color: 'cyan'
+    description: 'Restricts which points are drawn, not the projection itself'
+
+grid_sections:
+  - name: 'PCoA projection'
+    icon: 'mdi:relation-many-to-many'
+    color: 'cyan'
+    description: 'Projection computed from a distance matrix'
+
+components:
+  - tag: text-clustering_pcoa
+    index: pcoa-text
+    component_type: text
+    title: 'PCoA projection'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'PCoA projection'
+    body: |
+      Principal coordinates: the projection is computed from a distance matrix rather
+      than from the feature table, which is what makes it the right choice for
+      ecological distances where Euclidean geometry does not apply. Axes are still
+      comparable, as in PCA.
+    layout: { x: 0, y: 0, w: 8, h: 1 }
+
+  - tag: viz-clustering_pcoa
+    index: 'pcoa-embedding'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'embedding_pcoa'
+    title: 'PCoA — Bray–Curtis'
+    description: 'Principal Coordinates Analysis on a non-negative shift of the feature matrix. Pre-computed (instant render).'
+    section: 'PCoA projection'
+    viz_kind: 'embedding'
+    config:
+      viz_kind: "embedding"
+      sample_id_col: "sample_id"
+      dim_1_col: "dim_1"
+      dim_2_col: "dim_2"
+      dim_3_col: "dim_3"
+      cluster_col: "cluster"
+      color_col: "color"
+      point_size: 9
+      show_density: false
+    layout: { x: 0, y: 1, w: 8, h: 8 }
+
+  - tag: filter-clustering_pcoa-cluster
+    index: pcoa-f-cluster
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'embedding_pcoa'
+    interactive_component_type: MultiSelect
+    column_name: 'cluster'
+    column_type: 'object'
+    title: 'Cluster'
+    placement: left
+    section: 'Projection scope'
+    group: 'Point filters'
+    display:
+      title_size: md
+      custom_color: '#8E44AD'
+      icon_name: 'mdi:scatter-plot'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-clustering_pcoa-color
+    index: pcoa-f-color
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'embedding_pcoa'
+    interactive_component_type: RangeSlider
+    column_name: 'color'
+    column_type: 'float64'
+    title: 'Continuous value'
+    placement: left
+    section: 'Projection scope'
+    group: 'Point filters'
+    display:
+      title_size: md
+      custom_color: '#00BCD4'
+      icon_name: 'mdi:blur'
+    layout: { x: 0, y: 3, w: 1, h: 3 }

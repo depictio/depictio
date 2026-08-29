@@ -83,7 +83,13 @@ def test_optional_datasets_are_not_in_the_default_set():
     "dashboard_name,dataset",
     [
         ("iris", "iris"),
+        # Child tabs are dashboards in their own right and must map to their
+        # parent dataset. An equality test mapped them to themselves, so
+        # DEPICTIO_SEED_PROJECTS=iris seeded the overview and dropped the tab
+        # hanging off it — a half-seeded family, silently.
+        ("iris_petal", "iris"),
         ("penguins", "penguins"),
+        ("penguins_island_season", "penguins"),
         ("ampliseq_multiqc", "ampliseq"),
         ("ampliseq_phylogeny", "ampliseq"),
         ("advanced_viz_volcano", "advanced_viz_showcase"),
@@ -100,14 +106,16 @@ def test_only_iris_keeps_only_iris_dashboards():
     """A filter of {'iris'} should keep exactly the iris dashboard."""
     names = [
         "iris",
+        "iris_petal",
         "penguins",
+        "penguins_island_season",
         "ampliseq_multiqc",
         "advanced_viz_volcano",
         "viralrecon_variants",
     ]
     only = {"iris"}
     kept = [n for n in names if _dataset_of_dashboard(n) in only]
-    assert kept == ["iris"]
+    assert kept == ["iris", "iris_petal"]
 
 
 def test_extra_widens_the_allowlist_without_replacing_it():

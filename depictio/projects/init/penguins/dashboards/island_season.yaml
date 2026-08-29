@@ -1,0 +1,317 @@
+# Palmer Penguins — Island & Season (child tab of "Penguins Species Analysis")
+#
+# This tab exists to make the persistent sections on the main tab do something.
+# `persistent` is documented as a no-op on a single-tab dashboard, so before
+# this file the project declared the feature and could never demonstrate it.
+# Here the Cohort filters, the Measurements ranges and the Raw Data table all
+# arrive by fan-out — none of them is declared below — while `Island focus`
+# shows a locally scoped filter sitting beside them.
+#
+# A child tab does NOT inherit `brand_theme`; it is a per-dashboard override and
+# each dashboard document carries its own. Repeated verbatim from
+# species_analysis.yaml so the two tabs are not two different products.
+version: 1
+
+title: "Island & Season"
+subtitle: "Where each species was sampled, and whether three seasons of sampling drifted"
+project_tag: "Palmer Penguins Species Comparison"
+
+is_main_tab: false
+parent_dashboard_tag: "Penguins Species Analysis"
+tab_order: 1
+tab_icon: "mdi:map-marker-outline"
+tab_icon_color: "teal"
+
+brand_theme:
+  primary: "#159090"
+  secondary: "#a034f0"
+  tertiary: "#ff8c00"
+  tint_mode: "full"
+
+# Only one section of its own. Cohort (pinned top) and Measurements (pinned
+# bottom) arrive from the main tab, so this tab adds the one control that is
+# specific to it rather than restating four that are not.
+filter_sections:
+  - name: "Island focus"
+    icon: "mdi:map-marker-outline"
+    color: "pink"
+    description: "Options computed after dropping Adelie — the one species found on all three islands"
+
+grid_sections:
+  - name: "Island composition"
+    icon: "mdi:map-marker-outline"
+    color: "teal"
+    description: "Which species each island holds, and how the birds there compare"
+  - name: "Across seasons"
+    icon: "mdi:calendar-outline"
+    color: "orange"
+    description: "Whether 2007, 2008 and 2009 sampled the same population"
+
+components:
+  # --- Island composition --------------------------------------------------
+  - tag: text-island-intro
+    component_type: text
+    section: "Island composition"
+    title: "One species is on every island; two are on one each"
+    order: 2
+    alignment: left
+    body: "*Adelie* is on all three islands (51 Torgersen, 56 Dream, 44 Biscoe), *Chinstrap* only on Dream (68), *Gentoo* only on Biscoe (123). So island and species are confounded for two of the three: narrow to *Adelie* in the **Cohort** filter to compare islands honestly."
+    layout: { x: 0, y: 0, w: 8, h: 1 }
+
+  - tag: card-island-birds
+    component_type: card
+    section: "Island composition"
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    aggregation: count
+    column_name: individual_id
+    column_type: object
+    secondary_layout: coverage
+    coverage_max: 342
+    icon_name: mdi:counter
+    icon_color: "#5C6BC0"
+    title_color: "#5C6BC0"
+    title_font_size: md
+    value_font_size: xl
+    title: "Birds in view"
+    layout: { x: 0, y: 1, w: 2, h: 2 }
+
+  - tag: card-islands
+    component_type: card
+    section: "Island composition"
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    aggregation: nunique
+    column_name: island
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: island
+    top_n_count: 3
+    icon_name: mdi:map-marker
+    icon_color: "#159090"
+    title_color: "#159090"
+    title_font_size: md
+    value_font_size: xl
+    title: "Islands"
+    layout: { x: 2, y: 1, w: 2, h: 2 }
+
+  - tag: card-island-species-mix
+    component_type: card
+    section: "Island composition"
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    aggregation: nunique
+    column_name: species
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: species
+    top_n_count: 3
+    icon_name: mdi:chart-donut
+    icon_color: "#a034f0"
+    title_color: "#a034f0"
+    title_font_size: md
+    value_font_size: xl
+    title: "Species mix"
+    layout: { x: 4, y: 1, w: 2, h: 2 }
+
+  - tag: card-island-mass
+    component_type: card
+    section: "Island composition"
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: body_mass_g
+    column_type: float64
+    icon_name: mdi:chart-bell-curve
+    icon_color: "#ff8c00"
+    title_color: "#ff8c00"
+    title_font_size: md
+    value_font_size: xl
+    title: "Body mass"
+    layout: { x: 6, y: 1, w: 2, h: 2 }
+
+  - tag: bar-island-species
+    component_type: figure
+    section: "Island composition"
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    visu_type: histogram
+    title: "Birds per Island, by Species"
+    description: "Stacked counts. Torgersen is a single bar because only Adelie was sampled there."
+    title_size: h3
+    dict_kwargs:
+      x: island
+      color: species
+      color_discrete_map: '{"Adelie": "#FF8C00", "Chinstrap": "#A034F0", "Gentoo": "#159090"}'
+      barmode: stack
+      labels: '{"island": "Island", "species": "Species"}'
+    layout: { x: 0, y: 3, w: 4, h: 5 }
+
+  - tag: box-mass-by-island
+    component_type: figure
+    section: "Island composition"
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    visu_type: box
+    title: "Body Mass by Island and Species"
+    description: "Grouped so the Biscoe box splits into its Adelie and Gentoo halves — the island looks heavy only because Gentoo lives there."
+    title_size: h3
+    dict_kwargs:
+      x: island
+      y: body_mass_g
+      color: species
+      color_discrete_map: '{"Adelie": "#FF8C00", "Chinstrap": "#A034F0", "Gentoo": "#159090"}'
+      boxmode: group
+      points: all
+      labels: '{"island": "Island", "body_mass_g": "Body Mass (g)", "species": "Species"}'
+    layout: { x: 4, y: 3, w: 4, h: 5 }
+
+  # --- Across seasons ------------------------------------------------------
+  - tag: text-season
+    component_type: text
+    section: "Across seasons"
+    title: "Three seasons, one population"
+    order: 2
+    alignment: left
+    body: "Sampling effort is near-flat: 109 birds in 2007, 114 in 2008, 119 in 2009. The two trend cards below track mean body mass and mean flipper length across those seasons — if the population were drifting, or the sampling were, this is where it would show. It does not, which is what makes the season a safe thing to pool over on the main tab."
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: card-seasons
+    component_type: card
+    section: "Across seasons"
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    aggregation: nunique
+    column_name: year
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: year
+    top_n_count: 3
+    icon_name: mdi:calendar
+    icon_color: "#159090"
+    title_color: "#159090"
+    title_font_size: md
+    value_font_size: xl
+    title: "Seasons"
+    layout: { x: 0, y: 2, w: 2, h: 2 }
+
+  - tag: card-flipper-trend
+    component_type: card
+    section: "Across seasons"
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    aggregation: average
+    column_name: flipper_length_mm
+    column_type: float64
+    secondary_layout: trend
+    trend_col: year
+    icon_name: mdi:chart-line
+    icon_color: "#FF8C00"
+    title_color: "#FF8C00"
+    title_font_size: md
+    value_font_size: xl
+    title: "Flipper by season"
+    layout: { x: 2, y: 2, w: 2, h: 2 }
+
+  - tag: card-bill-depth-season
+    component_type: card
+    section: "Across seasons"
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    aggregation: average
+    column_name: bill_depth_mm
+    column_type: float64
+    secondary_layout: trend
+    trend_col: year
+    icon_name: mdi:chart-line
+    icon_color: "#A034F0"
+    title_color: "#A034F0"
+    title_font_size: md
+    value_font_size: xl
+    title: "Bill depth by season"
+    layout: { x: 4, y: 2, w: 2, h: 2 }
+
+  - tag: card-sex-balance
+    component_type: card
+    section: "Across seasons"
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    aggregation: count
+    column_name: sex
+    column_type: object
+    secondary_layout: completeness
+    icon_name: mdi:account-multiple
+    icon_color: "#C44E52"
+    title_color: "#C44E52"
+    title_font_size: md
+    value_font_size: xl
+    title: "Sex recorded"
+    layout: { x: 6, y: 2, w: 2, h: 2 }
+
+  # Not a second body-mass box: the parent tab already carries that chart under
+  # the same title. This tab is about how the cohort is composed, so the ribbon
+  # shows which island / species / sex combinations actually exist. The two
+  # single-island species show up as ribbons that never leave their column.
+  - tag: flow-island-species-sex
+    component_type: figure
+    section: "Across seasons"
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    visu_type: scatter
+    mode: code
+    title: "Island, species and sex — who is where"
+    description: "Every bird follows one ribbon across the three axes, coloured by species. Chinstrap never leaves Dream and Gentoo never leaves Biscoe, so those ribbons are single strands; only Adelie fans out across all three islands."
+    title_size: h3
+    code_content: |
+      df_pd = df.to_pandas().dropna(subset=['island', 'species', 'sex'])
+      codes = {'Adelie': 0, 'Chinstrap': 1, 'Gentoo': 2}
+      fig = px.parallel_categories(
+          df_pd,
+          dimensions=['island', 'species', 'sex'],
+          color=df_pd['species'].map(codes),
+          color_continuous_scale=['#FF8C00', '#A034F0', '#159090'],
+          labels={'island': 'Island', 'species': 'Species', 'sex': 'Sex'},
+      )
+      fig.update_layout(coloraxis_showscale=False)
+    layout: { x: 0, y: 4, w: 4, h: 5 }
+
+  - tag: hist-flipper-by-island
+    component_type: figure
+    section: "Across seasons"
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    visu_type: histogram
+    title: "Flipper Length by Island"
+    description: "Bimodal on Biscoe and unimodal on the other two — the second mode is Gentoo, not the island."
+    title_size: h3
+    dict_kwargs:
+      x: flipper_length_mm
+      color: island
+      color_discrete_map: '{"Biscoe": "#5B8FA8", "Dream": "#B07AA1", "Torgersen": "#8C7B6B"}'
+      barmode: overlay
+      opacity: 0.65
+      nbins: 30
+      labels: '{"flipper_length_mm": "Flipper Length (mm)", "island": "Island"}'
+    layout: { x: 4, y: 4, w: 4, h: 5 }
+
+  # --- left panel ----------------------------------------------------------
+  # Cohort and Measurements arrive from the main tab. This is the one control
+  # that belongs to this tab: its options are computed after dropping Adelie, so
+  # the dropdown holds exactly the two single-island species (191 birds).
+  - tag: filter-island-non-adelie
+    component_type: interactive
+    section: "Island focus"
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    interactive_component_type: MultiSelect
+    column_name: island
+    column_type: object
+    filter_expr: "col('species') != 'Adelie'"
+    custom_color: "#DA8BC3"
+    icon_name: mdi:filter-cog-outline
+    title: "Island (excluding Adelie)"
+    description: "Two islands, because Torgersen holds nothing but Adelie — the option list
+      going from three to two is the pre-filter working."
+    layout: { x: 0, y: 0, w: 1, h: 3 }

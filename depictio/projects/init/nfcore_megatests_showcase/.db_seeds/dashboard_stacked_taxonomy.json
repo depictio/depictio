@@ -9,10 +9,30 @@
     "$oid": "646b0f3c1e4a2d7f8e5b8e27"
   },
   "version": 1,
-  "tmp_children_data": [],
-  "stored_layout_data": [],
-  "stored_children_data": [],
   "stored_metadata": [
+    {
+      "index": "stacked_taxonomy-text",
+      "component_type": "text",
+      "title": "Stacked taxonomy",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Community composition",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "One stacked bar per sample, built straight from the QIIME2 feature table. The rank\ncolumn is a stub: the feature table carries no lineage, so this is ASV-level only\nand the tab exists to show the component against real counts rather than to be\nread as a taxonomy. Raising the abundance floor on the left drops the long tail of\nsingletons.\n",
+      "wf_tag": "nf-core/nfcore_megatests"
+    },
     {
       "index": "nfcore-stacked_taxonomy",
       "component_type": "advanced_viz",
@@ -28,7 +48,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "nf-core fixture: qiime2_stacked_taxonomy",
+        "description": "ASV abundances from nf-core/ampliseq QIIME2 (single-rank stub).",
         "data_collection_tag": "qiime2_stacked_taxonomy",
         "dc_specific_properties": null,
         "_id": {
@@ -37,27 +57,157 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-18T00:00:00.000000",
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Per-sample ASV abundances from nf-core/ampliseq. Single-rank stub (real multi-rank lineage would need a taxonkit join).",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Community composition",
       "viz_kind": "stacked_taxonomy",
       "config": {
         "viz_kind": "stacked_taxonomy",
         "sample_id_col": "sample_id",
         "taxon_col": "taxon",
         "rank_col": "rank",
-        "abundance_col": "abundance"
+        "abundance_col": "abundance",
+        "default_rank": null,
+        "top_n": 20,
+        "sort_by": "abundance",
+        "normalise_to_one": true,
+        "annotation_strips": null,
+        "sample_sort": "input",
+        "show_legend": true,
+        "log_y": false
       },
-      "wf_tag": "nf-core/nfcore_megatests",
-      "description": "Per-sample ASV abundances from nf-core/ampliseq. Single-rank stub (real multi-rank lineage would need a taxonkit join)."
+      "wf_tag": "nf-core/nfcore_megatests"
+    },
+    {
+      "index": "stacked_taxonomy-f-sample",
+      "component_type": "interactive",
+      "title": "Sample",
+      "workflow_tag": "nfcore_megatests",
+      "data_collection_tag": "qiime2_stacked_taxonomy",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e16"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ASV abundances from nf-core/ampliseq QIIME2 (single-rank stub).",
+        "data_collection_tag": "qiime2_stacked_taxonomy",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8e16"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Composition scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "sample_id",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Composition filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#3F51B5",
+      "icon_name": "mdi:flask",
+      "wf_tag": "nf-core/nfcore_megatests"
+    },
+    {
+      "index": "stacked_taxonomy-f-abundance",
+      "component_type": "interactive",
+      "title": "Abundance",
+      "workflow_tag": "nfcore_megatests",
+      "data_collection_tag": "qiime2_stacked_taxonomy",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e16"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ASV abundances from nf-core/ampliseq QIIME2 (single-rank stub).",
+        "data_collection_tag": "qiime2_stacked_taxonomy",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8e16"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Composition scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "abundance",
+      "column_type": "int64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Composition filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#45B8AC",
+      "icon_name": "mdi:counter",
+      "wf_tag": "nf-core/nfcore_megatests"
     }
   ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
   "stored_edit_dashboard_mode_button": [],
-  "left_panel_layout_data": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-stacked_taxonomy-f-sample",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-stacked_taxonomy-f-abundance",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
   "right_panel_layout_data": [
+    {
+      "i": "box-stacked_taxonomy-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
     {
       "i": "box-nfcore-stacked_taxonomy",
       "x": 0,
-      "y": 0,
-      "w": 12,
+      "y": 2,
+      "w": 8,
       "h": 8,
       "static": false,
       "resizeHandles": [
@@ -105,17 +255,41 @@
     "viewers": []
   },
   "is_public": true,
-  "last_saved_ts": "2026-05-18 14:49:24",
+  "last_saved_ts": "2026-05-12 00:00:00",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8e00"
   },
   "is_main_tab": false,
   "parent_dashboard_id": {
-    "$oid": "646b0f3c1e4a2d7f8e5b8e00"
+    "$oid": "646b0f3c1e4a2d7f8e5b8e20"
   },
   "tab_order": 8,
   "main_tab_name": null,
   "tab_icon": "mdi:chart-bar-stacked",
   "tab_icon_color": "indigo",
-  "parent_dashboard_title": null
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Composition scope",
+      "icon": "mdi:filter-variant",
+      "color": "indigo",
+      "description": "Restricts which samples and which abundances are stacked",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Community composition",
+      "icon": "mdi:chart-bar",
+      "color": "indigo",
+      "description": "Per-sample ASV abundance from the ampliseq feature table",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
 }

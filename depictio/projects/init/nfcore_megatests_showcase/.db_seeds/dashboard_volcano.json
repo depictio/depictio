@@ -9,10 +9,30 @@
     "$oid": "646b0f3c1e4a2d7f8e5b8e20"
   },
   "version": 1,
-  "tmp_children_data": [],
-  "stored_layout_data": [],
-  "stored_children_data": [],
   "stored_metadata": [
+    {
+      "index": "volcano-text",
+      "component_type": "text",
+      "title": "Volcano plot",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Differential expression",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Every gene DESeq2 tested, placed by effect size against adjusted significance,\nwith both thresholds drawn in. This is a real nf-core/differentialabundance run,\nso the cloud has the shape real data has: most genes sit near the origin and the\ninteresting ones are the handful far from it. Raising the significance floor or\nthe mean-expression floor on the left drops the low-information tail.\n",
+      "wf_tag": "nf-core/nfcore_megatests"
+    },
     {
       "index": "nfcore-volcano",
       "component_type": "advanced_viz",
@@ -28,7 +48,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "nf-core fixture: deseq2_results",
+        "description": "DESeq2 results table from nf-core/differentialabundance (Condition_treatment-Control-Treated).",
         "data_collection_tag": "deseq2_results",
         "dc_specific_properties": null,
         "_id": {
@@ -37,31 +57,244 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-18T00:00:00.000000",
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Effect size vs significance scatter, bound to nf-core/differentialabundance's Condition_treatment-Control-Treated.deseq2.results.tsv.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Differential expression",
       "viz_kind": "volcano",
       "config": {
         "viz_kind": "volcano",
         "feature_id_col": "gene_id",
         "effect_size_col": "log2FoldChange",
         "significance_col": "padj",
+        "label_col": null,
+        "category_col": null,
         "significance_is_neg_log10": false,
         "significance_threshold": 0.05,
         "effect_threshold": 0.5,
-        "top_n_labels": 15
+        "top_n_labels": 15,
+        "show_labels": true
       },
-      "wf_tag": "nf-core/nfcore_megatests",
-      "description": "Effect size vs significance scatter, bound to nf-core/differentialabundance's Condition_treatment-Control-Treated.deseq2.results.tsv."
+      "wf_tag": "nf-core/nfcore_megatests"
+    },
+    {
+      "index": "volcano-f-padj",
+      "component_type": "interactive",
+      "title": "Adjusted p-value",
+      "workflow_tag": "nfcore_megatests",
+      "data_collection_tag": "deseq2_results",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e10"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "DESeq2 results table from nf-core/differentialabundance (Condition_treatment-Control-Treated).",
+        "data_collection_tag": "deseq2_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8e10"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Gene scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "padj",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Result filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#E74C3C",
+      "icon_name": "mdi:target",
+      "wf_tag": "nf-core/nfcore_megatests"
+    },
+    {
+      "index": "volcano-f-lfc",
+      "component_type": "interactive",
+      "title": "Log2 fold change",
+      "workflow_tag": "nfcore_megatests",
+      "data_collection_tag": "deseq2_results",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e10"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "DESeq2 results table from nf-core/differentialabundance (Condition_treatment-Control-Treated).",
+        "data_collection_tag": "deseq2_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8e10"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Gene scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "log2FoldChange",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Result filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#1976D2",
+      "icon_name": "mdi:trending-up",
+      "wf_tag": "nf-core/nfcore_megatests"
+    },
+    {
+      "index": "volcano-f-basemean",
+      "component_type": "interactive",
+      "title": "Mean expression",
+      "workflow_tag": "nfcore_megatests",
+      "data_collection_tag": "deseq2_results",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e10"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "DESeq2 results table from nf-core/differentialabundance (Condition_treatment-Control-Treated).",
+        "data_collection_tag": "deseq2_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8e10"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Gene scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "baseMean",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Result filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#45B8AC",
+      "icon_name": "mdi:chart-bell-curve",
+      "wf_tag": "nf-core/nfcore_megatests"
+    },
+    {
+      "index": "volcano-about",
+      "component_type": "text",
+      "title": "About this showcase",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "About this showcase",
+      "order": 4,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "This project binds depictio's advanced visualisations to real nf-core pipeline\noutputs pulled from the public AWS megatests bucket: differentialabundance,\nrnaseq, viralrecon, ampliseq and taxprofiler. Unlike the Advanced Visualisations\nshowcase, which uses synthetic fixtures sized to make each component legible,\neverything here is a genuine result with the gaps and skew real runs have. The\nfixtures are not in the repository and this project is not seeded on a fresh\ndeployment; see the README next to project.yaml for how to build and upload it.\n",
+      "wf_tag": "nf-core/nfcore_megatests"
     }
   ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
   "stored_edit_dashboard_mode_button": [],
-  "left_panel_layout_data": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-volcano-f-padj",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-volcano-f-lfc",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-volcano-f-basemean",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
   "right_panel_layout_data": [
+    {
+      "i": "box-volcano-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
     {
       "i": "box-nfcore-volcano",
       "x": 0,
-      "y": 0,
-      "w": 12,
+      "y": 2,
+      "w": 8,
       "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-volcano-about",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
       "static": false,
       "resizeHandles": [
         "se",
@@ -81,7 +314,7 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "Volcano (DESeq2)",
+  "title": "nf-core megatests showcase",
   "subtitle": "DE results from nf-core/differentialabundance",
   "icon": "mdi:chart-scatter-plot",
   "icon_color": "red",
@@ -108,17 +341,48 @@
     "viewers": []
   },
   "is_public": true,
-  "last_saved_ts": "2026-05-18 14:49:24",
+  "last_saved_ts": "2026-05-12 00:00:00",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8e00"
   },
-  "is_main_tab": false,
-  "parent_dashboard_id": {
-    "$oid": "646b0f3c1e4a2d7f8e5b8e00"
-  },
-  "tab_order": 1,
-  "main_tab_name": null,
+  "is_main_tab": true,
+  "parent_dashboard_id": null,
+  "tab_order": 0,
+  "main_tab_name": "Volcano (DESeq2)",
   "tab_icon": "mdi:chart-scatter-plot",
   "tab_icon_color": "red",
-  "parent_dashboard_title": null
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Gene scope",
+      "icon": "mdi:filter-variant",
+      "color": "red",
+      "description": "Restricts the gene set before the thresholds are applied",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Differential expression",
+      "icon": "mdi:chart-scatter-plot",
+      "color": "red",
+      "description": "DESeq2 effect size against adjusted significance",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "About this showcase",
+      "icon": "mdi:information-outline",
+      "color": "gray",
+      "description": "What this project is, and what it is not",
+      "collapsed": true,
+      "persistent": true,
+      "pin": "bottom"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
 }
