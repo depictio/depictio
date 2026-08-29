@@ -33,6 +33,7 @@ import './styles/app.css';
 // chosen tree's chunk on demand behind the Suspense boundary below.
 const App = React.lazy(() => import('./App'));
 const EditorApp = React.lazy(() => import('./EditorApp'));
+import { rememberReturnTo } from './auth/postAuthTarget';
 const AuthApp = React.lazy(() => import('./auth/AuthApp'));
 const DashboardsApp = React.lazy(() => import('./dashboards/DashboardsApp'));
 const ProjectsApp = React.lazy(() => import('./projects/ProjectsApp'));
@@ -228,6 +229,13 @@ function consumeCrossOriginSessionHandoff(): void {
   }
 }
 
+/** Bounce to the gate, remembering the page that was asked for so the visitor
+ *  lands there rather than on the listing once they are through. */
+function redirectToAuth(): void {
+  rememberReturnTo();
+  window.location.replace('/auth');
+}
+
 async function bootstrapSession(): Promise<void> {
   if (window.location.pathname.startsWith('/auth')) return;
 
@@ -241,7 +249,7 @@ async function bootstrapSession(): Promise<void> {
     status = await fetchAuthStatus();
   } catch (err) {
     console.error('Auth bootstrap: failed to read /auth/me/optional', err);
-    window.location.replace('/auth');
+    redirectToAuth();
     return;
   }
 
@@ -265,7 +273,7 @@ async function bootstrapSession(): Promise<void> {
       // visitor has passed the shared code, so go to the gate rather than
       // spend a round-trip on a mint the backend is going to refuse.
       if (status.public_access_code_required) {
-        window.location.replace('/auth');
+        redirectToAuth();
         return;
       }
       const session = await createTemporaryUser();
@@ -273,12 +281,12 @@ async function bootstrapSession(): Promise<void> {
       return;
     }
     // Standard mode, no valid session — send to login.
-    window.location.replace('/auth');
+    redirectToAuth();
   } catch (err) {
     console.error('Auth bootstrap failed:', err);
     // Fail safe: when bootstrap can't recover, route to /auth so the user
     // sees an actionable login form rather than a silently broken SPA.
-    window.location.replace('/auth');
+    redirectToAuth();
   }
 }
 
