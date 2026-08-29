@@ -19,6 +19,7 @@ import {
 } from '../../api';
 import { adaptGlTrace, SVG_MAX_POINTS, useWebglSlot } from '../../webglBudget';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { COLOUR_SCALES, type ColourScale } from './colourScales';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
 
@@ -37,7 +38,6 @@ interface Props {
   refreshTick?: number;
 }
 
-type ColourScale = 'Viridis' | 'Plasma' | 'Inferno' | 'Cividis' | 'Magma' | 'RdBu' | 'Spectral';
 type AxisSort = 'name' | 'mean' | 'frac';
 
 const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
@@ -368,7 +368,7 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
           label="Colourscale"
           value={colourScale}
           onChange={(v) => v && setColourScale(v as ColourScale)}
-          data={['Viridis', 'Plasma', 'Inferno', 'Magma', 'Cividis', 'RdBu', 'Spectral']}
+          data={COLOUR_SCALES}
           allowDeselect={false}
         />
         <Stack gap={4}>

@@ -5123,6 +5123,33 @@ def _recompact_main_grid(
     return repacked
 
 
+def _section_key(component: dict) -> tuple[str, str] | None:
+    """``(kind, name)`` identifying the section a component renders in, or None.
+
+    Same membership rule as the viewer's `isFilterMember` (see
+    `get_cross_tab_components`): interactive components live in the left panel's
+    filter sections, everything else in the main grid's sections. A section name
+    is only unique within its kind, so a "QC" filter section and a "QC" grid
+    section are two different sections that happen to share a name.
+    """
+    name = component.get("section")
+    if not name:
+        return None
+    return ("filter" if component.get("component_type") == "interactive" else "grid", name)
+
+
+def _data_bound_sections(components: list[dict]) -> set[tuple[str, str]]:
+    """Section keys holding at least one component bound to a data collection."""
+    keys: set[tuple[str, str]] = set()
+    for component in components:
+        if not component.get("data_collection_tag"):
+            continue
+        key = _section_key(component)
+        if key is not None:
+            keys.add(key)
+    return keys
+
+
 def _filter_unresolved_components(
     dashboard_dict: dict, project_id: PyObjectId | None = None
 ) -> None:
@@ -5131,6 +5158,11 @@ def _filter_unresolved_components(
     Implements self-adapting dashboards: a run that produced a subset of outputs
     renders only the components it can back with data. Gated by `_component_has_data`
     so it never hides a missing *non-optional* DC (that still surfaces loudly).
+
+    A section that loses *every* data-bound member is then dropped whole, since
+    what survives it is an empty shell: its text header (headers carry no
+    `data_collection_tag`, so `_component_has_data` always keeps them) or, for a
+    filter section, nothing at all.
 
     After pruning, the main grid (`right_panel_layout_data`) is re-compacted so a
     dropped component never leaves a half-width card alone on a row.
@@ -5151,6 +5183,37 @@ def _filter_unresolved_components(
             )
     if not dropped:
         return
+
+    # Sections orphaned by the pruning above: they *had* data-bound components and
+    # now have none, so nothing is left to render under their header (an ampliseq
+    # run without SINTAX otherwise ships a "SINTAX classifier" section reduced to
+    # its title, plus an empty "SINTAX scope" block in the filter panel). Requiring
+    # that a section held data before is what keeps sections that are textual by
+    # design (the showcases' "About this showcase") — they never had a bound
+    # member, so they are never orphaned.
+    orphaned = _data_bound_sections(components) - _data_bound_sections(kept)
+    if orphaned:
+        survivors = []
+        for component in kept:
+            if _section_key(component) in orphaned:
+                dropped.append(component.get("index"))
+                logger.info(
+                    f"Hiding dashboard component (section='{component.get('section')}', "
+                    f"index='{component.get('index')}'): its section kept no data-bound component"
+                )
+            else:
+                survivors.append(component)
+        kept = survivors
+        # Drop the section's presentation spec too, so the viewer doesn't render
+        # a header for a section that no longer has members.
+        for kind, spec_field in (("filter", "filter_sections"), ("grid", "grid_sections")):
+            specs = dashboard_dict.get(spec_field)
+            if not specs:
+                continue
+            dashboard_dict[spec_field] = [
+                spec for spec in specs if (kind, spec.get("name")) not in orphaned
+            ]
+
     dashboard_dict["stored_metadata"] = kept
     drop_keys = {f"box-{idx}" for idx in dropped}
     for layout_key in ("left_panel_layout_data", "right_panel_layout_data", "stored_layout_data"):

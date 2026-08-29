@@ -202,17 +202,37 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     const scores = (rows[config.score_col] || []) as number[];
     const feats = config.feature_col ? (rows[config.feature_col] as (string | number)[]) : [];
 
-    // Natural-sorted chromosome list (chr1..chr22, chrX, chrY, chrMT).
+    // Natural-sorted chromosome list (chr1..chr22, chrX, chrY, chrMT). This is
+    // the full domain of the data: it feeds the Chromosomes dropdown and the
+    // colour palette, so a chromosome keeps its colour whatever is selected.
     const allChrs = Array.from(new Set(chrs)).sort(
       (a, b) => chromosomeSortKey(a) - chromosomeSortKey(b),
     );
-    const activeChrs = selectedChrs.length === 0 ? new Set(allChrs) : new Set(selectedChrs);
+    // Chromosomes actually drawn. A selection that no longer intersects the
+    // data (the left-panel filters moved under us, or a value persisted from a
+    // previous dataset) falls back to "everything" rather than blanking the
+    // tile with no explanation.
+    const narrowed = allChrs.filter((c) => selectedChrs.includes(c));
+    const visibleChrs = narrowed.length > 0 ? narrowed : allChrs;
+    const visibleSet = new Set(visibleChrs);
 
-    // 1) Per-chromosome cumulative x-offset. Each chromosome's block spans
-    //    [offset, offset + max_pos]; we pad between chromosomes by ~2% of the
-    //    largest chromosome so they don't visually butt against each other.
-    const maxPosByChr = new Map<string, number>();
+    // Row indices surviving the chromosome selection. Everything the trace
+    // draws is built by walking this list and indexing the full-length source
+    // arrays, so the per-row colour / size / label rules below are untouched
+    // while the hidden chromosomes never reach the figure at all.
+    const rowIdx: number[] = [];
     for (let i = 0; i < chrs.length; i++) {
+      if (visibleSet.has(chrs[i])) rowIdx.push(i);
+    }
+
+    // 1) Per-chromosome cumulative x-offset, over the visible chromosomes only
+    //    so that narrowing the selection zooms the axis onto them instead of
+    //    leaving one cluster stranded in an otherwise empty genome. Each
+    //    chromosome's block spans [offset, offset + max_pos]; we pad between
+    //    chromosomes by ~2% of the largest visible chromosome so they don't
+    //    visually butt against each other.
+    const maxPosByChr = new Map<string, number>();
+    for (const i of rowIdx) {
       const c = chrs[i];
       const p = positions[i] ?? 0;
       const prev = maxPosByChr.get(c) ?? 0;
@@ -224,7 +244,7 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     const offsetByChr = new Map<string, number>();
     const chrSpan = new Map<string, { start: number; end: number; mid: number }>();
     let cursor = 0;
-    for (const c of allChrs) {
+    for (const c of visibleChrs) {
       offsetByChr.set(c, cursor);
       const span = maxPosByChr.get(c) ?? 0;
       const start = cursor;
@@ -232,14 +252,19 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
       chrSpan.set(c, { start, end, mid: start + span / 2 });
       cursor = end + padding;
     }
-    const totalSpan = cursor;
+    // Drop the trailing inter-chromosome pad and hand half of it to each end,
+    // so a single-chromosome view sits centred on its own axis instead of
+    // being pushed against the left edge with dead space on the right.
+    const totalSpan = Math.max(1, cursor - padding);
+    const xRange: [number, number] = [-padding / 2, totalSpan + padding / 2];
 
-    // 2) Map every row to its cumulative x and chromosome colour. When a
-    //    threshold is set, points below it dim to grey so the eye is drawn to
+    // 2) Map every visible row to its cumulative x and chromosome colour. When
+    //    a threshold is set, points below it dim to grey so the eye is drawn to
     //    the "hits" instead of the chromosome blocks. `tiers` mirrors the
     //    Volcano/MA classification so the data popover can highlight the same
-    //    rows and the counts row shows ABOVE / BELOW.
-    const xs = chrs.map((c, i) => (offsetByChr.get(c) ?? 0) + (positions[i] ?? 0));
+    //    rows and the counts row shows ABOVE / BELOW. It stays full-length
+    //    because AdvancedVizFrame aligns it against the unfiltered `dataRows`.
+    const xs = rowIdx.map((i) => (offsetByChr.get(chrs[i]) ?? 0) + (positions[i] ?? 0));
     const colorByChr = new Map<string, string>(
       allChrs.map((c, i) => [c, _palette[i % _palette.length]]),
     );
@@ -344,16 +369,28 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
         const key = v == null ? '∅' : String(v);
         return map.get(key) ?? '#777';
       };
-      categoricalLegendItems = uniqueVals.map((v) => ({
-        name: v,
-        color: map.get(v) ?? '#777',
-      }));
+      // Palette assignment stays over the whole column so a value keeps its
+      // colour when the chromosome selection narrows; only the legend list
+      // follows the visible rows, so it never advertises a colour that isn't
+      // on screen.
+      const visibleKeys = new Set(
+        rowIdx.map((i) => {
+          const v = colorByValues[i];
+          return v == null ? '∅' : String(v);
+        }),
+      );
+      categoricalLegendItems = uniqueVals
+        .filter((v) => visibleKeys.has(v))
+        .map((v) => ({
+          name: v,
+          color: map.get(v) ?? '#777',
+        }));
     }
 
-    const colors = chrs.map((c, i) => {
-      // Inactive chromosomes (filtered out via the chromosome dropdown) always
-      // dim, regardless of colour-by mode.
-      if (!activeChrs.has(c)) return 'rgba(200,200,200,0.3)';
+    // Chromosomes dropped by the dropdown are already out of `rowIdx`, so no
+    // colour rule has to account for them any more.
+    const colors = rowIdx.map((i) => {
+      const c = chrs[i];
 
       // Highlight-driven dimming wins over colour-by for the non-highlighted
       // tier — same logic as before, just composed with arbitrary colour rules.
@@ -380,8 +417,8 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
       return colorByChr.get(c) || '#777';
     });
     const sizes = tiers
-      ? tiers.map((t) => {
-          const isAbove = t === 'ABOVE';
+      ? rowIdx.map((i) => {
+          const isAbove = tiers[i] === 'ABOVE';
           if (highlight === 'none') return isAbove ? markerSizeAbove : markerSizeBelow;
           const isHighlighted = highlight === 'above' ? isAbove : !isAbove;
           // Highlighted tier gets the larger size, dimmed tier the smaller.
@@ -389,10 +426,14 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
         })
       : markerSizeUniform;
 
-    // 3) Alternating background band shapes — one per chromosome.
+    // 3) Alternating background band shapes, one per visible chromosome, so
+    //    the bands line up with the narrowed axis. A lone chromosome gets no
+    //    band: there is nothing left for it to alternate against, and a
+    //    full-width wash would just read as a tinted plot.
     const bandFill = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)';
     const layoutShapes: any[] = [];
-    allChrs.forEach((c, idx) => {
+    const bandChrs: string[] = visibleChrs.length > 1 ? visibleChrs : [];
+    bandChrs.forEach((c, idx) => {
       if (idx % 2 !== 0) return;
       const span = chrSpan.get(c)!;
       layoutShapes.push({
@@ -430,37 +471,42 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
 
     // 5) Top-N label annotations. Use the feature column when present,
     //    fall back to "chr:pos". Three filters apply:
-    //    a) active chromosomes — chromosome dropdown narrows labels.
+    //    a) active chromosomes: the dropdown already dropped the others from
+    //       ``rowIdx``, so walking it is the filter.
     //    b) score threshold (when set) — only label the highlighted tier so
     //       labels match the recoloured markers. ``highlight === 'above'``
     //       labels the high-score side (classic GWAS hits); ``below`` labels
     //       the sub-threshold candidates (minority-allele hunting).
     //    c) sort direction follows the highlight target — highest scores first
     //       when highlighting above, lowest first when highlighting below.
+    //    ``candidates`` holds positions in the plotted arrays (``xs``), not raw
+    //    row indices, so ``rowIdx[j]`` is the hop back to the source columns.
     const annotations: any[] = [];
     if (topNLabels > 0) {
       const candidates: number[] = [];
-      for (let i = 0; i < scores.length; i++) {
-        if (!activeChrs.has(chrs[i])) continue;
+      for (let j = 0; j < rowIdx.length; j++) {
+        const i = rowIdx[j];
         if (hasThreshold && highlight !== 'none') {
           const isAbove = scores[i] != null && scores[i] >= (scoreThreshold as number);
           const isHighlighted = highlight === 'above' ? isAbove : !isAbove;
           if (!isHighlighted) continue;
         }
-        candidates.push(i);
+        candidates.push(j);
       }
       const direction = hasThreshold && highlight === 'below' ? 1 : -1;
       candidates.sort(
-        (a, b) => direction * ((scores[a] ?? Infinity) - (scores[b] ?? Infinity)),
+        (a, b) =>
+          direction * ((scores[rowIdx[a]] ?? Infinity) - (scores[rowIdx[b]] ?? Infinity)),
       );
       const top = candidates.slice(0, topNLabels);
-      for (const i of top) {
+      for (const j of top) {
+        const i = rowIdx[j];
         const labelRaw = feats.length > 0 ? feats[i] : null;
         const label = labelRaw != null && String(labelRaw).length > 0
           ? String(labelRaw)
           : `${chrs[i]}:${positions[i]}`;
         annotations.push({
-          x: xs[i],
+          x: xs[j],
           y: scores[i],
           text: label,
           showarrow: true,
@@ -478,10 +524,23 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
       }
     }
 
-    // 6) Chromosome tick labels at midpoints.
-    const tickvals = allChrs.map((c) => chrSpan.get(c)!.mid);
-    const ticktext = allChrs.map((c) => c.replace(/^chr/i, ''));
+    // 6) Chromosome tick labels at the midpoint of each visible block. The
+    //    label is the raw column value ("chr1"), i.e. exactly the token the
+    //    Chromosomes dropdown and the left-panel filter show. Stripping it down
+    //    to "1" here used to make the axis look like a different, integer,
+    //    chromosome naming scheme than the one you filter with.
+    const tickvals = visibleChrs.map((c) => chrSpan.get(c)!.mid);
+    const ticktext = visibleChrs.slice();
+    // Hide the tick labels only for datasets that are natively single-
+    // chromosome (viral genomes and the like), where the contig is already
+    // named in the tile description. Once a multi-chromosome dataset is
+    // narrowed down, the tick label is the only thing saying which chromosome
+    // is on screen, so it has to stay.
+    const showChrTicks = allChrs.length > 1 || selectedChrs.length > 0;
 
+    // Counts (and `tiers`) deliberately stay genome-wide: they annotate the
+    // Show-data table, which lists every fetched row, not just the plotted
+    // chromosomes.
     const counts: Record<string, number> | undefined = tiers
       ? tiers.reduce<Record<string, number>>(
           (acc, t) => {
@@ -492,17 +551,22 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
         )
       : undefined;
 
-    // Main scatter trace (all points). For numeric colour-by we attach a
-    // continuous colorscale + colorbar so the gradient reads as a legend.
+    // Main scatter trace (the visible points). For numeric colour-by we attach
+    // a continuous colorscale + colorbar so the gradient reads as a legend.
+    // ``customdata`` carries [chromosome, genomic position]: ``x`` is the
+    // cumulative genome-wide coordinate, which means nothing to a reader, so
+    // the hover quotes the real position from the source column instead.
+    const hasFeatureText = feats.length > 0;
     const mainTrace: Record<string, unknown> = {
       type: 'scattergl' as const,
       mode: 'markers' as const,
       x: xs,
-      y: scores,
-      text: feats.length > 0 ? feats.map((v) => String(v ?? '')) : chrs,
-      customdata: chrs,
-      hovertemplate:
-        `chr %{customdata}, pos %{x}<br>score: %{y}<br>%{text}<extra></extra>`,
+      y: rowIdx.map((i) => scores[i]),
+      ...(hasFeatureText ? { text: rowIdx.map((i) => String(feats[i] ?? '')) } : {}),
+      customdata: rowIdx.map((i) => [chrs[i], Number(positions[i] ?? 0)]),
+      hovertemplate: hasFeatureText
+        ? `%{customdata[0]}:%{customdata[1]:,d}<br>score: %{y}<br>%{text}<extra></extra>`
+        : `%{customdata[0]}:%{customdata[1]:,d}<br>score: %{y}<extra></extra>`,
       marker: { color: colors, size: sizes, opacity: 0.85 },
       showlegend: false,
     };
@@ -579,7 +643,7 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
             l: 55,
             r: showLegend || numericColorbarTrace.length ? 110 : 20,
             t: 10,
-            b: allChrs.length <= 1 ? 8 : 22,
+            b: showChrTicks ? 22 : 8,
           },
           xaxis: {
             ...plotlyAxisOverrides(isDark, theme),
@@ -590,8 +654,13 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
             tickmode: 'array',
             tickvals,
             ticktext,
-            showticklabels: allChrs.length > 1,
-            range: [0, totalSpan],
+            showticklabels: showChrTicks,
+            // Prefixed labels ("chr1" through "chr22") are wider than the bare
+            // numbers they replaced, so keep them small and let Plotly rotate
+            // them and claim the bottom margin it needs rather than overlap.
+            tickfont: { size: 10 },
+            automargin: true,
+            range: xRange,
           },
           yaxis: {
             ...plotlyAxisOverrides(isDark, theme),

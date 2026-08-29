@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Stack, Text, Title } from '@mantine/core';
 
 import { StoredMetadata } from '../api';
@@ -56,6 +56,37 @@ const renderInlineMarkdown = (input: string): React.ReactNode[] => {
 };
 
 /**
+ * Emitted on every change to a text tile's natural content height, so the grid
+ * can size the tile to its prose instead of the other way round.
+ *
+ * A CustomEvent rather than a prop: the only path from here to DashboardGrid
+ * runs through ComponentRenderer, and threading a measurement callback through
+ * every renderer to serve one of them is not worth it. The grid already listens
+ * for panel events this way.
+ */
+export const TEXT_AUTOFIT_EVENT = 'depictio:text-autofit';
+
+export interface TextAutofitDetail {
+  index: string;
+  /** Natural height of title + body, in px, independent of the tile. */
+  height: number;
+}
+
+/**
+ * Last height published per component index.
+ *
+ * The event alone is not enough: React runs a child's effects before its
+ * parent's, so a text tile measures and dispatches before DashboardGrid has
+ * added its listener, and that first measurement — the only one a tile whose
+ * prose never reflows will ever make — is dispatched to nobody. The grid seeds
+ * itself from here on mount and listens for the rest.
+ */
+const measuredHeights = new Map<string, number>();
+
+/** Every height measured so far, for a consumer mounting after the tiles. */
+export const textAutofitHeights = (): ReadonlyMap<string, number> => measuredHeights;
+
+/**
  * Pure-presentational renderer for the `text` component_type — section
  * headings + optional body, used to document and organize a dashboard.
  *
@@ -89,6 +120,34 @@ const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = fal
 
   const hasTitle = rawTitle.trim().length > 0;
 
+  // Measure the prose itself, not the tile. The Stack below is `h="100%"`, so
+  // it always reports the height it was given; this inner wrapper is
+  // height-auto, so its scrollHeight is what the text actually needs.
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const index = typeof metadata.index === 'string' ? metadata.index : '';
+  useEffect(() => {
+    const node = contentRef.current;
+    if (!node || !index || typeof ResizeObserver === 'undefined') return;
+    let last = -1;
+    const publish = () => {
+      const height = node.scrollHeight;
+      // Only on change: the grid re-renders on receipt, which re-runs the
+      // observer, and an unconditional dispatch would loop.
+      if (height === last) return;
+      last = height;
+      measuredHeights.set(index, height);
+      window.dispatchEvent(
+        new CustomEvent<TextAutofitDetail>(TEXT_AUTOFIT_EVENT, {
+          detail: { index, height },
+        }),
+      );
+    };
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [index, rawTitle, body, order, alignment]);
+
   return (
     <Stack
       gap={4}
@@ -100,6 +159,10 @@ const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = fal
       // and vertical alignment would have no room to act.
       style={{ flex: '1 1 auto', textAlign: alignment, width: '100%', padding: 0 }}
     >
+      <div
+        ref={contentRef}
+        style={{ display: 'flex', flexDirection: 'column', gap: 4, width: '100%' }}
+      >
       {hasTitle ? (
         <Title
           order={order}
@@ -131,6 +194,7 @@ const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = fal
           {renderInlineMarkdown(body)}
         </Text>
       ) : null}
+      </div>
     </Stack>
   );
 };

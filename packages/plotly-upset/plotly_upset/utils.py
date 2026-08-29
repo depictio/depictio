@@ -11,9 +11,16 @@ from numpy.typing import NDArray
 
 FONT_FAMILY = "Arial, Helvetica, sans-serif"
 
-# Default UpSet qualitative palette
+# Default UpSet qualitative palette.
+#
+# Near-black (#333333) is deliberately LAST, not first. `generate_colors` hands
+# out `UPSET_PALETTE[:n]`, so whatever sits at index 0 is what every degenerate
+# or first-assigned case gets: a single-category annotation track, the first
+# degree group in `color_intersections_by="degree"`, the first layer of a
+# stacked bar. With black at index 0 those all rendered as flat black and read
+# as "unstyled" rather than as a colour choice. It stays in the palette for the
+# tail end, where a dark neutral is a fine 20th hue.
 UPSET_PALETTE = [
-    "#333333",
     "#4C78A8",
     "#E45756",
     "#72B7B2",
@@ -33,6 +40,7 @@ UPSET_PALETTE = [
     "#66C2A5",
     "#8DA0CB",
     "#FC8D62",
+    "#333333",
 ]
 
 

@@ -284,49 +284,16 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   }
 
   if (metadata.component_type === 'map' && dashboardId) {
-    const selectionEnabled = isMapSelectionEnabled(metadata, !!onFilterChange);
-    const onResetSelection =
-      selectionEnabled && onFilterChange
-        ? () =>
-            onFilterChange({
-              index: metadata.index,
-              value: [],
-              source: 'map_selection',
-            })
-        : undefined;
-    const sourceFilterActive = isSourceFilterActive(filters, metadata.index, 'map_selection');
-    // Same "show underlying data" affordance advanced_viz has, riding the same
-    // `extraActions` slot — so `actionsFor('map')` needs no change.
-    const mapExtras = (
-      <>
-        {chromeExtras}
-        <MapDataButton
-          dashboardId={dashboardId}
-          metadata={metadata}
-          filters={filters}
-          onFilterChange={onFilterChange}
-        />
-      </>
-    );
-    return wrapWithChrome(
-      'map',
-      metadata,
-      undefined,
-      <Suspense fallback={<CellPlaceholder />}>
-        <MapRenderer
-          dashboardId={dashboardId}
-          metadata={metadata}
-          filters={filters}
-          onFilterChange={onFilterChange}
-          refreshTick={refreshTick}
-        />
-      </Suspense>,
-      {
-        onResetFilter: onResetSelection,
-        extraActions: mapExtras,
-        showDragHandle,
-        sourceFilterActive,
-      },
+    return (
+      <MapBlock
+        dashboardId={dashboardId}
+        metadata={metadata}
+        filters={filters}
+        onFilterChange={onFilterChange}
+        refreshTick={refreshTick}
+        extraActions={chromeExtras}
+        showDragHandle={showDragHandle}
+      />
     );
   }
 
@@ -481,6 +448,83 @@ const TableBlock: React.FC<{
       agGridApiRef,
       onResetFilter: onResetSelection,
       extraActions: combinedExtras,
+      showDragHandle,
+      sourceFilterActive,
+    },
+  );
+};
+
+const MapBlock: React.FC<{
+  dashboardId: string;
+  metadata: StoredMetadata;
+  filters: InteractiveFilter[];
+  onFilterChange?: (filter: InteractiveFilter) => void;
+  refreshTick?: number;
+  extraActions?: React.ReactNode;
+  showDragHandle?: boolean;
+}> = ({
+  dashboardId,
+  metadata,
+  filters,
+  onFilterChange,
+  refreshTick,
+  extraActions,
+  showDragHandle,
+}) => {
+  // MapRenderer builds the display-settings popover, because it is the one
+  // that restyles the figure and reads the current values back off it, and
+  // publishes it up here for the chrome action row. Same hand-off as
+  // TableBlock's `onLoadAllState`, and the reason the popover import stays
+  // inside the lazy map chunk rather than landing in this eager module.
+  const [settingsNode, setSettingsNode] = React.useState<React.ReactNode>(null);
+  const selectionEnabled = isMapSelectionEnabled(metadata, !!onFilterChange);
+  const onResetSelection =
+    selectionEnabled && onFilterChange
+      ? () =>
+          onFilterChange({
+            index: metadata.index,
+            value: [],
+            source: 'map_selection',
+          })
+      : undefined;
+  const sourceFilterActive = isSourceFilterActive(filters, metadata.index, 'map_selection');
+  // Settings then "show underlying data", riding the same `extraActions` slot
+  // advanced_viz uses and in the same order, so `actionsFor('map')` needs no
+  // change. The explicit key is there because the settings action only appears
+  // once the figure lands: without it ComponentChrome's
+  // `React.Children.toArray` would re-key the data button by position and
+  // remount it at that moment. MapRenderer keys its own node for the same
+  // reason.
+  const mapExtras = (
+    <>
+      {extraActions}
+      {settingsNode}
+      <MapDataButton
+        key="map-data"
+        dashboardId={dashboardId}
+        metadata={metadata}
+        filters={filters}
+        onFilterChange={onFilterChange}
+      />
+    </>
+  );
+  return wrapWithChrome(
+    'map',
+    metadata,
+    undefined,
+    <Suspense fallback={<CellPlaceholder />}>
+      <MapRenderer
+        dashboardId={dashboardId}
+        metadata={metadata}
+        filters={filters}
+        onFilterChange={onFilterChange}
+        refreshTick={refreshTick}
+        onSettingsNode={setSettingsNode}
+      />
+    </Suspense>,
+    {
+      onResetFilter: onResetSelection,
+      extraActions: mapExtras,
       showDragHandle,
       sourceFilterActive,
     },

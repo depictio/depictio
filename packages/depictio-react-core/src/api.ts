@@ -2223,6 +2223,12 @@ export function defaultLayoutForType(
       return { x: 0, y, w: 2, h: 2 };
     case 'figure':
       return { x: 0, y, w: 4, h: 5 };
+    case 'advanced_viz':
+      // Phylogenies, heatmaps, oncoplots and ordinations carry axis labels and
+      // a legend that a half-width box crushes. The seeded dashboards give them
+      // w8 h8 in 43 of 58 placements, against w4 h4 in 2; the type had no case
+      // here and fell to the generic default, which is the small one.
+      return { x: 0, y, w: 8, h: 8 };
     case 'multiqc':
       return { x: 0, y, w: 4, h: 5 };
     case 'table':
