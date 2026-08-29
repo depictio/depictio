@@ -12,7 +12,8 @@ import RegisterForm from './components/RegisterForm';
 import { useAuthMode } from './hooks/useAuthMode';
 import './styles/auth.css';
 
-const POST_AUTH_REDIRECT = '/dashboards';
+import { postAuthDestination } from './postAuthTarget';
+
 
 type View = 'login' | 'register' | 'oauth-callback' | 'magic-callback';
 
@@ -65,7 +66,7 @@ export default function AuthApp() {
         } else if (!status.user) {
           return; // let the login form render
         }
-        window.location.assign(POST_AUTH_REDIRECT);
+        window.location.assign(postAuthDestination());
       } catch (err) {
         console.error(err);
         if (!cancelled) {
@@ -79,7 +80,7 @@ export default function AuthApp() {
     return () => { cancelled = true; };
   }, [loading, status, view]);
 
-  const handleSuccess = () => window.location.assign(POST_AUTH_REDIRECT);
+  const handleSuccess = () => window.location.assign(postAuthDestination());
 
   return (
     <>
