@@ -21,6 +21,11 @@ from plotly_upset.layout import UpSetGridLayout, compute_upset_layout, create_fi
 from plotly_upset.matrix import dot_matrix_traces
 from plotly_upset.utils import FONT_FAMILY, generate_colors, validate_binary_data
 
+# Bar colour for intersections owned by more than one set in
+# ``color_intersections_by="set"``. Distinctly darker than ``inactive_color``
+# so a shared bar never reads as an inactive one.
+MULTI_SET_COLOR = "#7F7F7F"
+
 
 class UpSetPlot:
     """UpSet plot with configurable annotations, sorting, and filtering.
@@ -65,9 +70,10 @@ class UpSetPlot:
         dots, set-size bars, and edges are colored per-set.
     color_intersections_by:
         How to color intersection bars. ``None`` uses a single *color*;
-        ``"set"`` colors degree-1 bars by their set color and multi-set
-        bars with a neutral dark color; ``"degree"`` assigns a color per
-        degree level (one legend entry per degree).
+        ``"set"`` colors degree-1 bars by their set color (falling back to
+        the default palette when *set_colors* is not given) and multi-set
+        bars with a neutral grey; ``"degree"`` assigns a color per degree
+        level (one legend entry per degree).
     degree_colors:
         Custom color mapping for degree-based coloring, e.g.
         ``{1: "#E41A1C", 2: "#377EB8", 3: "#4DAF4A"}``. Only used when
@@ -344,18 +350,38 @@ class UpSetPlot:
         """Compute per-bar colors for intersection bars (used by 'set' mode)."""
         assert self._result is not None
 
-        if self.color_intersections_by != "set" or self._set_colors_map is None:
+        if self.color_intersections_by != "set":
             return self.color
+
+        # Asking for per-set colouring without supplying set_colors used to fall
+        # straight through to the single default colour, i.e. every bar the same
+        # near-black. Fall back to the shared qualitative palette so the mode
+        # does what its name says even when the caller names no colours.
+        set_colors_map = self._set_colors_map
+        if set_colors_map is None:
+            set_colors_map = dict(zip(self._set_names, generate_colors(len(self._set_names))))
 
         bar_colors: list[str] = []
         for pattern in self._result.patterns:
             active_sets = [i for i, b in enumerate(pattern) if b == 1]
             if len(active_sets) == 1:
-                bar_colors.append(self._set_colors_map.get(self._set_names[active_sets[0]], self.color))
+                bar_colors.append(set_colors_map.get(self._set_names[active_sets[0]], self.color))
             elif len(active_sets) == 0:
                 bar_colors.append(self.inactive_color)
             else:
-                bar_colors.append("#333333")
+                # Multi-set intersection: no single set owns the bar, and on a
+                # typical UpSet these are the MAJORITY of bars, so whatever goes
+                # here sets the tone of the whole chart. A neutral mid grey reads
+                # as "shared by several sets"; the previous #333333 read as plain
+                # black and made the chart look unstyled.
+                #
+                # Blending the participating set colours was the alternative and
+                # is deliberately not used: two different pairs can average to
+                # near-identical hues (and a blend can land on top of a third
+                # set's colour), while the dot matrix directly underneath already
+                # spells out the exact membership. The blend would buy ambiguity,
+                # not information.
+                bar_colors.append(MULTI_SET_COLOR)
         return bar_colors
 
     def _get_degree_color_map(self) -> dict[int, str]:

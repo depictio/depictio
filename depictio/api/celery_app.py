@@ -188,17 +188,32 @@ def generate_dashboard_screenshot_dual(
             # is the user-visible "modified" time, and a background screenshot
             # is not a user modification (issue #932).
             try:
+                from bson import ObjectId
+
                 from depictio.api.v1.db import dashboards_collection
                 from depictio.models.timestamps import utc_now_str
 
-                dashboards_collection.update_one(
-                    {"dashboard_id": dashboard_id},
+                # `dashboard_id` is an ObjectId in the stored document while the
+                # task takes it as a string, and a string never matches an
+                # ObjectId field. Passing it through raw made this a silent
+                # no-op: 0 documents matched, nothing written, nothing raised —
+                # so `screenshot_ts` stayed "" forever and the listing's
+                # cache-buster never advanced, which is the very staleness this
+                # bump exists to prevent.
+                bumped = dashboards_collection.update_one(
+                    {"dashboard_id": ObjectId(dashboard_id)},
                     {
                         "$set": {
                             "screenshot_ts": utc_now_str(),
                         }
                     },
                 )
+                if bumped.matched_count == 0:
+                    logger.warning(
+                        "screenshot_ts bump matched no dashboard for %s — the "
+                        "listing will keep serving the cached thumbnail.",
+                        dashboard_id,
+                    )
             except Exception as exc:  # noqa: BLE001 — non-fatal best-effort bump
                 logger.warning(
                     "Could not bump screenshot_ts after screenshot for %s: %s",

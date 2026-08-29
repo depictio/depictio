@@ -12,6 +12,12 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+# The continuous colour scales every viz kind that exposes one offers. Single
+# definition on the Python side; its React twin lives in
+# packages/depictio-react-core/src/components/advanced_viz/colourScales.ts and
+# must list the same names in the same order.
+ColourScale = Literal["Viridis", "Plasma", "Inferno", "Magma", "Cividis", "RdBu", "Spectral"]
+
 
 class _BaseVizConfig(BaseModel):
     """Common base for all viz-kind configs."""
@@ -113,6 +119,19 @@ class EmbeddingConfig(_BaseVizConfig):
 
     show_density: bool = Field(default=False, description="Overlay density contours")
     point_size: int = Field(default=6, ge=1, le=30)
+    marker_outline_width: float = Field(
+        default=1.5,
+        ge=0.5,
+        le=4,
+        description="Point outline thickness in px, when the outline is enabled",
+    )
+    plot_style: Literal["default", "grid", "clean"] = Field(
+        default="default",
+        description=(
+            "Axis decoration: 'default' keeps axis lines only, 'grid' adds "
+            "gridlines and ticks, 'clean' drops the axes entirely."
+        ),
+    )
     default_color_by: str | None = Field(
         default=None,
         description=(
@@ -378,6 +397,31 @@ class EnrichmentConfig(_BaseVizConfig):
         default="neg_log10_padj", description="Which quantity drives the point colour"
     )
 
+    # Display options, shared vocabulary with DotPlotConfig below. Every default
+    # here reproduces what the renderer drew before they existed, so a dashboard
+    # that never set them keeps its appearance.
+    colour_scale: Literal["Auto"] | ColourScale = Field(
+        default="Auto",
+        description=(
+            "Continuous colour scale. 'Auto' picks per colour-by mode and theme "
+            "(a discrete blue/red palette for NES sign); any named scale overrides all modes."
+        ),
+    )
+    reverse_scale: bool = Field(default=False, description="Reverse the colour scale")
+    max_dot_size: int = Field(default=30, ge=4, le=60, description="Max marker size in pixels")
+    min_dot_size: int = Field(
+        default=6, ge=0, le=20, description="Marker size at the smallest gene set"
+    )
+    term_sort: Literal["nes", "significance", "gene_count", "name"] = Field(
+        default="nes", description="Ordering of the term axis, most notable at the top"
+    )
+    annotate_top_n: int = Field(
+        default=0,
+        ge=0,
+        description="Label this many most-significant dots with their gene count; 0 draws none",
+    )
+    marker_outline: bool = Field(default=False, description="Draw an outline around each dot")
+
 
 class ComplexHeatmapConfig(_BaseVizConfig):
     """ComplexHeatmap-style clustered heatmap with dendrograms + annotations.
@@ -641,9 +685,9 @@ class DotPlotConfig(_BaseVizConfig):
 
     max_dot_size: int = Field(default=22, ge=4, le=60, description="Max marker size in pixels")
     min_dot_size: int = Field(default=2, ge=0, le=20)
-    colour_scale: Literal[
-        "Viridis", "Plasma", "Inferno", "Cividis", "Magma", "RdBu", "Spectral"
-    ] = Field(default="Viridis", description="Continuous colour scale for mean expression")
+    colour_scale: ColourScale = Field(
+        default="Viridis", description="Continuous colour scale for mean expression"
+    )
     reverse_scale: bool = Field(default=False, description="Reverse the colour scale")
     log_transform: bool = Field(
         default=False, description="Log-transform mean expression before colouring"

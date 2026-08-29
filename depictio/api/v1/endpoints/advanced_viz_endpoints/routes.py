@@ -1390,6 +1390,27 @@ def poll_compute_sankey(
     return _poll_compute(job_id, current_user)
 
 
+# The repo is bind-mounted at /app in the backend container, so any path holding
+# a `/depictio/projects/` segment has a container twin at the same suffix.
+_CONTAINER_REPO_ROOT = "/app"
+_REPO_PROJECTS_MARKER = "/depictio/projects/"
+
+
+def _container_repo_path(path: str) -> str | None:
+    """Map a host repo path onto its in-container twin, or None if not applicable.
+
+    Returns None when the path carries no ``/depictio/projects/`` segment or is
+    already the container path, so the caller only ever gets a genuinely new
+    candidate to try. Splits on the *last* occurrence, so a checkout that itself
+    sits under a directory of that name still resolves.
+    """
+    idx = path.rfind(_REPO_PROJECTS_MARKER)
+    if idx == -1:
+        return None
+    rewritten = f"{_CONTAINER_REPO_ROOT}{path[idx:]}"
+    return rewritten if rewritten != path else None
+
+
 @advanced_viz_endpoint_router.get(
     "/phylogeny/{data_collection_id}/newick", response_class=PlainTextResponse
 )
@@ -1399,13 +1420,16 @@ def get_phylogeny_newick(
 ) -> str:
     """Return the raw Newick string for a phylogeny DC.
 
-    Resolves the file location in two ways: (1) prefer the file registered
+    Resolves the file location in three ways: (1) prefer the file registered
     by the CLI scan in ``files_collection``; (2) for reference datasets
     (seeded via db_init, never CLI-scanned), traverse the project document
     to find the matching DC under ``workflows[].data_collections[]`` and
     read its ``config.scan.scan_parameters.filename``. DCs are stored
     embedded in the project — there is no top-level ``data_collections``
     document for them — so we can't ``find_one({"_id": dc_oid})`` directly.
+    (3) as a last resort, each stored path rewritten onto the container's
+    ``/app`` bind mount, which is what makes a host-run CLI ingest readable
+    from the backend container.
 
     Returns local file contents directly; stream S3-hosted trees via boto3.
     """
@@ -1446,6 +1470,16 @@ def get_phylogeny_newick(
                 if fname and fname not in candidates:
                     candidates.append(str(fname))
 
+    # Dev-loop fallback: the CLI run on the host stores an absolute host path
+    # (``/Users/<me>/Gits/.../depictio/projects/...``) that doesn't exist in the
+    # container, and the project doc holds that same host path because the same
+    # host CLI wrote it. The repo is bind-mounted at ``/app``, so the identical
+    # ``depictio/projects/...`` suffix is readable there. Appended last, after
+    # every stored path, so a deploy whose paths resolve normally never sees it.
+    rewritten = [_container_repo_path(c) for c in candidates if not c.startswith("s3://")]
+    host_rewrites = {c for c in rewritten if c and c not in candidates}
+    candidates.extend(sorted(host_rewrites))
+
     if not candidates:
         raise HTTPException(
             status_code=404,
@@ -1465,6 +1499,16 @@ def get_phylogeny_newick(
                 break
         except OSError:
             continue
+
+    if file_path and file_path in host_rewrites:
+        logger.info(
+            "phylogeny newick resolved through the %s fallback: the stored path(s) %s are "
+            "not readable by the backend (host CLI ingest against a containerised backend), "
+            "reading %s instead",
+            _CONTAINER_REPO_ROOT,
+            [c for c in candidates if c not in host_rewrites],
+            file_path,
+        )
 
     if not file_path:
         raise HTTPException(

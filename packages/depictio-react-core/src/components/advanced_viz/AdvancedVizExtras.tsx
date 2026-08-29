@@ -1,8 +1,14 @@
-import React, { createContext, useState } from 'react';
+import React, { createContext, Suspense, lazy, useState } from 'react';
 import { ActionIcon, Group, Popover, Stack, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import DataGridBody, { type TierAnnotation } from '../data/DataGridBody';
+// Lazy, matching `MapDataButton`: AG Grid is ~250kB plus its own stylesheets,
+// and this module is now also reached from the (otherwise grid-free) map path,
+// where a static import would drag the whole vendor-aggrid chunk onto a
+// dashboard that never opens a table. Mantine unmounts a closed dropdown, so it
+// resolves on first open and never otherwise.
+const DataGridBody = lazy(() => import('../data/DataGridBody'));
+import type { TierAnnotation } from '../data/DataGridBody';
 import type { LoadAllState } from '../chrome/LoadAllButton';
 
 /**
@@ -207,12 +213,14 @@ export const AdvancedVizDataPopover: React.FC<DataPopoverProps> = ({
           overflow: 'auto',
         }}
       >
-        <DataGridBody
-          dataRows={dataRows}
-          dataColumns={dataColumns}
-          tierAnnotation={tierAnnotation}
-          onClose={() => setOpened(false)}
-        />
+        <Suspense fallback={null}>
+          <DataGridBody
+            dataRows={dataRows}
+            dataColumns={dataColumns}
+            tierAnnotation={tierAnnotation}
+            onClose={() => setOpened(false)}
+          />
+        </Suspense>
       </Popover.Dropdown>
     </Popover>
   );

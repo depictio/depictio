@@ -507,7 +507,12 @@ async def generate_react_dual_theme_screenshots(
                 # large dashboard. Acceptable because the active path
                 # (`generate_dashboard_screenshot_dual` Celery task) is
                 # fire-and-forget and the user doesn't wait.
-                context = await browser.new_context(viewport={"width": 1920, "height": 1080})
+                # 16:10, not 16:9. The listing renders every thumbnail inside
+                # `AspectRatio ratio={16 / 10}` with `object-fit: cover`
+                # (DashboardCard.tsx), so a 16:9 capture gets scaled to the
+                # box height and loses ~5.5% off each side. Matching the box
+                # ratio here means the card shows the whole shot.
+                context = await browser.new_context(viewport={"width": 1920, "height": 1200})
                 await apply_init_script(context, token_data_json, theme)
                 page = await context.new_page()
 
