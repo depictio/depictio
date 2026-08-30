@@ -21,11 +21,36 @@ import polars as pl
 from depictio.models.models.transforms import RecipeSource
 
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="phylum", dc_ref="rel_abundance_phylum"),
-    RecipeSource(ref="class_", dc_ref="rel_abundance_class"),
-    RecipeSource(ref="order", dc_ref="rel_abundance_order"),
-    RecipeSource(ref="family", dc_ref="rel_abundance_family"),
-    RecipeSource(ref="genus", dc_ref="rel_abundance_genus"),
+    RecipeSource(
+        ref="phylum",
+        path="qiime2/rel_abundance_tables/rel-table-2.tsv",
+        format="TSV",
+        read_kwargs={"skip_rows": 1},
+    ),
+    RecipeSource(
+        ref="class_",
+        path="qiime2/rel_abundance_tables/rel-table-3.tsv",
+        format="TSV",
+        read_kwargs={"skip_rows": 1},
+    ),
+    RecipeSource(
+        ref="order",
+        path="qiime2/rel_abundance_tables/rel-table-4.tsv",
+        format="TSV",
+        read_kwargs={"skip_rows": 1},
+    ),
+    RecipeSource(
+        ref="family",
+        path="qiime2/rel_abundance_tables/rel-table-5.tsv",
+        format="TSV",
+        read_kwargs={"skip_rows": 1},
+    ),
+    RecipeSource(
+        ref="genus",
+        path="qiime2/rel_abundance_tables/rel-table-6.tsv",
+        format="TSV",
+        read_kwargs={"skip_rows": 1},
+    ),
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
 

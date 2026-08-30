@@ -20,6 +20,7 @@ import yaml
 
 from depictio.cli.cli_logging import logger
 from depictio.models.models.templates import (
+    DCOverride,
     ExpectedDataCollection,
     ProvenanceEntry,
     ProvenanceGroupRule,
@@ -434,6 +435,7 @@ def _apply_conditionals(
     conditionals: list[TemplateConditional],
     provided_vars: set[str],
     template_dir: Path,
+    variables: dict[str, str] | None = None,
 ) -> tuple[dict[str, Any], list[str], dict[str, str]]:
     """Apply conditional rules based on which optional variables were provided.
 
@@ -448,6 +450,10 @@ def _apply_conditionals(
         conditionals: List of conditional rules from template metadata.
         provided_vars: Set of variable names actually provided by the user.
         template_dir: Template directory for resolving dashboard paths.
+        variables: Variable map, for the placeholders an override may carry.
+            Conditionals run *after* the config-wide substitution pass, so an
+            override written as `scan_filename: "{TREE_FILE}"` would otherwise
+            reach the DC verbatim and read as a path that does not exist.
 
     Returns:
         Tuple of (modified_config, active_dashboard_rel_paths, removal_reasons),
@@ -478,8 +484,13 @@ def _apply_conditionals(
             removal_reasons.setdefault(tag, reason)
             logger.info(f"Conditional rule: removing DC tag '{tag}'")
 
-        # Collect DC source-binding overrides (last-write-wins per tag)
+        # Collect DC source-binding overrides (last-write-wins per tag).
+        # Resolved through the variable map first: the rule fires on a variable
+        # being present, so pointing the DC at that variable's value is the
+        # natural thing to write, and every override field can hold a path.
         for ov in rule.override_dcs:
+            if variables:
+                ov = DCOverride(**substitute_template_variables(ov.model_dump(), variables))
             overrides_by_tag[ov.data_collection_tag] = ov
             logger.info(f"Conditional rule: overriding DC source '{ov.data_collection_tag}'")
 
@@ -1176,6 +1187,7 @@ def resolve_template(
         template_metadata.conditional,
         provided_vars,
         template_dir,
+        variables,
     )
     removal_reasons.update(conditional_reasons)
 

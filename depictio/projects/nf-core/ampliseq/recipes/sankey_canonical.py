@@ -29,7 +29,12 @@ import polars as pl
 from depictio.models.models.transforms import RecipeSource
 
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="genus", dc_ref="rel_abundance_genus"),
+    RecipeSource(
+        ref="genus",
+        path="qiime2/rel_abundance_tables/rel-table-6.tsv",
+        format="TSV",
+        read_kwargs={"skip_rows": 1},
+    ),
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
 

@@ -24,6 +24,9 @@ template:
     - name: "SAMPLESHEET_FILE"
       description: "Path to the ampliseq samplesheet. Auto-detected from {DATA_ROOT}/input/ (CSV or TSV) when omitted."
       required: false
+    - name: "TREE_FILE"
+      description: "Path to the Newick tree to serve. Defaults to {DATA_ROOT}/qiime2/phylogenetic_tree/tree.nwk. A run with far more ASVs than a tree renders readably should point this at the output of scripts/prune_newick.py, which cuts the tree to the same taxa the tip-metadata recipe keeps."
+      required: false
     - name: "METADATA_FILE"
       description: "Path to sample metadata TSV (--metadata in ampliseq run). Optional. All non-ID columns become annotations."
       required: false
@@ -192,6 +195,12 @@ template:
     - if_var_present: "SKIP_ANCOM"
       remove_dc_tags: ["ancombc_results", "ma_canonical"]
       dashboards: ["dashboards/base.yaml"]
+    # A cohort large enough to need a pruned tree supplies its own Newick; the
+    # DC's default path stays the pipeline's, which is never written to.
+    - if_var_present: "TREE_FILE"
+      override_dcs:
+        - data_collection_tag: "phylogenetic_tree_canonical"
+          scan_filename: "{TREE_FILE}"
 
 # ============================================================================
 # PROJECT CONFIGURATION
@@ -583,6 +592,10 @@ workflows:
       - data_collection_tag: "phylogenetic_tree_canonical"
         optional: true  # tree.nwk absent for ITS / IonTorrent / multi-region / skip_qiime runs
         description: "QIIME2 phylogenetic tree (Newick) — tips are ASV identifiers"
+        # Serves the pipeline's tree as-is. Runs whose ASV count outgrows the
+        # renderer prune it with scripts/prune_newick.py and pass --var
+        # TREE_FILE=<pruned>; the tip-metadata recipe caps itself to the same
+        # taxa, so the two never disagree about which tips exist.
         config:
           type: "phylogeny"
           metatype: "Aggregate"
