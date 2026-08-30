@@ -499,6 +499,13 @@
       "title_size": "sm",
       "title_align": "left",
       "use": "qiime2/volcano",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_ancombc",
+        "use": "qiime2/volcano",
+        "description": "ANCOM-BC differential-abundance results. The tool writes one CSV per statistic per contrast; the recipe joins + melts them into a long table."
+      },
       "section": "Volcano & MA",
       "viz_kind": "volcano",
       "config": {
@@ -544,6 +551,13 @@
       "title_size": "sm",
       "title_align": "left",
       "use": "qiime2/da_barplot",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_ancombc",
+        "use": "qiime2/da_barplot",
+        "description": "ANCOM-BC differential-abundance results. The tool writes one CSV per statistic per contrast; the recipe joins + melts them into a long table."
+      },
       "section": "Volcano & MA",
       "viz_kind": "da_barplot",
       "config": {

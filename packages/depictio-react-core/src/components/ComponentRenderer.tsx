@@ -3,6 +3,7 @@ import { DepictioCard } from 'depictio-components';
 import type { GridApi } from 'ag-grid-community';
 
 import { InteractiveFilter, StoredMetadata } from '../api';
+import { useAutofitHeight } from './autofit';
 import ImageRenderer from './ImageRenderer';
 import TextRenderer from './TextRenderer';
 import LazyMount, { CellPlaceholder } from './LazyMount';
@@ -94,8 +95,9 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   showDragHandle,
   compact,
 }) => {
-  // Two states of one chrome slot, both scoped to the four selection-source
-  // component types (figure / table / map / image) that `chromeExtras` reaches:
+  // Two states of one chrome slot, scoped to the component types that can be a
+  // selection source and therefore receive `chromeExtras`: figure, table, map,
+  // image, and advanced_viz once its config opts in:
   //
   //   selection present → SaveGroupAction, the in-place "save as group" action
   //   analysis engaged  → SelectionHintAction, marking "you can select here"
@@ -367,7 +369,12 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
           filters={filters}
           refreshTick={refreshTick}
           onFilterChange={onFilterChange}
-          extraActions={extraActions}
+          // chromeExtras, not the raw extraActions: an embedding or a Manhattan
+          // that opts into selection is a selection source like any scatter, so
+          // its tile needs the same save-as-group action. Passing the raw slot
+          // left the group creatable only from the Analysis panel, with nothing
+          // on the tile to say the lasso had produced anything.
+          extraActions={chromeExtras}
           showDragHandle={showDragHandle}
         />
       </LazyMount>
@@ -618,6 +625,16 @@ function isSourceFilterActive(
   return false;
 }
 
+/**
+ * The card's frame, which the tile has to pay for on top of the content: 1.5px
+ * of border top and bottom. It is `content-box`, so the border falls outside
+ * the height the tile hands the card rather than inside it, and a card whose
+ * content fills its tile exactly still loses its frame to the grid cell's
+ * `overflow: hidden`. Three pixels of slack is what keeps that from happening,
+ * and it is far too little to cost a row on its own.
+ */
+const CARD_FRAME_PX = 3;
+
 const CardRenderer: React.FC<{
   metadata: StoredMetadata;
   value?: unknown;
@@ -733,6 +750,17 @@ const CardRenderer: React.FC<{
     return base;
   })();
 
+  // Cards size the grid to themselves, the way text tiles size it to their
+  // prose. The height an author picked is a guess made against the content the
+  // card had then, and a card that later gains a breakdown (a group-by, a top-N
+  // list, several rows where there was one number) needs rows nobody gave it.
+  // It has nowhere to put them: the card hides its overflow and centres what it
+  // holds, so content it cannot fit is cut off at the top AND the bottom.
+  // `contentRef` is the card's height-auto content box, so what we publish is
+  // the room the content needs, never the room the tile has.
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  useAutofitHeight(metadata.index, contentRef, [], (content) => content + CARD_FRAME_PX);
+
   // While the next bulk-compute is in flight we keep the previous value
   // visible (App.tsx no longer clears `cardValues`), but slightly dim the
   // card to signal "refreshing". 0.6 opacity is enough to read as stale
@@ -749,6 +777,7 @@ const CardRenderer: React.FC<{
       }}
     >
       <DepictioCard
+        contentRef={contentRef}
         title={metadata.title || inferCardTitle(metadata)}
         value={displayValue}
         icon_name={metadata.icon_name}

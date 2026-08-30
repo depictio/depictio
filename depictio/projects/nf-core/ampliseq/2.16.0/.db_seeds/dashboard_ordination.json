@@ -445,7 +445,9 @@
         "density_opacity": 0.45,
         "view_3d": false,
         "reverse_scale": true,
-        "hover_cols": []
+        "hover_cols": [],
+        "selection_enabled": false,
+        "selection_column": null
       },
       "wf_tag": "nextflow/ampliseq"
     },
@@ -477,6 +479,13 @@
       "title_size": "sm",
       "title_align": "left",
       "use": "qiime2/distance_heatmap",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_bray_curtis",
+        "use": "qiime2/distance_heatmap",
+        "description": "Sample by sample Bray-Curtis dissimilarity matrix computed from the relative-abundance table."
+      },
       "section": "Sample relationships",
       "viz_kind": "complex_heatmap",
       "config": {
@@ -490,8 +499,30 @@
         "index_column": "sample",
         "value_columns": null,
         "row_annotation_cols": [],
-        "col_annotations": null,
-        "col_annotation_colors": null,
+        "col_annotations": {
+          "habitat": {
+            "SRR10070130": "Riverwater",
+            "SRR10070131": "Riverwater",
+            "SRR10070132": "Groundwater",
+            "SRR10070133": "Groundwater",
+            "SRR10070134": "Riverwater",
+            "SRR10070141": "Groundwater",
+            "SRR10070149": "Sediment",
+            "SRR10070150": "Sediment",
+            "SRR10070151": "Sediment",
+            "SRR10102392": "Soil",
+            "SRR10102393": "Soil",
+            "SRR10102394": "Soil"
+          }
+        },
+        "col_annotation_colors": {
+          "habitat": {
+            "Groundwater": "#45B8AC",
+            "Riverwater": "#348ABD",
+            "Sediment": "#8B5A2B",
+            "Soil": "#E24A33"
+          }
+        },
         "cluster_rows": true,
         "cluster_cols": true,
         "cluster_method": "ward",
@@ -552,6 +583,13 @@
       "title_size": "sm",
       "title_align": "left",
       "use": "qiime2/abundance_heatmap",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_clustered_heatmap",
+        "use": "qiime2/abundance_heatmap",
+        "description": "The taxon by sample abundance matrix prepared for ComplexHeatmap: index and row-annotation columns cast to strings, so rows and columns can be clustered."
+      },
       "section": "Clustered abundance",
       "viz_kind": "complex_heatmap",
       "config": {
@@ -567,8 +605,30 @@
         "row_annotation_cols": [
           "Kingdom"
         ],
-        "col_annotations": null,
-        "col_annotation_colors": null,
+        "col_annotations": {
+          "habitat": {
+            "SRR10070130": "Riverwater",
+            "SRR10070131": "Riverwater",
+            "SRR10070132": "Groundwater",
+            "SRR10070133": "Groundwater",
+            "SRR10070134": "Riverwater",
+            "SRR10070141": "Groundwater",
+            "SRR10070149": "Sediment",
+            "SRR10070150": "Sediment",
+            "SRR10070151": "Sediment",
+            "SRR10102392": "Soil",
+            "SRR10102393": "Soil",
+            "SRR10102394": "Soil"
+          }
+        },
+        "col_annotation_colors": {
+          "habitat": {
+            "Groundwater": "#45B8AC",
+            "Riverwater": "#348ABD",
+            "Sediment": "#8B5A2B",
+            "Soil": "#E24A33"
+          }
+        },
         "cluster_rows": true,
         "cluster_cols": true,
         "cluster_method": "ward",

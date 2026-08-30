@@ -157,6 +157,27 @@ class EmbeddingConfig(_BaseVizConfig):
         default_factory=list, description="Extra columns to show in the hover tooltip"
     )
 
+    # --- Selection as a cross-filter ---------------------------------------
+    # Off by default so a shipped dashboard keeps the lasso-free drag it has
+    # today and no deployment inherits a cross-filter nobody asked for.
+    selection_enabled: bool = Field(
+        default=False,
+        description=(
+            "Let a lasso / box / click selection emit a dashboard filter the "
+            "Analysis panel can turn into a group. Draws a lasso-capable "
+            "dragmode and stops the component from filtering itself."
+        ),
+    )
+    selection_column: str | None = Field(
+        default=None,
+        description=(
+            "Column the emitted selection values belong to. Null uses "
+            "``sample_id_col``, which is what every point already carries as "
+            "its identifier; name another column to select on something the "
+            "other tiles join on instead."
+        ),
+    )
+
 
 class ManhattanConfig(_BaseVizConfig):
     """Generic chr/pos/score plot.
@@ -248,6 +269,30 @@ class ManhattanConfig(_BaseVizConfig):
             "payload builder has always emitted this and the renderer has always "
             "read it; the field was simply missing, so every catalog-added "
             "Manhattan wrote a config that no longer validated on re-import."
+        ),
+    )
+
+    # --- Selection as a cross-filter ---------------------------------------
+    # Off by default, same reasoning as EmbeddingConfig above.
+    selection_enabled: bool = Field(
+        default=False,
+        description=(
+            "Let a lasso / box / click selection emit a dashboard filter the "
+            "Analysis panel can turn into a group. Requires "
+            "``selection_column``; without one the renderer stays inert."
+        ),
+    )
+    selection_column: str | None = Field(
+        default=None,
+        description=(
+            "Column the emitted selection values belong to. There is no safe "
+            "default: a point here is one row of a long variant table keyed by "
+            "(sample, chromosome, position), so selecting on the sample column "
+            "pulls every variant of the picked samples while selecting on a "
+            "per-variant label narrows to those variants alone. The dashboard "
+            "has to say which of the two it means. The column is fetched "
+            "automatically; it does not also have to appear in "
+            "``color_by_columns``."
         ),
     )
 

@@ -13,7 +13,9 @@ from depictio.api.v1.services.multiqc.themes import get_theme_template
 # Reference viewport for the fit: the server does not know the panel's real
 # size, so assume a conservative dashboard tile. Underestimating keeps every
 # point on screen in larger panels; only a panel *narrower* than this could
-# clip edge points.
+# clip edge points. A panel narrower than this is exactly what the docked map
+# is, which is why the bounding box travels to the client in ``data_info`` and
+# the viewer redoes the fit against the container it actually measured.
 _FIT_VIEWPORT_PX = (600, 400)
 # Fraction of a zoom level held back so edge markers are not flush against the
 # frame (matches the client-side CoordinatesMapPreview).
@@ -28,8 +30,15 @@ def _lat_rad(lat: float) -> float:
     return max(min(rad, math.pi), -math.pi) / 2
 
 
-def _compute_auto_zoom(lats: list[float], lons: list[float]) -> tuple[dict[str, float], int]:
-    """Center and zoom that frame every point, web-Mercator fit.
+def _lat_from_rad(y: float) -> float:
+    """Inverse of :func:`_lat_rad`: a projected ordinate back to degrees."""
+    return math.degrees(math.asin(math.tanh(y * 2)))
+
+
+def _compute_auto_zoom(
+    lats: list[float], lons: list[float]
+) -> tuple[dict[str, float], int, dict[str, float] | None]:
+    """Center, zoom and bounding box that frame every point, web-Mercator fit.
 
     Mirrors the classic getBoundsZoom (and the client-side ``fitBoundsZoom``
     in ``CoordinatesMapPreview.tsx``): project the latitude span through the
@@ -39,26 +48,43 @@ def _compute_auto_zoom(lats: list[float], lons: list[float]) -> tuple[dict[str, 
     degrees as longitude degrees, and its ``+ 1`` landed a full level too
     tight — Mediterranean-wide points rendered with the outer sites clipped.
 
+    The bounding box is returned alongside because the zoom is only as good as
+    the viewport guess it was computed against: the viewer re-runs this same
+    fit once it has measured its container.
+
     Args:
         lats: List of latitude values.
         lons: List of longitude values.
 
     Returns:
-        Tuple of (center_dict, zoom_level).
+        Tuple of (center_dict, zoom_level, bounds_dict or None when there is
+        nothing to frame).
     """
     if not lats or not lons:
-        return {"lat": 0.0, "lon": 0.0}, 2
+        return {"lat": 0.0, "lon": 0.0}, 2, None
 
     min_lat, max_lat = min(lats), max(lats)
     min_lon, max_lon = min(lons), max(lons)
+    bounds = {
+        "min_lat": min_lat,
+        "max_lat": max_lat,
+        "min_lon": min_lon,
+        "max_lon": max_lon,
+    }
 
+    # The vertical middle of a Mercator viewport is the middle of the
+    # *projected* span, not of the raw degrees: the projection stretches
+    # towards the poles, so the arithmetic mean of two latitudes sits below
+    # (northern hemisphere) or above (southern) the pixel the map centres on.
+    # The offset grows with the span and is most visible in a short viewport,
+    # which is the docked panel.
     center = {
-        "lat": (min_lat + max_lat) / 2,
+        "lat": _lat_from_rad((_lat_rad(min_lat) + _lat_rad(max_lat)) / 2),
         "lon": (min_lon + max_lon) / 2,
     }
 
     if max_lat - min_lat == 0 and max_lon - min_lon == 0:
-        return center, _FIT_SINGLE_POINT_ZOOM
+        return center, _FIT_SINGLE_POINT_ZOOM, bounds
 
     world = 512.0
     width_px, height_px = _FIT_VIEWPORT_PX
@@ -74,20 +100,42 @@ def _compute_auto_zoom(lats: list[float], lons: list[float]) -> tuple[dict[str, 
     zoom = min(lat_zoom, lon_zoom) - _FIT_ZOOM_PADDING
     zoom = max(1, min(int(zoom), _FIT_MAX_ZOOM))
 
-    return center, zoom
+    return center, zoom, bounds
 
 
-def _compute_geojson_center_zoom(geojson: dict) -> tuple[dict[str, float], int]:
-    """Compute center and zoom from GeoJSON FeatureCollection coordinates.
+def _fit_payload(bounds: dict[str, float] | None) -> dict[str, float] | None:
+    """The bounding box plus the constants the client needs to redo the fit.
+
+    Shipping the constants rather than letting the viewer hardcode them is what
+    keeps a re-fit against a measured container from drifting away from the
+    server's own framing when either end is tuned.
+    """
+    if not bounds:
+        return None
+    return {
+        **bounds,
+        "padding": _FIT_ZOOM_PADDING,
+        "max_zoom": float(_FIT_MAX_ZOOM),
+        "single_point_zoom": float(_FIT_SINGLE_POINT_ZOOM),
+    }
+
+
+def _compute_geojson_center_zoom(
+    geojson: dict,
+) -> tuple[dict[str, float], int, dict[str, float] | None]:
+    """Compute center, zoom and bounds from GeoJSON FeatureCollection coordinates.
 
     Recursively extracts all coordinate pairs from GeoJSON geometry
-    and delegates to _compute_auto_zoom().
+    and delegates to _compute_auto_zoom(). The bounds matter most here: a
+    choropleth's geometry never reaches the client as coordinates it could
+    measure itself, so forwarding this is the only way the viewer can re-fit
+    one.
 
     Args:
         geojson: GeoJSON FeatureCollection dict.
 
     Returns:
-        Tuple of (center_dict, zoom_level).
+        Tuple of (center_dict, zoom_level, bounds_dict or None).
     """
     lats: list[float] = []
     lons: list[float] = []
@@ -227,6 +275,12 @@ def render_map(
     stored_center = (existing_metadata or {}).get("center")
     stored_zoom = (existing_metadata or {}).get("zoom")
 
+    # Bounds of what is plotted, forwarded to the client so it can redo the fit
+    # against the container it measured. Left None whenever the viewport did
+    # not come from the data: an authored default or a viewport carried across
+    # a filter change is a deliberate choice, and re-fitting would discard it.
+    fit_bounds: dict[str, float] | None = None
+
     if default_center and default_zoom is not None:
         center = default_center
         zoom = default_zoom
@@ -237,17 +291,19 @@ def render_map(
     else:
         # First render: compute from data extent
         if map_type == "choropleth_map" and geojson_data:
-            center, zoom = _compute_geojson_center_zoom(geojson_data)
+            center, zoom, fit_bounds = _compute_geojson_center_zoom(geojson_data)
         elif lat_column in pandas_df.columns and lon_column in pandas_df.columns:
             lats = pandas_df[lat_column].tolist()
             lons = pandas_df[lon_column].tolist()
-            center, zoom = _compute_auto_zoom(lats, lons)
+            center, zoom, fit_bounds = _compute_auto_zoom(lats, lons)
         else:
             center, zoom = {"lat": 0.0, "lon": 0.0}, 2
         if default_zoom is not None:
             zoom = default_zoom
+            fit_bounds = None
         if default_center is not None:
             center = default_center
+            fit_bounds = None
 
     # Lock color mapping so palette doesn't shift when data is filtered
     # Priority: existing_metadata > trigger_data > dict_kwargs > auto-generated
@@ -338,6 +394,9 @@ def render_map(
 
     except Exception as e:
         logger.error(f"Map rendering failed: {e}", exc_info=True)
+        # The fallback figure carries an annotation and no map subplot at all,
+        # so there is nothing for a client-side re-fit to act on.
+        fit_bounds = None
         template = get_theme_template(theme)
         fig = go.Figure()
         fig.update_layout(template=template)
@@ -358,6 +417,7 @@ def render_map(
         "total_count": total_count,
         "center": center,
         "zoom": zoom,
+        "fit": _fit_payload(fit_bounds),
         "color_discrete_map": color_discrete_map,
     }
 

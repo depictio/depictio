@@ -78,7 +78,9 @@
         "highlight": "above",
         "color_by_columns": [],
         "default_color_by": null,
-        "top_n_labels": 8
+        "top_n_labels": 8,
+        "selection_enabled": true,
+        "selection_column": "feature"
       },
       "wf_tag": "python/advanced_viz_demo"
     },

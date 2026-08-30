@@ -140,7 +140,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "fef8cadc-350a-4a9a-bb74-2d45b0aa7969",
+      "index": "1dcfc2c7-52c3-4161-9a91-a835e3f803f5",
       "component_type": "text",
       "title": "QC at a glance",
       "workflow_tag": "viralrecon",
@@ -170,7 +170,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "d657f867-23d6-44fc-8858-c7e85f161d2c",
+      "index": "457e3a58-8898-4ec0-bb32-f19da182e0c9",
       "component_type": "card",
       "title": "Avg % Genome >= 10x",
       "workflow_tag": "viralrecon",
@@ -222,7 +222,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "4fc04d8d-d6a4-4515-8160-d661e16dc07b",
+      "index": "ff126a25-7c19-4018-a4e4-62ab8e4d7880",
       "component_type": "card",
       "title": "Median Variants / Sample",
       "workflow_tag": "viralrecon",
@@ -401,7 +401,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "74d457dc-2dd8-41ea-87fc-d74b48c3c54f",
+      "index": "1c8a4c46-b41c-4fd4-b949-a27c1d06354e",
       "component_type": "figure",
       "title": "Median coverage vs total variants",
       "workflow_tag": "viralrecon",
@@ -444,7 +444,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "263c2bb4-03a8-4c53-a110-85129908de5e",
+      "index": "41f8709b-8a57-46e6-bf7c-eed2293bb7b8",
       "component_type": "figure",
       "title": "Nextclade substitutions vs deletions",
       "workflow_tag": "viralrecon",
@@ -481,8 +481,8 @@
       "was_sampled": false,
       "filter_applied": false,
       "max_points": null,
-      "selection_enabled": false,
-      "selection_column": null,
+      "selection_enabled": true,
+      "selection_column": "sample",
       "font_scale": null,
       "wf_tag": "nextflow/viralrecon"
     },
@@ -510,7 +510,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "99e90c99-6403-4cc9-82a8-acf2b2352eaa",
+      "index": "3bf4bf72-db7f-4516-ac6b-f84b220f2b78",
       "component_type": "figure",
       "title": "Genome coverage per sample (>=10x)",
       "workflow_tag": "viralrecon",
@@ -782,7 +782,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "2f352447-e183-4831-b357-48fe393336ac",
+      "index": "bfa9ffa0-c49f-4b33-81ee-3b695eea039c",
       "component_type": "table",
       "title": "Summary metrics",
       "workflow_tag": "viralrecon",
@@ -849,7 +849,7 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-fef8cadc-350a-4a9a-bb74-2d45b0aa7969",
+      "i": "box-1dcfc2c7-52c3-4161-9a91-a835e3f803f5",
       "x": 0,
       "y": 0,
       "w": 8,
@@ -864,7 +864,7 @@
       ]
     },
     {
-      "i": "box-d657f867-23d6-44fc-8858-c7e85f161d2c",
+      "i": "box-457e3a58-8898-4ec0-bb32-f19da182e0c9",
       "x": 0,
       "y": 1,
       "w": 2,
@@ -872,7 +872,7 @@
       "static": true
     },
     {
-      "i": "box-4fc04d8d-d6a4-4515-8160-d661e16dc07b",
+      "i": "box-ff126a25-7c19-4018-a4e4-62ab8e4d7880",
       "x": 2,
       "y": 1,
       "w": 2,
@@ -911,7 +911,7 @@
       ]
     },
     {
-      "i": "box-74d457dc-2dd8-41ea-87fc-d74b48c3c54f",
+      "i": "box-1c8a4c46-b41c-4fd4-b949-a27c1d06354e",
       "x": 0,
       "y": 1,
       "w": 4,
@@ -926,7 +926,7 @@
       ]
     },
     {
-      "i": "box-263c2bb4-03a8-4c53-a110-85129908de5e",
+      "i": "box-41f8709b-8a57-46e6-bf7c-eed2293bb7b8",
       "x": 4,
       "y": 1,
       "w": 4,
@@ -956,7 +956,7 @@
       ]
     },
     {
-      "i": "box-99e90c99-6403-4cc9-82a8-acf2b2352eaa",
+      "i": "box-3bf4bf72-db7f-4516-ac6b-f84b220f2b78",
       "x": 0,
       "y": 1,
       "w": 8,
@@ -1018,7 +1018,7 @@
       "static": true
     },
     {
-      "i": "box-2f352447-e183-4831-b357-48fe393336ac",
+      "i": "box-bfa9ffa0-c49f-4b33-81ee-3b695eea039c",
       "x": 0,
       "y": 4,
       "w": 8,

@@ -268,7 +268,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "c47ecf2b-56d5-4f94-803b-1dee7b2925b0",
+      "index": "c514796b-53d4-4d67-bb33-5e999a62a418",
       "component_type": "figure",
       "title": "Temperature \u00d7 conductivity",
       "workflow_tag": "ampliseq",
@@ -298,14 +298,14 @@
       "visu_type": "scatter",
       "dict_kwargs": {},
       "mode": "code",
-      "code_content": "colors = {'Riverwater': '#348ABD', 'Groundwater': '#45B8AC', 'Sediment': '#8B5A2B', 'Soil': '#E24A33'}\nfig = px.scatter(\n    df.to_pandas(),\n    x='ctd_temperature_c', y='ctd_conductivity_us_cm', color='habitat',\n    color_discrete_map=colors, hover_name='city',\n)\nfig.update_traces(marker={'size': 14})\nfig.update_layout(\n    xaxis_title='Temperature (\u00b0C)', yaxis_title='Conductivity (\u00b5S/cm)',\n    legend_title_text='Habitat', margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},\n)\n",
+      "code_content": "colors = {'Riverwater': '#348ABD', 'Groundwater': '#45B8AC', 'Sediment': '#8B5A2B', 'Soil': '#E24A33'}\nfig = px.scatter(\n    df.to_pandas(),\n    x='ctd_temperature_c', y='ctd_conductivity_us_cm', color='habitat',\n    color_discrete_map=colors, hover_name='city', custom_data=['sample'],\n)\nfig.update_traces(marker={'size': 14})\nfig.update_layout(\n    xaxis_title='Temperature (\u00b0C)', yaxis_title='Conductivity (\u00b5S/cm)',\n    legend_title_text='Habitat', margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},\n)\n",
       "displayed_data_count": 0,
       "total_data_count": 0,
       "was_sampled": false,
       "filter_applied": false,
       "max_points": null,
-      "selection_enabled": false,
-      "selection_column": null,
+      "selection_enabled": true,
+      "selection_column": "sample",
       "font_scale": null,
       "wf_tag": "nextflow/ampliseq"
     },
@@ -352,7 +352,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "e27759d7-8291-404c-9546-a6515e4432f4",
+      "index": "8d4a5ed4-58aa-4a07-9944-aafd4b6d7f3a",
       "component_type": "figure",
       "title": "Nitrate \u00d7 dissolved carbon",
       "workflow_tag": "ampliseq",
@@ -382,14 +382,14 @@
       "visu_type": "scatter",
       "dict_kwargs": {},
       "mode": "code",
-      "code_content": "colors = {'Riverwater': '#348ABD', 'Groundwater': '#45B8AC', 'Sediment': '#8B5A2B', 'Soil': '#E24A33'}\nfig = px.scatter(\n    df.to_pandas(),\n    x='ctd_nitrate_mg_l', y='ctd_doc_mg_l', color='habitat',\n    size='ctd_turbidity_ntu', color_discrete_map=colors, hover_name='city', size_max=26,\n)\nfig.update_layout(\n    xaxis_title='Nitrate (mg/L)', yaxis_title='Dissolved organic carbon (mg/L)',\n    legend_title_text='Habitat', margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},\n)\n",
+      "code_content": "colors = {'Riverwater': '#348ABD', 'Groundwater': '#45B8AC', 'Sediment': '#8B5A2B', 'Soil': '#E24A33'}\nfig = px.scatter(\n    df.to_pandas(),\n    x='ctd_nitrate_mg_l', y='ctd_doc_mg_l', color='habitat',\n    size='ctd_turbidity_ntu', color_discrete_map=colors, hover_name='city', size_max=26,\n    custom_data=['sample'],\n)\nfig.update_layout(\n    xaxis_title='Nitrate (mg/L)', yaxis_title='Dissolved organic carbon (mg/L)',\n    legend_title_text='Habitat', margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},\n)\n",
       "displayed_data_count": 0,
       "total_data_count": 0,
       "was_sampled": false,
       "filter_applied": false,
       "max_points": null,
-      "selection_enabled": false,
-      "selection_column": null,
+      "selection_enabled": true,
+      "selection_column": "sample",
       "font_scale": null,
       "wf_tag": "nextflow/ampliseq"
     },
@@ -525,7 +525,7 @@
       ]
     },
     {
-      "i": "box-c47ecf2b-56d5-4f94-803b-1dee7b2925b0",
+      "i": "box-c514796b-53d4-4d67-bb33-5e999a62a418",
       "x": 0,
       "y": 2,
       "w": 4,
@@ -555,7 +555,7 @@
       ]
     },
     {
-      "i": "box-e27759d7-8291-404c-9546-a6515e4432f4",
+      "i": "box-8d4a5ed4-58aa-4a07-9944-aafd4b6d7f3a",
       "x": 0,
       "y": 8,
       "w": 8,

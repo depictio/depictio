@@ -399,22 +399,37 @@ class ComplexHeatmap:
         return self._data.shape[0] * self._data.shape[1] > _WEBGL_THRESHOLD
 
     def _colorbar_props(self) -> dict[str, object]:
-        """Colorbar config positioned to avoid overlapping row labels."""
-        max_label_len = max((len(lbl) for lbl in self._row_labels), default=0)
-        label_frac = min(max_label_len * 6.5 / self.width, 0.12)
+        """Colorbar pinned to the figure's right edge, bottom-aligned.
 
+        The previous placement was ``x = 1.0 + row_label_width / self.width`` in
+        *paper* units, which is a fraction of the plotting area rather than of
+        the figure. The two only agree while the figure is genuinely rendered at
+        ``self.width``; any consumer that drops width/height to make the figure
+        responsive (Depictio's React tile does exactly that) shrinks the plotting
+        area, and the same fraction then resolves to a smaller pixel offset, so
+        the colorbar slid left on top of the row labels as the tile narrowed.
+        Anchoring to the container's right edge takes the rendered width out of
+        the equation: ``_style_figure`` reserves a right margin wide enough for
+        the row labels plus this band, so the band the colorbar lands in is empty
+        at every figure size. Bottom-aligning it keeps it clear of the legend,
+        which occupies the same band at the top.
+        """
         title_cfg: dict[str, object] | None = None
         if self.name:
             title_cfg = {"text": self.name, "font": {"size": 10, "family": FONT_FAMILY}}
 
         return {
             "title": title_cfg,
-            "len": 0.3,
+            "len": 0.35,
             "thickness": 12,
             "outlinewidth": 0,
             "xpad": 4,
-            "x": 1.0 + label_frac + 0.01,
-            "y": 0.5,
+            "xref": "container",
+            "x": 1.0,
+            "xanchor": "right",
+            "yref": "paper",
+            "y": 0.0,
+            "yanchor": "bottom",
             "tickfont": {"size": 9, "family": FONT_FAMILY},
         }
 
@@ -931,22 +946,37 @@ class ComplexHeatmap:
 
     def _style_figure(self, fig: go.Figure, layout: GridLayout) -> None:
         """Apply global figure styling: margins, legend, font, background."""
-        has_legend = any(
-            a is not None
-            for a in (self.top_annotation, self.bottom_annotation, self.left_annotation, self.right_annotation)
-        )
+        # Measure the legend off the traces that will actually draw one rather
+        # than off "an annotation exists": a purely numeric annotation track
+        # contributes no legend entry, and reserving a band for it would waste
+        # right margin the heatmap could have used.
+        legend_texts: list[str] = []
+        for trace in fig.data:
+            if not getattr(trace, "showlegend", False):
+                continue
+            legend_texts.append(str(getattr(trace, "name", "") or ""))
+            group_title = getattr(trace, "legendgrouptitle", None)
+            legend_texts.append(str(getattr(group_title, "text", "") or ""))
+        has_legend = any(legend_texts)
 
-        # Right margin must fit: row labels + colorbar + legend
+        # The right margin holds two bands side by side: the row labels next to
+        # the heatmap, then an outer band shared by the legend (top) and the
+        # colorbar (bottom). Both of those are anchored to the container's right
+        # edge, so the outer band has to be wide enough for whichever is wider or
+        # they would spill inwards over the row labels.
+        #
+        # Char-pixel approximation at 10pt: ~6px per char is an upper bound for
+        # the sans-serif stack; the constant covers the swatch, the gap after it
+        # and the legend box's own padding + border.
         max_label_len = max((len(lbl) for lbl in self._row_labels), default=0)
         label_px = max_label_len * 7 + 10
-        colorbar_px = 50
-        legend_px = 120 if has_legend else 0
-        right_margin = label_px + colorbar_px + legend_px
+        # Bar thickness 12 + xpad on both sides + room for the value tick labels.
+        colorbar_px = 58
+        legend_px = (max((len(t) for t in legend_texts), default=0) * 6 + 46) if has_legend else 0
+        right_margin = label_px + max(colorbar_px, legend_px) + 8
 
         # Left margin for left annotations or dendrogram
         left_margin = 5
-
-        legend_x_frac = 1.0 + (label_px + colorbar_px + 8) / self.width
 
         # Dynamic top margin based on title / description presence
         top_margin = 30
@@ -976,9 +1006,17 @@ class ComplexHeatmap:
             margin={"l": left_margin, "r": right_margin, "t": top_margin, "b": bottom_margin},
             font={"family": FONT_FAMILY, "size": 11},
             legend={
-                "x": legend_x_frac,
+                # Container-referenced so the entry never depends on the figure
+                # width: paper x=1 is the right edge of the *plotting area*, and
+                # a pixel offset past it can only be expressed as a fraction of a
+                # width this figure does not control once a responsive consumer
+                # strips it. Pinned to the container's right edge instead, the
+                # legend always lands in the outer band reserved above.
+                "xref": "container",
+                "x": 1.0,
+                "xanchor": "right",
+                "yref": "paper",
                 "y": 1.0,
-                "xanchor": "left",
                 "yanchor": "top",
                 "font": {"size": 10, "family": FONT_FAMILY},
                 "tracegroupgap": 8,

@@ -182,7 +182,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "62e645b0-18c1-4ccb-9e8a-867e4a348f0d",
+      "index": "a6506b94-1a5e-4011-b5bc-ab3e69562ca4",
       "component_type": "text",
       "title": "Typing at a glance",
       "workflow_tag": "viralrecon",
@@ -212,7 +212,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "1d1e08d6-3b83-4f81-848b-467b27151419",
+      "index": "0a65f0ce-7aed-438f-8dde-eaf2249120a3",
       "component_type": "card",
       "title": "Unique Lineages",
       "workflow_tag": "viralrecon",
@@ -262,7 +262,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "f109bb87-e0e6-4d24-a989-5a1a8ebc6b41",
+      "index": "4aadc972-1adb-4725-984a-5bbac4c9ebf5",
       "component_type": "card",
       "title": "Unique Clades",
       "workflow_tag": "viralrecon",
@@ -437,7 +437,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "e4fd8473-82c5-4e96-8c13-2cb38a2238f3",
+      "index": "45b3d902-9634-4d19-9c46-53c2fd9bce52",
       "component_type": "figure",
       "title": "Pangolin lineage distribution",
       "workflow_tag": "viralrecon",
@@ -480,7 +480,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "6514410b-0176-4d0f-956c-5622792543b5",
+      "index": "a98ba443-1f95-4f72-add9-a6a16460964a",
       "component_type": "figure",
       "title": "Nextclade clade distribution",
       "workflow_tag": "viralrecon",
@@ -652,7 +652,9 @@
         "density_opacity": 0.45,
         "view_3d": false,
         "reverse_scale": true,
-        "hover_cols": []
+        "hover_cols": [],
+        "selection_enabled": true,
+        "selection_column": null
       },
       "wf_tag": "nextflow/viralrecon"
     },
@@ -680,7 +682,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "1e5f1bbf-4333-4bc1-8c86-58b8da96a8da",
+      "index": "a97b5715-af46-4008-81f9-33a789567150",
       "component_type": "table",
       "title": "Pangolin lineage assignments",
       "workflow_tag": "viralrecon",
@@ -713,12 +715,12 @@
       "sortable": true,
       "filterable": true,
       "compact": false,
-      "row_selection_enabled": false,
-      "row_selection_column": null,
+      "row_selection_enabled": true,
+      "row_selection_column": "sample",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "e3655d4f-2901-4c92-a10f-80815a5dc368",
+      "index": "950d5707-d205-41ad-88f2-18348ba41e43",
       "component_type": "table",
       "title": "Nextclade clade assignments",
       "workflow_tag": "viralrecon",
@@ -751,8 +753,8 @@
       "sortable": true,
       "filterable": true,
       "compact": false,
-      "row_selection_enabled": false,
-      "row_selection_column": null,
+      "row_selection_enabled": true,
+      "row_selection_column": "sample",
       "wf_tag": "nextflow/viralrecon"
     }
   ],
@@ -793,7 +795,7 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-62e645b0-18c1-4ccb-9e8a-867e4a348f0d",
+      "i": "box-a6506b94-1a5e-4011-b5bc-ab3e69562ca4",
       "x": 0,
       "y": 0,
       "w": 8,
@@ -808,7 +810,7 @@
       ]
     },
     {
-      "i": "box-1d1e08d6-3b83-4f81-848b-467b27151419",
+      "i": "box-0a65f0ce-7aed-438f-8dde-eaf2249120a3",
       "x": 0,
       "y": 1,
       "w": 2,
@@ -816,7 +818,7 @@
       "static": true
     },
     {
-      "i": "box-f109bb87-e0e6-4d24-a989-5a1a8ebc6b41",
+      "i": "box-4aadc972-1adb-4725-984a-5bbac4c9ebf5",
       "x": 2,
       "y": 1,
       "w": 2,
@@ -855,7 +857,7 @@
       ]
     },
     {
-      "i": "box-e4fd8473-82c5-4e96-8c13-2cb38a2238f3",
+      "i": "box-45b3d902-9634-4d19-9c46-53c2fd9bce52",
       "x": 0,
       "y": 1,
       "w": 4,
@@ -870,7 +872,7 @@
       ]
     },
     {
-      "i": "box-6514410b-0176-4d0f-956c-5622792543b5",
+      "i": "box-a98ba443-1f95-4f72-add9-a6a16460964a",
       "x": 4,
       "y": 1,
       "w": 4,
@@ -945,7 +947,7 @@
       ]
     },
     {
-      "i": "box-1e5f1bbf-4333-4bc1-8c86-58b8da96a8da",
+      "i": "box-a97b5715-af46-4008-81f9-33a789567150",
       "x": 0,
       "y": 25,
       "w": 4,
@@ -960,7 +962,7 @@
       ]
     },
     {
-      "i": "box-e3655d4f-2901-4c92-a10f-80815a5dc368",
+      "i": "box-950d5707-d205-41ad-88f2-18348ba41e43",
       "x": 4,
       "y": 25,
       "w": 4,
