@@ -40,34 +40,55 @@ def _polars_schema_name(df: pl.DataFrame) -> dict[str, str]:
 
 def test_ampliseq_stacked_taxonomy_canonical(tmp_path: Path) -> None:
     # The recipe fans in QIIME2 rel-table-{2..6}.tsv (one wide table per rank,
-    # taxa × samples) via dc_ref sources — injected here as `extra_sources`.
-    # Only the Phylum level (rel-table-2) is supplied; the recipe tolerates the
-    # deeper levels being absent and derives a Kingdom level from the Phylum rows.
-    phylum = pl.DataFrame(
-        {
-            "#OTU ID": ["k__Bacteria;p__Firmicutes", "k__Bacteria;p__Bacteroidetes"],
-            "S1": [0.55, 0.30],
-            "S2": [0.40, 0.50],
-        }
-    )
-    empty = pl.DataFrame()
+    # taxa × samples), read from the run directory. Each carries the
+    # "# Constructed from biom file" banner QIIME2's biom export writes, which is
+    # why the sources skip a row.
+    #
+    # All five levels are written because the recipe engine rejects a required
+    # source that is missing *or* that loads zero rows, so a run cannot present
+    # QIIME2's collapse levels one at a time. Kingdom is not among them: the
+    # recipe derives it by summing the Phylum rows.
+    tables = tmp_path / "qiime2" / "rel_abundance_tables"
+    tables.mkdir(parents=True)
+    lineages = {
+        2: ("k__Bacteria;p__Firmicutes", "k__Bacteria;p__Bacteroidetes"),
+        3: ("k__Bacteria;p__Firmicutes;c__Bacilli", "k__Bacteria;p__Bacteroidetes;c__Bacteroidia"),
+        4: (
+            "k__Bacteria;p__Firmicutes;c__Bacilli;o__Lactobacillales",
+            "k__Bacteria;p__Bacteroidetes;c__Bacteroidia;o__Bacteroidales",
+        ),
+        5: (
+            "k__Bacteria;p__Firmicutes;c__Bacilli;o__Lactobacillales;f__Lactobacillaceae",
+            "k__Bacteria;p__Bacteroidetes;c__Bacteroidia;o__Bacteroidales;f__Bacteroidaceae",
+        ),
+        6: (
+            "k__Bacteria;p__Firmicutes;c__Bacilli;o__Lactobacillales;f__Lactobacillaceae;"
+            "g__Lactobacillus",
+            "k__Bacteria;p__Bacteroidetes;c__Bacteroidia;o__Bacteroidales;f__Bacteroidaceae;"
+            "g__Bacteroides",
+        ),
+    }
+    for level, (first, second) in lineages.items():
+        (tables / f"rel-table-{level}.tsv").write_text(
+            "# Constructed from biom file\n"
+            "#OTU ID\tS1\tS2\n"
+            f"{first}\t0.55\t0.40\n"
+            f"{second}\t0.30\t0.50\n"
+        )
 
-    result = execute_recipe(
-        "qiime2/stacked_taxonomy_canonical.py",
-        tmp_path,
-        extra_sources={
-            "phylum": phylum,
-            "class_": empty,
-            "order": empty,
-            "family": empty,
-            "genus": empty,
-        },
-    )
+    result = execute_recipe("qiime2/stacked_taxonomy_canonical.py", tmp_path)
 
     assert not result.is_empty()
     assert set(["sample_id", "taxon", "rank", "abundance"]).issubset(result.columns)
-    # Phylum rows plus a Kingdom level the recipe derives by summing Phylum.
-    assert set(result["rank"].unique().to_list()) == {"Kingdom", "Phylum"}
+    # Every collapse level, plus the Kingdom the recipe derives by summing Phylum.
+    assert set(result["rank"].unique().to_list()) == {
+        "Kingdom",
+        "Phylum",
+        "Class",
+        "Order",
+        "Family",
+        "Genus",
+    }
 
     cfg = StackedTaxonomyConfig(
         sample_id_col="sample_id",

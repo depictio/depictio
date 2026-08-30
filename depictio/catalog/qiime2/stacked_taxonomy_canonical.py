@@ -113,9 +113,11 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """Combine 5 rank-level rel-tables + a derived Kingdom level."""
     pieces: list[pl.DataFrame] = []
 
-    # Map source ref → (rank, level). We tolerate missing levels (e.g. if the
-    # pipeline didn't emit a deeper collapse) by skipping them rather than
-    # failing the whole recipe.
+    # Map source ref → (rank, level). QIIME2 writes the five collapse levels
+    # together, and the engine rejects a required source that is missing or
+    # empty, so in practice all five arrive. The skip below is what keeps a
+    # level that was repointed at a glob matching nothing from poisoning the
+    # concat rather than a route the pipeline actually takes.
     level_specs = (
         ("phylum", "Phylum"),
         ("class_", "Class"),
