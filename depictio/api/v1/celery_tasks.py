@@ -154,6 +154,8 @@ def build_figure_preview(payload: dict) -> dict:
 
     from depictio.api.v1.services.figure.figure_builder import _WHOLE_FRAME_VISU
     from depictio.api.v1.services.figure.groups import (
+        CODE_GROUP_BY,
+        CODE_GROUP_KWARGS,
         GROUP_COLUMN,
         MAX_FACET_CATEGORIES,
         OTHER_LABEL,
@@ -165,12 +167,38 @@ def build_figure_preview(payload: dict) -> dict:
         sanitize_color_by_column,
         sanitize_group_defs,
         sanitize_grouping_display,
+        tidy_facet_layout,
     )
 
     coloring_allowed = mode != "code" and (visu_type or "").lower() not in _WHOLE_FRAME_VISU
+    # Code mode owns the figure it builds, so the server must never rewrite its
+    # kwargs. What it can do is hand over the very kwargs UI mode gets and let
+    # the author spread them: `**depictio_group_kwargs`. Those come out of
+    # `_grouped_kwargs` below, the single place that turns the saved groups plus
+    # the Colour/Split toggle into px arguments, so a code figure and a UI figure
+    # cannot end up disagreeing about what "Split" means.
+    #
+    # Opt-in by naming it: a code figure that ignores groups pays no annotation
+    # pass over its frame and keeps reporting no override, exactly as before.
+    code_group_optin = mode == "code" and (
+        CODE_GROUP_KWARGS in code_content
+        or CODE_GROUP_BY in code_content
+        or GROUP_COLUMN in code_content
+    )
     group_defs = sanitize_group_defs(payload.get("groups"))
-    color_by_group = bool(payload.get("color_by_group")) and bool(group_defs) and coloring_allowed
+    color_by_group = (
+        bool(payload.get("color_by_group"))
+        and bool(group_defs)
+        and (coloring_allowed or code_group_optin)
+    )
     group_colored = False
+    # What code mode is handed. Empty whenever grouping is off, or the frame
+    # turned out not to carry any group's source column, so a figure that always
+    # spreads it simply renders ungrouped instead of failing.
+    code_group_kwargs: dict = {}
+    # The grouping keys an aggregating code figure spreads into its `group_by`.
+    # Empty for the same reasons `code_group_kwargs` is.
+    code_group_by: list[str] = []
     # False drops rows outside every group instead of drawing them gray. Since
     # "Other" is its own category, dropping it never changes the group traces —
     # it only removes the gray context (and its facet panel in Split mode).
@@ -181,7 +209,11 @@ def build_figure_preview(payload: dict) -> dict:
     # so no synthetic annotation is needed. Groups win when both are requested
     # (the endpoint enforces the same precedence).
     color_by_column = None
-    if coloring_allowed and not color_by_group:
+    if (coloring_allowed or code_group_optin) and not color_by_group:
+        # Code mode reaches this too, by the same handover as groups: "Colour by
+        # Phylum, split" is the same request whether the figure was authored in
+        # the UI or in Python, and answering it only on one path would make the
+        # dashboard-wide control lie about half its tiles.
         color_by_column = sanitize_color_by_column(payload.get("color_by_column"))
     column_colored: str | None = None
 
@@ -405,10 +437,16 @@ def build_figure_preview(payload: dict) -> dict:
                 df = df.with_columns(group_expr)
                 if not include_other:
                     df = df.filter(pl.col(GROUP_COLUMN) != OTHER_LABEL)
-                # The agg path may have reverted dict_kwargs (scan lacked the
-                # group column) before falling through to this loader; re-apply
-                # so the kwargs and the flag can't disagree.
-                dict_kwargs = _grouped_kwargs(original_dict_kwargs)
+                if code_group_optin:
+                    # Same kwargs, handed over rather than applied: the author's
+                    # code decides which px call they land in.
+                    code_group_kwargs = _grouped_kwargs({})
+                    code_group_by = [GROUP_COLUMN]
+                else:
+                    # The agg path may have reverted dict_kwargs (scan lacked the
+                    # group column) before falling through to this loader; re-apply
+                    # so the kwargs and the flag can't disagree.
+                    dict_kwargs = _grouped_kwargs(original_dict_kwargs)
                 group_colored = True
             else:
                 dict_kwargs = original_dict_kwargs
@@ -418,7 +456,14 @@ def build_figure_preview(payload: dict) -> dict:
             # originals in case the agg path reverted (kwargs and flag must
             # agree).
             if color_by_column["column_name"] in df.columns:
-                dict_kwargs = _column_kwargs(original_dict_kwargs)
+                if code_group_optin:
+                    # Handed over, not applied. Same two names the group path
+                    # uses, so an author writes one idiom and it answers both
+                    # halves of the "Colour by" control.
+                    code_group_kwargs = _column_kwargs({})
+                    code_group_by = [color_by_column["column_name"]]
+                else:
+                    dict_kwargs = _column_kwargs(original_dict_kwargs)
                 column_colored = color_by_column["column_name"]
             else:
                 dict_kwargs = original_dict_kwargs
@@ -437,7 +482,16 @@ def build_figure_preview(payload: dict) -> dict:
         # Already built by the aggregation path above; nothing left to do.
         fig = agg_fig
     elif mode == "code":
-        ok, fig, detected = process_code_mode_figure(code_content, df, theme, "viewer")
+        ok, fig, detected = process_code_mode_figure(
+            code_content,
+            df,
+            theme,
+            "viewer",
+            extra_globals={
+                CODE_GROUP_KWARGS: code_group_kwargs,
+                CODE_GROUP_BY: code_group_by,
+            },
+        )
         if not ok:
             # `process_code_mode_figure` returns `(False, error_fig, None)` when
             # the user code raises (e.g. unknown column name). The error_fig
@@ -481,6 +535,16 @@ def build_figure_preview(payload: dict) -> dict:
             render_stats=render_stats,
         )
     build_ms = int((time.monotonic() - build_started) * 1000)
+
+    # Both build paths converge here, which is where a faceted figure is made
+    # readable at tile size — see `tidy_facet_layout`. Unconditional: whether a
+    # figure has facets is a property of the figure, not of the request, and a
+    # code figure may lay its own out with grouping switched off entirely. The
+    # helper reads the axes and returns untouched when there is one panel.
+    try:
+        tidy_facet_layout(fig)
+    except Exception as exc:  # never lose a figure to its own tidying
+        logger.warning(f"celery_tasks.build_figure_preview: facet tidy skipped: {exc}")
 
     if hasattr(fig, "to_json"):
         fig_dict = json.loads(fig.to_json())

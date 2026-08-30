@@ -131,7 +131,7 @@ const MapDataButton: React.FC<MapDataButtonProps> = ({
     >
       <Popover.Target>
         <ActionIcon
-          variant="light"
+          variant={opened ? 'filled' : 'subtle'}
           color="violet"
           size="sm"
           aria-label="Show underlying data"

@@ -376,6 +376,9 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
           // on the tile to say the lasso had produced anything.
           extraActions={chromeExtras}
           showDragHandle={showDragHandle}
+          // The same grouping state figures get. Renderers that plot one point
+          // per row apply it client-side (see `groupSplit`); the rest ignore it.
+          groupRender={groupRender}
         />
       </LazyMount>
     );

@@ -4,7 +4,7 @@ import { Icon } from '@iconify/react';
 
 interface InspectButtonProps {
   componentId: string;
-  /** Drives the filled/light variant so the inspected component is identifiable
+  /** Drives the filled/subtle variant so the inspected component is identifiable
    *  from the grid, not only from the panel's own header. */
   active: boolean;
   onInspect: (componentId: string) => void;

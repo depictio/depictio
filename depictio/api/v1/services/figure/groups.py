@@ -27,6 +27,19 @@ import polars as pl
 from depictio.api.v1.deltatables_utils import _categorical_predicate
 
 GROUP_COLUMN = "__depictio_group__"
+# The name code-mode figures spread to opt into grouping:
+#   fig = px.scatter(df.to_pandas(), x=..., y=..., **depictio_group_kwargs)
+# It is bound to the output of the same helper UI mode applies, so "Split"
+# means the same thing on both paths. Always defined in code mode, empty
+# whenever grouping is off, so spreading it is safe unconditionally.
+CODE_GROUP_KWARGS = "depictio_group_kwargs"
+# Its companion, for a code figure that aggregates before plotting. Spread into
+# the grouping keys so the annotation survives the aggregation:
+#   df.group_by([*depictio_group_by, "Phylum"]).agg(...)
+# Without it a `group_by` silently drops `__depictio_group__` and the px call
+# below is then handed a column its frame no longer has. Empty list whenever
+# grouping is off, so the same line works ungrouped.
+CODE_GROUP_BY = "depictio_group_by"
 OTHER_LABEL = "Other"
 # Neutral gray for unassigned rows: context, not a category of its own.
 OTHER_COLOR = "#adb5bd"
@@ -249,3 +262,88 @@ def apply_facet_kwargs(dict_kwargs: dict, column: str) -> dict:
     out["facet_col"] = column
     out["facet_col_wrap"] = FACET_COL_WRAP
     return out
+
+
+def tidy_facet_layout(fig: Any) -> Any:
+    """Make a faceted figure readable inside a dashboard tile.
+
+    Plotly Express lays facets out for a full-page notebook figure, and two of
+    its defaults fail badly in a tile:
+
+    * Row labels are drawn rotated 90 degrees against the right-hand border,
+      which at tile size reads as a smudge. They move above their band, level.
+    * Every facet label is prefixed with the column it came from
+      (``__depictio_group__=North``), which is machinery, not information.
+    * Rotated tick labels are clipped, because the margin was fixed before the
+      labels were known. ``automargin`` measures them instead of guessing.
+
+    Applied to whatever figure the render task ends up with, so a code figure
+    that spread the same kwargs is tidied identically to a UI one. Detection is
+    on shape alone — whether the axes carry more than one band — so nothing here
+    knows what is being plotted, and a figure that facets on its own is tidied
+    whether or not the request asked for a split.
+    """
+    layout = getattr(fig, "layout", None)
+    if layout is None:
+        return fig
+
+    # Every band, as (low, high) in paper coordinates, read back off the axes.
+    # A dual-axis figure stacks two axes on the same full-width domain, so
+    # counting *distinct* domains is what separates faceting from that.
+    row_bands: list[tuple[float, float]] = []
+    col_bands: set[tuple[float, float]] = set()
+    for name, axis in layout.to_plotly_json().items():
+        if not isinstance(axis, dict):
+            continue
+        domain = axis.get("domain")
+        if not (isinstance(domain, (list, tuple)) and len(domain) == 2):
+            continue
+        band = (float(domain[0]), float(domain[1]))
+        if name.startswith("yaxis"):
+            row_bands.append(band)
+        elif name.startswith("xaxis"):
+            col_bands.add(band)
+    row_bands.sort()
+
+    # Not faceted: leave it alone. `automargin` rewrites the whole figure's
+    # margins, which has no business firing on a plain single-panel chart.
+    if len(set(row_bands)) < 2 and len(col_bands) < 2:
+        return fig
+
+    # Let Plotly measure the tick labels rather than living with a margin
+    # chosen before they existed. This is what un-clips a rotated axis, and what
+    # gives a long categorical label the width it needs.
+    fig.update_xaxes(automargin=True)
+    fig.update_yaxes(automargin=True)
+
+    def band_top(y: float) -> float:
+        """Top of the row band this label sits against, in paper coords."""
+        for low, high in row_bands:
+            if low - 0.01 <= y <= high + 0.01:
+                return high
+        return y
+
+    for annotation in layout.annotations or ():
+        text = getattr(annotation, "text", None)
+        if not isinstance(text, str):
+            continue
+        # The two defects are independent, and a figure that already stripped
+        # its own prefix still needs laying flat — so test for each separately
+        # rather than making the prefix the gate for both.
+        prefixed = "=" in text
+        rotated = getattr(annotation, "textangle", 0) in (90, -90)
+        if not (prefixed or rotated):
+            continue
+        if prefixed:
+            # px writes "<column>=<value>"; only the value is worth the space.
+            annotation.update(text=text.split("=", 1)[-1])
+        annotation.update(font={"size": 12})
+        if rotated:
+            annotation.update(
+                textangle=0,
+                x=0,
+                xanchor="left",
+                yanchor="bottom",
+                y=band_top(getattr(annotation, "y", 0.0)),
+            )
+    return fig

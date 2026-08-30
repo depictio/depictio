@@ -29,6 +29,10 @@ import type { AdvancedVizExtrasPayload } from './AdvancedVizExtras';
 import { useAdvancedVizInspector } from './AdvancedVizInspectorBridge';
 import LoadAllButton from '../chrome/LoadAllButton';
 import { ComponentIndexContext } from '../DashboardLoadingProvider';
+import type { GroupRenderState } from '../../selectionGroups';
+import SplitPanels, { shouldSplitIntoPanels } from './SplitPanels';
+import { panelsForGrouping } from '../../splitPanels';
+import type { PanelSpec } from '../../splitPanels';
 
 interface AdvancedVizDispatchProps {
   metadata: StoredMetadata;
@@ -43,11 +47,16 @@ interface AdvancedVizDispatchProps {
   onFilterChange?: (filter: InteractiveFilter) => void;
   extraActions?: React.ReactNode;
   showDragHandle?: boolean;
+  /** Dashboard-wide analysis grouping. Renderers whose points map one-to-one
+   *  onto rows apply it to their finished figure with `splitFigureByGroups`;
+   *  the aggregating ones (UpSet, sunburst, stacked taxonomy) ignore it,
+   *  because a group cannot be attributed to a bar that is already a sum. */
+  groupRender?: GroupRenderState;
 }
 
 /**
  * `viz_kind` → renderer. Every renderer takes the same
- * `{ metadata, filters, refreshTick, onFilterChange? }` props, so the dispatch
+ * `{ metadata, filters, refreshTick, onFilterChange?, groupRender? }` props, so the dispatch
  * is a lookup rather than a chain of comparisons. `ancombc_differentials` was collapsed
  * into `da_barplot` — legacy persisted dashboards still carry the old kind
  * string and need the same renderer.
@@ -101,6 +110,7 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   refreshTick,
   extraActions,
   showDragHandle,
+  groupRender,
 }) => {
   const [published, setPublished] = React.useState<AdvancedVizExtrasPayload | null>(null);
 
@@ -139,17 +149,48 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
 
   const vizKind = (metadata.viz_kind as string) || '';
   const Renderer = RENDERERS[vizKind];
-  const inner = Renderer ? (
+  // "Split" is one component per group, each built from that group's rows —
+  // see GroupSplitPanels for why it is not a cut through the finished figure.
+  // Panels are read-only: a lasso inside one would be a selection over an
+  // already-narrowed frame, which is not what saving a group means.
+  // Panels that turn out to hold identical data mean the group filter found
+  // nothing to narrow here — a volcano keyed per taxon has no sample column to
+  // match on. Remembered per component so the whole view is drawn once and
+  // does not oscillate.
+  const [splitIneffective, setSplitIneffective] = React.useState(false);
+  // `filters` is a fresh array on every render, so memoise on the panel set's
+  // content rather than its identity: an unstable `panels` would re-run every
+  // panel's fetch and clear the flag below on each render.
+  const panelKey = JSON.stringify(panelsForGrouping(groupRender, filters));
+  const panels = React.useMemo(() => JSON.parse(panelKey) as PanelSpec[], [panelKey]);
+  React.useEffect(() => setSplitIneffective(false), [metadata.dc_id, panelKey]);
+  const split = Boolean(Renderer) && !splitIneffective && shouldSplitIntoPanels(panels, vizKind);
+  const inner = !Renderer ? (
+    <div className="dashboard-error" style={{ fontSize: '0.75rem' }}>
+      Unknown advanced viz kind: "{vizKind}"
+    </div>
+  ) : split ? (
+    <SplitPanels
+      panels={panels}
+      filters={filters}
+      onIneffective={() => setSplitIneffective(true)}
+      renderPanel={(panelFilters, key) => (
+        <Renderer
+          key={key}
+          metadata={metadata}
+          filters={panelFilters}
+          refreshTick={refreshTick}
+        />
+      )}
+    />
+  ) : (
     <Renderer
       metadata={metadata}
       filters={filters}
       refreshTick={refreshTick}
       onFilterChange={onFilterChange}
+      groupRender={groupRender}
     />
-  ) : (
-    <div className="dashboard-error" style={{ fontSize: '0.75rem' }}>
-      Unknown advanced viz kind: "{vizKind}"
-    </div>
   );
 
   const combinedExtras = popovers || extraActions ? (

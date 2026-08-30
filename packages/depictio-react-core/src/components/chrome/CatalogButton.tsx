@@ -22,7 +22,9 @@ const CatalogButton: React.FC<{ source: CatalogSource }> = ({ source }) => (
         label={source.toolName ? `From catalog · ${source.toolName}` : 'From the tools catalog'}
         withArrow
       >
-        <ActionIcon variant="light" color="violet" size="sm" aria-label="Catalog origin">
+        {/* `subtle` like every other idle action in the cluster: a permanent
+            background made this the one icon that read as switched on. */}
+        <ActionIcon variant="subtle" color="violet" size="sm" aria-label="Catalog origin">
           <Icon icon="mdi:hammer" width={16} height={16} />
         </ActionIcon>
       </Tooltip>

@@ -387,3 +387,200 @@ class TestColumnColoringIntegration:
         assert set(by_name) == {"Setosa", "Virginica"}
         assert by_name["Setosa"].marker.color == "#4C72B0"
         assert by_name["Virginica"].marker.color == "#55A467"
+
+
+class TestCodeModeGrouping:
+    """A code-mode figure honours Colour/Split by spreading the server's kwargs.
+
+    The server never rewrites user code, so a code figure opts in by naming
+    ``depictio_group_kwargs`` and spreading it into its own px call. What it
+    receives is the output of the same two helpers UI mode applies, which is
+    what stops the two paths from disagreeing about what "Split" means.
+    """
+
+    GROUPS = [
+        {"name": "North", "column_name": "sample", "values": ["s1", "s2"], "color": "#4C72B0"},
+        {"name": "South", "column_name": "sample", "values": ["s3", "s4"], "color": "#DD8452"},
+    ]
+    CODE = (
+        "colors = {'Soil': '#E24A33', 'River': '#348ABD'}\n"
+        "opts = {'color': 'habitat', 'color_discrete_map': colors, **depictio_group_kwargs}\n"
+        "fig = px.scatter(df.to_pandas(), x='x', y='y', **opts)\n"
+    )
+
+    def _frame(self):
+        return pl.DataFrame(
+            {
+                "x": [1.0, 2.0, 3.0, 4.0],
+                "y": [2.0, 4.0, 6.0, 8.0],
+                "habitat": ["Soil", "Soil", "River", "River"],
+                "sample": ["s1", "s2", "s3", "s4"],
+                GROUP_COLUMN: ["North", "North", "South", "South"],
+            }
+        )
+
+    # An aggregating figure: `group_by` would drop the annotation, so the same
+    # handover also names the grouping keys to spread into it.
+    AGG_CODE = (
+        "df_modified = df.group_by(list(dict.fromkeys([*depictio_group_by, 'habitat']))).agg("
+        "pl.col('y').mean().alias('mean_y'))\n"
+        "fig = px.bar(df_modified.to_pandas(), x='habitat', y='mean_y', "
+        "**depictio_group_kwargs)\n"
+    )
+
+    def _run(self, group_kwargs, code=None, group_by=None):
+        from depictio.api.v1.services.figure.code_executor import SimpleCodeExecutor
+        from depictio.api.v1.services.figure.groups import CODE_GROUP_BY, CODE_GROUP_KWARGS
+
+        ok, fig, message = SimpleCodeExecutor().execute_code(
+            code or self.CODE,
+            self._frame(),
+            {CODE_GROUP_KWARGS: group_kwargs, CODE_GROUP_BY: group_by or []},
+        )
+        assert ok, message
+        return fig
+
+    def test_empty_kwargs_leave_the_authored_coloring_alone(self):
+        # Grouping off: the name is still bound, so spreading it is a no-op and
+        # the figure keeps the colors its author chose.
+        fig = self._run({})
+        assert {t.name for t in fig.data} == {"Soil", "River"}
+
+    def test_group_kwargs_override_the_authored_color(self):
+        fig = self._run(apply_group_coloring_kwargs({}, self.GROUPS))
+        by_name = {t.name: t for t in fig.data}
+        assert set(by_name) == {"North", "South"}
+        assert by_name["North"].marker.color == "#4C72B0"
+        assert len({t.xaxis for t in fig.data}) == 1  # overlaid, one panel
+
+    def test_grouping_keys_survive_an_aggregation(self):
+        fig = self._run(
+            apply_group_coloring_kwargs({}, self.GROUPS),
+            code=self.AGG_CODE,
+            group_by=[GROUP_COLUMN],
+        )
+        assert {t.name for t in fig.data} == {"North", "South"}
+
+    def test_an_aggregating_figure_renders_ungrouped_when_grouping_is_off(self):
+        # Same source line, nothing bound: the group_by spreads an empty list
+        # and the bar is the one its author wrote.
+        fig = self._run({}, code=self.AGG_CODE)
+        assert len(fig.data) == 1
+
+    def test_a_handed_over_column_the_figure_already_groups_by(self):
+        # "Colour by habitat" on a figure already keyed by habitat: polars
+        # refuses a repeated group_by key, so the idiom deduplicates.
+        fig = self._run({"color": "habitat"}, code=self.AGG_CODE, group_by=["habitat"])
+        assert len(fig.data) == 2
+
+    def test_split_kwargs_facet_the_code_figure(self):
+        fig = self._run(
+            apply_facet_kwargs(apply_group_coloring_kwargs({}, self.GROUPS), GROUP_COLUMN)
+        )
+        assert {t.name for t in fig.data} == {"North", "South"}
+        # One panel per group: the whole point of Split reaching code mode.
+        assert len({t.xaxis for t in fig.data}) == 2
+
+
+class TestFacetTidy:
+    """A split figure has to be readable inside a tile, not a notebook page."""
+
+    def _faceted(self):
+        import pandas as pd
+        import plotly.express as px
+
+        frame = pd.DataFrame(
+            {
+                "x": ["A", "B", "C"] * 3,
+                "y": range(9),
+                GROUP_COLUMN: ["North"] * 3 + ["South"] * 3 + [OTHER_LABEL] * 3,
+            }
+        )
+        return px.bar(frame, x="x", y="y", facet_row=GROUP_COLUMN)
+
+    def test_row_labels_come_off_the_border_and_lose_the_column_prefix(self):
+        from depictio.api.v1.services.figure.groups import tidy_facet_layout
+
+        fig = self._faceted()
+        assert all(a.textangle == 90 for a in fig.layout.annotations)
+        tidy_facet_layout(fig)
+        labels = {a.text for a in fig.layout.annotations}
+        assert labels == {"North", "South", OTHER_LABEL}
+        # Level, and at the left edge rather than rotated against the right one.
+        assert all(a.textangle == 0 and a.x == 0 for a in fig.layout.annotations)
+
+    def test_labels_sit_at_the_top_of_the_band_they_name(self):
+        from depictio.api.v1.services.figure.groups import tidy_facet_layout
+
+        fig = self._faceted()
+        tidy_facet_layout(fig)
+        tops = sorted(
+            axis["domain"][1]
+            for name, axis in fig.layout.to_plotly_json().items()
+            if name.startswith("yaxis")
+        )
+        assert sorted(a.y for a in fig.layout.annotations) == tops
+
+    def test_tick_labels_get_measured_instead_of_clipped(self):
+        from depictio.api.v1.services.figure.groups import tidy_facet_layout
+
+        fig = self._faceted()
+        tidy_facet_layout(fig)
+        assert fig.layout.xaxis.automargin is True
+
+    def test_a_label_the_figure_already_stripped_is_still_laid_flat(self):
+        """The two defects are independent: several shipped code figures strip
+        the ``col=`` prefix themselves, and used to keep their rotated labels
+        because the prefix was the gate for both fixes."""
+        from depictio.api.v1.services.figure.groups import tidy_facet_layout
+
+        fig = self._faceted()
+        fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
+        assert all("=" not in a.text for a in fig.layout.annotations)
+        tidy_facet_layout(fig)
+        assert {a.text for a in fig.layout.annotations} == {"North", "South", OTHER_LABEL}
+        assert all(a.textangle == 0 and a.x == 0 for a in fig.layout.annotations)
+
+    def test_a_figure_that_facets_itself_is_tidied_with_grouping_off(self):
+        """Faceting is a property of the figure, not of the request: several
+        shipped code figures lay their own facets out and must still be tidied
+        when nobody asked for a split."""
+        import pandas as pd
+        import plotly.express as px
+
+        from depictio.api.v1.services.figure.groups import tidy_facet_layout
+
+        frame = pd.DataFrame(
+            {
+                "value": range(6),
+                "Phylum": ["candidate_division_WPS-1", "Proteobacteria"] * 3,
+                "habitat": ["Soil"] * 2 + ["River"] * 2 + ["Sediment"] * 2,
+            }
+        )
+        fig = px.bar(frame, x="value", y="Phylum", orientation="h", facet_col="habitat")
+        tidy_facet_layout(fig)
+        assert fig.layout.yaxis.automargin is True
+
+    def test_a_single_panel_figure_keeps_the_margins_it_was_given(self):
+        """`automargin` rewrites the whole figure's margins, so it must not fire
+        on a chart that has one panel and never mentioned facets."""
+        import pandas as pd
+        import plotly.express as px
+
+        from depictio.api.v1.services.figure.groups import tidy_facet_layout
+
+        fig = px.bar(pd.DataFrame({"x": ["A", "B"], "y": [1, 2]}), x="x", y="y")
+        tidy_facet_layout(fig)
+        assert fig.layout.yaxis.automargin is None
+        assert fig.layout.xaxis.automargin is None
+
+    def test_a_figure_with_no_facets_keeps_its_annotations(self):
+        import pandas as pd
+        import plotly.express as px
+
+        from depictio.api.v1.services.figure.groups import tidy_facet_layout
+
+        fig = px.bar(pd.DataFrame({"x": ["A"], "y": [1]}), x="x", y="y")
+        fig.add_annotation(text="author's own note", x=0.5, y=0.5)
+        tidy_facet_layout(fig)
+        assert [a.text for a in fig.layout.annotations] == ["author's own note"]

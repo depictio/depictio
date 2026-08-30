@@ -20,6 +20,8 @@ import {
 import { adaptGlTrace, SVG_MAX_POINTS, useWebglSlot } from '../../webglBudget';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { COLOUR_SCALES, type ColourScale } from './colourScales';
+import { splitFigureByGroups } from './groupSplit';
+import type { GroupRenderState } from '../../selectionGroups';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
 
@@ -36,11 +38,15 @@ interface Props {
   metadata: StoredMetadata & { viz_kind?: string; config?: DotPlotConfig };
   filters: InteractiveFilter[];
   refreshTick?: number;
+  /** Dashboard-wide analysis grouping, recoloured into the built figure.
+   *  Colour only: this plot is keyed per feature, so panels would repeat the
+   *  same marks. See `splitFigureByGroups`. */
+  groupRender?: GroupRenderState;
 }
 
 type AxisSort = 'name' | 'mean' | 'frac';
 
-const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
+const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, groupRender }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
   const isDark = colorScheme === 'dark';
@@ -485,6 +491,23 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
     ],
   );
 
+  // Recolour by the dashboard's analysis groups. The join is on values, and
+  // `splitFigureByGroups` returns the figure untouched when no point matches,
+  // so a group built from sample ids leaves a per-feature plot alone. Slot 0 of
+  // `customdata` is the feature id.
+  const groupedFigure = useMemo(
+    () =>
+      figure
+        ? splitFigureByGroups(figure, {
+            groupRender,
+            identitySlot: 0,
+            facetable: false,
+            showLegend: true,
+          })
+        : figure,
+    [figure, groupRender],
+  );
+
   return (
     <AdvancedVizFrame
       estimated={estimated}
@@ -513,10 +536,10 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
           : undefined
       }
     >
-      {figure ? (
+      {groupedFigure ? (
         <Plot
-          data={applyDataTheme(figure.data, isDark, theme) as any}
-          layout={applyLayoutTheme(figure.layout as any, isDark, theme) as any}
+          data={applyDataTheme(groupedFigure.data, isDark, theme) as any}
+          layout={applyLayoutTheme(groupedFigure.layout as any, isDark, theme) as any}
           useResizeHandler
           style={{ width: '100%', height: '100%' }}
           config={{ displaylogo: false, responsive: true } as any}

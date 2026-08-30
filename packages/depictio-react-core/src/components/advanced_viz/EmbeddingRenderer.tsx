@@ -34,6 +34,8 @@ import {
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyThemeColors } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
+import { splitFigureByGroups } from './groupSplit';
+import type { GroupRenderState } from '../../selectionGroups';
 
 type ComputeMethod = 'pca' | 'umap' | 'tsne' | 'pcoa';
 
@@ -74,6 +76,9 @@ interface Props {
    *  read-only hosts (catalog, project previews), which is what keeps the
    *  lasso off there. */
   onFilterChange?: (filter: InteractiveFilter) => void;
+  /** Dashboard-wide analysis grouping, applied client-side to the built
+   *  figure. See `splitFigureByGroups`. */
+  groupRender?: GroupRenderState;
 }
 
 // Past this many distinct values, one trace and one legend entry per value is
@@ -105,7 +110,13 @@ function withAlpha(colour: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilterChange }) => {
+const EmbeddingRenderer: React.FC<Props> = ({
+  metadata,
+  filters,
+  refreshTick,
+  onFilterChange,
+  groupRender,
+}) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
   const isDark = colorScheme === 'dark';
@@ -764,6 +775,15 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
         template: isDark ? 'plotly_dark' : 'plotly_white',
         font: { color: textColor },
         margin: actuallyRender3D ? { l: 0, r: 0, t: 8, b: 0 } : { l: 40, r: 12, t: 12, b: 40 },
+        // Plotly wipes UI state — the drawn lasso and every trace's
+        // `selectedpoints` — on each `Plotly.react`, and `applyDataTheme`
+        // hands the wrapper a fresh trace array on every render, so one
+        // happens as soon as the emitted selection lands back in
+        // `filters`. Without a stable `uirevision` the lasso the user has
+        // just drawn disappears the instant it takes effect. Keyed on
+        // `refreshTick` like FigureRenderer: a realtime tick still
+        // repaints, a filter change does not.
+        uirevision: `tick-${refreshTick ?? 0}`,
         ...(actuallyRender3D ? { scene: scene3D, uirevision: 'embedding-3d' } : layout2D),
         ...(!actuallyRender3D && centroidAnnotations.length > 0
           ? { annotations: centroidAnnotations }
@@ -793,6 +813,7 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
   }, [
     rows,
     config,
+    refreshTick,
     selectionEnabled,
     selectionColumn,
     selectionInOwnSlot,
@@ -814,6 +835,27 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
     hoverCols,
     liveMode,
   ]);
+
+  // The dashboard's analysis groups, applied to the finished figure. An
+  // embedding is one point per sample, and `selectionSlot` is where each
+  // point's identifier sits in its customdata — slot 0, the sample id, unless
+  // the config named another selection column. That is the same slot the lasso
+  // reads, so a group saved from this component is read back from it exactly.
+  //
+  // Grouping colours this component and never splits it, whatever the
+  // dashboard's display mode says. An ordination means one thing only: where
+  // each sample falls relative to every other sample in one shared space.
+  // Dealing the same cloud into per-group panels answers a question nobody
+  // asked of it, and costs the comparison the plot exists for.
+  const groupedFigure = useMemo(() => {
+    if (!figure) return figure;
+    return splitFigureByGroups(figure, {
+      groupRender,
+      identitySlot: selectionSlot,
+      facetable: false,
+      showLegend: legendPos !== 'hidden',
+    });
+  }, [figure, groupRender, selectionSlot, legendPos]);
 
   // Colour-by candidates: every column of the DC, not only the two configured
   // roles. A computed cluster column, any annotation column and any numeric
@@ -1170,10 +1212,10 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
     >
-      {figure ? (
+      {groupedFigure ? (
         <AdvancedVizPlot
-          data={applyDataTheme(figure.data, isDark, theme) as any}
-          layout={applyLayoutTheme(figure.layout as any, isDark, theme) as any}
+          data={applyDataTheme(groupedFigure.data, isDark, theme) as any}
+          layout={applyLayoutTheme(groupedFigure.layout as any, isDark, theme) as any}
           useResizeHandler
           style={{ width: '100%', height: '100%' }}
           config={{ displaylogo: false, responsive: true } as any}
