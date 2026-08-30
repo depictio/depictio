@@ -2,8 +2,8 @@ apiVersion: v2
 name: depictio
 description: A Helm chart for Depictio application
 type: application
-version: "20260828.1"
-appVersion: "1.9.0"
+version: "20260830.1"
+appVersion: "1.9.1"
 icon: https://github.com/depictio/depictio/raw/main/docs/images/logo.png
 maintainers:
   - name: Thomas Weber
