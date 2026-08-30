@@ -49,11 +49,14 @@ PROJECTS: dict[str, dict[str, Any]] = {
         "project_id": "646b0f3c1e4a2d7f8e5b8c9a",
         "workflow_id": "646b0f3c1e4a2d7f8e5b8c9b",
         # The envelope the shipped seed carries. Per project because iris and
-        # penguins really do differ: iris is private and carries a generic
-        # Mantine icon, penguins is public and carries the product favicon.
+        # penguins really do differ: iris is private, penguins is public. The
+        # icon names the dataset rather than the product — a generic dashboard
+        # glyph or the Depictio favicon said nothing about which project this
+        # is, and disagreed with the icon the same dashboard shows in the tab
+        # strip. A tab that declares its own `tab_icon` overrides this anyway.
         "envelope": {
-            "icon": "mdi:view-dashboard",
-            "icon_color": "orange",
+            "icon": "mdi:flower-outline",
+            "icon_color": "violet",
             "workflow_system": "none",
             "notes_content": "<p></p>",
             "is_public": False,
@@ -105,7 +108,7 @@ PROJECTS: dict[str, dict[str, Any]] = {
         },
         "wf_tag": "python/penguin_species_analysis",
         "envelope": {
-            "icon": "/assets/images/icons/favicon.png",
+            "icon": "mdi:penguin",
             "icon_color": "orange",
             "workflow_system": "python",
             "notes_content": "",
