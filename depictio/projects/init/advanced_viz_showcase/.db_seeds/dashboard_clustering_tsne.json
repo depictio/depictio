@@ -90,7 +90,9 @@
         "density_opacity": 0.45,
         "view_3d": false,
         "reverse_scale": true,
-        "hover_cols": []
+        "hover_cols": [],
+        "selection_enabled": true,
+        "selection_column": null
       },
       "wf_tag": "python/advanced_viz_demo"
     },

@@ -339,14 +339,15 @@ components:
           labels={'petal.length': 'Petal length (cm)', 'petal.width': 'Petal width (cm)'},
       )
       fig.update_traces(contours_coloring='fill', contours_showlines=False, opacity=0.45)
-      for name, colour in palette.items():
-          sub = df_pd[df_pd['variety'] == name]
-          fig.add_scatter(
-              x=sub['petal.length'], y=sub['petal.width'], mode='markers', name=name,
-              marker=dict(size=5, color=colour, opacity=0.55,
-                          line=dict(width=0.4, color='white')),
+      fig.add_traces(
+          px.scatter(
+              df_pd, x='petal.length', y='petal.width', color='variety',
+              color_discrete_map=palette,
+          ).update_traces(
+              marker=dict(size=5, opacity=0.55, line=dict(width=0.4, color='white')),
               showlegend=False,
-          )
+          ).data
+      )
     layout: { x: 0, y: 4, w: 8, h: 5 }
 
   # ── Variety separation figures ─────────────────────────────────────

@@ -1254,6 +1254,8 @@ tabs:
       - Kingdom
       - Phylum
       - Class
+      palette: tab10
+      min_percent: 0
     section: Taxonomic structure
     tag: advanced_viz-adv-sunburst-8e75c7
     index: adv-sunburst
@@ -1637,6 +1639,26 @@ tabs:
       cluster_metric: euclidean
       normalize: none
       colorscale: Viridis
+      col_annotations:
+        habitat:
+          SRR10070130: Riverwater
+          SRR10070131: Riverwater
+          SRR10070132: Groundwater
+          SRR10070133: Groundwater
+          SRR10070134: Riverwater
+          SRR10070141: Groundwater
+          SRR10070149: Sediment
+          SRR10070150: Sediment
+          SRR10070151: Sediment
+          SRR10102392: Soil
+          SRR10102393: Soil
+          SRR10102394: Soil
+      col_annotation_colors:
+        habitat:
+          Riverwater: '#348ABD'
+          Groundwater: '#45B8AC'
+          Sediment: '#8B5A2B'
+          Soil: '#E24A33'
     section: Sample relationships
     tag: advanced_viz-ord-bray-curtis-f70a9e
     index: ord-bray-curtis
@@ -1678,6 +1700,26 @@ tabs:
       cluster_method: ward
       cluster_metric: euclidean
       normalize: row_z
+      col_annotations:
+        habitat:
+          SRR10070130: Riverwater
+          SRR10070131: Riverwater
+          SRR10070132: Groundwater
+          SRR10070133: Groundwater
+          SRR10070134: Riverwater
+          SRR10070141: Groundwater
+          SRR10070149: Sediment
+          SRR10070150: Sediment
+          SRR10070151: Sediment
+          SRR10102392: Soil
+          SRR10102393: Soil
+          SRR10102394: Soil
+      col_annotation_colors:
+        habitat:
+          Riverwater: '#348ABD'
+          Groundwater: '#45B8AC'
+          Sediment: '#8B5A2B'
+          Soil: '#E24A33'
     section: Clustered abundance
     tag: advanced_viz-ord-complex-heatmap-92c52d
     index: ord-complex-heatmap
@@ -3091,7 +3133,7 @@ tabs:
     workflow_tag: ampliseq
     data_collection_tag: metadata
     mode: code
-    code_content: "colors = {'Riverwater': '#348ABD', 'Groundwater': '#45B8AC', 'Sediment': '#8B5A2B', 'Soil': '#E24A33'}\nfig = px.scatter(\n    df.to_pandas(),\n    x='ctd_temperature_c', y='ctd_conductivity_us_cm', color='habitat',\n    color_discrete_map=colors, hover_name='city',\n)\nfig.update_traces(marker={'size': 14})\nfig.update_layout(\n    xaxis_title='Temperature (°C)', yaxis_title='Conductivity (µS/cm)',\n    legend_title_text='Habitat', margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},\n)\n"
+    code_content: "colors = {'Riverwater': '#348ABD', 'Groundwater': '#45B8AC', 'Sediment': '#8B5A2B', 'Soil': '#E24A33'}\nfig = px.scatter(\n    df.to_pandas(),\n    x='ctd_temperature_c', y='ctd_conductivity_us_cm', color='habitat',\n    color_discrete_map=colors, hover_name='city', custom_data=['sample'],\n)\nfig.update_traces(marker={'size': 14})\nfig.update_layout(\n    xaxis_title='Temperature (°C)', yaxis_title='Conductivity (µS/cm)',\n    legend_title_text='Habitat', margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},\n)\n"
     title_size: sm
     title_align: left
     section: Profiles
@@ -3103,6 +3145,8 @@ tabs:
       w: 4
       h: 6
     title: Temperature × conductivity
+    selection_enabled: true
+    selection_column: sample
   - component_type: figure
     workflow_tag: ampliseq
     data_collection_tag: metadata
@@ -3123,7 +3167,7 @@ tabs:
     workflow_tag: ampliseq
     data_collection_tag: metadata
     mode: code
-    code_content: "colors = {'Riverwater': '#348ABD', 'Groundwater': '#45B8AC', 'Sediment': '#8B5A2B', 'Soil': '#E24A33'}\nfig = px.scatter(\n    df.to_pandas(),\n    x='ctd_nitrate_mg_l', y='ctd_doc_mg_l', color='habitat',\n    size='ctd_turbidity_ntu', color_discrete_map=colors, hover_name='city', size_max=26,\n)\nfig.update_layout(\n    xaxis_title='Nitrate (mg/L)', yaxis_title='Dissolved organic carbon (mg/L)',\n    legend_title_text='Habitat', margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},\n)\n"
+    code_content: "colors = {'Riverwater': '#348ABD', 'Groundwater': '#45B8AC', 'Sediment': '#8B5A2B', 'Soil': '#E24A33'}\nfig = px.scatter(\n    df.to_pandas(),\n    x='ctd_nitrate_mg_l', y='ctd_doc_mg_l', color='habitat',\n    size='ctd_turbidity_ntu', color_discrete_map=colors, hover_name='city', size_max=26,\n    custom_data=['sample'],\n)\nfig.update_layout(\n    xaxis_title='Nitrate (mg/L)', yaxis_title='Dissolved organic carbon (mg/L)',\n    legend_title_text='Habitat', margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},\n)\n"
     title_size: sm
     title_align: left
     section: Profiles
@@ -3135,6 +3179,8 @@ tabs:
       w: 8
       h: 6
     title: Nitrate × dissolved carbon
+    selection_enabled: true
+    selection_column: sample
   - component_type: text
     workflow_tag: ampliseq
     title_size: sm

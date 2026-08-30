@@ -69,6 +69,7 @@ components:
       color_col: "color"
       point_size: 9
       show_density: false
+      selection_enabled: true
     layout: { x: 0, y: 1, w: 8, h: 8 }
 
   - tag: filter-clustering_pcoa-cluster

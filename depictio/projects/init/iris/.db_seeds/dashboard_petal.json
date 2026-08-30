@@ -759,7 +759,7 @@
       "visu_type": "scatter",
       "dict_kwargs": {},
       "mode": "code",
-      "code_content": "df_pd = df.to_pandas()\npalette = {'Setosa': '#4C72B0', 'Versicolor': '#DD8452', 'Virginica': '#55A467'}\nfig = px.density_contour(\n    df_pd, x='petal.length', y='petal.width', color='variety',\n    color_discrete_map=palette,\n    labels={'petal.length': 'Petal length (cm)', 'petal.width': 'Petal width (cm)'},\n)\nfig.update_traces(contours_coloring='fill', contours_showlines=False, opacity=0.45)\nfor name, colour in palette.items():\n    sub = df_pd[df_pd['variety'] == name]\n    fig.add_scatter(\n        x=sub['petal.length'], y=sub['petal.width'], mode='markers', name=name,\n        marker=dict(size=5, color=colour, opacity=0.55,\n                    line=dict(width=0.4, color='white')),\n        showlegend=False,\n    )\n",
+      "code_content": "df_pd = df.to_pandas()\npalette = {'Setosa': '#4C72B0', 'Versicolor': '#DD8452', 'Virginica': '#55A467'}\nfig = px.density_contour(\n    df_pd, x='petal.length', y='petal.width', color='variety',\n    color_discrete_map=palette,\n    labels={'petal.length': 'Petal length (cm)', 'petal.width': 'Petal width (cm)'},\n)\nfig.update_traces(contours_coloring='fill', contours_showlines=False, opacity=0.45)\nfig.add_traces(\n    px.scatter(\n        df_pd, x='petal.length', y='petal.width', color='variety',\n        color_discrete_map=palette,\n    ).update_traces(\n        marker=dict(size=5, opacity=0.55, line=dict(width=0.4, color='white')),\n        showlegend=False,\n    ).data\n)\n",
       "displayed_data_count": 0,
       "total_data_count": 0,
       "was_sampled": false,

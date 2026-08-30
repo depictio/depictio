@@ -68,6 +68,12 @@ components:
       score_kind: "-log10(padj)"
       score_threshold: 5.0
       top_n_labels: 8
+      # A Manhattan point is one feature at one locus, so the feature is what a
+      # lasso is actually picking out. Unlike the embedding there is no default:
+      # naming the wrong column here would emit a filter that silently matches
+      # nothing, so the config has to say it out loud.
+      selection_enabled: true
+      selection_column: "feature"
     layout: { x: 0, y: 2, w: 8, h: 8 }
 
   - tag: filter-manhattan-chr

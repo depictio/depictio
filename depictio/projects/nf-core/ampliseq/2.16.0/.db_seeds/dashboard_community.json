@@ -14,7 +14,7 @@
   "stored_children_data": [],
   "stored_metadata": [
     {
-      "index": "0a9810f1-7d1b-4c09-bf6e-6c7820fe1112",
+      "index": "3478e48b-0a3c-4f12-a7a4-96efa6d37426",
       "component_type": "interactive",
       "title": "Sample ID",
       "workflow_tag": "ampliseq",
@@ -56,7 +56,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "52343cbc-ffb0-4318-920d-591389e864e8",
+      "index": "79a0c496-9799-4560-b0dc-492468fa4769",
       "component_type": "interactive",
       "title": "Habitat",
       "workflow_tag": "ampliseq",
@@ -98,7 +98,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "2a4f66bc-e7bc-4ca0-b6ed-10aac88086bf",
+      "index": "401977d6-ef1b-44f1-9d12-2a86dd392076",
       "component_type": "interactive",
       "title": "Kingdom",
       "workflow_tag": "ampliseq",
@@ -140,7 +140,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "3c0694db-dc8b-4bb9-a2e8-a51a5e78e482",
+      "index": "d87057e7-a8e5-4383-85bf-e8a04af0c64b",
       "component_type": "interactive",
       "title": "Phylum",
       "workflow_tag": "ampliseq",
@@ -247,7 +247,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "1e8d1801-ec71-4edf-8c50-837c38c7b0e1",
+      "index": "009e35b2-864a-4c4b-b962-5e0e4bb972d5",
       "component_type": "card",
       "title": "Rel. abundance (distribution)",
       "workflow_tag": "ampliseq",
@@ -299,7 +299,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "fa5af4f7-6d4a-4d52-940d-439de1e33044",
+      "index": "508bf34f-70ae-4eae-99c2-fccf462294ee",
       "component_type": "card",
       "title": "Distinct taxa",
       "workflow_tag": "ampliseq",
@@ -349,7 +349,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "0b99c835-483e-4297-b917-d4ee8f910d4c",
+      "index": "3d74ab3b-b7a5-4aed-9459-d4b1fe048380",
       "component_type": "card",
       "title": "Habitat groups",
       "workflow_tag": "ampliseq",
@@ -472,7 +472,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "6b1d1414-c273-417a-8f8e-a89677173e42",
+      "index": "f340e629-68d6-4ac9-9b17-9939d5d5b738",
       "component_type": "figure",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -551,6 +551,13 @@
       "title_size": "sm",
       "title_align": "left",
       "use": "qiime2/stacked_taxonomy",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_stacked_taxonomy_canonical",
+        "use": "qiime2/stacked_taxonomy",
+        "description": "Long-format stacked-taxonomy abundance (sample \u00d7 rank \u00d7 taxon) fanned in from the per-rank QIIME2 rel-table-{2..6}.tsv collapses, with a derived Kingdom level."
+      },
       "section": "Composition",
       "viz_kind": "stacked_taxonomy",
       "config": {
@@ -627,6 +634,13 @@
       "title_size": "sm",
       "title_align": "left",
       "use": "qiime2/sunburst_taxonomy",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_sunburst_canonical",
+        "use": "qiime2/sunburst_taxonomy",
+        "description": "Hierarchical taxonomic composition (Kingdom\u2192\u2026\u2192Genus with relative abundance) for a sunburst, collapsed per sample from the QIIME2 per-rank rel-abundance tables."
+      },
       "section": "Taxonomic structure",
       "viz_kind": "sunburst",
       "config": {
@@ -641,9 +655,9 @@
         "start_rank": null,
         "colour_by_rank": null,
         "max_depth": 3,
-        "palette": "tab20",
+        "palette": "tab10",
         "show_counts": true,
-        "min_percent": 0.5
+        "min_percent": 0
       },
       "wf_tag": "nextflow/ampliseq"
     },
@@ -808,7 +822,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "ed9cd66a-c541-40c1-9fa6-36decfb0d4ca",
+      "index": "d819bdaf-84ec-4c28-a633-6e2b4d453dbc",
       "component_type": "table",
       "title": "Taxonomy Relative Abundance",
       "workflow_tag": "ampliseq",
@@ -848,7 +862,7 @@
   "stored_edit_dashboard_mode_button": [],
   "left_panel_layout_data": [
     {
-      "i": "box-0a9810f1-7d1b-4c09-bf6e-6c7820fe1112",
+      "i": "box-3478e48b-0a3c-4f12-a7a4-96efa6d37426",
       "x": 0,
       "y": 0,
       "w": 1,
@@ -856,7 +870,7 @@
       "static": false
     },
     {
-      "i": "box-52343cbc-ffb0-4318-920d-591389e864e8",
+      "i": "box-79a0c496-9799-4560-b0dc-492468fa4769",
       "x": 0,
       "y": 3,
       "w": 1,
@@ -864,7 +878,7 @@
       "static": false
     },
     {
-      "i": "box-2a4f66bc-e7bc-4ca0-b6ed-10aac88086bf",
+      "i": "box-401977d6-ef1b-44f1-9d12-2a86dd392076",
       "x": 0,
       "y": 5,
       "w": 1,
@@ -872,7 +886,7 @@
       "static": false
     },
     {
-      "i": "box-3c0694db-dc8b-4bb9-a2e8-a51a5e78e482",
+      "i": "box-d87057e7-a8e5-4383-85bf-e8a04af0c64b",
       "x": 0,
       "y": 7,
       "w": 1,
@@ -905,7 +919,7 @@
       ]
     },
     {
-      "i": "box-1e8d1801-ec71-4edf-8c50-837c38c7b0e1",
+      "i": "box-009e35b2-864a-4c4b-b962-5e0e4bb972d5",
       "x": 0,
       "y": 1,
       "w": 2,
@@ -913,7 +927,7 @@
       "static": true
     },
     {
-      "i": "box-fa5af4f7-6d4a-4d52-940d-439de1e33044",
+      "i": "box-508bf34f-70ae-4eae-99c2-fccf462294ee",
       "x": 2,
       "y": 1,
       "w": 2,
@@ -921,7 +935,7 @@
       "static": true
     },
     {
-      "i": "box-0b99c835-483e-4297-b917-d4ee8f910d4c",
+      "i": "box-3d74ab3b-b7a5-4aed-9459-d4b1fe048380",
       "x": 4,
       "y": 1,
       "w": 2,
@@ -952,7 +966,7 @@
       ]
     },
     {
-      "i": "box-6b1d1414-c273-417a-8f8e-a89677173e42",
+      "i": "box-f340e629-68d6-4ac9-9b17-9939d5d5b738",
       "x": 0,
       "y": 1,
       "w": 8,
@@ -1072,7 +1086,7 @@
       ]
     },
     {
-      "i": "box-ed9cd66a-c541-40c1-9fa6-36decfb0d4ca",
+      "i": "box-d819bdaf-84ec-4c28-a633-6e2b4d453dbc",
       "x": 0,
       "y": 61,
       "w": 8,

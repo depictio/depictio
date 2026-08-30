@@ -140,7 +140,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "a31de6bd-e671-47e4-a1af-0d5d618da26e",
+      "index": "d4eda8cc-f6b5-4cb0-a113-a952134c76fc",
       "component_type": "text",
       "title": "Coverage at a glance",
       "workflow_tag": "viralrecon",
@@ -170,7 +170,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "96cdca74-d052-4ab8-934e-a64b4e55d9b4",
+      "index": "13b2b787-3154-41f9-ae97-05e979682d62",
       "component_type": "card",
       "title": "Amplicons Tracked",
       "workflow_tag": "viralrecon",
@@ -220,7 +220,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "7accf80d-633c-4c6f-8cd8-31ae44672f11",
+      "index": "9ab824e3-1a21-422e-b3e1-bc86631211db",
       "component_type": "card",
       "title": "Amplicon Coverage",
       "workflow_tag": "viralrecon",
@@ -269,7 +269,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "9bb81e23-5b33-4a52-ad11-a12d7b0181a7",
+      "index": "2cb96e23-66a1-4a2e-a291-f8a945109d5c",
       "component_type": "card",
       "title": "Genome Coverage",
       "workflow_tag": "viralrecon",
@@ -419,6 +419,13 @@
       "title_size": "h3",
       "title_align": "left",
       "use": "mosdepth/coverage_track_genome",
+      "catalog_source": {
+        "toolId": "mosdepth",
+        "toolName": "mosdepth",
+        "outputId": "mosdepth_genome_coverage",
+        "use": "mosdepth/coverage_track_genome",
+        "description": "Genome-wide coverage in windows, aggregated across all samples."
+      },
       "section": "Coverage tracks",
       "viz_kind": "coverage_track",
       "config": {
@@ -470,6 +477,13 @@
       "title_size": "h3",
       "title_align": "left",
       "use": "mosdepth/coverage_track_amplicon",
+      "catalog_source": {
+        "toolId": "mosdepth",
+        "toolName": "mosdepth",
+        "outputId": "mosdepth_amplicon_coverage",
+        "use": "mosdepth/coverage_track_amplicon",
+        "description": "Per-amplicon coverage depth, aggregated across all samples (bindable as-is)."
+      },
       "section": "Coverage tracks",
       "viz_kind": "coverage_track",
       "config": {
@@ -521,6 +535,13 @@
       "title_size": "h3",
       "title_align": "left",
       "use": "mosdepth/complex_heatmap",
+      "catalog_source": {
+        "toolId": "mosdepth",
+        "toolName": "mosdepth",
+        "outputId": "mosdepth_amplicon_heatmap",
+        "use": "mosdepth/complex_heatmap",
+        "description": "Log10 amplicon-coverage matrix (samples \u00d7 amplicons)."
+      },
       "section": "Coverage tracks",
       "viz_kind": "complex_heatmap",
       "config": {
@@ -565,7 +586,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "15a21837-f125-445a-a767-745cf310badc",
+      "index": "1ea8f16f-a734-4395-a41a-ee62cafc2af0",
       "component_type": "table",
       "title": "Amplicon coverage table",
       "workflow_tag": "viralrecon",
@@ -598,8 +619,8 @@
       "sortable": true,
       "filterable": true,
       "compact": false,
-      "row_selection_enabled": false,
-      "row_selection_column": null,
+      "row_selection_enabled": true,
+      "row_selection_column": "sample",
       "wf_tag": "nextflow/viralrecon"
     }
   ],
@@ -632,7 +653,7 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-a31de6bd-e671-47e4-a1af-0d5d618da26e",
+      "i": "box-d4eda8cc-f6b5-4cb0-a113-a952134c76fc",
       "x": 0,
       "y": 0,
       "w": 8,
@@ -647,7 +668,7 @@
       ]
     },
     {
-      "i": "box-96cdca74-d052-4ab8-934e-a64b4e55d9b4",
+      "i": "box-13b2b787-3154-41f9-ae97-05e979682d62",
       "x": 0,
       "y": 2,
       "w": 2,
@@ -655,7 +676,7 @@
       "static": true
     },
     {
-      "i": "box-7accf80d-633c-4c6f-8cd8-31ae44672f11",
+      "i": "box-9ab824e3-1a21-422e-b3e1-bc86631211db",
       "x": 2,
       "y": 2,
       "w": 2,
@@ -663,7 +684,7 @@
       "static": true
     },
     {
-      "i": "box-9bb81e23-5b33-4a52-ad11-a12d7b0181a7",
+      "i": "box-2cb96e23-66a1-4a2e-a291-f8a945109d5c",
       "x": 4,
       "y": 2,
       "w": 2,
@@ -754,7 +775,7 @@
       ]
     },
     {
-      "i": "box-15a21837-f125-445a-a767-745cf310badc",
+      "i": "box-1ea8f16f-a734-4395-a41a-ee62cafc2af0",
       "x": 0,
       "y": 24,
       "w": 8,

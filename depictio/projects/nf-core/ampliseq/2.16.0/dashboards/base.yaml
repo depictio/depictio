@@ -1181,6 +1181,13 @@ tabs:
       - Kingdom
       - Phylum
       - Class
+      # tab10 over the tab20 default: three ranks deep, the wide palette pairs a
+      # light and a dark shade of the same hue for neighbouring phyla, which
+      # reads as one taxon split in two rather than two taxa.
+      palette: tab10
+      # Draw every arc. The 0.5% default silently drops the rare taxa, and on a
+      # marine amplicon run the long tail is a result, not noise.
+      min_percent: 0
     section: Taxonomic structure
     tag: advanced_viz-adv-sunburst-8e75c7
     index: adv-sunburst

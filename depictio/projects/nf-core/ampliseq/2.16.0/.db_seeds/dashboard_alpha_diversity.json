@@ -377,6 +377,13 @@
       "title_size": "sm",
       "title_align": "left",
       "use": "qiime2/rarefaction",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_rarefaction_canonical",
+        "use": "qiime2/rarefaction",
+        "description": "Multi-metric alpha-rarefaction curves (sample \u00d7 depth \u00d7 iteration; shannon, observed_features, faith_pd), fanned in from the per-metric QIIME2 rarefaction CSVs."
+      },
       "section": "Rarefaction",
       "viz_kind": "rarefaction",
       "config": {

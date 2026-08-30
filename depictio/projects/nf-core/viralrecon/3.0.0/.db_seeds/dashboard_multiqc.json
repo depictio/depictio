@@ -308,7 +308,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "ea97424d-48c0-42c9-a02f-b9f8a4013c57",
+      "index": "e13fc7ea-9ae2-4511-90fc-888d872a3795",
       "component_type": "text",
       "title": "Run at a glance",
       "workflow_tag": "viralrecon",
@@ -563,7 +563,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "415bcb6e-2f10-4b86-8b01-672c4e762849",
+      "index": "048574d5-450e-4bef-9d92-e1e5101f1c3e",
       "component_type": "multiqc",
       "title": "MultiQC general statistics",
       "workflow_tag": "viralrecon",
@@ -660,7 +660,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "514f70c6-1a6a-496f-9fad-97e98623f89d",
+      "index": "39be8300-7072-4734-a4d1-7e938633c7fc",
       "component_type": "multiqc",
       "title": "fastp - filtered reads",
       "workflow_tag": "viralrecon",
@@ -693,7 +693,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "c9bcccf5-1e81-49af-92c7-e139c77d4c53",
+      "index": "f3076b8a-ec7c-4bab-aef2-6efd3f76bb30",
       "component_type": "multiqc",
       "title": "bowtie2 - paired-end alignment",
       "workflow_tag": "viralrecon",
@@ -726,7 +726,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "21320824-8865-4e5f-acc7-72664a08efa3",
+      "index": "3f0c4aec-d762-4e85-b785-7f717fa3bd4f",
       "component_type": "multiqc",
       "title": "mosdepth - cumulative coverage",
       "workflow_tag": "viralrecon",
@@ -782,7 +782,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "a9004597-fd99-4b86-9cb0-b4afa3351342",
+      "index": "133d9fde-bed0-4e10-8a20-d347c0868d0a",
       "component_type": "multiqc",
       "title": "FastQC - sequence quality histograms",
       "workflow_tag": "viralrecon",
@@ -815,7 +815,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "f9df363a-8404-415a-a634-d768c30d88b1",
+      "index": "7e5b6c89-94eb-4ac3-8798-879fe1cea736",
       "component_type": "multiqc",
       "title": "FastQC - status checks",
       "workflow_tag": "viralrecon",
@@ -848,7 +848,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "6454604f-6c81-4732-ad0f-196f7b3eb51b",
+      "index": "23bc66e0-1b84-4800-8b2b-9674b7081974",
       "component_type": "multiqc",
       "title": "Kraken2 - top taxa",
       "workflow_tag": "viralrecon",
@@ -1000,7 +1000,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "7ac9eac2-ebb7-48a4-8c75-1b80e614fb57",
+      "index": "0cfbd497-2a2f-492c-b1ed-fcfdc619e448",
       "component_type": "multiqc",
       "title": "iVar - variant counts",
       "workflow_tag": "viralrecon",
@@ -1033,7 +1033,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "07a95a51-13bb-4e1b-bbae-cf1127181dd9",
+      "index": "88215a65-68fa-4216-aad5-a08a16f14f55",
       "component_type": "multiqc",
       "title": "snpEff - effects by impact",
       "workflow_tag": "viralrecon",
@@ -1098,7 +1098,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "d8a30eb1-899b-48c5-95c7-46cde1f003de",
+      "index": "42798c3f-e9de-4318-99e4-6711a3e57d20",
       "component_type": "multiqc",
       "title": "bcftools - substitution types",
       "workflow_tag": "viralrecon",
@@ -1131,7 +1131,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "b8ddca93-38f0-4d8a-bc2b-78f4ff2357de",
+      "index": "a2295420-32a2-4ddf-8037-3831e75ef42e",
       "component_type": "multiqc",
       "title": "QUAST - number of contigs",
       "workflow_tag": "viralrecon",
@@ -1257,7 +1257,7 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-ea97424d-48c0-42c9-a02f-b9f8a4013c57",
+      "i": "box-e13fc7ea-9ae2-4511-90fc-888d872a3795",
       "x": 0,
       "y": 0,
       "w": 8,
@@ -1319,7 +1319,7 @@
       ]
     },
     {
-      "i": "box-415bcb6e-2f10-4b86-8b01-672c4e762849",
+      "i": "box-048574d5-450e-4bef-9d92-e1e5101f1c3e",
       "x": 0,
       "y": 2,
       "w": 8,
@@ -1364,7 +1364,7 @@
       ]
     },
     {
-      "i": "box-514f70c6-1a6a-496f-9fad-97e98623f89d",
+      "i": "box-39be8300-7072-4734-a4d1-7e938633c7fc",
       "x": 4,
       "y": 10,
       "w": 4,
@@ -1379,7 +1379,7 @@
       ]
     },
     {
-      "i": "box-c9bcccf5-1e81-49af-92c7-e139c77d4c53",
+      "i": "box-f3076b8a-ec7c-4bab-aef2-6efd3f76bb30",
       "x": 0,
       "y": 14,
       "w": 4,
@@ -1394,7 +1394,7 @@
       ]
     },
     {
-      "i": "box-21320824-8865-4e5f-acc7-72664a08efa3",
+      "i": "box-3f0c4aec-d762-4e85-b785-7f717fa3bd4f",
       "x": 4,
       "y": 14,
       "w": 4,
@@ -1424,7 +1424,7 @@
       ]
     },
     {
-      "i": "box-a9004597-fd99-4b86-9cb0-b4afa3351342",
+      "i": "box-133d9fde-bed0-4e10-8a20-d347c0868d0a",
       "x": 0,
       "y": 1,
       "w": 8,
@@ -1439,7 +1439,7 @@
       ]
     },
     {
-      "i": "box-f9df363a-8404-415a-a634-d768c30d88b1",
+      "i": "box-7e5b6c89-94eb-4ac3-8798-879fe1cea736",
       "x": 0,
       "y": 6,
       "w": 8,
@@ -1454,7 +1454,7 @@
       ]
     },
     {
-      "i": "box-6454604f-6c81-4732-ad0f-196f7b3eb51b",
+      "i": "box-23bc66e0-1b84-4800-8b2b-9674b7081974",
       "x": 0,
       "y": 11,
       "w": 4,
@@ -1529,7 +1529,7 @@
       ]
     },
     {
-      "i": "box-7ac9eac2-ebb7-48a4-8c75-1b80e614fb57",
+      "i": "box-0cfbd497-2a2f-492c-b1ed-fcfdc619e448",
       "x": 0,
       "y": 1,
       "w": 4,
@@ -1544,7 +1544,7 @@
       ]
     },
     {
-      "i": "box-07a95a51-13bb-4e1b-bbae-cf1127181dd9",
+      "i": "box-88215a65-68fa-4216-aad5-a08a16f14f55",
       "x": 4,
       "y": 1,
       "w": 4,
@@ -1574,7 +1574,7 @@
       ]
     },
     {
-      "i": "box-d8a30eb1-899b-48c5-95c7-46cde1f003de",
+      "i": "box-42798c3f-e9de-4318-99e4-6711a3e57d20",
       "x": 4,
       "y": 5,
       "w": 4,
@@ -1589,7 +1589,7 @@
       ]
     },
     {
-      "i": "box-b8ddca93-38f0-4d8a-bc2b-78f4ff2357de",
+      "i": "box-a2295420-32a2-4ddf-8037-3831e75ef42e",
       "x": 0,
       "y": 9,
       "w": 4,

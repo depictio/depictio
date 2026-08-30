@@ -949,7 +949,8 @@ tabs:
   - component_type: table
     workflow_tag: viralrecon
     data_collection_tag: mosdepth_amplicon_coverage
-    row_selection_enabled: false
+    row_selection_enabled: true
+    row_selection_column: sample
     section: Coverage tables
     tag: table-cov-amplicon-y5z6a7
     title: Amplicon coverage table
@@ -1302,6 +1303,7 @@ tabs:
       cluster_col: clade
       point_size: 8
       show_density: false
+      selection_enabled: true
     section: Classification flow
     tag: adv-lin-embedding
     index: adv-lin-embedding
@@ -1333,7 +1335,8 @@ tabs:
   - component_type: table
     workflow_tag: viralrecon
     data_collection_tag: pangolin_lineages
-    row_selection_enabled: false
+    row_selection_enabled: true
+    row_selection_column: sample
     section: Typing tables
     tag: table-lin-pangolin-t6u7v8
     title: Pangolin lineage assignments
@@ -1347,7 +1350,8 @@ tabs:
   - component_type: table
     workflow_tag: viralrecon
     data_collection_tag: nextclade_results
-    row_selection_enabled: false
+    row_selection_enabled: true
+    row_selection_column: sample
     section: Typing tables
     tag: table-lin-nextclade-w9x0y1
     title: Nextclade clade assignments
@@ -1620,7 +1624,8 @@ tabs:
       \ hover_data=['sample', 'qc_overallStatus', 'coverage'],\n    labels={'totalSubstitutions': 'Total\
       \ Substitutions', 'totalDeletions': 'Total Deletions', 'clade': 'Clade'},\n    opacity=0.8)\nfig.update_traces(marker=dict(size=10,\
       \ line=dict(width=1, color='DarkSlateGrey')))\n"
-    selection_enabled: false
+    selection_enabled: true
+    selection_column: sample
     section: Diagnostics
     tag: figure-qcdx-nextclade-scatter-s9t0u1
     title: Nextclade substitutions vs deletions
@@ -2088,6 +2093,8 @@ tabs:
       - EFFECT
       - sample
       default_color_by: EFFECT
+      selection_enabled: true
+      selection_column: sample
     section: Variant burden
     tag: adv-manh-track
     index: adv-manh-track
@@ -2171,6 +2178,7 @@ tabs:
       fig = px.scatter(
           df_modified.to_pandas(),
           x='REF_DP', y='ALT_DP', color='FUNCLASS', hover_name='mutation_label', opacity=0.8,
+          custom_data=['sample'],
       )
       fig.update_layout(
           xaxis_title='Reference depth', yaxis_title='Alternate depth',
@@ -2179,6 +2187,8 @@ tabs:
     title_size: sm
     title_align: left
     description: Reference depth against alternate depth, coloured by functional class.
+    selection_enabled: true
+    selection_column: sample
     section: Allele frequency
     tag: figure-var-read-support-a1cf2b
     index: var-read-support
@@ -2372,7 +2382,8 @@ tabs:
   - component_type: table
     workflow_tag: viralrecon
     data_collection_tag: variants_long
-    row_selection_enabled: false
+    row_selection_enabled: true
+    row_selection_column: sample
     section: Variant table
     tag: table-var-variants-v0w1x2
     title: Variants table

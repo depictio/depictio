@@ -28,6 +28,7 @@ Run:
 from __future__ import annotations
 
 import copy
+import csv
 import math
 import re
 import sys
@@ -199,9 +200,26 @@ def card(
 
 
 def code_figure(
-    index: str, section: str, dc: str, title: str, code: str, x, y, w, h
+    index: str,
+    section: str,
+    dc: str,
+    title: str,
+    code: str,
+    x,
+    y,
+    w,
+    h,
+    selection_column: str | None = None,
 ) -> dict[str, Any]:
-    return {
+    """A code-mode figure, optionally feeding the Analysis panel.
+
+    ``selection_column`` only makes sense for a figure whose points are rows
+    rather than aggregates, and it is only half the wiring: the reader takes the
+    id from ``customdata[0]``, which on this path comes from a ``custom_data=``
+    argument in the code itself. Setting the key without that argument yields a
+    lasso that selects nothing at all, silently.
+    """
+    comp: dict[str, Any] = {
         "component_type": "figure",
         "workflow_tag": "ampliseq",
         "data_collection_tag": dc,
@@ -215,6 +233,10 @@ def code_figure(
         "layout": {"x": x, "y": y, "w": w, "h": h},
         "title": title,
     }
+    if selection_column:
+        comp["selection_enabled"] = True
+        comp["selection_column"] = selection_column
+    return comp
 
 
 def _colors_literal() -> str:
@@ -606,7 +628,7 @@ fig.update_layout(
     }
 
 
-def environment_tab(group_col: str, group_display: str, order: int) -> dict:
+def environment_tab(group_col: str, group_display: str, id_col: str, order: int) -> dict:
     colors = _colors_literal()
     return {
         "title": "Environment (CTD)",
@@ -733,7 +755,7 @@ colors = {colors}
 fig = px.scatter(
     df.to_pandas(),
     x='ctd_temperature_c', y='ctd_conductivity_us_cm', color='{group_col}',
-    color_discrete_map=colors, hover_name='city',
+    color_discrete_map=colors, hover_name='city', custom_data=['{id_col}'],
 )
 fig.update_traces(marker={{'size': 14}})
 fig.update_layout(
@@ -745,6 +767,7 @@ fig.update_layout(
                 5,
                 4,
                 6,
+                selection_column=id_col,
             ),
             code_figure(
                 "ref-env-box-do",
@@ -779,6 +802,7 @@ fig = px.scatter(
     df.to_pandas(),
     x='ctd_nitrate_mg_l', y='ctd_doc_mg_l', color='{group_col}',
     size='ctd_turbidity_ntu', color_discrete_map=colors, hover_name='city', size_max=26,
+    custom_data=['{id_col}'],
 )
 fig.update_layout(
     xaxis_title='Nitrate (mg/L)', yaxis_title='Dissolved organic carbon (mg/L)',
@@ -789,6 +813,7 @@ fig.update_layout(
                 11,
                 8,
                 6,
+                selection_column=id_col,
             ),
             text(
                 "ref-env-diversity-header",
@@ -875,6 +900,41 @@ def set_upset_set_colors(dashboard: dict[str, Any], colors: dict[str, str]) -> N
                 print(f"  set_colors on {comp.get('index', comp.get('tag'))}")
 
 
+def annotate_heatmap_columns(
+    dashboard: dict[str, Any], group_col: str, id_col: str, colors: dict[str, str]
+) -> None:
+    """Give every clustered heatmap a habitat strip above its columns.
+
+    Both heatmaps have samples for columns, and until now nothing on either said
+    which habitat a column came from: the clustering visibly groups the samples,
+    and the reader had no way to check that the groups it found are the habitats.
+    The row annotation cannot answer that, because `row_annotation_cols` reads
+    columns of the heatmap's own DC and habitat lives in the metadata.
+
+    base.yaml cannot carry this: `col_annotations` is a literal
+    ``{column_label: category}`` map, so it names this run's samples. That is
+    exactly the kind of run-specific value the demo layer exists for.
+    """
+    metadata = Path(__file__).parent / "input" / "Metadata_full.tsv"
+    with metadata.open(encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle, delimiter="\t"))
+    by_sample = {r[id_col]: r[group_col] for r in rows if r.get(id_col) and r.get(group_col)}
+    if not by_sample:
+        raise SystemExit(f"no {id_col}/{group_col} pairs in {metadata}")
+
+    for tab in [dashboard["main_dashboard"], *dashboard.get("tabs", [])]:
+        for comp in tab.get("components", []):
+            cfg = comp.get("config") or {}
+            if cfg.get("viz_kind") != "complex_heatmap":
+                continue
+            cfg["col_annotations"] = {group_col: dict(by_sample)}
+            # Same four hexes as every other habitat tile. Without the override
+            # the strip picks its own categorical palette and the dashboard
+            # shows two different colours for Riverwater on the same screen.
+            cfg["col_annotation_colors"] = {group_col: dict(colors)}
+            print(f"  {group_col} column strip on {comp.get('index', comp.get('tag'))}")
+
+
 CHARS_PER_ROW = 300
 GRID_COLS = 8
 
@@ -935,6 +995,7 @@ def build() -> dict[str, Any]:
 
     strip_sections(dashboard, SINTAX_SECTIONS)
     set_upset_set_colors(dashboard, HABITAT_COLORS)
+    annotate_heatmap_columns(dashboard, group_col, id_col, HABITAT_COLORS)
 
     main = dashboard["main_dashboard"]
     main["title"] = "nf-core/ampliseq"
@@ -943,7 +1004,7 @@ def build() -> dict[str, Any]:
 
     next_order = max(t.get("tab_order", 0) for t in dashboard["tabs"]) + 1
     dashboard["tabs"].append(sampling_campaign_tab(group_col, group_display, id_col, next_order))
-    dashboard["tabs"].append(environment_tab(group_col, group_display, next_order + 1))
+    dashboard["tabs"].append(environment_tab(group_col, group_display, id_col, next_order + 1))
 
     # Last, so it also covers the two tabs appended just above.
     fit_text_tiles(dashboard)
