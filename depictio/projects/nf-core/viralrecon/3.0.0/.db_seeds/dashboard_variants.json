@@ -266,7 +266,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "da73e82e-bd48-462c-b9ae-9b8d61d0b1e2",
+      "index": "a4287eb7-56ea-477c-a2ff-5579730f82db",
       "component_type": "text",
       "title": "Variant burden",
       "workflow_tag": "viralrecon",
@@ -296,7 +296,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "9fd23ca6-c6a4-40d7-a184-6070dde1f518",
+      "index": "08bcdcc3-abeb-4170-8628-61b8e02fc9d0",
       "component_type": "card",
       "title": "Total Variant Calls",
       "workflow_tag": "viralrecon",
@@ -346,7 +346,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "d25efde4-d0dd-48e7-b356-7bbcccdf75e0",
+      "index": "278c2597-f698-4934-9697-4996d0872d0f",
       "component_type": "card",
       "title": "Distinct Positions",
       "workflow_tag": "viralrecon",
@@ -396,7 +396,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "13e56723-ac2b-490e-99e6-17a871f7fb32",
+      "index": "66eb7470-c3da-4b5c-a961-bd3208b5c660",
       "component_type": "card",
       "title": "Samples w/ variants",
       "workflow_tag": "viralrecon",
@@ -446,7 +446,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "7056af9d-07bb-48a7-897e-16c6703a2cfa",
+      "index": "83220e7c-c8e7-4771-b3a8-0227626884b6",
       "component_type": "card",
       "title": "Unique AA Changes",
       "workflow_tag": "viralrecon",
@@ -746,7 +746,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "789200cb-2e1e-476d-97f6-d93b3a99d879",
+      "index": "3363bc53-87c5-47dd-b7eb-1e73932e6c1e",
       "component_type": "figure",
       "title": "Variant counts by gene & functional class",
       "workflow_tag": "viralrecon",
@@ -789,7 +789,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "10fe1be2-a676-45a5-8f43-f77f8cbe58aa",
+      "index": "5db6a8a8-338a-43d3-ad37-8ec563aab193",
       "component_type": "figure",
       "title": "Variants per sample",
       "workflow_tag": "viralrecon",
@@ -832,7 +832,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "81f47a73-e454-4c75-b012-da5114e08911",
+      "index": "692d9160-a35f-4549-a407-2d9eb78f1182",
       "component_type": "text",
       "title": "Which mutations travel together",
       "workflow_tag": "viralrecon",
@@ -862,7 +862,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "c545b87e-deeb-4f1b-8428-3c9bded42e98",
+      "index": "b57d3f1b-d33c-4721-a1e1-cd75c9502830",
       "component_type": "card",
       "title": "Samples (oncoplot)",
       "workflow_tag": "viralrecon",
@@ -912,7 +912,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "79b1cb2a-8c36-42f1-8737-9306c104b4cf",
+      "index": "fb348fef-92c3-44cf-8205-7b669da2362f",
       "component_type": "card",
       "title": "Genes (oncoplot)",
       "workflow_tag": "viralrecon",
@@ -1078,7 +1078,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "4f5aec97-6cb4-46e9-a20e-52b97b5f5ca5",
+      "index": "bad331cc-47f6-4727-b9d0-a051c3cf15ee",
       "component_type": "table",
       "title": "Variants table",
       "workflow_tag": "viralrecon",
@@ -1169,7 +1169,7 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-da73e82e-bd48-462c-b9ae-9b8d61d0b1e2",
+      "i": "box-a4287eb7-56ea-477c-a2ff-5579730f82db",
       "x": 0,
       "y": 0,
       "w": 8,
@@ -1184,35 +1184,35 @@
       ]
     },
     {
-      "i": "box-9fd23ca6-c6a4-40d7-a184-6070dde1f518",
+      "i": "box-08bcdcc3-abeb-4170-8628-61b8e02fc9d0",
       "x": 0,
       "y": 2,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
-      "i": "box-d25efde4-d0dd-48e7-b356-7bbcccdf75e0",
+      "i": "box-278c2597-f698-4934-9697-4996d0872d0f",
       "x": 2,
       "y": 2,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
-      "i": "box-13e56723-ac2b-490e-99e6-17a871f7fb32",
+      "i": "box-66eb7470-c3da-4b5c-a961-bd3208b5c660",
       "x": 4,
       "y": 2,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
-      "i": "box-7056af9d-07bb-48a7-897e-16c6703a2cfa",
+      "i": "box-83220e7c-c8e7-4771-b3a8-0227626884b6",
       "x": 6,
       "y": 2,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -1306,7 +1306,7 @@
       ]
     },
     {
-      "i": "box-789200cb-2e1e-476d-97f6-d93b3a99d879",
+      "i": "box-3363bc53-87c5-47dd-b7eb-1e73932e6c1e",
       "x": 0,
       "y": 24,
       "w": 4,
@@ -1321,7 +1321,7 @@
       ]
     },
     {
-      "i": "box-10fe1be2-a676-45a5-8f43-f77f8cbe58aa",
+      "i": "box-5db6a8a8-338a-43d3-ad37-8ec563aab193",
       "x": 4,
       "y": 24,
       "w": 4,
@@ -1336,7 +1336,7 @@
       ]
     },
     {
-      "i": "box-81f47a73-e454-4c75-b012-da5114e08911",
+      "i": "box-692d9160-a35f-4549-a407-2d9eb78f1182",
       "x": 0,
       "y": 0,
       "w": 8,
@@ -1351,19 +1351,19 @@
       ]
     },
     {
-      "i": "box-c545b87e-deeb-4f1b-8428-3c9bded42e98",
+      "i": "box-b57d3f1b-d33c-4721-a1e1-cd75c9502830",
       "x": 0,
       "y": 2,
       "w": 4,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
-      "i": "box-79b1cb2a-8c36-42f1-8737-9306c104b4cf",
+      "i": "box-fb348fef-92c3-44cf-8205-7b669da2362f",
       "x": 4,
       "y": 2,
       "w": 4,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -1412,7 +1412,7 @@
       ]
     },
     {
-      "i": "box-4f5aec97-6cb4-46e9-a20e-52b97b5f5ca5",
+      "i": "box-bad331cc-47f6-4727-b9d0-a051c3cf15ee",
       "x": 0,
       "y": 51,
       "w": 8,

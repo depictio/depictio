@@ -140,7 +140,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "1dcfc2c7-52c3-4161-9a91-a835e3f803f5",
+      "index": "7a6e8c82-e2f0-49d5-86f3-109824d3942d",
       "component_type": "text",
       "title": "QC at a glance",
       "workflow_tag": "viralrecon",
@@ -170,7 +170,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "457e3a58-8898-4ec0-bb32-f19da182e0c9",
+      "index": "474cf782-0a1e-4f8b-82bf-d5d1c93c29ef",
       "component_type": "card",
       "title": "Avg % Genome >= 10x",
       "workflow_tag": "viralrecon",
@@ -222,7 +222,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "ff126a25-7c19-4018-a4e4-62ab8e4d7880",
+      "index": "efb46aa0-a5d0-44d2-a90f-a8c956ca1eb2",
       "component_type": "card",
       "title": "Median Variants / Sample",
       "workflow_tag": "viralrecon",
@@ -401,7 +401,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "1c8a4c46-b41c-4fd4-b949-a27c1d06354e",
+      "index": "95dcce9e-4afb-4e0c-9e5e-cca77d714ff8",
       "component_type": "figure",
       "title": "Median coverage vs total variants",
       "workflow_tag": "viralrecon",
@@ -444,7 +444,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "41f8709b-8a57-46e6-bf7c-eed2293bb7b8",
+      "index": "695cf98d-1ae3-4edc-b021-e977920decba",
       "component_type": "figure",
       "title": "Nextclade substitutions vs deletions",
       "workflow_tag": "viralrecon",
@@ -510,7 +510,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "3bf4bf72-db7f-4516-ac6b-f84b220f2b78",
+      "index": "27d43d47-b3ea-4f43-ac80-4869ac4860b1",
       "component_type": "figure",
       "title": "Genome coverage per sample (>=10x)",
       "workflow_tag": "viralrecon",
@@ -782,7 +782,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "bfa9ffa0-c49f-4b33-81ee-3b695eea039c",
+      "index": "185daed7-6524-4958-9d68-7aaedc9836ac",
       "component_type": "table",
       "title": "Summary metrics",
       "workflow_tag": "viralrecon",
@@ -849,7 +849,7 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-1dcfc2c7-52c3-4161-9a91-a835e3f803f5",
+      "i": "box-7a6e8c82-e2f0-49d5-86f3-109824d3942d",
       "x": 0,
       "y": 0,
       "w": 8,
@@ -864,19 +864,19 @@
       ]
     },
     {
-      "i": "box-457e3a58-8898-4ec0-bb32-f19da182e0c9",
+      "i": "box-474cf782-0a1e-4f8b-82bf-d5d1c93c29ef",
       "x": 0,
       "y": 1,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
-      "i": "box-ff126a25-7c19-4018-a4e4-62ab8e4d7880",
+      "i": "box-efb46aa0-a5d0-44d2-a90f-a8c956ca1eb2",
       "x": 2,
       "y": 1,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -884,7 +884,7 @@
       "x": 4,
       "y": 1,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -892,7 +892,7 @@
       "x": 6,
       "y": 1,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -911,7 +911,7 @@
       ]
     },
     {
-      "i": "box-1c8a4c46-b41c-4fd4-b949-a27c1d06354e",
+      "i": "box-95dcce9e-4afb-4e0c-9e5e-cca77d714ff8",
       "x": 0,
       "y": 1,
       "w": 4,
@@ -926,7 +926,7 @@
       ]
     },
     {
-      "i": "box-41f8709b-8a57-46e6-bf7c-eed2293bb7b8",
+      "i": "box-695cf98d-1ae3-4edc-b021-e977920decba",
       "x": 4,
       "y": 1,
       "w": 4,
@@ -956,7 +956,7 @@
       ]
     },
     {
-      "i": "box-3bf4bf72-db7f-4516-ac6b-f84b220f2b78",
+      "i": "box-27d43d47-b3ea-4f43-ac80-4869ac4860b1",
       "x": 0,
       "y": 1,
       "w": 8,
@@ -990,7 +990,7 @@
       "x": 0,
       "y": 1,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -998,7 +998,7 @@
       "x": 2,
       "y": 1,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -1006,7 +1006,7 @@
       "x": 4,
       "y": 1,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -1014,11 +1014,11 @@
       "x": 6,
       "y": 1,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
-      "i": "box-bfa9ffa0-c49f-4b33-81ee-3b695eea039c",
+      "i": "box-185daed7-6524-4958-9d68-7aaedc9836ac",
       "x": 0,
       "y": 4,
       "w": 8,

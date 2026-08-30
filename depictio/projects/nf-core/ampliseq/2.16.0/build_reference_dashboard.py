@@ -192,7 +192,10 @@ def card(
             "section": section,
             "tag": f"card-{index}",
             "index": index,
-            "layout": {"x": x, "y": y, "w": 2, "h": 3},
+            # h=2 like every other shipped card: the viewer measures what the
+            # content actually needs and grows the row when a breakdown asks
+            # for more, so a stored 3 only ever left a blank band.
+            "layout": {"x": x, "y": y, "w": 2, "h": 2},
             "title": title,
         }
     )
@@ -544,16 +547,21 @@ def sampling_campaign_tab(group_col: str, group_display: str, id_col: str, order
                 "Visit order",
                 f"""
 colors = {colors}
+# Colour by the viewer's analysis groups when there are some, else by the
+# pipeline's own {group_display.lower()}. One grouping axis, and the groups
+# bring their own colours with them.
+grp_col = depictio_group_by[0] if depictio_group_by else '{group_col}'
+colors = depictio_group_kwargs.get('color_discrete_map') or colors
 df_modified = df.sort('sampling_date')
 fig = px.scatter(
     df_modified.to_pandas(),
-    x='sampling_date', y='city', color='{group_col}',
+    x='sampling_date', y='city', color=grp_col,
     color_discrete_map=colors,
     hover_name='{id_col}',
 )
 fig.update_traces(marker={{'size': 14}})
 fig.update_layout(
-    xaxis_title='Sampling date', yaxis_title=None, legend_title_text='{group_display}',
+    xaxis_title='Sampling date', yaxis_title=None, legend_title_text=None if depictio_group_by else '{group_display}',
     margin={{'t': 24, 'l': 8, 'r': 8, 'b': 40}},
 )
 """,
@@ -582,14 +590,19 @@ fig.update_layout(
                 "Samples per site",
                 f"""
 colors = {colors}
-df_modified = df.group_by(['city', '{group_col}']).len().rename({{'len': 'samples'}}).sort('city')
+# Colour by the viewer's analysis groups when there are some, else by the
+# pipeline's own {group_display.lower()}. One grouping axis, and the groups
+# bring their own colours with them.
+grp_col = depictio_group_by[0] if depictio_group_by else '{group_col}'
+colors = depictio_group_kwargs.get('color_discrete_map') or colors
+df_modified = df.group_by(list(dict.fromkeys(['city', grp_col]))).len().rename({{'len': 'samples'}}).sort('city')
 fig = px.bar(
     df_modified.to_pandas(),
-    x='city', y='samples', color='{group_col}',
+    x='city', y='samples', color=grp_col,
     color_discrete_map=colors, barmode='stack',
 )
 fig.update_layout(
-    xaxis_title=None, yaxis_title='Samples', legend_title_text='{group_display}',
+    xaxis_title=None, yaxis_title='Samples', legend_title_text=None if depictio_group_by else '{group_display}',
     margin={{'t': 24, 'l': 56, 'r': 16, 'b': 60}},
 )
 """,
@@ -752,15 +765,20 @@ def environment_tab(group_col: str, group_display: str, id_col: str, order: int)
                 "Temperature × conductivity",
                 f"""
 colors = {colors}
+# Colour by the viewer's analysis groups when there are some, else by the
+# pipeline's own {group_display.lower()}. One grouping axis, and the groups
+# bring their own colours with them.
+grp_col = depictio_group_by[0] if depictio_group_by else '{group_col}'
+colors = depictio_group_kwargs.get('color_discrete_map') or colors
 fig = px.scatter(
     df.to_pandas(),
-    x='ctd_temperature_c', y='ctd_conductivity_us_cm', color='{group_col}',
+    x='ctd_temperature_c', y='ctd_conductivity_us_cm', color=grp_col,
     color_discrete_map=colors, hover_name='city', custom_data=['{id_col}'],
 )
 fig.update_traces(marker={{'size': 14}})
 fig.update_layout(
     xaxis_title='Temperature (°C)', yaxis_title='Conductivity (µS/cm)',
-    legend_title_text='{group_display}', margin={{'t': 24, 'l': 64, 'r': 16, 'b': 48}},
+    legend_title_text=None if depictio_group_by else '{group_display}', margin={{'t': 24, 'l': 64, 'r': 16, 'b': 48}},
 )
 """,
                 0,
@@ -776,9 +794,14 @@ fig.update_layout(
                 "Dissolved oxygen",
                 f"""
 colors = {colors}
+# Colour by the viewer's analysis groups when there are some, else by the
+# pipeline's own {group_display.lower()}. One grouping axis, and the groups
+# bring their own colours with them.
+grp_col = depictio_group_by[0] if depictio_group_by else '{group_col}'
+colors = depictio_group_kwargs.get('color_discrete_map') or colors
 fig = px.box(
     df.to_pandas(),
-    x='{group_col}', y='ctd_do_mg_l', color='{group_col}',
+    x=grp_col, y='ctd_do_mg_l', color=grp_col,
     color_discrete_map=colors, points='all',
 )
 fig.update_layout(
@@ -798,15 +821,20 @@ fig.update_layout(
                 "Nitrate × dissolved carbon",
                 f"""
 colors = {colors}
+# Colour by the viewer's analysis groups when there are some, else by the
+# pipeline's own {group_display.lower()}. One grouping axis, and the groups
+# bring their own colours with them.
+grp_col = depictio_group_by[0] if depictio_group_by else '{group_col}'
+colors = depictio_group_kwargs.get('color_discrete_map') or colors
 fig = px.scatter(
     df.to_pandas(),
-    x='ctd_nitrate_mg_l', y='ctd_doc_mg_l', color='{group_col}',
+    x='ctd_nitrate_mg_l', y='ctd_doc_mg_l', color=grp_col,
     size='ctd_turbidity_ntu', color_discrete_map=colors, hover_name='city', size_max=26,
     custom_data=['{id_col}'],
 )
 fig.update_layout(
     xaxis_title='Nitrate (mg/L)', yaxis_title='Dissolved organic carbon (mg/L)',
-    legend_title_text='{group_display}', margin={{'t': 24, 'l': 64, 'r': 16, 'b': 48}},
+    legend_title_text=None if depictio_group_by else '{group_display}', margin={{'t': 24, 'l': 64, 'r': 16, 'b': 48}},
 )
 """,
                 0,
@@ -836,9 +864,14 @@ fig.update_layout(
                 "Shannon diversity",
                 f"""
 colors = {colors}
+# Colour by the viewer's analysis groups when there are some, else by the
+# pipeline's own {group_display.lower()}. One grouping axis, and the groups
+# bring their own colours with them.
+grp_col = depictio_group_by[0] if depictio_group_by else '{group_col}'
+colors = depictio_group_kwargs.get('color_discrete_map') or colors
 fig = px.box(
     df.to_pandas(),
-    x='{group_col}', y='shannon', color='{group_col}',
+    x=grp_col, y='shannon', color=grp_col,
     color_discrete_map=colors, points='all',
 )
 fig.update_layout(

@@ -14,7 +14,7 @@
   "stored_children_data": [],
   "stored_metadata": [
     {
-      "index": "3478e48b-0a3c-4f12-a7a4-96efa6d37426",
+      "index": "34c0eee4-ce9a-4053-962b-2378f868fdca",
       "component_type": "interactive",
       "title": "Sample ID",
       "workflow_tag": "ampliseq",
@@ -56,7 +56,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "79a0c496-9799-4560-b0dc-492468fa4769",
+      "index": "18ae2217-1f3f-41c7-9b27-69fe206eecb5",
       "component_type": "interactive",
       "title": "Habitat",
       "workflow_tag": "ampliseq",
@@ -98,7 +98,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "401977d6-ef1b-44f1-9d12-2a86dd392076",
+      "index": "883a9ec3-3980-4f63-8ec2-f014a686b613",
       "component_type": "interactive",
       "title": "Kingdom",
       "workflow_tag": "ampliseq",
@@ -140,7 +140,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "d87057e7-a8e5-4383-85bf-e8a04af0c64b",
+      "index": "e70322a9-b6da-49bc-9c7e-aa7d736f5d3d",
       "component_type": "interactive",
       "title": "Phylum",
       "workflow_tag": "ampliseq",
@@ -247,7 +247,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "009e35b2-864a-4c4b-b962-5e0e4bb972d5",
+      "index": "2996b8cf-bafe-4f00-8757-bb9aa5261062",
       "component_type": "card",
       "title": "Rel. abundance (distribution)",
       "workflow_tag": "ampliseq",
@@ -299,7 +299,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "508bf34f-70ae-4eae-99c2-fccf462294ee",
+      "index": "87c023eb-f3c3-45af-be74-57d222eb2907",
       "component_type": "card",
       "title": "Distinct taxa",
       "workflow_tag": "ampliseq",
@@ -349,7 +349,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "3d74ab3b-b7a5-4aed-9459-d4b1fe048380",
+      "index": "96ae0bf1-10dd-47d7-8e28-9454d62e1647",
       "component_type": "card",
       "title": "Habitat groups",
       "workflow_tag": "ampliseq",
@@ -472,7 +472,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "f340e629-68d6-4ac9-9b17-9939d5d5b738",
+      "index": "21b375c2-80a8-4b7e-a7fc-592de1824a33",
       "component_type": "figure",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -512,7 +512,7 @@
         "y": "mean_rel_abundance"
       },
       "mode": "code",
-      "code_content": "df_grp = df.with_columns(pl.col('habitat').alias('_facet')) if 'habitat' in df.columns else df.with_columns(pl.lit('All samples').alias('_facet'))\ndf_modified = df_grp.group_by(['_facet', 'Phylum']).agg(pl.col('rel_abundance').mean().alias('mean_rel_abundance')).sort('Phylum')\nfig = px.bar(\n    df_modified.to_pandas(),\n    x='Phylum', y='mean_rel_abundance', color='Phylum',\n    facet_row='_facet',\n    title='Mean Relative Abundance by Habitat',\n    labels={'Phylum': 'Phylum', 'mean_rel_abundance': 'Mean Relative Abundance'},\n)\nfig.update_layout(xaxis={'categoryorder': 'category ascending'})\nfig.update_xaxes(tickangle=-45, tickfont={'size': 9})\nfig.update_layout(showlegend=False)",
+      "code_content": "# The axis this figure groups on: the dashboard's analysis groups when the\n# viewer has made some, else the pipeline's own Habitat. One\n# grouping axis, not two stacked on each other.\ngrp_col = depictio_group_by[0] if depictio_group_by else 'habitat'\ndf_grp = df.with_columns(pl.col(grp_col).alias('_facet')) if grp_col in df.columns else df.with_columns(pl.lit('All samples').alias('_facet'))\n# Sorted so the panels come out in a stable order: px lays facets out in\n# order of first appearance, which otherwise follows the row order.\ndf_modified = df_grp.group_by(['_facet', 'Phylum']).agg(pl.col('rel_abundance').mean().alias('mean_rel_abundance')).sort('_facet')\n# Bars run horizontally and the groups are columns, not rows: a phylum name\n# is long, so it belongs on the shared y axis where it is written once and\n# read level, rather than rotated under every band.\ncolors = depictio_group_kwargs.get('color_discrete_map') or {}\nfig = px.bar(\n    df_modified.to_pandas(),\n    x='mean_rel_abundance', y='Phylum', color='_facet',\n    color_discrete_map=colors,\n    orientation='h',\n    facet_col='_facet',\n    title='Mean Relative Abundance by Habitat',\n    labels={'Phylum': 'Phylum', 'mean_rel_abundance': 'Mean Relative Abundance'},\n)\n# Most abundant at the top, so the tile opens on what carries the community.\nfig.update_yaxes(categoryorder='total ascending', tickfont={'size': 9})\nfig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1]))\nfig.update_layout(showlegend=False)",
       "displayed_data_count": 0,
       "total_data_count": 0,
       "was_sampled": false,
@@ -822,7 +822,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "d819bdaf-84ec-4c28-a633-6e2b4d453dbc",
+      "index": "9b8b57b7-c002-4e82-b0de-f0ac984e7a01",
       "component_type": "table",
       "title": "Taxonomy Relative Abundance",
       "workflow_tag": "ampliseq",
@@ -862,7 +862,7 @@
   "stored_edit_dashboard_mode_button": [],
   "left_panel_layout_data": [
     {
-      "i": "box-3478e48b-0a3c-4f12-a7a4-96efa6d37426",
+      "i": "box-34c0eee4-ce9a-4053-962b-2378f868fdca",
       "x": 0,
       "y": 0,
       "w": 1,
@@ -870,7 +870,7 @@
       "static": false
     },
     {
-      "i": "box-79a0c496-9799-4560-b0dc-492468fa4769",
+      "i": "box-18ae2217-1f3f-41c7-9b27-69fe206eecb5",
       "x": 0,
       "y": 3,
       "w": 1,
@@ -878,7 +878,7 @@
       "static": false
     },
     {
-      "i": "box-401977d6-ef1b-44f1-9d12-2a86dd392076",
+      "i": "box-883a9ec3-3980-4f63-8ec2-f014a686b613",
       "x": 0,
       "y": 5,
       "w": 1,
@@ -886,7 +886,7 @@
       "static": false
     },
     {
-      "i": "box-d87057e7-a8e5-4383-85bf-e8a04af0c64b",
+      "i": "box-e70322a9-b6da-49bc-9c7e-aa7d736f5d3d",
       "x": 0,
       "y": 7,
       "w": 1,
@@ -919,27 +919,27 @@
       ]
     },
     {
-      "i": "box-009e35b2-864a-4c4b-b962-5e0e4bb972d5",
+      "i": "box-2996b8cf-bafe-4f00-8757-bb9aa5261062",
       "x": 0,
       "y": 1,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
-      "i": "box-508bf34f-70ae-4eae-99c2-fccf462294ee",
+      "i": "box-87c023eb-f3c3-45af-be74-57d222eb2907",
       "x": 2,
       "y": 1,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
-      "i": "box-3d74ab3b-b7a5-4aed-9459-d4b1fe048380",
+      "i": "box-96ae0bf1-10dd-47d7-8e28-9454d62e1647",
       "x": 4,
       "y": 1,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -947,7 +947,7 @@
       "x": 6,
       "y": 1,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -966,11 +966,11 @@
       ]
     },
     {
-      "i": "box-f340e629-68d6-4ac9-9b17-9939d5d5b738",
+      "i": "box-21b375c2-80a8-4b7e-a7fc-592de1824a33",
       "x": 0,
       "y": 1,
       "w": 8,
-      "h": 7,
+      "h": 9,
       "static": false,
       "resizeHandles": [
         "se",
@@ -983,7 +983,7 @@
     {
       "i": "box-adv-stacked-taxonomy",
       "x": 0,
-      "y": 8,
+      "y": 10,
       "w": 8,
       "h": 8,
       "static": false,
@@ -1086,7 +1086,7 @@
       ]
     },
     {
-      "i": "box-d819bdaf-84ec-4c28-a633-6e2b4d453dbc",
+      "i": "box-9b8b57b7-c002-4e82-b0de-f0ac984e7a01",
       "x": 0,
       "y": 61,
       "w": 8,

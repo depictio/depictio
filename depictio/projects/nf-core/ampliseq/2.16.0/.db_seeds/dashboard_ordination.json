@@ -446,7 +446,7 @@
         "view_3d": false,
         "reverse_scale": true,
         "hover_cols": [],
-        "selection_enabled": false,
+        "selection_enabled": true,
         "selection_column": null
       },
       "wf_tag": "nextflow/ampliseq"
@@ -687,7 +687,7 @@
       "x": 0,
       "y": 1,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -695,7 +695,7 @@
       "x": 2,
       "y": 1,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -703,7 +703,7 @@
       "x": 4,
       "y": 1,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -711,7 +711,7 @@
       "x": 6,
       "y": 1,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {

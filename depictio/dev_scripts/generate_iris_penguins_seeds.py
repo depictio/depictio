@@ -246,8 +246,13 @@ def _build_seed_doc(project_key: str) -> dict[str, Any]:
     full["dashboard_id"] = _build_oid(spec["dashboard_id"])
     full["project_id"] = _build_oid(spec["project_id"])
     full["is_public"] = envelope["is_public"]
-    full["icon"] = envelope["icon"]
-    full["icon_color"] = envelope["icon_color"]
+    # A tab's own icon wins over the project envelope. The envelope is one
+    # value for a whole project, so a dashboard that names itself in the tab
+    # strip used to wear a different icon in its own header — a penguin in the
+    # strip, the product favicon above it. The YAML is the single source of a
+    # tab's identity; the envelope is only the fallback for one that names none.
+    full["icon"] = full.get("tab_icon") or envelope["icon"]
+    full["icon_color"] = full.get("tab_icon_color") or envelope["icon_color"]
     full["icon_variant"] = "filled"
     full["workflow_system"] = envelope["workflow_system"]
     full["notes_content"] = envelope["notes_content"]

@@ -252,7 +252,7 @@ main_dashboard:
       x: 0
       y: 2
       w: 2
-      h: 3
+      h: 2
     title: Samples
   - component_type: 'card'
     workflow_tag: viralrecon
@@ -278,7 +278,7 @@ main_dashboard:
       x: 2
       y: 2
       w: 2
-      h: 3
+      h: 2
     title: Reads mapped (%)
   - component_type: 'card'
     workflow_tag: viralrecon
@@ -305,7 +305,7 @@ main_dashboard:
       x: 4
       y: 2
       w: 2
-      h: 3
+      h: 2
     title: Genome at 10x
   - component_type: 'card'
     workflow_tag: viralrecon
@@ -330,7 +330,7 @@ main_dashboard:
       x: 6
       y: 2
       w: 2
-      h: 3
+      h: 2
     title: Lineages
   - component_type: 'text'
     workflow_tag: viralrecon
@@ -368,6 +368,10 @@ main_dashboard:
     data_collection_tag: multiqc_data
     selected_module: summary_variants_metrics
     selected_plot: summary_variants_metrics-section
+    # Catalog provenance: this plot is a known MultiQC output, so say which one.
+    # `_lite_to_stored` derives `catalog_source` from the handle, which is what
+    # puts the catalog badge and the origin block on the tile.
+    use: multiqc/summary_metrics
     title_size: sm
     title_align: left
     section: QC overview
@@ -398,6 +402,10 @@ main_dashboard:
     data_collection_tag: multiqc_data
     selected_module: fastp
     selected_plot: Filtered Reads
+    # Catalog provenance: this plot is a known MultiQC output, so say which one.
+    # `_lite_to_stored` derives `catalog_source` from the handle, which is what
+    # puts the catalog badge and the origin block on the tile.
+    use: multiqc/fastp
     section: QC overview
     tag: multiqc-fastp-filtered-reads-c4d5e6
     title: fastp - filtered reads
@@ -413,6 +421,10 @@ main_dashboard:
     data_collection_tag: multiqc_data
     selected_module: bowtie2
     selected_plot: Paired-end alignments
+    # Catalog provenance: this plot is a known MultiQC output, so say which one.
+    # `_lite_to_stored` derives `catalog_source` from the handle, which is what
+    # puts the catalog badge and the origin block on the tile.
+    use: multiqc/bowtie2
     section: QC overview
     tag: multiqc-bowtie2-alignment-f7g8h9
     title: bowtie2 - paired-end alignment
@@ -428,6 +440,10 @@ main_dashboard:
     data_collection_tag: multiqc_data
     selected_module: mosdepth
     selected_plot: Cumulative coverage distribution
+    # Catalog provenance: this plot is a known MultiQC output, so say which one.
+    # `_lite_to_stored` derives `catalog_source` from the handle, which is what
+    # puts the catalog badge and the origin block on the tile.
+    use: multiqc/mosdepth
     section: QC overview
     tag: multiqc-mosdepth-coverage-l3m4n5
     title: mosdepth - cumulative coverage
@@ -459,6 +475,10 @@ main_dashboard:
     data_collection_tag: multiqc_data
     selected_module: fastqc
     selected_plot: Sequence Quality Histograms
+    # Catalog provenance: this plot is a known MultiQC output, so say which one.
+    # `_lite_to_stored` derives `catalog_source` from the handle, which is what
+    # puts the catalog badge and the origin block on the tile.
+    use: multiqc/fastqc
     section: Read & alignment details
     tag: multiqc-fastqc-quality-d4e5f6
     title: FastQC - sequence quality histograms
@@ -474,6 +494,10 @@ main_dashboard:
     data_collection_tag: multiqc_data
     selected_module: fastqc
     selected_plot: Status Checks
+    # Catalog provenance: this plot is a known MultiQC output, so say which one.
+    # `_lite_to_stored` derives `catalog_source` from the handle, which is what
+    # puts the catalog badge and the origin block on the tile.
+    use: multiqc/fastqc
     section: Read & alignment details
     tag: multiqc-fastqc-status-checks-a1b2c3
     title: FastQC - status checks
@@ -490,6 +514,10 @@ main_dashboard:
     data_collection_tag: multiqc_data
     selected_module: kraken
     selected_plot: Top taxa
+    # Catalog provenance: this plot is a known MultiQC output, so say which one.
+    # `_lite_to_stored` derives `catalog_source` from the handle, which is what
+    # puts the catalog badge and the origin block on the tile.
+    use: multiqc/kraken
     section: Read & alignment details
     tag: multiqc-kraken-taxa-d4e5f6
     title: Kraken2 - top taxa
@@ -505,6 +533,10 @@ main_dashboard:
     data_collection_tag: multiqc_data
     selected_module: samtools_ivar
     selected_plot: Flagstat
+    # Catalog provenance: this plot is a known MultiQC output, so say which one.
+    # `_lite_to_stored` derives `catalog_source` from the handle, which is what
+    # puts the catalog badge and the origin block on the tile.
+    use: multiqc/samtools
     title_size: sm
     title_align: left
     section: Read & alignment details
@@ -520,6 +552,10 @@ main_dashboard:
     data_collection_tag: multiqc_data
     selected_module: mosdepth
     selected_plot: Average coverage per contig
+    # Catalog provenance: this plot is a known MultiQC output, so say which one.
+    # `_lite_to_stored` derives `catalog_source` from the handle, which is what
+    # puts the catalog badge and the origin block on the tile.
+    use: multiqc/mosdepth
     title_size: sm
     title_align: left
     section: Read & alignment details
@@ -535,6 +571,10 @@ main_dashboard:
     data_collection_tag: multiqc_data
     selected_module: cutadapt
     selected_plot: Filtered Reads
+    # Catalog provenance: this plot is a known MultiQC output, so say which one.
+    # `_lite_to_stored` derives `catalog_source` from the handle, which is what
+    # puts the catalog badge and the origin block on the tile.
+    use: multiqc/cutadapt
     title_size: sm
     title_align: left
     section: Read & alignment details
@@ -566,6 +606,10 @@ main_dashboard:
     data_collection_tag: multiqc_data
     selected_module: ivar_variants
     selected_plot: ivar_variants-section
+    # Catalog provenance: this plot is a known MultiQC output, so say which one.
+    # `_lite_to_stored` derives `catalog_source` from the handle, which is what
+    # puts the catalog badge and the origin block on the tile.
+    use: multiqc/ivar
     section: Variant & assembly details
     tag: multiqc-ivar-variants-o6p7q8
     title: iVar - variant counts
@@ -581,6 +625,10 @@ main_dashboard:
     data_collection_tag: multiqc_data
     selected_module: snpeff
     selected_plot: Variant Effects by Impact
+    # Catalog provenance: this plot is a known MultiQC output, so say which one.
+    # `_lite_to_stored` derives `catalog_source` from the handle, which is what
+    # puts the catalog badge and the origin block on the tile.
+    use: multiqc/snpeff
     section: Variant & assembly details
     tag: multiqc-snpeff-effects-r9s0t1
     title: snpEff - effects by impact
@@ -596,6 +644,10 @@ main_dashboard:
     data_collection_tag: multiqc_data
     selected_module: snpeff
     selected_plot: Variants by Genomic Region
+    # Catalog provenance: this plot is a known MultiQC output, so say which one.
+    # `_lite_to_stored` derives `catalog_source` from the handle, which is what
+    # puts the catalog badge and the origin block on the tile.
+    use: multiqc/snpeff
     title_size: sm
     title_align: left
     section: Variant & assembly details
@@ -611,6 +663,10 @@ main_dashboard:
     data_collection_tag: multiqc_data
     selected_module: bcftools
     selected_plot: Variant Substitution Types
+    # Catalog provenance: this plot is a known MultiQC output, so say which one.
+    # `_lite_to_stored` derives `catalog_source` from the handle, which is what
+    # puts the catalog badge and the origin block on the tile.
+    use: multiqc/bcftools
     section: Variant & assembly details
     tag: multiqc-bcftools-subtypes-j0k1l2
     title: bcftools - substitution types
@@ -626,6 +682,10 @@ main_dashboard:
     data_collection_tag: multiqc_data
     selected_module: quast_variants
     selected_plot: Number of Contigs
+    # Catalog provenance: this plot is a known MultiQC output, so say which one.
+    # `_lite_to_stored` derives `catalog_source` from the handle, which is what
+    # puts the catalog badge and the origin block on the tile.
+    use: multiqc/quast
     section: Variant & assembly details
     tag: multiqc-quast-contigs-u2v3w4
     title: QUAST - number of contigs
@@ -641,6 +701,10 @@ main_dashboard:
     data_collection_tag: multiqc_data
     selected_module: summary_assembly_metrics
     selected_plot: summary_assembly_metrics-section
+    # Catalog provenance: this plot is a known MultiQC output, so say which one.
+    # `_lite_to_stored` derives `catalog_source` from the handle, which is what
+    # puts the catalog badge and the origin block on the tile.
+    use: multiqc/summary_metrics
     title_size: sm
     title_align: left
     section: Variant & assembly details
@@ -783,7 +847,7 @@ tabs:
       x: 0
       y: 2
       w: 2
-      h: 3
+      h: 2
     title: Amplicons Tracked
   - component_type: card
     workflow_tag: viralrecon
@@ -802,7 +866,7 @@ tabs:
       x: 2
       y: 2
       w: 2
-      h: 3
+      h: 2
     title: Amplicon Coverage
   - component_type: card
     workflow_tag: viralrecon
@@ -821,7 +885,7 @@ tabs:
       x: 4
       y: 2
       w: 2
-      h: 3
+      h: 2
     title: Genome Coverage
   - component_type: 'card'
     workflow_tag: viralrecon
@@ -848,7 +912,7 @@ tabs:
       x: 6
       y: 2
       w: 2
-      h: 3
+      h: 2
     title: Amplicons at 20x
   - component_type: 'text'
     workflow_tag: viralrecon
@@ -1113,7 +1177,7 @@ tabs:
       x: 0
       y: 1
       w: 2
-      h: 3
+      h: 2
     title: Unique Lineages
   - component_type: card
     workflow_tag: viralrecon
@@ -1136,7 +1200,7 @@ tabs:
       x: 2
       y: 1
       w: 2
-      h: 3
+      h: 2
     title: Unique Clades
   - component_type: 'card'
     workflow_tag: viralrecon
@@ -1162,7 +1226,7 @@ tabs:
       x: 4
       y: 1
       w: 2
-      h: 3
+      h: 2
     title: Consensus coverage
   - component_type: 'card'
     workflow_tag: viralrecon
@@ -1187,7 +1251,7 @@ tabs:
       x: 6
       y: 1
       w: 2
-      h: 3
+      h: 2
     title: Pangolin QC verdicts
   - component_type: 'text'
     workflow_tag: viralrecon
@@ -1499,7 +1563,7 @@ tabs:
       x: 0
       y: 1
       w: 2
-      h: 3
+      h: 2
     title: Avg % Genome >= 10x
   - component_type: card
     workflow_tag: viralrecon
@@ -1522,7 +1586,7 @@ tabs:
       x: 2
       y: 1
       w: 2
-      h: 3
+      h: 2
     title: Median Variants / Sample
   - component_type: 'card'
     workflow_tag: viralrecon
@@ -1548,7 +1612,7 @@ tabs:
       x: 4
       y: 1
       w: 2
-      h: 3
+      h: 2
     title: Reads mapped (%)
   - component_type: 'card'
     workflow_tag: viralrecon
@@ -1574,7 +1638,7 @@ tabs:
       x: 6
       y: 1
       w: 2
-      h: 3
+      h: 2
     title: Missing bases
   - component_type: 'text'
     workflow_tag: viralrecon
@@ -1712,7 +1776,7 @@ tabs:
       x: 0
       y: 1
       w: 2
-      h: 3
+      h: 2
     title: Samples
   - component_type: 'card'
     workflow_tag: viralrecon
@@ -1740,7 +1804,7 @@ tabs:
       x: 2
       y: 1
       w: 2
-      h: 3
+      h: 2
     title: Reads mapped
   - component_type: 'card'
     workflow_tag: viralrecon
@@ -1766,7 +1830,7 @@ tabs:
       x: 4
       y: 1
       w: 2
-      h: 3
+      h: 2
     title: Genome at 1x
   - component_type: 'card'
     workflow_tag: viralrecon
@@ -1791,7 +1855,7 @@ tabs:
       x: 6
       y: 1
       w: 2
-      h: 3
+      h: 2
     title: Lineages
   - component_type: table
     workflow_tag: viralrecon
@@ -2011,7 +2075,7 @@ tabs:
       x: 0
       y: 2
       w: 2
-      h: 3
+      h: 2
     title: Total Variant Calls
   - component_type: card
     workflow_tag: viralrecon
@@ -2034,7 +2098,7 @@ tabs:
       x: 2
       y: 2
       w: 2
-      h: 3
+      h: 2
     title: Distinct Positions
   - component_type: card
     workflow_tag: viralrecon
@@ -2056,7 +2120,7 @@ tabs:
       x: 4
       y: 2
       w: 2
-      h: 3
+      h: 2
     title: Samples w/ variants
   - component_type: card
     workflow_tag: viralrecon
@@ -2079,7 +2143,7 @@ tabs:
       x: 6
       y: 2
       w: 2
-      h: 3
+      h: 2
     title: Unique AA Changes
   - component_type: advanced_viz
     use: ivar/manhattan
@@ -2288,7 +2352,7 @@ tabs:
       x: 0
       y: 2
       w: 4
-      h: 3
+      h: 2
     title: Samples (oncoplot)
   - component_type: card
     workflow_tag: viralrecon
@@ -2310,7 +2374,7 @@ tabs:
       x: 4
       y: 2
       w: 4
-      h: 3
+      h: 2
     title: Genes (oncoplot)
   - component_type: advanced_viz
     workflow_tag: viralrecon
