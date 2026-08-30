@@ -43,13 +43,11 @@ components:
     alignment: left
     vertical_alignment: top
     section: 'Community composition'
-    body: |
+    body: >
       One stacked bar per sample, built straight from the QIIME2 feature table. The rank
-      column is a stub: the feature table carries no lineage, so this is ASV-level only
-      and the tab exists to show the component against real counts rather than to be
-      read as a taxonomy. Raising the abundance floor on the left drops the long tail of
-      singletons.
-    layout: { x: 0, y: 0, w: 8, h: 2 }
+      column is a stub: the feature table carries no lineage, so this is ASV-level only and
+      the tab shows the component against real counts rather than a taxonomy to read.
+    layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: viz-stacked_taxonomy
     index: 'nfcore-stacked_taxonomy'

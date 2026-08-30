@@ -43,13 +43,12 @@ components:
     alignment: left
     vertical_alignment: top
     section: 'Categorical flow'
-    body: |
-      A Sankey over three categorical columns: each band is a set of samples carrying
-      the same combination of calls, and its width is how many. It answers questions a
-      set of bar charts cannot, such as whether the samples that fail QC are the same
-      ones that end up unassigned. Filtering any one column narrows the bands that pass
-      through it.
-    layout: { x: 0, y: 0, w: 8, h: 2 }
+    body: >
+      A Sankey over three categorical columns: each band is a set of samples carrying the
+      same combination of calls, and its width is how many. It answers what a set of bar
+      charts cannot, such as whether the samples that fail QC are the ones that end up
+      unassigned.
+    layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: viz-categorical_flow
     index: 'flow-sankey'

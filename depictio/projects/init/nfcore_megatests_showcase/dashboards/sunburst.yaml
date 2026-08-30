@@ -43,11 +43,11 @@ components:
     alignment: left
     vertical_alignment: top
     section: 'Taxonomic hierarchy'
-    body: |
+    body: >
       Bracken output from an nf-core/taxprofiler run, drawn as rings from rank outwards.
-      Bracken reports one rank per row rather than a full lineage, so the hierarchy here
-      is rank then taxon rather than kingdom to species. Clicking a wedge zooms into it;
-      the left panel is what narrows the data behind it.
+      Bracken reports one rank per row rather than a full lineage, so the hierarchy here is
+      rank then taxon rather than kingdom to species. Clicking a wedge zooms into it; the
+      left panel is what narrows the data behind it.
     layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: viz-sunburst

@@ -43,11 +43,11 @@ components:
     alignment: left
     vertical_alignment: top
     section: 'Test calibration'
-    body: |
+    body: >
       Raw DESeq2 p-values against what a null distribution predicts. This is a QC view
       rather than a result: a curve that leaves the diagonal only at the top is signal,
-      while one that lifts off along its whole length means the test is miscalibrated
-      and nothing downstream of it should be trusted.
+      while one that lifts off along its whole length means the test is miscalibrated and
+      nothing downstream of it should be trusted.
     layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: viz-qq

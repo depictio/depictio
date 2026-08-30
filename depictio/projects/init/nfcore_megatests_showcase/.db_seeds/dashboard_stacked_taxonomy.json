@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "One stacked bar per sample, built straight from the QIIME2 feature table. The rank\ncolumn is a stub: the feature table carries no lineage, so this is ASV-level only\nand the tab exists to show the component against real counts rather than to be\nread as a taxonomy. Raising the abundance floor on the left drops the long tail of\nsingletons.\n",
+      "body": "One stacked bar per sample, built straight from the QIIME2 feature table. The rank column is a stub: the feature table carries no lineage, so this is ASV-level only and the tab shows the component against real counts rather than a taxonomy to read.\n",
       "wf_tag": "nf-core/nfcore_megatests"
     },
     {
@@ -193,7 +193,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 2,
+      "h": 1,
       "static": false,
       "resizeHandles": [
         "se",

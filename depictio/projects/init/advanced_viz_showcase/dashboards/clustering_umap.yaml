@@ -43,11 +43,11 @@ components:
     alignment: left
     vertical_alignment: top
     section: 'UMAP projection'
-    body: |
+    body: >
       A non-linear projection that preserves local neighbourhoods at the cost of global
       distance: points that sit together really are neighbours, but the gap between two
-      clusters carries no meaning. Compare it against the PCA tab to see which structure
-      is real and which is an artefact of the embedding.
+      clusters carries no meaning. Compare it against the PCA tab to see which structure is
+      real and which is an artefact of the embedding.
     layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: viz-clustering_umap

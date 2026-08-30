@@ -52,13 +52,12 @@ components:
     alignment: left
     vertical_alignment: top
     section: 'Differential expression'
-    body: |
-      Every gene DESeq2 tested, placed by effect size against adjusted significance,
-      with both thresholds drawn in. This is a real nf-core/differentialabundance run,
-      so the cloud has the shape real data has: most genes sit near the origin and the
-      interesting ones are the handful far from it. Raising the significance floor or
-      the mean-expression floor on the left drops the low-information tail.
-    layout: { x: 0, y: 0, w: 8, h: 2 }
+    body: >
+      Every gene DESeq2 tested, placed by effect size against adjusted significance, with
+      both thresholds drawn in. This is a real nf-core/differentialabundance run, so the
+      cloud has the shape real data has: most genes sit near the origin and the interesting
+      ones are the handful far from it.
+    layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: viz-volcano
     index: 'nfcore-volcano'
@@ -142,12 +141,9 @@ components:
     alignment: left
     vertical_alignment: top
     section: 'About this showcase'
-    body: |
-      This project binds depictio's advanced visualisations to real nf-core pipeline
-      outputs pulled from the public AWS megatests bucket: differentialabundance,
-      rnaseq, viralrecon, ampliseq and taxprofiler. Unlike the Advanced Visualisations
-      showcase, which uses synthetic fixtures sized to make each component legible,
-      everything here is a genuine result with the gaps and skew real runs have. The
-      fixtures are not in the repository and this project is not seeded on a fresh
-      deployment; see the README next to project.yaml for how to build and upload it.
-    layout: { x: 0, y: 0, w: 8, h: 2 }
+    body: >
+      This project binds depictio's advanced visualisations to real nf-core outputs:
+      differentialabundance, rnaseq, viralrecon, ampliseq and taxprofiler. The fixtures are
+      not in the repository and this project is not seeded on a fresh deployment; see the
+      README next to project.yaml.
+    layout: { x: 0, y: 0, w: 8, h: 1 }

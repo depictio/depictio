@@ -89,13 +89,12 @@ components:
     title_size: h3
     alignment: left
     body: >
-      Every data collection here is generated from **depictio/catalog/**: one per
-      distinct recipe, one per recipe-free output, plus a synthetic MultiQC
-      report. It exists so the catalog e2e suite covers every module the catalog
-      declares, rather than whatever the nf-core reference projects happen to
-      ingest. Regenerate with `scripts/generate_project.py` after adding a module.
+      Every data collection here is generated from **depictio/catalog/**: one per distinct
+      recipe, one per recipe-free output, plus a synthetic MultiQC report. It exists so the
+      catalog e2e suite covers every module the catalog declares. Regenerate with
+      `scripts/generate_project.py`.
     section: Catalog coverage
-    layout: { x: 0, y: 0, w: 8, h: 2 }
+    layout: { x: 0, y: 0, w: 8, h: 1 }
 
   # --- cards: four across, so the row is full -----------------------------
   - tag: card-amplicon-coverage
@@ -200,12 +199,11 @@ components:
     alignment: left
     body: >
       Both tiles below come from collections depictio recognised **without running a
-      recipe**: the MultiQC report was matched on its `path_glob`, the MetaPhlAn
-      profile on its find block. Nothing was joined or reshaped — what you see is
-      the file, read. This is the lane most pipelines land in, and the one that
-      breaks first when a tool changes its output path.
+      recipe**: the MultiQC report matched on its `path_glob`, the MetaPhlAn profile on its
+      find block. Nothing was joined or reshaped. This is the lane that breaks first when a
+      tool moves its output.
     section: Raw lane
-    layout: { x: 0, y: 0, w: 8, h: 2 }
+    layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: multiqc-fastqc-counts
     index: multiqc-fastqc-counts
@@ -259,13 +257,11 @@ components:
     alignment: left
     body: >
       These two need a **catalog recipe**. ANCOM-BC writes one CSV per statistic per
-      contrast, so `qiime2/ancombc.py` joins and melts them into the single long
-      table the volcano reads; the taxon counts are melted out of the taxa barplot
-      export with the taxonomy string split back into ranks. Set a contrast and a
-      q-value cut-off on the left and the volcano narrows — the recipe is what
-      makes those columns exist to filter on.
+      contrast, so `qiime2/ancombc.py` joins and melts them into the long table the volcano
+      reads. Set a contrast and a q-value cut-off on the left: the recipe is what makes
+      those columns exist.
     section: Recipe lane
-    layout: { x: 0, y: 0, w: 8, h: 2 }
+    layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: adv-ancombc-volcano
     index: adv-ancombc-volcano

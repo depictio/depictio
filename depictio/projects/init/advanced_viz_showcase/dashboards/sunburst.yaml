@@ -43,11 +43,11 @@ components:
     alignment: left
     vertical_alignment: top
     section: 'Hierarchy'
-    body: |
+    body: >
       The same taxonomy the stacked bars show, drawn as concentric rings from kingdom
-      outwards. Clicking a wedge zooms into it rather than filtering the dashboard, so
-      it is a way to read the hierarchy rather than to select from it. The left panel is
-      what narrows the other tiles.
+      outwards. Clicking a wedge zooms into it rather than filtering the dashboard, so it is
+      a way to read the hierarchy rather than to select from it. The left panel is what
+      narrows the other tiles.
     layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: viz-sunburst

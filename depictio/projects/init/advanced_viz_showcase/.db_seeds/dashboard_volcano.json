@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Every feature placed by its effect size against its significance, with the two\nthreshold lines drawn rather than assumed. The features worth reading are the ones\nfar from the centre and high up; the top-N labels name them for you, and the\nsearch box in the settings menu finds a specific one. Narrowing the category or\nraising the significance floor on the left removes points rather than greying them\nout.\n",
+      "body": "Every feature placed by its effect size against its significance, with the two threshold lines drawn rather than assumed. The ones worth reading are far from the centre and high up, and the top-N labels name them. Narrowing on the left removes points rather than greying them out.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -224,7 +224,7 @@
       "order": 4,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Each tab of this project is one advanced visualisation kind, rendered from a small\nsynthetic fixture rather than from a real pipeline run. The point is the kind:\nwhat question it answers, what its settings menu can change, and what a left-panel\nfilter does to it. Nothing here is a result. For the same components on real data,\nlook at the nf-core/ampliseq and nf-core/viralrecon reference projects.\n",
+      "body": "Each tab of this project is one advanced visualisation kind, rendered from a small synthetic fixture rather than a real run. Nothing here is a result. For the same components on real data, look at the nf-core/ampliseq and nf-core/viralrecon reference projects.\n",
       "wf_tag": "python/advanced_viz_demo"
     }
   ],
@@ -264,7 +264,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 2,
+      "h": 1,
       "static": false,
       "resizeHandles": [
         "se",
@@ -294,7 +294,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 2,
+      "h": 1,
       "static": false,
       "resizeHandles": [
         "se",

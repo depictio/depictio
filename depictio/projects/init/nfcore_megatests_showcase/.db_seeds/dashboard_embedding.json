@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "The DESeq2 vst() PCA from an nf-core/rnaseq run. With five samples the question is\nnot whether clusters exist but whether replicates of the same condition land\ntogether, which is the first thing to check before believing any differential\ncall.\n",
+      "body": "The DESeq2 vst() PCA from an nf-core/rnaseq run. With five samples the question is not whether clusters exist but whether replicates of the same condition land together, which is the first thing to check before believing any differential call.\n",
       "wf_tag": "nf-core/nfcore_megatests"
     },
     {
@@ -90,7 +90,9 @@
         "density_opacity": 0.45,
         "view_3d": false,
         "reverse_scale": true,
-        "hover_cols": []
+        "hover_cols": [],
+        "selection_enabled": false,
+        "selection_column": null
       },
       "wf_tag": "nf-core/nfcore_megatests"
     },

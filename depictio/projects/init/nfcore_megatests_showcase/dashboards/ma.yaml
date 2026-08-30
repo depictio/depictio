@@ -43,11 +43,10 @@ components:
     alignment: left
     vertical_alignment: top
     section: 'Intensity vs effect'
-    body: |
-      The same DESeq2 table as the volcano tab, with mean expression on the x axis. A
-      fold change that only appears at low expression is usually noise, and it shows up
-      here as a funnel opening to the left; the volcano cannot show that. Read the two
-      together.
+    body: >
+      The same DESeq2 table as the volcano tab, with mean expression on the x axis. A fold
+      change that only appears at low expression is usually noise, and it shows up here as a
+      funnel opening to the left; the volcano cannot show that. Read the two together.
     layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: viz-ma

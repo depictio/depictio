@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Samples on one axis, genes on the other, each cell coloured by the class of the\nmutation it carries. Rows and columns are reordered so that co-occurring mutations\nline up into blocks, which is the pattern the plot exists to surface. Filtering to\none mutation class shows which genes carry it.\n",
+      "body": "Samples on one axis, genes on the other, each cell coloured by the class of the mutation it carries. Rows and columns are reordered so that co-occurring mutations line up into blocks, which is the pattern the plot exists to surface. Filtering to one mutation class shows which genes carry it.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {

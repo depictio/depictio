@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "A Sankey over three categorical columns: each band is a set of samples carrying\nthe same combination of calls, and its width is how many. It answers questions a\nset of bar charts cannot, such as whether the samples that fail QC are the same\nones that end up unassigned. Filtering any one column narrows the bands that pass\nthrough it.\n",
+      "body": "A Sankey over three categorical columns: each band is a set of samples carrying the same combination of calls, and its width is how many. It answers what a set of bar charts cannot, such as whether the samples that fail QC are the ones that end up unassigned.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -246,7 +246,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 2,
+      "h": 1,
       "static": false,
       "resizeHandles": [
         "se",

@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Per-region read depth from a real nf-core/viralrecon mosdepth run, one lane per\nsample. A dropout reads as a gap in one lane; a region the amplicon scheme never\ncovers reads as a gap in all of them. Pick a few samples on the left before\nreading it: every lane at once is a wall.\n",
+      "body": "Per-region read depth from a real nf-core/viralrecon mosdepth run, one lane per sample. A dropout reads as a gap in one lane; a region the amplicon scheme never covers reads as a gap in all of them. Pick a few samples on the left before reading it: every lane at once is a wall.\n",
       "wf_tag": "nf-core/nfcore_megatests"
     },
     {

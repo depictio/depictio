@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "The same ANCOM-BC table as the previous tab, drawn the way a differential-\nabundance figure usually is: top-N features by effect, bars signed by direction,\none panel per contrast when more than one is selected. Where the volcano answers\nwhich features are significant, this one answers how large the differences are.\n",
+      "body": "The same ANCOM-BC table as the previous tab, drawn the way a differential-abundance figure usually is: top-N features by effect, bars signed by direction, one panel per contrast. Where the volcano answers which features are significant, this answers how large the differences are.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -189,7 +189,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 2,
+      "h": 1,
       "static": false,
       "resizeHandles": [
         "se",

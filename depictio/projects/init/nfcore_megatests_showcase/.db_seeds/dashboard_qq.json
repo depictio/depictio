@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Raw DESeq2 p-values against what a null distribution predicts. This is a QC view\nrather than a result: a curve that leaves the diagonal only at the top is signal,\nwhile one that lifts off along its whole length means the test is miscalibrated\nand nothing downstream of it should be trusted.\n",
+      "body": "Raw DESeq2 p-values against what a null distribution predicts. This is a QC view rather than a result: a curve that leaves the diagonal only at the top is signal, while one that lifts off along its whole length means the test is miscalibrated and nothing downstream of it should be trusted.\n",
       "wf_tag": "nf-core/nfcore_megatests"
     },
     {

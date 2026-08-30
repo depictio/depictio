@@ -43,11 +43,11 @@ components:
     alignment: left
     vertical_alignment: top
     section: 'MA plot'
-    body: |
-      Effect size against average intensity, the diagnostic companion to the volcano: a
-      fold change that only appears at low intensity is usually noise, and it shows up
-      here as a funnel opening to the left. The same feature set as the volcano tab,
-      read against a different x axis.
+    body: >
+      Effect size against average intensity, the diagnostic companion to the volcano: a fold
+      change that only appears at low intensity is usually noise, and it shows up here as a
+      funnel opening to the left. The same feature set as the volcano tab, read against a
+      different x axis.
     layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: viz-ma

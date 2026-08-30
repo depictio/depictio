@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Bracken output from an nf-core/taxprofiler run, drawn as rings from rank outwards.\nBracken reports one rank per row rather than a full lineage, so the hierarchy here\nis rank then taxon rather than kingdom to species. Clicking a wedge zooms into it;\nthe left panel is what narrows the data behind it.\n",
+      "body": "Bracken output from an nf-core/taxprofiler run, drawn as rings from rank outwards. Bracken reports one rank per row rather than a full lineage, so the hierarchy here is rank then taxon rather than kingdom to species. Clicking a wedge zooms into it; the left panel is what narrows the data behind it.\n",
       "wf_tag": "nf-core/nfcore_megatests"
     },
     {

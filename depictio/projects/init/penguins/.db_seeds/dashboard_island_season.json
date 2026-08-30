@@ -410,7 +410,7 @@
       "order": 2,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "Sampling effort is near-flat: 109 birds in 2007, 114 in 2008, 119 in 2009. The two trend cards below track mean body mass and mean flipper length across those seasons \u2014 if the population were drifting, or the sampling were, this is where it would show. It does not, which is what makes the season a safe thing to pool over on the main tab.",
+      "body": "Sampling effort is near-flat: 109 birds in 2007, 114 in 2008, 119 in 2009. The two trend cards below track mean body mass and mean flipper length across those seasons. If the population were drifting, or the sampling were, this is where it would show.",
       "wf_tag": "python/penguin_species_analysis"
     },
     {
@@ -844,7 +844,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 2,
+      "h": 1,
       "static": false,
       "resizeHandles": [
         "se",

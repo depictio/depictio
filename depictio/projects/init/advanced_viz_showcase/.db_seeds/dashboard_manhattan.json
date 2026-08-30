@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Markers plotted at their genomic position against their score, with alternating\nbands separating the chromosomes and a threshold line across the plot. The peaks\nthat clear the line are labelled by feature id. Restricting to one chromosome or\nraising the score floor on the left isolates a single locus.\n",
+      "body": "Markers plotted at their genomic position against their score, with alternating bands separating the chromosomes and a threshold line across the plot. Peaks that clear the line are labelled by feature id; restricting to one chromosome isolates a locus.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -197,7 +197,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 2,
+      "h": 1,
       "static": false,
       "resizeHandles": [
         "se",

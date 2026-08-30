@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "A linear projection: axes are principal components, so distance along an axis\nmeans variance explained and the axes are directly comparable. This is the\nprojection to trust when the question is how much structure there is, rather than\nwhat shape it has.\n",
+      "body": "A linear projection: axes are principal components, so distance along an axis means variance explained and the axes are directly comparable. This is the projection to trust when the question is how much structure there is, rather than what shape it has.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {

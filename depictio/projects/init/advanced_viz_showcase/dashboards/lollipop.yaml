@@ -43,10 +43,10 @@ components:
     alignment: left
     vertical_alignment: top
     section: 'Positional effects'
-    body: |
-      Effects placed at their position along a sequence, stem height encoding magnitude
-      and colour encoding class. It is the view that makes a mutational hotspot visible
-      as a cluster of stems rather than a row in a table.
+    body: >
+      Effects placed at their position along a sequence, stem height encoding magnitude and
+      colour encoding class. It is the view that makes a mutational hotspot visible as a
+      cluster of stems rather than a row in a table.
     layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: viz-lollipop

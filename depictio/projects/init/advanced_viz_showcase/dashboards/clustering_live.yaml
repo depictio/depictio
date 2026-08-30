@@ -43,13 +43,11 @@ components:
     alignment: left
     vertical_alignment: top
     section: 'Live clustering'
-    body: |
-      The only projection on this showcase computed at request time rather than read
-      from a precomputed table: it takes the raw feature matrix and runs the reduction
-      with the parameters set in the settings menu, so changing the neighbour count or
-      the metric re-runs it. The cost is latency; the gain is that the parameter is a
-      control rather than a decision someone made upstream.
-    layout: { x: 0, y: 0, w: 8, h: 2 }
+    body: >
+      The only projection on this showcase computed at request time rather than read from a
+      precomputed table: changing the neighbour count or the metric in the settings menu
+      re-runs the reduction. The cost is latency; the gain is a parameter you control.
+    layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: viz-clustering_live
     index: 'live-embedding'

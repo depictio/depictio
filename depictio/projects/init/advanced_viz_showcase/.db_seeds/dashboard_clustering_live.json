@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "The only projection on this showcase computed at request time rather than read\nfrom a precomputed table: it takes the raw feature matrix and runs the reduction\nwith the parameters set in the settings menu, so changing the neighbour count or\nthe metric re-runs it. The cost is latency; the gain is that the parameter is a\ncontrol rather than a decision someone made upstream.\n",
+      "body": "The only projection on this showcase computed at request time rather than read from a precomputed table: changing the neighbour count or the metric in the settings menu re-runs the reduction. The cost is latency; the gain is a parameter you control.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -209,7 +209,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 2,
+      "h": 1,
       "static": false,
       "resizeHandles": [
         "se",

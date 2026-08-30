@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Principal coordinates: the projection is computed from a distance matrix rather\nthan from the feature table, which is what makes it the right choice for\necological distances where Euclidean geometry does not apply. Axes are still\ncomparable, as in PCA.\n",
+      "body": "Principal coordinates: the projection is computed from a distance matrix rather than from the feature table, which is what makes it the right choice for ecological distances where Euclidean geometry does not apply. Axes are still comparable, as in PCA.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {

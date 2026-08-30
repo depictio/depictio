@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Observed significance against what a null distribution would predict, with the\ndiagonal drawn in. A curve that leaves the diagonal only at the top is genuine\nsignal; one that lifts off along its whole length is inflation, and it means the\ntest is miscalibrated rather than the biology being interesting.\n",
+      "body": "Observed significance against what a null distribution would predict, with the diagonal drawn in. A curve that leaves the diagonal only at the top is genuine signal; one that lifts off along its whole length is inflation, and the test is miscalibrated.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -188,7 +188,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 2,
+      "h": 1,
       "static": false,
       "resizeHandles": [
         "se",

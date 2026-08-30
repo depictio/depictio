@@ -43,11 +43,11 @@ components:
     alignment: left
     vertical_alignment: top
     section: 'PCoA projection'
-    body: |
-      Principal coordinates: the projection is computed from a distance matrix rather
-      than from the feature table, which is what makes it the right choice for
-      ecological distances where Euclidean geometry does not apply. Axes are still
-      comparable, as in PCA.
+    body: >
+      Principal coordinates: the projection is computed from a distance matrix rather than
+      from the feature table, which is what makes it the right choice for ecological
+      distances where Euclidean geometry does not apply. Axes are still comparable, as in
+      PCA.
     layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: viz-clustering_pcoa

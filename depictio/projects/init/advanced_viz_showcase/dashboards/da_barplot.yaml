@@ -43,12 +43,12 @@ components:
     alignment: left
     vertical_alignment: top
     section: 'Differential barplot'
-    body: |
-      The same ANCOM-BC table as the previous tab, drawn the way a differential-
-      abundance figure usually is: top-N features by effect, bars signed by direction,
-      one panel per contrast when more than one is selected. Where the volcano answers
-      which features are significant, this one answers how large the differences are.
-    layout: { x: 0, y: 0, w: 8, h: 2 }
+    body: >
+      The same ANCOM-BC table as the previous tab, drawn the way a differential-abundance
+      figure usually is: top-N features by effect, bars signed by direction, one panel per
+      contrast. Where the volcano answers which features are significant, this answers how
+      large the differences are.
+    layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: viz-da_barplot
     index: 'da-bar'

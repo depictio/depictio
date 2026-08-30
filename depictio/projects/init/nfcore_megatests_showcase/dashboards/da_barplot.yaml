@@ -43,10 +43,10 @@ components:
     alignment: left
     vertical_alignment: top
     section: 'Differential abundance'
-    body: |
+    body: >
       Compositionally corrected differential abundance from an nf-core/ampliseq ANCOM-BC
-      run, top features by effect, bars signed by direction. Two contrasts are available
-      and every bar is conditional on the one selected, so pick it on the left first.
+      run, top features by effect, bars signed by direction. Two contrasts are available and
+      every bar is conditional on the one selected, so pick it on the left first.
     layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: viz-da_barplot
