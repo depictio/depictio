@@ -182,7 +182,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "a6506b94-1a5e-4011-b5bc-ab3e69562ca4",
+      "index": "166b54e9-e1e3-4d49-adad-61f507104952",
       "component_type": "text",
       "title": "Typing at a glance",
       "workflow_tag": "viralrecon",
@@ -212,7 +212,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "0a65f0ce-7aed-438f-8dde-eaf2249120a3",
+      "index": "fa7c6fac-6396-4b81-a64c-bc976a58575a",
       "component_type": "card",
       "title": "Unique Lineages",
       "workflow_tag": "viralrecon",
@@ -262,7 +262,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "4aadc972-1adb-4725-984a-5bbac4c9ebf5",
+      "index": "266485ad-d36e-46b0-bc72-517482b8beec",
       "component_type": "card",
       "title": "Unique Clades",
       "workflow_tag": "viralrecon",
@@ -437,7 +437,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "45b3d902-9634-4d19-9c46-53c2fd9bce52",
+      "index": "856a578d-6908-4579-97b6-3d1477a78898",
       "component_type": "figure",
       "title": "Pangolin lineage distribution",
       "workflow_tag": "viralrecon",
@@ -480,7 +480,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "a98ba443-1f95-4f72-add9-a6a16460964a",
+      "index": "e21e3ec2-0630-4bd9-9158-289254fe7c88",
       "component_type": "figure",
       "title": "Nextclade clade distribution",
       "workflow_tag": "viralrecon",
@@ -682,7 +682,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "a97b5715-af46-4008-81f9-33a789567150",
+      "index": "93d588a3-f28b-4243-bf4e-f615be7c2a85",
       "component_type": "table",
       "title": "Pangolin lineage assignments",
       "workflow_tag": "viralrecon",
@@ -720,7 +720,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "950d5707-d205-41ad-88f2-18348ba41e43",
+      "index": "b72347bf-3afd-4eb9-bb02-af012b78f347",
       "component_type": "table",
       "title": "Nextclade clade assignments",
       "workflow_tag": "viralrecon",
@@ -795,7 +795,7 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-a6506b94-1a5e-4011-b5bc-ab3e69562ca4",
+      "i": "box-166b54e9-e1e3-4d49-adad-61f507104952",
       "x": 0,
       "y": 0,
       "w": 8,
@@ -810,19 +810,19 @@
       ]
     },
     {
-      "i": "box-0a65f0ce-7aed-438f-8dde-eaf2249120a3",
+      "i": "box-fa7c6fac-6396-4b81-a64c-bc976a58575a",
       "x": 0,
       "y": 1,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
-      "i": "box-4aadc972-1adb-4725-984a-5bbac4c9ebf5",
+      "i": "box-266485ad-d36e-46b0-bc72-517482b8beec",
       "x": 2,
       "y": 1,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -830,7 +830,7 @@
       "x": 4,
       "y": 1,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -838,7 +838,7 @@
       "x": 6,
       "y": 1,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -857,7 +857,7 @@
       ]
     },
     {
-      "i": "box-45b3d902-9634-4d19-9c46-53c2fd9bce52",
+      "i": "box-856a578d-6908-4579-97b6-3d1477a78898",
       "x": 0,
       "y": 1,
       "w": 4,
@@ -872,7 +872,7 @@
       ]
     },
     {
-      "i": "box-a98ba443-1f95-4f72-add9-a6a16460964a",
+      "i": "box-e21e3ec2-0630-4bd9-9158-289254fe7c88",
       "x": 4,
       "y": 1,
       "w": 4,
@@ -947,7 +947,7 @@
       ]
     },
     {
-      "i": "box-a97b5715-af46-4008-81f9-33a789567150",
+      "i": "box-93d588a3-f28b-4243-bf4e-f615be7c2a85",
       "x": 0,
       "y": 25,
       "w": 4,
@@ -962,7 +962,7 @@
       ]
     },
     {
-      "i": "box-950d5707-d205-41ad-88f2-18348ba41e43",
+      "i": "box-b72347bf-3afd-4eb9-bb02-af012b78f347",
       "x": 4,
       "y": 25,
       "w": 4,

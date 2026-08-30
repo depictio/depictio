@@ -268,7 +268,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "c514796b-53d4-4d67-bb33-5e999a62a418",
+      "index": "9ecb1ecf-90f9-463a-ad2e-906e9db31e05",
       "component_type": "figure",
       "title": "Temperature \u00d7 conductivity",
       "workflow_tag": "ampliseq",
@@ -298,7 +298,7 @@
       "visu_type": "scatter",
       "dict_kwargs": {},
       "mode": "code",
-      "code_content": "colors = {'Riverwater': '#348ABD', 'Groundwater': '#45B8AC', 'Sediment': '#8B5A2B', 'Soil': '#E24A33'}\nfig = px.scatter(\n    df.to_pandas(),\n    x='ctd_temperature_c', y='ctd_conductivity_us_cm', color='habitat',\n    color_discrete_map=colors, hover_name='city', custom_data=['sample'],\n)\nfig.update_traces(marker={'size': 14})\nfig.update_layout(\n    xaxis_title='Temperature (\u00b0C)', yaxis_title='Conductivity (\u00b5S/cm)',\n    legend_title_text='Habitat', margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},\n)\n",
+      "code_content": "colors = {'Riverwater': '#348ABD', 'Groundwater': '#45B8AC', 'Sediment': '#8B5A2B', 'Soil': '#E24A33'}\n# Colour by the viewer's analysis groups when there are some, else by the\n# pipeline's own habitat. One grouping axis, and the groups\n# bring their own colours with them.\ngrp_col = depictio_group_by[0] if depictio_group_by else 'habitat'\ncolors = depictio_group_kwargs.get('color_discrete_map') or colors\nfig = px.scatter(\n    df.to_pandas(),\n    x='ctd_temperature_c', y='ctd_conductivity_us_cm', color=grp_col,\n    color_discrete_map=colors, hover_name='city', custom_data=['sample'],\n)\nfig.update_traces(marker={'size': 14})\nfig.update_layout(\n    xaxis_title='Temperature (\u00b0C)', yaxis_title='Conductivity (\u00b5S/cm)',\n    legend_title_text=None if depictio_group_by else 'Habitat', margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},\n)\n",
       "displayed_data_count": 0,
       "total_data_count": 0,
       "was_sampled": false,
@@ -340,7 +340,7 @@
       "visu_type": "scatter",
       "dict_kwargs": {},
       "mode": "code",
-      "code_content": "colors = {'Riverwater': '#348ABD', 'Groundwater': '#45B8AC', 'Sediment': '#8B5A2B', 'Soil': '#E24A33'}\nfig = px.box(\n    df.to_pandas(),\n    x='habitat', y='ctd_do_mg_l', color='habitat',\n    color_discrete_map=colors, points='all',\n)\nfig.update_layout(\n    xaxis_title=None, yaxis_title='Dissolved O\u2082 (mg/L)', showlegend=False,\n    margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},\n)\n",
+      "code_content": "colors = {'Riverwater': '#348ABD', 'Groundwater': '#45B8AC', 'Sediment': '#8B5A2B', 'Soil': '#E24A33'}\n# Colour by the viewer's analysis groups when there are some, else by the\n# pipeline's own habitat. One grouping axis, and the groups\n# bring their own colours with them.\ngrp_col = depictio_group_by[0] if depictio_group_by else 'habitat'\ncolors = depictio_group_kwargs.get('color_discrete_map') or colors\nfig = px.box(\n    df.to_pandas(),\n    x=grp_col, y='ctd_do_mg_l', color=grp_col,\n    color_discrete_map=colors, points='all',\n)\nfig.update_layout(\n    xaxis_title=None, yaxis_title='Dissolved O\u2082 (mg/L)', showlegend=False,\n    margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},\n)\n",
       "displayed_data_count": 0,
       "total_data_count": 0,
       "was_sampled": false,
@@ -352,7 +352,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "8d4a5ed4-58aa-4a07-9944-aafd4b6d7f3a",
+      "index": "fc08a18a-0858-486a-bb43-415b502dca77",
       "component_type": "figure",
       "title": "Nitrate \u00d7 dissolved carbon",
       "workflow_tag": "ampliseq",
@@ -382,7 +382,7 @@
       "visu_type": "scatter",
       "dict_kwargs": {},
       "mode": "code",
-      "code_content": "colors = {'Riverwater': '#348ABD', 'Groundwater': '#45B8AC', 'Sediment': '#8B5A2B', 'Soil': '#E24A33'}\nfig = px.scatter(\n    df.to_pandas(),\n    x='ctd_nitrate_mg_l', y='ctd_doc_mg_l', color='habitat',\n    size='ctd_turbidity_ntu', color_discrete_map=colors, hover_name='city', size_max=26,\n    custom_data=['sample'],\n)\nfig.update_layout(\n    xaxis_title='Nitrate (mg/L)', yaxis_title='Dissolved organic carbon (mg/L)',\n    legend_title_text='Habitat', margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},\n)\n",
+      "code_content": "colors = {'Riverwater': '#348ABD', 'Groundwater': '#45B8AC', 'Sediment': '#8B5A2B', 'Soil': '#E24A33'}\n# Colour by the viewer's analysis groups when there are some, else by the\n# pipeline's own habitat. One grouping axis, and the groups\n# bring their own colours with them.\ngrp_col = depictio_group_by[0] if depictio_group_by else 'habitat'\ncolors = depictio_group_kwargs.get('color_discrete_map') or colors\nfig = px.scatter(\n    df.to_pandas(),\n    x='ctd_nitrate_mg_l', y='ctd_doc_mg_l', color=grp_col,\n    size='ctd_turbidity_ntu', color_discrete_map=colors, hover_name='city', size_max=26,\n    custom_data=['sample'],\n)\nfig.update_layout(\n    xaxis_title='Nitrate (mg/L)', yaxis_title='Dissolved organic carbon (mg/L)',\n    legend_title_text=None if depictio_group_by else 'Habitat', margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},\n)\n",
       "displayed_data_count": 0,
       "total_data_count": 0,
       "was_sampled": false,
@@ -447,7 +447,7 @@
       "visu_type": "scatter",
       "dict_kwargs": {},
       "mode": "code",
-      "code_content": "colors = {'Riverwater': '#348ABD', 'Groundwater': '#45B8AC', 'Sediment': '#8B5A2B', 'Soil': '#E24A33'}\nfig = px.box(\n    df.to_pandas(),\n    x='habitat', y='shannon', color='habitat',\n    color_discrete_map=colors, points='all',\n)\nfig.update_layout(\n    xaxis_title=None, yaxis_title='Shannon index', showlegend=False,\n    margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},\n)\n",
+      "code_content": "colors = {'Riverwater': '#348ABD', 'Groundwater': '#45B8AC', 'Sediment': '#8B5A2B', 'Soil': '#E24A33'}\n# Colour by the viewer's analysis groups when there are some, else by the\n# pipeline's own habitat. One grouping axis, and the groups\n# bring their own colours with them.\ngrp_col = depictio_group_by[0] if depictio_group_by else 'habitat'\ncolors = depictio_group_kwargs.get('color_discrete_map') or colors\nfig = px.box(\n    df.to_pandas(),\n    x=grp_col, y='shannon', color=grp_col,\n    color_discrete_map=colors, points='all',\n)\nfig.update_layout(\n    xaxis_title=None, yaxis_title='Shannon index', showlegend=False,\n    margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},\n)\n",
       "displayed_data_count": 0,
       "total_data_count": 0,
       "was_sampled": false,
@@ -482,7 +482,7 @@
       "x": 0,
       "y": 2,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -490,7 +490,7 @@
       "x": 2,
       "y": 2,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -498,7 +498,7 @@
       "x": 4,
       "y": 2,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -506,7 +506,7 @@
       "x": 6,
       "y": 2,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -525,7 +525,7 @@
       ]
     },
     {
-      "i": "box-c514796b-53d4-4d67-bb33-5e999a62a418",
+      "i": "box-9ecb1ecf-90f9-463a-ad2e-906e9db31e05",
       "x": 0,
       "y": 2,
       "w": 4,
@@ -555,7 +555,7 @@
       ]
     },
     {
-      "i": "box-8d4a5ed4-58aa-4a07-9944-aafd4b6d7f3a",
+      "i": "box-fc08a18a-0858-486a-bb43-415b502dca77",
       "x": 0,
       "y": 8,
       "w": 8,

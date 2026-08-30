@@ -31,7 +31,7 @@ const LoadAllButton: React.FC<{ state: LoadAllState }> = ({ state }) => {
   return (
     <Tooltip label={label} withArrow>
       <ActionIcon
-        variant={state.full ? 'filled' : 'light'}
+        variant={state.full ? 'filled' : 'subtle'}
         color="gray"
         size="sm"
         loading={state.loading}

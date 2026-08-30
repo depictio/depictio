@@ -27,6 +27,8 @@ import { adaptGlTrace, useWebglSlot } from '../../webglBudget';
 import AdvancedVizFrame, { TIER_COLORS } from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
+import { splitFigureByGroups } from './groupSplit';
+import type { GroupRenderState } from '../../selectionGroups';
 
 type Highlight = 'above' | 'below' | 'none';
 
@@ -65,6 +67,11 @@ interface Props {
    *  read-only hosts (catalog, project previews), which is what keeps the
    *  lasso off there. */
   onFilterChange?: (filter: InteractiveFilter) => void;
+  /** Dashboard-wide analysis grouping, applied client-side to the built
+   *  figure. Colour only, never facets: a Manhattan reads as one genome-wide
+   *  axis, and cutting it into panels would break the very continuity that
+   *  makes it legible. See `splitFigureByGroups`. */
+  groupRender?: GroupRenderState;
 }
 
 const _palette = [
@@ -89,7 +96,13 @@ function chromosomeSortKey(label: string): number {
   return Number.isFinite(n) ? n : 100;
 }
 
-const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilterChange }) => {
+const ManhattanRenderer: React.FC<Props> = ({
+  metadata,
+  filters,
+  refreshTick,
+  onFilterChange,
+  groupRender,
+}) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
   const isDark = colorScheme === 'dark';
@@ -742,6 +755,15 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
           // reachable without opening the modebar. Zoom stays available from
           // the modebar, which the track keeps.
           ...(selectionEnabled ? { dragmode: 'lasso' as const } : {}),
+          // Plotly wipes UI state — the drawn lasso and every trace's
+          // `selectedpoints` — on each `Plotly.react`, and `applyDataTheme`
+          // hands the wrapper a fresh trace array on every render, so one
+          // happens as soon as the emitted selection lands back in
+          // `filters`. Without a stable `uirevision` the lasso the user has
+          // just drawn disappears the instant it takes effect. Keyed on
+          // `refreshTick` like FigureRenderer: a realtime tick still
+          // repaints, a filter change does not.
+          uirevision: `tick-${refreshTick ?? 0}`,
           autosize: true,
         },
       },
@@ -752,6 +774,7 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
   }, [
     rows,
     config,
+    refreshTick,
     selectionColumn,
     selectionEnabled,
     scoreThreshold,
@@ -900,6 +923,24 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
     ],
   );
 
+  // Recolour by the dashboard's analysis groups, when the groups were made on
+  // a column this plot's points actually carry. The join is on values, not on
+  // column names, and `splitFigureByGroups` returns the figure untouched when
+  // no point matches — so a group built from sample ids on another tile leaves
+  // a per-variant Manhattan exactly as its own colour-by drew it.
+  //
+  // Slot 0 of ``customdata`` is the selection value, by the same convention
+  // ``extractScatterSelection`` reads.
+  const groupedFigure = useMemo(() => {
+    if (!figure) return figure;
+    return splitFigureByGroups(figure, {
+      groupRender,
+      identitySlot: 0,
+      facetable: false,
+      showLegend: true,
+    });
+  }, [figure, groupRender]);
+
   // ``selectedOrder`` drives which tier gets the "selected" treatment in the
   // top counts chips AND the Show-data table row highlighting. Follow the
   // user's highlight pick so the chips, table rows, and plot markers all agree
@@ -962,10 +1003,10 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
       counts={counts}
       tierAnnotation={tierAnnotation}
     >
-      {figure ? (
+      {groupedFigure ? (
         <Plot
-          data={applyDataTheme(figure.data, isDark, theme) as any}
-          layout={applyLayoutTheme(figure.layout as any, isDark, theme) as any}
+          data={applyDataTheme(groupedFigure.data, isDark, theme) as any}
+          layout={applyLayoutTheme(groupedFigure.layout as any, isDark, theme) as any}
           useResizeHandler
           style={{ width: '100%', height: '100%' }}
           config={{ displaylogo: false, responsive: true } as any}

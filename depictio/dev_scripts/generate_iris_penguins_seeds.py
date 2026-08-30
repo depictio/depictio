@@ -49,11 +49,14 @@ PROJECTS: dict[str, dict[str, Any]] = {
         "project_id": "646b0f3c1e4a2d7f8e5b8c9a",
         "workflow_id": "646b0f3c1e4a2d7f8e5b8c9b",
         # The envelope the shipped seed carries. Per project because iris and
-        # penguins really do differ: iris is private and carries a generic
-        # Mantine icon, penguins is public and carries the product favicon.
+        # penguins really do differ: iris is private, penguins is public. The
+        # icon names the dataset rather than the product — a generic dashboard
+        # glyph or the Depictio favicon said nothing about which project this
+        # is, and disagreed with the icon the same dashboard shows in the tab
+        # strip. A tab that declares its own `tab_icon` overrides this anyway.
         "envelope": {
-            "icon": "mdi:view-dashboard",
-            "icon_color": "orange",
+            "icon": "mdi:flower-outline",
+            "icon_color": "violet",
             "workflow_system": "none",
             "notes_content": "<p></p>",
             "is_public": False,
@@ -105,7 +108,7 @@ PROJECTS: dict[str, dict[str, Any]] = {
         },
         "wf_tag": "python/penguin_species_analysis",
         "envelope": {
-            "icon": "/assets/images/icons/favicon.png",
+            "icon": "mdi:penguin",
             "icon_color": "orange",
             "workflow_system": "python",
             "notes_content": "",
@@ -246,8 +249,13 @@ def _build_seed_doc(project_key: str) -> dict[str, Any]:
     full["dashboard_id"] = _build_oid(spec["dashboard_id"])
     full["project_id"] = _build_oid(spec["project_id"])
     full["is_public"] = envelope["is_public"]
-    full["icon"] = envelope["icon"]
-    full["icon_color"] = envelope["icon_color"]
+    # A tab's own icon wins over the project envelope. The envelope is one
+    # value for a whole project, so a dashboard that names itself in the tab
+    # strip used to wear a different icon in its own header — a penguin in the
+    # strip, the product favicon above it. The YAML is the single source of a
+    # tab's identity; the envelope is only the fallback for one that names none.
+    full["icon"] = full.get("tab_icon") or envelope["icon"]
+    full["icon_color"] = full.get("tab_icon_color") or envelope["icon_color"]
     full["icon_variant"] = "filled"
     full["workflow_system"] = envelope["workflow_system"]
     full["notes_content"] = envelope["notes_content"]

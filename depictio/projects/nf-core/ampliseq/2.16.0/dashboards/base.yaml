@@ -128,6 +128,10 @@ main_dashboard:
     data_collection_tag: multiqc_data
     selected_module: cutadapt
     selected_plot: Filtered Reads
+    # Catalog provenance: this plot is a known MultiQC output, so say which one.
+    # `_lite_to_stored` derives `catalog_source` from the handle, which is what
+    # puts the catalog badge and the origin block on the tile.
+    use: multiqc/cutadapt
     title_size: sm
     title_align: left
     section: QC overview
@@ -142,6 +146,10 @@ main_dashboard:
     data_collection_tag: multiqc_data
     selected_module: fastqc
     selected_plot: Sequence Counts
+    # Catalog provenance: this plot is a known MultiQC output, so say which one.
+    # `_lite_to_stored` derives `catalog_source` from the handle, which is what
+    # puts the catalog badge and the origin block on the tile.
+    use: multiqc/fastqc
     title_size: sm
     title_align: left
     section: QC overview
@@ -156,6 +164,10 @@ main_dashboard:
     data_collection_tag: multiqc_data
     selected_module: fastqc
     selected_plot: Sequence Quality Histograms
+    # Catalog provenance: this plot is a known MultiQC output, so say which one.
+    # `_lite_to_stored` derives `catalog_source` from the handle, which is what
+    # puts the catalog badge and the origin block on the tile.
+    use: multiqc/fastqc
     title_size: sm
     title_align: left
     section: QC overview
@@ -192,6 +204,10 @@ main_dashboard:
     data_collection_tag: multiqc_data
     selected_module: fastqc
     selected_plot: Adapter Content
+    # Catalog provenance: this plot is a known MultiQC output, so say which one.
+    # `_lite_to_stored` derives `catalog_source` from the handle, which is what
+    # puts the catalog badge and the origin block on the tile.
+    use: multiqc/fastqc
     title_size: sm
     title_align: left
     section: QC details
@@ -206,6 +222,10 @@ main_dashboard:
     data_collection_tag: multiqc_data
     selected_module: cutadapt
     selected_plot: Trimmed Sequence Lengths (5')
+    # Catalog provenance: this plot is a known MultiQC output, so say which one.
+    # `_lite_to_stored` derives `catalog_source` from the handle, which is what
+    # puts the catalog badge and the origin block on the tile.
+    use: multiqc/cutadapt
     title_size: sm
     title_align: left
     section: QC details
@@ -220,6 +240,10 @@ main_dashboard:
     data_collection_tag: multiqc_data
     selected_module: fastqc
     selected_plot: Per Sequence Quality Scores
+    # Catalog provenance: this plot is a known MultiQC output, so say which one.
+    # `_lite_to_stored` derives `catalog_source` from the handle, which is what
+    # puts the catalog badge and the origin block on the tile.
+    use: multiqc/fastqc
     title_size: sm
     title_align: left
     section: QC details
@@ -234,6 +258,10 @@ main_dashboard:
     data_collection_tag: multiqc_data
     selected_module: fastqc
     selected_plot: Sequence Duplication Levels
+    # Catalog provenance: this plot is a known MultiQC output, so say which one.
+    # `_lite_to_stored` derives `catalog_source` from the handle, which is what
+    # puts the catalog badge and the origin block on the tile.
+    use: multiqc/fastqc
     title_size: sm
     title_align: left
     section: QC details
@@ -248,6 +276,10 @@ main_dashboard:
     data_collection_tag: multiqc_data
     selected_module: fastqc
     selected_plot: Sequence Length Distribution
+    # Catalog provenance: this plot is a known MultiQC output, so say which one.
+    # `_lite_to_stored` derives `catalog_source` from the handle, which is what
+    # puts the catalog badge and the origin block on the tile.
+    use: multiqc/fastqc
     title_size: sm
     title_align: left
     section: QC details
@@ -262,6 +294,10 @@ main_dashboard:
     data_collection_tag: multiqc_data
     selected_module: fastqc
     selected_plot: Per Base N Content
+    # Catalog provenance: this plot is a known MultiQC output, so say which one.
+    # `_lite_to_stored` derives `catalog_source` from the handle, which is what
+    # puts the catalog badge and the origin block on the tile.
+    use: multiqc/fastqc
     title_size: sm
     title_align: left
     section: QC details
@@ -276,6 +312,10 @@ main_dashboard:
     data_collection_tag: multiqc_data
     selected_module: fastqc
     selected_plot: Top overrepresented sequences
+    # Catalog provenance: this plot is a known MultiQC output, so say which one.
+    # `_lite_to_stored` derives `catalog_source` from the handle, which is what
+    # puts the catalog badge and the origin block on the tile.
+    use: multiqc/fastqc
     title_size: sm
     title_align: left
     section: QC details
@@ -290,6 +330,10 @@ main_dashboard:
     data_collection_tag: multiqc_data
     selected_module: fastqc
     selected_plot: Overrepresented sequences by sample
+    # Catalog provenance: this plot is a known MultiQC output, so say which one.
+    # `_lite_to_stored` derives `catalog_source` from the handle, which is what
+    # puts the catalog badge and the origin block on the tile.
+    use: multiqc/fastqc
     title_size: sm
     title_align: left
     section: QC details
@@ -304,14 +348,21 @@ main_dashboard:
     data_collection_tag: multiqc_data
     selected_module: fastqc
     selected_plot: Status Checks
+    # Catalog provenance: this plot is a known MultiQC output, so say which one.
+    # `_lite_to_stored` derives `catalog_source` from the handle, which is what
+    # puts the catalog badge and the origin block on the tile.
+    use: multiqc/fastqc
     title_size: sm
     title_align: left
     section: QC details
     tag: multiqc-fastqc_status-checks-d33968
+    # Alone on its row, so it takes the whole row. `widenLoneRows` only widens a
+    # tile that LOST a neighbour, never one the author left alone, which is the
+    # right rule and the reason this has to be said here.
     layout:
-      x: 4
+      x: 0
       y: 22
-      w: 4
+      w: 8
       h: 5
   - component_type: text
     workflow_tag: ampliseq
@@ -352,7 +403,7 @@ main_dashboard:
       x: 0
       y: 2
       w: 2
-      h: 3
+      h: 2
     title: Samples
   - component_type: card
     workflow_tag: ampliseq
@@ -377,7 +428,7 @@ main_dashboard:
       x: 2
       y: 2
       w: 2
-      h: 3
+      h: 2
     title: '{GROUP_COL_DISPLAY} groups'
   - component_type: card
     workflow_tag: ampliseq
@@ -401,7 +452,7 @@ main_dashboard:
       x: 4
       y: 2
       w: 2
-      h: 3
+      h: 2
     title: '{GROUP_COL_DISPLAY} coverage'
   - component_type: card
     workflow_tag: ampliseq
@@ -425,7 +476,7 @@ main_dashboard:
       x: 6
       y: 2
       w: 2
-      h: 3
+      h: 2
     title: Sample identifiers
   - component_type: table
     workflow_tag: ampliseq
@@ -564,7 +615,7 @@ tabs:
       x: 0
       y: 2
       w: 2
-      h: 3
+      h: 2
     title: Total Samples
   - component_type: card
     workflow_tag: ampliseq
@@ -590,7 +641,7 @@ tabs:
       x: 2
       y: 2
       w: 2
-      h: 3
+      h: 2
     title: Shannon (distribution)
   - component_type: card
     workflow_tag: ampliseq
@@ -616,7 +667,7 @@ tabs:
       x: 4
       y: 2
       w: 2
-      h: 3
+      h: 2
     title: Faith PD (distribution)
   - component_type: card
     workflow_tag: ampliseq
@@ -642,7 +693,7 @@ tabs:
       x: 6
       y: 2
       w: 2
-      h: 3
+      h: 2
     title: Evenness (distribution)
   - component_type: text
     workflow_tag: ampliseq
@@ -705,7 +756,11 @@ tabs:
       title: Alpha diversity by {GROUP_COL_DISPLAY} (per metric)
     mode: code
     code_content: |-
-      df_grp = df.with_columns(pl.col('{GROUP_COL}').alias('_grp')) if '{GROUP_COL}' in df.columns else df.with_columns(pl.lit('All samples').alias('_grp'))
+      # The axis this figure groups on: the dashboard's analysis groups when the
+      # viewer has made some, else the pipeline's own {GROUP_COL_DISPLAY}. One
+      # grouping axis, not two stacked on each other.
+      grp_col = depictio_group_by[0] if depictio_group_by else '{GROUP_COL}'
+      df_grp = df.with_columns(pl.col(grp_col).alias('_grp')) if grp_col in df.columns else df.with_columns(pl.lit('All samples').alias('_grp'))
       df_modified = df_grp.unpivot(
           on=['shannon', 'observed_features', 'faith_pd', 'evenness'],
           index=['sample_id', '_grp'],
@@ -718,6 +773,7 @@ tabs:
           facet_col='metric', facet_col_wrap=2,
           points='all',
           labels={'_grp': '{GROUP_COL_DISPLAY}', 'value': ''},
+          color_discrete_map=depictio_group_kwargs.get('color_discrete_map', {}),
       )
       fig.update_yaxes(matches=None, showticklabels=True)
       fig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1], font={'size': 15, 'weight': 'bold'}))
@@ -1004,7 +1060,7 @@ tabs:
       x: 0
       y: 1
       w: 2
-      h: 3
+      h: 2
     title: Rel. abundance (distribution)
   - component_type: card
     workflow_tag: ampliseq
@@ -1029,7 +1085,7 @@ tabs:
       x: 2
       y: 1
       w: 2
-      h: 3
+      h: 2
     title: Distinct taxa
   - component_type: card
     workflow_tag: ampliseq
@@ -1054,7 +1110,7 @@ tabs:
       x: 4
       y: 1
       w: 2
-      h: 3
+      h: 2
     title: '{GROUP_COL_DISPLAY} groups'
   - component_type: card
     workflow_tag: ampliseq
@@ -1079,7 +1135,7 @@ tabs:
       x: 6
       y: 1
       w: 2
-      h: 3
+      h: 2
     title: Phyla detected
   - component_type: text
     workflow_tag: ampliseq
@@ -1112,17 +1168,30 @@ tabs:
       y: mean_rel_abundance
     mode: code
     code_content: |-
-      df_grp = df.with_columns(pl.col('{GROUP_COL}').alias('_facet')) if '{GROUP_COL}' in df.columns else df.with_columns(pl.lit('All samples').alias('_facet'))
-      df_modified = df_grp.group_by(['_facet', 'Phylum']).agg(pl.col('rel_abundance').mean().alias('mean_rel_abundance')).sort('Phylum')
+      # The axis this figure groups on: the dashboard's analysis groups when the
+      # viewer has made some, else the pipeline's own {GROUP_COL_DISPLAY}. One
+      # grouping axis, not two stacked on each other.
+      grp_col = depictio_group_by[0] if depictio_group_by else '{GROUP_COL}'
+      df_grp = df.with_columns(pl.col(grp_col).alias('_facet')) if grp_col in df.columns else df.with_columns(pl.lit('All samples').alias('_facet'))
+      # Sorted so the panels come out in a stable order: px lays facets out in
+      # order of first appearance, which otherwise follows the row order.
+      df_modified = df_grp.group_by(['_facet', 'Phylum']).agg(pl.col('rel_abundance').mean().alias('mean_rel_abundance')).sort('_facet')
+      # Bars run horizontally and the groups are columns, not rows: a phylum name
+      # is long, so it belongs on the shared y axis where it is written once and
+      # read level, rather than rotated under every band.
+      colors = depictio_group_kwargs.get('color_discrete_map') or {}
       fig = px.bar(
           df_modified.to_pandas(),
-          x='Phylum', y='mean_rel_abundance', color='Phylum',
-          facet_row='_facet',
+          x='mean_rel_abundance', y='Phylum', color='_facet',
+          color_discrete_map=colors,
+          orientation='h',
+          facet_col='_facet',
           title='Mean Relative Abundance by {GROUP_COL_DISPLAY}',
           labels={'Phylum': 'Phylum', 'mean_rel_abundance': 'Mean Relative Abundance'},
       )
-      fig.update_layout(xaxis={'categoryorder': 'category ascending'})
-      fig.update_xaxes(tickangle=-45, tickfont={'size': 9})
+      # Most abundant at the top, so the tile opens on what carries the community.
+      fig.update_yaxes(categoryorder='total ascending', tickfont={'size': 9})
+      fig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1]))
       fig.update_layout(showlegend=False)
     selection_enabled: false
     title_size: sm
@@ -1133,7 +1202,7 @@ tabs:
       x: 0
       y: 1
       w: 8
-      h: 7
+      h: 9
   - component_type: advanced_viz
     workflow_tag: ampliseq
     use: qiime2/stacked_taxonomy
@@ -1152,7 +1221,7 @@ tabs:
     index: adv-stacked-taxonomy
     layout:
       x: 0
-      y: 8
+      y: 10
       w: 8
       h: 8
     title: Stacked taxonomy (advanced)
@@ -1312,17 +1381,30 @@ tabs:
       y: mean_rel_abundance
     mode: code
     code_content: |-
-      df_grp = df.with_columns(pl.col('{GROUP_COL}').alias('_facet')) if '{GROUP_COL}' in df.columns else df.with_columns(pl.lit('All samples').alias('_facet'))
-      df_modified = df_grp.group_by(['_facet', 'Phylum']).agg(pl.col('rel_abundance').mean().alias('mean_rel_abundance')).sort('Phylum')
+      # The axis this figure groups on: the dashboard's analysis groups when the
+      # viewer has made some, else the pipeline's own {GROUP_COL_DISPLAY}. One
+      # grouping axis, not two stacked on each other.
+      grp_col = depictio_group_by[0] if depictio_group_by else '{GROUP_COL}'
+      df_grp = df.with_columns(pl.col(grp_col).alias('_facet')) if grp_col in df.columns else df.with_columns(pl.lit('All samples').alias('_facet'))
+      # Sorted so the panels come out in a stable order: px lays facets out in
+      # order of first appearance, which otherwise follows the row order.
+      df_modified = df_grp.group_by(['_facet', 'Phylum']).agg(pl.col('rel_abundance').mean().alias('mean_rel_abundance')).sort('_facet')
+      # Bars run horizontally and the groups are columns, not rows: a phylum name
+      # is long, so it belongs on the shared y axis where it is written once and
+      # read level, rather than rotated under every band.
+      colors = depictio_group_kwargs.get('color_discrete_map') or {}
       fig = px.bar(
           df_modified.to_pandas(),
-          x='Phylum', y='mean_rel_abundance', color='Phylum',
-          facet_row='_facet',
+          x='mean_rel_abundance', y='Phylum', color='_facet',
+          color_discrete_map=colors,
+          orientation='h',
+          facet_col='_facet',
           title='Mean Relative Abundance by {GROUP_COL_DISPLAY}',
           labels={'Phylum': 'Phylum', 'mean_rel_abundance': 'Mean Relative Abundance'},
       )
-      fig.update_layout(xaxis={'categoryorder': 'category ascending'})
-      fig.update_xaxes(tickangle=-45, tickfont={'size': 9})
+      # Most abundant at the top, so the tile opens on what carries the community.
+      fig.update_yaxes(categoryorder='total ascending', tickfont={'size': 9})
+      fig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1]))
       fig.update_layout(showlegend=False)
     selection_enabled: false
     title_size: sm
@@ -1334,7 +1416,7 @@ tabs:
       x: 0
       y: 2
       w: 8
-      h: 7
+      h: 9
   - component_type: table
     workflow_tag: ampliseq
     data_collection_tag: sintax_rel_abundance
@@ -1516,7 +1598,7 @@ tabs:
       x: 0
       y: 1
       w: 2
-      h: 3
+      h: 2
     title: Samples projected
   - component_type: card
     workflow_tag: ampliseq
@@ -1541,7 +1623,7 @@ tabs:
       x: 2
       y: 1
       w: 2
-      h: 3
+      h: 2
     title: '{GROUP_COL_DISPLAY} groups'
   - component_type: card
     workflow_tag: ampliseq
@@ -1567,7 +1649,7 @@ tabs:
       x: 4
       y: 1
       w: 2
-      h: 3
+      h: 2
     title: PCoA axis 1 (distribution)
   - component_type: card
     workflow_tag: ampliseq
@@ -1593,7 +1675,7 @@ tabs:
       x: 6
       y: 1
       w: 2
-      h: 3
+      h: 2
     title: PCoA axis 2 (distribution)
   - component_type: text
     workflow_tag: ampliseq
@@ -1623,6 +1705,11 @@ tabs:
       color_col: '{GROUP_COL}'
       point_size: 10
       show_density: false
+      # Opt into selection so a lasso here becomes an analysis group. The
+      # embedding lane of `advancedVizSelectionColumn` falls back to
+      # `sample_id_col`, which is already what every point carries in its
+      # customdata, so no `selection_column` is needed.
+      selection_enabled: true
     section: Sample relationships
     tag: advanced_viz-ord-embedding-531e5a
     index: ord-embedding
@@ -1877,7 +1964,7 @@ tabs:
       x: 0
       y: 2
       w: 2
-      h: 3
+      h: 2
     title: Taxa tested
   - component_type: card
     workflow_tag: ampliseq
@@ -1904,7 +1991,7 @@ tabs:
       x: 2
       y: 2
       w: 2
-      h: 3
+      h: 2
     title: Significant Taxa (q<0.05)
   - component_type: card
     workflow_tag: ampliseq
@@ -1932,7 +2019,7 @@ tabs:
       x: 4
       y: 2
       w: 2
-      h: 3
+      h: 2
     title: FDR calls
   - component_type: card
     workflow_tag: ampliseq
@@ -1958,7 +2045,7 @@ tabs:
       x: 6
       y: 2
       w: 2
-      h: 3
+      h: 2
     title: Log-Fold Change distribution
   - component_type: text
     workflow_tag: ampliseq
@@ -2159,7 +2246,7 @@ tabs:
       x: 0
       y: 1
       w: 2
-      h: 3
+      h: 2
     title: Total ASVs
   - component_type: card
     workflow_tag: ampliseq
@@ -2184,7 +2271,7 @@ tabs:
       x: 2
       y: 1
       w: 2
-      h: 3
+      h: 2
     title: Genus-level classification
   - component_type: card
     workflow_tag: ampliseq
@@ -2210,7 +2297,7 @@ tabs:
       x: 4
       y: 1
       w: 2
-      h: 3
+      h: 2
     title: Mean classifier confidence
   - component_type: card
     workflow_tag: ampliseq
@@ -2236,7 +2323,7 @@ tabs:
       x: 6
       y: 1
       w: 2
-      h: 3
+      h: 2
     title: Unique Genera
   - component_type: text
     workflow_tag: ampliseq
@@ -2420,7 +2507,7 @@ tabs:
       x: 0
       y: 2
       w: 2
-      h: 3
+      h: 2
     title: Reconstructed features
   - component_type: card
     workflow_tag: ampliseq
@@ -2445,7 +2532,7 @@ tabs:
       x: 2
       y: 2
       w: 2
-      h: 3
+      h: 2
     title: Samples
   - component_type: card
     workflow_tag: ampliseq
@@ -2470,7 +2557,7 @@ tabs:
       x: 4
       y: 2
       w: 2
-      h: 3
+      h: 2
     title: Phyla detected
   - component_type: card
     workflow_tag: ampliseq
@@ -2496,7 +2583,7 @@ tabs:
       x: 6
       y: 2
       w: 2
-      h: 3
+      h: 2
     title: Mean regions / feature
   - component_type: text
     workflow_tag: ampliseq
@@ -2527,11 +2614,16 @@ tabs:
       y: rel
     mode: code
     code_content: |-
-      df_g = df.group_by(['sample', 'Phylum']).agg(pl.col('count').sum().alias('count'))
+      # Spread into the keys so the annotation survives the aggregation, and read
+      # back below as a facet. Deduplicated: the handed-over column may be one
+      # the figure already groups by, and polars refuses a repeated key.
+      # back below as a facet: the colour here is already spoken for by Phylum.
+      df_g = df.group_by(list(dict.fromkeys([*depictio_group_by, 'sample', 'Phylum']))).agg(pl.col('count').sum().alias('count'))
       df_g = df_g.with_columns((pl.col('count') / pl.col('count').sum().over('sample') * 100).alias('rel'))
       fig = px.bar(
           df_g.sort(['sample', 'Phylum']).to_pandas(),
           x='sample', y='rel', color='Phylum',
+          facet_col=depictio_group_by[0] if depictio_group_by else None,
           title='Relative composition by phylum (per sample)',
           labels={'sample': 'Sample', 'rel': 'Relative abundance (%)', 'Phylum': 'Phylum'},
       )
@@ -2561,10 +2653,11 @@ tabs:
       y: count
     mode: code
     code_content: |-
-      df_g = df.group_by(['sample', 'Genus']).agg(pl.col('count').sum().alias('count')).sort(['sample', 'Genus'])
+      df_g = df.group_by(list(dict.fromkeys([*depictio_group_by, 'sample', 'Genus']))).agg(pl.col('count').sum().alias('count')).sort(['sample', 'Genus'])
       fig = px.bar(
           df_g.to_pandas(),
           x='sample', y='count', color='Genus',
+          facet_col=depictio_group_by[0] if depictio_group_by else None,
           title='Genus-level composition (per sample)',
           labels={'sample': 'Sample', 'count': 'Reconstructed count', 'Genus': 'Genus'},
       )
@@ -2609,10 +2702,11 @@ tabs:
       y: features
     mode: code
     code_content: |-
-      df_g = df.group_by('num_regions').agg(pl.len().alias('features')).sort('num_regions')
+      df_g = df.group_by(list(dict.fromkeys([*depictio_group_by, 'num_regions']))).agg(pl.len().alias('features')).sort('num_regions')
       fig = px.bar(
           df_g.to_pandas(),
           x='num_regions', y='features', text='features',
+          facet_col=depictio_group_by[0] if depictio_group_by else None,
           title='Cross-region support (features by regions mapped)',
           labels={'num_regions': '# regions mapped', 'features': 'Reconstructed features'},
       )
@@ -2645,6 +2739,7 @@ tabs:
           df.to_pandas(),
           x='num_regions', y='total_kmers_mapped', size='mean_kmer_per_region',
           hover_data=['feature_id', 'mean_kmer_per_region', 'stdv_kmer_per_region'],
+          **depictio_group_kwargs,
           title='K-mer support vs region coverage',
           labels={'num_regions': '# regions mapped', 'total_kmers_mapped': 'Total k-mers mapped'},
       )

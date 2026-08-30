@@ -460,7 +460,7 @@
         "title": "Alpha diversity by Habitat (per metric)"
       },
       "mode": "code",
-      "code_content": "df_grp = df.with_columns(pl.col('habitat').alias('_grp')) if 'habitat' in df.columns else df.with_columns(pl.lit('All samples').alias('_grp'))\ndf_modified = df_grp.unpivot(\n    on=['shannon', 'observed_features', 'faith_pd', 'evenness'],\n    index=['sample_id', '_grp'],\n    variable_name='metric',\n    value_name='value',\n).filter(pl.col('value').is_not_null())\nfig = px.box(\n    df_modified.to_pandas(),\n    x='_grp', y='value', color='_grp',\n    facet_col='metric', facet_col_wrap=2,\n    points='all',\n    labels={'_grp': 'Habitat', 'value': ''},\n)\nfig.update_yaxes(matches=None, showticklabels=True)\nfig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1], font={'size': 15, 'weight': 'bold'}))\nfig.update_layout(showlegend=False, title=None, margin={'t': 32, 'l': 56, 'r': 16, 'b': 40})",
+      "code_content": "# The axis this figure groups on: the dashboard's analysis groups when the\n# viewer has made some, else the pipeline's own Habitat. One\n# grouping axis, not two stacked on each other.\ngrp_col = depictio_group_by[0] if depictio_group_by else 'habitat'\ndf_grp = df.with_columns(pl.col(grp_col).alias('_grp')) if grp_col in df.columns else df.with_columns(pl.lit('All samples').alias('_grp'))\ndf_modified = df_grp.unpivot(\n    on=['shannon', 'observed_features', 'faith_pd', 'evenness'],\n    index=['sample_id', '_grp'],\n    variable_name='metric',\n    value_name='value',\n).filter(pl.col('value').is_not_null())\nfig = px.box(\n    df_modified.to_pandas(),\n    x='_grp', y='value', color='_grp',\n    facet_col='metric', facet_col_wrap=2,\n    points='all',\n    labels={'_grp': 'Habitat', 'value': ''},\n    color_discrete_map=depictio_group_kwargs.get('color_discrete_map', {}),\n)\nfig.update_yaxes(matches=None, showticklabels=True)\nfig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1], font={'size': 15, 'weight': 'bold'}))\nfig.update_layout(showlegend=False, title=None, margin={'t': 32, 'l': 56, 'r': 16, 'b': 40})",
       "displayed_data_count": 0,
       "total_data_count": 0,
       "was_sampled": false,
@@ -572,7 +572,7 @@
       "x": 0,
       "y": 2,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -580,7 +580,7 @@
       "x": 2,
       "y": 2,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -588,7 +588,7 @@
       "x": 4,
       "y": 2,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -596,7 +596,7 @@
       "x": 6,
       "y": 2,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {

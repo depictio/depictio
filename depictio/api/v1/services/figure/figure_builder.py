@@ -247,6 +247,7 @@ def process_code_mode_figure(
     df: Any,
     current_theme: str,
     task_id: str,
+    extra_globals: dict[str, Any] | None = None,
 ) -> tuple[bool, go.Figure | None, str | None]:
     """
     Process a figure in code mode by executing user-provided code.
@@ -256,6 +257,8 @@ def process_code_mode_figure(
         df: DataFrame to pass to the code execution
         current_theme: Current theme name for styling
         task_id: Task ID for logging
+        extra_globals: Extra names to bind in the sandbox, e.g. the grouping
+            kwargs a code figure spreads to honour the Colour/Split toggle
 
     Returns:
         Tuple of (success, figure, visu_type):
@@ -273,7 +276,7 @@ def process_code_mode_figure(
     )
 
     executor = SimpleCodeExecutor()
-    success, fig, message = executor.execute_code(code_content, df)
+    success, fig, message = executor.execute_code(code_content, df, extra_globals)
 
     if not success:
         logger.error(f"[{task_id}] Code execution failed: {message}")

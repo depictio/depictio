@@ -14,8 +14,9 @@ import type { LoadAllState } from '../chrome/LoadAllButton';
 /**
  * Bridges the per-renderer Settings + Show-data popovers into ComponentChrome's
  * `extraActions` slot — that way the ActionIcons sit in the same hover-revealed
- * row as metadata/fullscreen/download/reset and match their Mantine styling
- * (variant=light, size=sm), instead of floating in the panel header.
+ * row as metadata/fullscreen/download/reset and match their Mantine styling:
+ * size=sm, and the cluster's subtle-at-rest / filled-when-engaged pair, so a
+ * popover that is open reads as open. Not floating in the panel header.
  *
  * Wiring:
  *  - AdvancedVizDispatch holds the published payload and renders an
@@ -104,7 +105,7 @@ export const AdvancedVizSettingsPopover: React.FC<SettingsPopoverProps> = ({ con
     >
       <Popover.Target>
         <ActionIcon
-          variant="light"
+          variant={opened ? 'filled' : 'subtle'}
           color="teal"
           size="sm"
           aria-label="Viz settings"
@@ -192,7 +193,7 @@ export const AdvancedVizDataPopover: React.FC<DataPopoverProps> = ({
     >
       <Popover.Target>
         <ActionIcon
-          variant="light"
+          variant={opened ? 'filled' : 'subtle'}
           color="violet"
           size="sm"
           aria-label="Show underlying data"

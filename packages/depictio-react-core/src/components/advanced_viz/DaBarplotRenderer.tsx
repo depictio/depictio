@@ -7,6 +7,8 @@ import { isStaleFetch } from '../../fetchQueue';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
+import { splitFigureByGroups } from './groupSplit';
+import type { GroupRenderState } from '../../selectionGroups';
 
 interface DaBarplotConfig {
   feature_id_col: string;
@@ -23,6 +25,10 @@ interface Props {
   metadata: StoredMetadata & { viz_kind?: string; config?: DaBarplotConfig };
   filters: InteractiveFilter[];
   refreshTick?: number;
+  /** Dashboard-wide analysis grouping, recoloured into every contrast panel.
+   *  Colour only: the panels are already one per contrast, and this plot is
+   *  keyed per feature. See `splitFigureByGroups`. */
+  groupRender?: GroupRenderState;
 }
 
 const POSITIVE = '#1f77b4';
@@ -32,7 +38,7 @@ const ALL_TAB = 'all';
 
 type FeatureRow = { feat: string; label: string; lfc: number; sig: number };
 
-const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
+const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, groupRender }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
   const config = (metadata.config || {}) as DaBarplotConfig;
@@ -215,6 +221,21 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     };
   };
 
+  // One recolour point for both call sites: `buildPanel` is what the faceted
+  // view and the single-contrast view both go through. The join is on values,
+  // so a group built from sample ids leaves this per-feature plot alone.
+  // Slot 0 of `customdata` is the feature id.
+  const buildGroupedPanel = (contrastName: string) => {
+    const panel = buildPanel(contrastName);
+    if (!panel) return null;
+    return splitFigureByGroups(panel, {
+      groupRender,
+      identitySlot: 0,
+      facetable: false,
+      showLegend: true,
+    }) as typeof panel;
+  };
+
   // Memoised so AdvancedVizFrame's `extras` useMemo doesn't invalidate on every
   // render — an unmemoised element re-fires the frame's publish effect and loops
   // it against ComponentRenderer's setState ("Maximum update depth exceeded").
@@ -253,7 +274,7 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     <ScrollArea style={{ width: '100%', height: '100%' }}>
       <Stack gap="md" p="xs">
         {contrastNames.map((c) => {
-          const panel = buildPanel(c);
+          const panel = buildGroupedPanel(c);
           if (!panel) return null;
           const layout = {
             ...panel.layout,
@@ -278,7 +299,7 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
 
   const renderSinglePanel = () => {
     if (!activeTab || activeTab === ALL_TAB) return null;
-    const panel = buildPanel(activeTab);
+    const panel = buildGroupedPanel(activeTab);
     if (!panel) return null;
     return (
       <Plot

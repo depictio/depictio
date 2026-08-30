@@ -15,6 +15,7 @@ import {
 } from './SectionAccordion';
 import ComponentRenderer from './ComponentRenderer';
 import { normalizeLayout, SectionSummary } from './DashboardGrid';
+import { fitLayoutHeights, useAutofitHeights } from './autofit';
 
 export interface PersistentSectionsHostProps {
   /** Persistent *grid* sections owned by sibling tabs. The caller filters out
@@ -182,6 +183,7 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
   // Measure our own wrapper; the accordion box chrome is accounted for with a
   // probe, mirroring DashboardGrid's `sectionInset`.
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const autoHeights = useAutofitHeights();
   const [containerWidth, setContainerWidth] = useState<number>(() =>
     typeof window !== 'undefined' ? window.innerWidth - 40 : 1200,
   );
@@ -255,10 +257,19 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
                     <ResponsiveGridLayout
                       className="layout"
                       layouts={{
-                        lg: normalizeLayout(
+                        // Fitted here as in DashboardGrid: a pinned section is
+                        // still a grid of tiles, and a text tile that sizes
+                        // itself on the tab that declares it has to do the same
+                        // on every tab that shows it. Always on — this host is
+                        // read-only, so a measurement can never be persisted.
+                        lg: fitLayoutHeights(
                           members.map((m) => m.metadata),
-                          section.layouts,
-                          false,
+                          normalizeLayout(
+                            members.map((m) => m.metadata),
+                            section.layouts,
+                            false,
+                          ),
+                          autoHeights,
                         ),
                       }}
                       breakpoints={GRID_BREAKPOINTS}

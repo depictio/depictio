@@ -15,7 +15,9 @@ import Plot from 'react-plotly.js';
 import Plotly from 'plotly.js';
 
 import { renderFigure, InteractiveFilter, StoredMetadata, FigureResponse } from '../api';
+import { useGroupingColor } from '../selectionGroups';
 import type { GroupRenderState } from '../selectionGroups';
+import { Icon } from '@iconify/react';
 import { enqueueFetch, isStaleFetch } from '../fetchQueue';
 import { extractScatterSelection } from '../selection';
 import { useInView } from '../hooks/useInView';
@@ -248,6 +250,9 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   // hatch.
   const gdRef = useRef<HTMLElement | null>(null);
 
+  // The Analysis feature's colour: violet, or the instance's brand tertiary.
+  const groupingColor = useGroupingColor();
+
   const hasOwnSelection = useMemo(() => {
     return filters.some(
       (f) =>
@@ -474,11 +479,23 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   // decline, e.g. when the column isn't in this figure's data collection).
   // Explicit because both modes temporarily override the figure's own `color`
   // mapping.
+  //
+  // Wears the Analysis feature's own colour and mark rather than a generic
+  // blue: this badge and the "save as group" action on the tile are two ends
+  // of one feature, and a badge in some other hue reads as a different thing
+  // entirely. `useGroupingColor` is the same source the action and the
+  // component outline read, so a branded instance restains all three at once.
   let groupedBadgeLabel: string | null = null;
   if (renderMeta?.group_colored) groupedBadgeLabel = 'grouped';
   else if (renderMeta?.column_colored) groupedBadgeLabel = `by ${renderMeta.column_colored}`;
   const groupedBadge = groupedBadgeLabel ? (
-    <Badge variant="light" color="blue" size="xs" radius="sm">
+    <Badge
+      variant="light"
+      color={groupingColor}
+      size="xs"
+      radius="sm"
+      leftSection={<Icon icon="mdi:select-group" width={11} height={11} />}
+    >
       {groupedBadgeLabel}
     </Badge>
   ) : null;

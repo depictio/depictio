@@ -2,7 +2,7 @@
   "title": "Penguins Species Analysis",
   "subtitle": "Comparative morphology across Adelie, Chinstrap, and Gentoo on three islands",
   "version": 1,
-  "icon": "/assets/images/icons/favicon.png",
+  "icon": "mdi:penguin",
   "icon_color": "orange",
   "icon_variant": "filled",
   "workflow_system": "python",

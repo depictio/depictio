@@ -308,7 +308,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "e13fc7ea-9ae2-4511-90fc-888d872a3795",
+      "index": "f5a9a603-94b7-4e43-9858-e72085226ce7",
       "component_type": "text",
       "title": "Run at a glance",
       "workflow_tag": "viralrecon",
@@ -563,7 +563,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "048574d5-450e-4bef-9d92-e1e5101f1c3e",
+      "index": "d37f7e9f-077b-47ea-a5f3-bfac5a5e3009",
       "component_type": "multiqc",
       "title": "MultiQC general statistics",
       "workflow_tag": "viralrecon",
@@ -622,6 +622,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "multiqc/summary_metrics",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_summary_metrics",
+        "use": "multiqc/summary_metrics",
+        "description": "Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total variant counts, lineage) parsed from MultiQC's summary_variants_metrics table."
+      },
       "section": "QC overview",
       "selected_module": "summary_variants_metrics",
       "selected_plot": "summary_variants_metrics-section",
@@ -660,7 +668,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "39be8300-7072-4734-a4d1-7e938633c7fc",
+      "index": "6e0f88ff-9121-45f6-a45a-95fbf7526228",
       "component_type": "multiqc",
       "title": "fastp - filtered reads",
       "workflow_tag": "viralrecon",
@@ -687,13 +695,21 @@
       "description": "Reads retained vs filtered before alignment.",
       "title_size": "h3",
       "title_align": "left",
+      "use": "multiqc/fastp",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_fastp",
+        "use": "multiqc/fastp",
+        "description": "Read pre-processing QC (quality/adapter filtering, insert size, GC/N content) \u2014 fastp, via MultiQC."
+      },
       "section": "QC overview",
       "selected_module": "fastp",
       "selected_plot": "Filtered Reads",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "f3076b8a-ec7c-4bab-aef2-6efd3f76bb30",
+      "index": "27a81252-5e44-4cd7-9ef3-27f00a37f55c",
       "component_type": "multiqc",
       "title": "bowtie2 - paired-end alignment",
       "workflow_tag": "viralrecon",
@@ -720,13 +736,21 @@
       "description": "Uniquely / multi-mapped / unmapped read fractions.",
       "title_size": "h3",
       "title_align": "left",
+      "use": "multiqc/bowtie2",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_bowtie2",
+        "use": "multiqc/bowtie2",
+        "description": "Read-alignment summary against the reference (paired-end alignment rates) \u2014 Bowtie2, via MultiQC."
+      },
       "section": "QC overview",
       "selected_module": "bowtie2",
       "selected_plot": "Paired-end alignments",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "3f0c4aec-d762-4e85-b785-7f717fa3bd4f",
+      "index": "c8c65190-7ef9-4e14-a555-8bfaffbd9cb2",
       "component_type": "multiqc",
       "title": "mosdepth - cumulative coverage",
       "workflow_tag": "viralrecon",
@@ -753,6 +777,14 @@
       "description": "Genome fraction covered at >= X depth, per sample.",
       "title_size": "h3",
       "title_align": "left",
+      "use": "multiqc/mosdepth",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_mosdepth",
+        "use": "multiqc/mosdepth",
+        "description": "Coverage-depth distribution and per-contig coverage \u2014 mosdepth, surfaced via MultiQC."
+      },
       "section": "QC overview",
       "selected_module": "mosdepth",
       "selected_plot": "Cumulative coverage distribution",
@@ -782,7 +814,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "133d9fde-bed0-4e10-8a20-d347c0868d0a",
+      "index": "82b5decb-5dc3-4ba2-a4b6-fa83d414ec08",
       "component_type": "multiqc",
       "title": "FastQC - sequence quality histograms",
       "workflow_tag": "viralrecon",
@@ -809,13 +841,21 @@
       "description": "Per-position mean quality across all samples - primary read-QC signal.",
       "title_size": "h3",
       "title_align": "left",
+      "use": "multiqc/fastqc",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_fastqc",
+        "use": "multiqc/fastqc",
+        "description": "Raw-read sequencing QC (per-base quality, GC content, duplication, adapter content) \u2014 FastQC plots aggregated by MultiQC."
+      },
       "section": "Read & alignment details",
       "selected_module": "fastqc",
       "selected_plot": "Sequence Quality Histograms",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "7e5b6c89-94eb-4ac3-8798-879fe1cea736",
+      "index": "f5c2ff09-36f5-44d4-906b-8a03b0484273",
       "component_type": "multiqc",
       "title": "FastQC - status checks",
       "workflow_tag": "viralrecon",
@@ -842,13 +882,21 @@
       "description": "Pass/Warn/Fail status per FastQC module per sample. Red columns flag systematic library / sequencing issues.",
       "title_size": "h3",
       "title_align": "left",
+      "use": "multiqc/fastqc",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_fastqc",
+        "use": "multiqc/fastqc",
+        "description": "Raw-read sequencing QC (per-base quality, GC content, duplication, adapter content) \u2014 FastQC plots aggregated by MultiQC."
+      },
       "section": "Read & alignment details",
       "selected_module": "fastqc",
       "selected_plot": "Status Checks",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "23bc66e0-1b84-4800-8b2b-9674b7081974",
+      "index": "5a2fba2a-e8a5-4e30-8b56-92dcf391a981",
       "component_type": "multiqc",
       "title": "Kraken2 - top taxa",
       "workflow_tag": "viralrecon",
@@ -875,6 +923,14 @@
       "description": "Off-target reads = contamination / low viral load.",
       "title_size": "h3",
       "title_align": "left",
+      "use": "multiqc/kraken",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_kraken",
+        "use": "multiqc/kraken",
+        "description": "Taxonomic read classification (top species/clades) \u2014 Kraken2, surfaced via MultiQC."
+      },
       "section": "Read & alignment details",
       "selected_module": "kraken",
       "selected_plot": "Top taxa",
@@ -907,6 +963,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "multiqc/samtools",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_samtools",
+        "use": "multiqc/samtools",
+        "description": "Alignment flagstat summaries (mapped %, properly paired) \u2014 samtools, via MultiQC."
+      },
       "section": "Read & alignment details",
       "selected_module": "samtools_ivar",
       "selected_plot": "Flagstat",
@@ -939,6 +1003,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "multiqc/mosdepth",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_mosdepth",
+        "use": "multiqc/mosdepth",
+        "description": "Coverage-depth distribution and per-contig coverage \u2014 mosdepth, surfaced via MultiQC."
+      },
       "section": "Read & alignment details",
       "selected_module": "mosdepth",
       "selected_plot": "Average coverage per contig",
@@ -971,6 +1043,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "multiqc/cutadapt",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_cutadapt",
+        "use": "multiqc/cutadapt",
+        "description": "Adapter/primer trimming summary (filtered reads, trimmed sequence lengths) \u2014 Cutadapt, surfaced via MultiQC."
+      },
       "section": "Read & alignment details",
       "selected_module": "cutadapt",
       "selected_plot": "Filtered Reads",
@@ -1000,7 +1080,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "0cfbd497-2a2f-492c-b1ed-fcfdc619e448",
+      "index": "88766fa9-e7f2-405d-877f-632a43d25108",
       "component_type": "multiqc",
       "title": "iVar - variant counts",
       "workflow_tag": "viralrecon",
@@ -1027,13 +1107,21 @@
       "description": "Raw iVar variant calls per sample.",
       "title_size": "h3",
       "title_align": "left",
+      "use": "multiqc/ivar",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_ivar",
+        "use": "multiqc/ivar",
+        "description": "Amplicon primer-trimming and variant section metrics \u2014 iVar, surfaced via MultiQC."
+      },
       "section": "Variant & assembly details",
       "selected_module": "ivar_variants",
       "selected_plot": "ivar_variants-section",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "88215a65-68fa-4216-aad5-a08a16f14f55",
+      "index": "92ad78a7-3f91-41ad-88e0-15f8b96a5dce",
       "component_type": "multiqc",
       "title": "snpEff - effects by impact",
       "workflow_tag": "viralrecon",
@@ -1060,6 +1148,14 @@
       "description": "HIGH / MODERATE / LOW / MODIFIER per sample.",
       "title_size": "h3",
       "title_align": "left",
+      "use": "multiqc/snpeff",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_snpeff",
+        "use": "multiqc/snpeff",
+        "description": "Variant functional-effect annotation summary (impact, class, region) \u2014 SnpEff, via MultiQC."
+      },
       "section": "Variant & assembly details",
       "selected_module": "snpeff",
       "selected_plot": "Variant Effects by Impact",
@@ -1092,13 +1188,21 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "multiqc/snpeff",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_snpeff",
+        "use": "multiqc/snpeff",
+        "description": "Variant functional-effect annotation summary (impact, class, region) \u2014 SnpEff, via MultiQC."
+      },
       "section": "Variant & assembly details",
       "selected_module": "snpeff",
       "selected_plot": "Variants by Genomic Region",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "42798c3f-e9de-4318-99e4-6711a3e57d20",
+      "index": "46112f57-17c7-4d4d-9dff-f103cc5da5bc",
       "component_type": "multiqc",
       "title": "bcftools - substitution types",
       "workflow_tag": "viralrecon",
@@ -1125,13 +1229,21 @@
       "description": "Transitions vs transversions per sample.",
       "title_size": "h3",
       "title_align": "left",
+      "use": "multiqc/bcftools",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_bcftools",
+        "use": "multiqc/bcftools",
+        "description": "Variant-call statistics (substitution types, indel lengths, variant-quality counts) \u2014 bcftools stats, via MultiQC."
+      },
       "section": "Variant & assembly details",
       "selected_module": "bcftools",
       "selected_plot": "Variant Substitution Types",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "a2295420-32a2-4ddf-8037-3831e75ef42e",
+      "index": "40aab51a-0bf1-4a3e-86a1-28437d0f57e9",
       "component_type": "multiqc",
       "title": "QUAST - number of contigs",
       "workflow_tag": "viralrecon",
@@ -1158,6 +1270,14 @@
       "description": "Assembly contiguity per sample.",
       "title_size": "h3",
       "title_align": "left",
+      "use": "multiqc/quast",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_quast",
+        "use": "multiqc/quast",
+        "description": "Genome-assembly quality metrics (contig counts, lengths) \u2014 QUAST, surfaced via MultiQC."
+      },
       "section": "Variant & assembly details",
       "selected_module": "quast_variants",
       "selected_plot": "Number of Contigs",
@@ -1190,6 +1310,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "multiqc/summary_metrics",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_summary_metrics",
+        "use": "multiqc/summary_metrics",
+        "description": "Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total variant counts, lineage) parsed from MultiQC's summary_variants_metrics table."
+      },
       "section": "Variant & assembly details",
       "selected_module": "summary_assembly_metrics",
       "selected_plot": "summary_assembly_metrics-section",
@@ -1257,7 +1385,7 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-e13fc7ea-9ae2-4511-90fc-888d872a3795",
+      "i": "box-f5a9a603-94b7-4e43-9858-e72085226ce7",
       "x": 0,
       "y": 0,
       "w": 8,
@@ -1276,7 +1404,7 @@
       "x": 0,
       "y": 2,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -1284,7 +1412,7 @@
       "x": 2,
       "y": 2,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -1292,7 +1420,7 @@
       "x": 4,
       "y": 2,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -1300,7 +1428,7 @@
       "x": 6,
       "y": 2,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -1319,7 +1447,7 @@
       ]
     },
     {
-      "i": "box-048574d5-450e-4bef-9d92-e1e5101f1c3e",
+      "i": "box-d37f7e9f-077b-47ea-a5f3-bfac5a5e3009",
       "x": 0,
       "y": 2,
       "w": 8,
@@ -1364,7 +1492,7 @@
       ]
     },
     {
-      "i": "box-39be8300-7072-4734-a4d1-7e938633c7fc",
+      "i": "box-6e0f88ff-9121-45f6-a45a-95fbf7526228",
       "x": 4,
       "y": 10,
       "w": 4,
@@ -1379,7 +1507,7 @@
       ]
     },
     {
-      "i": "box-f3076b8a-ec7c-4bab-aef2-6efd3f76bb30",
+      "i": "box-27a81252-5e44-4cd7-9ef3-27f00a37f55c",
       "x": 0,
       "y": 14,
       "w": 4,
@@ -1394,7 +1522,7 @@
       ]
     },
     {
-      "i": "box-3f0c4aec-d762-4e85-b785-7f717fa3bd4f",
+      "i": "box-c8c65190-7ef9-4e14-a555-8bfaffbd9cb2",
       "x": 4,
       "y": 14,
       "w": 4,
@@ -1424,7 +1552,7 @@
       ]
     },
     {
-      "i": "box-133d9fde-bed0-4e10-8a20-d347c0868d0a",
+      "i": "box-82b5decb-5dc3-4ba2-a4b6-fa83d414ec08",
       "x": 0,
       "y": 1,
       "w": 8,
@@ -1439,7 +1567,7 @@
       ]
     },
     {
-      "i": "box-7e5b6c89-94eb-4ac3-8798-879fe1cea736",
+      "i": "box-f5c2ff09-36f5-44d4-906b-8a03b0484273",
       "x": 0,
       "y": 6,
       "w": 8,
@@ -1454,7 +1582,7 @@
       ]
     },
     {
-      "i": "box-23bc66e0-1b84-4800-8b2b-9674b7081974",
+      "i": "box-5a2fba2a-e8a5-4e30-8b56-92dcf391a981",
       "x": 0,
       "y": 11,
       "w": 4,
@@ -1529,7 +1657,7 @@
       ]
     },
     {
-      "i": "box-0cfbd497-2a2f-492c-b1ed-fcfdc619e448",
+      "i": "box-88766fa9-e7f2-405d-877f-632a43d25108",
       "x": 0,
       "y": 1,
       "w": 4,
@@ -1544,7 +1672,7 @@
       ]
     },
     {
-      "i": "box-88215a65-68fa-4216-aad5-a08a16f14f55",
+      "i": "box-92ad78a7-3f91-41ad-88e0-15f8b96a5dce",
       "x": 4,
       "y": 1,
       "w": 4,
@@ -1574,7 +1702,7 @@
       ]
     },
     {
-      "i": "box-42798c3f-e9de-4318-99e4-6711a3e57d20",
+      "i": "box-46112f57-17c7-4d4d-9dff-f103cc5da5bc",
       "x": 4,
       "y": 5,
       "w": 4,
@@ -1589,7 +1717,7 @@
       ]
     },
     {
-      "i": "box-a2295420-32a2-4ddf-8037-3831e75ef42e",
+      "i": "box-40aab51a-0bf1-4a3e-86a1-28437d0f57e9",
       "x": 0,
       "y": 9,
       "w": 4,

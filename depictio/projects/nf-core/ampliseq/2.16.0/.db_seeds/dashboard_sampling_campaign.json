@@ -363,7 +363,7 @@
       "visu_type": "scatter",
       "dict_kwargs": {},
       "mode": "code",
-      "code_content": "colors = {'Riverwater': '#348ABD', 'Groundwater': '#45B8AC', 'Sediment': '#8B5A2B', 'Soil': '#E24A33'}\ndf_modified = df.sort('sampling_date')\nfig = px.scatter(\n    df_modified.to_pandas(),\n    x='sampling_date', y='city', color='habitat',\n    color_discrete_map=colors,\n    hover_name='sample',\n)\nfig.update_traces(marker={'size': 14})\nfig.update_layout(\n    xaxis_title='Sampling date', yaxis_title=None, legend_title_text='Habitat',\n    margin={'t': 24, 'l': 8, 'r': 8, 'b': 40},\n)\n",
+      "code_content": "colors = {'Riverwater': '#348ABD', 'Groundwater': '#45B8AC', 'Sediment': '#8B5A2B', 'Soil': '#E24A33'}\n# Colour by the viewer's analysis groups when there are some, else by the\n# pipeline's own habitat. One grouping axis, and the groups\n# bring their own colours with them.\ngrp_col = depictio_group_by[0] if depictio_group_by else 'habitat'\ncolors = depictio_group_kwargs.get('color_discrete_map') or colors\ndf_modified = df.sort('sampling_date')\nfig = px.scatter(\n    df_modified.to_pandas(),\n    x='sampling_date', y='city', color=grp_col,\n    color_discrete_map=colors,\n    hover_name='sample',\n)\nfig.update_traces(marker={'size': 14})\nfig.update_layout(\n    xaxis_title='Sampling date', yaxis_title=None, legend_title_text=None if depictio_group_by else 'Habitat',\n    margin={'t': 24, 'l': 8, 'r': 8, 'b': 40},\n)\n",
       "displayed_data_count": 0,
       "total_data_count": 0,
       "was_sampled": false,
@@ -428,7 +428,7 @@
       "visu_type": "scatter",
       "dict_kwargs": {},
       "mode": "code",
-      "code_content": "colors = {'Riverwater': '#348ABD', 'Groundwater': '#45B8AC', 'Sediment': '#8B5A2B', 'Soil': '#E24A33'}\ndf_modified = df.group_by(['city', 'habitat']).len().rename({'len': 'samples'}).sort('city')\nfig = px.bar(\n    df_modified.to_pandas(),\n    x='city', y='samples', color='habitat',\n    color_discrete_map=colors, barmode='stack',\n)\nfig.update_layout(\n    xaxis_title=None, yaxis_title='Samples', legend_title_text='Habitat',\n    margin={'t': 24, 'l': 56, 'r': 16, 'b': 60},\n)\n",
+      "code_content": "colors = {'Riverwater': '#348ABD', 'Groundwater': '#45B8AC', 'Sediment': '#8B5A2B', 'Soil': '#E24A33'}\n# Colour by the viewer's analysis groups when there are some, else by the\n# pipeline's own habitat. One grouping axis, and the groups\n# bring their own colours with them.\ngrp_col = depictio_group_by[0] if depictio_group_by else 'habitat'\ncolors = depictio_group_kwargs.get('color_discrete_map') or colors\ndf_modified = df.group_by(list(dict.fromkeys(['city', grp_col]))).len().rename({'len': 'samples'}).sort('city')\nfig = px.bar(\n    df_modified.to_pandas(),\n    x='city', y='samples', color=grp_col,\n    color_discrete_map=colors, barmode='stack',\n)\nfig.update_layout(\n    xaxis_title=None, yaxis_title='Samples', legend_title_text=None if depictio_group_by else 'Habitat',\n    margin={'t': 24, 'l': 56, 'r': 16, 'b': 60},\n)\n",
       "displayed_data_count": 0,
       "total_data_count": 0,
       "was_sampled": false,
@@ -523,7 +523,7 @@
       "x": 0,
       "y": 2,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -531,7 +531,7 @@
       "x": 2,
       "y": 2,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -539,7 +539,7 @@
       "x": 4,
       "y": 2,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -547,7 +547,7 @@
       "x": 6,
       "y": 2,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {

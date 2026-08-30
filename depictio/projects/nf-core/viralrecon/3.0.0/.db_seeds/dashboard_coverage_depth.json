@@ -140,7 +140,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "d4eda8cc-f6b5-4cb0-a113-a952134c76fc",
+      "index": "48439876-a0ee-40fd-84ae-b8cf8f2ae116",
       "component_type": "text",
       "title": "Coverage at a glance",
       "workflow_tag": "viralrecon",
@@ -170,7 +170,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "13b2b787-3154-41f9-ae97-05e979682d62",
+      "index": "8aae6858-e668-4905-9ea3-ba97a001eda2",
       "component_type": "card",
       "title": "Amplicons Tracked",
       "workflow_tag": "viralrecon",
@@ -220,7 +220,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "9ab824e3-1a21-422e-b3e1-bc86631211db",
+      "index": "b1696eda-a523-4a95-9659-954e3c505f24",
       "component_type": "card",
       "title": "Amplicon Coverage",
       "workflow_tag": "viralrecon",
@@ -269,7 +269,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "2cb96e23-66a1-4a2e-a291-f8a945109d5c",
+      "index": "9c61d185-e4e4-4efd-9b71-0907790ee1c1",
       "component_type": "card",
       "title": "Genome Coverage",
       "workflow_tag": "viralrecon",
@@ -586,7 +586,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "1ea8f16f-a734-4395-a41a-ee62cafc2af0",
+      "index": "5d487ea3-564b-451b-8247-acfd4754f99e",
       "component_type": "table",
       "title": "Amplicon coverage table",
       "workflow_tag": "viralrecon",
@@ -653,7 +653,7 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-d4eda8cc-f6b5-4cb0-a113-a952134c76fc",
+      "i": "box-48439876-a0ee-40fd-84ae-b8cf8f2ae116",
       "x": 0,
       "y": 0,
       "w": 8,
@@ -668,27 +668,27 @@
       ]
     },
     {
-      "i": "box-13b2b787-3154-41f9-ae97-05e979682d62",
+      "i": "box-8aae6858-e668-4905-9ea3-ba97a001eda2",
       "x": 0,
       "y": 2,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
-      "i": "box-9ab824e3-1a21-422e-b3e1-bc86631211db",
+      "i": "box-b1696eda-a523-4a95-9659-954e3c505f24",
       "x": 2,
       "y": 2,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
-      "i": "box-2cb96e23-66a1-4a2e-a291-f8a945109d5c",
+      "i": "box-9c61d185-e4e4-4efd-9b71-0907790ee1c1",
       "x": 4,
       "y": 2,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -696,7 +696,7 @@
       "x": 6,
       "y": 2,
       "w": 2,
-      "h": 3,
+      "h": 2,
       "static": true
     },
     {
@@ -775,7 +775,7 @@
       ]
     },
     {
-      "i": "box-1ea8f16f-a734-4395-a41a-ee62cafc2af0",
+      "i": "box-5d487ea3-564b-451b-8247-acfd4754f99e",
       "x": 0,
       "y": 24,
       "w": 8,

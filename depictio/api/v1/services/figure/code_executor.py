@@ -82,6 +82,11 @@ class SimpleCodeExecutor:
             # Additional safe functions for complex operations
             "_iter_unpack_sequence_": safe_iter_unpack_sequence,
             "_getiter_": safe_getiter,
+            # RestrictedPython's hook for `f(*args, **kwargs)` unpacking, which
+            # a code figure needs to spread `**depictio_group_kwargs`. Plain
+            # forwarding is the safe default: it reaches nothing the same call
+            # with explicit keywords could not already reach.
+            "_apply_": lambda func, *args, **kwargs: func(*args, **kwargs),
             "enumerate": enumerate,
             "zip": zip,
             "len": len,
@@ -123,13 +128,20 @@ class SimpleCodeExecutor:
 
         return True, ""
 
-    def execute_code(self, code: str, dataframe: pl.DataFrame) -> Tuple[bool, Any, str]:
+    def execute_code(
+        self,
+        code: str,
+        dataframe: pl.DataFrame,
+        extra_globals: Dict[str, Any] | None = None,
+    ) -> Tuple[bool, Any, str]:
         """
         Execute user code safely using RestrictedPython with df_modified constraint support.
 
         Args:
             code: Python code to execute
             dataframe: DataFrame to make available as 'df'
+            extra_globals: Additional names bound in the sandbox, alongside
+                `df` and the plotting libraries (e.g. `depictio_group_kwargs`).
 
         Returns:
             (success: bool, result: Any, message: str)
@@ -150,6 +162,10 @@ class SimpleCodeExecutor:
             # Prepare execution environment
             execution_globals = self.safe_globals.copy()
             execution_globals["df"] = dataframe.clone()  # Provide DataFrame copy
+            # Server-provided names come last so a collision in safe_globals
+            # cannot shadow them. Plain data only (dicts, strings): nothing
+            # here widens what the sandbox can reach.
+            execution_globals.update(extra_globals or {})
             execution_locals: Dict[str, Any] = {}
 
             # Handle preprocessing if needed

@@ -44,6 +44,11 @@ export interface GroupRenderDef {
   column_name: string;
   values: string[];
   color: string;
+  /** Data collection the source selection was made on. Carried so a client-side
+   *  consumer can project the group back into a filter that resolves across
+   *  data collections (`groupPanelFilters`). `sanitize_group_defs` reads only
+   *  the four keys above, so this rides along unread on the wire. */
+  dc_id?: string;
 }
 
 /** How the "Color by" override is displayed: series overlaid in one panel
@@ -277,6 +282,7 @@ export function groupsRenderPayload(groups: SelectionGroup[]): GroupRenderDef[] 
       column_name: g.columnName,
       values: g.values,
       color: g.color,
+      dc_id: g.dcId,
     }));
 }
 

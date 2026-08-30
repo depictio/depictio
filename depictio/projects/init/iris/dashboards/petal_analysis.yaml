@@ -316,10 +316,12 @@ components:
     layout: { x: 0, y: 12, w: 1, h: 3 }
 
   # ── Petal geometry figure ──────────────────────────────────────────
-  # Density contours rather than a second plain scatter: the Overview tab
-  # already plots these two columns point by point, so this one reads the same
-  # plane as mass. The points stay underneath at low opacity so the contours
-  # can be checked against the flowers that produced them.
+  # The Overview tab already plots these two columns point by point, so this one
+  # has to read differently. Marginals rather than a density surface: the box on
+  # each axis IS the mass, per variety, and it needs no second colour system.
+  # A filled or contoured density here took its colour from a continuous scale
+  # (`color_discrete_map` only ever reaches a contour's `line.color`) and drew a
+  # colorbar per variety on top of the legend.
   - tag: petal-density
     component_type: figure
     section: "Petal geometry"
@@ -327,27 +329,21 @@ components:
     data_collection_tag: iris_table
     visu_type: scatter
     mode: code
-    title: "Petal Length vs Width — where the mass sits"
-    description: "Filled contours are per-variety density; the dots underneath are the individual flowers. Setosa occupies a small, tight island; Versicolor and Virginica form one elongated ridge that the contours show meeting rather than overlapping."
+    title: "Petal Length vs Width, with each axis's own spread"
+    description: "The joint plane in the middle, and beside each axis the same flowers summarised one variable at a time. Setosa sits apart on both measures; Versicolor and Virginica overlap far more on length than on width, which is why width is the cleaner cut between them."
     title_size: h3
     code_content: |
-      df_pd = df.to_pandas()
-      palette = {'Setosa': '#4C72B0', 'Versicolor': '#DD8452', 'Virginica': '#55A467'}
-      fig = px.density_contour(
-          df_pd, x='petal.length', y='petal.width', color='variety',
-          color_discrete_map=palette,
+      fig = px.scatter(
+          df.to_pandas(), x='petal.length', y='petal.width', color='variety',
+          color_discrete_map={'Setosa': '#4C72B0', 'Versicolor': '#DD8452', 'Virginica': '#55A467'},
+          marginal_x='box', marginal_y='box',
           labels={'petal.length': 'Petal length (cm)', 'petal.width': 'Petal width (cm)'},
       )
-      fig.update_traces(contours_coloring='fill', contours_showlines=False, opacity=0.45)
-      fig.add_traces(
-          px.scatter(
-              df_pd, x='petal.length', y='petal.width', color='variety',
-              color_discrete_map=palette,
-          ).update_traces(
-              marker=dict(size=5, opacity=0.55, line=dict(width=0.4, color='white')),
-              showlegend=False,
-          ).data
+      fig.update_traces(
+          marker={'size': 6, 'opacity': 0.75, 'line': {'width': 0.5, 'color': 'white'}},
+          selector={'type': 'scatter'},
       )
+      fig.update_layout(legend={'title_text': ''}, margin={'t': 24, 'r': 16})
     layout: { x: 0, y: 4, w: 8, h: 5 }
 
   # ── Variety separation figures ─────────────────────────────────────
