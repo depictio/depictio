@@ -192,9 +192,15 @@ async def _recreate_dashboards(dataset_names: list[str]) -> None:
     """Re-run create_initial_dashboards. It iterates ALL dashboards, but only
     creates those whose JSON file is on disk and whose project_id resolves to
     an existing project — so wiped-then-recreated targets get rebuilt and the
-    others are no-ops (idempotent path inside create_dashboard_from_json)."""
+    others are no-ops (idempotent path inside create_dashboard_from_json).
+
+    `extra` carries the requested names because the optional datasets
+    (catalog_conformance) have their dashboards filtered out of that iteration
+    unless they are opted into. Naming one on this script's command line IS the
+    opt-in: without it the project and its data collections come back and the
+    dashboard silently does not."""
     admin = await UserBeanie.find_one({"is_admin": True})
-    await create_initial_dashboards(admin_user=admin)
+    await create_initial_dashboards(admin_user=admin, extra=set(dataset_names))
 
 
 async def _trigger_data_materialisation(dataset_names: Iterable[str]) -> None:
@@ -263,7 +269,7 @@ async def _replace_dashboards_only(dataset_names: list[str]) -> None:
     admin = await UserBeanie.find_one({"is_admin": True})
     if admin is None:
         raise RuntimeError("reseed: no admin user — run a fresh deploy first")
-    await create_initial_dashboards(admin_user=admin)
+    await create_initial_dashboards(admin_user=admin, extra=set(dataset_names))
 
 
 async def reseed(
