@@ -14,9 +14,135 @@
   "stored_children_data": [],
   "stored_metadata": [
     {
-      "index": "ea254744-70df-4898-863e-89d8a2ee22fe",
+      "index": "qcdx-snp-yield",
+      "component_type": "interactive",
+      "title": "SNPs called",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "summary_metrics",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c11"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample alignment, coverage, and variant calling summary metrics",
+        "data_collection_tag": "summary_metrics",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c11"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Variant yield",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "num_variants_snp",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Variant counts",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#3F51B5",
+      "icon_name": "mdi:dna",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "qcdx-indel-yield",
+      "component_type": "interactive",
+      "title": "Indels called",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "summary_metrics",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c11"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample alignment, coverage, and variant calling summary metrics",
+        "data_collection_tag": "summary_metrics",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c11"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Variant yield",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "num_variants_indel",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Variant counts",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#3F51B5",
+      "icon_name": "mdi:dna",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "qcdx-missing",
+      "component_type": "interactive",
+      "title": "Missing bases",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "nextclade_results",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c15"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nextclade clade assignments and sequence quality metrics",
+        "data_collection_tag": "nextclade_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c15"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Variant yield",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "totalMissing",
+      "column_type": "int64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Variant counts",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#F68B33",
+      "icon_name": "mdi:alert-outline",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "1dcfc2c7-52c3-4161-9a91-a835e3f803f5",
       "component_type": "text",
-      "title": "Sample QC Diagnostics - Coverage vs Variant Yield",
+      "title": "QC at a glance",
       "workflow_tag": "viralrecon",
       "data_collection_tag": "summary_metrics",
       "wf_id": {
@@ -33,16 +159,18 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T21:27:37.141205",
+      "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
-      "order": 3,
+      "section": "QC at a glance",
+      "order": 2,
       "alignment": "left",
-      "body": "Diagnostic plots to catch problematic samples before drawing biological conclusions. The **coverage-vs-variants scatter** flags low-coverage samples with inflated / deflated variant counts (usually partial drop-out or contamination). The **substitutions-vs-deletions** plot surfaces clade-specific deletion patterns or assembly artefacts. The bar at the bottom shows the per-sample % >= 10x with the 80% reliability cut-off.",
+      "vertical_alignment": "center",
+      "body": "Four per-sample distributions: how much of the genome is covered at 10x, how many variants were called, what share of reads mapped, and how many consensus bases came out as N. The last one is the strongest single quality signal in the pipeline and it is the one that used to be invisible here.",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "364bbe82-1ccc-4017-b698-e9e91a507530",
+      "index": "457e3a58-8898-4ec0-bb32-f19da182e0c9",
       "component_type": "card",
       "title": "Avg % Genome >= 10x",
       "workflow_tag": "viralrecon",
@@ -65,9 +193,10 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T21:27:37.141235",
+      "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "section": "QC at a glance",
       "aggregation": "average",
       "column_name": "pct_genome_covered_10x",
       "column_type": "float64",
@@ -80,6 +209,11 @@
       "breakdown_col": null,
       "top_n_count": 3,
       "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
       "icon_name": "mdi:chart-line",
       "icon_color": "#2196F3",
       "title_color": "#2196F3",
@@ -88,7 +222,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "2ba72c05-1e12-415c-a19d-fb44a1b5ddf6",
+      "index": "ff126a25-7c19-4018-a4e4-62ab8e4d7880",
       "component_type": "card",
       "title": "Median Variants / Sample",
       "workflow_tag": "viralrecon",
@@ -111,9 +245,10 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T21:27:37.141251",
+      "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "section": "QC at a glance",
       "aggregation": "median",
       "column_name": "num_variants_total",
       "column_type": "float64",
@@ -126,6 +261,11 @@
       "breakdown_col": null,
       "top_n_count": 3,
       "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
       "icon_name": "mdi:dna",
       "icon_color": "#FF9800",
       "title_color": "#FF9800",
@@ -134,9 +274,9 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "qcdx-sample-filter",
-      "component_type": "interactive",
-      "title": "Sample ID",
+      "index": "qcdx-mapped",
+      "component_type": "card",
+      "title": "Reads mapped (%)",
       "workflow_tag": "viralrecon",
       "data_collection_tag": "summary_metrics",
       "wf_id": {
@@ -157,66 +297,111 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T21:27:37.141271",
-      "title_size": "md",
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
       "title_align": "left",
-      "interactive_component_type": "MultiSelect",
-      "column_name": "sample",
-      "column_type": "object",
+      "section": "QC at a glance",
+      "aggregation": "average",
+      "column_name": "pct_reads_mapped",
+      "column_type": "float64",
       "value": null,
-      "default_state": null,
+      "aggregations": [
+        "box_plot_stats"
+      ],
       "filter_expr": null,
-      "placement": "left",
-      "group": null,
-      "timescale": null,
-      "show_marks": null,
-      "custom_color": "#45B8AC",
-      "icon_name": "mdi:flask",
+      "secondary_layout": "box_plot",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:target",
+      "icon_color": "#1976D2",
+      "title_color": "#1976D2",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "qcdx-lineage-filter",
-      "component_type": "interactive",
-      "title": "Lineage",
+      "index": "qcdx-missing",
+      "component_type": "card",
+      "title": "Missing bases",
       "workflow_tag": "viralrecon",
-      "data_collection_tag": "summary_metrics",
+      "data_collection_tag": "nextclade_results",
       "wf_id": {
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c11"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c15"
       },
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Per-sample alignment, coverage, and variant calling summary metrics",
-        "data_collection_tag": "summary_metrics",
+        "description": "Nextclade clade assignments and sequence quality metrics",
+        "data_collection_tag": "nextclade_results",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "746b0f3c1e4a2d7f8e5b9c11"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c15"
         }
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T21:27:37.141284",
-      "title_size": "md",
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
       "title_align": "left",
-      "interactive_component_type": "MultiSelect",
-      "column_name": "lineage",
-      "column_type": "object",
+      "section": "QC at a glance",
+      "aggregation": "median",
+      "column_name": "totalMissing",
+      "column_type": "int64",
       "value": null,
-      "default_state": null,
+      "aggregations": [
+        "box_plot_stats"
+      ],
       "filter_expr": null,
-      "placement": "left",
-      "group": null,
-      "timescale": null,
-      "show_marks": null,
-      "custom_color": "#E74C3C",
-      "icon_name": "mdi:virus",
+      "secondary_layout": "box_plot",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:alert-outline",
+      "icon_color": "#F68B33",
+      "title_color": "#F68B33",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "27d85fe2-16f5-419e-8301-4fbde79a9cb8",
+      "index": "qcdx-diagnostics-header",
+      "component_type": "text",
+      "title": "Where the signals disagree",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Diagnostics",
+      "order": 2,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "Coverage against variant count separates a genuinely divergent sample from one that is simply under-sequenced: both produce few calls, but only one of them is well covered. The Nextclade panel beside it says the same thing from the consensus side.",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "1c8a4c46-b41c-4fd4-b949-a27c1d06354e",
       "component_type": "figure",
       "title": "Median coverage vs total variants",
       "workflow_tag": "viralrecon",
@@ -239,10 +424,11 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T21:27:37.141300",
+      "last_updated": "2026-08-29T00:00:00.000000",
       "description": "Spot low-coverage samples with inflated / deflated variant counts.",
       "title_size": "h3",
       "title_align": "left",
+      "section": "Diagnostics",
       "visu_type": "scatter",
       "dict_kwargs": {},
       "mode": "code",
@@ -251,12 +437,14 @@
       "total_data_count": 0,
       "was_sampled": false,
       "filter_applied": false,
-      "selection_enabled": false,
-      "selection_column": null,
+      "max_points": null,
+      "selection_enabled": true,
+      "selection_column": "sample",
+      "font_scale": null,
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "9aa4f7bd-9c63-4869-9f81-093f786e2bcb",
+      "index": "41f8709b-8a57-46e6-bf7c-eed2293bb7b8",
       "component_type": "figure",
       "title": "Nextclade substitutions vs deletions",
       "workflow_tag": "viralrecon",
@@ -279,10 +467,11 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T21:27:37.141313",
+      "last_updated": "2026-08-29T00:00:00.000000",
       "description": "Per-sample mutation profile shape. Outliers signal clade-specific patterns.",
       "title_size": "h3",
       "title_align": "left",
+      "section": "Diagnostics",
       "visu_type": "scatter",
       "dict_kwargs": {},
       "mode": "code",
@@ -291,12 +480,37 @@
       "total_data_count": 0,
       "was_sampled": false,
       "filter_applied": false,
-      "selection_enabled": false,
-      "selection_column": null,
+      "max_points": null,
+      "selection_enabled": true,
+      "selection_column": "sample",
+      "font_scale": null,
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "704e7dec-9c99-4071-b629-1c8d64d14760",
+      "index": "qcdx-coverage-header",
+      "component_type": "text",
+      "title": "Genome breadth per sample",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Per-sample coverage",
+      "order": 2,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "Breadth at 1x and 10x side by side, sample by sample. The gap between the two bars is the part of the genome that is covered but not deeply enough to call.",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "3bf4bf72-db7f-4516-ac6b-f84b220f2b78",
       "component_type": "figure",
       "title": "Genome coverage per sample (>=10x)",
       "workflow_tag": "viralrecon",
@@ -319,10 +533,11 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T21:27:37.141323",
+      "last_updated": "2026-08-29T00:00:00.000000",
       "description": "Per-sample %-genome >=10x, sorted. Red = 80% reliability cut-off.",
       "title_size": "h3",
       "title_align": "left",
+      "section": "Per-sample coverage",
       "visu_type": "bar",
       "dict_kwargs": {},
       "mode": "code",
@@ -331,12 +546,243 @@
       "total_data_count": 0,
       "was_sampled": false,
       "filter_applied": false,
+      "max_points": null,
       "selection_enabled": false,
       "selection_column": null,
+      "font_scale": null,
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "9a4a31b0-2c93-4324-86b3-570877943455",
+      "index": "qcdx-metadata-header",
+      "component_type": "text",
+      "title": "Sample metadata",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sample metadata",
+      "order": 2,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "The nf-core summary table, one row per sample. It is viralrecon's metadata collection: every project link starts from its sample column, which is why a filter set on it reaches the coverage, typing and variant tabs. Pinned to the bottom of every tab so the cohort stays in view.",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "meta-samples",
+      "component_type": "card",
+      "title": "Samples",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "summary_metrics",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c11"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample alignment, coverage, and variant calling summary metrics",
+        "data_collection_tag": "summary_metrics",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c11"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sample metadata",
+      "aggregation": "nunique",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "top_n",
+      "breakdown_col": "lineage",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:flask",
+      "icon_color": "#45B8AC",
+      "title_color": "#45B8AC",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "meta-reads",
+      "component_type": "card",
+      "title": "Reads mapped",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "summary_metrics",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c11"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample alignment, coverage, and variant calling summary metrics",
+        "data_collection_tag": "summary_metrics",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c11"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sample metadata",
+      "aggregation": "average",
+      "column_name": "num_reads_mapped",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": [
+        "median",
+        "min",
+        "max"
+      ],
+      "filter_expr": null,
+      "secondary_layout": "compact",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:counter",
+      "icon_color": "#3F51B5",
+      "title_color": "#3F51B5",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "meta-genome-1x",
+      "component_type": "card",
+      "title": "Genome at 1x",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "summary_metrics",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c11"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample alignment, coverage, and variant calling summary metrics",
+        "data_collection_tag": "summary_metrics",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c11"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sample metadata",
+      "aggregation": "average",
+      "column_name": "pct_genome_covered_1x",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": [
+        "box_plot_stats"
+      ],
+      "filter_expr": null,
+      "secondary_layout": "box_plot",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-areaspline",
+      "icon_color": "#2E7D32",
+      "title_color": "#2E7D32",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "meta-lineages",
+      "component_type": "card",
+      "title": "Lineages",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "summary_metrics",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c11"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample alignment, coverage, and variant calling summary metrics",
+        "data_collection_tag": "summary_metrics",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c11"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sample metadata",
+      "aggregation": "nunique",
+      "column_name": "lineage",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "donut",
+      "breakdown_col": "lineage",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:virus",
+      "icon_color": "#E74C3C",
+      "title_color": "#E74C3C",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "bfa9ffa0-c49f-4b33-81ee-3b695eea039c",
       "component_type": "table",
       "title": "Summary metrics",
       "workflow_tag": "viralrecon",
@@ -359,41 +805,51 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T21:27:37.141337",
+      "last_updated": "2026-08-29T00:00:00.000000",
       "description": "Per-sample alignment, coverage, and variant calling summary - QC backbone for downstream tabs.",
       "title_size": "h3",
       "title_align": "left",
+      "section": "Sample metadata",
       "columns": [],
-      "page_size": 10,
+      "page_size": 100,
       "sortable": true,
       "filterable": true,
-      "row_selection_enabled": false,
-      "row_selection_column": null,
+      "compact": false,
+      "row_selection_enabled": true,
+      "row_selection_column": "sample",
       "wf_tag": "nextflow/viralrecon"
     }
   ],
   "stored_edit_dashboard_mode_button": [],
   "left_panel_layout_data": [
     {
-      "i": "box-qcdx-sample-filter",
+      "i": "box-qcdx-snp-yield",
       "x": 0,
-      "y": 2,
+      "y": 0,
       "w": 1,
-      "h": 2,
+      "h": 3,
       "static": false
     },
     {
-      "i": "box-qcdx-lineage-filter",
+      "i": "box-qcdx-indel-yield",
       "x": 0,
-      "y": 4,
+      "y": 3,
       "w": 1,
-      "h": 2,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-qcdx-missing",
+      "x": 6,
+      "y": 1,
+      "w": 2,
+      "h": 3,
       "static": false
     }
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-ea254744-70df-4898-863e-89d8a2ee22fe",
+      "i": "box-1dcfc2c7-52c3-4161-9a91-a835e3f803f5",
       "x": 0,
       "y": 0,
       "w": 8,
@@ -408,42 +864,58 @@
       ]
     },
     {
-      "i": "box-364bbe82-1ccc-4017-b698-e9e91a507530",
+      "i": "box-457e3a58-8898-4ec0-bb32-f19da182e0c9",
       "x": 0,
       "y": 1,
-      "w": 4,
-      "h": 2,
+      "w": 2,
+      "h": 3,
       "static": true
     },
     {
-      "i": "box-2ba72c05-1e12-415c-a19d-fb44a1b5ddf6",
-      "x": 4,
+      "i": "box-ff126a25-7c19-4018-a4e4-62ab8e4d7880",
+      "x": 2,
       "y": 1,
-      "w": 4,
-      "h": 2,
+      "w": 2,
+      "h": 3,
       "static": true
     },
     {
-      "i": "box-27d85fe2-16f5-419e-8301-4fbde79a9cb8",
-      "x": 0,
-      "y": 3,
-      "w": 4,
-      "h": 4,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
-    },
-    {
-      "i": "box-9aa4f7bd-9c63-4869-9f81-093f786e2bcb",
+      "i": "box-qcdx-mapped",
       "x": 4,
-      "y": 3,
+      "y": 1,
+      "w": 2,
+      "h": 3,
+      "static": true
+    },
+    {
+      "i": "box-qcdx-missing",
+      "x": 6,
+      "y": 1,
+      "w": 2,
+      "h": 3,
+      "static": true
+    },
+    {
+      "i": "box-qcdx-diagnostics-header",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-1c8a4c46-b41c-4fd4-b949-a27c1d06354e",
+      "x": 0,
+      "y": 1,
       "w": 4,
-      "h": 4,
+      "h": 6,
       "static": false,
       "resizeHandles": [
         "se",
@@ -454,11 +926,11 @@
       ]
     },
     {
-      "i": "box-704e7dec-9c99-4071-b629-1c8d64d14760",
-      "x": 0,
-      "y": 7,
-      "w": 8,
-      "h": 4,
+      "i": "box-41f8709b-8a57-46e6-bf7c-eed2293bb7b8",
+      "x": 4,
+      "y": 1,
+      "w": 4,
+      "h": 6,
       "static": false,
       "resizeHandles": [
         "se",
@@ -469,11 +941,88 @@
       ]
     },
     {
-      "i": "box-9a4a31b0-2c93-4324-86b3-570877943455",
+      "i": "box-qcdx-coverage-header",
       "x": 0,
-      "y": 11,
+      "y": 0,
       "w": 8,
-      "h": 4,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-3bf4bf72-db7f-4516-ac6b-f84b220f2b78",
+      "x": 0,
+      "y": 1,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-qcdx-metadata-header",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-meta-samples",
+      "x": 0,
+      "y": 1,
+      "w": 2,
+      "h": 3,
+      "static": true
+    },
+    {
+      "i": "box-meta-reads",
+      "x": 2,
+      "y": 1,
+      "w": 2,
+      "h": 3,
+      "static": true
+    },
+    {
+      "i": "box-meta-genome-1x",
+      "x": 4,
+      "y": 1,
+      "w": 2,
+      "h": 3,
+      "static": true
+    },
+    {
+      "i": "box-meta-lineages",
+      "x": 6,
+      "y": 1,
+      "w": 2,
+      "h": 3,
+      "static": true
+    },
+    {
+      "i": "box-bfa9ffa0-c49f-4b33-81ee-3b695eea039c",
+      "x": 0,
+      "y": 4,
+      "w": 8,
+      "h": 5,
       "static": false,
       "resizeHandles": [
         "se",
@@ -484,6 +1033,57 @@
       ]
     }
   ],
+  "filter_sections": [
+    {
+      "name": "Variant yield",
+      "icon": "mdi:tune",
+      "color": "indigo",
+      "description": "Narrow to samples by how many calls they produced",
+      "collapsed": true,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "QC at a glance",
+      "icon": "mdi:counter",
+      "color": "indigo",
+      "description": "Coverage, mapping rate and variant yield per sample",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Diagnostics",
+      "icon": "mdi:chart-scatter-plot",
+      "color": "cyan",
+      "description": "Where coverage, variant count and consensus quality disagree",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Per-sample coverage",
+      "icon": "mdi:chart-bar",
+      "color": "teal",
+      "description": "Genome breadth, sample by sample",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Sample metadata",
+      "icon": "mdi:table-account",
+      "color": "teal",
+      "description": "The summary table every other tab is filtered through",
+      "collapsed": true,
+      "persistent": true,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
   "buttons_data": {
     "unified_edit_mode": true,
     "add_components_button": {
@@ -510,7 +1110,7 @@
         "flexible_metadata": null,
         "hash": null,
         "email": "admin@example.com",
-        "is_admin": false,
+        "is_admin": true,
         "is_anonymous": false,
         "is_temporary": false,
         "expiration_time": null
@@ -519,8 +1119,10 @@
     "editors": [],
     "viewers": []
   },
-  "is_public": false,
-  "last_saved_ts": "2026-05-20 21:27:37",
+  "is_public": true,
+  "last_saved_ts": "2026-08-29 00:00:00",
+  "creation_time": "2026-08-29 15:00:13",
+  "screenshot_ts": "",
   "project_id": {
     "$oid": "746b0f3c1e4a2d7f8e5b9ca2"
   },

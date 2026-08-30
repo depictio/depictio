@@ -4,6 +4,11 @@ version: 1
 title: "Penguins Species Analysis"
 subtitle: "Comparative morphology across Adelie, Chinstrap, and Gentoo on three islands"
 project_tag: "Palmer Penguins Species Comparison"
+# Named explicitly: without it the parent tab shows its full dashboard
+# title in the strip while the child shows a short one.
+main_tab_name: "Species"
+tab_icon: "mdi:penguin"
+tab_icon_color: "orange"
 
 # Per-dashboard brand override. Anything left out is inherited from the
 # instance branding (`DEPICTIO_BRANDING_*` and the /admin Branding panel), so
@@ -28,25 +33,34 @@ brand_theme:
 # filter that narrows the birds on one side and the tiles that describe them on
 # the other — and the two never interfere.
 #
-# Every Iconify id used here — section icons, card icons, filter icons — must
-# already appear as a literal somewhere in the viewer's own TypeScript source.
-# `scripts/generate-icon-subset.mjs` builds the bundled icon set by scanning
-# that source, and the app's `connect-src 'self'` CSP blocks the runtime Iconify
-# API, so an id only a YAML knows about renders blank in a built deployment (it
-# still shows under the Vite dev server, which sends no CSP). Section icons have
-# the narrower list the editor's Sections manager offers
-# (depictio/viewer/src/components/sections/sectionIcons.ts).
+# `scripts/generate-icon-subset.mjs` scans this file for `icon` / `tab_icon` /
+# `icon_name` values and bundles what it finds, so an id used here reaches the
+# built app without also being mirrored into a TypeScript list. Section icons
+# are the exception worth caring about: keep them to the list the editor's
+# Sections manager offers (depictio/viewer/src/components/sections/sectionIcons.ts),
+# or the icon cannot be re-picked once someone opens the section form.
 filter_sections:
+  # `persistent` fans a section out over every tab of the family. It is a no-op
+  # on a single-tab dashboard, which is why this project has a child tab at all:
+  # the four cohort controls below are declared once, here, and the Island &
+  # Season tab receives them without repeating a line.
   - name: "Cohort"
     icon: "mdi:account-group-outline"
     color: "teal"
-    description: "Which birds to look at"
+    description: "Which birds to look at — on every tab"
+    persistent: true
+    pin: "top"
   - name: "Measurements"
     icon: "mdi:ruler"
     color: "indigo"
     description: "Morphometric ranges, folded into one card"
+    persistent: true
+    pin: "bottom"
+    collapsed: true
+  # These controls exist to demonstrate `filter_expr`: their options are
+  # computed from a narrowed set of rows, not from the whole table.
   - name: "Scoped views"
-    icon: "mdi:filter-variant"
+    icon: "mdi:tune"
     color: "pink"
     description: "Options computed from a pre-filtered subset"
     collapsed: true
@@ -68,22 +82,27 @@ grid_sections:
   - name: "Composition"
     icon: "mdi:chart-donut"
     color: "orange"
-    description: "Species across the three islands and the three sampling seasons"
+    description: "How the cohort breaks down by island. The Island & Season tab takes this apart"
+  # Reference material, so `pin: bottom`: present on every tab, never ahead of
+  # that tab's own introduction.
   - name: "Raw Data"
     icon: "mdi:table"
     color: "gray"
-    description: "Per-individual records behind every figure above"
+    description: "Per-individual records behind every figure, shown on every tab"
     collapsed: true
+    persistent: true
+    pin: "bottom"
 
 components:
   # ── Narrative intro ────────────────────────────────────────────────
   - tag: text-penguins-intro
     component_type: text
+    section: "Cohort"
     title: "Palmer Penguins — Species & Island Morphology"
     order: 2
     alignment: left
-    body: "Joined physical measurements + demographics for *Adelie*, *Chinstrap*, *Gentoo* across Biscoe, Dream, Torgersen. Each section leads with its numbers, then its figures."
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    body: "Physical measurements joined to demographics for 342 birds, 151 *Adelie*, 68 *Chinstrap*, 123 *Gentoo*, across Biscoe, Dream and Torgersen. The **Cohort** filters on the left are persistent, so whatever you pick here follows you to the Island & Season tab."
+    layout: { x: 0, y: 0, w: 8, h: 1 }
 
   # ── Cohort cards — one row of four, w=2 each ───────────────────────
   # Four different secondary layouts, each answering a question the others
@@ -98,14 +117,17 @@ components:
     column_name: individual_id
     column_type: object
     secondary_layout: coverage
-    coverage_max: 344
+    # 151 Adelie + 68 Chinstrap + 123 Gentoo. The 344 this used to claim is the
+    # published palmerpenguins row count, two of which have no measurements at
+    # all and so never survive the join.
+    coverage_max: 342
     icon_name: mdi:counter
     icon_color: "#5C6BC0"
     title_color: "#5C6BC0"
     title_font_size: md
     value_font_size: xl
     title: "Individuals"
-    layout: {x: 0, y: 1, w: 2, h: 2}
+    layout: { x: 0, y: 3, w: 2, h: 2 }
 
   - tag: card-species-mix
     component_type: card
@@ -124,7 +146,7 @@ components:
     title_font_size: md
     value_font_size: xl
     title: "Species mix"
-    layout: {x: 2, y: 1, w: 2, h: 2}
+    layout: { x: 2, y: 3, w: 2, h: 2 }
 
   - tag: card-island-balance
     component_type: card
@@ -143,7 +165,7 @@ components:
     title_font_size: md
     value_font_size: xl
     title: "Island balance"
-    layout: {x: 4, y: 1, w: 2, h: 2}
+    layout: { x: 4, y: 3, w: 2, h: 2 }
 
   # ``completeness`` is the only layout that reports what is *absent*: a hero
   # ``count`` already skips nulls, so this card is what keeps the unsexed birds
@@ -163,13 +185,22 @@ components:
     title_font_size: md
     value_font_size: xl
     title: "Sex recorded"
-    layout: {x: 6, y: 1, w: 2, h: 2}
+    layout: { x: 6, y: 3, w: 2, h: 2 }
 
   # ── Morphometrics cards — one row of four, w=2 each ────────────────
   # Layout picked per column rather than uniformly: body mass is unimodal and
   # reads well as a Tukey box, flipper length is bimodal and a five-number
   # summary would draw it the same as a flat column, mass has an ordered axis
   # to walk (the sampling season), and the long-bill count is a level.
+  - tag: text-morphometrics
+    component_type: text
+    section: "Morphometrics"
+    title: "Where the species separate"
+    order: 2
+    alignment: left
+    body: "Flipper length and body mass separate *Gentoo* cleanly; *Adelie* and *Chinstrap* overlap on both and only pull apart on bill length. The scatter carries species as colour and island as symbol, so the confound is visible: every *Gentoo* is from Biscoe, every *Chinstrap* from Dream."
+    layout: { x: 0, y: 0, w: 8, h: 1 }
+
   - tag: card-body-mass
     component_type: card
     section: "Morphometrics"
@@ -186,7 +217,7 @@ components:
     title_font_size: md
     value_font_size: xl
     title: "Body Mass (g)"
-    layout: {x: 0, y: 3, w: 2, h: 2}
+    layout: { x: 0, y: 2, w: 2, h: 2 }
 
   - tag: card-flipper
     component_type: card
@@ -203,7 +234,7 @@ components:
     title_font_size: md
     value_font_size: xl
     title: "Flipper Length (mm)"
-    layout: {x: 2, y: 3, w: 2, h: 2}
+    layout: { x: 2, y: 2, w: 2, h: 2 }
 
   - tag: card-mass-by-season
     component_type: card
@@ -216,12 +247,12 @@ components:
     column_name: body_mass_g
     column_type: float64
     icon_name: mdi:chart-line
-    icon_color: "#4C72B0"
-    title_color: "#4C72B0"
+    icon_color: "#FF8C00"
+    title_color: "#FF8C00"
     title_font_size: md
     value_font_size: xl
     title: "Mass by season"
-    layout: {x: 4, y: 3, w: 2, h: 2}
+    layout: { x: 4, y: 2, w: 2, h: 2 }
 
   - tag: card-long-bills
     component_type: card
@@ -240,7 +271,8 @@ components:
     title_font_size: md
     value_font_size: xl
     title: "Bills > 50 mm"
-    layout: {x: 6, y: 3, w: 2, h: 2}
+    description: "Demonstrates `filter_expr`: the card counts only rows matching col('bill_length_mm') > 50, so it scores a threshold without a dedicated column."
+    layout: { x: 6, y: 2, w: 2, h: 2 }
 
   # ── Interactive filters — left panel, one section each ─────────────
   # Section: which birds.
@@ -252,7 +284,7 @@ components:
     interactive_component_type: MultiSelect
     column_name: species
     column_type: object
-    custom_color: "#4C72B0"
+    custom_color: "#FF8C00"
     icon_name: mdi:dna
     title: "Species"
     layout: {x: 0, y: 0, w: 1, h: 3}
@@ -292,7 +324,7 @@ components:
     column_name: year
     column_type: int64
     show_marks: true
-    custom_color: "#55A467"
+    custom_color: "#159090"
     icon_name: mdi:calendar-outline
     title: "Sampling season"
     layout: {x: 0, y: 9, w: 1, h: 3}
@@ -309,7 +341,7 @@ components:
     interactive_component_type: RangeSlider
     column_name: body_mass_g
     column_type: float64
-    custom_color: "#DD8452"
+    custom_color: "#A034F0"
     icon_name: bx:slider-alt
     title: "Body mass (g)"
     layout: {x: 0, y: 12, w: 1, h: 3}
@@ -351,7 +383,7 @@ components:
     interactive_component_type: RangeSlider
     column_name: flipper_length_mm
     column_type: float64
-    custom_color: "#55A467"
+    custom_color: "#159090"
     icon_name: bx:slider
     title: "Flipper length (mm)"
     layout: {x: 0, y: 21, w: 1, h: 3}
@@ -371,6 +403,7 @@ components:
     custom_color: "#DA8BC3"
     icon_name: mdi:filter-cog-outline
     title: "Species (bill > 50 mm)"
+    description: "Demonstrates `filter_expr` on an interactive: the dropdown's options are computed from birds with a bill over 50 mm, so Adelie never appears in the list."
     layout: {x: 0, y: 24, w: 1, h: 3}
 
   # ── Morphometrics figures ──────────────────────────────────────────
@@ -389,13 +422,13 @@ components:
       color: species
       symbol: island
       size: bill_length_mm
-      color_discrete_map: '{"Adelie": "#4C72B0", "Chinstrap": "#DD8452", "Gentoo": "#55A467"}'
+      color_discrete_map: '{"Adelie": "#FF8C00", "Chinstrap": "#A034F0", "Gentoo": "#159090"}'
       size_max: 15
       marginal_x: box
       marginal_y: violin
       trendline: lowess
       labels: '{"flipper_length_mm": "Flipper Length (mm)", "body_mass_g": "Body Mass (g)", "bill_length_mm": "Bill Length (mm)", "island": "Island", "species": "Species"}'
-    layout: {x: 0, y: 5, w: 8, h: 5}
+    layout: { x: 0, y: 4, w: 8, h: 5 }
 
   - tag: scatter-bill-shape
     component_type: figure
@@ -411,13 +444,13 @@ components:
       y: bill_depth_mm
       color: species
       symbol: sex
-      color_discrete_map: '{"Adelie": "#4C72B0", "Chinstrap": "#DD8452", "Gentoo": "#55A467"}'
+      color_discrete_map: '{"Adelie": "#FF8C00", "Chinstrap": "#A034F0", "Gentoo": "#159090"}'
       trendline: ols
     # Cross-filtering: lasso/box selections on this scatter narrow the rest of
     # the dashboard and can be saved as named groups ("select & compare").
     selection_enabled: true
     selection_column: individual_id
-    layout: {x: 0, y: 10, w: 4, h: 5}
+    layout: { x: 0, y: 9, w: 4, h: 5 }
 
   - tag: box-bill-length
     component_type: figure
@@ -432,30 +465,36 @@ components:
       x: species
       y: bill_length_mm
       color: sex
-      color_discrete_map: '{"male": "#4C72B0", "female": "#C44E52"}'
+      color_discrete_map: '{"male": "#546E7A", "female": "#C44E52"}'
       boxmode: group
       points: all
       notched: true
       labels: '{"bill_length_mm": "Bill Length (mm)", "species": "Species", "sex": "Sex"}'
-    layout: {x: 4, y: 10, w: 4, h: 5}
+    layout: { x: 4, y: 9, w: 4, h: 5 }
 
-  - tag: box-body-mass
+  # A violin rather than a third box on this tab: the bill-length chart beside
+  # it is already a grouped box, and mass is the variable where the shape
+  # matters most (Gentoo is not just heavier, it is bimodal by sex).
+  - tag: violin-body-mass
     component_type: figure
     section: "Morphometrics"
     workflow_tag: penguin_species_analysis
     data_collection_tag: joined_penguins_complete
-    visu_type: box
+    visu_type: scatter
+    mode: code
     title: "Body Mass Distribution by Species"
-    description: "Box + every observation as a tick. Reads against the Body Mass card above: the card's single box is this one with the species collapsed together."
+    description: "Violin with the box and every observation inside. Reads against the Body Mass card above: the card's single number is this chart with the species collapsed together. Gentoo's outline is visibly two-humped, which is the male / female split."
     title_size: h3
-    dict_kwargs:
-      x: species
-      y: body_mass_g
-      color: species
-      points: all
-      notched: true
-      color_discrete_map: '{"Adelie": "#4C72B0", "Chinstrap": "#DD8452", "Gentoo": "#55A467"}'
-    layout: {x: 0, y: 15, w: 4, h: 5}
+    code_content: |
+      fig = px.violin(
+          df.to_pandas(),
+          x='species', y='body_mass_g', color='species',
+          box=True, points='all',
+          color_discrete_map={'Adelie': '#FF8C00', 'Chinstrap': '#A034F0', 'Gentoo': '#159090'},
+          labels={'body_mass_g': 'Body Mass (g)', 'species': 'Species'},
+      )
+      fig.update_traces(meanline_visible=True, marker=dict(size=4, opacity=0.55))
+    layout: { x: 0, y: 14, w: 4, h: 5 }
 
   - tag: hist-bill-depth
     component_type: figure
@@ -469,15 +508,24 @@ components:
     dict_kwargs:
       x: bill_depth_mm
       color: species
-      color_discrete_map: '{"Adelie": "#4C72B0", "Chinstrap": "#DD8452", "Gentoo": "#55A467"}'
+      color_discrete_map: '{"Adelie": "#FF8C00", "Chinstrap": "#A034F0", "Gentoo": "#159090"}'
       barmode: overlay
       opacity: 0.7
       nbins: 30
       marginal: rug
       labels: '{"bill_depth_mm": "Bill Depth (mm)", "species": "Species"}'
-    layout: {x: 4, y: 15, w: 4, h: 5}
+    layout: { x: 4, y: 14, w: 4, h: 5 }
 
   # ── Composition figures ────────────────────────────────────────────
+  - tag: text-composition
+    component_type: text
+    section: "Composition"
+    title: "How the cohort is distributed"
+    order: 2
+    alignment: left
+    body: "Torgersen holds *Adelie* only, Biscoe holds *Adelie* and *Gentoo*, Dream holds *Adelie* and *Chinstrap* — *Adelie* is the one species sampled everywhere. Sampling is near-flat across the three seasons (109 / 114 / 119 birds), so a difference between years is unlikely to be an effort artefact."
+    layout: { x: 0, y: 0, w: 8, h: 1 }
+
   - tag: sunburst-distribution
     component_type: figure
     section: "Composition"
@@ -491,8 +539,8 @@ components:
     code_content: >
       df_modified = df.to_pandas().groupby(['island','species']).agg({'body_mass_g':'mean','bill_length_mm':'count'}).reset_index().rename(columns={'bill_length_mm':'count'})
 
-      fig = px.sunburst(df_modified,path=['island','species'],values='count',color='island',color_discrete_map={"Biscoe":"#4C72B0","Dream":"#DD8452","Torgersen":"#55A467"},title='Palmer Penguins: Island & Species Distribution',hover_data={'body_mass_g':':.0f'})
-    layout: {x: 0, y: 20, w: 4, h: 5}
+      fig = px.sunburst(df_modified,path=['island','species'],values='count',color='island',color_discrete_map={"Biscoe":"#5B8FA8","Dream":"#B07AA1","Torgersen":"#8C7B6B"},title='Palmer Penguins: Island & Species Distribution',hover_data={'body_mass_g':':.0f'})
+    layout: { x: 0, y: 1, w: 4, h: 5 }
 
   # Box rather than histogram: `year` is a numeric column, so a histogram bins
   # it continuously and lands the bars on fractional years. A box takes one
@@ -510,13 +558,22 @@ components:
       x: year
       y: body_mass_g
       color: species
-      color_discrete_map: '{"Adelie": "#4C72B0", "Chinstrap": "#DD8452", "Gentoo": "#55A467"}'
+      color_discrete_map: '{"Adelie": "#FF8C00", "Chinstrap": "#A034F0", "Gentoo": "#159090"}'
       boxmode: group
       notched: true
       labels: '{"year": "Sampling season", "body_mass_g": "Body Mass (g)", "species": "Species"}'
-    layout: {x: 4, y: 20, w: 4, h: 5}
+    layout: { x: 4, y: 1, w: 4, h: 5 }
 
   # ── Data table ─────────────────────────────────────────────────────
+  - tag: text-raw-data
+    component_type: text
+    section: "Raw Data"
+    title: "Records in view"
+    order: 2
+    alignment: left
+    body: "The joined rows behind every tile, narrowed by whatever the left panel currently holds. Persistent and pinned to the bottom, so it is also the last thing on the Island & Season tab."
+    layout: { x: 0, y: 0, w: 8, h: 1 }
+
   - tag: data-table
     component_type: table
     section: "Raw Data"
@@ -527,4 +584,4 @@ components:
     title_size: h3
     title_align: left
     page_size: 100
-    layout: {x: 0, y: 25, w: 8, h: 5}
+    layout: { x: 0, y: 1, w: 8, h: 5 }

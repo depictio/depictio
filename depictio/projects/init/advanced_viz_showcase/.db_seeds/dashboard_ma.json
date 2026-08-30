@@ -9,10 +9,30 @@
     "$oid": "646b0f3c1e4a2d7f8e5b8d40"
   },
   "version": 1,
-  "tmp_children_data": [],
-  "stored_layout_data": [],
-  "stored_children_data": [],
   "stored_metadata": [
+    {
+      "index": "ma-text",
+      "component_type": "text",
+      "title": "MA plot",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "MA plot",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Effect size against average intensity, the diagnostic companion to the volcano: a fold change that only appears at low intensity is usually noise, and it shows up here as a funnel opening to the left. The same feature set as the volcano tab, read against a different x axis.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
     {
       "index": "ma-plot",
       "component_type": "advanced_viz",
@@ -28,7 +48,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Synthetic volcano fixture (with avg_log_intensity)",
+        "description": "Synthetic volcano: 200 features x 2 contrasts; ~15% are designed hits",
         "data_collection_tag": "volcano_demo",
         "dc_specific_properties": null,
         "_id": {
@@ -37,7 +57,11 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-13T00:00:00.000000",
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Mean log intensity vs log2 fold change \u2014 same tier-colour story as the volcano, different axis pairing.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "MA plot",
       "viz_kind": "ma",
       "config": {
         "viz_kind": "ma",
@@ -48,20 +72,139 @@
         "label_col": "label",
         "significance_threshold": 0.05,
         "fold_change_threshold": 1.0,
-        "top_n_labels": 15
+        "top_n_labels": 15,
+        "show_labels": true
       },
-      "wf_tag": "python/advanced_viz_demo",
-      "description": "Mean log intensity vs log2 fold change \u2014 same tier-colour story as the volcano, different axis pairing."
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "ma-f-category",
+      "component_type": "interactive",
+      "title": "Category",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "volcano_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d02"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic volcano: 200 features x 2 contrasts; ~15% are designed hits",
+        "data_collection_tag": "volcano_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d02"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Feature scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "category",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Feature filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#E91E63",
+      "icon_name": "mdi:form-select",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "ma-f-significance",
+      "component_type": "interactive",
+      "title": "Significance",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "volcano_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d02"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic volcano: 200 features x 2 contrasts; ~15% are designed hits",
+        "data_collection_tag": "volcano_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d02"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Feature scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "significance",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Feature filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#F68B33",
+      "icon_name": "mdi:target",
+      "wf_tag": "python/advanced_viz_demo"
     }
   ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
   "stored_edit_dashboard_mode_button": [],
-  "left_panel_layout_data": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-ma-f-category",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-ma-f-significance",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
   "right_panel_layout_data": [
+    {
+      "i": "box-ma-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
     {
       "i": "box-ma-plot",
       "x": 0,
-      "y": 0,
-      "w": 12,
+      "y": 1,
+      "w": 8,
       "h": 8,
       "static": false,
       "resizeHandles": [
@@ -109,7 +252,7 @@
     "viewers": []
   },
   "is_public": true,
-  "last_saved_ts": "2026-05-13 00:00:00",
+  "last_saved_ts": "2026-05-12 00:00:00",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8d00"
   },
@@ -121,5 +264,29 @@
   "main_tab_name": null,
   "tab_icon": "mdi:chart-bell-curve",
   "tab_icon_color": "pink",
-  "parent_dashboard_title": null
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Feature scope",
+      "icon": "mdi:filter-variant",
+      "color": "pink",
+      "description": "Restricts the point cloud",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "MA plot",
+      "icon": "mdi:chart-bell-curve",
+      "color": "pink",
+      "description": "Effect size against mean intensity",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
 }

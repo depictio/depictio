@@ -9,10 +9,30 @@
     "$oid": "646b0f3c1e4a2d7f8e5b8d43"
   },
   "version": 1,
-  "tmp_children_data": [],
-  "stored_layout_data": [],
-  "stored_children_data": [],
   "stored_metadata": [
+    {
+      "index": "qq-text",
+      "component_type": "text",
+      "title": "QQ plot",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Quantile-quantile",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Observed significance against what a null distribution would predict, with the diagonal drawn in. A curve that leaves the diagonal only at the top is genuine signal; one that lifts off along its whole length is inflation, and the test is miscalibrated.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
     {
       "index": "qq-plot",
       "component_type": "advanced_viz",
@@ -28,7 +48,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Manhattan fixture",
+        "description": "Synthetic Manhattan: 23 chromosomes x ~40 noise points + 6 designed hits",
         "data_collection_tag": "manhattan_demo",
         "dc_specific_properties": null,
         "_id": {
@@ -37,26 +57,152 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-13T00:00:00.000000",
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Observed vs expected -log10(p). 95% CI band, hover surfaces designed-hit rsids.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Quantile-quantile",
       "viz_kind": "qq",
       "config": {
         "viz_kind": "qq",
         "p_value_col": "p_value",
         "feature_id_col": "feature",
-        "show_ci": true
+        "category_col": null,
+        "show_ci": true,
+        "show_identity": true,
+        "point_size": 5,
+        "top_n_labels": 0
       },
-      "wf_tag": "python/advanced_viz_demo",
-      "description": "Observed vs expected -log10(p). 95% CI band, hover surfaces designed-hit rsids."
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "qq-f-score",
+      "component_type": "interactive",
+      "title": "Score",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "manhattan_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic Manhattan: 23 chromosomes x ~40 noise points + 6 designed hits",
+        "data_collection_tag": "manhattan_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Test scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "score",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Test filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#8E44AD",
+      "icon_name": "mdi:chart-line",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "qq-f-chr",
+      "component_type": "interactive",
+      "title": "Chromosome",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "manhattan_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic Manhattan: 23 chromosomes x ~40 noise points + 6 designed hits",
+        "data_collection_tag": "manhattan_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Test scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "chr",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Test filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#F68B33",
+      "icon_name": "mdi:dna",
+      "wf_tag": "python/advanced_viz_demo"
     }
   ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
   "stored_edit_dashboard_mode_button": [],
-  "left_panel_layout_data": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-qq-f-score",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-qq-f-chr",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
   "right_panel_layout_data": [
+    {
+      "i": "box-qq-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
     {
       "i": "box-qq-plot",
       "x": 0,
-      "y": 0,
-      "w": 12,
+      "y": 2,
+      "w": 8,
       "h": 8,
       "static": false,
       "resizeHandles": [
@@ -104,7 +250,7 @@
     "viewers": []
   },
   "is_public": true,
-  "last_saved_ts": "2026-05-13 00:00:00",
+  "last_saved_ts": "2026-05-12 00:00:00",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8d00"
   },
@@ -116,5 +262,29 @@
   "main_tab_name": null,
   "tab_icon": "mdi:chart-line",
   "tab_icon_color": "grape",
-  "parent_dashboard_title": null
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Test scope",
+      "icon": "mdi:filter-variant",
+      "color": "grape",
+      "description": "Restricts which tests enter the quantile comparison",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Quantile-quantile",
+      "icon": "mdi:chart-line",
+      "color": "grape",
+      "description": "Observed against expected significance",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
 }

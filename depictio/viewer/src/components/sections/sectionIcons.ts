@@ -32,7 +32,10 @@ export const SECTION_ICON_OPTIONS: IconOption[] = [
   { value: 'mdi:chart-timeline-variant', label: 'Timeline' },
   // Data
   { value: 'mdi:table', label: 'Table' },
+  { value: 'mdi:table-account', label: 'Sample metadata' },
   { value: 'mdi:database-outline', label: 'Data' },
+  { value: 'mdi:set-merge', label: 'Set overlap' },
+  { value: 'mdi:relation-many-to-many', label: 'Relationships' },
   { value: 'mdi:file-document-outline', label: 'Reports' },
   { value: 'mdi:folder-outline', label: 'Files' },
   // Quality / status
@@ -45,6 +48,11 @@ export const SECTION_ICON_OPTIONS: IconOption[] = [
   { value: 'mdi:test-tube', label: 'Sample' },
   { value: 'mdi:dna', label: 'Genomics' },
   { value: 'mdi:bacteria-outline', label: 'Microbiology' },
+  { value: 'mdi:virus', label: 'Virology' },
+  { value: 'mdi:family-tree', label: 'Phylogeny' },
+  { value: 'mdi:stethoscope', label: 'Clinical' },
+  { value: 'mdi:scale-balance', label: 'Comparison' },
+  { value: 'mdi:waves', label: 'Water' },
   { value: 'mdi:microscope', label: 'Imaging' },
   { value: 'mdi:ruler', label: 'Measurements' },
   { value: 'mdi:shape-outline', label: 'Categories' },

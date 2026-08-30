@@ -1,0 +1,149 @@
+# nf-core megatests showcase — one tab of the nf-core megatests showcase.
+#
+# Regenerate the seed after editing:
+#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds nfcore_megatests_showcase
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'nf-core megatests showcase'
+subtitle: 'DE results from nf-core/differentialabundance'
+icon: 'mdi:chart-scatter-plot'
+icon_color: 'red'
+icon_variant: filled
+workflow_system: nf-core
+dashboard_id: '646b0f3c1e4a2d7f8e5b8e20'
+is_main_tab: true
+tab_order: 0
+main_tab_name: 'Volcano (DESeq2)'
+tab_icon: 'mdi:chart-scatter-plot'
+tab_icon_color: 'red'
+
+# Left-panel filter section. Deliberately not `persistent`: the 10 tabs of
+# this family read different collections whose column names collide while their
+# value domains do not overlap, so a control fanned out from one tab would show
+# up everywhere and bite on nothing.
+filter_sections:
+  - name: 'Gene scope'
+    icon: 'mdi:filter-variant'
+    color: 'red'
+    description: 'Restricts the gene set before the thresholds are applied'
+
+grid_sections:
+  - name: 'Differential expression'
+    icon: 'mdi:chart-scatter-plot'
+    color: 'red'
+    description: 'DESeq2 effect size against adjusted significance'
+  # Carries a single text tile and no data binding, which is what makes it safe
+  # to fan out: there is no column name for a sibling tab to mis-resolve.
+  - name: 'About this showcase'
+    icon: 'mdi:information-outline'
+    color: gray
+    description: 'What this project is, and what it is not'
+    collapsed: true
+    persistent: true
+    pin: bottom
+
+components:
+  - tag: text-volcano
+    index: volcano-text
+    component_type: text
+    title: 'Volcano plot'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Differential expression'
+    body: >
+      Every gene DESeq2 tested, placed by effect size against adjusted significance, with
+      both thresholds drawn in. This is a real nf-core/differentialabundance run, so the
+      cloud has the shape real data has: most genes sit near the origin and the interesting
+      ones are the handful far from it.
+    layout: { x: 0, y: 0, w: 8, h: 1 }
+
+  - tag: viz-volcano
+    index: 'nfcore-volcano'
+    component_type: advanced_viz
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'deseq2_results'
+    title: 'Volcano — DESeq2 differential expression'
+    description: 'Effect size vs significance scatter, bound to nf-core/differentialabundance''s Condition_treatment-Control-Treated.deseq2.results.tsv.'
+    section: 'Differential expression'
+    viz_kind: 'volcano'
+    config:
+      viz_kind: "volcano"
+      feature_id_col: "gene_id"
+      effect_size_col: "log2FoldChange"
+      significance_col: "padj"
+      significance_is_neg_log10: false
+      significance_threshold: 0.05
+      effect_threshold: 0.5
+      top_n_labels: 15
+    layout: { x: 0, y: 2, w: 8, h: 8 }
+
+  - tag: filter-volcano-padj
+    index: volcano-f-padj
+    component_type: interactive
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'deseq2_results'
+    interactive_component_type: RangeSlider
+    column_name: 'padj'
+    column_type: 'float64'
+    title: 'Adjusted p-value'
+    placement: left
+    section: 'Gene scope'
+    group: 'Result filters'
+    display:
+      title_size: md
+      custom_color: '#E74C3C'
+      icon_name: 'mdi:target'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-volcano-lfc
+    index: volcano-f-lfc
+    component_type: interactive
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'deseq2_results'
+    interactive_component_type: RangeSlider
+    column_name: 'log2FoldChange'
+    column_type: 'float64'
+    title: 'Log2 fold change'
+    placement: left
+    section: 'Gene scope'
+    group: 'Result filters'
+    display:
+      title_size: md
+      custom_color: '#1976D2'
+      icon_name: 'mdi:trending-up'
+    layout: { x: 0, y: 3, w: 1, h: 3 }
+
+  - tag: filter-volcano-basemean
+    index: volcano-f-basemean
+    component_type: interactive
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'deseq2_results'
+    interactive_component_type: RangeSlider
+    column_name: 'baseMean'
+    column_type: 'float64'
+    title: 'Mean expression'
+    placement: left
+    section: 'Gene scope'
+    group: 'Result filters'
+    display:
+      title_size: md
+      custom_color: '#45B8AC'
+      icon_name: 'mdi:chart-bell-curve'
+    layout: { x: 0, y: 6, w: 1, h: 3 }
+
+  - tag: text-about-showcase
+    index: volcano-about
+    component_type: text
+    title: 'About this showcase'
+    order: 4
+    alignment: left
+    vertical_alignment: top
+    section: 'About this showcase'
+    body: >
+      This project binds depictio's advanced visualisations to real nf-core outputs:
+      differentialabundance, rnaseq, viralrecon, ampliseq and taxprofiler. The fixtures are
+      not in the repository and this project is not seeded on a fresh deployment; see the
+      README next to project.yaml.
+    layout: { x: 0, y: 0, w: 8, h: 1 }

@@ -1,0 +1,103 @@
+# Stacked taxonomy (QIIME2) — one tab of the nf-core megatests showcase.
+#
+# Regenerate the seed after editing:
+#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds nfcore_megatests_showcase
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'Stacked taxonomy (QIIME2)'
+subtitle: 'Per-sample ASV composition'
+icon: 'mdi:chart-bar-stacked'
+icon_color: 'indigo'
+icon_variant: filled
+workflow_system: nf-core
+dashboard_id: '646b0f3c1e4a2d7f8e5b8e27'
+is_main_tab: false
+tab_order: 8
+parent_dashboard_tag: volcano
+tab_icon: 'mdi:chart-bar-stacked'
+tab_icon_color: 'indigo'
+
+# Left-panel filter section. Deliberately not `persistent`: the 10 tabs of
+# this family read different collections whose column names collide while their
+# value domains do not overlap, so a control fanned out from one tab would show
+# up everywhere and bite on nothing.
+filter_sections:
+  - name: 'Composition scope'
+    icon: 'mdi:filter-variant'
+    color: 'indigo'
+    description: 'Restricts which samples and which abundances are stacked'
+
+grid_sections:
+  - name: 'Community composition'
+    icon: 'mdi:chart-bar'
+    color: 'indigo'
+    description: 'Per-sample ASV abundance from the ampliseq feature table'
+
+components:
+  - tag: text-stacked_taxonomy
+    index: stacked_taxonomy-text
+    component_type: text
+    title: 'Stacked taxonomy'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Community composition'
+    body: >
+      One stacked bar per sample, built straight from the QIIME2 feature table. The rank
+      column is a stub: the feature table carries no lineage, so this is ASV-level only and
+      the tab shows the component against real counts rather than a taxonomy to read.
+    layout: { x: 0, y: 0, w: 8, h: 1 }
+
+  - tag: viz-stacked_taxonomy
+    index: 'nfcore-stacked_taxonomy'
+    component_type: advanced_viz
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'qiime2_stacked_taxonomy'
+    title: 'Stacked taxonomy — QIIME2 feature-table'
+    description: 'Per-sample ASV abundances from nf-core/ampliseq. Single-rank stub (real multi-rank lineage would need a taxonkit join).'
+    section: 'Community composition'
+    viz_kind: 'stacked_taxonomy'
+    config:
+      viz_kind: "stacked_taxonomy"
+      sample_id_col: "sample_id"
+      taxon_col: "taxon"
+      rank_col: "rank"
+      abundance_col: "abundance"
+    layout: { x: 0, y: 2, w: 8, h: 8 }
+
+  - tag: filter-stacked_taxonomy-sample
+    index: stacked_taxonomy-f-sample
+    component_type: interactive
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'qiime2_stacked_taxonomy'
+    interactive_component_type: MultiSelect
+    column_name: 'sample_id'
+    column_type: 'object'
+    title: 'Sample'
+    placement: left
+    section: 'Composition scope'
+    group: 'Composition filters'
+    display:
+      title_size: md
+      custom_color: '#3F51B5'
+      icon_name: 'mdi:flask'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-stacked_taxonomy-abundance
+    index: stacked_taxonomy-f-abundance
+    component_type: interactive
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'qiime2_stacked_taxonomy'
+    interactive_component_type: RangeSlider
+    column_name: 'abundance'
+    column_type: 'int64'
+    title: 'Abundance'
+    placement: left
+    section: 'Composition scope'
+    group: 'Composition filters'
+    display:
+      title_size: md
+      custom_color: '#45B8AC'
+      icon_name: 'mdi:counter'
+    layout: { x: 0, y: 3, w: 1, h: 3 }

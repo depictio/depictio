@@ -14,25 +14,6 @@
   "stored_children_data": [],
   "stored_metadata": [
     {
-      "index": "ord-section-header",
-      "component_type": "text",
-      "title": "Sample Relationships",
-      "order": 2,
-      "alignment": "left",
-      "body": "PCoA projects sample-to-sample Bray-Curtis distances into 2D \u2014 samples that cluster share community composition. The clustered taxonomy heatmap and the symmetric distance matrix below give complementary views of the same structure.",
-      "workflow_tag": "ampliseq",
-      "data_collection_tag": "",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "dc_id": null,
-      "dc_config": {},
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-05-18T00:00:00.000000",
-      "wf_tag": "nextflow/ampliseq"
-    },
-    {
       "index": "ord-sample-filter",
       "component_type": "interactive",
       "title": "Sample ID",
@@ -47,7 +28,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Sample metadata for ampliseq analysis",
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
         "data_collection_tag": "metadata",
         "dc_specific_properties": null,
         "_id": {
@@ -56,14 +37,20 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-18T00:00:00.000000",
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Ordination filters",
       "interactive_component_type": "MultiSelect",
       "column_name": "sample",
       "column_type": "object",
       "value": null,
       "default_state": null,
       "filter_expr": null,
-      "title_size": "md",
+      "placement": "left",
+      "group": "Ordination scope",
+      "timescale": null,
+      "show_marks": null,
       "custom_color": "#45B8AC",
       "icon_name": "mdi:flask",
       "wf_tag": "nextflow/ampliseq"
@@ -83,7 +70,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Sample metadata for ampliseq analysis",
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
         "data_collection_tag": "metadata",
         "dc_specific_properties": null,
         "_id": {
@@ -92,68 +79,28 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-18T00:00:00.000000",
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Ordination filters",
       "interactive_component_type": "MultiSelect",
       "column_name": "habitat",
       "column_type": "object",
       "value": null,
       "default_state": null,
       "filter_expr": null,
-      "title_size": "md",
+      "placement": "left",
+      "group": "Ordination scope",
+      "timescale": null,
+      "show_marks": null,
       "custom_color": "#984EA3",
       "icon_name": "mdi:earth",
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "ord-embedding",
-      "component_type": "advanced_viz",
-      "title": "Sample ordination (PCoA, Bray-Curtis)",
-      "workflow_tag": "ampliseq",
-      "data_collection_tag": "embedding_pcoa",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8cb2"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Sample embedding (PCoA on Bray-Curtis) ready for the embedding viz",
-        "data_collection_tag": "embedding_pcoa",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8cb2"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-05-18T00:00:00.000000",
-      "viz_kind": "embedding",
-      "config": {
-        "viz_kind": "embedding",
-        "sample_id_col": "sample_id",
-        "dim_1_col": "dim_1",
-        "dim_2_col": "dim_2",
-        "color_col": "habitat",
-        "point_size": 10,
-        "show_density": false,
-        "category_palette": {
-          "Riverwater": "#377EB8",
-          "Groundwater": "#4DAF4A",
-          "Sediment": "#E41A1C",
-          "Soil": "#FF7F00"
-        }
-      },
-      "wf_tag": "nextflow/ampliseq",
-      "description": "PCoA on Bray-Curtis distances \u2014 explained-variance percentages appear in axis labels when available.",
-      "title_size": "md",
-      "title_align": "left"
-    },
-    {
-      "index": "ord-complex-heatmap",
-      "component_type": "advanced_viz",
-      "title": "Taxonomy heatmap (clustered)",
+      "index": "ord-phylum-filter",
+      "component_type": "interactive",
+      "title": "Phylum",
       "workflow_tag": "ampliseq",
       "data_collection_tag": "complex_heatmap_canonical",
       "wf_id": {
@@ -174,50 +121,335 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-18T00:00:00.000000",
-      "viz_kind": "complex_heatmap",
-      "config": {
-        "viz_kind": "complex_heatmap",
-        "matrix_wf_id": "646b0f3c1e4a2d7f8e5b8ca3",
-        "matrix_dc_id": "646b0f3c1e4a2d7f8e5b8cd2",
-        "index_column": "Phylum",
-        "row_annotation_cols": [
-          "Kingdom"
-        ],
-        "cluster_rows": true,
-        "cluster_cols": true,
-        "cluster_method": "ward",
-        "cluster_metric": "euclidean",
-        "normalize": "row_z",
-        "col_annotations": {
-          "habitat": {
-            "SRR10070130": "Riverwater",
-            "SRR10070131": "Riverwater",
-            "SRR10070132": "Groundwater",
-            "SRR10070133": "Groundwater",
-            "SRR10070134": "Riverwater",
-            "SRR10070141": "Groundwater",
-            "SRR10070149": "Sediment",
-            "SRR10070150": "Sediment",
-            "SRR10070151": "Sediment",
-            "SRR10102392": "Soil",
-            "SRR10102393": "Soil",
-            "SRR10102394": "Soil"
-          }
-        },
-        "col_annotation_colors": {
-          "habitat": {
-            "Riverwater": "#377EB8",
-            "Groundwater": "#4DAF4A",
-            "Sediment": "#E41A1C",
-            "Soil": "#FF7F00"
-          }
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Ordination filters",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "Phylum",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Ordination scope",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#1f9e89",
+      "icon_name": "mdi:filter-variant",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ord-section-header",
+      "component_type": "text",
+      "title": "Sample relationships",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Ordination summary",
+      "order": 2,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "Beta diversity: how similar the samples are to each other, rather than how diverse each one is on its own. The cards summarise the PCoA coordinates the projection below was computed from.",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ord-samples",
+      "component_type": "card",
+      "title": "Samples projected",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "embedding_pcoa",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cb2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample embedding (PCoA on Bray-Curtis) for the advanced-viz embedding",
+        "data_collection_tag": "embedding_pcoa",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cb2"
         }
       },
-      "wf_tag": "nextflow/ampliseq",
-      "description": "Taxonomy \u00d7 sample matrix with hierarchical clustering on both axes (Ward + Euclidean by default).",
-      "title_size": "md",
-      "title_align": "left"
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Ordination summary",
+      "aggregation": "nunique",
+      "column_name": "sample_id",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "top_n",
+      "breakdown_col": "habitat",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:flask",
+      "icon_color": "#E91E63",
+      "title_color": "#E91E63",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ord-groups",
+      "component_type": "card",
+      "title": "Habitat groups",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "embedding_pcoa",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cb2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample embedding (PCoA on Bray-Curtis) for the advanced-viz embedding",
+        "data_collection_tag": "embedding_pcoa",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cb2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Ordination summary",
+      "aggregation": "nunique",
+      "column_name": "habitat",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "donut",
+      "breakdown_col": "habitat",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:earth",
+      "icon_color": "#984EA3",
+      "title_color": "#984EA3",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ord-dim1",
+      "component_type": "card",
+      "title": "PCoA axis 1 (distribution)",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "embedding_pcoa",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cb2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample embedding (PCoA on Bray-Curtis) for the advanced-viz embedding",
+        "data_collection_tag": "embedding_pcoa",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cb2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Ordination summary",
+      "aggregation": "median",
+      "column_name": "dim_1",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": [
+        "box_plot_stats"
+      ],
+      "filter_expr": null,
+      "secondary_layout": "box_plot",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:arrow-left-right",
+      "icon_color": "#1976D2",
+      "title_color": "#1976D2",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ord-dim2",
+      "component_type": "card",
+      "title": "PCoA axis 2 (distribution)",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "embedding_pcoa",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cb2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample embedding (PCoA on Bray-Curtis) for the advanced-viz embedding",
+        "data_collection_tag": "embedding_pcoa",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cb2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Ordination summary",
+      "aggregation": "median",
+      "column_name": "dim_2",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": [
+        "box_plot_stats"
+      ],
+      "filter_expr": null,
+      "secondary_layout": "box_plot",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:arrow-up-down",
+      "icon_color": "#00BCD4",
+      "title_color": "#00BCD4",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ord-relationships-header",
+      "component_type": "text",
+      "title": "Projection and distance",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sample relationships",
+      "order": 2,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "The PCoA embeds each sample in two dimensions so that the closer two points sit, the more similar their communities. The Bray-Curtis panel beside it is the raw pairwise distance matrix that projection was computed from, which is where a sample that is an outlier to everything shows up as a bright row.",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ord-embedding",
+      "component_type": "advanced_viz",
+      "title": "Sample ordination (PCoA, Bray-Curtis)",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "embedding_pcoa",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cb2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample embedding (PCoA on Bray-Curtis) for the advanced-viz embedding",
+        "data_collection_tag": "embedding_pcoa",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cb2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sample relationships",
+      "viz_kind": "embedding",
+      "config": {
+        "viz_kind": "embedding",
+        "sample_id_col": "sample_id",
+        "dim_1_col": "dim_1",
+        "dim_2_col": "dim_2",
+        "dim_3_col": null,
+        "cluster_col": null,
+        "color_col": "habitat",
+        "category_palette": null,
+        "compute_method": null,
+        "umap_n_neighbors": 15,
+        "umap_min_dist": 0.1,
+        "tsne_perplexity": 30,
+        "tsne_n_iter": 1000,
+        "pcoa_distance": "bray_curtis",
+        "show_density": false,
+        "point_size": 10,
+        "marker_outline_width": 1.5,
+        "plot_style": "default",
+        "default_color_by": null,
+        "show_centroids": false,
+        "marker_outline": false,
+        "legend_pos": "right",
+        "ncontours": 14,
+        "density_opacity": 0.45,
+        "view_3d": false,
+        "reverse_scale": true,
+        "hover_cols": [],
+        "selection_enabled": false,
+        "selection_column": null
+      },
+      "wf_tag": "nextflow/ampliseq"
     },
     {
       "index": "ord-bray-curtis",
@@ -243,20 +475,30 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-18T00:00:00.000000",
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "qiime2/distance_heatmap",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_bray_curtis",
+        "use": "qiime2/distance_heatmap",
+        "description": "Sample by sample Bray-Curtis dissimilarity matrix computed from the relative-abundance table."
+      },
+      "section": "Sample relationships",
       "viz_kind": "complex_heatmap",
       "config": {
         "viz_kind": "complex_heatmap",
-        "matrix_wf_id": "646b0f3c1e4a2d7f8e5b8ca3",
-        "matrix_dc_id": "646b0f3c1e4a2d7f8e5b8cd9",
+        "matrix_wf_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+        },
+        "matrix_dc_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cd9"
+        },
         "index_column": "sample",
+        "value_columns": null,
         "row_annotation_cols": [],
-        "cluster_rows": true,
-        "cluster_cols": true,
-        "cluster_method": "ward",
-        "cluster_metric": "euclidean",
-        "normalize": "none",
-        "colorscale": "Viridis",
         "col_annotations": {
           "habitat": {
             "SRR10070130": "Riverwater",
@@ -275,17 +517,126 @@
         },
         "col_annotation_colors": {
           "habitat": {
-            "Riverwater": "#377EB8",
-            "Groundwater": "#4DAF4A",
-            "Sediment": "#E41A1C",
-            "Soil": "#FF7F00"
+            "Groundwater": "#45B8AC",
+            "Riverwater": "#348ABD",
+            "Sediment": "#8B5A2B",
+            "Soil": "#E24A33"
           }
+        },
+        "cluster_rows": true,
+        "cluster_cols": true,
+        "cluster_method": "ward",
+        "cluster_metric": "euclidean",
+        "normalize": "none",
+        "colorscale": "Viridis"
+      },
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ord-heatmap-header",
+      "component_type": "text",
+      "title": "Clustered abundance",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Clustered abundance",
+      "order": 2,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "Phyla in rows, samples in columns, both axes clustered. Selecting samples on the left removes columns from this matrix and selecting Phylum removes rows, so the dendrograms recompute on the subset. Narrowing to a single sample or a single phylum leaves nothing to cluster, and the matrix is then drawn unclustered rather than failing.",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ord-complex-heatmap",
+      "component_type": "advanced_viz",
+      "title": "Taxonomy heatmap (clustered)",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "complex_heatmap_canonical",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cd2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ComplexHeatmap-ready taxonomy matrix (Phylum \u00d7 sample)",
+        "data_collection_tag": "complex_heatmap_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cd2"
         }
       },
-      "wf_tag": "nextflow/ampliseq",
-      "description": "Symmetric sample \u00d7 sample Bray-Curtis distance matrix \u2014 dark cells = similar communities.",
-      "title_size": "md",
-      "title_align": "left"
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "qiime2/abundance_heatmap",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_clustered_heatmap",
+        "use": "qiime2/abundance_heatmap",
+        "description": "The taxon by sample abundance matrix prepared for ComplexHeatmap: index and row-annotation columns cast to strings, so rows and columns can be clustered."
+      },
+      "section": "Clustered abundance",
+      "viz_kind": "complex_heatmap",
+      "config": {
+        "viz_kind": "complex_heatmap",
+        "matrix_wf_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+        },
+        "matrix_dc_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cd2"
+        },
+        "index_column": "Phylum",
+        "value_columns": null,
+        "row_annotation_cols": [
+          "Kingdom"
+        ],
+        "col_annotations": {
+          "habitat": {
+            "SRR10070130": "Riverwater",
+            "SRR10070131": "Riverwater",
+            "SRR10070132": "Groundwater",
+            "SRR10070133": "Groundwater",
+            "SRR10070134": "Riverwater",
+            "SRR10070141": "Groundwater",
+            "SRR10070149": "Sediment",
+            "SRR10070150": "Sediment",
+            "SRR10070151": "Sediment",
+            "SRR10102392": "Soil",
+            "SRR10102393": "Soil",
+            "SRR10102394": "Soil"
+          }
+        },
+        "col_annotation_colors": {
+          "habitat": {
+            "Groundwater": "#45B8AC",
+            "Riverwater": "#348ABD",
+            "Sediment": "#8B5A2B",
+            "Soil": "#E24A33"
+          }
+        },
+        "cluster_rows": true,
+        "cluster_cols": true,
+        "cluster_method": "ward",
+        "cluster_metric": "euclidean",
+        "normalize": "row_z",
+        "colorscale": null
+      },
+      "wf_tag": "nextflow/ampliseq"
     }
   ],
   "stored_edit_dashboard_mode_button": [],
@@ -304,6 +655,14 @@
       "y": 3,
       "w": 1,
       "h": 2,
+      "static": false
+    },
+    {
+      "i": "box-ord-phylum-filter",
+      "x": 0,
+      "y": 5,
+      "w": 1,
+      "h": 3,
       "static": false
     }
   ],
@@ -324,11 +683,58 @@
       ]
     },
     {
-      "i": "box-ord-embedding",
+      "i": "box-ord-samples",
       "x": 0,
       "y": 1,
+      "w": 2,
+      "h": 3,
+      "static": true
+    },
+    {
+      "i": "box-ord-groups",
+      "x": 2,
+      "y": 1,
+      "w": 2,
+      "h": 3,
+      "static": true
+    },
+    {
+      "i": "box-ord-dim1",
+      "x": 4,
+      "y": 1,
+      "w": 2,
+      "h": 3,
+      "static": true
+    },
+    {
+      "i": "box-ord-dim2",
+      "x": 6,
+      "y": 1,
+      "w": 2,
+      "h": 3,
+      "static": true
+    },
+    {
+      "i": "box-ord-relationships-header",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ord-embedding",
+      "x": 0,
+      "y": 2,
       "w": 4,
-      "h": 6,
+      "h": 7,
       "static": false,
       "resizeHandles": [
         "se",
@@ -341,9 +747,24 @@
     {
       "i": "box-ord-bray-curtis",
       "x": 4,
-      "y": 1,
+      "y": 2,
       "w": 4,
-      "h": 6,
+      "h": 7,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ord-heatmap-header",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
       "static": false,
       "resizeHandles": [
         "se",
@@ -356,9 +777,9 @@
     {
       "i": "box-ord-complex-heatmap",
       "x": 0,
-      "y": 8,
+      "y": 2,
       "w": 8,
-      "h": 8,
+      "h": 9,
       "static": false,
       "resizeHandles": [
         "se",
@@ -369,6 +790,48 @@
       ]
     }
   ],
+  "filter_sections": [
+    {
+      "name": "Ordination filters",
+      "icon": "mdi:filter-variant",
+      "color": "pink",
+      "description": "Sample scope reaches the heatmap columns, Phylum its rows",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Ordination summary",
+      "icon": "mdi:counter",
+      "color": "pink",
+      "description": "What the projection was computed from",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Sample relationships",
+      "icon": "mdi:chart-scatter-plot",
+      "color": "pink",
+      "description": "The projection and the distance matrix behind it",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Clustered abundance",
+      "icon": "mdi:chart-box-outline",
+      "color": "indigo",
+      "description": "Phyla against samples, both axes clustered",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
   "buttons_data": {
     "unified_edit_mode": true,
     "add_components_button": {
@@ -384,7 +847,7 @@
   "icon_color": "green",
   "icon_variant": "filled",
   "workflow_system": "nf-core",
-  "notes_content": "<h2>Ordination &amp; Clustering</h2><p>PCoA on Bray-Curtis distances projects sample-to-sample dissimilarity into 2D. Samples that cluster share community composition; axis percentages (when reported) tell you how much variance each component captures. Three or fewer percent on a primary axis usually means the structure isn't well-separated.</p><p>The two complex-heatmaps below show the same information from different angles: the taxonomy-clustered matrix highlights which taxa drive the sample groupings, while the symmetric Bray-Curtis matrix shows pairwise distances directly (dark = similar).</p>",
+  "notes_content": "",
   "permissions": {
     "owners": [
       {
@@ -404,8 +867,10 @@
     "editors": [],
     "viewers": []
   },
-  "is_public": false,
-  "last_saved_ts": "2026-05-18 00:00:00",
+  "is_public": true,
+  "last_saved_ts": "2026-08-29 00:00:00",
+  "creation_time": "2023-05-22 06:44:12",
+  "screenshot_ts": "",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
   },
@@ -417,5 +882,6 @@
   "main_tab_name": null,
   "tab_icon": "mdi:chart-scatter-plot-hexbin",
   "tab_icon_color": "pink",
-  "parent_dashboard_title": null
+  "parent_dashboard_title": null,
+  "project_realtime": null
 }

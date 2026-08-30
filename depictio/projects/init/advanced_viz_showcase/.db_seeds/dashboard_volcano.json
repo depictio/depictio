@@ -9,10 +9,30 @@
     "$oid": "646b0f3c1e4a2d7f8e5b8d00"
   },
   "version": 1,
-  "tmp_children_data": [],
-  "stored_layout_data": [],
-  "stored_children_data": [],
   "stored_metadata": [
+    {
+      "index": "vol-text",
+      "component_type": "text",
+      "title": "Volcano plot",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Volcano",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Every feature placed by its effect size against its significance, with the two threshold lines drawn rather than assumed. The ones worth reading are far from the centre and high up, and the top-N labels name them. Narrowing on the left removes points rather than greying them out.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
     {
       "index": "vol-volcano",
       "component_type": "advanced_viz",
@@ -28,7 +48,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Synthetic volcano fixture",
+        "description": "Synthetic volcano: 200 features x 2 contrasts; ~15% are designed hits",
         "data_collection_tag": "volcano_demo",
         "dc_specific_properties": null,
         "_id": {
@@ -38,6 +58,10 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Effect size vs significance with builtin thresholds, top-N labels and search. Settings \u2699 at top-right.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Volcano",
       "viz_kind": "volcano",
       "config": {
         "viz_kind": "volcano",
@@ -49,21 +73,228 @@
         "significance_is_neg_log10": false,
         "significance_threshold": 0.05,
         "effect_threshold": 1.0,
-        "top_n_labels": 15
+        "top_n_labels": 15,
+        "show_labels": true
       },
-      "wf_tag": "python/advanced_viz_demo",
-      "description": "Effect size vs significance with builtin thresholds, top-N labels and search. Settings \u2699 at top-right."
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "vol-f-category",
+      "component_type": "interactive",
+      "title": "Category",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "volcano_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d02"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic volcano: 200 features x 2 contrasts; ~15% are designed hits",
+        "data_collection_tag": "volcano_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d02"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Feature scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "category",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Feature filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#E74C3C",
+      "icon_name": "mdi:form-select",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "vol-f-significance",
+      "component_type": "interactive",
+      "title": "Significance",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "volcano_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d02"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic volcano: 200 features x 2 contrasts; ~15% are designed hits",
+        "data_collection_tag": "volcano_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d02"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Feature scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "significance",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Feature filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#F68B33",
+      "icon_name": "mdi:target",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "vol-f-effect",
+      "component_type": "interactive",
+      "title": "Effect size",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "volcano_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d02"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic volcano: 200 features x 2 contrasts; ~15% are designed hits",
+        "data_collection_tag": "volcano_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d02"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Feature scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "effect_size",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Feature filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#1976D2",
+      "icon_name": "mdi:trending-up",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "vol-about",
+      "component_type": "text",
+      "title": "About this showcase",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "About this showcase",
+      "order": 4,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Each tab of this project is one advanced visualisation kind, rendered from a small synthetic fixture rather than a real run. Nothing here is a result. For the same components on real data, look at the nf-core/ampliseq and nf-core/viralrecon reference projects.\n",
+      "wf_tag": "python/advanced_viz_demo"
     }
   ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
   "stored_edit_dashboard_mode_button": [],
-  "left_panel_layout_data": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-vol-f-category",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-vol-f-significance",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-vol-f-effect",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
   "right_panel_layout_data": [
+    {
+      "i": "box-vol-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
     {
       "i": "box-vol-volcano",
       "x": 0,
-      "y": 0,
-      "w": 12,
+      "y": 2,
+      "w": 8,
       "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-vol-about",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
       "static": false,
       "resizeHandles": [
         "se",
@@ -84,7 +315,7 @@
     "count": 0
   },
   "title": "Advanced Visualisations",
-  "subtitle": "Showcase of advanced visualisation kinds (volcano, manhattan, clustering, …) backed by synthetic fixtures",
+  "subtitle": "Showcase of advanced visualisation kinds (volcano, manhattan, clustering, \u2026) backed by synthetic fixtures",
   "icon": "mdi:chart-scatter-plot",
   "icon_color": "red",
   "icon_variant": "filled",
@@ -120,5 +351,38 @@
   "main_tab_name": "Volcano",
   "tab_icon": "mdi:chart-scatter-plot",
   "tab_icon_color": "red",
-  "parent_dashboard_title": null
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Feature scope",
+      "icon": "mdi:filter-variant",
+      "color": "red",
+      "description": "Restricts the point cloud before the thresholds are applied",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Volcano",
+      "icon": "mdi:chart-scatter-plot",
+      "color": "red",
+      "description": "Effect size against significance, with the thresholds drawn in",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "About this showcase",
+      "icon": "mdi:information-outline",
+      "color": "gray",
+      "description": "What this project is, and what it is not",
+      "collapsed": true,
+      "persistent": true,
+      "pin": "bottom"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
 }

@@ -142,9 +142,16 @@ test.describe("Phylogeny zoom / pan / subtree selection", () => {
 
     // Drag = pan: the x-range shifts.
     const fitted = await xRange(page);
+    // Drag from a point that is inside the plot AND inside the viewport. The
+    // plot's own centre is neither as soon as the dashboard puts anything above
+    // it (an intro text tile) or the plot is taller than the window: the mouse
+    // events then land outside the page and the pan silently never happens.
+    await page.locator(PLOT).scrollIntoViewIfNeeded();
     const box = (await page.locator(PLOT).boundingBox())!;
+    const viewport = page.viewportSize()!;
     const cx = box.x + box.width / 2;
-    const cy = box.y + box.height / 2;
+    const cy =
+      (Math.max(box.y, 0) + Math.min(box.y + box.height, viewport.height)) / 2;
     await page.mouse.move(cx, cy);
     await page.mouse.down();
     await page.mouse.move(cx - 120, cy, { steps: 5 });
