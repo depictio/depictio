@@ -57,8 +57,22 @@ export interface DepictioCardProps {
   /** Tooltip shown when hovering the title/value header — carries the
    *  aggregation description when the visible line is dropped. */
   header_tooltip?: React.ReactNode;
+  /** Attached to the single height-auto element the card's content lives in.
+   *
+   *  The card frame itself is `height: 100%`, so it reports the tile it was
+   *  given and never the room its content needs. A caller that wants to size
+   *  the tile to the card (the dashboard grid does) has nothing to measure
+   *  without this. Exposed as a ref rather than found by class name because
+   *  Mantine's class names are generated and are not ours to depend on. */
+  contentRef?: React.Ref<HTMLDivElement>;
   setProps?: (props: Partial<DepictioCardProps>) => void;
 }
+
+/** Shortest the card ever draws itself, whatever it holds. Carried by the
+ *  content wrapper as well as the frame, so what a caller measures off the
+ *  wrapper is the room the card will really take and not just the room its
+ *  content needs. */
+const CARD_MIN_CONTENT_HEIGHT = 120;
 
 const DepictioCard: React.FC<DepictioCardProps> = ({
   title = '',
@@ -76,6 +90,7 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
   filter_applied = false,
   inline_header = false,
   header_tooltip,
+  contentRef,
 }) => {
   const hasCustomBg = !!background_color;
 
@@ -175,7 +190,7 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
       style={{
         boxSizing: 'content-box',
         height: '100%',
-        minHeight: 120,
+        minHeight: CARD_MIN_CONTENT_HEIGHT,
         position: 'relative',
         // Flex column with ``justifyContent: center`` so the content cluster
         // (Card.Section) and the optional ``secondaryStrip`` are vertically
@@ -211,6 +226,35 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
         </Box>
       )}
 
+      {/* The card's content, in one height-auto box.
+          Two jobs. It is what a caller measures: the frame above is
+          ``height: 100%`` and can only report the tile it was handed, while
+          this box is as tall as what it holds and no taller, which is the
+          number a grid needs to size the tile to the card. And because it is
+          height-auto it cannot be told a height by the tile, so measuring it
+          can never feed a resize back into itself.
+          A flex column, matching the formatting context the section and the
+          strip had as direct children of the frame; ``justifyContent: center``
+          and ``minHeight`` keep a short card's content centred in the 120px
+          the frame gives it, exactly where the frame's own centring put it. */}
+      <div
+        ref={contentRef}
+        style={{
+          // ``flex: 0 0 auto`` is what makes this box measurable, not just a
+          // style preference. A flex item shrinks to its container by default,
+          // so content taller than the card would be squeezed back to the
+          // card's height and would report the tile again, and report it short
+          // at that, since a centred overflow spills past the top edge where
+          // ``scrollHeight`` cannot see it.
+          flex: '0 0 auto',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          minHeight: CARD_MIN_CONTENT_HEIGHT,
+          width: '100%',
+          minWidth: 0,
+        }}
+      >
       {/* Content section — flex column, vertically centered, padding xs.
           Matches dmc.CardSection(p='xs', justifyContent='center'). When a
           ``secondaryStrip`` is present, drop the bottom padding so the strip
@@ -306,6 +350,7 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
           {secondaryStrip}
         </Box>
       ) : null}
+      </div>
     </Card>
   );
 };

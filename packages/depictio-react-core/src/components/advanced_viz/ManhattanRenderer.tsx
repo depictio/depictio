@@ -17,6 +17,12 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
+import {
+  advancedVizSelectionColumn,
+  advancedVizSelectionFilter,
+  extractScatterSelection,
+  filtersExcludingOwn,
+} from '../../selection';
 import { adaptGlTrace, useWebglSlot } from '../../webglBudget';
 import AdvancedVizFrame, { TIER_COLORS } from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
@@ -39,6 +45,12 @@ interface ManhattanConfig {
   highlight?: Highlight;
   /** Extra columns to fetch + expose in the Colour-by dropdown. */
   color_by_columns?: string[];
+  /** Opt into lasso/box/click selection as a dashboard filter. Inert without
+   *  `selection_column`; resolved through `advancedVizSelectionColumn`. */
+  selection_enabled?: boolean;
+  /** Column the emitted values belong to. No default: see the field's
+   *  description in depictio/models/components/advanced_viz/configs.py. */
+  selection_column?: string | null;
 }
 
 /** Sentinel values for the Colour-by Select that aren't real DC columns. */
@@ -49,6 +61,10 @@ interface Props {
   metadata: StoredMetadata & { viz_kind?: string; config?: ManhattanConfig };
   filters: InteractiveFilter[];
   refreshTick?: number;
+  /** Emits this component's selection as a dashboard filter. Absent on
+   *  read-only hosts (catalog, project previews), which is what keeps the
+   *  lasso off there. */
+  onFilterChange?: (filter: InteractiveFilter) => void;
 }
 
 const _palette = [
@@ -73,7 +89,7 @@ function chromosomeSortKey(label: string): number {
   return Number.isFinite(n) ? n : 100;
 }
 
-const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
+const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilterChange }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
   const isDark = colorScheme === 'dark';
@@ -118,6 +134,15 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     COLOR_BY_CHROMOSOME,
   );
 
+  // ---- Selection as a cross-filter ---------------------------------------
+  // `undefined` means this component does not select: either the dashboard
+  // did not opt in, or it opted in without naming a column (a Manhattan point
+  // is one row of a long variant table, so there is nothing safe to guess).
+  // The same resolution drives the chrome's capability marker, see
+  // selection.ts. A host with no onFilterChange is read-only.
+  const selectionColumn = onFilterChange ? advancedVizSelectionColumn(metadata) : undefined;
+  const selectionEnabled = Boolean(selectionColumn);
+
   const requiredCols = useMemo(() => {
     const cols = [config.chr_col, config.pos_col, config.score_col].filter(Boolean) as string[];
     if (config.feature_col) cols.push(config.feature_col);
@@ -127,8 +152,20 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     for (const c of config.color_by_columns ?? []) {
       if (!cols.includes(c)) cols.push(c);
     }
+    // The selection column is fetched whether or not it is also a colour-by
+    // option, so a dashboard only has to name it once.
+    if (selectionColumn && !cols.includes(selectionColumn)) cols.push(selectionColumn);
     return cols;
-  }, [config]);
+  }, [config, selectionColumn]);
+
+  // This component must NOT narrow itself by its own selection: a lasso would
+  // otherwise redraw the track as only the variants it caught, and the user
+  // could never widen it again. Same rule FigureRenderer follows; every other
+  // component still sees the entry and narrows.
+  const filtersForFetch = useMemo(
+    () => filtersExcludingOwn(filters, metadata.index, 'scatter_selection'),
+    [filters, metadata.index],
+  );
 
   const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -147,7 +184,7 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
       wfId: metadata.wf_id,
       dcId: metadata.dc_id,
       columns: requiredCols,
-      filters,
+      filters: filtersForFetch,
       vizKind: 'manhattan',
       roles: { chr: config.chr_col, pos: config.pos_col, score: config.score_col },
       // The threshold line the plot already draws is exactly the cut the server
@@ -179,7 +216,7 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     metadata.wf_id,
     metadata.dc_id,
     JSON.stringify(requiredCols),
-    JSON.stringify(filters),
+    JSON.stringify(filtersForFetch),
     refreshTick,
   ]);
 
@@ -553,9 +590,15 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
 
     // Main scatter trace (the visible points). For numeric colour-by we attach
     // a continuous colorscale + colorbar so the gradient reads as a legend.
-    // ``customdata`` carries [chromosome, genomic position]: ``x`` is the
-    // cumulative genome-wide coordinate, which means nothing to a reader, so
-    // the hover quotes the real position from the source column instead.
+    // ``customdata`` carries [selection value, chromosome, genomic position]:
+    // ``x`` is the cumulative genome-wide coordinate, which means nothing to a
+    // reader, so the hover quotes the real position from the source column
+    // instead. Slot 0 is the selection value because that is the slot
+    // ``extractScatterSelection`` reads by convention (the frontend-only
+    // ``selection_column_index`` is 0 everywhere); it stays present, as an
+    // empty string, when the component does not select, so there is one slot
+    // layout and one hover template rather than two of each.
+    const selectionSource = selectionColumn ? (rows[selectionColumn] as unknown[]) ?? [] : [];
     const hasFeatureText = feats.length > 0;
     const mainTrace: Record<string, unknown> = {
       type: 'scattergl' as const,
@@ -563,10 +606,17 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
       x: xs,
       y: rowIdx.map((i) => scores[i]),
       ...(hasFeatureText ? { text: rowIdx.map((i) => String(feats[i] ?? '')) } : {}),
-      customdata: rowIdx.map((i) => [chrs[i], Number(positions[i] ?? 0)]),
+      customdata: rowIdx.map((i) => [
+        // null rather than '' for a row the selection column has no value for:
+        // `extractScatterSelection` skips null, so such a point contributes
+        // nothing instead of adding a blank to the filter.
+        selectionColumn && selectionSource[i] != null ? String(selectionSource[i]) : null,
+        chrs[i],
+        Number(positions[i] ?? 0),
+      ]),
       hovertemplate: hasFeatureText
-        ? `%{customdata[0]}:%{customdata[1]:,d}<br>score: %{y}<br>%{text}<extra></extra>`
-        : `%{customdata[0]}:%{customdata[1]:,d}<br>score: %{y}<extra></extra>`,
+        ? `%{customdata[1]}:%{customdata[2]:,d}<br>score: %{y}<br>%{text}<extra></extra>`
+        : `%{customdata[1]}:%{customdata[2]:,d}<br>score: %{y}<extra></extra>`,
       marker: { color: colors, size: sizes, opacity: 0.85 },
       showlegend: false,
     };
@@ -688,6 +738,10 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
                 title: { text: typeof colorBy === 'string' ? colorBy : '', font: { size: 10 } },
               }
             : undefined,
+          // Drag draws a lasso instead of zooming, so the selection is
+          // reachable without opening the modebar. Zoom stays available from
+          // the modebar, which the track keeps.
+          ...(selectionEnabled ? { dragmode: 'lasso' as const } : {}),
           autosize: true,
         },
       },
@@ -698,6 +752,8 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
   }, [
     rows,
     config,
+    selectionColumn,
+    selectionEnabled,
     scoreThreshold,
     selectedChrs,
     topNLabels,
@@ -866,6 +922,33 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     [tiers, highlight],
   );
 
+  // Lasso / box / click all land on the same `(index, 'scatter_selection')`
+  // entry, so the last gesture replaces the previous one and a deselect
+  // clears it. Two caps bound what a gesture can produce: the data endpoint
+  // serves a reduced, tail-sampled frame (~100k rows), so only the variants
+  // actually drawn can be caught, and a selection wider than
+  // MAX_GROUP_VALUES (25k distinct values) is refused by
+  // `groupFromSelectionFilter` when the user tries to save it as a group. It
+  // still cross-filters at any size.
+  const emitSelection = (values: string[]) => {
+    if (!onFilterChange || !selectionColumn) return;
+    onFilterChange(advancedVizSelectionFilter(metadata, selectionColumn, values));
+  };
+  const handleSelected = (event: any) => {
+    if (!selectionEnabled) return;
+    emitSelection(extractScatterSelection(event, 0));
+  };
+  // A single click is a one-point selection, which is how the scatter figures
+  // and the Dash viewer have always read it.
+  const handleClick = (event: any) => {
+    if (!selectionEnabled) return;
+    emitSelection(extractScatterSelection(event, 0));
+  };
+  const handleDeselect = () => {
+    if (!selectionEnabled) return;
+    emitSelection([]);
+  };
+
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Manhattan'}
@@ -886,6 +969,9 @@ const ManhattanRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
           useResizeHandler
           style={{ width: '100%', height: '100%' }}
           config={{ displaylogo: false, responsive: true } as any}
+          onSelected={selectionEnabled ? handleSelected : undefined}
+          onClick={selectionEnabled ? handleClick : undefined}
+          onDeselect={selectionEnabled ? handleDeselect : undefined}
         />
       ) : null}
     </AdvancedVizFrame>

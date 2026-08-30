@@ -25,6 +25,12 @@ import {
   type ComputeEmbeddingResult,
 } from '../../api';
 import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
+import {
+  advancedVizSelectionColumn,
+  advancedVizSelectionFilter,
+  extractScatterSelection,
+  filtersExcludingOwn,
+} from '../../selection';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyThemeColors } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
@@ -52,12 +58,22 @@ interface EmbeddingConfig {
   tsne_perplexity?: number;
   tsne_n_iter?: number;
   pcoa_distance?: string;
+  /** Opt into lasso/box/click selection as a dashboard filter. Resolved
+   *  through `advancedVizSelectionColumn`, which is what the chrome's
+   *  capability marker reads too. */
+  selection_enabled?: boolean;
+  /** Column the emitted values belong to; null means `sample_id_col`. */
+  selection_column?: string | null;
 }
 
 interface Props {
   metadata: StoredMetadata & { viz_kind?: string; config?: EmbeddingConfig };
   filters: InteractiveFilter[];
   refreshTick?: number;
+  /** Emits this component's selection as a dashboard filter. Absent on
+   *  read-only hosts (catalog, project previews), which is what keeps the
+   *  lasso off there. */
+  onFilterChange?: (filter: InteractiveFilter) => void;
 }
 
 // Past this many distinct values, one trace and one legend entry per value is
@@ -89,7 +105,7 @@ function withAlpha(colour: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
+const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilterChange }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
   const isDark = colorScheme === 'dark';
@@ -180,6 +196,20 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
   const [minDist, setMinDist] = usePersistedVizControl(metadata, 'umap_min_dist', 0.1);
   const [perplexity, setPerplexity] = usePersistedVizControl(metadata, 'tsne_perplexity', 30);
 
+  // ---- Selection as a cross-filter ---------------------------------------
+  // The column resolves to sample_id_col unless the dashboard names another
+  // one; `undefined` means this component does not select at all, which is
+  // also what the chrome's capability marker reads (see selection.ts). A host
+  // with no onFilterChange is read-only, so it advertises nothing.
+  const selectionColumn = onFilterChange ? advancedVizSelectionColumn(metadata) : undefined;
+  const selectionEnabled = Boolean(selectionColumn);
+  // Every point already carries its sample id in customdata slot 0, so that is
+  // the slot to read when selecting on the sample id itself. A different
+  // column rides in a slot of its own after the hover extras, which leaves the
+  // hover template, and the identity it shows from slot 0, exactly as it was.
+  const selectionInOwnSlot = Boolean(selectionColumn) && selectionColumn !== config.sample_id_col;
+  const selectionSlot = selectionInOwnSlot ? 1 + hoverCols.length : 0;
+
   const requiredCols = useMemo(() => {
     const cols = [config.sample_id_col, config.dim_1_col, config.dim_2_col].filter(Boolean) as string[];
     if (config.dim_3_col) cols.push(config.dim_3_col);
@@ -190,8 +220,18 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     // otherwise never be requested and the plot would stay one flat colour.
     if (colorBy && !cols.includes(colorBy)) cols.push(colorBy);
     for (const c of hoverCols) if (c && !cols.includes(c)) cols.push(c);
+    if (selectionColumn && !cols.includes(selectionColumn)) cols.push(selectionColumn);
     return cols;
-  }, [config, hoverCols, colorBy]);
+  }, [config, hoverCols, colorBy, selectionColumn]);
+
+  // This component must NOT narrow itself by its own selection: a lasso would
+  // otherwise redraw the embedding as only the points it caught, and the user
+  // could never widen it again. Same rule FigureRenderer follows; every other
+  // component still sees the entry and narrows.
+  const filtersForFetch = useMemo(
+    () => filtersExcludingOwn(filters, metadata.index, 'scatter_selection'),
+    [filters, metadata.index],
+  );
 
   const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -235,7 +275,7 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
         wfId: metadata.wf_id,
         dcId: metadata.dc_id,
         columns: requiredCols,
-        filters,
+        filters: filtersForFetch,
         vizKind: 'embedding',
       })
         .then((res) => {
@@ -262,13 +302,18 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     // is asked for, so the active Colour-by column has to travel with the job.
     if (colorBy && !extraCols.includes(colorBy)) extraCols.push(colorBy);
     for (const c of hoverCols) if (c && !extraCols.includes(c)) extraCols.push(c);
+    // The worker returns the sample ids on its own, so only a selection column
+    // that is something else has to travel as an extra.
+    if (selectionInOwnSlot && selectionColumn && !extraCols.includes(selectionColumn)) {
+      extraCols.push(selectionColumn);
+    }
     const payload = {
       wf_id: metadata.wf_id,
       dc_id: metadata.dc_id,
       feature_id_col: config.sample_id_col,
       method,
       params: computeParams,
-      filter_metadata: filters,
+      filter_metadata: filtersForFetch,
       extra_cols: extraCols,
     };
 
@@ -344,12 +389,13 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     metadata.wf_id,
     metadata.dc_id,
     JSON.stringify(requiredCols),
-    JSON.stringify(filters),
+    JSON.stringify(filtersForFetch),
     refreshTick,
     method,
     JSON.stringify(computeParams),
     JSON.stringify(hoverCols),
     colorBy,
+    selectionColumn,
     config.sample_id_col,
     config.dim_1_col,
     config.dim_2_col,
@@ -385,10 +431,25 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
       colorValues.length > 0 &&
       typeof colorValues[0] !== 'number';
 
-    // Hover-extras: customdata slot 0 = sample id, slots 1..N = extra cols.
+    // Hover-extras: customdata slot 0 = sample id, slots 1..N = extra cols,
+    // then the selection column when it is not the sample id (see
+    // `selectionSlot`, which is what the Plotly handlers read).
     const extraValues = hoverCols.map((c) => (rows[c] as unknown[]) || []);
+    // Nothing is appended when the column did not come back, which leaves the
+    // slot the handlers read empty and degrades to "this gesture selected
+    // nothing" rather than to a filter on a column of blanks. Missing values
+    // ride as null for the same reason: `extractScatterSelection` skips them.
+    const selectionSource =
+      selectionInOwnSlot && selectionColumn
+        ? (rows[selectionColumn] as unknown[] | undefined)
+        : undefined;
+    const selectionValues = selectionSource && selectionSource.length > 0 ? selectionSource : null;
     const buildCustomdata = (idxList: number[]) =>
-      idxList.map((i) => [String(ids[i] ?? ''), ...extraValues.map((vs) => vs[i] ?? '')]);
+      idxList.map((i) => [
+        String(ids[i] ?? ''),
+        ...extraValues.map((vs) => vs[i] ?? ''),
+        ...(selectionValues ? [selectionValues[i] ?? null] : []),
+      ]);
     const hoverExtraTpl = hoverCols
       .map((c, j) => `<br>${c}: %{customdata[${j + 1}]}`)
       .join('');
@@ -719,6 +780,11 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
               tracegroupgap: 4,
             }
           : undefined,
+        // Drag draws a lasso instead of zooming, so the selection is reachable
+        // without opening the modebar. 2D only: a 3D scene has no lasso, and
+        // Plotly rejects the value on `scene` outright, so 3D keeps its
+        // orbit-on-drag and can only select by clicking single points.
+        ...(selectionEnabled && !actuallyRender3D ? { dragmode: 'lasso' as const } : {}),
         autosize: true,
         plot_bgcolor: 'rgba(0,0,0,0)',
         paper_bgcolor: 'rgba(0,0,0,0)',
@@ -727,6 +793,9 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
   }, [
     rows,
     config,
+    selectionEnabled,
+    selectionColumn,
+    selectionInOwnSlot,
     pointSize,
     colorBy,
     colorUniverse,
@@ -1066,6 +1135,30 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     ],
   );
 
+  // Lasso / box / click all land on the same `(index, 'scatter_selection')`
+  // entry, so the last gesture replaces the previous one and a deselect
+  // clears it. Only the points Plotly actually drew can be caught: the data
+  // endpoint serves a reduced frame (~100k rows), so a lasso over a truncated
+  // cloud selects what is on screen, not the whole collection.
+  const emitSelection = (values: string[]) => {
+    if (!onFilterChange || !selectionColumn) return;
+    onFilterChange(advancedVizSelectionFilter(metadata, selectionColumn, values));
+  };
+  const handleSelected = (event: any) => {
+    if (!selectionEnabled) return;
+    emitSelection(extractScatterSelection(event, selectionSlot));
+  };
+  // A single click is a one-point selection, which is how the scatter figures
+  // and the Dash viewer have always read it.
+  const handleClick = (event: any) => {
+    if (!selectionEnabled) return;
+    emitSelection(extractScatterSelection(event, selectionSlot));
+  };
+  const handleDeselect = () => {
+    if (!selectionEnabled) return;
+    emitSelection([]);
+  };
+
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Embedding'}
@@ -1084,6 +1177,9 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
           useResizeHandler
           style={{ width: '100%', height: '100%' }}
           config={{ displaylogo: false, responsive: true } as any}
+          onSelected={selectionEnabled ? handleSelected : undefined}
+          onClick={selectionEnabled ? handleClick : undefined}
+          onDeselect={selectionEnabled ? handleDeselect : undefined}
         />
       ) : null}
     </AdvancedVizFrame>

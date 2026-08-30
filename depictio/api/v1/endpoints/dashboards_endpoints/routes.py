@@ -3406,6 +3406,13 @@ def render_map_endpoint(
                 "filter_applied": bool(ctx.filter_metadata),
                 "displayed_count": data_info.get("displayed_count"),
                 "total_count": data_info.get("total_count"),
+                # Bounding box of what was plotted. The zoom baked into the
+                # figure was fitted to a guessed viewport, so a host whose real
+                # box is a different shape (the docked side panel, which is
+                # both narrower and much shorter) re-runs the fit itself. None
+                # when the viewport was authored rather than derived, which is
+                # the viewer's signal to leave it alone.
+                "fit": data_info.get("fit"),
             },
         }
     except HTTPException:

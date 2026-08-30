@@ -114,6 +114,38 @@ const GRID_MARGIN_Y = 4;
 // raises above itself.
 const CARD_TOOLTIP_HEADROOM = 240;
 
+// Preview box overrides, in grid units, for the renders that cannot be judged
+// at tile size.
+//
+// The default is the dashboard tile itself, which is the right answer for the
+// types whose tile IS the component: a card or an interactive control reads
+// exactly the same in the picker as it will on the grid, so showing it larger
+// would misrepresent it. Content-heavy renders are the opposite case. A figure,
+// a map, an image or a MultiQC panel defaults to a half-width 4-column tile,
+// and a table to five rows, so the picker was asking the user to choose between
+// outputs on a thumbnail of a thumbnail. These get the full panel width and
+// enough rows to actually read axes, labels and a few rows of data.
+//
+// Deliberately not listed, and therefore unchanged: `card` and `interactive`
+// (already true to size, and a card additionally needs CARD_TOOLTIP_HEADROOM
+// rather than a bigger tile) and `text`, which is full width already.
+// Floor for the clamp below, so a short window shrinks the frame rather than
+// collapsing it to nothing.
+const PREVIEW_MIN_HEIGHT = 240;
+
+// Padding of the scroll viewport, subtracted from its client height so the
+// clamp measures the room the frame can occupy rather than the box around it.
+const PREVIEW_PADDING = 16;
+
+const PREVIEW_BOX: Record<string, { w: number; h: number }> = {
+  table: { w: 8, h: 8 },
+  figure: { w: 8, h: 7 },
+  multiqc: { w: 8, h: 7 },
+  map: { w: 8, h: 6 },
+  image: { w: 8, h: 6 },
+  advanced_viz: { w: 8, h: 9 },
+};
+
 // ---------------------------------------------------------------------------
 // Details popover pieces
 // ---------------------------------------------------------------------------
@@ -221,9 +253,34 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
   // not carry over.
   useEffect(() => setPreviewOverrides(null), [selectedIdx]);
 
+  // How much room the panel actually has for the frame.
+  //
+  // The box sizes above are what each render *wants*: the tile it will get on
+  // the dashboard, enlarged for the types that cannot be judged at tile size.
+  // What it may have is whatever is left of the window under the header, the
+  // tab strip and the details block, which varies with the window and with how
+  // many render tabs a tool declares. Asking for a height without measuring
+  // that is how the frame ends up taller than the panel showing it.
+  // A callback ref rather than useRef: a local `useRef` further down this
+  // function (the `use:` reference string) shadows the React hook for the whole
+  // scope, so the hook is not reachable by that name here.
+  const [viewportEl, setViewportEl] = useState<HTMLDivElement | null>(null);
+  const [availableHeight, setAvailableHeight] = useState(0);
+  useEffect(() => {
+    const node = viewportEl;
+    if (!node) return;
+    // clientHeight is the padding box, and the frame sits inside the padding.
+    const measure = () => setAvailableHeight(node.clientHeight - PREVIEW_PADDING * 2);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [viewportEl]);
+
   const current = renders[selectedIdx] ?? renders[0];
   const renderId = `${match.output_id}-${selectedIdx}`;
-  const box = defaultLayoutForType(current?.component ?? '', 'right', 0);
+  const tileBox = defaultLayoutForType(current?.component ?? '', 'right', 0);
+  const box = { ...tileBox, ...(PREVIEW_BOX[current?.component ?? ''] ?? {}) };
   const tileHeight = box.h * GRID_ROW_HEIGHT + (box.h - 1) * GRID_MARGIN_Y;
   // A card paints its own surface (DepictioCard is a Paper with its own radius,
   // border and background), so the frame's chrome would only double it — and
@@ -240,6 +297,15 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
     `${PREVIEW_BASE}/${encodeURIComponent(match.output_id)}/preview-html` +
     `?render_id=${encodeURIComponent(renderId)}` +
     `#render_id=${encodeURIComponent(renderId)}${isCard ? `&tile_h=${tileHeight}` : ''}`;
+
+  // Never taller than the panel that has to show it: the overrides ask for as
+  // much room as a render can use, and this is what stops that from becoming a
+  // frame whose top and bottom cannot be on screen at the same time.
+  const wantedHeight = tileHeight + (isCard ? CARD_TOOLTIP_HEADROOM : 0);
+  const previewHeight =
+    availableHeight > 0
+      ? Math.max(PREVIEW_MIN_HEIGHT, Math.min(wantedHeight, availableHeight))
+      : wantedHeight;
 
   const previewLoading = loadedUrl !== previewUrl;
 
@@ -511,11 +577,12 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
         * Width is CSS rather than a measured container: one column is
         * `(100% - 12*(8-1)) / 8`, and `w` of them plus the margins between. */}
       <Box
+        ref={setViewportEl}
         style={{
           flex: 1,
           minHeight: 0,
           overflow: 'auto',
-          padding: 16,
+          padding: PREVIEW_PADDING,
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'flex-start',
@@ -526,7 +593,7 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
           style={{
             position: 'relative',
             width: `calc(((100% - ${GRID_MARGIN_X * (GRID_COLS - 1)}px) / ${GRID_COLS}) * ${box.w} + ${(box.w - 1) * GRID_MARGIN_X}px)`,
-            height: tileHeight + (isCard ? CARD_TOOLTIP_HEADROOM : 0),
+            height: previewHeight,
             flexShrink: 0,
             overflow: 'hidden',
             ...(isCard

@@ -1294,18 +1294,20 @@ def compute_complex_heatmap(payload: dict) -> dict:
 
     hm = ComplexHeatmap.from_dataframe(pdf, **hm_kwargs)
     fig = hm.to_plotly()
-    # Margin tweaks for the React viewer:
-    #   - b=110: x-tick labels rotated 45° don't get clipped (~14 char @10pt)
-    #   - r=200: row-annotation legend + col-annotation legend + colorbar all
-    #     stack on the right when the figure is rendered standalone. The lib
-    #     defaults to ~30px which works when its own baked-in width=900 is
-    #     used, but we strip width/height in the renderer to fit the chrome
-    #     panel — meaning the legend cluster gets clipped at 30px.
+    # Margin tweak for the React viewer: b=110 so the x-tick labels, which the
+    # library sizes from a 6px-per-char approximation, aren't clipped when a
+    # rotated sample id runs longer than that estimate (~14 chars @10pt).
+    #
+    # The right margin is left exactly as the library computed it. It sizes that
+    # side from the widest row label plus the widest of the legend / colorbar,
+    # and it now anchors both of those to the figure's right edge, so the reserved
+    # band holds regardless of the tile width we render into. Forcing a floor here
+    # would only pad the figure with empty space.
     try:
         existing_margin = fig.layout.margin
         new_margin = dict(
             l=getattr(existing_margin, "l", None) or 60,
-            r=max(getattr(existing_margin, "r", 30) or 30, 200),
+            r=getattr(existing_margin, "r", None) or 200,
             t=getattr(existing_margin, "t", None) or 60,
             b=max(getattr(existing_margin, "b", 50) or 50, 110),
         )

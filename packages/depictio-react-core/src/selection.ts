@@ -79,6 +79,79 @@ export function isMapSelectionEnabled(metadata: StoredMetadata, hasHandler: bool
 }
 
 /**
+ * The DC column an advanced_viz component emits its selection on, or
+ * `undefined` when it cannot emit one at all.
+ *
+ * Only two viz kinds draw one marker per source row and therefore have a
+ * per-row identity to select on; every other kind aggregates (bins, taxa,
+ * intersections) and would emit an envelope pointing at nothing. Both are
+ * opt-in per component, so a shipped dashboard keeps the drag behaviour it has
+ * today until its YAML asks for the lasso.
+ *
+ * Embedding falls back to `sample_id_col` because that is already the value it
+ * writes into every point's customdata. Manhattan has no defensible fallback:
+ * one point there is a row of a long variant table keyed by (sample,
+ * chromosome, position), so selecting on the sample column and selecting on a
+ * per-variant label are two different questions and only the dashboard knows
+ * which one it is asking.
+ *
+ * This is the single source of truth for the capability: the two renderers
+ * gate their Plotly handlers on it and `supportsSelectionGrouping` gates the
+ * chrome's marker on it, so the affordance and the behaviour cannot disagree.
+ */
+export function advancedVizSelectionColumn(metadata: StoredMetadata): string | undefined {
+  const config = (metadata.config ?? {}) as Record<string, unknown>;
+  if (config.selection_enabled !== true) return undefined;
+  const named =
+    typeof config.selection_column === 'string' && config.selection_column
+      ? config.selection_column
+      : undefined;
+  switch (typeof metadata.viz_kind === 'string' ? metadata.viz_kind : '') {
+    case 'embedding': {
+      const sampleIdCol =
+        typeof config.sample_id_col === 'string' && config.sample_id_col
+          ? config.sample_id_col
+          : undefined;
+      return named ?? sampleIdCol;
+    }
+    case 'manhattan':
+      return named;
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * The filter entry an advanced_viz renderer emits for a set of selected
+ * values, in the same `scatter_selection` shape FigureRenderer produces.
+ *
+ * Deliberately not a source of its own (the phylogeny's `tree_selection` is,
+ * and that is exactly why its selections cross-filter but can never become an
+ * analysis group: `SELECTION_SOURCES` in selectionGroups.ts does not list it).
+ * Reusing `scatter_selection` means these renderers reach the Analysis panel
+ * through the path scatter figures already use. Passing `[]` clears.
+ */
+export function advancedVizSelectionFilter(
+  metadata: StoredMetadata,
+  selectionColumn: string,
+  values: string[],
+): InteractiveFilter {
+  return {
+    index: metadata.index,
+    value: values,
+    source: 'scatter_selection',
+    column_name: selectionColumn,
+    interactive_component_type: 'MultiSelect',
+    metadata: {
+      dc_id: metadata.dc_id,
+      column_name: selectionColumn,
+      interactive_component_type: 'MultiSelect',
+      selection_column: selectionColumn,
+    },
+  };
+}
+
+/**
  * The filter list a selection-source component should render against: every
  * dashboard filter *except* the one it emitted itself.
  *
@@ -245,6 +318,8 @@ export function enrichFilterWithDcId(
  * - `table`  — row selection is opt-in per component.
  * - `map`    — see `isMapSelectionEnabled` (choropleth is excluded).
  * - `image`  — a gallery selects thumbnails, which requires an image column.
+ * - `advanced_viz`: see `advancedVizSelectionColumn`, i.e. the embedding and
+ *   Manhattan scatters, each opt-in and each needing a resolvable column.
  *
  * `hasHandler` folds in the caller's "is anyone listening" check, so read-only
  * hosts (catalog, project previews) advertise nothing.
@@ -266,6 +341,8 @@ export function supportsSelectionGrouping(
       return isMapSelectionEnabled(metadata, true);
     case 'image':
       return Boolean(metadata.image_column);
+    case 'advanced_viz':
+      return advancedVizSelectionColumn(metadata) !== undefined;
     default:
       return false;
   }

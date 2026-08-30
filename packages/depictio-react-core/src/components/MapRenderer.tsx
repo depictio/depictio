@@ -91,6 +91,7 @@ const MapRenderer: React.FC<MapRendererProps> = ({
 }) => {
   const plotRef = useRef<HTMLDivElement | null>(null);
   const [figure, setFigure] = useState<{ data?: unknown[]; layout?: Record<string, unknown> } | null>(null);
+  const [fitSpec, setFitSpec] = useState<MapFitSpec | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { colorScheme } = useMantineColorScheme();
@@ -136,6 +137,7 @@ const MapRenderer: React.FC<MapRendererProps> = ({
         // flight; Plotly diffs props so swapping data/layout in place
         // avoids the full tile-layer teardown the old loader pattern caused.
         setFigure(res.figure);
+        setFitSpec(parseMapFit(res.metadata));
       })
       .catch((err) => {
         if (cancelled) return;
@@ -194,6 +196,82 @@ const MapRenderer: React.FC<MapRendererProps> = ({
 
   const bare = Boolean(presentation?.bare);
   const showLegend = presentation?.showLegend ?? true;
+
+  // ---------------------------------------------------------------------
+  // Re-fitting the viewport to the box we actually got.
+  //
+  // `render_map` frames the data against a guessed 600x400 viewport, because
+  // the server has no idea who is rendering. A grid tile is close enough to
+  // that; the docked panel is neither as wide nor anywhere near as tall, so
+  // the server's zoom comes back about a level too tight and the outer points
+  // fall off the edges. So the server also ships the bounding box it fitted
+  // (`metadata.fit`) and we redo the same arithmetic against the measured
+  // container. It is the box and not the figure's own traces because a
+  // choropleth's geometry is server-side GeoJSON that never reaches us.
+  const [boxSize, setBoxSize] = useState<{ width: number; height: number } | null>(null);
+  const [appliedFit, setAppliedFit] = useState<AppliedFit | null>(null);
+  // True once the viewer has panned or zoomed by hand, which is what stops a
+  // resize or a filter change from dragging the map back out from under them.
+  // Deliberately never cleared while the plot stays mounted: that is already
+  // how the rest of the viewport behaves, because Plotly stores a direct GUI
+  // edit and `map.uirevision` holds it against every later figure.
+  const userMovedRef = useRef(false);
+  const appliedFitRef = useRef<AppliedFit | null>(null);
+  const fitRevRef = useRef(0);
+
+  useEffect(() => {
+    const el = plotRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect;
+      if (!rect) return;
+      // Rounded, and only stored when it actually changed: a sub-pixel
+      // reflow must not turn into a state update, let alone one that resizes
+      // the plot again.
+      const width = Math.round(rect.width);
+      const height = Math.round(rect.height);
+      if (width < 1 || height < 1) return;
+      setBoxSize((prev) =>
+        prev && prev.width === width && prev.height === height ? prev : { width, height },
+      );
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+    // The observed div only exists once there is a figure to draw, so the
+    // observer has to be (re)attached when that flips.
+  }, [isInitialLoad]);
+
+  useEffect(() => {
+    if (userMovedRef.current || !fitSpec || !boxSize) return;
+    // Plotly's margins come off the container before the map subplot gets what
+    // is left, so the fit has to be against the drawing area rather than the
+    // div. On a titled grid tile that is a 30px strip, which on a short panel
+    // would be a real slice of the height.
+    const margin = (figure?.layout?.margin as Record<string, unknown>) || {};
+    const width = boxSize.width - numberOr(margin.l, 0) - numberOr(margin.r, 0);
+    const height =
+      boxSize.height - (bare ? 0 : numberOr(margin.t, 30)) - numberOr(margin.b, 0);
+    if (width < 1 || height < 1) return;
+    const next = computeMapFit(fitSpec, width, height);
+    // The last fit is mirrored in a ref rather than read out of state, so the
+    // comparison happens once here instead of inside a state updater React is
+    // free to call more than once.
+    if (appliedFitRef.current && sameFit(appliedFitRef.current, next)) return;
+    fitRevRef.current += 1;
+    const applied: AppliedFit = { ...next, revision: `fit-${fitRevRef.current}` };
+    appliedFitRef.current = applied;
+    setAppliedFit(applied);
+  }, [fitSpec, boxSize, figure, bare]);
+
+  /** Plotly reports every user pan / zoom / rotate through relayout, keyed
+   *  under the map subplot. Our own re-fits go through props and reach the map
+   *  as a `Plotly.react`, which emits `plotly_react` and never this, so
+   *  anything arriving here is the viewer's own doing. */
+  const handleRelayout = useCallback((event: unknown) => {
+    if (!event || typeof event !== 'object') return;
+    const moved = Object.keys(event).some((key) => /^map(box)?[._]/.test(key));
+    if (moved) userMovedRef.current = true;
+  }, []);
 
   // Does this figure have anything to legend? Plotly only draws a legend for
   // more than one named trace, and a colour bar only for a colour axis — read
@@ -496,18 +574,29 @@ const MapRenderer: React.FC<MapRendererProps> = ({
       };
     }
 
-    // Basemap swap. `render_map` builds with the MapLibre constructors
-    // (px.scatter_map / density_map / choropleth_map), so the style lives at
-    // `layout.map.style`; the legacy `layout.mapbox` key is only honoured for
-    // figures that already carry one. Spread over the server's own subplot
-    // object so `center`, `zoom` and its `uirevision` survive, which is what
-    // keeps the viewer's pan and zoom across a style change.
-    if (styleOverride) {
-      const key = figure?.layout?.mapbox ? 'mapbox' : 'map';
-      base[key] = {
-        ...((base[key] as Record<string, unknown>) || {}),
-        style: styleOverride,
-      };
+    // Everything that lives on the map subplot itself. `render_map` builds
+    // with the MapLibre constructors (px.scatter_map / density_map /
+    // choropleth_map), so the style lives at `layout.map.style`; the legacy
+    // `layout.mapbox` key is only honoured for figures that already carry one.
+    // Spread over the server's own subplot object so whatever we do not touch
+    // — `center`, `zoom`, its `uirevision` — survives, which is what keeps the
+    // viewer's pan and zoom across a style change.
+    const subplotKey = figure?.layout?.mapbox ? 'mapbox' : 'map';
+    const subplot: Record<string, unknown> = {};
+    if (styleOverride) subplot.style = styleOverride;
+    if (appliedFit) {
+      subplot.center = appliedFit.center;
+      subplot.zoom = appliedFit.zoom;
+      // The subplot carries its OWN `uirevision` (the server pins it to
+      // "preserve") and does not inherit the one above, so without moving it
+      // Plotly would treat the fit as a value to reconcile against a stashed
+      // GUI edit and drop it on an already-mounted map. It changes only when
+      // the fit itself does, so a refetch that lands on the same framing still
+      // leaves the viewer's own pan and zoom alone.
+      subplot.uirevision = appliedFit.revision;
+    }
+    if (Object.keys(subplot).length > 0) {
+      base[subplotKey] = { ...((base[subplotKey] as Record<string, unknown>) || {}), ...subplot };
     }
     return base;
   }, [
@@ -520,6 +609,7 @@ const MapRenderer: React.FC<MapRendererProps> = ({
     showLegend,
     overlayPlate,
     styleOverride,
+    appliedFit,
   ]);
 
   // Repaint the selection: dim every point the active filter excludes. Plotly
@@ -609,6 +699,7 @@ const MapRenderer: React.FC<MapRendererProps> = ({
             }}
             style={{ width: '100%', height: '100%' }}
             useResizeHandler
+            onRelayout={handleRelayout}
             onSelected={selectionEnabled ? handlePointSelection : undefined}
             onClick={selectionEnabled ? handlePointSelection : undefined}
             onDeselect={selectionEnabled ? handleDeselect : undefined}
@@ -651,6 +742,118 @@ const DEFAULT_DENSITY_RADIUS = 30;
 /** Narrow an untyped figure / metadata field to a finite number. */
 function numberOr<T>(value: unknown, fallback: T): number | T {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+/** MapLibre's world is one 512px tile at zoom 0. */
+const WORLD_TILE_PX = 512;
+
+/**
+ * What the server framed, as forwarded in `metadata.fit`: the bounding box of
+ * everything it plotted plus the constants it fitted with. The constants ride
+ * along on purpose, so the two ends of this cannot drift apart when one of
+ * them is tuned — see `_fit_payload` in
+ * depictio/api/v1/services/map/render.py.
+ */
+interface MapFitSpec {
+  minLat: number;
+  maxLat: number;
+  minLon: number;
+  maxLon: number;
+  padding: number;
+  maxZoom: number;
+  singlePointZoom: number;
+}
+
+/** A fit we have handed Plotly, and the revision that made it stick. */
+interface AppliedFit {
+  center: { lat: number; lon: number };
+  zoom: number;
+  revision: string;
+}
+
+function parseMapFit(metadata: unknown): MapFitSpec | null {
+  const fit = (metadata as { fit?: unknown } | undefined)?.fit;
+  if (!fit || typeof fit !== 'object') return null;
+  const raw = fit as Record<string, unknown>;
+  const num = (key: string): number | null => {
+    const value = raw[key];
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  };
+  const minLat = num('min_lat');
+  const maxLat = num('max_lat');
+  const minLon = num('min_lon');
+  const maxLon = num('max_lon');
+  if (minLat == null || maxLat == null || minLon == null || maxLon == null) return null;
+  return {
+    minLat,
+    maxLat,
+    minLon,
+    maxLon,
+    padding: num('padding') ?? 0.5,
+    maxZoom: num('max_zoom') ?? 12,
+    singlePointZoom: num('single_point_zoom') ?? 9,
+  };
+}
+
+/** Web-Mercator ordinate of a latitude, halved and clamped to the projection's
+ *  usable range. Same function as `_lat_rad` server-side and `latRad` in
+ *  CoordinatesMapPreview. */
+function mercatorY(lat: number): number {
+  const sin = Math.sin((lat * Math.PI) / 180);
+  const y = Math.log((1 + sin) / (1 - sin)) / 2;
+  return Math.max(Math.min(y, Math.PI), -Math.PI) / 2;
+}
+
+/** Inverse of `mercatorY`. */
+function latFromMercatorY(y: number): number {
+  return (Math.asin(Math.tanh(y * 2)) * 180) / Math.PI;
+}
+
+/**
+ * Center and zoom that frame `spec` inside a `widthPx` x `heightPx` drawing
+ * area. The same fit the server does, run again against the box we measured
+ * rather than the 600x400 it has to assume.
+ *
+ * The center is the middle of the *projected* latitude span: Mercator stretches
+ * towards the poles, so the mean of two latitudes is not the latitude halfway
+ * down the viewport, and the gap grows as the box gets shorter.
+ *
+ * The zoom keeps its fraction where the server floors it. Flooring is the
+ * server hedging against a viewport it guessed at; with a measured one there
+ * is nothing to hedge, and a floor here would throw away most of a level.
+ */
+function computeMapFit(
+  spec: MapFitSpec,
+  widthPx: number,
+  heightPx: number,
+): { center: { lat: number; lon: number }; zoom: number } {
+  const center = {
+    lat: latFromMercatorY((mercatorY(spec.minLat) + mercatorY(spec.maxLat)) / 2),
+    lon: (spec.minLon + spec.maxLon) / 2,
+  };
+  if (spec.minLat === spec.maxLat && spec.minLon === spec.maxLon) {
+    return { center, zoom: spec.singlePointZoom };
+  }
+  const latFraction = (mercatorY(spec.maxLat) - mercatorY(spec.minLat)) / Math.PI;
+  let lonDiff = spec.maxLon - spec.minLon;
+  if (lonDiff < 0) lonDiff += 360;
+  const lonFraction = lonDiff / 360;
+  const latZoom = Math.log2(heightPx / WORLD_TILE_PX / (latFraction || Number.EPSILON));
+  const lonZoom = Math.log2(widthPx / WORLD_TILE_PX / (lonFraction || Number.EPSILON));
+  let zoom = Math.min(latZoom, lonZoom) - spec.padding;
+  if (!Number.isFinite(zoom)) zoom = spec.singlePointZoom;
+  return { center, zoom: Math.max(1, Math.min(zoom, spec.maxZoom)) };
+}
+
+/** Whether a recomputed fit is close enough to the applied one to leave alone.
+ *  Below these thresholds the map would not move a pixel, and re-applying
+ *  would cost a `uirevision` bump for nothing. */
+function sameFit(a: AppliedFit, b: { center: { lat: number; lon: number }; zoom: number }): boolean {
+  return (
+    Math.abs(a.zoom - b.zoom) < 0.01 &&
+    Math.abs(a.center.lat - b.center.lat) < 1e-6 &&
+    Math.abs(a.center.lon - b.center.lon) < 1e-6
+  );
 }
 
 /**

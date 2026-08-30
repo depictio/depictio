@@ -34,8 +34,12 @@ interface AdvancedVizDispatchProps {
   metadata: StoredMetadata;
   filters: InteractiveFilter[];
   refreshTick?: number;
-  /** Selection-as-filter callback, forwarded to renderers that emit one
-   *  (currently the phylogeny's subtree filter). Other renderers ignore it. */
+  /** Selection-as-filter callback, forwarded to renderers that emit one: the
+   *  phylogeny's subtree filter, and the embedding / Manhattan scatters when
+   *  their config opts into selection (see `advancedVizSelectionColumn`).
+   *  Other renderers ignore it. Its absence is also the signal that the host
+   *  is read-only, which is what keeps the lasso out of the catalog and the
+   *  project previews. */
   onFilterChange?: (filter: InteractiveFilter) => void;
   extraActions?: React.ReactNode;
   showDragHandle?: boolean;
