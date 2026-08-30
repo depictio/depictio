@@ -43,13 +43,11 @@ components:
     alignment: left
     vertical_alignment: top
     section: 'Enrichment'
-    body: |
-      One point per enriched term, placed by normalised enrichment score, sized by how
-      many genes the set contains and coloured by adjusted p-value. A large point far
-      from zero is a big set moving coherently, which is a stronger claim than a small
-      set with the same score. Filter by ontology source on the left to compare like
-      with like.
-    layout: { x: 0, y: 0, w: 8, h: 2 }
+    body: >
+      One point per enriched term, placed by normalised enrichment score, sized by how many
+      genes the set contains and coloured by adjusted p-value. A large point far from zero
+      is a big set moving coherently, a stronger claim than a small set with the same score.
+    layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: viz-enrichment
     index: 'gsea-dotplot'

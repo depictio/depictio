@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Every gene DESeq2 tested, placed by effect size against adjusted significance,\nwith both thresholds drawn in. This is a real nf-core/differentialabundance run,\nso the cloud has the shape real data has: most genes sit near the origin and the\ninteresting ones are the handful far from it. Raising the significance floor or\nthe mean-expression floor on the left drops the low-information tail.\n",
+      "body": "Every gene DESeq2 tested, placed by effect size against adjusted significance, with both thresholds drawn in. This is a real nf-core/differentialabundance run, so the cloud has the shape real data has: most genes sit near the origin and the interesting ones are the handful far from it.\n",
       "wf_tag": "nf-core/nfcore_megatests"
     },
     {
@@ -224,7 +224,7 @@
       "order": 4,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "This project binds depictio's advanced visualisations to real nf-core pipeline\noutputs pulled from the public AWS megatests bucket: differentialabundance,\nrnaseq, viralrecon, ampliseq and taxprofiler. Unlike the Advanced Visualisations\nshowcase, which uses synthetic fixtures sized to make each component legible,\neverything here is a genuine result with the gaps and skew real runs have. The\nfixtures are not in the repository and this project is not seeded on a fresh\ndeployment; see the README next to project.yaml for how to build and upload it.\n",
+      "body": "This project binds depictio's advanced visualisations to real nf-core outputs: differentialabundance, rnaseq, viralrecon, ampliseq and taxprofiler. The fixtures are not in the repository and this project is not seeded on a fresh deployment; see the README next to project.yaml.\n",
       "wf_tag": "nf-core/nfcore_megatests"
     }
   ],
@@ -264,7 +264,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 2,
+      "h": 1,
       "static": false,
       "resizeHandles": [
         "se",
@@ -294,7 +294,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 2,
+      "h": 1,
       "static": false,
       "resizeHandles": [
         "se",

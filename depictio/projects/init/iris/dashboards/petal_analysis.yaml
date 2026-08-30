@@ -63,8 +63,8 @@ components:
     title: "Petal Geometry as a Species Signal"
     order: 2
     alignment: left
-    body: "Petal length × width is the cleanest variety separator in Fisher's dataset. These four cards summarise the two petal columns and put sepal length beside them for contrast — the sepal spread overlaps across all three varieties where the petal spread does not. Note the `Raw Data` section at the bottom of this tab: it is declared on the Overview and follows you here, cards included."
-    layout: { x: 0, y: 0, w: 8, h: 2 }
+    body: "Petal length × width is the cleanest variety separator in Fisher's dataset. These four cards summarise the two petal columns and put sepal length beside them for contrast: the sepal spread overlaps across all three varieties where the petal spread does not."
+    layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: text-variety-separation
     component_type: text
@@ -72,8 +72,8 @@ components:
     title: "How much one threshold buys"
     order: 2
     alignment: left
-    body: "The cards ask what a single petal-length cut-off actually classifies, and the figures show what it costs. A cut at 4 cm keeps every *Virginica* and one *Versicolor*; pushing it higher trades recall for purity. The box plots below are where that trade is visible — the *Versicolor* and *Virginica* boxes overlap on length far more than on width."
-    layout: { x: 0, y: 0, w: 8, h: 2 }
+    body: "The cards ask what a single petal-length cut-off actually classifies, and the figures show what it costs. A cut at 4 cm keeps every *Virginica* and one *Versicolor*; pushing it higher trades recall for purity."
+    layout: { x: 0, y: 0, w: 8, h: 1 }
 
   # ── Petal geometry cards — one row of four, w=2 each ───────────────
   - tag: card-petal-length

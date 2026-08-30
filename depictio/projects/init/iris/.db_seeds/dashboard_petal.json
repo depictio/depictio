@@ -89,7 +89,7 @@
       "order": 2,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "Petal length \u00d7 width is the cleanest variety separator in Fisher's dataset. These four cards summarise the two petal columns and put sepal length beside them for contrast \u2014 the sepal spread overlaps across all three varieties where the petal spread does not. Note the `Raw Data` section at the bottom of this tab: it is declared on the Overview and follows you here, cards included.",
+      "body": "Petal length \u00d7 width is the cleanest variety separator in Fisher's dataset. These four cards summarise the two petal columns and put sepal length beside them for contrast: the sepal spread overlaps across all three varieties where the petal spread does not.",
       "wf_tag": "python/iris_workflow"
     },
     {
@@ -112,7 +112,7 @@
       "order": 2,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "The cards ask what a single petal-length cut-off actually classifies, and the figures show what it costs. A cut at 4 cm keeps every *Virginica* and one *Versicolor*; pushing it higher trades recall for purity. The box plots below are where that trade is visible \u2014 the *Versicolor* and *Virginica* boxes overlap on length far more than on width.",
+      "body": "The cards ask what a single petal-length cut-off actually classifies, and the figures show what it costs. A cut at 4 cm keeps every *Virginica* and one *Versicolor*; pushing it higher trades recall for purity.",
       "wf_tag": "python/iris_workflow"
     },
     {
@@ -963,7 +963,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 2,
+      "h": 1,
       "static": false,
       "resizeHandles": [
         "se",
@@ -978,7 +978,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 2,
+      "h": 1,
       "static": false,
       "resizeHandles": [
         "se",

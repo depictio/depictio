@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Effect size against average intensity, the diagnostic companion to the volcano: a\nfold change that only appears at low intensity is usually noise, and it shows up\nhere as a funnel opening to the left. The same feature set as the volcano tab,\nread against a different x axis.\n",
+      "body": "Effect size against average intensity, the diagnostic companion to the volcano: a fold change that only appears at low intensity is usually noise, and it shows up here as a funnel opening to the left. The same feature set as the volcano tab, read against a different x axis.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {

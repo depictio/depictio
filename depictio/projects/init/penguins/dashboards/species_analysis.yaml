@@ -101,8 +101,8 @@ components:
     title: "Palmer Penguins — Species & Island Morphology"
     order: 2
     alignment: left
-    body: "Physical measurements joined to demographics for 342 birds — 151 *Adelie*, 68 *Chinstrap*, 123 *Gentoo* — across Biscoe, Dream and Torgersen. The cards below count the cohort and say what the records are missing: sex is blank for 9 birds, which is the only gap in the table. The **Cohort** filters on the left are marked persistent, so whatever you pick here follows you to the Island & Season tab."
-    layout: { x: 0, y: 0, w: 8, h: 3 }
+    body: "Physical measurements joined to demographics for 342 birds, 151 *Adelie*, 68 *Chinstrap*, 123 *Gentoo*, across Biscoe, Dream and Torgersen. The **Cohort** filters on the left are persistent, so whatever you pick here follows you to the Island & Season tab."
+    layout: { x: 0, y: 0, w: 8, h: 1 }
 
   # ── Cohort cards — one row of four, w=2 each ───────────────────────
   # Four different secondary layouts, each answering a question the others
@@ -198,8 +198,8 @@ components:
     title: "Where the species separate"
     order: 2
     alignment: left
-    body: "Flipper length and body mass separate *Gentoo* cleanly from the other two; *Adelie* and *Chinstrap* overlap on both and only pull apart on bill length. The scatter carries species as colour and island as symbol, so the confound is visible rather than assumed: every *Gentoo* is from Biscoe and every *Chinstrap* from Dream, which means an island effect and a species effect look identical here."
-    layout: { x: 0, y: 0, w: 8, h: 2 }
+    body: "Flipper length and body mass separate *Gentoo* cleanly; *Adelie* and *Chinstrap* overlap on both and only pull apart on bill length. The scatter carries species as colour and island as symbol, so the confound is visible: every *Gentoo* is from Biscoe, every *Chinstrap* from Dream."
+    layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: card-body-mass
     component_type: card

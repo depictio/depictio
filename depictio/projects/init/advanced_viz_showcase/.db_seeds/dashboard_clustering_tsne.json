@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Like UMAP, a neighbourhood-preserving projection, but one that pushes clusters\nfurther apart and preserves even less global structure. Cluster sizes and inter-\ncluster distances are not interpretable here; membership is.\n",
+      "body": "Like UMAP, a neighbourhood-preserving projection, but one that pushes clusters further apart and preserves even less global structure. Cluster sizes and inter-cluster distances are not interpretable here; membership is.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {

@@ -43,11 +43,10 @@ components:
     alignment: left
     vertical_alignment: top
     section: 'PCA projection'
-    body: |
-      A linear projection: axes are principal components, so distance along an axis
-      means variance explained and the axes are directly comparable. This is the
-      projection to trust when the question is how much structure there is, rather than
-      what shape it has.
+    body: >
+      A linear projection: axes are principal components, so distance along an axis means
+      variance explained and the axes are directly comparable. This is the projection to
+      trust when the question is how much structure there is, rather than what shape it has.
     layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: viz-clustering_pca

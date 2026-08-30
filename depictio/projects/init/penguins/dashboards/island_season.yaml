@@ -175,8 +175,8 @@ components:
     title: "Three seasons, one population"
     order: 2
     alignment: left
-    body: "Sampling effort is near-flat: 109 birds in 2007, 114 in 2008, 119 in 2009. The two trend cards below track mean body mass and mean flipper length across those seasons — if the population were drifting, or the sampling were, this is where it would show. It does not, which is what makes the season a safe thing to pool over on the main tab."
-    layout: { x: 0, y: 0, w: 8, h: 2 }
+    body: "Sampling effort is near-flat: 109 birds in 2007, 114 in 2008, 119 in 2009. The two trend cards below track mean body mass and mean flipper length across those seasons. If the population were drifting, or the sampling were, this is where it would show."
+    layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: card-seasons
     component_type: card

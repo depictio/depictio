@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Effects placed at their position along a sequence, stem height encoding magnitude\nand colour encoding class. It is the view that makes a mutational hotspot visible\nas a cluster of stems rather than a row in a table.\n",
+      "body": "Effects placed at their position along a sequence, stem height encoding magnitude and colour encoding class. It is the view that makes a mutational hotspot visible as a cluster of stems rather than a row in a table.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {

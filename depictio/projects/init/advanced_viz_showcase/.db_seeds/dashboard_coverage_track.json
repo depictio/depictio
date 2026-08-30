@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Per-position depth along the reference, one lane per sample, with an annotation\nlane naming the regions underneath. A dropout reads as a gap in one lane; a region\nthe assay never covers reads as a gap in all of them. The log axis in the settings\nmenu is what makes both visible at once.\n",
+      "body": "Per-position depth along the reference, one lane per sample, with an annotation lane naming the regions underneath. A dropout reads as a gap in one lane; a region the assay never covers reads as a gap in all of them. The log axis in the settings menu is what makes both visible at once.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {

@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "One stacked bar per sample, segments sized by abundance and coloured by taxon.\nSwitching the rank in the settings menu recomputes the stack from the lineage\ncolumns rather than re-aggregating upstream. Filtering to a phylum on the left is\nwhat turns a wall of colour into a readable comparison.\n",
+      "body": "One stacked bar per sample, segments sized by abundance and coloured by taxon. Switching the rank in the settings menu recomputes the stack from the lineage columns rather than re-aggregating upstream. Filtering to a phylum on the left is what turns a wall of colour into a readable comparison.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {

@@ -43,11 +43,11 @@ components:
     alignment: left
     vertical_alignment: top
     section: 'Coverage track'
-    body: |
+    body: >
       Per-region read depth from a real nf-core/viralrecon mosdepth run, one lane per
       sample. A dropout reads as a gap in one lane; a region the amplicon scheme never
-      covers reads as a gap in all of them. Pick a few samples on the left before
-      reading it: every lane at once is a wall.
+      covers reads as a gap in all of them. Pick a few samples on the left before reading
+      it: every lane at once is a wall.
     layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: viz-coverage_track

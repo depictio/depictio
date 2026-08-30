@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "The readable alternative to a five-way Venn diagram: bars count the features in\neach intersection, and the dot matrix underneath names which sets the intersection\nbelongs to. Sorting by cardinality puts the largest overlaps first; sorting by\ndegree groups the exclusives together.\n",
+      "body": "The readable alternative to a five-way Venn diagram: bars count the features in each intersection, and the dot matrix underneath names which sets the intersection belongs to. Sorting by cardinality puts the largest overlaps first; sorting by degree groups the exclusives together.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {

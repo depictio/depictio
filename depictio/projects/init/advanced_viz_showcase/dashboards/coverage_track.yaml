@@ -43,11 +43,11 @@ components:
     alignment: left
     vertical_alignment: top
     section: 'Coverage track'
-    body: |
-      Per-position depth along the reference, one lane per sample, with an annotation
-      lane naming the regions underneath. A dropout reads as a gap in one lane; a region
-      the assay never covers reads as a gap in all of them. The log axis in the settings
-      menu is what makes both visible at once.
+    body: >
+      Per-position depth along the reference, one lane per sample, with an annotation lane
+      naming the regions underneath. A dropout reads as a gap in one lane; a region the
+      assay never covers reads as a gap in all of them. The log axis in the settings menu is
+      what makes both visible at once.
     layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: viz-coverage_track

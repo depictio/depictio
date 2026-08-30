@@ -121,7 +121,7 @@
       "order": 2,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "Physical measurements joined to demographics for 342 birds \u2014 151 *Adelie*, 68 *Chinstrap*, 123 *Gentoo* \u2014 across Biscoe, Dream and Torgersen. The cards below count the cohort and say what the records are missing: sex is blank for 9 birds, which is the only gap in the table. The **Cohort** filters on the left are marked persistent, so whatever you pick here follows you to the Island & Season tab.",
+      "body": "Physical measurements joined to demographics for 342 birds, 151 *Adelie*, 68 *Chinstrap*, 123 *Gentoo*, across Biscoe, Dream and Torgersen. The **Cohort** filters on the left are persistent, so whatever you pick here follows you to the Island & Season tab.",
       "wf_tag": "python/penguin_species_analysis"
     },
     {
@@ -344,7 +344,7 @@
       "order": 2,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "Flipper length and body mass separate *Gentoo* cleanly from the other two; *Adelie* and *Chinstrap* overlap on both and only pull apart on bill length. The scatter carries species as colour and island as symbol, so the confound is visible rather than assumed: every *Gentoo* is from Biscoe and every *Chinstrap* from Dream, which means an island effect and a species effect look identical here.",
+      "body": "Flipper length and body mass separate *Gentoo* cleanly; *Adelie* and *Chinstrap* overlap on both and only pull apart on bill length. The scatter carries species as colour and island as symbol, so the confound is visible: every *Gentoo* is from Biscoe, every *Chinstrap* from Dream.",
       "wf_tag": "python/penguin_species_analysis"
     },
     {
@@ -1432,7 +1432,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 3,
+      "h": 1,
       "static": false,
       "resizeHandles": [
         "se",
@@ -1479,7 +1479,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 2,
+      "h": 1,
       "static": false,
       "resizeHandles": [
         "se",

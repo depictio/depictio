@@ -43,11 +43,11 @@ components:
     alignment: left
     vertical_alignment: top
     section: 'Community composition'
-    body: |
+    body: >
       One stacked bar per sample, segments sized by abundance and coloured by taxon.
-      Switching the rank in the settings menu recomputes the stack from the lineage
-      columns rather than re-aggregating upstream. Filtering to a phylum on the left is
-      what turns a wall of colour into a readable comparison.
+      Switching the rank in the settings menu recomputes the stack from the lineage columns
+      rather than re-aggregating upstream. Filtering to a phylum on the left is what turns a
+      wall of colour into a readable comparison.
     layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: viz-stacked_taxonomy

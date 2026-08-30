@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "The same DESeq2 table as the volcano tab, with mean expression on the x axis. A\nfold change that only appears at low expression is usually noise, and it shows up\nhere as a funnel opening to the left; the volcano cannot show that. Read the two\ntogether.\n",
+      "body": "The same DESeq2 table as the volcano tab, with mean expression on the x axis. A fold change that only appears at low expression is usually noise, and it shows up here as a funnel opening to the left; the volcano cannot show that. Read the two together.\n",
       "wf_tag": "nf-core/nfcore_megatests"
     },
     {

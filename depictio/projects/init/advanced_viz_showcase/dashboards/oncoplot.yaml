@@ -43,11 +43,11 @@ components:
     alignment: left
     vertical_alignment: top
     section: 'Mutation matrix'
-    body: |
+    body: >
       Samples on one axis, genes on the other, each cell coloured by the class of the
       mutation it carries. Rows and columns are reordered so that co-occurring mutations
-      line up into blocks, which is the pattern the plot exists to surface. Filtering to
-      one mutation class shows which genes carry it.
+      line up into blocks, which is the pattern the plot exists to surface. Filtering to one
+      mutation class shows which genes carry it.
     layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: viz-oncoplot

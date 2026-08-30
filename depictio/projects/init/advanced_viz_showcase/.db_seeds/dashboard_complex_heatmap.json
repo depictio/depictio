@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "The feature matrix with rows and columns reordered by hierarchical clustering,\ndendrograms drawn on both axes. The clustering is recomputed on whatever the\nfilters leave, so narrowing to one cluster genuinely changes the tree rather than\nhiding branches. The distance metric and linkage are settings on the tile.\n",
+      "body": "The feature matrix with rows and columns reordered by hierarchical clustering, dendrograms on both axes. The clustering is recomputed on whatever the filters leave, so narrowing to one cluster genuinely changes the tree rather than hiding branches.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -177,7 +177,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 2,
+      "h": 1,
       "static": false,
       "resizeHandles": [
         "se",

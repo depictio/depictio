@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Shannon diversity recomputed at thirty subsampling depths, ten iterations each,\nwith the spread drawn as a band. A curve that flattens means the sample was\nsequenced deeply enough; one still climbing means the diversity estimate is\nbounded by depth rather than by biology.\n",
+      "body": "Shannon diversity recomputed at thirty subsampling depths, ten iterations each, with the spread drawn as a band. A curve that flattens means the sample was sequenced deeply enough; one still climbing means the diversity estimate is bounded by depth rather than by biology.\n",
       "wf_tag": "nf-core/nfcore_megatests"
     },
     {

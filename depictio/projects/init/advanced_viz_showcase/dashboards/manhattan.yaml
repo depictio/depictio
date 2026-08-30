@@ -43,12 +43,11 @@ components:
     alignment: left
     vertical_alignment: top
     section: 'Genome-wide scan'
-    body: |
-      Markers plotted at their genomic position against their score, with alternating
-      bands separating the chromosomes and a threshold line across the plot. The peaks
-      that clear the line are labelled by feature id. Restricting to one chromosome or
-      raising the score floor on the left isolates a single locus.
-    layout: { x: 0, y: 0, w: 8, h: 2 }
+    body: >
+      Markers plotted at their genomic position against their score, with alternating bands
+      separating the chromosomes and a threshold line across the plot. Peaks that clear the
+      line are labelled by feature id; restricting to one chromosome isolates a locus.
+    layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: viz-manhattan
     index: 'man-manhattan'

@@ -52,14 +52,12 @@ components:
     alignment: left
     vertical_alignment: top
     section: 'Volcano'
-    body: |
+    body: >
       Every feature placed by its effect size against its significance, with the two
-      threshold lines drawn rather than assumed. The features worth reading are the ones
-      far from the centre and high up; the top-N labels name them for you, and the
-      search box in the settings menu finds a specific one. Narrowing the category or
-      raising the significance floor on the left removes points rather than greying them
-      out.
-    layout: { x: 0, y: 0, w: 8, h: 2 }
+      threshold lines drawn rather than assumed. The ones worth reading are far from the
+      centre and high up, and the top-N labels name them. Narrowing on the left removes
+      points rather than greying them out.
+    layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: viz-volcano
     index: 'vol-volcano'
@@ -145,10 +143,9 @@ components:
     alignment: left
     vertical_alignment: top
     section: 'About this showcase'
-    body: |
+    body: >
       Each tab of this project is one advanced visualisation kind, rendered from a small
-      synthetic fixture rather than from a real pipeline run. The point is the kind:
-      what question it answers, what its settings menu can change, and what a left-panel
-      filter does to it. Nothing here is a result. For the same components on real data,
-      look at the nf-core/ampliseq and nf-core/viralrecon reference projects.
-    layout: { x: 0, y: 0, w: 8, h: 2 }
+      synthetic fixture rather than a real run. Nothing here is a result. For the same
+      components on real data, look at the nf-core/ampliseq and nf-core/viralrecon reference
+      projects.
+    layout: { x: 0, y: 0, w: 8, h: 1 }

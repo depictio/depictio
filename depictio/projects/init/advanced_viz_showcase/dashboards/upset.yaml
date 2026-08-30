@@ -43,11 +43,11 @@ components:
     alignment: left
     vertical_alignment: top
     section: 'Set overlap'
-    body: |
-      The readable alternative to a five-way Venn diagram: bars count the features in
-      each intersection, and the dot matrix underneath names which sets the intersection
-      belongs to. Sorting by cardinality puts the largest overlaps first; sorting by
-      degree groups the exclusives together.
+    body: >
+      The readable alternative to a five-way Venn diagram: bars count the features in each
+      intersection, and the dot matrix underneath names which sets the intersection belongs
+      to. Sorting by cardinality puts the largest overlaps first; sorting by degree groups
+      the exclusives together.
     layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: viz-upset

@@ -43,12 +43,11 @@ components:
     alignment: left
     vertical_alignment: top
     section: 'Clustered matrix'
-    body: |
-      The 100 most variable genes of the DESeq2 vst() matrix, rows and columns reordered
-      by hierarchical clustering with dendrograms on both axes. Row z-scoring is what
-      makes genes on different expression scales comparable in one picture. Narrowing
-      the gene list on the left recomputes the clustering rather than hiding branches.
-    layout: { x: 0, y: 0, w: 8, h: 2 }
+    body: >
+      The 100 most variable genes of the DESeq2 vst() matrix, rows and columns reordered by
+      hierarchical clustering with dendrograms on both axes. Row z-scoring is what makes
+      genes on different expression scales comparable in one picture.
+    layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: viz-complex_heatmap
     index: 'nfcore-complex_heatmap'

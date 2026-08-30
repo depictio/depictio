@@ -43,10 +43,10 @@ components:
     alignment: left
     vertical_alignment: top
     section: 't-SNE projection'
-    body: |
-      Like UMAP, a neighbourhood-preserving projection, but one that pushes clusters
-      further apart and preserves even less global structure. Cluster sizes and inter-
-      cluster distances are not interpretable here; membership is.
+    body: >
+      Like UMAP, a neighbourhood-preserving projection, but one that pushes clusters further
+      apart and preserves even less global structure. Cluster sizes and inter-cluster
+      distances are not interpretable here; membership is.
     layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: viz-clustering_tsne

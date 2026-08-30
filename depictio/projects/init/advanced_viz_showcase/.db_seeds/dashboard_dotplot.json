@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Genes on one axis and clusters on the other, each dot sized by the fraction of\ncells expressing the gene and coloured by mean expression. The two encodings\nanswer different questions: size says how many, colour says how much, and a marker\ngene is the dot that is both large and bright in exactly one column.\n",
+      "body": "Genes on one axis and clusters on the other, each dot sized by the fraction of cells expressing the gene and coloured by mean expression. Size says how many, colour says how much, and a marker gene is the dot that is both large and bright in one column.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -195,7 +195,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 2,
+      "h": 1,
       "static": false,
       "resizeHandles": [
         "se",

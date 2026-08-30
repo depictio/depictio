@@ -116,7 +116,7 @@
       "order": 2,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "Fisher's classic 150-flower dataset across three varieties (*Setosa*, *Versicolor*, *Virginica*), 50 of each. The four cards below count the cohort and say how finely it was measured \u2014 petal width takes only 22 distinct values across 150 flowers, which is why it discretises so cleanly. Filters on the left refine every tile.",
+      "body": "Fisher's classic 150-flower dataset across three varieties (*Setosa*, *Versicolor*, *Virginica*), 50 of each. The four cards below count the cohort and say how finely it was measured: petal width takes only 22 distinct values across 150 flowers.",
       "wf_tag": "python/iris_workflow"
     },
     {
@@ -339,7 +339,7 @@
       "order": 2,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "One card per measurement, each carrying the summary its own shape calls for: a box plot where the spread matters, a two-column stat grid where the quartiles do, a histogram where the shape is bimodal, and a threshold count where the question is really \"how many are above the line\". Four layouts on four columns of the same table \u2014 the point is that the layout follows the column, not the other way round.",
+      "body": "One card per measurement, each carrying the summary its own shape calls for: a box plot where the spread matters, a stat grid where the quartiles do, a histogram where the shape is bimodal, a threshold count where the question is how many clear the line.",
       "wf_tag": "python/iris_workflow"
     },
     {
@@ -816,7 +816,7 @@
       "order": 2,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "*Setosa* separates on petal size alone \u2014 it is linearly separable from the other two on either petal axis. *Versicolor* and *Virginica* overlap on every single measurement and only pull apart when petal length and width are read together, which is what the scatter matrix is for. Filter to one variety on the left and watch which panels stop being informative.",
+      "body": "*Setosa* separates on petal size alone, linearly separable from the other two on either petal axis. *Versicolor* and *Virginica* overlap on every measurement and only pull apart when petal length and width are read together, which is what the scatter matrix is for.",
       "wf_tag": "python/iris_workflow"
     },
     {
@@ -1376,7 +1376,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 2,
+      "h": 1,
       "static": false,
       "resizeHandles": [
         "se",
@@ -1423,7 +1423,7 @@
       "x": 0,
       "y": 5,
       "w": 8,
-      "h": 3,
+      "h": 1,
       "static": false,
       "resizeHandles": [
         "se",
@@ -1470,7 +1470,7 @@
       "x": 0,
       "y": 6,
       "w": 8,
-      "h": 2,
+      "h": 1,
       "static": false,
       "resizeHandles": [
         "se",

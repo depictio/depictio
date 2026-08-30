@@ -33,14 +33,12 @@ components:
     alignment: left
     vertical_alignment: top
     section: 'Phylogenetic tree'
-    body: |
+    body: >
       A Newick tree rendered with an annotation strip built from a separate metadata
-      collection, joined on the tip label. Layout, ladderisation and which metadata
-      columns colour the strip are all set in the settings menu on the tile. This tab
-      deliberately carries no left-panel filter: the tree reads two collections and only
-      one of them is filterable, so a control here would prune the strip while leaving
-      the topology untouched.
-    layout: { x: 0, y: 0, w: 8, h: 2 }
+      collection, joined on the tip label. This tab carries no left-panel filter: the tree
+      reads two collections and only one is filterable, so a control would prune the strip
+      and leave the topology untouched.
+    layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: viz-phylogeny
     index: 'phylo-tree'

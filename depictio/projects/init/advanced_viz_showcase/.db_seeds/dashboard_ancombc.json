@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Compositionally corrected differential abundance, one row per feature and\ncontrast. The bars are signed by direction and ordered by effect, so the two ends\nof the chart are the two directions of the comparison. Pick a contrast on the left\nfirst: every bar is conditional on it.\n",
+      "body": "Compositionally corrected differential abundance, one row per feature and contrast. The bars are signed by direction and ordered by effect, so the two ends of the chart are the two directions of the comparison. Pick a contrast on the left first: every bar is conditional on it.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {

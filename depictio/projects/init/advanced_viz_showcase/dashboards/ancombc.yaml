@@ -43,11 +43,11 @@ components:
     alignment: left
     vertical_alignment: top
     section: 'Differential calls'
-    body: |
-      Compositionally corrected differential abundance, one row per feature and
-      contrast. The bars are signed by direction and ordered by effect, so the two ends
-      of the chart are the two directions of the comparison. Pick a contrast on the left
-      first: every bar is conditional on it.
+    body: >
+      Compositionally corrected differential abundance, one row per feature and contrast.
+      The bars are signed by direction and ordered by effect, so the two ends of the chart
+      are the two directions of the comparison. Pick a contrast on the left first: every bar
+      is conditional on it.
     layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: viz-ancombc

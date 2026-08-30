@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Diversity recomputed at a ladder of sequencing depths, several iterations per\ndepth, with the spread drawn as a confidence band. A curve that flattens means the\nsample was sequenced deeply enough for that index; one still climbing means\nrichness is bounded by depth. The index itself is a selector on the tile.\n",
+      "body": "Diversity recomputed at a ladder of sequencing depths, several iterations per depth, with the spread drawn as a confidence band. A curve that flattens means the sample was sequenced deeply enough; one still climbing means richness is bounded by depth.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -244,7 +244,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 2,
+      "h": 1,
       "static": false,
       "resizeHandles": [
         "se",

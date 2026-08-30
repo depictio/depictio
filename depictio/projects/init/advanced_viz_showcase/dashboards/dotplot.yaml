@@ -43,12 +43,11 @@ components:
     alignment: left
     vertical_alignment: top
     section: 'Expression dot plot'
-    body: |
-      Genes on one axis and clusters on the other, each dot sized by the fraction of
-      cells expressing the gene and coloured by mean expression. The two encodings
-      answer different questions: size says how many, colour says how much, and a marker
-      gene is the dot that is both large and bright in exactly one column.
-    layout: { x: 0, y: 0, w: 8, h: 2 }
+    body: >
+      Genes on one axis and clusters on the other, each dot sized by the fraction of cells
+      expressing the gene and coloured by mean expression. Size says how many, colour says
+      how much, and a marker gene is the dot that is both large and bright in one column.
+    layout: { x: 0, y: 0, w: 8, h: 1 }
 
   - tag: viz-dotplot
     index: 'dot-plot'

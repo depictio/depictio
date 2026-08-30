@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "The same taxonomy the stacked bars show, drawn as concentric rings from kingdom\noutwards. Clicking a wedge zooms into it rather than filtering the dashboard, so\nit is a way to read the hierarchy rather than to select from it. The left panel is\nwhat narrows the other tiles.\n",
+      "body": "The same taxonomy the stacked bars show, drawn as concentric rings from kingdom outwards. Clicking a wedge zooms into it rather than filtering the dashboard, so it is a way to read the hierarchy rather than to select from it. The left panel is what narrows the other tiles.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
