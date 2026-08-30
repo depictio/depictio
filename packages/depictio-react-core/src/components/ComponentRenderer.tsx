@@ -3,6 +3,7 @@ import { DepictioCard } from 'depictio-components';
 import type { GridApi } from 'ag-grid-community';
 
 import { InteractiveFilter, StoredMetadata } from '../api';
+import { useAutofitHeight } from './autofit';
 import ImageRenderer from './ImageRenderer';
 import TextRenderer from './TextRenderer';
 import LazyMount, { CellPlaceholder } from './LazyMount';
@@ -94,8 +95,9 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   showDragHandle,
   compact,
 }) => {
-  // Two states of one chrome slot, both scoped to the four selection-source
-  // component types (figure / table / map / image) that `chromeExtras` reaches:
+  // Two states of one chrome slot, scoped to the component types that can be a
+  // selection source and therefore receive `chromeExtras`: figure, table, map,
+  // image, and advanced_viz once its config opts in:
   //
   //   selection present → SaveGroupAction, the in-place "save as group" action
   //   analysis engaged  → SelectionHintAction, marking "you can select here"
@@ -284,49 +286,16 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   }
 
   if (metadata.component_type === 'map' && dashboardId) {
-    const selectionEnabled = isMapSelectionEnabled(metadata, !!onFilterChange);
-    const onResetSelection =
-      selectionEnabled && onFilterChange
-        ? () =>
-            onFilterChange({
-              index: metadata.index,
-              value: [],
-              source: 'map_selection',
-            })
-        : undefined;
-    const sourceFilterActive = isSourceFilterActive(filters, metadata.index, 'map_selection');
-    // Same "show underlying data" affordance advanced_viz has, riding the same
-    // `extraActions` slot — so `actionsFor('map')` needs no change.
-    const mapExtras = (
-      <>
-        {chromeExtras}
-        <MapDataButton
-          dashboardId={dashboardId}
-          metadata={metadata}
-          filters={filters}
-          onFilterChange={onFilterChange}
-        />
-      </>
-    );
-    return wrapWithChrome(
-      'map',
-      metadata,
-      undefined,
-      <Suspense fallback={<CellPlaceholder />}>
-        <MapRenderer
-          dashboardId={dashboardId}
-          metadata={metadata}
-          filters={filters}
-          onFilterChange={onFilterChange}
-          refreshTick={refreshTick}
-        />
-      </Suspense>,
-      {
-        onResetFilter: onResetSelection,
-        extraActions: mapExtras,
-        showDragHandle,
-        sourceFilterActive,
-      },
+    return (
+      <MapBlock
+        dashboardId={dashboardId}
+        metadata={metadata}
+        filters={filters}
+        onFilterChange={onFilterChange}
+        refreshTick={refreshTick}
+        extraActions={chromeExtras}
+        showDragHandle={showDragHandle}
+      />
     );
   }
 
@@ -400,7 +369,12 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
           filters={filters}
           refreshTick={refreshTick}
           onFilterChange={onFilterChange}
-          extraActions={extraActions}
+          // chromeExtras, not the raw extraActions: an embedding or a Manhattan
+          // that opts into selection is a selection source like any scatter, so
+          // its tile needs the same save-as-group action. Passing the raw slot
+          // left the group creatable only from the Analysis panel, with nothing
+          // on the tile to say the lasso had produced anything.
+          extraActions={chromeExtras}
           showDragHandle={showDragHandle}
         />
       </LazyMount>
@@ -481,6 +455,83 @@ const TableBlock: React.FC<{
       agGridApiRef,
       onResetFilter: onResetSelection,
       extraActions: combinedExtras,
+      showDragHandle,
+      sourceFilterActive,
+    },
+  );
+};
+
+const MapBlock: React.FC<{
+  dashboardId: string;
+  metadata: StoredMetadata;
+  filters: InteractiveFilter[];
+  onFilterChange?: (filter: InteractiveFilter) => void;
+  refreshTick?: number;
+  extraActions?: React.ReactNode;
+  showDragHandle?: boolean;
+}> = ({
+  dashboardId,
+  metadata,
+  filters,
+  onFilterChange,
+  refreshTick,
+  extraActions,
+  showDragHandle,
+}) => {
+  // MapRenderer builds the display-settings popover, because it is the one
+  // that restyles the figure and reads the current values back off it, and
+  // publishes it up here for the chrome action row. Same hand-off as
+  // TableBlock's `onLoadAllState`, and the reason the popover import stays
+  // inside the lazy map chunk rather than landing in this eager module.
+  const [settingsNode, setSettingsNode] = React.useState<React.ReactNode>(null);
+  const selectionEnabled = isMapSelectionEnabled(metadata, !!onFilterChange);
+  const onResetSelection =
+    selectionEnabled && onFilterChange
+      ? () =>
+          onFilterChange({
+            index: metadata.index,
+            value: [],
+            source: 'map_selection',
+          })
+      : undefined;
+  const sourceFilterActive = isSourceFilterActive(filters, metadata.index, 'map_selection');
+  // Settings then "show underlying data", riding the same `extraActions` slot
+  // advanced_viz uses and in the same order, so `actionsFor('map')` needs no
+  // change. The explicit key is there because the settings action only appears
+  // once the figure lands: without it ComponentChrome's
+  // `React.Children.toArray` would re-key the data button by position and
+  // remount it at that moment. MapRenderer keys its own node for the same
+  // reason.
+  const mapExtras = (
+    <>
+      {extraActions}
+      {settingsNode}
+      <MapDataButton
+        key="map-data"
+        dashboardId={dashboardId}
+        metadata={metadata}
+        filters={filters}
+        onFilterChange={onFilterChange}
+      />
+    </>
+  );
+  return wrapWithChrome(
+    'map',
+    metadata,
+    undefined,
+    <Suspense fallback={<CellPlaceholder />}>
+      <MapRenderer
+        dashboardId={dashboardId}
+        metadata={metadata}
+        filters={filters}
+        onFilterChange={onFilterChange}
+        refreshTick={refreshTick}
+        onSettingsNode={setSettingsNode}
+      />
+    </Suspense>,
+    {
+      onResetFilter: onResetSelection,
+      extraActions: mapExtras,
       showDragHandle,
       sourceFilterActive,
     },
@@ -573,6 +624,16 @@ function isSourceFilterActive(
   }
   return false;
 }
+
+/**
+ * The card's frame, which the tile has to pay for on top of the content: 1.5px
+ * of border top and bottom. It is `content-box`, so the border falls outside
+ * the height the tile hands the card rather than inside it, and a card whose
+ * content fills its tile exactly still loses its frame to the grid cell's
+ * `overflow: hidden`. Three pixels of slack is what keeps that from happening,
+ * and it is far too little to cost a row on its own.
+ */
+const CARD_FRAME_PX = 3;
 
 const CardRenderer: React.FC<{
   metadata: StoredMetadata;
@@ -689,6 +750,17 @@ const CardRenderer: React.FC<{
     return base;
   })();
 
+  // Cards size the grid to themselves, the way text tiles size it to their
+  // prose. The height an author picked is a guess made against the content the
+  // card had then, and a card that later gains a breakdown (a group-by, a top-N
+  // list, several rows where there was one number) needs rows nobody gave it.
+  // It has nowhere to put them: the card hides its overflow and centres what it
+  // holds, so content it cannot fit is cut off at the top AND the bottom.
+  // `contentRef` is the card's height-auto content box, so what we publish is
+  // the room the content needs, never the room the tile has.
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  useAutofitHeight(metadata.index, contentRef, [], (content) => content + CARD_FRAME_PX);
+
   // While the next bulk-compute is in flight we keep the previous value
   // visible (App.tsx no longer clears `cardValues`), but slightly dim the
   // card to signal "refreshing". 0.6 opacity is enough to read as stale
@@ -705,6 +777,7 @@ const CardRenderer: React.FC<{
       }}
     >
       <DepictioCard
+        contentRef={contentRef}
         title={metadata.title || inferCardTitle(metadata)}
         value={displayValue}
         icon_name={metadata.icon_name}

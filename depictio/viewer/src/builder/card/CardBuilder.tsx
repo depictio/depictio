@@ -78,6 +78,21 @@ const ICON_OPTIONS: { value: string; label: string }[] = [
   { value: 'mdi:test-tube', label: 'Test tube' },
   { value: 'mdi:percent', label: 'Percent' },
   { value: 'mdi:check-circle', label: 'Check circle' },
+  // Domain icons the shipped reference dashboards use. Listed here so the
+  // builder can offer them too — a card authored in YAML with an icon the
+  // picker does not know would otherwise blank the field on the first save.
+  { value: 'mdi:alpha', label: 'Alpha diversity' },
+  { value: 'mdi:bacteria', label: 'Bacteria' },
+  { value: 'mdi:molecule', label: 'Biology' },
+  { value: 'mdi:virus', label: 'Virus' },
+  { value: 'mdi:family-tree', label: 'Phylogeny' },
+  { value: 'mdi:forest', label: 'Forest' },
+  { value: 'mdi:scale-balance', label: 'Balance' },
+  { value: 'mdi:shape', label: 'Shape' },
+  { value: 'mdi:map-marker', label: 'Location' },
+  { value: 'mdi:image-multiple', label: 'Images' },
+  { value: 'mdi:chart-line-variant', label: 'Chart line variant' },
+  { value: 'mdi:chart-bell-curve-cumulative', label: 'Cumulative distribution' },
 ];
 
 /** Multi-metric style options. The Select carries a single token that maps

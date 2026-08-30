@@ -47,13 +47,20 @@ export interface NumericScale {
   discrete: boolean;
 }
 
-/** Slider value as a reader would write it: an integer bare, a fraction with
- *  enough decimals to tell neighbouring stops apart and no more. */
+/**
+ * Slider value as a reader would write it: an integer bare, a fraction with
+ * enough decimals to tell neighbouring stops apart and no more.
+ *
+ * Three decimals is the ceiling whatever the magnitude. Below 1 this used to
+ * spell out four, which on a sub-unit column turned every mark and every drag
+ * readout into a wall of digits nobody was reading; a fourth decimal has never
+ * been what tells two stops apart at a width the Filters panel can offer.
+ */
 export function formatSliderValue(v: number): string {
   if (!Number.isFinite(v)) return String(v);
   if (Number.isInteger(v)) return String(v);
   const abs = Math.abs(v);
-  const decimals = abs >= 100 ? 1 : abs >= 1 ? 2 : 4;
+  const decimals = abs >= 100 ? 1 : abs >= 1 ? 2 : 3;
   return String(Number(v.toFixed(decimals)));
 }
 

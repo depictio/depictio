@@ -9,10 +9,30 @@
     "$oid": "646b0f3c1e4a2d7f8e5b8d41"
   },
   "version": 1,
-  "tmp_children_data": [],
-  "stored_layout_data": [],
-  "stored_children_data": [],
   "stored_metadata": [
+    {
+      "index": "dot-text",
+      "component_type": "text",
+      "title": "Dot plot",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Expression dot plot",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Genes on one axis and clusters on the other, each dot sized by the fraction of cells expressing the gene and coloured by mean expression. Size says how many, colour says how much, and a marker gene is the dot that is both large and bright in one column.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
     {
       "index": "dot-plot",
       "component_type": "advanced_viz",
@@ -28,7 +48,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Single-cell marker dot plot fixture",
+        "description": "Synthetic single-cell marker matrix: 6 clusters \u00d7 25 marker genes with cluster-specific expression",
         "data_collection_tag": "dotplot_demo",
         "dc_specific_properties": null,
         "_id": {
@@ -37,7 +57,11 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-13T00:00:00.000000",
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Mean expression (colour) \u00d7 fraction expressing (size) across 6 PBMC-like clusters.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Expression dot plot",
       "viz_kind": "dot_plot",
       "config": {
         "viz_kind": "dot_plot",
@@ -46,20 +70,146 @@
         "mean_expression_col": "mean_expression",
         "frac_expressing_col": "frac_expressing",
         "max_dot_size": 22,
-        "min_dot_size": 2
+        "min_dot_size": 2,
+        "colour_scale": "Viridis",
+        "reverse_scale": false,
+        "log_transform": false,
+        "gene_sort": "name",
+        "cluster_sort": "name",
+        "annotate_top_n": 0,
+        "marker_outline": true,
+        "max_genes": 50
       },
-      "wf_tag": "python/advanced_viz_demo",
-      "description": "Mean expression (colour) \u00d7 fraction expressing (size) across 6 PBMC-like clusters."
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "dot-f-cluster",
+      "component_type": "interactive",
+      "title": "Cluster",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "dotplot_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d30"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic single-cell marker matrix: 6 clusters \u00d7 25 marker genes with cluster-specific expression",
+        "data_collection_tag": "dotplot_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d30"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Expression scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "cluster",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Expression filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#45B8AC",
+      "icon_name": "mdi:form-select",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "dot-f-frac",
+      "component_type": "interactive",
+      "title": "Fraction expressing",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "dotplot_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d30"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic single-cell marker matrix: 6 clusters \u00d7 25 marker genes with cluster-specific expression",
+        "data_collection_tag": "dotplot_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d30"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Expression scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "frac_expressing",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Expression filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#2E7D32",
+      "icon_name": "mdi:water-percent",
+      "wf_tag": "python/advanced_viz_demo"
     }
   ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
   "stored_edit_dashboard_mode_button": [],
-  "left_panel_layout_data": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-dot-f-cluster",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-dot-f-frac",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
   "right_panel_layout_data": [
+    {
+      "i": "box-dot-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
     {
       "i": "box-dot-plot",
       "x": 0,
-      "y": 0,
-      "w": 12,
+      "y": 2,
+      "w": 8,
       "h": 8,
       "static": false,
       "resizeHandles": [
@@ -107,7 +257,7 @@
     "viewers": []
   },
   "is_public": true,
-  "last_saved_ts": "2026-05-13 00:00:00",
+  "last_saved_ts": "2026-05-12 00:00:00",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8d00"
   },
@@ -119,5 +269,29 @@
   "main_tab_name": null,
   "tab_icon": "mdi:dots-grid",
   "tab_icon_color": "teal",
-  "parent_dashboard_title": null
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Expression scope",
+      "icon": "mdi:filter-variant",
+      "color": "teal",
+      "description": "Restricts which clusters and expression levels are shown",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Expression dot plot",
+      "icon": "mdi:chart-scatter-plot",
+      "color": "teal",
+      "description": "Gene against cluster, sized by fraction expressing",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
 }

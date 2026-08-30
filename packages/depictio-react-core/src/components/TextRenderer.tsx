@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { Stack, Text, Title } from '@mantine/core';
 
 import { StoredMetadata } from '../api';
+import { useAutofitHeight } from './autofit';
 
 interface TextRendererProps {
   metadata: StoredMetadata;
@@ -89,6 +90,13 @@ const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = fal
 
   const hasTitle = rawTitle.trim().length > 0;
 
+  // Measure the prose itself, not the tile. The Stack below is `h="100%"`, so
+  // it always reports the height it was given; this inner wrapper is
+  // height-auto, so its scrollHeight is what the text actually needs.
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const index = typeof metadata.index === 'string' ? metadata.index : '';
+  useAutofitHeight(index, contentRef, [rawTitle, body, order, alignment]);
+
   return (
     <Stack
       gap={4}
@@ -100,6 +108,10 @@ const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = fal
       // and vertical alignment would have no room to act.
       style={{ flex: '1 1 auto', textAlign: alignment, width: '100%', padding: 0 }}
     >
+      <div
+        ref={contentRef}
+        style={{ display: 'flex', flexDirection: 'column', gap: 4, width: '100%' }}
+      >
       {hasTitle ? (
         <Title
           order={order}
@@ -131,6 +143,7 @@ const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = fal
           {renderInlineMarkdown(body)}
         </Text>
       ) : null}
+      </div>
     </Stack>
   );
 };

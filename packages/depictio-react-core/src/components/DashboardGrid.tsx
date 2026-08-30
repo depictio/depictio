@@ -33,6 +33,7 @@ import {
   SectionHeader,
 } from './SectionAccordion';
 import ComponentRenderer, { formatValue, inferCardTitle } from './ComponentRenderer';
+import { AUTOFIT_EVENT, autofitHeights, type AutofitDetail } from './autofit';
 
 /** Bucket key for what is left of the unsectioned components once the tab's
  *  opening text has been split off — never a real section name, so it can't
@@ -122,6 +123,24 @@ interface DashboardGridProps {
  * apart to resolve the collision. Rounding the shared edge once gives both
  * neighbours the same answer, so a boundary that coincided still coincides.
  */
+// Grid geometry, mirrored by the ResponsiveGridLayout props below. Autofit
+// turns a measured pixel height into a row count with these, so a change here
+// has to move with the props (both reference these constants for that reason).
+const GRID_ROW_PX = 100;
+const GRID_ROW_GAP_PX = 4;
+
+/**
+ * How many rows a tile has to span to offer `height` px.
+ *
+ * n rows span n*GRID_ROW_PX plus the (n-1) gaps between them, so the room a
+ * span of n offers is 104n - 4. Inverting that is the whole conversion — any
+ * padding added on top buys a few pixels of comfort at the price of a whole
+ * empty row.
+ */
+function rowsForHeight(height: number): number {
+  return Math.max(1, Math.ceil((height + GRID_ROW_GAP_PX) / (GRID_ROW_PX + GRID_ROW_GAP_PX)));
+}
+
 function responsiveLayouts(lg: Layout[]): Record<string, Layout[]> {
   const scale = (cols: number) =>
     lg.map((item) => {
@@ -417,6 +436,36 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   // the others' current positions into the single flat array we persist.
   const sectionLayoutsRef = useRef<Map<string, Layout[]>>(new Map());
 
+  // Text tiles size themselves to their prose, and cards to their content. A
+  // stored height is a guess made when the component was written, and it is
+  // wrong as soon as the wording changes, the viewport does, or the card gains
+  // a breakdown it did not have: too small and the content spills over the tile
+  // below, too large and the tile is mostly blank. The renderers measure what
+  // they actually need and we turn that into rows here.
+  const [autoHeights, setAutoHeights] = useState<Record<string, number>>({});
+  useEffect(() => {
+    const onMeasure = (event: Event) => {
+      const detail = (event as CustomEvent<AutofitDetail>).detail;
+      if (!detail?.index) return;
+      setAutoHeights((prev) =>
+        prev[detail.index] === detail.height ? prev : { ...prev, [detail.index]: detail.height },
+      );
+    };
+    window.addEventListener(AUTOFIT_EVENT, onMeasure);
+    // React runs a child's effects before its parent's, so every tile already
+    // measured and dispatched by the time this listener exists. Without this
+    // catch-up the common case — content that renders once and never reflows —
+    // would never reach the layout at all.
+    setAutoHeights((prev) => {
+      let next = prev;
+      for (const [index, height] of autofitHeights()) {
+        if (next[index] !== height) next = { ...next, [index]: height };
+      }
+      return next;
+    });
+    return () => window.removeEventListener(AUTOFIT_EVENT, onMeasure);
+  }, []);
+
   const layoutsForSection = useCallback(
     (members: StoredMetadata[]): Layout[] => {
       const ids = new Set(members.map((m) => m.index));
@@ -427,7 +476,52 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       // and closes the gaps the other sections' members left behind. In edit mode
       // react-grid-layout would converge to the same packing on its own; doing it
       // up front means the first paint is already right.
-      const packed = compactVerticallyForStatic(mine);
+      // Convert each measured height into rows before packing, so the packing
+      // closes up around the real sizes. GRID_ROW_PX / GRID_ROW_GAP_PX mirror
+      // the `rowHeight` and vertical `margin` handed to ResponsiveGridLayout
+      // below.
+      // Viewer only. In the editor the author sets geometry by hand, and a
+      // measurement that quietly overrode a drag would both fight them and get
+      // persisted — `onLayoutChange` exists there and nowhere else. Gating here
+      // means the fitted height can never be written back to a dashboard.
+      const fittedIds = new Set(
+        isDraggable || isResizable
+          ? []
+          : members
+              .filter((m) => m.component_type === 'text' || m.component_type === 'card')
+              .map((m) => m.index),
+      );
+      const cardIds = new Set(
+        members.filter((m) => m.component_type === 'card').map((m) => m.index),
+      );
+      // A card answers to the tallest measurement taken on its row rather than
+      // to its own. Cards are authored as a band across a row, and one of them
+      // growing to fit a breakdown its neighbours don't have turns that band
+      // into a staircase. Keyed on the stored `y`, i.e. the row as the author
+      // laid it out, before packing moves anything.
+      const cardRowDemand = new Map<number, number>();
+      for (const l of mine) {
+        if (!cardIds.has(l.i) || !fittedIds.has(l.i)) continue;
+        const measured = autoHeights[l.i];
+        if (!measured) continue;
+        cardRowDemand.set(l.y, Math.max(cardRowDemand.get(l.y) ?? 0, rowsForHeight(measured)));
+      }
+      const sized = mine.map((l) => {
+        if (cardIds.has(l.i)) {
+          const demand = cardRowDemand.get(l.y);
+          // Cards grow, never shrink: a measurement says how much room the
+          // content needs, not how much room the card is worth. A sparse card
+          // fitted to its value alone would drop below the height its author
+          // gave it, and drop out of line with the row it belongs to.
+          const grown = demand ? Math.max(l.h, demand) : l.h;
+          return grown === l.h ? l : { ...l, h: grown };
+        }
+        const measured = fittedIds.has(l.i) ? autoHeights[l.i] : undefined;
+        if (!measured) return l;
+        const rows = rowsForHeight(measured);
+        return rows === l.h ? l : { ...l, h: rows };
+      });
+      const packed = compactVerticallyForStatic(sized);
       // Lone-row widening runs HERE, against the section's own members — never
       // against the flat union, where co-authored rows from sibling sections
       // overlap and shove each other apart (see `normalizeLayout`'s pack flag).
@@ -436,7 +530,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       // neighbour gets widened.
       return isDraggable || isResizable ? packed : widenLoneRows(packed, rowMateSet(mine));
     },
-    [layouts, isDraggable, isResizable],
+    [layouts, isDraggable, isResizable, autoHeights],
   );
 
   const handleSectionLayoutChange = useCallback(
@@ -575,7 +669,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       onBreakpointChange={(bp) => {
         breakpointRef.current = bp;
       }}
-      rowHeight={100}
+      rowHeight={GRID_ROW_PX}
       // Explicit width rather than `WidthProvider`: that HOC installs its own
       // window listener, which would fight `lockedWidthRef` and undo the
       // panel-transition sync above. Sectioned grids sit inside the section box
@@ -586,7 +680,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       // between side-by-side cards / plots) but vertical drops to 4 px so
       // stacked rows feel tightly packed — short text intros, Manhattan→
       // filter-strip transitions, etc. no longer have a wasteful gap.
-      margin={[12, 4]}
+      margin={[12, GRID_ROW_GAP_PX]}
       containerPadding={[0, 0]}
       isDraggable={isDraggable}
       isResizable={isResizable}

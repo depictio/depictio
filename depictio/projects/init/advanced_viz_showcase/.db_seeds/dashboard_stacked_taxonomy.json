@@ -9,10 +9,30 @@
     "$oid": "646b0f3c1e4a2d7f8e5b8d14"
   },
   "version": 1,
-  "tmp_children_data": [],
-  "stored_layout_data": [],
-  "stored_children_data": [],
   "stored_metadata": [
+    {
+      "index": "tax-text",
+      "component_type": "text",
+      "title": "Stacked taxonomy",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Community composition",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "One stacked bar per sample, segments sized by abundance and coloured by taxon. Switching the rank in the settings menu recomputes the stack from the lineage columns rather than re-aggregating upstream. Filtering to a phylum on the left is what turns a wall of colour into a readable comparison.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
     {
       "index": "tax-stacked",
       "component_type": "advanced_viz",
@@ -28,7 +48,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Synthetic stacked taxonomy fixture",
+        "description": "Synthetic taxonomy: 18 samples x 9 taxa, two ranks (Phylum + Genus)",
         "data_collection_tag": "stacked_taxonomy_demo",
         "dc_specific_properties": null,
         "_id": {
@@ -38,6 +58,10 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Per-sample relative abundance per rank. Toggle Normalise in Settings \u2699 to switch between raw counts and 0\u2013100 % stacks.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Community composition",
       "viz_kind": "stacked_taxonomy",
       "config": {
         "viz_kind": "stacked_taxonomy",
@@ -48,20 +72,192 @@
         "default_rank": "Phylum",
         "top_n": 12,
         "sort_by": "abundance",
-        "normalise_to_one": true
+        "normalise_to_one": true,
+        "annotation_strips": null,
+        "sample_sort": "input",
+        "show_legend": true,
+        "log_y": false
       },
-      "wf_tag": "python/advanced_viz_demo",
-      "description": "Per-sample relative abundance per rank. Toggle Normalise in Settings \u2699 to switch between raw counts and 0\u2013100 % stacks."
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "tax-f-phylum",
+      "component_type": "interactive",
+      "title": "Phylum",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "stacked_taxonomy_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d05"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic taxonomy: 18 samples x 9 taxa, two ranks (Phylum + Genus)",
+        "data_collection_tag": "stacked_taxonomy_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d05"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Taxonomic scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "Phylum",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Taxonomy",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#45B8AC",
+      "icon_name": "mdi:bacteria",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "tax-f-genus",
+      "component_type": "interactive",
+      "title": "Genus",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "stacked_taxonomy_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d05"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic taxonomy: 18 samples x 9 taxa, two ranks (Phylum + Genus)",
+        "data_collection_tag": "stacked_taxonomy_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d05"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Taxonomic scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "Genus",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Taxonomy",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#2E7D32",
+      "icon_name": "mdi:bacteria",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "tax-f-sample",
+      "component_type": "interactive",
+      "title": "Sample",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "stacked_taxonomy_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d05"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic taxonomy: 18 samples x 9 taxa, two ranks (Phylum + Genus)",
+        "data_collection_tag": "stacked_taxonomy_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d05"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Taxonomic scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "sample_id",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Taxonomy",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#1976D2",
+      "icon_name": "mdi:flask",
+      "wf_tag": "python/advanced_viz_demo"
     }
   ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
   "stored_edit_dashboard_mode_button": [],
-  "left_panel_layout_data": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-tax-f-phylum",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-tax-f-genus",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-tax-f-sample",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
   "right_panel_layout_data": [
+    {
+      "i": "box-tax-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
     {
       "i": "box-tax-stacked",
       "x": 0,
-      "y": 0,
-      "w": 12,
+      "y": 1,
+      "w": 8,
       "h": 8,
       "static": false,
       "resizeHandles": [
@@ -121,5 +317,29 @@
   "main_tab_name": null,
   "tab_icon": "mdi:chart-bar-stacked",
   "tab_icon_color": "blue",
-  "parent_dashboard_title": null
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Taxonomic scope",
+      "icon": "mdi:filter-variant",
+      "color": "blue",
+      "description": "Restricts which lineages are stacked",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Community composition",
+      "icon": "mdi:chart-bar",
+      "color": "blue",
+      "description": "Relative abundance per sample, stacked by taxon",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
 }

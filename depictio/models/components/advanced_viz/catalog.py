@@ -913,3 +913,42 @@ def compose_run_dir(
     for match in match_run_dir(run_dir, entries, confirm_with_versions=confirm_with_versions):
         by_tool.setdefault(match.tool_id, []).append(match)
     return by_tool
+
+
+def catalog_source_for_use(ref: str) -> dict[str, str] | None:
+    """Resolve a ``use: <tool>/<ref>`` handle into the provenance the chrome draws.
+
+    ``use:`` and ``catalog_source`` say the same thing in two registers. ``use:``
+    is what a YAML author writes, because it is also the binding that expands
+    into ``viz_kind`` + ``config``; ``catalog_source`` is what the tile chrome
+    and the metadata popover read to show a component came from the catalog.
+    Nothing connected them, so every dashboard authored in ``use:`` claimed no
+    catalog provenance at all and went unbadged, which is exactly backwards:
+    those are the components whose origin is known most precisely.
+
+    Resolution mirrors ``_expand_catalog_use``: render id first, then output id.
+    Returns ``None`` rather than raising for anything it cannot resolve, because
+    a dashboard that fails to badge is a cosmetic loss and must never be a
+    reason an otherwise valid import fails.
+    """
+    if not isinstance(ref, str) or "/" not in ref:
+        return None
+    tool_id, short = ref.split("/", 1)
+
+    entry = next((e for e in load_catalog_entries() if e.id == tool_id), None)
+    if entry is None:
+        return None
+
+    output = next(
+        (o for o in entry.outputs if any(r.id == short for r in (o.renders_as or []))),
+        None,
+    )
+    if output is None:
+        output = next((o for o in entry.outputs if o.id in (f"{tool_id}_{short}", short)), None)
+    if output is None:
+        return None
+
+    source = {"toolId": entry.id, "toolName": entry.name, "outputId": output.id, "use": ref}
+    if output.description:
+        source["description"] = output.description
+    return source

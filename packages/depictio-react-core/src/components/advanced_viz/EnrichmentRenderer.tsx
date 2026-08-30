@@ -1,9 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  alpha,
+  Group,
   MultiSelect,
   NumberInput,
   Select,
   Stack,
+  Switch,
+  Text,
   useMantineColorScheme,
   useMantineTheme,
 } from '@mantine/core';
@@ -11,6 +15,7 @@ import Plot from 'react-plotly.js';
 
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { COLOUR_SCALES, type ColourScale } from './colourScales';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
 
@@ -22,7 +27,19 @@ interface EnrichmentConfig {
   source_col?: string | null;
   padj_threshold?: number;
   top_n?: number;
+  colour_scale?: EnrichmentColourScale;
+  reverse_scale?: boolean;
+  max_dot_size?: number;
+  min_dot_size?: number;
+  term_sort?: TermSort;
+  annotate_top_n?: number;
+  marker_outline?: boolean;
 }
+
+// 'Auto' keeps the per-mode, per-theme palette the renderer has always drawn;
+// any named scale overrides it for every colour-by mode.
+type EnrichmentColourScale = 'Auto' | ColourScale;
+type TermSort = 'nes' | 'significance' | 'gene_count' | 'name';
 
 interface Props {
   metadata: StoredMetadata & { viz_kind?: string; config?: EnrichmentConfig };
@@ -41,6 +58,19 @@ const EnrichmentRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
   type ColourBy = 'neg_log10_padj' | 'abs_nes' | 'nes_sign' | 'gene_count';
   const [colourBy, setColourBy] = usePersistedVizControl<ColourBy>(metadata, 'default_colour_by', 'neg_log10_padj');
+  // Display options, same vocabulary as the dot plot. Every fallback below is
+  // what the renderer drew before these controls existed.
+  const [colourScale, setColourScale] = usePersistedVizControl<EnrichmentColourScale>(
+    metadata,
+    'colour_scale',
+    'Auto',
+  );
+  const [reverseScale, setReverseScale] = usePersistedVizControl(metadata, 'reverse_scale', false);
+  const [maxSize, setMaxSize] = usePersistedVizControl(metadata, 'max_dot_size', 30);
+  const [minSize, setMinSize] = usePersistedVizControl(metadata, 'min_dot_size', 6);
+  const [termSort, setTermSort] = usePersistedVizControl<TermSort>(metadata, 'term_sort', 'nes');
+  const [annotateTopN, setAnnotateTopN] = usePersistedVizControl(metadata, 'annotate_top_n', 0);
+  const [markerOutline, setMarkerOutline] = usePersistedVizControl(metadata, 'marker_outline', false);
 
   const requiredCols = useMemo(() => {
     const cols = [
@@ -132,18 +162,45 @@ const EnrichmentRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
     // Top-N by significance (smallest padj wins).
     collected.sort((a, b) => a.padj - b.padj);
     const top = collected.slice(0, topN);
-    // Then re-sort by NES ascending so positive NES sits at the top of
-    // the y-axis (plotly draws first item at the bottom).
-    top.sort((a, b) => a.nes - b.nes);
+    // Then re-sort for the y-axis. Plotly draws the first item at the bottom,
+    // so each comparator puts the most notable term last.
+    top.sort((a, b) => {
+      if (termSort === 'significance') return b.padj - a.padj;
+      if (termSort === 'gene_count') return a.count - b.count;
+      if (termSort === 'name') return b.term.localeCompare(a.term);
+      return a.nes - b.nes;
+    });
 
     if (top.length === 0) {
       return null;
     }
 
-    // Map gene_count → marker size (sqrt scaled, capped).
+    // Map gene_count → marker size (sqrt scaled, capped). sqrt rather than
+    // linear because the eye reads dot area, not radius.
     const counts2 = top.map((r) => r.count);
     const cMax = Math.max(...counts2, 1);
-    const sizes = counts2.map((c) => 6 + Math.sqrt(c / cMax) * 24);
+    const sizeSpan = Math.max(0, maxSize - minSize);
+    const sizes = counts2.map((c) => minSize + Math.sqrt(c / cMax) * sizeSpan);
+
+    // Annotation overlay: the N most significant terms get their gene count
+    // written beside the dot, since size alone is hard to read off precisely.
+    const annotations: any[] = [];
+    if (annotateTopN > 0) {
+      const ranked = [...top].sort((a, b) => a.padj - b.padj).slice(0, annotateTopN);
+      for (const r of ranked) {
+        annotations.push({
+          x: r.nes,
+          y: r.term,
+          text: String(r.count),
+          showarrow: false,
+          xanchor: 'left',
+          // Clear the marker itself, which grows with max_dot_size.
+          xshift: maxSize / 2 + 4,
+          // No font colour: applyLayoutTheme tints unstyled annotations.
+          font: { size: 9 },
+        });
+      }
+    }
 
     // Colour-by maps the user's choice to (a) per-point colour values and
     // (b) the colourscale + colourbar title. NES sign is the only discrete
@@ -156,11 +213,12 @@ const EnrichmentRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
           : colourBy === 'gene_count'
             ? top.map((r) => r.count)
             : top.map((r) => Math.sign(r.nes));
-    // NES sign uses a discrete blue (down) / red (up) palette; the other
-    // modes use perceptually-uniform sequential scales. YlOrRd reads better
-    // than Viridis when the user picked |NES| (magnitude-only — warm end
-    // signals "stronger enrichment").
-    const colorscale: string | (string | number)[][] =
+    // 'Auto': NES sign uses a discrete blue (down) / red (up) palette; the
+    // other modes use perceptually-uniform sequential scales. YlOrRd reads
+    // better than Viridis when the user picked |NES| (magnitude-only — warm
+    // end signals "stronger enrichment"). A named scale wins over all of it,
+    // including NES sign, where cmin/cmax below keep the two buckets apart.
+    const autoScale: string | (string | number)[][] =
       colourBy === 'nes_sign'
         ? [
             [0.0, '#1f77b4'],
@@ -175,6 +233,8 @@ const EnrichmentRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
           : isDark
             ? 'Plasma'
             : 'Viridis';
+    const colorscale: string | (string | number)[][] =
+      colourScale === 'Auto' ? autoScale : colourScale;
     const colourbarTitle: string =
       colourBy === 'neg_log10_padj'
         ? '-log10(padj)'
@@ -201,6 +261,7 @@ const EnrichmentRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
             size: sizes,
             color: colourValues,
             colorscale: colorscale,
+            reversescale: reverseScale,
             showscale: true,
             // Discrete two-bucket palette needs an explicit min/max so the
             // boundary lands at 0 rather than auto-fitting to the data.
@@ -213,7 +274,12 @@ const EnrichmentRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
                 ? { tickvals: [-1, 1], ticktext: ['down', 'up'] }
                 : {}),
             },
-            line: { width: 0 },
+            line: markerOutline
+              ? {
+                  width: 0.6,
+                  color: isDark ? alpha(theme.black, 0.7) : alpha(theme.white, 0.85),
+                }
+              : { width: 0 },
           },
         },
       ],
@@ -231,11 +297,28 @@ const EnrichmentRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
           ticks: '',
           showgrid: true,
         },
+        annotations,
         showlegend: false,
         autosize: true,
       },
     };
-  }, [rows, config, topN, padjThreshold, selectedSources, colourBy, isDark, theme]);
+  }, [
+    rows,
+    config,
+    topN,
+    padjThreshold,
+    selectedSources,
+    colourBy,
+    colourScale,
+    reverseScale,
+    maxSize,
+    minSize,
+    termSort,
+    annotateTopN,
+    markerOutline,
+    isDark,
+    theme,
+  ]);
 
   const controls = (
     <Stack gap="xs">
@@ -282,6 +365,78 @@ const EnrichmentRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
         ]}
         allowDeselect={false}
       />
+      <Select
+        size="xs"
+        label="Colourscale"
+        description="Auto follows the colour-by mode and the theme"
+        value={colourScale}
+        onChange={(v) => v && setColourScale(v as EnrichmentColourScale)}
+        data={['Auto', ...COLOUR_SCALES]}
+        allowDeselect={false}
+      />
+      <Stack gap={4}>
+        <Text size="xs" fw={500}>
+          Direction
+        </Text>
+        <Switch
+          size="xs"
+          checked={reverseScale}
+          onChange={(e) => setReverseScale(e.currentTarget.checked)}
+          label="Reverse colourscale"
+        />
+      </Stack>
+      <Select
+        size="xs"
+        label="Sort terms"
+        description="Which term sits at the top of the axis"
+        value={termSort}
+        onChange={(v) => v && setTermSort(v as TermSort)}
+        data={[
+          { value: 'nes', label: 'NES' },
+          { value: 'significance', label: 'Significance' },
+          { value: 'gene_count', label: 'Gene count' },
+          { value: 'name', label: 'Name' },
+        ]}
+        allowDeselect={false}
+      />
+      <Group gap="xs" grow>
+        <NumberInput
+          size="xs"
+          label="Max dot size"
+          value={maxSize}
+          onChange={(v) => setMaxSize(Math.max(4, Math.min(60, Number(v) || 30)))}
+          min={4}
+          max={60}
+        />
+        <NumberInput
+          size="xs"
+          label="Min dot size"
+          value={minSize}
+          onChange={(v) => setMinSize(Math.max(0, Math.min(20, Number(v) || 6)))}
+          min={0}
+          max={20}
+        />
+      </Group>
+      <NumberInput
+        size="xs"
+        label="Annotate top-N"
+        description="Gene count on the most significant dots; 0 = off"
+        value={annotateTopN}
+        onChange={(v) => setAnnotateTopN(Math.max(0, Math.min(40, Number(v) || 0)))}
+        min={0}
+        max={40}
+      />
+      <Stack gap={4}>
+        <Text size="xs" fw={500}>
+          Markers
+        </Text>
+        <Switch
+          size="xs"
+          checked={markerOutline}
+          onChange={(e) => setMarkerOutline(e.currentTarget.checked)}
+          label="Marker outline"
+        />
+      </Stack>
     </Stack>
   );
 

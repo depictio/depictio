@@ -465,6 +465,9 @@ const CoverageTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
 
     const layout: Record<string, unknown> = {
       template: isDark ? 'plotly_dark' : 'plotly_white',
+      // b is only a floor: the x axis carries automargin, so Plotly grows the
+      // bottom margin to whatever the tick labels plus the genome-name title
+      // need. Raising the floor buys nothing, it only shortens the track.
       margin: { l: 80, r: 12, t: 8, b: 32 },
       showlegend: !useFacets,
       legend: {
@@ -506,12 +509,23 @@ const CoverageTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
       };
     });
 
+    // The axis furniture (line, tick labels, and the genome-name title) is drawn
+    // downwards from wherever the axis is anchored. Anchoring it to `y` put it at
+    // the coverage panel's lower domain edge, which is `trackBase` (0.09) rather
+    // than the bottom of the plotting area, so the tick labels landed inside the
+    // annotation strip's band [0, 0.06] and the title came to rest across that
+    // band's lower boundary. Anchoring free at position 0 puts all of it below
+    // the strip, in the bottom margin, which is also what the facet branch was
+    // already getting from `free` (position defaults to 0). automargin lets the
+    // bottom margin grow for the title rather than clipping it.
     layout.xaxis = {
       title: { text: annotation ? `${annotation.displayName} (bp)` : config.position_col, font: { size: 11 } },
       zeroline: false,
       showgrid: true,
       gridcolor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-      anchor: useFacets ? 'free' : 'y',
+      anchor: 'free',
+      position: 0,
+      automargin: true,
       ...(annotation ? { range: [0, annotation.length] } : {}),
     };
 

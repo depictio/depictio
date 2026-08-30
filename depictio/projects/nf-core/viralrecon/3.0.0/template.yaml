@@ -26,6 +26,53 @@ template:
       required: false
   dashboards:
     - "dashboards/base.yaml"
+  # How a run's provenance is collected. Without this block the CLI falls back
+  # to _DEFAULT_PROVENANCE_SPEC, which reads params.json but drops every key
+  # into a single ungrouped "Parameters" list and never looks at the software
+  # versions. viralrecon has ~106 parameters, so the grouping is what makes the
+  # ingestion report and the dashboard Settings drawer readable.
+  #
+  # Globs are relative to DATA_ROOT; collect_run_provenance also tries
+  # `*/pipeline_info/...`, which is what matches the run_N/ layout this
+  # template expects.
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "genomes.*"   # bundled genome catalog, identical every run
+          - "hook_url"    # nf-core runs put a live Slack webhook here
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Protocol & primers"
+        key_patterns: ["protocol", "platform", "primer_*", "artic_minion_*", "min_barcode_reads", "min_guppyplex_reads", "threeprime_adapters"]
+      - group: "Reference genome"
+        key_patterns: ["genome", "genomes", "fasta", "gff", "bowtie2_index", "nextclade_dataset*", "pango_database", "kraken2_db*", "blast_db", "freyja_db_name", "freyja_barcodes", "freyja_lineages", "additional_annotation"]
+      - group: "Read processing"
+        key_patterns: ["save_trimmed_fail", "save_unaligned", "save_mpileup", "save_reference", "filter_duplicates", "ivar_trim_*", "min_mapped_reads", "sequencing_summary", "fastq_dir"]
+      - group: "Variant calling"
+        key_patterns: ["variant_caller", "consensus_caller", "kraken2_variants_host_filter", "freyja_depthcutoff", "freyja_repeats"]
+      - group: "Assembly"
+        key_patterns: ["assemblers", "spades_*", "min_contig_length", "min_perc_contig_aligned", "kraken2_assembly_host_filter"]
+      - group: "Run context"
+        key_patterns: ["input*", "outdir", "version", "email*", "config_profile_*", "custom_config_*", "multiqc_*", "max_multiqc_email_size", "monochrome_logs", "validate_params", "help*", "show_hidden", "publish_dir_mode", "pipelines_testdata_base_path", "trace_report_suffix", "plaintext_email", "hook_url", "account", "clusterOptions"]
+      - group: "Skipped steps"
+        key_patterns: ["skip_*"]
+    highlight:
+      - "protocol"
+      - "platform"
+      - "primer_set"
+      - "primer_set_version"
+      - "variant_caller"
+      - "consensus_caller"
+      - "min_mapped_reads"
+      - "genome"
   # No reference.vars needed — DATA_ROOT is resolved by db_init to the
   # bundled project directory (/app/depictio/projects/nf-core/viralrecon/3.0.0).
   conditional:
@@ -93,56 +140,84 @@ workflows:
                 pattern: "multiqc/multiqc_data/multiqc.parquet"
           dc_specific_properties:
             s3_location: null
+            # Documentation only: `DCMultiQC.modules` / `.plots` are overwritten at
+            # ingest from the report's own `parse_logs()` output, so nothing here
+            # gates what renders. They are still worth keeping honest, since this
+            # is what a dashboard author reads before writing a `selected_module`
+            # / `selected_plot` pair. Every name below is one the shipped
+            # viralrecon report actually carries; the previous list named four
+            # modules that do not exist in it (picard, freyja, nextclade, and the
+            # unsuffixed samtools / ivar / quast) and seven plot anchors under
+            # names MultiQC does not use.
             modules:
-              - "fastp"
               - "fastqc"
+              - "fastp"
+              - "cutadapt"
+              - "kraken"
               - "bowtie2"
-              - "samtools"
-              - "picard"
+              - "samtools_bowtie2"
+              - "samtools_ivar"
+              - "samtools_markduplicates"
               - "mosdepth"
-              - "ivar"
               - "ivar_variants"
               - "bcftools"
               - "snpeff"
-              - "pangolin"
-              - "nextclade"
-              - "quast"
               - "quast_variants"
-              - "kraken"
-              - "freyja"
+              - "pangolin"
+              - "nextclade_clade"
+              - "fail_mapped_samples"
+              - "summary_variants_metrics"
+              - "summary_assembly_metrics"
             plots:
+              fastqc:
+                - "Sequence Counts"
+                - "Sequence Quality Histograms"
+                - "Per Sequence Quality Scores"
+                - "Per Base N Content"
+                - "Sequence Duplication Levels"
+                - "Adapter Content"
+                - "Status Checks"
               fastp:
                 - "Filtered Reads"
                 - "Insert Sizes"
-              fastqc:
-                - "Sequence Quality Histograms"
-                - "Status Checks"
-              bowtie2:
-                - "SE"
-                - "PE"
-                - "Paired-end alignments"
-              samtools:
-                - "Alignment Metrics"
-              mosdepth:
-                - "Coverage Distribution"
-                - "Cumulative coverage distribution"
-                - "Coverage Per Contig"
-                - "Average coverage per contig"
-              ivar:
-                - "Variants Counts"
-              ivar_variants:
-                - "ivar_variants-section"
-              snpeff:
-                - "Variant Effects by Genomic Region"
-                - "Variant Effects by Impact"
-              quast:
-                - "Assembly Statistics"
-              quast_variants:
-                - "Number of Contigs"
-              bcftools:
-                - "Variant Substitution Types"
+              cutadapt:
+                - "Filtered Reads"
               kraken:
                 - "Top taxa"
+              bowtie2:
+                - "Paired-end alignments"
+              samtools_bowtie2:
+                - "Flagstat"
+              samtools_ivar:
+                - "Flagstat"
+              samtools_markduplicates:
+                - "Flagstat"
+              mosdepth:
+                - "Cumulative coverage distribution"
+                - "Average coverage per contig"
+              ivar_variants:
+                - "ivar_variants-section"
+              bcftools:
+                - "Variant Substitution Types"
+                - "Indel Distribution"
+              snpeff:
+                - "Variants by Genomic Region"
+                - "Variant Effects by Impact"
+                - "Variants by Effect Types"
+                - "Variants by Functional Class"
+              quast_variants:
+                - "Assembly Statistics"
+                - "Number of Contigs"
+              pangolin:
+                - "Run table"
+              nextclade_clade:
+                - "nextclade_clade-section"
+              fail_mapped_samples:
+                - "fail_mapped_samples-section"
+              summary_variants_metrics:
+                - "summary_variants_metrics-section"
+              summary_assembly_metrics:
+                - "summary_assembly_metrics-section"
 
       # ----------------------------------------------------------------
       # Recipe-transformed data collections (Aggregated metatype)
@@ -216,9 +291,10 @@ workflows:
               "ambiguity_score": "Ambiguity in lineage assignment"
               "scorpio_call": "Scorpio constellation call"
               "scorpio_support": "Scorpio support score"
+              "scorpio_conflict": "Scorpio constellation conflict score"
+              "scorpio_notes": "Scorpio free-text notes on the call"
               "pangolin_version": "Pangolin software version"
-              "pango_version": "PANGO data version"
-              "status": "Assignment status"
+              "note": "Pangolin free-text note on the assignment"
               "qc_status": "QC status (pass/fail)"
 
       - data_collection_tag: "nextclade_results"
@@ -497,4 +573,73 @@ links:
       resolver: "direct"
       target_field: "sample"
     description: "Filter amplicon heatmap by selected samples"
+    enabled: true
+
+  # Link 8: Summary Metrics -> Complex Heatmap (canonical)
+  #
+  # `complex_heatmap_canonical` is a pass-through of the amplicon heatmap, and it
+  # is the collection the only complex_heatmap tile in the project actually
+  # binds. Without this link a filter set on any other summary_metrics column
+  # (lineage, coverage, variant yield) is never translated onto it: the resolver
+  # rewrites a filter to the link's target field, and with no link there is
+  # nothing to rewrite to. The tile then logs FILTER MISMATCH and renders the
+  # full matrix while every neighbouring tile has narrowed.
+  - source_dc_tag: "summary_metrics"
+    source_column: "sample"
+    target_dc_tag: "complex_heatmap_canonical"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the clustered amplicon heatmap by selected samples"
+    enabled: true
+
+  # Links 9-12: the remaining `*_canonical` collections a dashboard tile binds.
+  #
+  # Same reasoning as link 8, and the same one-line-per-collection fix. Each of
+  # these backs an advanced_viz tile that sits in a section next to a linked
+  # tile: without the link the genome coverage track stays at every sample while
+  # the amplicon track beside it narrows, and the oncoplot cards keep counting
+  # the full cohort while the variant cards above them do not. `upset_canonical`
+  # is deliberately absent — its columns are lineage names, so the runtime
+  # narrows it by value with no link needed.
+  - source_dc_tag: "summary_metrics"
+    source_column: "sample"
+    target_dc_tag: "coverage_track_canonical"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the genome coverage track by selected samples"
+    enabled: true
+
+  - source_dc_tag: "summary_metrics"
+    source_column: "sample"
+    target_dc_tag: "sankey_canonical"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the classification funnel by selected samples"
+    enabled: true
+
+  # The two matrices below index samples as `sample_id`, not `sample`.
+  - source_dc_tag: "summary_metrics"
+    source_column: "sample"
+    target_dc_tag: "oncoplot_canonical"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the oncoplot by selected samples"
+    enabled: true
+
+  - source_dc_tag: "summary_metrics"
+    source_column: "sample"
+    target_dc_tag: "variant_feature_matrix_canonical"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the variant feature matrix by selected samples"
     enabled: true

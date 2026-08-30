@@ -25,6 +25,12 @@ import {
   type ComputeEmbeddingResult,
 } from '../../api';
 import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
+import {
+  advancedVizSelectionColumn,
+  advancedVizSelectionFilter,
+  extractScatterSelection,
+  filtersExcludingOwn,
+} from '../../selection';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyThemeColors } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
@@ -52,22 +58,73 @@ interface EmbeddingConfig {
   tsne_perplexity?: number;
   tsne_n_iter?: number;
   pcoa_distance?: string;
+  /** Opt into lasso/box/click selection as a dashboard filter. Resolved
+   *  through `advancedVizSelectionColumn`, which is what the chrome's
+   *  capability marker reads too. */
+  selection_enabled?: boolean;
+  /** Column the emitted values belong to; null means `sample_id_col`. */
+  selection_column?: string | null;
 }
 
 interface Props {
   metadata: StoredMetadata & { viz_kind?: string; config?: EmbeddingConfig };
   filters: InteractiveFilter[];
   refreshTick?: number;
+  /** Emits this component's selection as a dashboard filter. Absent on
+   *  read-only hosts (catalog, project previews), which is what keeps the
+   *  lasso off there. */
+  onFilterChange?: (filter: InteractiveFilter) => void;
 }
 
-const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
+// Past this many distinct values, one trace and one legend entry per value is
+// not a plot: colouring falls back to a single trace with a per-point colour
+// array. Reachable now that the Colour-by menu lists every column of the DC.
+const MAX_CATEGORY_TRACES = 40;
+// A contour drawn over a handful of points is noise, not a density.
+const MIN_DENSITY_POINTS = 8;
+// Polars dtype prefixes that mean "this column gets a continuous colourscale".
+const NUMERIC_DTYPE_PREFIXES = ['Int', 'UInt', 'Float', 'Decimal'];
+
+/** `colour` at `alpha`, for the two-stop density colourscales. Plotly needs an
+ *  explicit transparent stop and hex carries no alpha channel. Anything the
+ *  helper cannot parse degrades to fully transparent below 1 and to the colour
+ *  itself at 1, which is exactly the pair of stops we ever ask for. */
+function withAlpha(colour: string, alpha: number): string {
+  const match = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(colour.trim());
+  if (!match) return alpha >= 1 ? colour : 'rgba(0,0,0,0)';
+  const hex =
+    match[1].length === 3
+      ? match[1]
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : match[1];
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilterChange }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
   const isDark = colorScheme === 'dark';
   const config = (metadata.config || {}) as EmbeddingConfig;
-  const [pointSize, setPointSize] = usePersistedVizControl(metadata, 'point_size', 7);
+  // 6 to agree with EmbeddingConfig.point_size in
+  // depictio/models/components/advanced_viz/configs.py. The two layers used to
+  // disagree, so an unconfigured component drew 7 px and a configured one 6.
+  const [pointSize, setPointSize] = usePersistedVizControl(metadata, 'point_size', 6);
   const [showCentroids, setShowCentroids] = usePersistedVizControl(metadata, 'show_centroids', false);
   const [markerOutline, setMarkerOutline] = usePersistedVizControl(metadata, 'marker_outline', false);
+  // Outline width in px. The old hardcoded 0.5 was invisible at any point size,
+  // which is what the "outline?? je ne vois rien" report was about.
+  const [outlineWidth, setOutlineWidth] = usePersistedVizControl(metadata, 'marker_outline_width', 1.5);
+  // Axis furniture preset. "default" is exactly what this renderer has always
+  // drawn (axis lines, no grid, no tick labels), so a shipped dashboard is
+  // untouched; "grid" adds gridlines and ticks, and "clean" strips the axes,
+  // which is the usual convention for a UMAP / t-SNE embedding.
+  type PlotStyle = 'default' | 'grid' | 'clean';
+  const [plotStyle, setPlotStyle] = usePersistedVizControl<PlotStyle>(metadata, 'plot_style', 'default');
   type LegendPos = 'right' | 'bottom' | 'in-tr' | 'hidden';
   const [legendPos, setLegendPos] = usePersistedVizControl<LegendPos>(metadata, 'legend_pos', 'right');
   const [ncontours, setNcontours] = usePersistedVizControl(metadata, 'ncontours', 14);
@@ -139,14 +196,42 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
   const [minDist, setMinDist] = usePersistedVizControl(metadata, 'umap_min_dist', 0.1);
   const [perplexity, setPerplexity] = usePersistedVizControl(metadata, 'tsne_perplexity', 30);
 
+  // ---- Selection as a cross-filter ---------------------------------------
+  // The column resolves to sample_id_col unless the dashboard names another
+  // one; `undefined` means this component does not select at all, which is
+  // also what the chrome's capability marker reads (see selection.ts). A host
+  // with no onFilterChange is read-only, so it advertises nothing.
+  const selectionColumn = onFilterChange ? advancedVizSelectionColumn(metadata) : undefined;
+  const selectionEnabled = Boolean(selectionColumn);
+  // Every point already carries its sample id in customdata slot 0, so that is
+  // the slot to read when selecting on the sample id itself. A different
+  // column rides in a slot of its own after the hover extras, which leaves the
+  // hover template, and the identity it shows from slot 0, exactly as it was.
+  const selectionInOwnSlot = Boolean(selectionColumn) && selectionColumn !== config.sample_id_col;
+  const selectionSlot = selectionInOwnSlot ? 1 + hoverCols.length : 0;
+
   const requiredCols = useMemo(() => {
     const cols = [config.sample_id_col, config.dim_1_col, config.dim_2_col].filter(Boolean) as string[];
     if (config.dim_3_col) cols.push(config.dim_3_col);
     if (config.cluster_col) cols.push(config.cluster_col);
     if (config.color_col && !cols.includes(config.color_col)) cols.push(config.color_col);
+    // Whatever the user is colouring by right now. The projection is built from
+    // the configured roles, so a column picked in the Colour-by menu would
+    // otherwise never be requested and the plot would stay one flat colour.
+    if (colorBy && !cols.includes(colorBy)) cols.push(colorBy);
     for (const c of hoverCols) if (c && !cols.includes(c)) cols.push(c);
+    if (selectionColumn && !cols.includes(selectionColumn)) cols.push(selectionColumn);
     return cols;
-  }, [config, hoverCols]);
+  }, [config, hoverCols, colorBy, selectionColumn]);
+
+  // This component must NOT narrow itself by its own selection: a lasso would
+  // otherwise redraw the embedding as only the points it caught, and the user
+  // could never widen it again. Same rule FigureRenderer follows; every other
+  // component still sees the entry and narrows.
+  const filtersForFetch = useMemo(
+    () => filtersExcludingOwn(filters, metadata.index, 'scatter_selection'),
+    [filters, metadata.index],
+  );
 
   const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -190,7 +275,7 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
         wfId: metadata.wf_id,
         dcId: metadata.dc_id,
         columns: requiredCols,
-        filters,
+        filters: filtersForFetch,
         vizKind: 'embedding',
       })
         .then((res) => {
@@ -213,14 +298,22 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     if (config.color_col && !extraCols.includes(config.color_col)) {
       extraCols.push(config.color_col);
     }
+    // Same reason as requiredCols above: the worker only returns the extras it
+    // is asked for, so the active Colour-by column has to travel with the job.
+    if (colorBy && !extraCols.includes(colorBy)) extraCols.push(colorBy);
     for (const c of hoverCols) if (c && !extraCols.includes(c)) extraCols.push(c);
+    // The worker returns the sample ids on its own, so only a selection column
+    // that is something else has to travel as an extra.
+    if (selectionInOwnSlot && selectionColumn && !extraCols.includes(selectionColumn)) {
+      extraCols.push(selectionColumn);
+    }
     const payload = {
       wf_id: metadata.wf_id,
       dc_id: metadata.dc_id,
       feature_id_col: config.sample_id_col,
       method,
       params: computeParams,
-      filter_metadata: filters,
+      filter_metadata: filtersForFetch,
       extra_cols: extraCols,
     };
 
@@ -296,11 +389,13 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     metadata.wf_id,
     metadata.dc_id,
     JSON.stringify(requiredCols),
-    JSON.stringify(filters),
+    JSON.stringify(filtersForFetch),
     refreshTick,
     method,
     JSON.stringify(computeParams),
     JSON.stringify(hoverCols),
+    colorBy,
+    selectionColumn,
     config.sample_id_col,
     config.dim_1_col,
     config.dim_2_col,
@@ -336,62 +431,129 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
       colorValues.length > 0 &&
       typeof colorValues[0] !== 'number';
 
-    // Hover-extras: customdata slot 0 = sample id, slots 1..N = extra cols.
+    // Hover-extras: customdata slot 0 = sample id, slots 1..N = extra cols,
+    // then the selection column when it is not the sample id (see
+    // `selectionSlot`, which is what the Plotly handlers read).
     const extraValues = hoverCols.map((c) => (rows[c] as unknown[]) || []);
+    // Nothing is appended when the column did not come back, which leaves the
+    // slot the handlers read empty and degrades to "this gesture selected
+    // nothing" rather than to a filter on a column of blanks. Missing values
+    // ride as null for the same reason: `extractScatterSelection` skips them.
+    const selectionSource =
+      selectionInOwnSlot && selectionColumn
+        ? (rows[selectionColumn] as unknown[] | undefined)
+        : undefined;
+    const selectionValues = selectionSource && selectionSource.length > 0 ? selectionSource : null;
     const buildCustomdata = (idxList: number[]) =>
-      idxList.map((i) => [String(ids[i] ?? ''), ...extraValues.map((vs) => vs[i] ?? '')]);
+      idxList.map((i) => [
+        String(ids[i] ?? ''),
+        ...extraValues.map((vs) => vs[i] ?? ''),
+        ...(selectionValues ? [selectionValues[i] ?? null] : []),
+      ]);
     const hoverExtraTpl = hoverCols
       .map((c, j) => `<br>${c}: %{customdata[${j + 1}]}`)
       .join('');
 
-    const traces: any[] = [];
+    const { textColor, gridColor, zeroLineColor } = plotlyThemeColors(isDark, theme);
+    // Plaque behind in-plot text: the inside-top-right legend and the centroid
+    // labels, both of which sit over the points.
+    const inTrBg = isDark ? 'rgba(20,20,20,0.6)' : 'rgba(255,255,255,0.7)';
 
-    // 2D KDE only — Plotly's histogram2dcontour doesn't make sense in 3D, and
-    // a volumetric density would dwarf the scatter. Skip in 3D mode.
+    const traces: any[] = [];
+    const centroidAnnotations: any[] = [];
+
+    // Category universe, per-category row indices and the colour map, built
+    // once: the density overlay, the scatter traces and the centroid labels all
+    // key off exactly the same grouping.
+    const categories: string[] = [];
+    const categoryIdx = new Map<string, number[]>();
+    if (isCategorical && colorValues) {
+      for (let i = 0; i < colorValues.length; i++) {
+        const cat = String(colorValues[i]);
+        const bucket = categoryIdx.get(cat);
+        if (bucket) {
+          bucket.push(i);
+        } else {
+          categoryIdx.set(cat, [i]);
+          categories.push(cat);
+        }
+      }
+      categories.sort();
+    }
+    const colourSource =
+      isCategorical && colorValues
+        ? stableColorMap(
+            colorUniverse ?? categories,
+            resolveCategoricalPalette(theme, TAB10_PALETTE),
+            config.category_palette ?? null,
+          )
+        : null;
+    // One trace per group only while the group count stays sane, see
+    // MAX_CATEGORY_TRACES. Past it the colours survive but the traces collapse
+    // into one, so picking a free-text column can't lock up the tab.
+    const perCategoryTraces = Boolean(colourSource) && categories.length <= MAX_CATEGORY_TRACES;
+
+    // 2D only: a volumetric density would dwarf the scatter, so 3D skips it.
+    // This is a binned 2D histogram with smoothed contours, NOT a KDE: Plotly
+    // has no KDE trace. Each group gets its own alpha ramp (transparent → the
+    // group's own colour), which replaces the old flat Greys/Blues fill that
+    // was dark-on-dark in dark mode and read as blocks rather than a density.
     if (!actuallyRender3D && showDensity && x.length > 1) {
-      traces.push({
-        type: 'histogram2dcontour' as const,
-        x,
-        y,
-        colorscale: isDark ? 'Greys' : 'Blues',
-        reversescale: false,
-        showscale: false,
-        opacity: densityOpacity,
-        contours: { coloring: 'fill', showlines: false },
-        hoverinfo: 'skip',
-        ncontours,
-        showlegend: false,
-      });
+      const densityAccent = theme.colors[theme.primaryColor]?.[isDark ? 4 : 6] ?? textColor;
+      const densityGroups =
+        perCategoryTraces && colourSource
+          ? categories.map((cat) => ({
+              idx: categoryIdx.get(cat) ?? [],
+              colour: colourSource.get(cat),
+            }))
+          : [{ idx: x.map((_, i) => i), colour: densityAccent }];
+      for (const group of densityGroups) {
+        if (group.idx.length < MIN_DENSITY_POINTS) continue;
+        traces.push({
+          type: 'histogram2dcontour' as const,
+          x: group.idx.map((i) => x[i]),
+          y: group.idx.map((i) => y[i]),
+          colorscale: [
+            [0, withAlpha(group.colour, 0)],
+            [1, withAlpha(group.colour, 1)],
+          ],
+          showscale: false,
+          opacity: densityOpacity,
+          contours: { coloring: 'fill', showlines: false },
+          // Smoothing on the contour paths is what stops the fill reading as a
+          // staircase of histogram bins.
+          line: { width: 0, smoothing: 1.3 },
+          hoverinfo: 'skip',
+          ncontours,
+          showlegend: false,
+        });
+      }
     }
 
     const denseAutoSize = x.length > 1000 ? Math.min(pointSize, 4) : pointSize;
+    // An opaque, contrasting stroke. The old line was 0.5 px of translucent
+    // background colour, which was invisible at every point size.
+    const outline = markerOutline ? { width: outlineWidth, color: textColor } : { width: 0 };
     const baseMarker2D = {
       size: denseAutoSize,
       opacity: 0.85,
-      line: markerOutline
-        ? { width: 0.5, color: isDark ? 'rgba(0,0,0,0.65)' : 'rgba(255,255,255,0.8)' }
-        : { width: 0 },
+      line: outline,
     };
-    // 3D markers don't accept the same outline shape; keep them simple.
-    const baseMarker3D = { size: Math.max(2, Math.min(denseAutoSize, 6)), opacity: 0.9 };
+    // scatter3d draws marker.line as a sprite border, so it takes the same
+    // shape. It was simply never passed, which is why the outline toggle did
+    // nothing at all in 3D.
+    const baseMarker3D = {
+      size: Math.max(2, Math.min(denseAutoSize, 6)),
+      opacity: 0.9,
+      line: outline,
+    };
 
     const scatterType = actuallyRender3D ? ('scatter3d' as const) : ('scattergl' as const);
 
-    if (isCategorical && colorValues) {
-      const categories = Array.from(new Set(colorValues.map((v) => String(v))));
-      categories.sort();
-      const colourSource = stableColorMap(
-        colorUniverse ?? categories,
-        resolveCategoricalPalette(theme, TAB10_PALETTE),
-        config.category_palette ?? null,
-      );
-      const centroids: { x: number; y: number; z?: number; label: string }[] = [];
-      for (let ci = 0; ci < categories.length; ci++) {
-        const cat = categories[ci];
-        const idx: number[] = [];
-        for (let i = 0; i < colorValues.length; i++) {
-          if (String(colorValues[i]) === cat) idx.push(i);
-        }
+    if (perCategoryTraces && colourSource) {
+      const centroids: { x: number; y: number; z?: number; label: string; colour: string }[] = [];
+      for (const cat of categories) {
+        const idx = categoryIdx.get(cat) ?? [];
         const trace: any = {
           type: scatterType,
           mode: 'markers' as const,
@@ -417,31 +579,56 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
           const cy = idx.reduce((s, i) => s + y[i], 0) / idx.length;
           const cz =
             actuallyRender3D && z3 ? idx.reduce((s, i) => s + z3[i], 0) / idx.length : undefined;
-          centroids.push({ x: cx, y: cy, z: cz, label: cat });
+          centroids.push({ x: cx, y: cy, z: cz, label: cat, colour: colourSource.get(cat) });
         }
       }
       if (showCentroids && centroids.length > 0) {
-        const labelTrace: any = {
-          type: actuallyRender3D ? 'scatter3d' : 'scatter',
-          mode: 'text' as const,
+        // A cross marks the barycentre and the label rides above it as an
+        // annotation: yshift is a pixel offset, so the text clears the points
+        // at any zoom, and bgcolor gives it the plaque it needs to stay
+        // readable over a dense cloud. The label used to be a text trace
+        // planted exactly on the barycentre, i.e. under its own points.
+        const centroidTrace: any = {
+          type: scatterType,
+          mode: 'markers' as const,
           x: centroids.map((c) => c.x),
           y: centroids.map((c) => c.y),
-          text: centroids.map((c) => c.label),
-          textfont: {
-            size: 12,
-            color: isDark ? 'rgba(255,255,255,0.95)' : 'rgba(0,0,0,0.85)',
+          marker: {
+            symbol: 'x',
+            size: Math.max(8, denseAutoSize + 4),
+            color: centroids.map((c) => c.colour),
+            line: { width: 1, color: textColor },
           },
-          hoverinfo: 'skip',
+          hoverinfo: 'skip' as const,
           showlegend: false,
         };
-        if (actuallyRender3D) labelTrace.z = centroids.map((c) => c.z);
-        traces.push(labelTrace);
+        if (actuallyRender3D) centroidTrace.z = centroids.map((c) => c.z);
+        traces.push(centroidTrace);
+        for (const c of centroids) {
+          centroidAnnotations.push({
+            x: c.x,
+            y: c.y,
+            ...(actuallyRender3D ? { z: c.z } : {}),
+            text: c.label,
+            showarrow: false,
+            yshift: 16,
+            font: { size: 11, color: textColor },
+            bgcolor: inTrBg,
+            bordercolor: c.colour,
+            borderwidth: 1,
+            borderpad: 2,
+          });
+        }
       }
     } else {
-      // Continuous gradient OR no colour binding. Use Spectral (with optional
-      // reverse) for the continuous case so cluster-heavy use cases get a
-      // perceptually-ordered diverging palette instead of Viridis monotone.
-      const colourArr = (colorValues as number[] | undefined) ?? undefined;
+      // Three cases land here: a continuous colour column, no colour binding at
+      // all, and a categorical column with more distinct values than
+      // MAX_CATEGORY_TRACES (which keeps its per-value colours, as one trace).
+      // The continuous case uses Spectral (optionally reversed) so cluster-heavy
+      // reads get a perceptually-ordered diverging palette, not Viridis monotone.
+      const colourArr = isCategorical ? undefined : (colorValues as number[] | undefined) ?? undefined;
+      const categoricalColours =
+        colourSource && colorValues ? colorValues.map((v) => colourSource.get(String(v))) : undefined;
       const trace: any = {
         type: scatterType,
         mode: 'markers' as const,
@@ -456,7 +643,7 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
           '<extra></extra>',
         marker: {
           ...(actuallyRender3D ? baseMarker3D : baseMarker2D),
-          color: colourArr ?? '#4C72B0',
+          color: colourArr ?? categoricalColours ?? '#4C72B0',
           colorscale: colourArr ? 'Spectral' : undefined,
           reversescale: colourArr ? reverseScale : undefined,
           showscale: Boolean(colourArr),
@@ -472,7 +659,6 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
 
     // Per-position legend placement. Pulled out of the layout literal so the
     // legend branch isn't a 5-level nested ternary.
-    const inTrBg = isDark ? 'rgba(20,20,20,0.6)' : 'rgba(255,255,255,0.7)';
     function legendForPos(pos: LegendPos): Record<string, unknown> {
       switch (pos) {
         case 'right':
@@ -493,19 +679,29 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
       }
     }
 
-    const { textColor, gridColor, zeroLineColor } = plotlyThemeColors(isDark, theme);
+    // Axis furniture, driven by the Plot style control. "default" reproduces
+    // the historical look exactly, so nothing shipped moves unless the user
+    // asks for gridlines or for the bare-canvas UMAP look.
+    const gridStyle = plotStyle === 'grid';
+    const cleanStyle = plotStyle === 'clean';
     const axisCommon = {
       zeroline: false,
-      showgrid: false,
-      showticklabels: false,
-      ticks: '' as const,
-      showline: true,
+      showgrid: gridStyle,
+      gridcolor: gridColor,
+      showticklabels: gridStyle,
+      ticks: (gridStyle ? 'outside' : '') as '' | 'outside',
+      showline: !cleanStyle,
       linecolor: zeroLineColor,
       linewidth: 1,
       mirror: false,
       color: textColor,
       tickfont: { color: textColor },
     };
+    // The 3D scene already draws a grid and ticks by default, so only the
+    // "clean" preset has anything to say there.
+    const scene3DAxisStyle = cleanStyle
+      ? { showgrid: false, showticklabels: false, zeroline: false }
+      : {};
 
     const layout2D = {
       xaxis: {
@@ -536,12 +732,14 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
         color: textColor,
         gridcolor: gridColor,
         tickfont: { color: textColor },
+        ...scene3DAxisStyle,
       },
       yaxis: {
         title: { text: config.dim_2_col, font: { size: 11, color: textColor } },
         color: textColor,
         gridcolor: gridColor,
         tickfont: { color: textColor },
+        ...scene3DAxisStyle,
       },
       zaxis: {
         title: {
@@ -551,9 +749,13 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
         color: textColor,
         gridcolor: gridColor,
         tickfont: { color: textColor },
+        ...scene3DAxisStyle,
       },
       bgcolor: 'rgba(0,0,0,0)',
       aspectmode: 'cube' as const,
+      // Scene annotations carry the centroid labels in 3D; the 2D branch puts
+      // the same objects on layout.annotations below.
+      ...(centroidAnnotations.length > 0 ? { annotations: centroidAnnotations } : {}),
     };
 
     return {
@@ -563,8 +765,13 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
         font: { color: textColor },
         margin: actuallyRender3D ? { l: 0, r: 0, t: 8, b: 0 } : { l: 40, r: 12, t: 12, b: 40 },
         ...(actuallyRender3D ? { scene: scene3D, uirevision: 'embedding-3d' } : layout2D),
-        showlegend: isCategorical && legendPos !== 'hidden',
-        legend: isCategorical
+        ...(!actuallyRender3D && centroidAnnotations.length > 0
+          ? { annotations: centroidAnnotations }
+          : {}),
+        // A legend only exists while there is one trace per group; the
+        // collapsed high-cardinality fallback has nothing to list.
+        showlegend: perCategoryTraces && legendPos !== 'hidden',
+        legend: perCategoryTraces
           ? {
               ...legendForPos(legendPos),
               borderwidth: 0,
@@ -573,6 +780,11 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
               tracegroupgap: 4,
             }
           : undefined,
+        // Drag draws a lasso instead of zooming, so the selection is reachable
+        // without opening the modebar. 2D only: a 3D scene has no lasso, and
+        // Plotly rejects the value on `scene` outright, so 3D keeps its
+        // orbit-on-drag and can only select by clicking single points.
+        ...(selectionEnabled && !actuallyRender3D ? { dragmode: 'lasso' as const } : {}),
         autosize: true,
         plot_bgcolor: 'rgba(0,0,0,0)',
         paper_bgcolor: 'rgba(0,0,0,0)',
@@ -581,12 +793,17 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
   }, [
     rows,
     config,
+    selectionEnabled,
+    selectionColumn,
+    selectionInOwnSlot,
     pointSize,
     colorBy,
     colorUniverse,
     showDensity,
     showCentroids,
     markerOutline,
+    outlineWidth,
+    plotStyle,
     legendPos,
     ncontours,
     densityOpacity,
@@ -598,14 +815,40 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
     liveMode,
   ]);
 
+  // Colour-by candidates: every column of the DC, not only the two configured
+  // roles. A computed cluster column, any annotation column and any numeric
+  // column all belong in the same menu, which is what "pas uniquement legende
+  // par valeur continue ou annotation mais aussi groupes realises" asks for.
+  // The coordinates and the sample id stay out: colouring by a coordinate just
+  // repaints an axis, and colouring by the id is one colour per point.
   const colorOptions: { value: string; label: string }[] = useMemo(() => {
+    const skip = new Set<string>(
+      [config.sample_id_col, config.dim_1_col, config.dim_2_col, config.dim_3_col].filter(
+        Boolean,
+      ) as string[],
+    );
+    const seen = new Set<string>();
     const opts: { value: string; label: string }[] = [];
-    if (config.cluster_col) opts.push({ value: config.cluster_col, label: `${config.cluster_col} (cluster)` });
-    if (config.color_col && config.color_col !== config.cluster_col) {
-      opts.push({ value: config.color_col, label: config.color_col });
+    const push = (col: string | null | undefined, label: string) => {
+      if (!col || skip.has(col) || seen.has(col)) return;
+      seen.add(col);
+      opts.push({ value: col, label });
+    };
+    // Configured roles first: they are what the dashboard author meant.
+    push(config.cluster_col, `${config.cluster_col} (cluster)`);
+    push(config.color_col, String(config.color_col));
+    if (dcSchema) {
+      for (const [col, dtype] of Object.entries(dcSchema)) {
+        const numeric = NUMERIC_DTYPE_PREFIXES.some((p) => dtype.startsWith(p));
+        push(col, numeric ? `${col} (continuous)` : col);
+      }
+    } else if (rows) {
+      // No schema endpoint: offer what actually arrived, which is at least the
+      // configured roles.
+      for (const col of Object.keys(rows)) push(col, col);
     }
     return opts;
-  }, [config]);
+  }, [config, dcSchema, rows]);
 
   // Hover-column candidates: any column in the DC schema that isn't already
   // bound as a coordinate / id / cluster / colour. Falls back to whatever
@@ -721,6 +964,19 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
             disabled={!liveMode && !has3DConfigured}
           />
         </Stack>
+        <Select
+          size="xs"
+          label="Plot style"
+          value={plotStyle}
+          onChange={(v) => v && setPlotStyle(v as PlotStyle)}
+          data={[
+            { value: 'default', label: 'Axis lines' },
+            { value: 'grid', label: 'Gridlines + ticks' },
+            { value: 'clean', label: 'No axes' },
+          ]}
+          description="Axis furniture drawn around the points"
+          allowDeselect={false}
+        />
         <Group gap="xs" grow>
           <NumberInput
             size="xs"
@@ -737,6 +993,7 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
               value={colorBy}
               onChange={setColorBy}
               data={colorOptions}
+              searchable
               clearable
             />
           ) : null}
@@ -821,8 +1078,19 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
             checked={markerOutline}
             onChange={(e) => setMarkerOutline(e.currentTarget.checked)}
             label="Outline"
-            disabled={view3D}
           />
+          {markerOutline ? (
+            <NumberInput
+              size="xs"
+              label="Outline width"
+              value={outlineWidth}
+              onChange={(v) => setOutlineWidth(Math.max(0.5, Math.min(4, Number(v) || 1.5)))}
+              min={0.5}
+              max={4}
+              step={0.5}
+              decimalScale={1}
+            />
+          ) : null}
         </Stack>
         <Select
           size="xs"
@@ -849,6 +1117,7 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
       computeMs,
       view3D,
       has3DConfigured,
+      plotStyle,
       pointSize,
       colorBy,
       colorOptions,
@@ -861,9 +1130,34 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
       densityOpacity,
       showCentroids,
       markerOutline,
+      outlineWidth,
       legendPos,
     ],
   );
+
+  // Lasso / box / click all land on the same `(index, 'scatter_selection')`
+  // entry, so the last gesture replaces the previous one and a deselect
+  // clears it. Only the points Plotly actually drew can be caught: the data
+  // endpoint serves a reduced frame (~100k rows), so a lasso over a truncated
+  // cloud selects what is on screen, not the whole collection.
+  const emitSelection = (values: string[]) => {
+    if (!onFilterChange || !selectionColumn) return;
+    onFilterChange(advancedVizSelectionFilter(metadata, selectionColumn, values));
+  };
+  const handleSelected = (event: any) => {
+    if (!selectionEnabled) return;
+    emitSelection(extractScatterSelection(event, selectionSlot));
+  };
+  // A single click is a one-point selection, which is how the scatter figures
+  // and the Dash viewer have always read it.
+  const handleClick = (event: any) => {
+    if (!selectionEnabled) return;
+    emitSelection(extractScatterSelection(event, selectionSlot));
+  };
+  const handleDeselect = () => {
+    if (!selectionEnabled) return;
+    emitSelection([]);
+  };
 
   return (
     <AdvancedVizFrame
@@ -883,6 +1177,9 @@ const EmbeddingRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) 
           useResizeHandler
           style={{ width: '100%', height: '100%' }}
           config={{ displaylogo: false, responsive: true } as any}
+          onSelected={selectionEnabled ? handleSelected : undefined}
+          onClick={selectionEnabled ? handleClick : undefined}
+          onDeselect={selectionEnabled ? handleDeselect : undefined}
         />
       ) : null}
     </AdvancedVizFrame>

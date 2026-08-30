@@ -13,7 +13,7 @@ interface MetadataBodyProps {
 /** 10% of an accent, for the icon tile behind it. */
 const tint = (hex: string) => `${hex}1A`;
 
-type Row = { label: string; value: string };
+type Row = { label: string; value: string; mono?: boolean };
 
 /** A human-readable, per-type summary of the component's configuration. */
 function summaryRows(m: StoredMetadata): Row[] {
@@ -21,9 +21,9 @@ function summaryRows(m: StoredMetadata): Row[] {
   const s = (v: unknown): string =>
     v === null || v === undefined || v === '' ? '' : String(v);
   const rows: Row[] = [];
-  const push = (label: string, value: unknown) => {
+  const push = (label: string, value: unknown, mono?: boolean) => {
     const val = s(value);
-    if (val) rows.push({ label, value: val });
+    if (val) rows.push({ label, value: val, mono });
   };
 
   switch (m.component_type) {
@@ -80,6 +80,12 @@ function summaryRows(m: StoredMetadata): Row[] {
       break;
     }
   }
+  // Outside the switch: a static row filter applies to any component type that
+  // reads a data collection, and it is the one setting whose absence from this
+  // panel is actively misleading, because a card or a dropdown restricted to a
+  // subset looks exactly like one built on the whole collection. Mono because
+  // the value is a Polars expression, e.g. col('bill_length_mm') > 50.
+  push('Filter expr', g.filter_expr, true);
   return rows;
 }
 
@@ -176,7 +182,7 @@ const MetadataBody: React.FC<MetadataBodyProps> = ({ metadata }) => {
           <SectionTitle icon="mdi:tune-variant">Configuration</SectionTitle>
           <Stack gap={3}>
             {rows.map((r) => (
-              <KeyValue key={r.label} label={r.label}>{r.value}</KeyValue>
+              <KeyValue key={r.label} label={r.label} mono={r.mono}>{r.value}</KeyValue>
             ))}
           </Stack>
         </Box>

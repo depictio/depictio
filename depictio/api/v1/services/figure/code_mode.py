@@ -47,12 +47,15 @@ def analyze_constrained_code(code: str) -> dict[str, Any]:
     # Split into lines, preserving structure for multi-line statements
     all_lines = code.split("\n")
 
-    # Remove comments and empty lines while keeping track of original structure
-    lines = []
+    # Drop comments and blank lines, but keep each line's own indentation.
+    # Indentation is the only thing carrying block structure, and stripping it
+    # made the body of a `for` indistinguishable from a statement standing on
+    # its own — which is how a loop could be taken apart line by line.
+    lines: list[tuple[str, str]] = []
     for line in all_lines:
         stripped = line.strip()
         if stripped and not stripped.startswith("#"):
-            lines.append(stripped)
+            lines.append((line.rstrip(), stripped))
 
     preprocessing_lines = []
     figure_line = None
@@ -62,15 +65,12 @@ def analyze_constrained_code(code: str) -> dict[str, Any]:
     # Track multi-line statements
     in_figure_statement = False
     in_preprocessing_statement = False
-    in_post_figure_statement = False
     figure_parts = []
     preprocessing_parts = []
-    post_figure_parts = []
     figure_open_parens = 0
     preprocessing_open_parens = 0
-    post_figure_open_parens = 0
 
-    for line in lines:
+    for idx, (raw, line) in enumerate(lines):
         # Check if this line starts a figure assignment
         if line.startswith("fig =") or line.startswith("fig="):
             in_figure_statement = True
@@ -82,6 +82,8 @@ def analyze_constrained_code(code: str) -> dict[str, Any]:
                 figure_line = line
                 uses_modified_df = "df_modified" in line
                 in_figure_statement = False
+                post_figure_lines = [r for r, _ in lines[idx + 1 :]]
+                break
         elif in_figure_statement:
             # Continue collecting figure statement lines
             figure_parts.append(line)
@@ -96,28 +98,13 @@ def analyze_constrained_code(code: str) -> dict[str, Any]:
                 logger.debug(
                     f"Found multi-line figure: {figure_line[:80]}... ({len(figure_parts)} lines)"
                 )
-        elif figure_line is not None and line.startswith("fig."):
-            # Post-figure customization (fig.update_*, fig.add_*, fig.for_each_*, etc.)
-            in_post_figure_statement = True
-            post_figure_parts = [line]
-            post_figure_open_parens = line.count("(") - line.count(")")
-
-            if post_figure_open_parens == 0:
-                post_figure_lines.append(line)
-                in_post_figure_statement = False
-        elif in_post_figure_statement:
-            # Continue collecting post-figure statement
-            post_figure_parts.append(line)
-            post_figure_open_parens += line.count("(") - line.count(")")
-
-            if post_figure_open_parens == 0:
-                post_figure_lines.append("\n".join(post_figure_parts))
-                in_post_figure_statement = False
+                post_figure_lines = [r for r, _ in lines[idx + 1 :]]
+                break
         elif in_preprocessing_statement:
             # Continue collecting a multi-line preprocessing statement. Checked
             # BEFORE the generic case below, which would otherwise swallow the
             # continuation lines as if each were a statement of its own.
-            preprocessing_parts.append(line)
+            preprocessing_parts.append(raw)
             preprocessing_open_parens += line.count("(") - line.count(")")
             preprocessing_open_parens += line.count("[") - line.count("]")
 
@@ -135,20 +122,29 @@ def analyze_constrained_code(code: str) -> dict[str, Any]:
             # figure line, which is not where the problem was. Naming a variable
             # is not a signal about what the code is for.
             in_preprocessing_statement = True
-            preprocessing_parts = [line]
+            preprocessing_parts = [raw]
             preprocessing_open_parens = line.count("(") - line.count(")")
             # Brackets too: `agg([` spans lines just as `agg(` does, and
             # counting only parentheses closed the statement one line early.
             preprocessing_open_parens += line.count("[") - line.count("]")
 
             if preprocessing_open_parens == 0:
-                preprocessing_lines.append(line)
+                preprocessing_lines.append(raw)
                 in_preprocessing_statement = False
 
-    # Combine figure creation with post-figure customization (fig.update_*, fig.add_*, etc.)
+    # Everything after the figure statement runs as written, verbatim.
+    #
+    # It used to be filtered down to the lines starting with `fig.`, on the
+    # assumption that customisation is only ever a chain of `fig.update_*`
+    # calls. Anything else — a loop, a condition, a helper assignment — was
+    # dropped without a word, and the surviving `fig.` lines were re-emitted at
+    # column 0, so a `fig.add_scatter(...)` written inside a `for` came back
+    # referring to loop variables that no longer existed. The failure surfaced
+    # as "name 'sub' is not defined" pointing at the figure code, which is not
+    # where the user's mistake was, because there wasn't one.
     if figure_line and post_figure_lines:
         full_figure_code = figure_line + "\n" + "\n".join(post_figure_lines)
-        logger.debug(f"Including {len(post_figure_lines)} post-figure customization line(s)")
+        logger.debug(f"Keeping {len(post_figure_lines)} post-figure line(s) verbatim")
     else:
         full_figure_code = figure_line
 

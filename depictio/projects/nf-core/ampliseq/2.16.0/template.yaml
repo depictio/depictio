@@ -77,6 +77,7 @@ template:
         pick: "latest"
         exclude_keys:
           - "*_ref_databases*"   # bundled reference-DB catalogs, ~78 KB of noise
+          - "hook_url"           # nf-core runs put a live Slack webhook here
       - name: "software_versions"
         glob: "pipeline_info/*software*versions.yml"
         format: "yaml"
@@ -99,6 +100,10 @@ template:
         key_patterns: ["metadata*", "picrust", "vsearch_cluster*"]
       - group: "Run context"
         key_patterns: ["input*", "outdir", "seed", "version", "email*", "multiregion", "config_profile_*", "custom_config_*", "trace_report_suffix", "publish_dir_mode", "pipelines_testdata_base_path", "multiqc_*", "max_multiqc_email_size", "monochrome_logs", "validate_params", "help*", "show_hidden", "modules_testdata_base_path", "platform", "save_intermediates"]
+      - group: "Sequencing platform"
+        key_patterns: ["iontorrent", "pacbio", "single_end", "multiple_sequencing_runs", "extension", "quality_type", "cut_its", "min_read_counts", "raise_filter_stacksize", "sbdiexport"]
+      - group: "Reporting"
+        key_patterns: ["report_*", "plaintext_email", "hook_url"]
       - group: "Skipped steps"
         key_patterns: ["skip_*"]
     highlight:
@@ -864,9 +869,11 @@ links:
     enabled: true
 
   # complex_heatmap_canonical and bray_curtis_canonical are wide matrices
-  # (sample IDs are columns, not rows). Link uses target_field 'sample' for
-  # the row index; wide-matrix column subsetting requires renderer support
-  # (tracked separately).
+  # (sample IDs are columns, not rows), so the link's filter never matches a
+  # row. `_narrow_wide_matrix_columns` (api/v1/celery_tasks.py) mirrors it as a
+  # COLUMN subset instead, matching the filter's VALUES against the column
+  # names — which is why the link still works, and why `target_field` here is
+  # nominal rather than load-bearing.
   - source_dc_tag: "metadata"
     source_column: "{METADATA_ID_COL}"
     target_dc_tag: "complex_heatmap_canonical"

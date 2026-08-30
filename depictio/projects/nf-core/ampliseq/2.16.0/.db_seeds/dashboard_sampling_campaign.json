@@ -1,0 +1,752 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8cc3"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8cc3"
+  },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "ref-campaign-header",
+      "component_type": "text",
+      "title": "The sampling campaign",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Campaign at a glance",
+      "order": 2,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "Twelve samples taken across the Ammer catchment near T\u00fcbingen in January 2023, four habitats over six villages. This tab is the *where* and *when* behind every other tab: the date range and site selector on the left are persistent, so a period picked here narrows the diversity, taxonomy and differential tiles too.",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-campaign-samples",
+      "component_type": "card",
+      "title": "Samples",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Campaign at a glance",
+      "aggregation": "nunique",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "top_n",
+      "breakdown_col": "habitat",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:flask",
+      "icon_color": "#45B8AC",
+      "title_color": "#45B8AC",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-campaign-habitats",
+      "component_type": "card",
+      "title": "Habitat groups",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Campaign at a glance",
+      "aggregation": "nunique",
+      "column_name": "habitat",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "donut",
+      "breakdown_col": "habitat",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:earth",
+      "icon_color": "#984EA3",
+      "title_color": "#984EA3",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-campaign-sites",
+      "component_type": "card",
+      "title": "Sites visited",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Campaign at a glance",
+      "aggregation": "nunique",
+      "column_name": "city",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "composition",
+      "breakdown_col": "city",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:map-marker-outline",
+      "icon_color": "#1976D2",
+      "title_color": "#1976D2",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-campaign-effort",
+      "component_type": "card",
+      "title": "Sampling effort",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Campaign at a glance",
+      "aggregation": "count",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "trend",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": "sampling_date",
+      "icon_name": "mdi:calendar-outline",
+      "icon_color": "#3F51B5",
+      "title_color": "#3F51B5",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-campaign-map-header",
+      "component_type": "text",
+      "title": "The catchment",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Where & when",
+      "order": 2,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "Each marker is one sample, placed at its site and coloured by habitat. The same map is available as a floating panel from every tab, and clicking a marker filters the whole dashboard to that sample. The strip beside it reads the campaign in time order.",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-campaign-grid",
+      "component_type": "map",
+      "title": "Sampling sites",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Where & when",
+      "map_type": "scatter_map",
+      "lat_column": "lat",
+      "lon_column": "lon",
+      "color_column": "habitat",
+      "size_column": null,
+      "hover_columns": [
+        "sample",
+        "city",
+        "sampling_date"
+      ],
+      "text_column": null,
+      "map_style": "carto-positron",
+      "default_zoom": null,
+      "default_center": null,
+      "opacity": 0.9,
+      "size_max": 26,
+      "z_column": null,
+      "radius": null,
+      "selection_enabled": true,
+      "selection_column": "sample",
+      "dict_kwargs": {
+        "color_discrete_map": {
+          "Groundwater": "#45B8AC",
+          "Riverwater": "#348ABD",
+          "Sediment": "#8B5A2B",
+          "Soil": "#E24A33"
+        }
+      },
+      "locations_column": null,
+      "featureidkey": "id",
+      "geojson_data": null,
+      "geojson_url": null,
+      "geojson_dc_id": null,
+      "geojson_dc_tag": null,
+      "choropleth_aggregation": null,
+      "color_continuous_scale": null,
+      "range_color": null,
+      "placement": "grid",
+      "floating_initial_state": "compact",
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-campaign-timeline",
+      "component_type": "figure",
+      "title": "Visit order",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Where & when",
+      "visu_type": "scatter",
+      "dict_kwargs": {},
+      "mode": "code",
+      "code_content": "colors = {'Riverwater': '#348ABD', 'Groundwater': '#45B8AC', 'Sediment': '#8B5A2B', 'Soil': '#E24A33'}\ndf_modified = df.sort('sampling_date')\nfig = px.scatter(\n    df_modified.to_pandas(),\n    x='sampling_date', y='city', color='habitat',\n    color_discrete_map=colors,\n    hover_name='sample',\n)\nfig.update_traces(marker={'size': 14})\nfig.update_layout(\n    xaxis_title='Sampling date', yaxis_title=None, legend_title_text='Habitat',\n    margin={'t': 24, 'l': 8, 'r': 8, 'b': 40},\n)\n",
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": false,
+      "selection_column": null,
+      "font_scale": null,
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-campaign-design-header",
+      "component_type": "text",
+      "title": "Sampling design",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sampling design",
+      "order": 2,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "How many samples each site contributed, split by habitat. The design is deliberately unbalanced: some sites carry a single habitat, others carry three, which is what makes the between-group contrasts on the other tabs worth reading with the sample counts in view.",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-campaign-design",
+      "component_type": "figure",
+      "title": "Samples per site",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sampling design",
+      "visu_type": "scatter",
+      "dict_kwargs": {},
+      "mode": "code",
+      "code_content": "colors = {'Riverwater': '#348ABD', 'Groundwater': '#45B8AC', 'Sediment': '#8B5A2B', 'Soil': '#E24A33'}\ndf_modified = df.group_by(['city', 'habitat']).len().rename({'len': 'samples'}).sort('city')\nfig = px.bar(\n    df_modified.to_pandas(),\n    x='city', y='samples', color='habitat',\n    color_discrete_map=colors, barmode='stack',\n)\nfig.update_layout(\n    xaxis_title=None, yaxis_title='Samples', legend_title_text='Habitat',\n    margin={'t': 24, 'l': 56, 'r': 16, 'b': 60},\n)\n",
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": false,
+      "selection_column": null,
+      "font_scale": null,
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-campaign-manifest-header",
+      "component_type": "text",
+      "title": "Run manifest",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Run manifest",
+      "order": 2,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "The samplesheet the pipeline was launched with, one row per library.",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-campaign-samplesheet",
+      "component_type": "table",
+      "title": "Samplesheet",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "samplesheet",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cab"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Ampliseq samplesheet (always present, used for cross-DC filtering)",
+        "data_collection_tag": "samplesheet",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cab"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Run manifest",
+      "columns": [],
+      "page_size": 100,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": true,
+      "row_selection_column": "sampleID",
+      "wf_tag": "nextflow/ampliseq"
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [],
+  "right_panel_layout_data": [
+    {
+      "i": "box-ref-campaign-header",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ref-campaign-samples",
+      "x": 0,
+      "y": 2,
+      "w": 2,
+      "h": 3,
+      "static": true
+    },
+    {
+      "i": "box-ref-campaign-habitats",
+      "x": 2,
+      "y": 2,
+      "w": 2,
+      "h": 3,
+      "static": true
+    },
+    {
+      "i": "box-ref-campaign-sites",
+      "x": 4,
+      "y": 2,
+      "w": 2,
+      "h": 3,
+      "static": true
+    },
+    {
+      "i": "box-ref-campaign-effort",
+      "x": 6,
+      "y": 2,
+      "w": 2,
+      "h": 3,
+      "static": true
+    },
+    {
+      "i": "box-ref-campaign-map-header",
+      "x": 0,
+      "y": 4,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ref-campaign-grid",
+      "x": 0,
+      "y": 5,
+      "w": 5,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ref-campaign-timeline",
+      "x": 5,
+      "y": 5,
+      "w": 3,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ref-campaign-design-header",
+      "x": 0,
+      "y": 13,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ref-campaign-design",
+      "x": 0,
+      "y": 14,
+      "w": 8,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ref-campaign-manifest-header",
+      "x": 0,
+      "y": 20,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ref-campaign-samplesheet",
+      "x": 0,
+      "y": 21,
+      "w": 8,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "filter_sections": [],
+  "grid_sections": [
+    {
+      "name": "Campaign at a glance",
+      "icon": "mdi:counter",
+      "color": "blue",
+      "description": "How many samples, from how many sites, over what period",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Where & when",
+      "icon": "mdi:map-marker-outline",
+      "color": "teal",
+      "description": "The catchment, and the order the sites were visited in",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Sampling design",
+      "icon": "mdi:chart-donut",
+      "color": "violet",
+      "description": "How the habitat groups are spread across sites",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Run manifest",
+      "icon": "mdi:table",
+      "color": "gray",
+      "description": "The samplesheet the pipeline was launched with",
+      "collapsed": true,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Sampling Campaign",
+  "subtitle": "Where and when the Ammer catchment was sampled",
+  "icon": "/assets/images/workflows/nf-core.png",
+  "icon_color": "green",
+  "icon_variant": "filled",
+  "workflow_system": "nf-core",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-08-29 00:00:00",
+  "creation_time": "2023-05-22 06:44:12",
+  "screenshot_ts": "",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
+  },
+  "tab_order": 7,
+  "main_tab_name": null,
+  "tab_icon": "mdi:map-marker-outline",
+  "tab_icon_color": "blue",
+  "parent_dashboard_title": null,
+  "project_realtime": null
+}

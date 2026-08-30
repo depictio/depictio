@@ -1,15 +1,29 @@
-"""Generate iris + penguins .db_seeds/dashboard.json from their lite YAML.
+"""Generate the iris + penguins ``.db_seeds`` dashboards from their lite YAML.
 
-Run once after editing the YAML files so the seed JSON used by
-``create_initial_dashboards`` matches what users will import via
+Run after editing the YAML files so the seed JSON that
+``create_initial_dashboards`` loads matches what a user would get from
 ``depictio dashboard import``.
 
+Covers every tab, not just the main one: iris ships a child ``Petal Analysis``
+tab that used to be dumped from Mongo by hand and so drifted from its YAML.
+
+Two properties this script deliberately guarantees:
+
+* **Stable component indices.** The index is derived from the component's
+  ``tag`` (a UUID5), not minted fresh, so regenerating an unchanged YAML
+  produces a byte-identical seed. Random UUIDs made every run a whole-file
+  diff, which hid the changes that mattered.
+* **A faithful envelope.** ``is_public``, ``icon`` and ``workflow_system``
+  are declared per project rather than hardcoded, because iris and penguins
+  genuinely differ and a shared default silently flipped iris's.
+
 Usage:
-    .venv/bin/python -m depictio.dev_scripts.generate_iris_penguins_seeds
+    venv/bin/python -m depictio.dev_scripts.generate_iris_penguins_seeds
 """
 
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +36,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Static identifiers from db_init_reference_datasets.STATIC_IDS.
 # Hardcoded here so this script has no MongoDB dependency.
+#
+# One entry per SEED FILE, i.e. per tab — a child tab is a dashboard document
+# of its own, with its own `_id`, and only `parent_dashboard_id` ties it to the
+# family. Keys match `db_init.dashboards_config` names so the two lists can be
+# read side by side.
 PROJECTS: dict[str, dict[str, Any]] = {
     "iris": {
         "yaml": "depictio/projects/init/iris/dashboards/overview.yaml",
@@ -29,6 +48,17 @@ PROJECTS: dict[str, dict[str, Any]] = {
         "dashboard_id": "6824cb3b89d2b72169309737",
         "project_id": "646b0f3c1e4a2d7f8e5b8c9a",
         "workflow_id": "646b0f3c1e4a2d7f8e5b8c9b",
+        # The envelope the shipped seed carries. Per project because iris and
+        # penguins really do differ: iris is private and carries a generic
+        # Mantine icon, penguins is public and carries the product favicon.
+        "envelope": {
+            "icon": "mdi:view-dashboard",
+            "icon_color": "orange",
+            "workflow_system": "none",
+            "notes_content": "<p></p>",
+            "is_public": False,
+            "main_tab_name": "Overview",
+        },
         # Map data_collection_tag → static DC id.
         "dc_ids": {
             "iris_table": "646b0f3c1e4a2d7f8e5b8c9c",
@@ -45,8 +75,6 @@ PROJECTS: dict[str, dict[str, Any]] = {
         },
         # Workflow tag carried on each component for the React viewer.
         "wf_tag": "python/iris_workflow",
-        "icon": "/assets/images/icons/favicon.png",
-        "icon_color": "orange",
     },
     "penguins": {
         "yaml": "depictio/projects/init/penguins/dashboards/species_analysis.yaml",
@@ -76,17 +104,67 @@ PROJECTS: dict[str, dict[str, Any]] = {
             },
         },
         "wf_tag": "python/penguin_species_analysis",
-        "icon": "/assets/images/icons/favicon.png",
-        "icon_color": "orange",
+        "envelope": {
+            "icon": "/assets/images/icons/favicon.png",
+            "icon_color": "orange",
+            "workflow_system": "python",
+            "notes_content": "",
+            "is_public": True,
+        },
     },
 }
+
+# Child tabs. They reuse their parent's project, workflow and DC tables — only
+# the YAML, the seed path and the identity differ — so they are declared as a
+# delta rather than a copy, which is what keeps a DC id from being fixed in one
+# place and stale in the other.
+CHILD_TABS: dict[str, dict[str, Any]] = {
+    "iris_petal": {
+        "parent": "iris",
+        "yaml": "depictio/projects/init/iris/dashboards/petal_analysis.yaml",
+        "seed": "depictio/projects/init/iris/.db_seeds/dashboard_petal.json",
+        "dashboard_id": "6a75a191f5e6ff34386c8f0b",
+    },
+    "penguins_island_season": {
+        "parent": "penguins",
+        "yaml": "depictio/projects/init/penguins/dashboards/island_season.yaml",
+        "seed": "depictio/projects/init/penguins/.db_seeds/dashboard_island_season.json",
+        "dashboard_id": "6a75a191f5e6ff34386c8f0c",
+    },
+}
+
+for _key, _delta in CHILD_TABS.items():
+    _spec = dict(PROJECTS[_delta["parent"]])
+    _spec.update({k: v for k, v in _delta.items() if k != "parent"})
+    _spec["parent_dashboard_id"] = PROJECTS[_delta["parent"]]["dashboard_id"]
+    # A child tab has no main-tab label of its own.
+    _spec["envelope"] = {**_spec["envelope"], "main_tab_name": None}
+    PROJECTS[_key] = _spec
 
 ADMIN_USER_ID = "67658ba033c8b59ad489d7c7"
 ADMIN_EMAIL = "admin@example.com"
 
 
+# Namespace for deriving a component's index from its tag. Any fixed UUID does;
+# this one is arbitrary and must never change, or every seed rewrites at once.
+_INDEX_NAMESPACE = uuid.UUID("6b3f9c1e-4a2d-4f7e-9b5c-0d1a2b3c4d5e")
+
+
 def _build_oid(oid: str) -> dict[str, str]:
     return {"$oid": oid}
+
+
+def _stable_index(seed_key: str, comp: dict[str, Any], position: int) -> str:
+    """A component index that survives regeneration.
+
+    Derived from the YAML `tag`, which is the author-facing identity and the
+    only thing about a component that is meant to be stable. Falling back to
+    the position keeps an untagged component working, at the cost of moving
+    when a sibling is inserted above it — which is the argument for tagging
+    every component in a shipped dashboard.
+    """
+    tag = comp.get("tag") or f"__position_{position}"
+    return str(uuid.uuid5(_INDEX_NAMESPACE, f"{seed_key}:{tag}"))
 
 
 def _enrich_components(
@@ -132,11 +210,25 @@ def _enrich_components(
     return enriched
 
 
+# `to_full` stamps every component with `datetime.now()`. In a checked-in seed
+# that is pure churn: it rewrites every component on every run and buries the
+# one line that actually changed. Pinned to the same instant as `last_saved_ts`.
+FROZEN_TIMESTAMP = "2026-05-20 00:00:00"
+FROZEN_LAST_UPDATED = "2026-05-20T00:00:00"
+
+
 def _build_seed_doc(project_key: str) -> dict[str, Any]:
     spec = PROJECTS[project_key]
     yaml_path = REPO_ROOT / spec["yaml"]
     with yaml_path.open() as f:
         raw = yaml.safe_load(f)
+
+    # Pin each component's index before the conversion: `to_full` mints a fresh
+    # UUID only when one is absent, so supplying it here is what makes an
+    # unchanged YAML regenerate byte-identically.
+    for position, comp in enumerate(raw.get("components") or []):
+        if isinstance(comp, dict):
+            comp.setdefault("index", _stable_index(project_key, comp, position))
 
     lite = DashboardDataLite.model_validate(raw)
     full = lite.to_full()
@@ -149,15 +241,22 @@ def _build_seed_doc(project_key: str) -> dict[str, Any]:
         wf_tag=spec["wf_tag"],
     )
 
+    envelope = spec["envelope"]
     full["_id"] = _build_oid(spec["dashboard_id"])
     full["dashboard_id"] = _build_oid(spec["dashboard_id"])
     full["project_id"] = _build_oid(spec["project_id"])
-    full["is_public"] = True
-    full["icon"] = spec["icon"]
-    full["icon_color"] = spec["icon_color"]
+    full["is_public"] = envelope["is_public"]
+    full["icon"] = envelope["icon"]
+    full["icon_color"] = envelope["icon_color"]
     full["icon_variant"] = "filled"
-    full["workflow_system"] = "python"
-    full["notes_content"] = ""
+    full["workflow_system"] = envelope["workflow_system"]
+    full["notes_content"] = envelope["notes_content"]
+    if "main_tab_name" in envelope:
+        full["main_tab_name"] = envelope["main_tab_name"]
+    # Only a child tab carries a parent. `_resolve_tab_family` matches on this
+    # field, so a wrong or missing value leaves the tab a family of one.
+    if spec.get("parent_dashboard_id"):
+        full["parent_dashboard_id"] = _build_oid(spec["parent_dashboard_id"])
     full["permissions"] = {
         "owners": [
             {
@@ -169,7 +268,9 @@ def _build_seed_doc(project_key: str) -> dict[str, Any]:
         "editors": [],
         "viewers": [],
     }
-    full["last_saved_ts"] = "2026-05-20 00:00:00"
+    full["last_saved_ts"] = FROZEN_TIMESTAMP
+    for comp in full["stored_metadata"]:
+        comp["last_updated"] = FROZEN_LAST_UPDATED
 
     return full
 

@@ -11,28 +11,39 @@ main_dashboard:
   dashboard_id: 646b0f3c1e4a2d7f8e5b8ca2
   # Persistent: these sample filters render in every tab's filter panel and the
   # values picked in them survive tab switches (cross-tab fan-out; see
-  # FilterSectionSpec.persistent).
+  # FilterSectionSpec.persistent). `pin: top` keeps them above each tab's own
+  # filters wherever the viewer lands.
   filter_sections:
   - name: Sample filters
     icon: mdi:filter-variant
     color: teal
     description: Applies to every tab
     persistent: true
+    pin: top
+  # `Sample metadata` is persistent and pinned to the bottom, so the sample
+  # sheet and its four summary cards trail every tab of the family. It is
+  # declared on the main tab rather than on an analysis tab on purpose: a run
+  # with --skip_taxonomy prunes the taxonomic DCs, _tab_meets_minimum then drops
+  # the Community tab, and a persistent section declared there would disappear
+  # from the whole family with it.
+  grid_sections:
+  - name: QC overview
+    icon: mdi:chart-box-outline
+    color: teal
+    description: Read yield and base quality for the whole run
+  - name: QC details
+    icon: mdi:file-document-outline
+    color: gray
+    description: The remaining FastQC and Cutadapt panels
+    collapsed: true
+  - name: Sample metadata
+    icon: mdi:table-account
+    color: teal
+    description: The sample sheet every other tab is filtered by
+    collapsed: true
+    persistent: true
+    pin: top
   components:
-  - component_type: text
-    workflow_tag: ampliseq
-    title_size: sm
-    title_align: left
-    order: 1
-    alignment: left
-    tag: text-multiqc-section-header-47c567
-    index: multiqc-section-header
-    layout:
-      x: 0
-      y: 0
-      w: 8
-      h: 1
-    title: QC Overview
   # Bound to the always-present multiqc_data DC (sample options come from the
   # ingested sample list) so the MultiQC tab keeps a working sample filter on
   # every route — the metadata DC that would otherwise back it is pruned on
@@ -51,6 +62,7 @@ main_dashboard:
     title_align: left
     placement: left
     section: Sample filters
+    group: Sample scope
     tag: interactive-multiqc-sample-filter-78c9c2
     index: multiqc-sample-filter
     layout:
@@ -72,6 +84,7 @@ main_dashboard:
     title_align: left
     placement: left
     section: Sample filters
+    group: Sample scope
     tag: interactive-multiqc-habitat-filter-d8ca83
     index: multiqc-habitat-filter
     layout:
@@ -80,6 +93,22 @@ main_dashboard:
       w: 1
       h: 2
     title: '{GROUP_COL_DISPLAY}'
+  - component_type: text
+    workflow_tag: ampliseq
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    section: QC overview
+    body: 'MultiQC aggregates the per-sample FastQC and Cutadapt reports for this run. The four panels here answer the questions asked first: how many reads survived trimming, how evenly they are spread across samples, and whether base quality holds to the end of the read. The remaining ten panels are folded into *QC details* below. Pick a sample on the left to narrow every panel at once.'
+    tag: text-multiqc-section-header-47c567
+    index: multiqc-section-header
+    layout:
+      x: 0
+      y: 0
+      w: 8
+      h: 2
+    title: Run quality at a glance
   - component_type: multiqc
     workflow_tag: ampliseq
     data_collection_tag: multiqc_data
@@ -87,10 +116,11 @@ main_dashboard:
     selected_plot: general_stats
     title_size: sm
     title_align: left
+    section: QC overview
     tag: multiqc-general_stats_general_stats-7998d9
     layout:
       x: 0
-      y: 1
+      y: 2
       w: 8
       h: 5
   - component_type: multiqc
@@ -100,10 +130,11 @@ main_dashboard:
     selected_plot: Filtered Reads
     title_size: sm
     title_align: left
+    section: QC overview
     tag: multiqc-cutadapt_filtered-reads-d421ae
     layout:
       x: 0
-      y: 6
+      y: 7
       w: 8
       h: 4
   - component_type: multiqc
@@ -113,12 +144,13 @@ main_dashboard:
     selected_plot: Sequence Counts
     title_size: sm
     title_align: left
+    section: QC overview
     tag: multiqc-fastqc_sequence-counts-52bd04
     layout:
       x: 0
-      y: 10
-      w: 8
-      h: 4
+      y: 11
+      w: 4
+      h: 5
   - component_type: multiqc
     workflow_tag: ampliseq
     data_collection_tag: multiqc_data
@@ -126,25 +158,35 @@ main_dashboard:
     selected_plot: Sequence Quality Histograms
     title_size: sm
     title_align: left
+    section: QC overview
     tag: multiqc-fastqc_sequence-quality-histograms-ce2a02
     layout:
-      x: 0
-      y: 14
+      x: 4
+      y: 11
       w: 4
       h: 5
-  - component_type: multiqc
+  - component_type: text
     workflow_tag: ampliseq
-    data_collection_tag: multiqc_data
-    selected_module: fastqc
-    selected_plot: Per Sequence GC Content
     title_size: sm
     title_align: left
-    tag: multiqc-fastqc_per-sequence-gc-content-359f73
+    order: 2
+    alignment: left
+    section: QC details
+    tag: text-multiqc-details-header-a6c1bb
+    index: multiqc-details-header
     layout:
-      x: 4
-      y: 14
-      w: 4
-      h: 5
+      x: 0
+      y: 0
+      w: 8
+      h: 2
+    title: The rest of the QC report
+    body: 'Ten more MultiQC panels, one per FastQC or Cutadapt module: GC content, adapter contamination, duplication, length distribution, N content and overrepresented sequences. They start collapsed because each only becomes interesting once a panel above has flagged something. A tile inside a collapsed section is also never fetched, so opening this section is what triggers the requests.'
+  # No `Per Sequence GC Content` tile. FastQC forces the x domain to 0-100 %GC
+  # and emits 101 points per sample, but amplicon reads occupy a narrow GC band,
+  # so ~60 of those points sit at y=0 and the panel reads as a flat line running
+  # the full width. This run also carries a spike of 0 %GC reads at x=0. Neither
+  # the Percentages nor the Counts dataset changes that domain, so the tile is
+  # noise at any size. The other ten FastQC panels are all present below.
   - component_type: multiqc
     workflow_tag: ampliseq
     data_collection_tag: multiqc_data
@@ -152,10 +194,11 @@ main_dashboard:
     selected_plot: Adapter Content
     title_size: sm
     title_align: left
+    section: QC details
     tag: multiqc-fastqc_adapter-content-6dd1a9
     layout:
-      x: 0
-      y: 19
+      x: 4
+      y: 2
       w: 4
       h: 5
   - component_type: multiqc
@@ -165,10 +208,11 @@ main_dashboard:
     selected_plot: Trimmed Sequence Lengths (5')
     title_size: sm
     title_align: left
+    section: QC details
     tag: multiqc-cutadapt_trimmed-sequence-lengths-5-e5e50a
     layout:
-      x: 4
-      y: 19
+      x: 0
+      y: 2
       w: 4
       h: 5
   - component_type: multiqc
@@ -178,10 +222,11 @@ main_dashboard:
     selected_plot: Per Sequence Quality Scores
     title_size: sm
     title_align: left
+    section: QC details
     tag: multiqc-fastqc_per-sequence-quality-scores-d5dc60
     layout:
-      x: 0
-      y: 24
+      x: 4
+      y: 7
       w: 4
       h: 5
   - component_type: multiqc
@@ -191,10 +236,11 @@ main_dashboard:
     selected_plot: Sequence Duplication Levels
     title_size: sm
     title_align: left
+    section: QC details
     tag: multiqc-fastqc_sequence-duplication-levels-0cb646
     layout:
-      x: 4
-      y: 24
+      x: 0
+      y: 7
       w: 4
       h: 5
   - component_type: multiqc
@@ -204,25 +250,13 @@ main_dashboard:
     selected_plot: Sequence Length Distribution
     title_size: sm
     title_align: left
+    section: QC details
     tag: multiqc-fastqc_sequence-length-distribution-bef5ab
     layout:
-      x: 0
-      y: 29
+      x: 4
+      y: 12
       w: 4
       h: 5
-  - component_type: multiqc
-    workflow_tag: ampliseq
-    data_collection_tag: multiqc_data
-    selected_module: fastqc
-    selected_plot: Status Checks
-    title_size: sm
-    title_align: left
-    tag: multiqc-fastqc_status-checks-d33968
-    layout:
-      x: 0
-      y: 44
-      w: 8
-      h: 6
   - component_type: multiqc
     workflow_tag: ampliseq
     data_collection_tag: multiqc_data
@@ -230,10 +264,11 @@ main_dashboard:
     selected_plot: Per Base N Content
     title_size: sm
     title_align: left
+    section: QC details
     tag: multiqc-fastqc_per-base-n-content-c4a783
     layout:
-      x: 4
-      y: 34
+      x: 0
+      y: 12
       w: 4
       h: 5
   - component_type: multiqc
@@ -243,10 +278,11 @@ main_dashboard:
     selected_plot: Top overrepresented sequences
     title_size: sm
     title_align: left
+    section: QC details
     tag: multiqc-fastqc_top-overrepresented-sequences-d870e3
     layout:
-      x: 0
-      y: 39
+      x: 4
+      y: 17
       w: 4
       h: 5
   - component_type: multiqc
@@ -256,12 +292,160 @@ main_dashboard:
     selected_plot: Overrepresented sequences by sample
     title_size: sm
     title_align: left
+    section: QC details
     tag: multiqc-fastqc_overrepresented-sequences-by-sample-687553
     layout:
-      x: 4
-      y: 39
+      x: 0
+      y: 17
       w: 4
       h: 5
+  - component_type: multiqc
+    workflow_tag: ampliseq
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Status Checks
+    title_size: sm
+    title_align: left
+    section: QC details
+    tag: multiqc-fastqc_status-checks-d33968
+    layout:
+      x: 4
+      y: 22
+      w: 4
+      h: 5
+  - component_type: text
+    workflow_tag: ampliseq
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    section: Sample metadata
+    tag: text-meta-header-f2ba1f
+    index: meta-header
+    layout:
+      x: 0
+      y: 0
+      w: 8
+      h: 2
+    title: Sample metadata
+    body: The sample sheet this project was ingested with, plus four summaries of it. The section is pinned to the bottom of every tab, so the cohort stays one scroll away wherever the viewer lands. The cards count the samples, show how they split across {GROUP_COL_DISPLAY}, and report how complete and how unique the two key columns are.
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: metadata
+    aggregation: nunique
+    column_name: '{METADATA_ID_COL}'
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: '{GROUP_COL}'
+    display:
+      icon_name: mdi:flask
+      icon_color: '#45B8AC'
+      title_color: '#45B8AC'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    section: Sample metadata
+    tag: card-meta-samples-8e6628
+    index: meta-samples
+    layout:
+      x: 0
+      y: 2
+      w: 2
+      h: 3
+    title: Samples
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: metadata
+    aggregation: nunique
+    column_name: '{GROUP_COL}'
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: '{GROUP_COL}'
+    display:
+      icon_name: mdi:earth
+      icon_color: '#984EA3'
+      title_color: '#984EA3'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    section: Sample metadata
+    tag: card-meta-groups-2acac5
+    index: meta-groups
+    layout:
+      x: 2
+      y: 2
+      w: 2
+      h: 3
+    title: '{GROUP_COL_DISPLAY} groups'
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: metadata
+    aggregation: count
+    column_name: '{GROUP_COL}'
+    column_type: object
+    secondary_layout: completeness
+    display:
+      icon_name: mdi:check-decagram
+      icon_color: '#2E7D32'
+      title_color: '#2E7D32'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    section: Sample metadata
+    tag: card-meta-filled-00536b
+    index: meta-filled
+    layout:
+      x: 4
+      y: 2
+      w: 2
+      h: 3
+    title: '{GROUP_COL_DISPLAY} coverage'
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: metadata
+    aggregation: count
+    column_name: '{METADATA_ID_COL}'
+    column_type: object
+    secondary_layout: uniqueness
+    display:
+      icon_name: mdi:fingerprint
+      icon_color: '#1976D2'
+      title_color: '#1976D2'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    section: Sample metadata
+    tag: card-meta-unique-c6e109
+    index: meta-unique
+    layout:
+      x: 6
+      y: 2
+      w: 2
+      h: 3
+    title: Sample identifiers
+  - component_type: table
+    workflow_tag: ampliseq
+    data_collection_tag: metadata
+    # Row selection feeds the Analysis panel. This table is the only component
+    # on the family that is both persistent and row-addressable: figures can
+    # only source a selection when they are scatter-like, and every ampliseq
+    # figure is a bar, a box or code-mode.
+    row_selection_enabled: true
+    row_selection_column: '{METADATA_ID_COL}'
+    title_size: sm
+    title_align: left
+    section: Sample metadata
+    tag: table-table-16e587
+    layout:
+      x: 0
+      y: 5
+      w: 8
+      h: 6
+    title: Sample Metadata
 tabs:
 - title: Alpha Diversity
   subtitle: Within-sample richness, evenness, phylogenetic spread — rarefaction + per-group boxplots
@@ -272,21 +456,30 @@ tabs:
   icon_color: green
   workflow_system: nf-core
   dashboard_id: 646b0f3c1e4a2d7f8e5b8cbe
+  filter_sections:
+  - name: Alpha filters
+    icon: mdi:filter-variant
+    color: orange
+    description: Narrows every diversity tile on this tab
+  grid_sections:
+  - name: Diversity at a glance
+    icon: mdi:counter
+    color: orange
+    description: Four per-sample indices, each summarised the way its shape asks for
+  - name: Rarefaction
+    icon: mdi:chart-line
+    color: grape
+    description: Whether sequencing depth reached saturation
+  - name: Per-{GROUP_COL_DISPLAY} comparison
+    icon: mdi:scale-balance
+    color: teal
+    description: The same indices, contrasted between groups
+  - name: Per-sample table
+    icon: mdi:table
+    color: gray
+    description: The numbers behind the cards, one row per sample
+    collapsed: true
   components:
-  - component_type: text
-    workflow_tag: ampliseq
-    title_size: sm
-    title_align: left
-    order: 1
-    alignment: left
-    tag: text-alpha-section-header-78cb12
-    index: alpha-section-header
-    layout:
-      x: 0
-      y: 0
-      w: 8
-      h: 1
-    title: Within-Sample Diversity
   - component_type: interactive
     workflow_tag: ampliseq
     data_collection_tag: alpha_diversity_multi_canonical
@@ -299,6 +492,8 @@ tabs:
       icon_name: mdi:flask
     title_align: left
     placement: left
+    section: Alpha filters
+    group: Alpha scope
     tag: interactive-alpha-sample-filter-235a5d
     index: alpha-sample-filter
     layout:
@@ -319,6 +514,8 @@ tabs:
       icon_name: mdi:earth
     title_align: left
     placement: left
+    section: Alpha filters
+    group: Alpha scope
     tag: interactive-alpha-habitat-filter-f2247a
     index: alpha-habitat-filter
     layout:
@@ -327,6 +524,22 @@ tabs:
       w: 1
       h: 2
     title: '{GROUP_COL_DISPLAY}'
+  - component_type: text
+    workflow_tag: ampliseq
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    section: Diversity at a glance
+    body: 'Four alpha-diversity indices computed by QIIME 2 on the rarefied feature table, one row per sample. Shannon weights richness by evenness, Faith''s PD weights it by branch length on the phylogeny, and evenness isolates the balance between taxa. Each card carries the distribution behind its median rather than the median alone.'
+    tag: text-alpha-section-header-78cb12
+    index: alpha-section-header
+    layout:
+      x: 0
+      y: 0
+      w: 8
+      h: 2
+    title: Within-sample diversity
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: alpha_diversity_multi_canonical
@@ -341,15 +554,17 @@ tabs:
       value_font_size: xl
     title_size: sm
     title_align: left
-    secondary_layout: vertical
+    secondary_layout: top_n
     top_n_count: 3
+    section: Diversity at a glance
+    breakdown_col: '{GROUP_COL}'
     tag: card-alpha-card-samples-fdaa66
     index: alpha-card-samples
     layout:
       x: 0
-      y: 1
+      y: 2
       w: 2
-      h: 2
+      h: 3
     title: Total Samples
   - component_type: card
     workflow_tag: ampliseq
@@ -368,13 +583,14 @@ tabs:
     aggregations:
     - box_plot_stats
     secondary_layout: box_plot
+    section: Diversity at a glance
     tag: card-alpha-card-shannon-73f8df
     index: alpha-card-shannon
     layout:
       x: 2
-      y: 1
+      y: 2
       w: 2
-      h: 2
+      h: 3
     title: Shannon (distribution)
   - component_type: card
     workflow_tag: ampliseq
@@ -393,13 +609,14 @@ tabs:
     aggregations:
     - box_plot_stats
     secondary_layout: box_plot
+    section: Diversity at a glance
     tag: card-alpha-card-faith-pd-0b1489
     index: alpha-card-faith-pd
     layout:
       x: 4
-      y: 1
+      y: 2
       w: 2
-      h: 2
+      h: 3
     title: Faith PD (distribution)
   - component_type: card
     workflow_tag: ampliseq
@@ -418,14 +635,31 @@ tabs:
     aggregations:
     - box_plot_stats
     secondary_layout: box_plot
+    section: Diversity at a glance
     tag: card-alpha-card-observed-af80c8
     index: alpha-card-observed
     layout:
       x: 6
-      y: 1
+      y: 2
       w: 2
-      h: 2
+      h: 3
     title: Evenness (distribution)
+  - component_type: text
+    workflow_tag: ampliseq
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    section: Rarefaction
+    tag: text-alpha-rarefaction-header-4129af
+    index: alpha-rarefaction-header
+    layout:
+      x: 0
+      y: 0
+      w: 8
+      h: 2
+    title: Rarefaction
+    body: Diversity recomputed at increasing sequencing depths, ten iterations per depth. A curve that flattens means the sample was sequenced deep enough for that index to stop climbing; one still rising means richness is bounded by depth rather than by biology. Switch the index with the selector on the plot.
   - component_type: advanced_viz
     workflow_tag: ampliseq
     use: qiime2/rarefaction
@@ -438,14 +672,31 @@ tabs:
       - observed_features
       - faith_pd
       show_ci: true
+    section: Rarefaction
     tag: advanced_viz-alpha-rarefaction-multi-f98922
     index: alpha-rarefaction-multi
     layout:
       x: 0
-      y: 3
+      y: 2
       w: 8
       h: 8
     title: Rarefaction curves (multi-metric)
+  - component_type: text
+    workflow_tag: ampliseq
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    section: Per-{GROUP_COL_DISPLAY} comparison
+    body: 'The same per-sample indices, grouped. This is where a between-group difference shows up if there is one: read the medians and the spread rather than the extremes, since each group holds only a handful of samples.'
+    tag: text-alpha-section-boxplot-4d596d
+    index: alpha-section-boxplot
+    layout:
+      x: 0
+      y: 0
+      w: 8
+      h: 1
+    title: Per-{GROUP_COL_DISPLAY} Comparison
   - component_type: figure
     workflow_tag: ampliseq
     data_collection_tag: alpha_diversity_multi_canonical
@@ -474,14 +725,31 @@ tabs:
     selection_enabled: false
     title_size: sm
     title_align: left
+    section: Per-{GROUP_COL_DISPLAY} comparison
     tag: figure-alpha-boxplot-by-habitat-ec8425
     index: alpha-boxplot-by-habitat
     layout:
       x: 0
-      y: 12
+      y: 1
       w: 8
       h: 6
     title: Alpha diversity by {GROUP_COL_DISPLAY} (per metric)
+  - component_type: text
+    workflow_tag: ampliseq
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    section: Per-sample table
+    tag: text-alpha-table-header-75b810
+    index: alpha-table-header
+    layout:
+      x: 0
+      y: 20
+      w: 8
+      h: 1
+    title: Per-sample values
+    body: One row per sample with all four indices. Sorting a column finds the outlier a box plot only hints at.
   - component_type: table
     workflow_tag: ampliseq
     data_collection_tag: alpha_diversity_multi_canonical
@@ -489,28 +757,15 @@ tabs:
     row_selection_enabled: false
     title_size: sm
     title_align: left
+    section: Per-sample table
     tag: table-alpha-table-summary-859b77
     index: alpha-table-summary
     layout:
       x: 0
-      y: 18
+      y: 21
       w: 8
       h: 6
     title: Per-sample alpha diversity (one row per sample)
-  - component_type: text
-    workflow_tag: ampliseq
-    title_size: sm
-    title_align: left
-    order: 1
-    alignment: left
-    tag: text-alpha-section-boxplot-4d596d
-    index: alpha-section-boxplot
-    layout:
-      x: 0
-      y: 11
-      w: 8
-      h: 1
-    title: Per-{GROUP_COL_DISPLAY} Comparison
 - title: Community & Diversity
   subtitle: Alpha diversity, rarefaction, taxonomic composition (sunburst + Sankey + stacked taxonomy)
   tab_order: 2
@@ -520,22 +775,204 @@ tabs:
   icon_color: green
   workflow_system: nf-core
   dashboard_id: 646b0f3c1e4a2d7f8e5b8cb3
-  # Persistent: the sample-metadata table renders (read-only) at the top of
-  # every tab in the family — the issue-#858 "metadata in view on landing" slot.
-  grid_sections:
-  - name: Sample metadata
-    icon: mdi:table-account
+  filter_sections:
+  - name: Community filters
+    icon: mdi:filter-variant
     color: teal
-    description: Project metadata table, shown on every tab
+    description: Sample scope first, then the taxonomic slice
+  # Its own section rather than a third group of the one above: these two bite
+  # on sintax_rel_abundance alone, which is absent from a run without SINTAX.
+  - name: SINTAX scope
+    icon: mdi:dna
+    color: violet
+    description: Applies to the SINTAX tiles only
     collapsed: true
-    persistent: true
+  grid_sections:
+  - name: Overview
+    icon: mdi:counter
+    color: teal
+    description: How much of the abundance table the current filters leave
+  - name: Composition
+    icon: mdi:chart-bar
+    color: grape
+    description: What the samples are made of, ranked and per sample
+  - name: Taxonomic structure
+    icon: mdi:relation-many-to-many
+    color: violet
+    description: The same abundances read as a hierarchy
+  - name: Set overlap
+    icon: mdi:set-merge
+    color: indigo
+    description: Which taxa are shared between groups and which are exclusive
+  - name: SINTAX classifier
+    icon: mdi:dna
+    color: violet
+    description: The alternative classifier, present only when SINTAX ran
+    collapsed: true
+  - name: Tables
+    icon: mdi:table
+    color: gray
+    description: The abundance table behind every tile above
+    collapsed: true
   components:
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: metadata
+    interactive_component_type: MultiSelect
+    column_name: '{METADATA_ID_COL}'
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#45B8AC'
+      icon_name: mdi:flask
+    title_align: left
+    placement: left
+    section: Community filters
+    group: Sample scope
+    tag: interactive-sample-78c9c2
+    layout:
+      x: 0
+      y: 0
+      w: 1
+      h: 3
+    title: Sample ID
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: metadata
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#984EA3'
+      icon_name: mdi:earth
+    title_align: left
+    placement: left
+    section: Community filters
+    group: Sample scope
+    tag: interactive-habitat-d8ca83
+    layout:
+      x: 0
+      y: 3
+      w: 1
+      h: 2
+    title: '{GROUP_COL_DISPLAY}'
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: taxonomy_rel_abundance
+    interactive_component_type: MultiSelect
+    column_name: Kingdom
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#377EB8'
+      icon_name: mdi:bacteria
+    title_align: left
+    placement: left
+    section: Community filters
+    group: Taxonomy
+    tag: interactive-kingdom-7ad029
+    layout:
+      x: 0
+      y: 5
+      w: 1
+      h: 2
+    title: Kingdom
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: taxonomy_rel_abundance
+    interactive_component_type: MultiSelect
+    column_name: Phylum
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#8BC34A'
+      icon_name: mdi:bacteria-outline
+    title_align: left
+    placement: left
+    section: Community filters
+    group: Taxonomy
+    tag: interactive-phylum-e802cf
+    layout:
+      x: 0
+      y: 7
+      w: 1
+      h: 3
+    title: Phylum
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: taxonomy_rel_abundance
+    interactive_component_type: RangeSlider
+    column_name: rel_abundance
+    column_type: float64
+    display:
+      title_size: md
+      custom_color: '#FF9800'
+      icon_name: mdi:counter
+    title_align: left
+    placement: left
+    section: Community filters
+    group: Taxonomy
+    tag: interactive-range-rel-abundance-slider-b483fc
+    index: range-rel-abundance-slider
+    layout:
+      x: 0
+      y: 10
+      w: 1
+      h: 3
+    title: Relative Abundance Range
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: sintax_rel_abundance
+    interactive_component_type: MultiSelect
+    column_name: Kingdom
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#377EB8'
+      icon_name: mdi:bacteria
+    title_align: left
+    placement: left
+    section: SINTAX scope
+    group: SINTAX ranks
+    tag: interactive-sintax-kingdom-5e6a18
+    index: sintax-kingdom-filter
+    layout:
+      x: 0
+      y: 13
+      w: 1
+      h: 2
+    title: Kingdom
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: sintax_rel_abundance
+    interactive_component_type: MultiSelect
+    column_name: Phylum
+    column_type: object
+    display:
+      title_size: md
+      custom_color: '#8BC34A'
+      icon_name: mdi:bacteria-outline
+    title_align: left
+    placement: left
+    section: SINTAX scope
+    group: SINTAX ranks
+    tag: interactive-sintax-phylum-7b2c94
+    index: sintax-phylum-filter
+    layout:
+      x: 0
+      y: 15
+      w: 1
+      h: 3
+    title: Phylum
   - component_type: text
     workflow_tag: ampliseq
     title_size: sm
     title_align: left
-    order: 1
+    order: 2
     alignment: left
+    section: Overview
+    body: 'Relative abundance per sample from the QIIME 2 taxonomic classification. The cards report how much of the table the current filters leave: how many distinct taxa remain, how the samples split across {GROUP_COL_DISPLAY}, how the abundances are distributed, and what the phyla are made of.'
     tag: text-community-section-header-28d771
     index: community-section-header
     layout:
@@ -543,7 +980,7 @@ tabs:
       y: 0
       w: 8
       h: 1
-    title: Community Composition
+    title: Community composition
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: taxonomy_rel_abundance
@@ -561,12 +998,13 @@ tabs:
     aggregations:
     - box_plot_stats
     secondary_layout: box_plot
+    section: Overview
     tag: card-rel_abundance_median-e4d729
     layout:
       x: 0
       y: 1
-      w: 4
-      h: 2
+      w: 2
+      h: 3
     title: Rel. abundance (distribution)
   - component_type: card
     workflow_tag: ampliseq
@@ -582,15 +1020,17 @@ tabs:
       value_font_size: xl
     title_size: sm
     title_align: left
-    secondary_layout: vertical
+    secondary_layout: top_n
     top_n_count: 3
+    section: Overview
+    breakdown_col: Phylum
     tag: card-taxonomy_nunique-7aa707
     layout:
-      x: 4
+      x: 2
       y: 1
       w: 2
-      h: 2
-    title: Total Phyla
+      h: 3
+    title: Distinct taxa
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: metadata
@@ -605,15 +1045,58 @@ tabs:
       value_font_size: xl
     title_size: sm
     title_align: left
-    secondary_layout: vertical
+    secondary_layout: donut
     top_n_count: 3
+    section: Overview
+    breakdown_col: '{GROUP_COL}'
     tag: card-habitat_nunique-1fc891
+    layout:
+      x: 4
+      y: 1
+      w: 2
+      h: 3
+    title: '{GROUP_COL_DISPLAY} groups'
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: taxonomy_rel_abundance
+    aggregation: nunique
+    column_name: Phylum
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: Kingdom
+    display:
+      icon_name: mdi:chart-donut
+      icon_color: '#8E44AD'
+      title_color: '#8E44AD'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    section: Overview
+    tag: card-community-phyla-f495eb
+    index: community-phyla
     layout:
       x: 6
       y: 1
       w: 2
-      h: 2
-    title: '{GROUP_COL_DISPLAY} groups'
+      h: 3
+    title: Phyla detected
+  - component_type: text
+    workflow_tag: ampliseq
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    section: Composition
+    tag: text-community-composition-header-a28634
+    index: community-composition-header
+    layout:
+      x: 0
+      y: 0
+      w: 8
+      h: 1
+    title: What the samples are made of
+    body: The bar chart ranks phyla by mean relative abundance across the current selection. The stacked view below breaks the same numbers down sample by sample, so a phylum that dominates one group but is absent elsewhere reads as a block rather than as an average.
   - component_type: figure
     workflow_tag: ampliseq
     data_collection_tag: taxonomy_rel_abundance
@@ -644,39 +1127,172 @@ tabs:
     selection_enabled: false
     title_size: sm
     title_align: left
+    section: Composition
     tag: figure-bar_phylum_mean_rel_abundance-281e64
     layout:
       x: 0
-      y: 3
+      y: 1
+      w: 8
+      h: 7
+  - component_type: advanced_viz
+    workflow_tag: ampliseq
+    use: qiime2/stacked_taxonomy
+    data_collection_tag: stacked_taxonomy_canonical
+    config:
+      default_rank: Phylum
+      top_n: 15
+      sort_by: abundance
+      normalise_to_one: true
+      annotation_strips:
+      - column: '{GROUP_COL}'
+        label: '{GROUP_COL_DISPLAY}'
+        position: top
+    section: Composition
+    tag: advanced_viz-adv-stacked-taxonomy-46dad9
+    index: adv-stacked-taxonomy
+    layout:
+      x: 0
+      y: 8
       w: 8
       h: 8
-  - component_type: table
+    title: Stacked taxonomy (advanced)
+  - component_type: text
     workflow_tag: ampliseq
-    data_collection_tag: metadata
-    row_selection_enabled: false
     title_size: sm
     title_align: left
-    section: Sample metadata
-    tag: table-table-16e587
+    order: 2
+    alignment: left
+    section: Taxonomic structure
+    tag: text-community-structure-header-82419f
+    index: community-structure-header
     layout:
       x: 0
-      y: 43
+      y: 0
       w: 8
-      h: 6
-    title: Sample Metadata
-  - component_type: table
+      h: 1
+    title: Taxonomic structure
+    body: The same abundances read as a hierarchy. The sunburst drills from kingdom to genus in place; the Sankey shows how abundance flows between ranks, which is the view that makes a lineage collapsing into a single dominant genus obvious.
+  - component_type: advanced_viz
     workflow_tag: ampliseq
-    data_collection_tag: taxonomy_rel_abundance
-    row_selection_enabled: false
+    use: qiime2/sunburst_taxonomy
+    data_collection_tag: sunburst_canonical
+    config:
+      rank_cols:
+      - Kingdom
+      - Phylum
+      - Class
+      # tab10 over the tab20 default: three ranks deep, the wide palette pairs a
+      # light and a dark shade of the same hue for neighbouring phyla, which
+      # reads as one taxon split in two rather than two taxa.
+      palette: tab10
+      # Draw every arc. The 0.5% default silently drops the rare taxa, and on a
+      # marine amplicon run the long tail is a result, not noise.
+      min_percent: 0
+    section: Taxonomic structure
+    tag: advanced_viz-adv-sunburst-8e75c7
+    index: adv-sunburst
+    layout:
+      x: 0
+      y: 1
+      w: 8
+      h: 8
+    title: Taxonomic hierarchy (sunburst)
+  - component_type: advanced_viz
+    workflow_tag: ampliseq
+    viz_kind: sankey
+    data_collection_tag: sankey_canonical
+    config:
+      viz_kind: sankey
+      step_cols:
+      - Kingdom
+      - Phylum
+      - Class
+      available_step_cols:
+      - Kingdom
+      - Phylum
+      - Class
+      - Order
+      - Family
+      - Genus
+      value_col: abundance
+      value_label: rel. abundance
+      value_format: fraction
+      sort_mode: total_flow
+      color_mode: source
+      link_opacity: 0.5
+      min_link_value: 0.005
+      show_node_labels: true
+    section: Taxonomic structure
+    tag: advanced_viz-adv-sankey-cd4759
+    index: adv-sankey
+    layout:
+      x: 0
+      y: 9
+      w: 8
+      h: 8
+    title: Taxonomic flow (Kingdom → Phylum → taxon)
+  - component_type: text
+    workflow_tag: ampliseq
     title_size: sm
     title_align: left
-    tag: table-table-e280c1
+    order: 2
+    alignment: left
+    section: Set overlap
+    tag: text-community-upset-header-afec20
+    index: community-upset-header
     layout:
       x: 0
-      y: 49
+      y: 0
       w: 8
-      h: 6
-    title: Taxonomy Relative Abundance
+      h: 2
+    title: Shared and exclusive taxa
+    body: Which taxa are found in which {GROUP_COL_DISPLAY} groups. The bars count taxa, the dot matrix below names the combination. Filtering {GROUP_COL_DISPLAY} on the left removes sets from the matrix and filtering Phylum removes rows from it, because the underlying wide matrix carries both the group columns and the taxonomic ranks.
+  - component_type: advanced_viz
+    workflow_tag: ampliseq
+    viz_kind: upset_plot
+    data_collection_tag: upset_canonical
+    config:
+      viz_kind: upset_plot
+      matrix_wf_id: 646b0f3c1e4a2d7f8e5b8ca3
+      matrix_dc_id: 646b0f3c1e4a2d7f8e5b8cd6
+      sort_by: cardinality
+      sort_order: descending
+      min_size: 1
+      show_set_sizes: true
+      # `degree`, not `set`: in `set` mode plotly-upset needs an explicit
+      # set_colors map or every bar falls back to its #333333 default and the
+      # whole plot renders black. The set names here are {GROUP_COL} values,
+      # discovered at ingest, so no map can be written in a generic template.
+      # build_reference_dashboard.py restores `set` for the bundled reference
+      # run, where the four habitats are known.
+      color_intersections_by: degree
+      default_annotation_cols:
+      - taxon
+    section: Set overlap
+    tag: advanced_viz-adv-upset-81bed0
+    index: adv-upset
+    layout:
+      x: 0
+      y: 2
+      w: 8
+      h: 8
+    title: Taxa shared across {GROUP_COL_DISPLAY} groups (UpSet)
+  - component_type: text
+    workflow_tag: ampliseq
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    section: SINTAX classifier
+    tag: text-community-sintax-header-3d3155
+    index: community-sintax-header
+    layout:
+      x: 0
+      y: 0
+      w: 8
+      h: 2
+    title: SINTAX classifier
+    body: The same reads classified by SINTAX instead of the QIIME 2 naive Bayes classifier, which is a useful cross-check when an assignment looks surprising. It exists only on runs where SINTAX was enabled. Its filters sit in the *SINTAX scope* section on the left, because they bite on this collection alone.
   # sintax counterparts (--skip_qiime runs): bound to sintax_rel_abundance, which
   # is present only when QIIME2 taxonomy DCs are pruned. On QIIME2 runs the DC is
   # absent so these prune; on skip_qiime runs the QIIME2 bar/table above prune and
@@ -711,257 +1327,59 @@ tabs:
     selection_enabled: false
     title_size: sm
     title_align: left
+    section: SINTAX classifier
     tag: figure-sintax-bar-rel-abundance-9f1a2b
     index: sintax-bar-rel-abundance
     layout:
       x: 0
-      y: 3
+      y: 2
       w: 8
-      h: 8
+      h: 7
   - component_type: table
     workflow_tag: ampliseq
     data_collection_tag: sintax_rel_abundance
     row_selection_enabled: false
     title_size: sm
     title_align: left
+    section: SINTAX classifier
     tag: table-sintax-taxonomy-3c5d71
     index: sintax-taxonomy-table
     layout:
       x: 0
-      y: 11
+      y: 9
       w: 8
       h: 6
     title: Taxonomy Relative Abundance (sintax)
-  - component_type: interactive
+  - component_type: text
     workflow_tag: ampliseq
-    data_collection_tag: sintax_rel_abundance
-    interactive_component_type: MultiSelect
-    column_name: Kingdom
-    column_type: object
-    display:
-      title_size: md
-      custom_color: '#377EB8'
-      icon_name: mdi:bacteria
+    title_size: sm
     title_align: left
-    placement: left
-    tag: interactive-sintax-kingdom-5e6a18
-    index: sintax-kingdom-filter
+    order: 2
+    alignment: left
+    section: Tables
+    tag: text-community-tables-header-05079f
+    index: community-tables-header
     layout:
       x: 0
-      y: 8
-      w: 1
-      h: 2
-    title: Kingdom
-  - component_type: interactive
-    workflow_tag: ampliseq
-    data_collection_tag: sintax_rel_abundance
-    interactive_component_type: MultiSelect
-    column_name: Phylum
-    column_type: object
-    display:
-      title_size: md
-      custom_color: '#8BC34A'
-      icon_name: mdi:bacteria-outline
-    title_align: left
-    placement: left
-    tag: interactive-sintax-phylum-7b2c94
-    index: sintax-phylum-filter
-    layout:
-      x: 0
-      y: 10
-      w: 1
-      h: 3
-    title: Phylum
-  - component_type: interactive
-    workflow_tag: ampliseq
-    data_collection_tag: metadata
-    interactive_component_type: MultiSelect
-    column_name: '{METADATA_ID_COL}'
-    column_type: object
-    display:
-      title_size: md
-      custom_color: '#45B8AC'
-      icon_name: mdi:flask
-    title_align: left
-    placement: left
-    tag: interactive-sample-78c9c2
-    layout:
-      x: 0
-      y: 0
-      w: 1
-      h: 3
-    title: Sample ID
-  - component_type: interactive
-    workflow_tag: ampliseq
-    data_collection_tag: metadata
-    interactive_component_type: MultiSelect
-    column_name: '{GROUP_COL}'
-    column_type: object
-    display:
-      title_size: md
-      custom_color: '#984EA3'
-      icon_name: mdi:earth
-    title_align: left
-    placement: left
-    tag: interactive-habitat-d8ca83
-    layout:
-      x: 0
-      y: 3
-      w: 1
-      h: 2
-    title: '{GROUP_COL_DISPLAY}'
-  - component_type: interactive
+      y: 60
+      w: 8
+      h: 1
+    title: Relative abundance table
+    body: The full per-sample, per-taxon abundance table behind every tile above.
+  - component_type: table
     workflow_tag: ampliseq
     data_collection_tag: taxonomy_rel_abundance
-    interactive_component_type: MultiSelect
-    column_name: Kingdom
-    column_type: object
-    display:
-      title_size: md
-      custom_color: '#377EB8'
-      icon_name: mdi:bacteria
+    row_selection_enabled: false
+    title_size: sm
     title_align: left
-    placement: left
-    tag: interactive-kingdom-7ad029
+    section: Tables
+    tag: table-table-e280c1
     layout:
       x: 0
-      y: 8
-      w: 1
-      h: 2
-    title: Kingdom
-  - component_type: interactive
-    workflow_tag: ampliseq
-    data_collection_tag: taxonomy_rel_abundance
-    interactive_component_type: MultiSelect
-    column_name: Phylum
-    column_type: object
-    display:
-      title_size: md
-      custom_color: '#8BC34A'
-      icon_name: mdi:bacteria-outline
-    title_align: left
-    placement: left
-    tag: interactive-phylum-e802cf
-    layout:
-      x: 0
-      y: 10
-      w: 1
-      h: 3
-    title: Phylum
-  - component_type: interactive
-    workflow_tag: ampliseq
-    data_collection_tag: taxonomy_rel_abundance
-    interactive_component_type: RangeSlider
-    column_name: rel_abundance
-    column_type: float64
-    display:
-      title_size: md
-      custom_color: '#FF9800'
-      icon_name: mdi:counter
-    title_align: left
-    placement: left
-    tag: interactive-range-rel-abundance-slider-b483fc
-    index: range-rel-abundance-slider
-    layout:
-      x: 0
-      y: 13
-      w: 1
-      h: 3
-    title: Relative Abundance Range
-  - component_type: advanced_viz
-    workflow_tag: ampliseq
-    use: qiime2/stacked_taxonomy
-    data_collection_tag: stacked_taxonomy_canonical
-    config:
-      default_rank: Phylum
-      top_n: 15
-      sort_by: abundance
-      normalise_to_one: true
-      annotation_strips:
-      - column: '{GROUP_COL}'
-        label: '{GROUP_COL_DISPLAY}'
-        position: top
-    tag: advanced_viz-adv-stacked-taxonomy-46dad9
-    index: adv-stacked-taxonomy
-    layout:
-      x: 0
-      y: 11
+      y: 61
       w: 8
-      h: 8
-    title: Stacked taxonomy (advanced)
-  - component_type: advanced_viz
-    workflow_tag: ampliseq
-    use: qiime2/sunburst_taxonomy
-    data_collection_tag: sunburst_canonical
-    config:
-      rank_cols:
-      - Kingdom
-      - Phylum
-      - Class
-    tag: advanced_viz-adv-sunburst-8e75c7
-    index: adv-sunburst
-    layout:
-      x: 0
-      y: 19
-      w: 8
-      h: 8
-    title: Taxonomic hierarchy (sunburst)
-  - component_type: advanced_viz
-    workflow_tag: ampliseq
-    viz_kind: sankey
-    data_collection_tag: sankey_canonical
-    config:
-      viz_kind: sankey
-      step_cols:
-      - Kingdom
-      - Phylum
-      - Class
-      available_step_cols:
-      - Kingdom
-      - Phylum
-      - Class
-      - Order
-      - Family
-      - Genus
-      value_col: abundance
-      value_label: rel. abundance
-      value_format: fraction
-      sort_mode: total_flow
-      color_mode: source
-      link_opacity: 0.5
-      min_link_value: 0.005
-      show_node_labels: true
-    tag: advanced_viz-adv-sankey-cd4759
-    index: adv-sankey
-    layout:
-      x: 0
-      y: 27
-      w: 8
-      h: 8
-    title: Taxonomic flow (Kingdom → Phylum → taxon)
-  - component_type: advanced_viz
-    workflow_tag: ampliseq
-    viz_kind: upset_plot
-    data_collection_tag: upset_canonical
-    config:
-      viz_kind: upset_plot
-      matrix_wf_id: 646b0f3c1e4a2d7f8e5b8ca3
-      matrix_dc_id: 646b0f3c1e4a2d7f8e5b8cd6
-      sort_by: cardinality
-      sort_order: descending
-      min_size: 1
-      show_set_sizes: true
-      color_intersections_by: set
-      default_annotation_cols:
-      - taxon
-    tag: advanced_viz-adv-upset-81bed0
-    index: adv-upset
-    layout:
-      x: 0
-      y: 35
-      w: 8
-      h: 8
-    title: Taxa shared across {GROUP_COL_DISPLAY} groups (UpSet)
+      h: 6
+    title: Taxonomy Relative Abundance
 - title: Ordination & Clustering
   subtitle: 'Sample-relationship structure: PCoA on Bray-Curtis + clustered taxonomy heatmap'
   tab_order: 3
@@ -971,21 +1389,25 @@ tabs:
   icon_color: green
   workflow_system: nf-core
   dashboard_id: 646b0f3c1e4a2d7f8e5b8cc2
+  filter_sections:
+  - name: Ordination filters
+    icon: mdi:filter-variant
+    color: pink
+    description: Sample scope reaches the heatmap columns, Phylum its rows
+  grid_sections:
+  - name: Ordination summary
+    icon: mdi:counter
+    color: pink
+    description: What the projection was computed from
+  - name: Sample relationships
+    icon: mdi:chart-scatter-plot
+    color: pink
+    description: The projection and the distance matrix behind it
+  - name: Clustered abundance
+    icon: mdi:chart-box-outline
+    color: indigo
+    description: Phyla against samples, both axes clustered
   components:
-  - component_type: text
-    workflow_tag: ampliseq
-    title_size: sm
-    title_align: left
-    order: 1
-    alignment: left
-    tag: text-ord-section-header-aa2879
-    index: ord-section-header
-    layout:
-      x: 0
-      y: 0
-      w: 8
-      h: 1
-    title: Sample Relationships
   - component_type: interactive
     workflow_tag: ampliseq
     data_collection_tag: metadata
@@ -998,6 +1420,8 @@ tabs:
       icon_name: mdi:flask
     title_align: left
     placement: left
+    section: Ordination filters
+    group: Ordination scope
     tag: interactive-ord-sample-filter-78c9c2
     index: ord-sample-filter
     layout:
@@ -1018,6 +1442,8 @@ tabs:
       icon_name: mdi:earth
     title_align: left
     placement: left
+    section: Ordination filters
+    group: Ordination scope
     tag: interactive-ord-habitat-filter-7fd48c
     index: ord-habitat-filter
     layout:
@@ -1041,14 +1467,150 @@ tabs:
       icon_name: mdi:filter-variant
     title_align: left
     placement: left
+    section: Ordination filters
+    group: Ordination scope
     tag: interactive-ord-phylum-filter-7fd490
     index: ord-phylum-filter
     layout:
       x: 0
       y: 5
       w: 1
-      h: 2
+      h: 3
     title: Phylum
+  - component_type: text
+    workflow_tag: ampliseq
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    section: Ordination summary
+    body: 'Beta diversity: how similar the samples are to each other, rather than how diverse each one is on its own. The cards summarise the PCoA coordinates the projection below was computed from.'
+    tag: text-ord-section-header-aa2879
+    index: ord-section-header
+    layout:
+      x: 0
+      y: 0
+      w: 8
+      h: 1
+    title: Sample relationships
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: embedding_pcoa
+    aggregation: nunique
+    column_name: sample_id
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: '{GROUP_COL}'
+    display:
+      icon_name: mdi:flask
+      icon_color: '#E91E63'
+      title_color: '#E91E63'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    section: Ordination summary
+    tag: card-ord-samples-87b1b2
+    index: ord-samples
+    layout:
+      x: 0
+      y: 1
+      w: 2
+      h: 3
+    title: Samples projected
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: embedding_pcoa
+    aggregation: nunique
+    column_name: '{GROUP_COL}'
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: '{GROUP_COL}'
+    display:
+      icon_name: mdi:earth
+      icon_color: '#984EA3'
+      title_color: '#984EA3'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    section: Ordination summary
+    tag: card-ord-groups-6f9320
+    index: ord-groups
+    layout:
+      x: 2
+      y: 1
+      w: 2
+      h: 3
+    title: '{GROUP_COL_DISPLAY} groups'
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: embedding_pcoa
+    aggregation: median
+    column_name: dim_1
+    column_type: float64
+    aggregations:
+    - box_plot_stats
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:arrow-left-right
+      icon_color: '#1976D2'
+      title_color: '#1976D2'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    section: Ordination summary
+    tag: card-ord-dim1-28c77a
+    index: ord-dim1
+    layout:
+      x: 4
+      y: 1
+      w: 2
+      h: 3
+    title: PCoA axis 1 (distribution)
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: embedding_pcoa
+    aggregation: median
+    column_name: dim_2
+    column_type: float64
+    aggregations:
+    - box_plot_stats
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:arrow-up-down
+      icon_color: '#00BCD4'
+      title_color: '#00BCD4'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    section: Ordination summary
+    tag: card-ord-dim2-07dba5
+    index: ord-dim2
+    layout:
+      x: 6
+      y: 1
+      w: 2
+      h: 3
+    title: PCoA axis 2 (distribution)
+  - component_type: text
+    workflow_tag: ampliseq
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    section: Sample relationships
+    tag: text-ord-relationships-header-44cfea
+    index: ord-relationships-header
+    layout:
+      x: 0
+      y: 0
+      w: 8
+      h: 2
+    title: Projection and distance
+    body: The PCoA embeds each sample in two dimensions so that the closer two points sit, the more similar their communities. The Bray-Curtis panel beside it is the raw pairwise distance matrix that projection was computed from, which is where a sample that is an outlier to everything shows up as a bright row.
   - component_type: advanced_viz
     workflow_tag: ampliseq
     viz_kind: embedding
@@ -1061,41 +1623,18 @@ tabs:
       color_col: '{GROUP_COL}'
       point_size: 10
       show_density: false
+    section: Sample relationships
     tag: advanced_viz-ord-embedding-531e5a
     index: ord-embedding
     layout:
       x: 0
-      y: 1
+      y: 2
       w: 4
-      h: 6
+      h: 7
     title: Sample ordination (PCoA, Bray-Curtis)
   - component_type: advanced_viz
     workflow_tag: ampliseq
-    use: qiime2/complex_heatmap
-    data_collection_tag: complex_heatmap_canonical
-    config:
-      viz_kind: complex_heatmap
-      matrix_wf_id: 646b0f3c1e4a2d7f8e5b8ca3
-      matrix_dc_id: 646b0f3c1e4a2d7f8e5b8cd2
-      index_column: Phylum
-      row_annotation_cols:
-      - Kingdom
-      cluster_rows: true
-      cluster_cols: true
-      cluster_method: ward
-      cluster_metric: euclidean
-      normalize: row_z
-    tag: advanced_viz-ord-complex-heatmap-92c52d
-    index: ord-complex-heatmap
-    layout:
-      x: 0
-      y: 8
-      w: 8
-      h: 8
-    title: Taxonomy heatmap (clustered)
-  - component_type: advanced_viz
-    workflow_tag: ampliseq
-    use: qiime2/complex_heatmap
+    use: qiime2/distance_heatmap
     data_collection_tag: bray_curtis_canonical
     config:
       viz_kind: complex_heatmap
@@ -1109,14 +1648,56 @@ tabs:
       cluster_metric: euclidean
       normalize: none
       colorscale: Viridis
+    section: Sample relationships
     tag: advanced_viz-ord-bray-curtis-f70a9e
     index: ord-bray-curtis
     layout:
       x: 4
-      y: 1
+      y: 2
       w: 4
-      h: 6
+      h: 7
     title: Sample distances (Bray-Curtis)
+  - component_type: text
+    workflow_tag: ampliseq
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    section: Clustered abundance
+    tag: text-ord-heatmap-header-64956a
+    index: ord-heatmap-header
+    layout:
+      x: 0
+      y: 0
+      w: 8
+      h: 2
+    title: Clustered abundance
+    body: Phyla in rows, samples in columns, both axes clustered. Selecting samples on the left removes columns from this matrix and selecting Phylum removes rows, so the dendrograms recompute on the subset. Narrowing to a single sample or a single phylum leaves nothing to cluster, and the matrix is then drawn unclustered rather than failing.
+  - component_type: advanced_viz
+    workflow_tag: ampliseq
+    use: qiime2/abundance_heatmap
+    data_collection_tag: complex_heatmap_canonical
+    config:
+      viz_kind: complex_heatmap
+      matrix_wf_id: 646b0f3c1e4a2d7f8e5b8ca3
+      matrix_dc_id: 646b0f3c1e4a2d7f8e5b8cd2
+      index_column: Phylum
+      row_annotation_cols:
+      - Kingdom
+      cluster_rows: true
+      cluster_cols: true
+      cluster_method: ward
+      cluster_metric: euclidean
+      normalize: row_z
+    section: Clustered abundance
+    tag: advanced_viz-ord-complex-heatmap-92c52d
+    index: ord-complex-heatmap
+    layout:
+      x: 0
+      y: 2
+      w: 8
+      h: 9
+    title: Taxonomy heatmap (clustered)
 - title: Differential Abundance
   subtitle: ANCOM-BC volcano + DA-barplot per contrast
   tab_order: 4
@@ -1126,21 +1707,26 @@ tabs:
   icon_color: green
   workflow_system: nf-core
   dashboard_id: 646b0f3c1e4a2d7f8e5b8cb4
+  filter_sections:
+  - name: Differential filters
+    icon: mdi:filter-variant
+    color: red
+    description: Pick a contrast first, then the taxonomic slice and the thresholds
+  grid_sections:
+  - name: Summary
+    icon: mdi:counter
+    color: red
+    description: What was tested and what survived multiple-testing correction
+  - name: Volcano & MA
+    icon: mdi:chart-scatter-plot
+    color: grape
+    description: Effect size read against significance
+  - name: Results table
+    icon: mdi:table
+    color: gray
+    description: Every tested taxon with its statistics
+    collapsed: true
   components:
-  - component_type: text
-    workflow_tag: ampliseq
-    title_size: sm
-    title_align: left
-    order: 1
-    alignment: left
-    tag: text-diff-section-header-b63d9f
-    index: diff-section-header
-    layout:
-      x: 0
-      y: 0
-      w: 8
-      h: 1
-    title: ANCOM-BC Differentials
   - component_type: interactive
     workflow_tag: ampliseq
     data_collection_tag: ancombc_results
@@ -1153,6 +1739,8 @@ tabs:
       icon_name: mdi:compare-horizontal
     title_align: left
     placement: left
+    section: Differential filters
+    group: Call scope
     tag: interactive-diff-contrast-filter-245518
     index: diff-contrast-filter
     layout:
@@ -1173,6 +1761,8 @@ tabs:
       icon_name: mdi:bacteria-outline
     title_align: left
     placement: left
+    section: Differential filters
+    group: Call scope
     tag: interactive-diff-filter-phylum-12e821
     index: diff-filter-phylum
     layout:
@@ -1193,6 +1783,8 @@ tabs:
       icon_name: mdi:bacteria
     title_align: left
     placement: left
+    section: Differential filters
+    group: Call scope
     tag: interactive-diff-kingdom-filter-a4b2a0
     index: diff-kingdom-filter
     layout:
@@ -1213,6 +1805,8 @@ tabs:
       icon_name: mdi:chart-line
     title_align: left
     placement: left
+    section: Differential filters
+    group: Thresholds
     tag: interactive-diff-w-slider-ba8ae2
     index: diff-w-slider
     layout:
@@ -1233,6 +1827,8 @@ tabs:
       icon_name: mdi:chart-bell-curve
     title_align: left
     placement: left
+    section: Differential filters
+    group: Thresholds
     tag: interactive-diff-lfc-slider-549ce8
     index: diff-lfc-slider
     layout:
@@ -1241,6 +1837,22 @@ tabs:
       w: 1
       h: 3
     title: Log-Fold Change Range
+  - component_type: text
+    workflow_tag: ampliseq
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    section: Summary
+    body: 'ANCOM-BC tests each taxon for a difference in abundance between two groups, correcting for compositional bias and for the number of tests. Pick a contrast on the left first: every number on this tab is conditional on it. The cards count what was tested, what survives FDR, and how large the effects are.'
+    tag: text-diff-section-header-b63d9f
+    index: diff-section-header
+    layout:
+      x: 0
+      y: 0
+      w: 8
+      h: 2
+    title: ANCOM-BC differentials
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: ancombc_results
@@ -1255,16 +1867,18 @@ tabs:
       value_font_size: xl
     title_size: sm
     title_align: left
-    secondary_layout: vertical
+    secondary_layout: top_n
     top_n_count: 3
+    section: Summary
+    breakdown_col: Phylum
     tag: card-diff-card-total-taxa-365cd9
     index: diff-card-total-taxa
     layout:
       x: 0
-      y: 1
+      y: 2
       w: 2
-      h: 2
-    title: Total Taxa Analyzed
+      h: 3
+    title: Taxa tested
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: ancombc_results
@@ -1280,41 +1894,46 @@ tabs:
     title_size: sm
     title_align: left
     filter_expr: col('q_val') < 0.05
-    secondary_layout: vertical
+    secondary_layout: donut
     top_n_count: 3
+    section: Summary
+    breakdown_col: Phylum
     tag: card-diff-card-significant-5f3a71
     index: diff-card-significant
     layout:
       x: 2
-      y: 1
+      y: 2
       w: 2
-      h: 2
+      h: 3
     title: Significant Taxa (q<0.05)
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: ancombc_results
-    aggregation: nunique
-    column_name: Phylum
-    column_type: object
+    aggregation: median
+    column_name: q_val
+    column_type: float64
     display:
-      icon_name: mdi:bacteria-outline
-      icon_color: '#8BC34A'
-      title_color: '#8BC34A'
+      icon_name: mdi:check-decagram
+      icon_color: '#E74C3C'
+      title_color: '#E74C3C'
       title_font_size: xl
       value_font_size: xl
     title_size: sm
     title_align: left
-    filter_expr: col('q_val') < 0.05
-    secondary_layout: vertical
+    secondary_layout: threshold
     top_n_count: 3
-    tag: card-diff-card-phyla-0b4a14
-    index: diff-card-phyla
+    section: Summary
+    threshold_value: 0.05
+    threshold_direction: max
+    threshold_warn: 0.1
+    tag: card-diff-card-fdr-pass-0b4a14
+    index: diff-card-fdr-pass
     layout:
       x: 4
-      y: 1
+      y: 2
       w: 2
-      h: 2
-    title: Phyla with significant hits
+      h: 3
+    title: FDR calls
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: ancombc_results
@@ -1332,28 +1951,31 @@ tabs:
     aggregations:
     - box_plot_stats
     secondary_layout: box_plot
+    section: Summary
     tag: card-diff-card-max-effect-116cba
     index: diff-card-max-effect
     layout:
       x: 6
-      y: 1
+      y: 2
       w: 2
-      h: 2
+      h: 3
     title: Log-Fold Change distribution
-  - component_type: table
+  - component_type: text
     workflow_tag: ampliseq
-    data_collection_tag: ancombc_results
-    row_selection_enabled: false
     title_size: sm
     title_align: left
-    tag: table-diff-table-results-f14daf
-    index: diff-table-results
+    order: 2
+    alignment: left
+    section: Volcano & MA
+    tag: text-diff-plots-header-2309b9
+    index: diff-plots-header
     layout:
       x: 0
-      y: 19
+      y: 0
       w: 8
-      h: 6
-    title: ANCOM-BC differential abundance results
+      h: 1
+    title: Effect size against significance
+    body: The volcano plots log-fold change against significance, so the taxa worth reading are the ones far from the centre and high up. The differential-abundance bar chart below ranks the same calls by effect, signed by direction. Both respond to the W and log-fold-change sliders on the left.
   - component_type: advanced_viz
     workflow_tag: ampliseq
     use: qiime2/volcano
@@ -1365,11 +1987,12 @@ tabs:
       significance_threshold: 0.05
       effect_threshold: 1.0
       top_n_labels: 6
+    section: Volcano & MA
     tag: advanced_viz-adv-volcano-eaac41
     index: adv-volcano
     layout:
       x: 0
-      y: 3
+      y: 1
       w: 8
       h: 8
     title: Volcano (advanced viz)
@@ -1383,14 +2006,46 @@ tabs:
       significance_threshold: 0.05
       top_n: 15
       contrast_view: all
+    section: Volcano & MA
     tag: advanced_viz-adv-da-barplot-367b95
     index: adv-da-barplot
     layout:
       x: 0
-      y: 11
+      y: 9
       w: 8
       h: 8
     title: Differential-abundance bars (per contrast)
+  - component_type: text
+    workflow_tag: ampliseq
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    section: Results table
+    tag: text-diff-table-header-1c3450
+    index: diff-table-header
+    layout:
+      x: 0
+      y: 21
+      w: 8
+      h: 1
+    title: Full result table
+    body: Every tested taxon with its log-fold change, standard error, W statistic and adjusted p-value.
+  - component_type: table
+    workflow_tag: ampliseq
+    data_collection_tag: ancombc_results
+    row_selection_enabled: false
+    title_size: sm
+    title_align: left
+    section: Results table
+    tag: table-diff-table-results-f14daf
+    index: diff-table-results
+    layout:
+      x: 0
+      y: 22
+      w: 8
+      h: 6
+    title: ANCOM-BC differential abundance results
 - title: Phylogeny
   subtitle: QIIME2 phylogenetic tree with ASV taxonomy annotation
   tab_order: 5
@@ -1400,119 +2055,26 @@ tabs:
   icon_color: green
   workflow_system: nf-core
   dashboard_id: 646b0f3c1e4a2d7f8e5b8cbf
+  filter_sections:
+  - name: Tree filters
+    icon: mdi:filter-variant
+    color: lime
+    description: Prunes the tree and its tip table to one clade
+  grid_sections:
+  - name: Tree at a glance
+    icon: mdi:counter
+    color: lime
+    description: How many tips, how deeply classified, how confidently
+  - name: Tree
+    icon: mdi:family-tree
+    color: lime
+    description: Every ASV as a tip, coloured by assignment
+  - name: Tip taxonomy
+    icon: mdi:table
+    color: gray
+    description: One row per tip with its full lineage
+    collapsed: true
   components:
-  - component_type: card
-    workflow_tag: ampliseq
-    data_collection_tag: phylogenetic_tree_metadata_canonical
-    aggregation: nunique
-    column_name: taxon
-    column_type: object
-    display:
-      icon_name: mdi:dna
-      icon_color: '#9C27B0'
-      title_color: '#9C27B0'
-      title_font_size: xl
-      value_font_size: xl
-    title_size: sm
-    title_align: left
-    secondary_layout: vertical
-    top_n_count: 3
-    tag: card-phylo-card-asvs-15ea34
-    index: phylo-card-asvs
-    layout:
-      x: 0
-      y: 1
-      w: 2
-      h: 2
-    title: Total ASVs
-  - component_type: card
-    workflow_tag: ampliseq
-    data_collection_tag: phylogenetic_tree_metadata_canonical
-    aggregation: average
-    column_name: confidence
-    column_type: float64
-    display:
-      icon_name: mdi:check-decagram
-      icon_color: '#1976D2'
-      title_color: '#1976D2'
-      title_font_size: xl
-      value_font_size: xl
-    title_size: sm
-    title_align: left
-    aggregations:
-    - box_plot_stats
-    secondary_layout: box_plot
-    tag: card-phylo-card-phyla-c8ba3b
-    index: phylo-card-phyla
-    layout:
-      x: 4
-      y: 1
-      w: 2
-      h: 2
-    title: Mean classifier confidence
-  - component_type: card
-    workflow_tag: ampliseq
-    data_collection_tag: phylogenetic_tree_metadata_canonical
-    aggregation: nunique
-    column_name: taxon
-    column_type: object
-    display:
-      icon_name: mdi:check-circle-outline
-      icon_color: '#2E7D32'
-      title_color: '#2E7D32'
-      title_font_size: xl
-      value_font_size: xl
-    title_size: sm
-    title_align: left
-    filter_expr: col('Phylum').is_not_null() & (col('Phylum') != '')
-    secondary_layout: vertical
-    top_n_count: 3
-    tag: card-phylo-card-classified-74050c
-    index: phylo-card-classified
-    layout:
-      x: 2
-      y: 1
-      w: 2
-      h: 2
-    title: Classified ASVs
-  - component_type: card
-    workflow_tag: ampliseq
-    data_collection_tag: phylogenetic_tree_metadata_canonical
-    aggregation: nunique
-    column_name: Genus
-    column_type: object
-    display:
-      icon_name: mdi:format-list-group
-      icon_color: '#7B1FA2'
-      title_color: '#7B1FA2'
-      title_font_size: xl
-      value_font_size: xl
-    title_size: sm
-    title_align: left
-    secondary_layout: vertical
-    top_n_count: 3
-    tag: card-phylo-card-genera-538642
-    index: phylo-card-genera
-    layout:
-      x: 6
-      y: 1
-      w: 2
-      h: 2
-    title: Unique Genera
-  - component_type: text
-    workflow_tag: ampliseq
-    title_size: sm
-    title_align: left
-    order: 1
-    alignment: left
-    tag: text-phylo-section-header-dbcd38
-    index: phylo-section-header
-    layout:
-      x: 0
-      y: 0
-      w: 8
-      h: 1
-    title: Tree Context
   - component_type: interactive
     workflow_tag: ampliseq
     data_collection_tag: phylogenetic_tree_metadata_canonical
@@ -1525,6 +2087,8 @@ tabs:
       icon_name: mdi:bacteria
     title_align: left
     placement: left
+    section: Tree filters
+    group: Taxonomy scope
     tag: interactive-phylo-kingdom-filter-cc8149
     index: phylo-kingdom-filter
     layout:
@@ -1545,6 +2109,8 @@ tabs:
       icon_name: mdi:bacteria-outline
     title_align: left
     placement: left
+    section: Tree filters
+    group: Taxonomy scope
     tag: interactive-phylo-phylum-filter-b091ff
     index: phylo-phylum-filter
     layout:
@@ -1553,6 +2119,141 @@ tabs:
       w: 1
       h: 3
     title: Phylum
+  - component_type: text
+    workflow_tag: ampliseq
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    section: Tree at a glance
+    body: The ASV phylogeny built by the pipeline, annotated with the taxonomic assignment of each tip. The cards report how many tips there are, how far down the ranks the classifier reached, and how confident it was getting there.
+    tag: text-phylo-section-header-dbcd38
+    index: phylo-section-header
+    layout:
+      x: 0
+      y: 0
+      w: 8
+      h: 1
+    title: Tree context
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: phylogenetic_tree_metadata_canonical
+    aggregation: nunique
+    column_name: taxon
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      icon_color: '#9C27B0'
+      title_color: '#9C27B0'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    secondary_layout: top_n
+    top_n_count: 3
+    section: Tree at a glance
+    breakdown_col: Phylum
+    tag: card-phylo-card-asvs-15ea34
+    index: phylo-card-asvs
+    layout:
+      x: 0
+      y: 1
+      w: 2
+      h: 3
+    title: Total ASVs
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: phylogenetic_tree_metadata_canonical
+    aggregation: count
+    column_name: Genus
+    column_type: object
+    display:
+      icon_name: mdi:check-circle-outline
+      icon_color: '#2E7D32'
+      title_color: '#2E7D32'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    secondary_layout: completeness
+    top_n_count: 3
+    section: Tree at a glance
+    tag: card-phylo-card-classified-74050c
+    index: phylo-card-classified
+    layout:
+      x: 2
+      y: 1
+      w: 2
+      h: 3
+    title: Genus-level classification
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: phylogenetic_tree_metadata_canonical
+    aggregation: average
+    column_name: confidence
+    column_type: float64
+    display:
+      icon_name: mdi:check-decagram
+      icon_color: '#1976D2'
+      title_color: '#1976D2'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    aggregations:
+    - box_plot_stats
+    secondary_layout: box_plot
+    section: Tree at a glance
+    tag: card-phylo-card-phyla-c8ba3b
+    index: phylo-card-phyla
+    layout:
+      x: 4
+      y: 1
+      w: 2
+      h: 3
+    title: Mean classifier confidence
+  - component_type: card
+    workflow_tag: ampliseq
+    data_collection_tag: phylogenetic_tree_metadata_canonical
+    aggregation: nunique
+    column_name: Genus
+    column_type: object
+    display:
+      icon_name: mdi:format-list-group
+      icon_color: '#7B1FA2'
+      title_color: '#7B1FA2'
+      title_font_size: xl
+      value_font_size: xl
+    title_size: sm
+    title_align: left
+    secondary_layout: concentration
+    top_n_count: 3
+    section: Tree at a glance
+    breakdown_col: Genus
+    tag: card-phylo-card-genera-538642
+    index: phylo-card-genera
+    layout:
+      x: 6
+      y: 1
+      w: 2
+      h: 3
+    title: Unique Genera
+  - component_type: text
+    workflow_tag: ampliseq
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    section: Tree
+    tag: text-phylo-tree-header-9520e8
+    index: phylo-tree-header
+    layout:
+      x: 0
+      y: 0
+      w: 8
+      h: 1
+    title: Phylogenetic tree
+    body: Every ASV as a tip, coloured by its assignment. Filtering Kingdom or Phylum on the left prunes the tree to that clade rather than greying it out, which is what keeps a tree of this size readable.
   - component_type: advanced_viz
     workflow_tag: ampliseq
     viz_kind: phylogenetic
@@ -1585,14 +2286,31 @@ tabs:
       - Genus
       - Species
       - dominant_habitat
+    section: Tree
     tag: advanced_viz-phylo-tree-2f13e4
     index: phylo-tree
     layout:
       x: 0
-      y: 3
+      y: 1
       w: 8
       h: 12
     title: ASV phylogenetic tree
+  - component_type: text
+    workflow_tag: ampliseq
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    section: Tip taxonomy
+    tag: text-phylo-table-header-032f32
+    index: phylo-table-header
+    layout:
+      x: 0
+      y: 17
+      w: 8
+      h: 1
+    title: Tip taxonomy
+    body: One row per tip with the full lineage and the classifier confidence behind it.
   - component_type: table
     workflow_tag: ampliseq
     data_collection_tag: phylogenetic_tree_metadata_canonical
@@ -1600,11 +2318,12 @@ tabs:
     row_selection_enabled: false
     title_size: sm
     title_align: left
+    section: Tip taxonomy
     tag: table-phylo-table-metadata-c614d5
     index: phylo-table-metadata
     layout:
       x: 0
-      y: 15
+      y: 18
       w: 8
       h: 6
     title: ASV taxonomy table
@@ -1612,26 +2331,35 @@ tabs:
   subtitle: Cross-region reconstructed community + per-feature reconstruction confidence (multiregion/SIDLE route only)
   tab_order: 6
   tab_icon: mdi:graph-outline
-  tab_icon_color: teal
+  tab_icon_color: indigo
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
-  dashboard_id: 646b0f3c1e4a2d7f8e5b8d06
+  dashboard_id: 646b0f3c1e4a2d7f8e5b8cc5
+  filter_sections:
+  - name: SIDLE filters
+    icon: mdi:filter-variant
+    color: indigo
+    description: One Phylum slice across the reconstruction and its QC
+  grid_sections:
+  - name: Reconstruction at a glance
+    icon: mdi:counter
+    color: indigo
+    description: What SIDLE rebuilt from the per-region tables
+  - name: Composition
+    icon: mdi:chart-bar
+    color: grape
+    description: The reconstructed community per sample
+  - name: Reconstruction QC
+    icon: mdi:check-decagram
+    color: yellow
+    description: How much evidence each reconstructed feature rests on
+  - name: Tables
+    icon: mdi:table
+    color: gray
+    description: The reconstructed table and its per-feature metrics
+    collapsed: true
   components:
-  - component_type: text
-    workflow_tag: ampliseq
-    title_size: sm
-    title_align: left
-    order: 1
-    alignment: left
-    tag: text-sidle-section-header-9a1c44
-    index: sidle-section-header
-    layout:
-      x: 0
-      y: 0
-      w: 8
-      h: 1
-    title: Reconstructed Community (SIDLE)
   - component_type: interactive
     workflow_tag: ampliseq
     data_collection_tag: sidle_reconstructed
@@ -1644,14 +2372,31 @@ tabs:
       icon_name: mdi:filter-variant
     title_align: left
     placement: left
+    section: SIDLE filters
     tag: interactive-sidle-phylum-filter-9a1c48
     index: sidle-phylum-filter
     layout:
       x: 0
       y: 0
       w: 1
-      h: 2
+      h: 3
     title: Phylum
+  - component_type: text
+    workflow_tag: ampliseq
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    section: Reconstruction at a glance
+    body: SIDLE rebuilds a single feature table from several amplicon regions sequenced separately, so a feature here rests on evidence from more than one region. The cards report how many features were reconstructed, which samples carry them, what phyla they resolve to, and how many regions each feature draws on.
+    tag: text-sidle-section-header-9a1c44
+    index: sidle-section-header
+    layout:
+      x: 0
+      y: 0
+      w: 8
+      h: 2
+    title: Reconstructed Community (SIDLE)
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: sidle_reconstructed
@@ -1666,14 +2411,16 @@ tabs:
       value_font_size: xl
     title_size: sm
     title_align: left
-    secondary_layout: vertical
+    secondary_layout: top_n
+    section: Reconstruction at a glance
+    breakdown_col: Phylum
     tag: card-sidle-features-9a1c50
     index: sidle-card-features
     layout:
       x: 0
-      y: 1
+      y: 2
       w: 2
-      h: 2
+      h: 3
     title: Reconstructed features
   - component_type: card
     workflow_tag: ampliseq
@@ -1689,14 +2436,16 @@ tabs:
       value_font_size: xl
     title_size: sm
     title_align: left
-    secondary_layout: vertical
+    secondary_layout: top_n
+    section: Reconstruction at a glance
+    breakdown_col: sample
     tag: card-sidle-samples-9a1c51
     index: sidle-card-samples
     layout:
       x: 2
-      y: 1
+      y: 2
       w: 2
-      h: 2
+      h: 3
     title: Samples
   - component_type: card
     workflow_tag: ampliseq
@@ -1712,14 +2461,16 @@ tabs:
       value_font_size: xl
     title_size: sm
     title_align: left
-    secondary_layout: vertical
+    secondary_layout: composition
+    section: Reconstruction at a glance
+    breakdown_col: Phylum
     tag: card-sidle-phyla-9a1c52
     index: sidle-card-phyla
     layout:
       x: 4
-      y: 1
+      y: 2
       w: 2
-      h: 2
+      h: 3
     title: Phyla detected
   - component_type: card
     workflow_tag: ampliseq
@@ -1735,15 +2486,34 @@ tabs:
       value_font_size: xl
     title_size: sm
     title_align: left
-    secondary_layout: vertical
+    secondary_layout: box_plot
+    section: Reconstruction at a glance
+    aggregations:
+    - box_plot_stats
     tag: card-sidle-mean-regions-9a1c53
     index: sidle-card-mean-regions
     layout:
       x: 6
-      y: 1
+      y: 2
       w: 2
-      h: 2
+      h: 3
     title: Mean regions / feature
+  - component_type: text
+    workflow_tag: ampliseq
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    section: Composition
+    tag: text-sidle-composition-header-61dc31
+    index: sidle-composition-header
+    layout:
+      x: 0
+      y: 0
+      w: 8
+      h: 1
+    title: Reconstructed composition
+    body: Relative composition of the reconstructed table per sample, and the genus-level breakdown of the same features. Filtering Phylum on the left narrows both.
   - component_type: figure
     workflow_tag: ampliseq
     data_collection_tag: sidle_reconstructed
@@ -1770,44 +2540,14 @@ tabs:
     selection_enabled: false
     title_size: sm
     title_align: left
+    section: Composition
     tag: figure-bar_sidle_rel_composition-9a1c45
     description: Per-sample phylum makeup normalised to 100% — compare community structure across samples.
     layout:
       x: 0
-      y: 3
+      y: 1
       w: 4
-      h: 5
-  - component_type: figure
-    workflow_tag: ampliseq
-    data_collection_tag: sidle_reconstruction_qc
-    visu_type: bar
-    figure_params:
-      labels:
-        num_regions: '# regions mapped'
-      title: Cross-region support (features by regions mapped)
-      x: num_regions
-      y: features
-    mode: code
-    code_content: |-
-      df_g = df.group_by('num_regions').agg(pl.len().alias('features')).sort('num_regions')
-      fig = px.bar(
-          df_g.to_pandas(),
-          x='num_regions', y='features', text='features',
-          title='Cross-region support (features by regions mapped)',
-          labels={'num_regions': '# regions mapped', 'features': 'Reconstructed features'},
-      )
-      fig.update_xaxes(dtick=1)
-      fig.update_traces(textposition='outside')
-    selection_enabled: false
-    title_size: sm
-    title_align: left
-    tag: figure-bar_sidle_confidence-9a1c54
-    description: How many of the amplified 16S regions each feature was reconstructed from — the core SIDLE confidence signal.
-    layout:
-      x: 4
-      y: 3
-      w: 4
-      h: 5
+      h: 6
   - component_type: figure
     workflow_tag: ampliseq
     data_collection_tag: sidle_reconstructed
@@ -1833,13 +2573,62 @@ tabs:
     selection_enabled: false
     title_size: sm
     title_align: left
+    section: Composition
     tag: figure-bar_sidle_genus-9a1c55
     description: Deeper taxonomic resolution than phylum — genus-level counts per sample (Unclassified where the lineage stops short).
     layout:
-      x: 0
-      y: 8
+      x: 4
+      y: 1
       w: 4
-      h: 5
+      h: 6
+  - component_type: text
+    workflow_tag: ampliseq
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    section: Reconstruction QC
+    tag: text-sidle-qc-header-5e911b
+    index: sidle-qc-header
+    layout:
+      x: 0
+      y: 0
+      w: 8
+      h: 1
+    title: Reconstruction quality
+    body: 'How much evidence the reconstruction rests on: per-feature confidence, and the number of k-mers that mapped. A feature built from few k-mers across few regions is the one to treat with caution.'
+  - component_type: figure
+    workflow_tag: ampliseq
+    data_collection_tag: sidle_reconstruction_qc
+    visu_type: bar
+    figure_params:
+      labels:
+        num_regions: '# regions mapped'
+      title: Cross-region support (features by regions mapped)
+      x: num_regions
+      y: features
+    mode: code
+    code_content: |-
+      df_g = df.group_by('num_regions').agg(pl.len().alias('features')).sort('num_regions')
+      fig = px.bar(
+          df_g.to_pandas(),
+          x='num_regions', y='features', text='features',
+          title='Cross-region support (features by regions mapped)',
+          labels={'num_regions': '# regions mapped', 'features': 'Reconstructed features'},
+      )
+      fig.update_xaxes(dtick=1)
+      fig.update_traces(textposition='outside')
+    selection_enabled: false
+    title_size: sm
+    title_align: left
+    section: Reconstruction QC
+    tag: figure-bar_sidle_confidence-9a1c54
+    description: How many of the amplified 16S regions each feature was reconstructed from — the core SIDLE confidence signal.
+    layout:
+      x: 0
+      y: 1
+      w: 4
+      h: 6
   - component_type: figure
     workflow_tag: ampliseq
     data_collection_tag: sidle_reconstruction_qc
@@ -1864,24 +2653,42 @@ tabs:
     selection_enabled: false
     title_size: sm
     title_align: left
+    section: Reconstruction QC
     tag: figure-scatter_sidle_kmers-9a1c56
     description: Each reconstructed feature's k-mer evidence against how many regions support it — outliers flag weakly-supported reconstructions.
     layout:
       x: 4
-      y: 8
+      y: 1
       w: 4
-      h: 5
+      h: 6
+  - component_type: text
+    workflow_tag: ampliseq
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    section: Tables
+    tag: text-sidle-tables-header-055cd5
+    index: sidle-tables-header
+    layout:
+      x: 0
+      y: 18
+      w: 8
+      h: 1
+    title: Reconstruction tables
+    body: The reconstructed feature table and its per-feature QC metrics, as delivered by SIDLE.
   - component_type: table
     workflow_tag: ampliseq
     data_collection_tag: sidle_reconstructed
     row_selection_enabled: false
     title_size: sm
     title_align: left
+    section: Tables
     tag: table-sidle-reconstructed-9a1c46
     index: sidle-reconstructed-table
     layout:
       x: 0
-      y: 13
+      y: 19
       w: 8
       h: 6
     title: Reconstructed features (per-sample counts)
@@ -1891,11 +2698,12 @@ tabs:
     row_selection_enabled: false
     title_size: sm
     title_align: left
+    section: Tables
     tag: table-sidle-reconstruction-qc-9a1c47
     index: sidle-reconstruction-qc-table
     layout:
       x: 0
-      y: 19
+      y: 25
       w: 8
       h: 6
     title: Reconstruction confidence (regions mapped, kmer support)

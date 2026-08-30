@@ -1,0 +1,91 @@
+# ComplexHeatmap — one tab of the advanced-visualisation showcase.
+#
+# Regenerate the seed after editing:
+#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'ComplexHeatmap'
+subtitle: 'Clustered heatmap with dendrograms + annotation track. Server-side compute via packages/plotly-complexheatmap; cached by (DC, normalize, cluster opts, filters).'
+icon: 'mdi:grid'
+icon_color: 'indigo'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8d27'
+is_main_tab: false
+tab_order: 14
+parent_dashboard_tag: volcano
+tab_icon: 'mdi:grid'
+tab_icon_color: 'indigo'
+
+# Left-panel filter section. Deliberately not `persistent`: the 23 tabs of
+# this family read different collections whose column names collide while their
+# value domains do not overlap, so a control fanned out from one tab would show
+# up everywhere and bite on nothing.
+filter_sections:
+  - name: 'Matrix scope'
+    icon: 'mdi:filter-variant'
+    color: 'indigo'
+    description: 'Restricts the rows the clustering is computed on'
+
+grid_sections:
+  - name: 'Clustered matrix'
+    icon: 'mdi:chart-box-outline'
+    color: 'indigo'
+    description: 'A feature matrix with both axes clustered'
+
+components:
+  - tag: text-complex_heatmap
+    index: ch-text
+    component_type: text
+    title: 'Complex heatmap'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Clustered matrix'
+    body: >
+      The feature matrix with rows and columns reordered by hierarchical clustering,
+      dendrograms on both axes. The clustering is recomputed on whatever the filters leave,
+      so narrowing to one cluster genuinely changes the tree rather than hiding branches.
+    layout: { x: 0, y: 0, w: 8, h: 1 }
+
+  - tag: viz-complex_heatmap
+    index: 'ch-heatmap'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'embedding_features'
+    title: 'Clustered heatmap (ComplexHeatmap)'
+    description: 'Server-side clustering via packages/plotly-complexheatmap. 90 samples × first 30 features of the synthetic matrix, z-scored per column with a cluster annotation strip on the right. Settings ⚙ tunes normalisation / cluster method / cluster axes; each change re-dispatches a Celery task (cached by params).'
+    section: 'Clustered matrix'
+    viz_kind: 'complex_heatmap'
+    config:
+      viz_kind: "complex_heatmap"
+      matrix_wf_id: "646b0f3c1e4a2d7f8e5b8d01"
+      matrix_dc_id: "646b0f3c1e4a2d7f8e5b8d0b"
+      index_column: "sample_id"
+      value_columns: ["feat_0", "feat_1", "feat_2", "feat_3", "feat_4", "feat_5", "feat_6", "feat_7", "feat_8", "feat_9", "feat_10", "feat_11", "feat_12", "feat_13", "feat_14", "feat_15", "feat_16", "feat_17", "feat_18", "feat_19", "feat_20", "feat_21", "feat_22", "feat_23", "feat_24", "feat_25", "feat_26", "feat_27", "feat_28", "feat_29"]
+      row_annotation_cols: ["cluster"]
+      cluster_rows: true
+      cluster_cols: true
+      cluster_method: "ward"
+      cluster_metric: "euclidean"
+      normalize: "col_z"
+    layout: { x: 0, y: 2, w: 8, h: 8 }
+
+  - tag: filter-complex_heatmap-cluster
+    index: ch-f-cluster
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'embedding_features'
+    interactive_component_type: MultiSelect
+    column_name: 'cluster'
+    column_type: 'object'
+    title: 'Cluster'
+    placement: left
+    section: 'Matrix scope'
+    group: 'Matrix filters'
+    display:
+      title_size: md
+      custom_color: '#3F51B5'
+      icon_name: 'mdi:form-select'
+    layout: { x: 0, y: 0, w: 1, h: 3 }

@@ -9,10 +9,30 @@
     "$oid": "646b0f3c1e4a2d7f8e5b8d13"
   },
   "version": 1,
-  "tmp_children_data": [],
-  "stored_layout_data": [],
-  "stored_children_data": [],
   "stored_metadata": [
+    {
+      "index": "man-text",
+      "component_type": "text",
+      "title": "Genome-wide scan",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Genome-wide scan",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Markers plotted at their genomic position against their score, with alternating bands separating the chromosomes and a threshold line across the plot. Peaks that clear the line are labelled by feature id; restricting to one chromosome isolates a locus.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
     {
       "index": "man-manhattan",
       "component_type": "advanced_viz",
@@ -28,7 +48,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Synthetic Manhattan fixture",
+        "description": "Synthetic Manhattan: 23 chromosomes x ~40 noise points + 6 designed hits",
         "data_collection_tag": "manhattan_demo",
         "dc_specific_properties": null,
         "_id": {
@@ -38,6 +58,10 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Per-chromosome significance with alternating bands and top-N locus labels. Tune the threshold line in Settings \u2699.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Genome-wide scan",
       "viz_kind": "manhattan",
       "config": {
         "viz_kind": "manhattan",
@@ -45,22 +69,149 @@
         "pos_col": "pos",
         "score_col": "score",
         "feature_col": "feature",
+        "effect_col": null,
         "score_kind": "-log10(padj)",
         "score_threshold": 5.0,
-        "top_n_labels": 8
+        "marker_size_above": 6,
+        "marker_size_below": 4,
+        "marker_size_uniform": 5,
+        "highlight": "above",
+        "color_by_columns": [],
+        "default_color_by": null,
+        "top_n_labels": 8,
+        "selection_enabled": true,
+        "selection_column": "feature"
       },
-      "wf_tag": "python/advanced_viz_demo",
-      "description": "Per-chromosome significance with alternating bands and top-N locus labels. Tune the threshold line in Settings \u2699."
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "man-f-chr",
+      "component_type": "interactive",
+      "title": "Chromosome",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "manhattan_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic Manhattan: 23 chromosomes x ~40 noise points + 6 designed hits",
+        "data_collection_tag": "manhattan_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Scan scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "chr",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Locus filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#F68B33",
+      "icon_name": "mdi:dna",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "man-f-score",
+      "component_type": "interactive",
+      "title": "Score",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "manhattan_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic Manhattan: 23 chromosomes x ~40 noise points + 6 designed hits",
+        "data_collection_tag": "manhattan_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Scan scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "score",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Locus filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#E74C3C",
+      "icon_name": "mdi:chart-line",
+      "wf_tag": "python/advanced_viz_demo"
     }
   ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
   "stored_edit_dashboard_mode_button": [],
-  "left_panel_layout_data": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-man-f-chr",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-man-f-score",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
   "right_panel_layout_data": [
+    {
+      "i": "box-man-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
     {
       "i": "box-man-manhattan",
       "x": 0,
-      "y": 0,
-      "w": 12,
+      "y": 2,
+      "w": 8,
       "h": 8,
       "static": false,
       "resizeHandles": [
@@ -120,5 +271,29 @@
   "main_tab_name": null,
   "tab_icon": "mdi:chart-line-stacked",
   "tab_icon_color": "orange",
-  "parent_dashboard_title": null
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Scan scope",
+      "icon": "mdi:filter-variant",
+      "color": "orange",
+      "description": "Restricts the scan to a region or a score range",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Genome-wide scan",
+      "icon": "mdi:chart-line",
+      "color": "orange",
+      "description": "Markers at their genomic position against significance",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
 }

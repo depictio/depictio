@@ -25,9 +25,63 @@ version: 1
 title: "Catalog Conformance"
 subtitle: "One tile per component type, from catalog-derived collections"
 project_tag: "Catalog Conformance"
+# Pinned so the generated seed keeps the id `static_ids.json` reserves; the
+# generator cross-checks the two and fails if they drift.
+dashboard_id: eae7caf89548988de9aa71eb
+
+# No section is marked `persistent` here, and that is deliberate rather than an
+# oversight: `scripts/dump_dashboard_seed.py` requires this project to hold
+# exactly one dashboard, and `persistent` is a documented no-op on a single-tab
+# dashboard (see DashboardDataLite). A decorative flag that never fires would
+# only teach the wrong thing about what the field does.
+
+# Left panel. One section per collection, because this project declares no
+# links between data collections: a filter reaches a component only when that
+# component's own collection has a column of the same name. Grouping the
+# controls by the collection they come from is the only honest arrangement, and
+# each description says how far the filter actually travels.
+filter_sections:
+  - name: Alpha diversity
+    icon: mdi:chart-bell-curve
+    color: orange
+    description: Per-sample diversity from the QIIME 2 recipe lane. `habitat` also
+      reaches the taxon-count figure, which carries the same column.
+  - name: Taxonomy
+    icon: mdi:bacteria-outline
+    color: teal
+    description: Ranks from the ASV classification table. `Kingdom` and `Phylum`
+      reach the volcano and the taxon-count figure too.
+  - name: Differential thresholds
+    icon: mdi:tune
+    color: red
+    description: ANCOM-BC contrast and cut-offs. These columns exist only on the
+      ANCOM-BC collection, so they move the volcano alone.
+
+# Main grid. The raw/recipe split is what this project exists to demonstrate:
+# one lane matched by a find block, the other assembled by a catalog recipe.
+grid_sections:
+  - name: Catalog coverage
+    icon: mdi:view-dashboard-outline
+    color: blue
+    description: One number per lane, so a broken collection shows as a blank card
+      before you scroll.
+  - name: Raw lane
+    icon: mdi:folder-outline
+    color: teal
+    description: Collections recognised straight from files on disk — no recipe ran.
+  - name: Recipe lane
+    icon: mdi:database-outline
+    color: violet
+    description: Collections a catalog recipe assembled from several inputs.
+  - name: Reference tables
+    icon: mdi:table
+    color: gray
+    collapsed: true
+    description: The underlying rows, for checking a tile against its data.
 
 components:
   - tag: text-intro
+    index: text-intro
     component_type: text
     workflow_tag: python/catalog_conformance
     data_collection_tag: metaphlan_profile
@@ -35,15 +89,16 @@ components:
     title_size: h3
     alignment: left
     body: >
-      Every data collection here is generated from **depictio/catalog/**: one per
-      distinct recipe, one per recipe-free output, plus a synthetic MultiQC
-      report. It exists so the catalog e2e suite covers every module the catalog
-      declares, rather than whatever the nf-core reference projects happen to
-      ingest. Regenerate with `scripts/generate_project.py` after adding a module.
+      Every data collection here is generated from **depictio/catalog/**: one per distinct
+      recipe, one per recipe-free output, plus a synthetic MultiQC report. It exists so the
+      catalog e2e suite covers every module the catalog declares. Regenerate with
+      `scripts/generate_project.py`.
+    section: Catalog coverage
     layout: { x: 0, y: 0, w: 8, h: 1 }
 
   # --- cards: four across, so the row is full -----------------------------
   - tag: card-amplicon-coverage
+    index: card-amplicon-coverage
     catalog_source:
       toolId: mosdepth
       toolName: mosdepth
@@ -56,12 +111,17 @@ components:
     column_name: coverage
     column_type: float64
     aggregation: median
+    aggregations: [box_plot_stats]
     secondary_layout: box_plot
     display:
+      icon_color: cyan
+      title_color: cyan
       icon_name: mdi:chart-bell-curve
-    layout: { x: 0, y: 1, w: 2, h: 2 }
+    section: Catalog coverage
+    layout: { x: 0, y: 2, w: 2, h: 3 }
 
   - tag: card-asv-taxa
+    index: card-asv-taxa
     catalog_source:
       toolId: qiime2
       toolName: QIIME 2
@@ -76,10 +136,14 @@ components:
     aggregation: nunique
     secondary_layout: uniqueness
     display:
+      icon_color: teal
+      title_color: teal
       icon_name: mdi:family-tree
-    layout: { x: 2, y: 1, w: 2, h: 2 }
+    section: Catalog coverage
+    layout: { x: 2, y: 2, w: 2, h: 3 }
 
   - tag: card-classifier-confidence
+    index: card-classifier-confidence
     catalog_source:
       toolId: qiime2
       toolName: QIIME 2
@@ -92,12 +156,17 @@ components:
     column_name: confidence
     column_type: float64
     aggregation: average
+    aggregations: [box_plot_stats]
     secondary_layout: box_plot
     display:
+      icon_color: green
+      title_color: green
       icon_name: mdi:check-decagram
-    layout: { x: 4, y: 1, w: 2, h: 2 }
+    section: Catalog coverage
+    layout: { x: 4, y: 2, w: 2, h: 3 }
 
   - tag: card-shannon
+    index: card-shannon
     catalog_source:
       toolId: qiime2
       toolName: QIIME 2
@@ -110,13 +179,34 @@ components:
     column_name: shannon
     column_type: float64
     aggregation: median
+    aggregations: [box_plot_stats]
     secondary_layout: box_plot
     display:
+      icon_color: orange
+      title_color: orange
       icon_name: mdi:leaf
-    layout: { x: 6, y: 1, w: 2, h: 2 }
+    section: Catalog coverage
+    layout: { x: 6, y: 2, w: 2, h: 3 }
 
   # --- the raw lane: a report and a profile recognised by their find block --
+  - tag: text-raw-lane
+    index: text-raw-lane
+    component_type: text
+    workflow_tag: python/catalog_conformance
+    data_collection_tag: multiqc_report
+    title: The raw lane
+    title_size: h3
+    alignment: left
+    body: >
+      Both tiles below come from collections depictio recognised **without running a
+      recipe**: the MultiQC report matched on its `path_glob`, the MetaPhlAn profile on its
+      find block. Nothing was joined or reshaped. This is the lane that breaks first when a
+      tool moves its output.
+    section: Raw lane
+    layout: { x: 0, y: 0, w: 8, h: 1 }
+
   - tag: multiqc-fastqc-counts
+    index: multiqc-fastqc-counts
     catalog_source:
       toolId: multiqc
       toolName: MultiQC
@@ -130,9 +220,11 @@ components:
     title_size: h3
     selected_module: fastqc
     selected_plot: Sequence Counts
-    layout: { x: 0, y: 3, w: 4, h: 3 }
+    section: Raw lane
+    layout: { x: 0, y: 2, w: 4, h: 4 }
 
   - tag: adv-metaphlan-stacked
+    index: adv-metaphlan-stacked
     catalog_source:
       toolId: metaphlan
       toolName: MetaPhlAn
@@ -151,10 +243,28 @@ components:
       taxon_col: taxon
       rank_col: rank
       abundance_col: relative_abundance
-    layout: { x: 4, y: 3, w: 4, h: 3 }
+    section: Raw lane
+    layout: { x: 4, y: 2, w: 4, h: 4 }
 
   # --- the recipe lane -----------------------------------------------------
+  - tag: text-recipe-lane
+    index: text-recipe-lane
+    component_type: text
+    workflow_tag: python/catalog_conformance
+    data_collection_tag: qiime2_ancombc
+    title: The recipe lane
+    title_size: h3
+    alignment: left
+    body: >
+      These two need a **catalog recipe**. ANCOM-BC writes one CSV per statistic per
+      contrast, so `qiime2/ancombc.py` joins and melts them into the long table the volcano
+      reads. Set a contrast and a q-value cut-off on the left: the recipe is what makes
+      those columns exist.
+    section: Recipe lane
+    layout: { x: 0, y: 0, w: 8, h: 1 }
+
   - tag: adv-ancombc-volcano
+    index: adv-ancombc-volcano
     catalog_source:
       toolId: qiime2
       toolName: QIIME 2
@@ -172,9 +282,11 @@ components:
       feature_id_col: id
       effect_size_col: lfc
       significance_col: q_val
-    layout: { x: 0, y: 6, w: 4, h: 3 }
+    section: Recipe lane
+    layout: { x: 0, y: 2, w: 4, h: 4 }
 
   - tag: figure-taxonomy-composition
+    index: figure-taxonomy-composition
     catalog_source:
       toolId: qiime2
       toolName: QIIME 2
@@ -190,9 +302,25 @@ components:
       x: sample
       y: count
       color: Phylum
-    layout: { x: 4, y: 6, w: 4, h: 3 }
+    section: Recipe lane
+    layout: { x: 4, y: 2, w: 4, h: 4 }
+
+  - tag: text-reference-tables
+    index: text-reference-tables
+    component_type: text
+    workflow_tag: python/catalog_conformance
+    data_collection_tag: metaphlan_profile
+    title: Underneath the tiles
+    title_size: h3
+    alignment: left
+    body: >
+      The rows behind the raw lane, collapsed by default. Useful when a tile looks
+      wrong and you need to know whether the data or the binding is at fault.
+    section: Reference tables
+    layout: { x: 0, y: 14, w: 8, h: 1 }
 
   - tag: table-metaphlan-profile
+    index: table-metaphlan-profile
     catalog_source:
       toolId: metaphlan
       toolName: MetaPhlAn
@@ -203,4 +331,120 @@ components:
     data_collection_tag: metaphlan_profile
     title: MetaPhlAn profile rows
     title_size: h3
-    layout: { x: 0, y: 9, w: 8, h: 3 }
+    section: Reference tables
+    layout: { x: 0, y: 15, w: 8, h: 4 }
+
+  # --- left panel ----------------------------------------------------------
+  # Column names below are the TSV headers of each collection, and a filter
+  # applies wherever that name exists: `habitat` and `Phylum` are carried by
+  # more than one collection here, which is why one control can move two tiles
+  # in a project that declares no links at all.
+  - tag: filter-habitat
+    index: filter-habitat
+    component_type: interactive
+    workflow_tag: python/catalog_conformance
+    data_collection_tag: qiime2_alpha_diversity
+    title: Habitat
+    interactive_component_type: MultiSelect
+    column_name: habitat
+    column_type: object
+    section: Alpha diversity
+    icon_name: mdi:water
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-shannon
+    index: filter-shannon
+    component_type: interactive
+    workflow_tag: python/catalog_conformance
+    data_collection_tag: qiime2_alpha_diversity
+    title: Shannon
+    interactive_component_type: RangeSlider
+    column_name: shannon
+    column_type: float64
+    section: Alpha diversity
+    icon_name: mdi:leaf
+    layout: { x: 0, y: 3, w: 1, h: 3 }
+
+  - tag: filter-kingdom
+    index: filter-kingdom
+    component_type: interactive
+    workflow_tag: python/catalog_conformance
+    data_collection_tag: qiime2_tree_metadata
+    title: Kingdom
+    interactive_component_type: MultiSelect
+    column_name: Kingdom
+    column_type: object
+    section: Taxonomy
+    group: Ranks
+    icon_name: mdi:bacteria
+    layout: { x: 0, y: 6, w: 1, h: 3 }
+
+  - tag: filter-phylum
+    index: filter-phylum
+    component_type: interactive
+    workflow_tag: python/catalog_conformance
+    data_collection_tag: qiime2_tree_metadata
+    title: Phylum
+    interactive_component_type: MultiSelect
+    column_name: Phylum
+    column_type: object
+    section: Taxonomy
+    group: Ranks
+    icon_name: mdi:dna
+    layout: { x: 0, y: 9, w: 1, h: 3 }
+
+  - tag: filter-confidence
+    index: filter-confidence
+    component_type: interactive
+    workflow_tag: python/catalog_conformance
+    data_collection_tag: qiime2_tree_metadata
+    title: Classifier confidence
+    interactive_component_type: RangeSlider
+    column_name: confidence
+    column_type: float64
+    section: Taxonomy
+    group: Ranks
+    icon_name: mdi:shield-check
+    layout: { x: 0, y: 12, w: 1, h: 3 }
+
+  - tag: filter-contrast
+    index: filter-contrast
+    component_type: interactive
+    workflow_tag: python/catalog_conformance
+    data_collection_tag: qiime2_ancombc
+    title: Contrast
+    interactive_component_type: Select
+    column_name: contrast
+    column_type: object
+    section: Differential thresholds
+    group: ANCOM-BC
+    icon_name: mdi:scatter-plot
+    layout: { x: 0, y: 15, w: 1, h: 3 }
+
+  - tag: filter-lfc
+    index: filter-lfc
+    component_type: interactive
+    workflow_tag: python/catalog_conformance
+    data_collection_tag: qiime2_ancombc
+    title: Log-fold change
+    interactive_component_type: RangeSlider
+    column_name: lfc
+    column_type: float64
+    section: Differential thresholds
+    group: ANCOM-BC
+    icon_name: mdi:trending-up
+    layout: { x: 0, y: 18, w: 1, h: 3 }
+
+  - tag: filter-qval
+    index: filter-qval
+    component_type: interactive
+    workflow_tag: python/catalog_conformance
+    data_collection_tag: qiime2_ancombc
+    title: q-value
+    interactive_component_type: RangeSlider
+    column_name: q_val
+    column_type: float64
+    section: Differential thresholds
+    group: ANCOM-BC
+    icon_name: mdi:target
+    layout: { x: 0, y: 21, w: 1, h: 3 }

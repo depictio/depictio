@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useRef, useState } from 'react';
-import { ActionIcon, Group } from '@mantine/core';
+import { ActionIcon, Group, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import { StoredMetadata } from '../../api';
@@ -18,6 +18,7 @@ import './chrome.css';
 export type ChromeAction =
   | 'inspect'
   | 'catalog'
+  | 'description'
   | 'metadata'
   | 'fullscreen'
   | 'download'
@@ -161,6 +162,22 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
   // Same reasoning as `inspect`: whether this action exists is a property of
   // the component's provenance, not of its type.
   if (metadata.catalog_source) actions.push('catalog');
+  /**
+   * The author's own prose about this component, from `description` in the
+   * dashboard YAML. Every renderer but advanced_viz drops it on the floor, so
+   * a card explaining that it exists to demonstrate `filter_expr` said that to
+   * nobody. Surfacing it here rather than in each renderer keeps it out of the
+   * tile's own layout: a card has room for a title and a number, an interactive
+   * for a label and its control, and neither can grow a paragraph.
+   *
+   * advanced_viz is excluded because its renderers already print the same text
+   * as a subtitle under the title, so the icon would only offer a second copy.
+   */
+  const description = typeof metadata.description === 'string' ? metadata.description.trim() : '';
+  const hasDescription = Boolean(description) && componentType !== 'advanced_viz';
+  // Sits directly before `metadata` (always first in `actionsFor`): both answer
+  // "what is this component", the prose one before the structured one.
+  if (hasDescription) actions.push('description');
   actions.push(...actionsFor(componentType));
 
   /**
@@ -199,6 +216,34 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
       case 'catalog':
         if (!metadata.catalog_source) return null;
         return <CatalogButton key="catalog" source={metadata.catalog_source} />;
+      case 'description':
+        if (!hasDescription) return null;
+        return (
+          // Hover, focus and touch all open it: the icon has no click action of
+          // its own, so a viewer who never hovers (keyboard, tablet) would
+          // otherwise reach a button that does nothing. Mantine's Tooltip wires
+          // no aria-describedby, so the text is repeated in the aria-label,
+          // which is the only copy a screen reader ever reaches.
+          <Tooltip
+            key="description"
+            label={description}
+            withArrow
+            multiline
+            w={260}
+            openDelay={200}
+            position="bottom-end"
+            events={{ hover: true, focus: true, touch: true }}
+          >
+            <ActionIcon
+              variant="subtle"
+              color="teal"
+              size="sm"
+              aria-label={`About this component: ${description}`}
+            >
+              <Icon icon="mdi:text-box-outline" width={16} height={16} />
+            </ActionIcon>
+          </Tooltip>
+        );
       case 'metadata':
         return <MetadataPopover key="metadata" metadata={metadata} />;
       case 'fullscreen':

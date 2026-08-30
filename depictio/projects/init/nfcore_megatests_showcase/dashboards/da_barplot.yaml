@@ -1,0 +1,123 @@
+# DA barplot (ANCOM-BC) — one tab of the nf-core megatests showcase.
+#
+# Regenerate the seed after editing:
+#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds nfcore_megatests_showcase
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'DA barplot (ANCOM-BC)'
+subtitle: 'Differential abundance from QIIME2 ANCOM-BC'
+icon: 'mdi:view-grid-plus-outline'
+icon_color: 'lime'
+icon_variant: filled
+workflow_system: nf-core
+dashboard_id: '646b0f3c1e4a2d7f8e5b8e28'
+is_main_tab: false
+tab_order: 9
+parent_dashboard_tag: volcano
+tab_icon: 'mdi:view-grid-plus-outline'
+tab_icon_color: 'lime'
+
+# Left-panel filter section. Deliberately not `persistent`: the 10 tabs of
+# this family read different collections whose column names collide while their
+# value domains do not overlap, so a control fanned out from one tab would show
+# up everywhere and bite on nothing.
+filter_sections:
+  - name: 'Contrast scope'
+    icon: 'mdi:filter-variant'
+    color: 'lime'
+    description: 'One contrast at a time, then the effect and significance floors'
+
+grid_sections:
+  - name: 'Differential abundance'
+    icon: 'mdi:chart-bar'
+    color: 'lime'
+    description: 'ANCOM-BC log-fold changes, one panel per contrast'
+
+components:
+  - tag: text-da_barplot
+    index: da_barplot-text
+    component_type: text
+    title: 'Differential abundance barplot'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Differential abundance'
+    body: >
+      Compositionally corrected differential abundance from an nf-core/ampliseq ANCOM-BC
+      run, top features by effect, bars signed by direction. Two contrasts are available and
+      every bar is conditional on the one selected, so pick it on the left first.
+    layout: { x: 0, y: 0, w: 8, h: 1 }
+
+  - tag: viz-da_barplot
+    index: 'nfcore-da_barplot'
+    component_type: advanced_viz
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'ancombc_da_barplot'
+    title: 'DA barplot — ANCOM-BC differentials'
+    description: 'Per-contrast log-fold-change bars from nf-core/ampliseq ANCOM-BC (Category-mix8-ASV). Two contrasts: (Intercept) + mix8a.'
+    section: 'Differential abundance'
+    viz_kind: 'da_barplot'
+    config:
+      viz_kind: "da_barplot"
+      feature_id_col: "feature_id"
+      contrast_col: "contrast"
+      lfc_col: "lfc"
+      significance_col: "significance"
+      contrast_view: "all"
+      top_n: 20
+    layout: { x: 0, y: 1, w: 8, h: 8 }
+
+  - tag: filter-da_barplot-contrast
+    index: da_barplot-f-contrast
+    component_type: interactive
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'ancombc_da_barplot'
+    interactive_component_type: MultiSelect
+    column_name: 'contrast'
+    column_type: 'object'
+    title: 'Contrast'
+    placement: left
+    section: 'Contrast scope'
+    group: 'Call filters'
+    display:
+      title_size: md
+      custom_color: '#7CB342'
+      icon_name: 'mdi:bullseye-arrow'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-da_barplot-significance
+    index: da_barplot-f-significance
+    component_type: interactive
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'ancombc_da_barplot'
+    interactive_component_type: RangeSlider
+    column_name: 'significance'
+    column_type: 'float64'
+    title: 'q-value'
+    placement: left
+    section: 'Contrast scope'
+    group: 'Call filters'
+    display:
+      title_size: md
+      custom_color: '#F68B33'
+      icon_name: 'mdi:target'
+    layout: { x: 0, y: 3, w: 1, h: 3 }
+
+  - tag: filter-da_barplot-lfc
+    index: da_barplot-f-lfc
+    component_type: interactive
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'ancombc_da_barplot'
+    interactive_component_type: RangeSlider
+    column_name: 'lfc'
+    column_type: 'float64'
+    title: 'Log-fold change'
+    placement: left
+    section: 'Contrast scope'
+    group: 'Call filters'
+    display:
+      title_size: md
+      custom_color: '#1976D2'
+      icon_name: 'mdi:trending-up'
+    layout: { x: 0, y: 6, w: 1, h: 3 }

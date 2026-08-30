@@ -201,6 +201,12 @@ const DatePickerRenderer: React.FC<{
       <DatePickerInput
         type="range"
         value={value}
+        // Mantine's default renders a range as "September 12, 2023 - November
+        // 30, 2024", which needs more width than the Filters panel has and so
+        // wraps to a second line. ISO dates halve that and are the format the
+        // filter is stored and shared in anyway (see `toIsoDateString`), so the
+        // input now reads the same as the value it emits.
+        valueFormat="YYYY-MM-DD"
         minDate={bounds.min ?? undefined}
         maxDate={bounds.max ?? undefined}
         clearable={false}

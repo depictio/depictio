@@ -1,0 +1,89 @@
+# Hierarchical Heatmap (DESeq2 vst) — one tab of the nf-core megatests showcase.
+#
+# Regenerate the seed after editing:
+#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds nfcore_megatests_showcase
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'Hierarchical Heatmap (DESeq2 vst)'
+subtitle: 'Top-100 most-variable genes'
+icon: 'mdi:grid'
+icon_color: 'orange'
+icon_variant: filled
+workflow_system: nf-core
+dashboard_id: '646b0f3c1e4a2d7f8e5b8e25'
+is_main_tab: false
+tab_order: 6
+parent_dashboard_tag: volcano
+tab_icon: 'mdi:grid'
+tab_icon_color: 'orange'
+
+# Left-panel filter section. Deliberately not `persistent`: the 10 tabs of
+# this family read different collections whose column names collide while their
+# value domains do not overlap, so a control fanned out from one tab would show
+# up everywhere and bite on nothing.
+filter_sections:
+  - name: 'Matrix scope'
+    icon: 'mdi:filter-variant'
+    color: 'orange'
+    description: 'Restricts the rows the clustering is computed on'
+
+grid_sections:
+  - name: 'Clustered matrix'
+    icon: 'mdi:chart-box-outline'
+    color: 'orange'
+    description: 'The top-100 variable genes, both axes clustered'
+
+components:
+  - tag: text-complex_heatmap
+    index: complex_heatmap-text
+    component_type: text
+    title: 'Hierarchical heatmap'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Clustered matrix'
+    body: >
+      The 100 most variable genes of the DESeq2 vst() matrix, rows and columns reordered by
+      hierarchical clustering with dendrograms on both axes. Row z-scoring is what makes
+      genes on different expression scales comparable in one picture.
+    layout: { x: 0, y: 0, w: 8, h: 1 }
+
+  - tag: viz-complex_heatmap
+    index: 'nfcore-complex_heatmap'
+    component_type: advanced_viz
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'deseq2_vst_top100'
+    title: 'Hierarchical Heatmap — DESeq2 vst()'
+    description: 'Clustered heatmap of the top-100 most-variable genes from the DESeq2 vst() matrix (24 samples × 100 genes).'
+    section: 'Clustered matrix'
+    viz_kind: 'complex_heatmap'
+    config:
+      viz_kind: "complex_heatmap"
+      matrix_wf_id: "646b0f3c1e4a2d7f8e5b8e01"
+      matrix_dc_id: "646b0f3c1e4a2d7f8e5b8e14"
+      index_column: "gene_id"
+      cluster_rows: true
+      cluster_cols: true
+      cluster_method: "ward"
+      cluster_metric: "euclidean"
+      normalize: "row_z"
+    layout: { x: 0, y: 2, w: 8, h: 8 }
+
+  - tag: filter-complex_heatmap-gene
+    index: complex_heatmap-f-gene
+    component_type: interactive
+    workflow_tag: nfcore_megatests
+    data_collection_tag: 'deseq2_vst_top100'
+    interactive_component_type: MultiSelect
+    column_name: 'gene_id'
+    column_type: 'object'
+    title: 'Gene'
+    placement: left
+    section: 'Matrix scope'
+    group: 'Matrix filters'
+    display:
+      title_size: md
+      custom_color: '#F68B33'
+      icon_name: 'mdi:dna'
+    layout: { x: 0, y: 0, w: 1, h: 3 }

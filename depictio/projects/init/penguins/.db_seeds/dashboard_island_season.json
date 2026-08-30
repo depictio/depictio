@@ -1,0 +1,941 @@
+{
+  "title": "Island & Season",
+  "subtitle": "Where each species was sampled, and whether three seasons of sampling drifted",
+  "version": 1,
+  "icon": "/assets/images/icons/favicon.png",
+  "icon_color": "orange",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "is_public": true,
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "email": "admin@example.com",
+        "is_admin": true
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_main_tab": false,
+  "tab_order": 1,
+  "main_tab_name": null,
+  "tab_icon": "mdi:map-marker-outline",
+  "tab_icon_color": "teal",
+  "filter_sections": [
+    {
+      "name": "Island focus",
+      "icon": "mdi:map-marker-outline",
+      "color": "pink",
+      "description": "Options computed after dropping Adelie \u2014 the one species found on all three islands",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Island composition",
+      "icon": "mdi:map-marker-outline",
+      "color": "teal",
+      "description": "Which species each island holds, and how the birds there compare",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Across seasons",
+      "icon": "mdi:calendar-outline",
+      "color": "orange",
+      "description": "Whether 2007, 2008 and 2009 sampled the same population",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": {
+    "primary": "#159090",
+    "secondary": "#a034f0",
+    "tertiary": "#ff8c00",
+    "tint_mode": "full"
+  },
+  "stored_metadata": [
+    {
+      "index": "67c1e73e-730b-51e4-817f-9da438baad7a",
+      "component_type": "text",
+      "title": "One species is on every island; two are on one each",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T00:00:00",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Island composition",
+      "order": 2,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "*Adelie* is on all three islands (51 Torgersen, 56 Dream, 44 Biscoe), *Chinstrap* only on Dream (68), *Gentoo* only on Biscoe (123). So island and species are confounded for two of the three: narrow to *Adelie* in the **Cohort** filter to compare islands honestly.",
+      "wf_tag": "python/penguin_species_analysis"
+    },
+    {
+      "index": "96dfffe7-3671-59e9-8dac-0ada7fc42f9b",
+      "component_type": "card",
+      "title": "Birds in view",
+      "workflow_tag": "penguin_species_analysis",
+      "data_collection_tag": "joined_penguins_complete",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "dc_config": {
+        "type": "table",
+        "metatype": "Aggregate",
+        "description": "Complete penguin dataset with physical features and demographics",
+        "data_collection_tag": "joined_penguins_complete",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T00:00:00",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Island composition",
+      "aggregation": "count",
+      "column_name": "individual_id",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "coverage",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": 342.0,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:counter",
+      "icon_color": "#5C6BC0",
+      "title_color": "#5C6BC0",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/penguin_species_analysis"
+    },
+    {
+      "index": "21dfd76d-147b-5272-aae5-f2597019319a",
+      "component_type": "card",
+      "title": "Islands",
+      "workflow_tag": "penguin_species_analysis",
+      "data_collection_tag": "joined_penguins_complete",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "dc_config": {
+        "type": "table",
+        "metatype": "Aggregate",
+        "description": "Complete penguin dataset with physical features and demographics",
+        "data_collection_tag": "joined_penguins_complete",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T00:00:00",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Island composition",
+      "aggregation": "nunique",
+      "column_name": "island",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "top_n",
+      "breakdown_col": "island",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:map-marker",
+      "icon_color": "#159090",
+      "title_color": "#159090",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/penguin_species_analysis"
+    },
+    {
+      "index": "ea37570c-96f8-5d44-a415-bce5353f6544",
+      "component_type": "card",
+      "title": "Species mix",
+      "workflow_tag": "penguin_species_analysis",
+      "data_collection_tag": "joined_penguins_complete",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "dc_config": {
+        "type": "table",
+        "metatype": "Aggregate",
+        "description": "Complete penguin dataset with physical features and demographics",
+        "data_collection_tag": "joined_penguins_complete",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T00:00:00",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Island composition",
+      "aggregation": "nunique",
+      "column_name": "species",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "donut",
+      "breakdown_col": "species",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-donut",
+      "icon_color": "#a034f0",
+      "title_color": "#a034f0",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/penguin_species_analysis"
+    },
+    {
+      "index": "1fa967a4-0fcb-5c3e-9bea-e5dea605df64",
+      "component_type": "card",
+      "title": "Body mass",
+      "workflow_tag": "penguin_species_analysis",
+      "data_collection_tag": "joined_penguins_complete",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "dc_config": {
+        "type": "table",
+        "metatype": "Aggregate",
+        "description": "Complete penguin dataset with physical features and demographics",
+        "data_collection_tag": "joined_penguins_complete",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T00:00:00",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Island composition",
+      "aggregation": "median",
+      "column_name": "body_mass_g",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": [
+        "box_plot_stats"
+      ],
+      "filter_expr": null,
+      "secondary_layout": "box_plot",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-bell-curve",
+      "icon_color": "#ff8c00",
+      "title_color": "#ff8c00",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/penguin_species_analysis"
+    },
+    {
+      "index": "d6026b43-16c9-5079-950b-2a1a3017220e",
+      "component_type": "figure",
+      "title": "Birds per Island, by Species",
+      "workflow_tag": "penguin_species_analysis",
+      "data_collection_tag": "joined_penguins_complete",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "dc_config": {
+        "type": "table",
+        "metatype": "Aggregate",
+        "description": "Complete penguin dataset with physical features and demographics",
+        "data_collection_tag": "joined_penguins_complete",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T00:00:00",
+      "description": "Stacked counts. Torgersen is a single bar because only Adelie was sampled there.",
+      "title_size": "h3",
+      "title_align": "left",
+      "section": "Island composition",
+      "visu_type": "histogram",
+      "dict_kwargs": {
+        "x": "island",
+        "color": "species",
+        "color_discrete_map": "{\"Adelie\": \"#FF8C00\", \"Chinstrap\": \"#A034F0\", \"Gentoo\": \"#159090\"}",
+        "barmode": "stack",
+        "labels": "{\"island\": \"Island\", \"species\": \"Species\"}"
+      },
+      "mode": "ui",
+      "code_content": null,
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": false,
+      "selection_column": null,
+      "font_scale": null,
+      "wf_tag": "python/penguin_species_analysis"
+    },
+    {
+      "index": "92f91a79-066b-5f8c-870e-84426d481e5b",
+      "component_type": "figure",
+      "title": "Body Mass by Island and Species",
+      "workflow_tag": "penguin_species_analysis",
+      "data_collection_tag": "joined_penguins_complete",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "dc_config": {
+        "type": "table",
+        "metatype": "Aggregate",
+        "description": "Complete penguin dataset with physical features and demographics",
+        "data_collection_tag": "joined_penguins_complete",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T00:00:00",
+      "description": "Grouped so the Biscoe box splits into its Adelie and Gentoo halves \u2014 the island looks heavy only because Gentoo lives there.",
+      "title_size": "h3",
+      "title_align": "left",
+      "section": "Island composition",
+      "visu_type": "box",
+      "dict_kwargs": {
+        "x": "island",
+        "y": "body_mass_g",
+        "color": "species",
+        "color_discrete_map": "{\"Adelie\": \"#FF8C00\", \"Chinstrap\": \"#A034F0\", \"Gentoo\": \"#159090\"}",
+        "boxmode": "group",
+        "points": "all",
+        "labels": "{\"island\": \"Island\", \"body_mass_g\": \"Body Mass (g)\", \"species\": \"Species\"}"
+      },
+      "mode": "ui",
+      "code_content": null,
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": false,
+      "selection_column": null,
+      "font_scale": null,
+      "wf_tag": "python/penguin_species_analysis"
+    },
+    {
+      "index": "08b60daf-9d14-519f-bbf7-2257ba7edbc8",
+      "component_type": "text",
+      "title": "Three seasons, one population",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T00:00:00",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Across seasons",
+      "order": 2,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "Sampling effort is near-flat: 109 birds in 2007, 114 in 2008, 119 in 2009. The two trend cards below track mean body mass and mean flipper length across those seasons. If the population were drifting, or the sampling were, this is where it would show.",
+      "wf_tag": "python/penguin_species_analysis"
+    },
+    {
+      "index": "6c288133-ea8c-5ab9-b9c6-94b35726fe69",
+      "component_type": "card",
+      "title": "Seasons",
+      "workflow_tag": "penguin_species_analysis",
+      "data_collection_tag": "joined_penguins_complete",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "dc_config": {
+        "type": "table",
+        "metatype": "Aggregate",
+        "description": "Complete penguin dataset with physical features and demographics",
+        "data_collection_tag": "joined_penguins_complete",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T00:00:00",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Across seasons",
+      "aggregation": "nunique",
+      "column_name": "year",
+      "column_type": "int64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "top_n",
+      "breakdown_col": "year",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:calendar",
+      "icon_color": "#159090",
+      "title_color": "#159090",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/penguin_species_analysis"
+    },
+    {
+      "index": "800e5ad1-90e9-5085-9931-0129c7c0ce7e",
+      "component_type": "card",
+      "title": "Flipper by season",
+      "workflow_tag": "penguin_species_analysis",
+      "data_collection_tag": "joined_penguins_complete",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "dc_config": {
+        "type": "table",
+        "metatype": "Aggregate",
+        "description": "Complete penguin dataset with physical features and demographics",
+        "data_collection_tag": "joined_penguins_complete",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T00:00:00",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Across seasons",
+      "aggregation": "average",
+      "column_name": "flipper_length_mm",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "trend",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": "year",
+      "icon_name": "mdi:chart-line",
+      "icon_color": "#FF8C00",
+      "title_color": "#FF8C00",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/penguin_species_analysis"
+    },
+    {
+      "index": "bce4fffe-5c92-5e57-bb84-1cacd5137137",
+      "component_type": "card",
+      "title": "Bill depth by season",
+      "workflow_tag": "penguin_species_analysis",
+      "data_collection_tag": "joined_penguins_complete",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "dc_config": {
+        "type": "table",
+        "metatype": "Aggregate",
+        "description": "Complete penguin dataset with physical features and demographics",
+        "data_collection_tag": "joined_penguins_complete",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T00:00:00",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Across seasons",
+      "aggregation": "average",
+      "column_name": "bill_depth_mm",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "trend",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": "year",
+      "icon_name": "mdi:chart-line",
+      "icon_color": "#A034F0",
+      "title_color": "#A034F0",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/penguin_species_analysis"
+    },
+    {
+      "index": "055cc33b-084f-5c94-ac3f-58741d46ec32",
+      "component_type": "card",
+      "title": "Sex recorded",
+      "workflow_tag": "penguin_species_analysis",
+      "data_collection_tag": "joined_penguins_complete",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "dc_config": {
+        "type": "table",
+        "metatype": "Aggregate",
+        "description": "Complete penguin dataset with physical features and demographics",
+        "data_collection_tag": "joined_penguins_complete",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T00:00:00",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Across seasons",
+      "aggregation": "count",
+      "column_name": "sex",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "completeness",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:account-multiple",
+      "icon_color": "#C44E52",
+      "title_color": "#C44E52",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/penguin_species_analysis"
+    },
+    {
+      "index": "fcaee6c1-fc2d-5d60-8fb0-be4b7be948d7",
+      "component_type": "figure",
+      "title": "Island, species and sex \u2014 who is where",
+      "workflow_tag": "penguin_species_analysis",
+      "data_collection_tag": "joined_penguins_complete",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "dc_config": {
+        "type": "table",
+        "metatype": "Aggregate",
+        "description": "Complete penguin dataset with physical features and demographics",
+        "data_collection_tag": "joined_penguins_complete",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T00:00:00",
+      "description": "Every bird follows one ribbon across the three axes, coloured by species. Chinstrap never leaves Dream and Gentoo never leaves Biscoe, so those ribbons are single strands; only Adelie fans out across all three islands.",
+      "title_size": "h3",
+      "title_align": "left",
+      "section": "Across seasons",
+      "visu_type": "scatter",
+      "dict_kwargs": {},
+      "mode": "code",
+      "code_content": "df_pd = df.to_pandas().dropna(subset=['island', 'species', 'sex'])\ncodes = {'Adelie': 0, 'Chinstrap': 1, 'Gentoo': 2}\nfig = px.parallel_categories(\n    df_pd,\n    dimensions=['island', 'species', 'sex'],\n    color=df_pd['species'].map(codes),\n    color_continuous_scale=['#FF8C00', '#A034F0', '#159090'],\n    labels={'island': 'Island', 'species': 'Species', 'sex': 'Sex'},\n)\nfig.update_layout(coloraxis_showscale=False)\n",
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": false,
+      "selection_column": null,
+      "font_scale": null,
+      "wf_tag": "python/penguin_species_analysis"
+    },
+    {
+      "index": "56f84216-69ec-5bfc-824a-5da09968f61a",
+      "component_type": "figure",
+      "title": "Flipper Length by Island",
+      "workflow_tag": "penguin_species_analysis",
+      "data_collection_tag": "joined_penguins_complete",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "dc_config": {
+        "type": "table",
+        "metatype": "Aggregate",
+        "description": "Complete penguin dataset with physical features and demographics",
+        "data_collection_tag": "joined_penguins_complete",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T00:00:00",
+      "description": "Bimodal on Biscoe and unimodal on the other two \u2014 the second mode is Gentoo, not the island.",
+      "title_size": "h3",
+      "title_align": "left",
+      "section": "Across seasons",
+      "visu_type": "histogram",
+      "dict_kwargs": {
+        "x": "flipper_length_mm",
+        "color": "island",
+        "color_discrete_map": "{\"Biscoe\": \"#5B8FA8\", \"Dream\": \"#B07AA1\", \"Torgersen\": \"#8C7B6B\"}",
+        "barmode": "overlay",
+        "opacity": 0.65,
+        "nbins": 30,
+        "labels": "{\"flipper_length_mm\": \"Flipper Length (mm)\", \"island\": \"Island\"}"
+      },
+      "mode": "ui",
+      "code_content": null,
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": false,
+      "selection_column": null,
+      "font_scale": null,
+      "wf_tag": "python/penguin_species_analysis"
+    },
+    {
+      "index": "d83a020b-f0b4-5e6f-a9bf-2cfa98e94936",
+      "component_type": "interactive",
+      "title": "Island (excluding Adelie)",
+      "workflow_tag": "penguin_species_analysis",
+      "data_collection_tag": "joined_penguins_complete",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9e"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+      },
+      "dc_config": {
+        "type": "table",
+        "metatype": "Aggregate",
+        "description": "Complete penguin dataset with physical features and demographics",
+        "data_collection_tag": "joined_penguins_complete",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca1"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-20T00:00:00",
+      "description": "Two islands, because Torgersen holds nothing but Adelie \u2014 the option list going from three to two is the pre-filter working.",
+      "title_align": "left",
+      "section": "Island focus",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "island",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": "col('species') != 'Adelie'",
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#DA8BC3",
+      "icon_name": "mdi:filter-cog-outline",
+      "wf_tag": "python/penguin_species_analysis"
+    }
+  ],
+  "stored_layout_data": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-d83a020b-f0b4-5e6f-a9bf-2cfa98e94936",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-67c1e73e-730b-51e4-817f-9da438baad7a",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-96dfffe7-3671-59e9-8dac-0ada7fc42f9b",
+      "x": 0,
+      "y": 1,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-21dfd76d-147b-5272-aae5-f2597019319a",
+      "x": 2,
+      "y": 1,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-ea37570c-96f8-5d44-a415-bce5353f6544",
+      "x": 4,
+      "y": 1,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-1fa967a4-0fcb-5c3e-9bea-e5dea605df64",
+      "x": 6,
+      "y": 1,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-d6026b43-16c9-5079-950b-2a1a3017220e",
+      "x": 0,
+      "y": 3,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-92f91a79-066b-5f8c-870e-84426d481e5b",
+      "x": 4,
+      "y": 3,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-08b60daf-9d14-519f-bbf7-2257ba7edbc8",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-6c288133-ea8c-5ab9-b9c6-94b35726fe69",
+      "x": 0,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-800e5ad1-90e9-5085-9931-0129c7c0ce7e",
+      "x": 2,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-bce4fffe-5c92-5e57-bb84-1cacd5137137",
+      "x": 4,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-055cc33b-084f-5c94-ac3f-58741d46ec32",
+      "x": 6,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-fcaee6c1-fc2d-5d60-8fb0-be4b7be948d7",
+      "x": 0,
+      "y": 4,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-56f84216-69ec-5bfc-824a-5da09968f61a",
+      "x": 4,
+      "y": 4,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_children_data": [],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "_id": {
+    "$oid": "6a75a191f5e6ff34386c8f0c"
+  },
+  "dashboard_id": {
+    "$oid": "6a75a191f5e6ff34386c8f0c"
+  },
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8c9d"
+  },
+  "parent_dashboard_id": {
+    "$oid": "6824cb3b89d2b72169309738"
+  },
+  "last_saved_ts": "2026-05-20 00:00:00"
+}

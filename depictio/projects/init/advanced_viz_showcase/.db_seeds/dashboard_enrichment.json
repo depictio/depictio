@@ -9,10 +9,30 @@
     "$oid": "646b0f3c1e4a2d7f8e5b8d26"
   },
   "version": 1,
-  "tmp_children_data": [],
-  "stored_layout_data": [],
-  "stored_children_data": [],
   "stored_metadata": [
+    {
+      "index": "gsea-text",
+      "component_type": "text",
+      "title": "Gene-set enrichment",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Enrichment",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "One point per enriched term, placed by normalised enrichment score, sized by how many genes the set contains and coloured by adjusted p-value. A large point far from zero is a big set moving coherently, a stronger claim than a small set with the same score.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
     {
       "index": "gsea-dotplot",
       "component_type": "advanced_viz",
@@ -28,7 +48,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Synthetic pathway-enrichment results",
+        "description": "Synthetic pathway-enrichment results across 5 ontologies (GO_BP / GO_CC / KEGG / Reactome / Hallmark)",
         "data_collection_tag": "gsea_demo",
         "dc_specific_properties": null,
         "_id": {
@@ -38,6 +58,10 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Y-axis: pathway name. X-axis: normalised enrichment score (NES). Dot size = gene-set size. Dot colour = -log10(padj). Settings \u2699 tunes Top-N / padj threshold / source filter.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Enrichment",
       "viz_kind": "enrichment",
       "config": {
         "viz_kind": "enrichment",
@@ -47,20 +71,196 @@
         "gene_count_col": "gene_count",
         "source_col": "source",
         "padj_threshold": 0.05,
-        "top_n": 20
+        "top_n": 20,
+        "default_colour_by": "neg_log10_padj",
+        "colour_scale": "Auto",
+        "reverse_scale": false,
+        "max_dot_size": 30,
+        "min_dot_size": 6,
+        "term_sort": "nes",
+        "annotate_top_n": 0,
+        "marker_outline": false
       },
-      "wf_tag": "python/advanced_viz_demo",
-      "description": "Y-axis: pathway name. X-axis: normalised enrichment score (NES). Dot size = gene-set size. Dot colour = -log10(padj). Settings \u2699 tunes Top-N / padj threshold / source filter."
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gsea-f-source",
+      "component_type": "interactive",
+      "title": "Ontology",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "gsea_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d25"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic pathway-enrichment results across 5 ontologies (GO_BP / GO_CC / KEGG / Reactome / Hallmark)",
+        "data_collection_tag": "gsea_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d25"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Term scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "source",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Term filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#7B1FA2",
+      "icon_name": "mdi:form-select",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gsea-f-padj",
+      "component_type": "interactive",
+      "title": "Adjusted p-value",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "gsea_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d25"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic pathway-enrichment results across 5 ontologies (GO_BP / GO_CC / KEGG / Reactome / Hallmark)",
+        "data_collection_tag": "gsea_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d25"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Term scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "padj",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Term filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#F68B33",
+      "icon_name": "mdi:target",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gsea-f-size",
+      "component_type": "interactive",
+      "title": "Genes in set",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "gsea_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d25"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic pathway-enrichment results across 5 ontologies (GO_BP / GO_CC / KEGG / Reactome / Hallmark)",
+        "data_collection_tag": "gsea_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d25"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Term scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "gene_count",
+      "column_type": "int64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Term filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#45B8AC",
+      "icon_name": "mdi:counter",
+      "wf_tag": "python/advanced_viz_demo"
     }
   ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
   "stored_edit_dashboard_mode_button": [],
-  "left_panel_layout_data": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-gsea-f-source",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-gsea-f-padj",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-gsea-f-size",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
   "right_panel_layout_data": [
+    {
+      "i": "box-gsea-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
     {
       "i": "box-gsea-dotplot",
       "x": 0,
-      "y": 0,
-      "w": 12,
+      "y": 2,
+      "w": 8,
       "h": 8,
       "static": false,
       "resizeHandles": [
@@ -120,5 +320,29 @@
   "main_tab_name": null,
   "tab_icon": "mdi:chart-bubble",
   "tab_icon_color": "violet",
-  "parent_dashboard_title": null
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Term scope",
+      "icon": "mdi:filter-variant",
+      "color": "violet",
+      "description": "Restricts which ontologies and which set sizes are shown",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Enrichment",
+      "icon": "mdi:chart-donut",
+      "color": "violet",
+      "description": "Enriched terms by normalised score and set size",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
 }

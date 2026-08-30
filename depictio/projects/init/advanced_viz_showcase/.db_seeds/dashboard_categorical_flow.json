@@ -9,10 +9,30 @@
     "$oid": "646b0f3c1e4a2d7f8e5b8d47"
   },
   "version": 1,
-  "tmp_children_data": [],
-  "stored_layout_data": [],
-  "stored_children_data": [],
   "stored_metadata": [
+    {
+      "index": "flow-text",
+      "component_type": "text",
+      "title": "Categorical flow",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Categorical flow",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "A Sankey over three categorical columns: each band is a set of samples carrying the same combination of calls, and its width is how many. It answers what a set of bar charts cannot, such as whether the samples that fail QC are the ones that end up unassigned.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
     {
       "index": "flow-sankey",
       "component_type": "advanced_viz",
@@ -28,7 +48,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Per-sample lineage classification",
+        "description": "Per-sample Pangolin + Nextclade classification: qc_status \u2192 lineage \u2192 clade flow across SARS-CoV-2 samples",
         "data_collection_tag": "categorical_flow_demo",
         "dc_specific_properties": null,
         "_id": {
@@ -37,7 +57,11 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-14T00:00:00.000000",
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Sankey flow across qc_status \u2192 lineage \u2192 clade. Server-side aggregation via Celery; sort / colour / opacity / threshold live in the Settings \u2699 popover.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Categorical flow",
       "viz_kind": "sankey",
       "config": {
         "viz_kind": "sankey",
@@ -46,25 +70,197 @@
           "lineage",
           "clade"
         ],
+        "available_step_cols": null,
         "value_col": null,
+        "value_label": null,
+        "value_format": "raw",
         "sort_mode": "total_flow",
         "color_mode": "source",
         "link_opacity": 0.5,
         "min_link_value": 0.0,
-        "show_node_labels": true
+        "show_node_labels": true,
+        "depth": null
       },
-      "wf_tag": "python/advanced_viz_demo",
-      "description": "Sankey flow across qc_status \u2192 lineage \u2192 clade. Server-side aggregation via Celery; sort / colour / opacity / threshold live in the Settings \u2699 popover."
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "flow-f-qc",
+      "component_type": "interactive",
+      "title": "QC status",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "categorical_flow_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d51"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample Pangolin + Nextclade classification: qc_status \u2192 lineage \u2192 clade flow across SARS-CoV-2 samples",
+        "data_collection_tag": "categorical_flow_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d51"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Call scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "qc_status",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Call filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#2E7D32",
+      "icon_name": "mdi:check-circle",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "flow-f-lineage",
+      "component_type": "interactive",
+      "title": "Lineage",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "categorical_flow_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d51"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample Pangolin + Nextclade classification: qc_status \u2192 lineage \u2192 clade flow across SARS-CoV-2 samples",
+        "data_collection_tag": "categorical_flow_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d51"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Call scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "lineage",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Call filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#7B1FA2",
+      "icon_name": "mdi:virus",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "flow-f-clade",
+      "component_type": "interactive",
+      "title": "Clade",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "categorical_flow_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d51"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample Pangolin + Nextclade classification: qc_status \u2192 lineage \u2192 clade flow across SARS-CoV-2 samples",
+        "data_collection_tag": "categorical_flow_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d51"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Call scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "clade",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Call filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#3F51B5",
+      "icon_name": "mdi:family-tree",
+      "wf_tag": "python/advanced_viz_demo"
     }
   ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
   "stored_edit_dashboard_mode_button": [],
-  "left_panel_layout_data": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-flow-f-qc",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-flow-f-lineage",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-flow-f-clade",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
   "right_panel_layout_data": [
+    {
+      "i": "box-flow-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
     {
       "i": "box-flow-sankey",
       "x": 0,
-      "y": 0,
-      "w": 12,
+      "y": 2,
+      "w": 8,
       "h": 8,
       "static": false,
       "resizeHandles": [
@@ -112,7 +308,7 @@
     "viewers": []
   },
   "is_public": true,
-  "last_saved_ts": "2026-05-14 00:00:00",
+  "last_saved_ts": "2026-05-12 00:00:00",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8d00"
   },
@@ -124,5 +320,29 @@
   "main_tab_name": null,
   "tab_icon": "mdi:chart-sankey",
   "tab_icon_color": "violet",
-  "parent_dashboard_title": null
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Call scope",
+      "icon": "mdi:filter-variant",
+      "color": "violet",
+      "description": "Restricts which samples enter the flow",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Categorical flow",
+      "icon": "mdi:relation-many-to-many",
+      "color": "violet",
+      "description": "How samples move between three categorical calls",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
 }

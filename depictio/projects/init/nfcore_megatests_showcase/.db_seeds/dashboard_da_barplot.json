@@ -9,10 +9,30 @@
     "$oid": "646b0f3c1e4a2d7f8e5b8e28"
   },
   "version": 1,
-  "tmp_children_data": [],
-  "stored_layout_data": [],
-  "stored_children_data": [],
   "stored_metadata": [
+    {
+      "index": "da_barplot-text",
+      "component_type": "text",
+      "title": "Differential abundance barplot",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Differential abundance",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Compositionally corrected differential abundance from an nf-core/ampliseq ANCOM-BC run, top features by effect, bars signed by direction. Two contrasts are available and every bar is conditional on the one selected, so pick it on the left first.\n",
+      "wf_tag": "nf-core/nfcore_megatests"
+    },
     {
       "index": "nfcore-da_barplot",
       "component_type": "advanced_viz",
@@ -28,7 +48,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "nf-core fixture: ancombc_da_barplot",
+        "description": "ANCOM-BC log-fold-change + q-value table from nf-core/ampliseq (Category-mix8-ASV).",
         "data_collection_tag": "ancombc_da_barplot",
         "dc_specific_properties": null,
         "_id": {
@@ -37,7 +57,11 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-18T00:00:00.000000",
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Per-contrast log-fold-change bars from nf-core/ampliseq ANCOM-BC (Category-mix8-ASV). Two contrasts: (Intercept) + mix8a.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Differential abundance",
       "viz_kind": "da_barplot",
       "config": {
         "viz_kind": "da_barplot",
@@ -45,21 +69,191 @@
         "contrast_col": "contrast",
         "lfc_col": "lfc",
         "significance_col": "significance",
-        "contrast_view": "all",
-        "top_n": 20
+        "label_col": null,
+        "significance_threshold": 0.05,
+        "top_n": 20,
+        "contrast_view": "all"
       },
-      "wf_tag": "nf-core/nfcore_megatests",
-      "description": "Per-contrast log-fold-change bars from nf-core/ampliseq ANCOM-BC (Category-mix8-ASV). Two contrasts: (Intercept) + mix8a."
+      "wf_tag": "nf-core/nfcore_megatests"
+    },
+    {
+      "index": "da_barplot-f-contrast",
+      "component_type": "interactive",
+      "title": "Contrast",
+      "workflow_tag": "nfcore_megatests",
+      "data_collection_tag": "ancombc_da_barplot",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e17"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ANCOM-BC log-fold-change + q-value table from nf-core/ampliseq (Category-mix8-ASV).",
+        "data_collection_tag": "ancombc_da_barplot",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8e17"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Contrast scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "contrast",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Call filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#7CB342",
+      "icon_name": "mdi:bullseye-arrow",
+      "wf_tag": "nf-core/nfcore_megatests"
+    },
+    {
+      "index": "da_barplot-f-significance",
+      "component_type": "interactive",
+      "title": "q-value",
+      "workflow_tag": "nfcore_megatests",
+      "data_collection_tag": "ancombc_da_barplot",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e17"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ANCOM-BC log-fold-change + q-value table from nf-core/ampliseq (Category-mix8-ASV).",
+        "data_collection_tag": "ancombc_da_barplot",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8e17"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Contrast scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "significance",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Call filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#F68B33",
+      "icon_name": "mdi:target",
+      "wf_tag": "nf-core/nfcore_megatests"
+    },
+    {
+      "index": "da_barplot-f-lfc",
+      "component_type": "interactive",
+      "title": "Log-fold change",
+      "workflow_tag": "nfcore_megatests",
+      "data_collection_tag": "ancombc_da_barplot",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e17"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ANCOM-BC log-fold-change + q-value table from nf-core/ampliseq (Category-mix8-ASV).",
+        "data_collection_tag": "ancombc_da_barplot",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8e17"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Contrast scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "lfc",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Call filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#1976D2",
+      "icon_name": "mdi:trending-up",
+      "wf_tag": "nf-core/nfcore_megatests"
     }
   ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
   "stored_edit_dashboard_mode_button": [],
-  "left_panel_layout_data": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-da_barplot-f-contrast",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-da_barplot-f-significance",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-da_barplot-f-lfc",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
   "right_panel_layout_data": [
+    {
+      "i": "box-da_barplot-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
     {
       "i": "box-nfcore-da_barplot",
       "x": 0,
-      "y": 0,
-      "w": 12,
+      "y": 1,
+      "w": 8,
       "h": 8,
       "static": false,
       "resizeHandles": [
@@ -107,17 +301,41 @@
     "viewers": []
   },
   "is_public": true,
-  "last_saved_ts": "2026-05-18 14:49:24",
+  "last_saved_ts": "2026-05-12 00:00:00",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8e00"
   },
   "is_main_tab": false,
   "parent_dashboard_id": {
-    "$oid": "646b0f3c1e4a2d7f8e5b8e00"
+    "$oid": "646b0f3c1e4a2d7f8e5b8e20"
   },
   "tab_order": 9,
   "main_tab_name": null,
   "tab_icon": "mdi:view-grid-plus-outline",
   "tab_icon_color": "lime",
-  "parent_dashboard_title": null
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Contrast scope",
+      "icon": "mdi:filter-variant",
+      "color": "lime",
+      "description": "One contrast at a time, then the effect and significance floors",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Differential abundance",
+      "icon": "mdi:chart-bar",
+      "color": "lime",
+      "description": "ANCOM-BC log-fold changes, one panel per contrast",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
 }

@@ -42,6 +42,14 @@ STATIC_IDS = {
         "data_collections": {
             "iris_table": "646b0f3c1e4a2d7f8e5b8c9c",
         },
+        # Without this table `reseed_project --dashboards-only iris` deletes
+        # nothing, and `create_dashboard_from_json` never overwrites an
+        # existing document — so the reseed reported success and changed
+        # nothing at all.
+        "dashboards": {
+            "iris": "6824cb3b89d2b72169309737",
+            "iris_petal": "6a75a191f5e6ff34386c8f0b",
+        },
     },
     "penguins": {
         "project": "646b0f3c1e4a2d7f8e5b8c9d",
@@ -50,6 +58,10 @@ STATIC_IDS = {
             "physical_features": "646b0f3c1e4a2d7f8e5b8c9f",
             "demographic_data": "646b0f3c1e4a2d7f8e5b8ca0",
             "penguins_complete": "646b0f3c1e4a2d7f8e5b8ca1",  # Join result
+        },
+        "dashboards": {
+            "penguins": "6824cb3b89d2b72169309738",
+            "penguins_island_season": "6a75a191f5e6ff34386c8f0c",
         },
     },
     "ampliseq": {
@@ -91,7 +103,11 @@ STATIC_IDS = {
             "phylogenetic_tree_metadata_canonical": "646b0f3c1e4a2d7f8e5b8cdc",
         },
         "dashboards": {
-            "ampliseq_multiqc": "646b0f3c1e4a2d7f8e5b8cb7",
+            # The main tab's `_id` IS the project id — the same convention
+            # advanced_viz_showcase follows (…8d00 for both). It was listed as
+            # …8cb7, an id no shipped seed carries, so every dashboard-level
+            # cleanup keyed on this table missed the main tab.
+            "ampliseq_multiqc": "646b0f3c1e4a2d7f8e5b8ca2",
             # Phase E — Alpha Diversity (tab 1) + Phylogeny (tab 5) tabs.
             "ampliseq_alpha_diversity": "646b0f3c1e4a2d7f8e5b8cbe",
             "ampliseq_community": "646b0f3c1e4a2d7f8e5b8cb3",
@@ -102,6 +118,19 @@ STATIC_IDS = {
             # added alongside Embedding. Bray-Curtis tile lands in Phase D.
             "ampliseq_ordination": "646b0f3c1e4a2d7f8e5b8cc2",
             "ampliseq_phylogeny": "646b0f3c1e4a2d7f8e5b8cbf",
+            # Reserved rather than seeded. The SIDLE tab is in `base.yaml` and a
+            # real run with SIDLE outputs builds it, but the reference DATA_ROOT
+            # (the project directory in this repo) ships no sidle TSVs, so the
+            # tab is pruned before export and there is no `.db_seeds` file for
+            # it. The id is pinned here because the one `base.yaml` used to
+            # carry, …8d06, is the `embedding_umap` DC of advanced_viz_showcase.
+            "ampliseq_sidle": "646b0f3c1e4a2d7f8e5b8cc5",
+            # The two demo tabs `build_reference_dashboard.py` adds on top of
+            # base.yaml. They bind columns only the reference metadata has
+            # (coordinates, a sampling date, CTD readings), which is why they
+            # live in `reference_extended.yaml` and not in the nf-core template.
+            "ampliseq_sampling_campaign": "646b0f3c1e4a2d7f8e5b8cc3",
+            "ampliseq_environment": "646b0f3c1e4a2d7f8e5b8cc4",
         },
     },
     "ampliseq_base": {
@@ -184,6 +213,8 @@ STATIC_IDS = {
             "advanced_viz_qq": "646b0f3c1e4a2d7f8e5b8d43",
             "advanced_viz_sunburst": "646b0f3c1e4a2d7f8e5b8d44",
             "advanced_viz_oncoplot": "646b0f3c1e4a2d7f8e5b8d45",
+            "advanced_viz_coverage_track": "646b0f3c1e4a2d7f8e5b8d46",
+            "advanced_viz_categorical_flow": "646b0f3c1e4a2d7f8e5b8d47",
         },
     },
     # nf-core/viralrecon 3.0.0 viral-genome analysis template — five-tab
@@ -624,15 +655,45 @@ class ReferenceDatasetRegistry:
 
         # Add template_origin for template-based projects (ampliseq)
         if os.path.exists(template_path):
-            from depictio.models.models.templates import TemplateOrigin
+            from depictio.models.models.templates import ProvenanceSpec, TemplateOrigin
 
             raw_template = get_config(template_path)
             tmpl = raw_template.get("template", {})
+
+            # Collect the run's provenance the same way the CLI does. This path
+            # is not the CLI's `resolve_template`, so it has to ask explicitly;
+            # without it a seeded project ships a template_origin whose
+            # run_provenance is empty and the ingestion report's provenance
+            # section (and the dashboard Settings drawer) render blank.
+            #
+            # The bundled projects carry a trimmed pipeline_info/ for exactly
+            # this. Best-effort: a project without one keeps an empty list, and
+            # a malformed file must not stop a deployment from booting.
+            run_provenance: list = []
+            run_provenance_files: list = []
+            try:
+                from depictio.cli.cli.utils.templates import collect_run_provenance
+
+                spec_raw = tmpl.get("provenance")
+                spec = ProvenanceSpec.model_validate(spec_raw) if spec_raw else None
+                entries, files = collect_run_provenance(data_root, spec)
+                run_provenance = [e.model_dump() for e in entries]
+                run_provenance_files = files
+                if entries:
+                    logger.info(
+                        f"Collected {len(entries)} provenance entries for {dataset_name} "
+                        f"from {len(files)} file(s)"
+                    )
+            except Exception as exc:  # noqa: BLE001 - provenance is never load-bearing
+                logger.warning(f"Provenance collection failed for {dataset_name}: {exc}")
+
             project_config["template_origin"] = TemplateOrigin(
                 template_id=tmpl.get("template_id", dataset_name),
                 template_version=tmpl.get("version", "1.0.0"),
                 data_root=data_root,
                 variables=tmpl.get("reference", {}).get("vars", {}),
+                run_provenance=run_provenance,
+                run_provenance_files=run_provenance_files,
             ).model_dump()
 
         # Extract and remove _static_dc_id from join definitions (not allowed in ProjectBeanie)

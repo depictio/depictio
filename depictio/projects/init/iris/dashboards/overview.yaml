@@ -7,6 +7,11 @@ subtitle: "Overview of sepal/petal measurements across the three Iris varieties"
 project_tag: "Iris Dataset Project Data Analysis"
 main_tab_name: "Overview"
 
+# Tab strip identity. Without these the tab renders with no icon while its
+# sibling has one, which reads as a rendering fault rather than a choice.
+tab_icon: "mdi:flower-outline"
+tab_icon_color: "violet"
+
 # `filter_sections` and `grid_sections` are two independent lists: the first
 # groups the left panel's interactive controls, the second groups everything
 # else in the main grid.
@@ -74,11 +79,12 @@ components:
   # ── Narrative intro ────────────────────────────────────────────────
   - tag: text-overview-intro
     component_type: text
+    section: "Cohort"
     title: "Iris Dataset — Overview"
     order: 2
     alignment: left
-    body: "Fisher's classic 150-flower dataset across three varieties (*Setosa*, *Versicolor*, *Virginica*). Filters on the left refine every tile; each section leads with its numbers, then its figures."
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    body: "Fisher's classic 150-flower dataset across three varieties (*Setosa*, *Versicolor*, *Virginica*), 50 of each. The four cards below count the cohort and say how finely it was measured: petal width takes only 22 distinct values across 150 flowers."
+    layout: { x: 0, y: 0, w: 8, h: 1 }
 
   # ── Cohort cards — one row of four, w=2 each ───────────────────────
   - tag: card-flowers
@@ -97,7 +103,7 @@ components:
     title_font_size: md
     value_font_size: xl
     title: "Flowers"
-    layout: {x: 0, y: 1, w: 2, h: 2}
+    layout: { x: 0, y: 2, w: 2, h: 2 }
 
   - tag: card-varieties
     component_type: card
@@ -116,7 +122,7 @@ components:
     title_font_size: md
     value_font_size: xl
     title: "Varieties"
-    layout: {x: 2, y: 1, w: 2, h: 2}
+    layout: { x: 2, y: 2, w: 2, h: 2 }
 
   # ``uniqueness`` counts what is *repeated*, which nothing else surfaces here:
   # petal width takes far fewer distinct values than there are flowers, because
@@ -136,7 +142,7 @@ components:
     title_font_size: md
     value_font_size: xl
     title: "Petal width values"
-    layout: {x: 4, y: 1, w: 2, h: 2}
+    layout: { x: 4, y: 2, w: 2, h: 2 }
 
   # ``filter_expr`` narrows the rows before the hero count, and ``gauge`` draws
   # it as a level against the whole cohort. 2.5 cm is the petal length no Setosa
@@ -158,7 +164,7 @@ components:
     title_font_size: md
     value_font_size: xl
     title: "Petals > 2.5 cm"
-    layout: {x: 6, y: 1, w: 2, h: 2}
+    layout: { x: 6, y: 2, w: 2, h: 2 }
 
   # ── Measurement cards — one row of four, w=2 each ──────────────────
   # Four columns, four secondary layouts, picked from what each column actually
@@ -166,6 +172,15 @@ components:
   # describe them fully), the petal measurements are bimodal (a five-number
   # summary would draw them the same as a flat column) and petal width has a
   # cut-off that splits the dataset cleanly in two.
+  - tag: text-measurements
+    component_type: text
+    section: "Measurements"
+    title: "Measurements"
+    order: 2
+    alignment: left
+    body: "One card per measurement, each carrying the summary its own shape calls for: a box plot where the spread matters, a stat grid where the quartiles do, a histogram where the shape is bimodal, a threshold count where the question is how many clear the line."
+    layout: { x: 0, y: 5, w: 8, h: 1 }
+
   - tag: card-sepal-length
     component_type: card
     section: "Measurements"
@@ -182,7 +197,7 @@ components:
     title_font_size: md
     value_font_size: xl
     title: "Sepal Length"
-    layout: {x: 0, y: 3, w: 2, h: 2}
+    layout: { x: 0, y: 8, w: 2, h: 2 }
 
   - tag: card-sepal-width
     component_type: card
@@ -200,7 +215,7 @@ components:
     title_font_size: md
     value_font_size: xl
     title: "Sepal Width"
-    layout: {x: 2, y: 3, w: 2, h: 2}
+    layout: { x: 2, y: 8, w: 2, h: 2 }
 
   - tag: card-petal-length
     component_type: card
@@ -217,7 +232,7 @@ components:
     title_font_size: md
     value_font_size: xl
     title: "Petal Length"
-    layout: {x: 4, y: 3, w: 2, h: 2}
+    layout: { x: 4, y: 8, w: 2, h: 2 }
 
   # ``threshold`` is the only layout that returns a verdict rather than a shape.
   # 0.8 cm is above every Setosa petal and below every other flower's, so the
@@ -239,7 +254,7 @@ components:
     title_font_size: md
     value_font_size: xl
     title: "Petal width cut-off"
-    layout: {x: 6, y: 3, w: 2, h: 2}
+    layout: { x: 6, y: 8, w: 2, h: 2 }
 
   # ── Interactive filters — left panel, one section each ─────────────
   - tag: variety-filter
@@ -317,7 +332,7 @@ components:
   # `filter_expr` narrows the rows the dropdown's options are computed from, so
   # this one lists only the varieties that have a flower with a sepal over 6 cm
   # — Setosa never appears.
-  - tag: large-sepal-variety-filter
+  - tag: wide-petal-variety-filter
     component_type: interactive
     section: "Scoped views"
     workflow_tag: python/iris_workflow
@@ -325,11 +340,13 @@ components:
     interactive_component_type: MultiSelect
     column_name: variety
     column_type: object
-    filter_expr: "col('sepal.length') > 6"
+    filter_expr: "col('petal.width') > 1.8"
     custom_color: "#C44E52"
     icon_name: mdi:filter-cog-outline
-    title: "Variety (sepal > 6 cm)"
-    layout: {x: 0, y: 15, w: 1, h: 3}
+    title: "Variety (petal width > 1.8 cm)"
+    description: "34 of 150 flowers clear that width, and all 34 are Virginica — the
+      dropdown collapsing to a single option is the filter working, not failing."
+    layout: { x: 0, y: 15, w: 1, h: 3 }
 
   # ── Distribution figures ───────────────────────────────────────────
   # Hero: scatter matrix across all 4 measurement columns. Both halves
@@ -337,6 +354,15 @@ components:
   # tick strip. Rendered via code mode because `scatter_matrix` is a
   # plotly-express figure factory, not one of the core six visu_types
   # supported by the lite YAML schema.
+  - tag: text-distributions
+    component_type: text
+    section: "Distributions"
+    title: "Where the varieties separate"
+    order: 2
+    alignment: left
+    body: "*Setosa* separates on petal size alone, linearly separable from the other two on either petal axis. *Versicolor* and *Virginica* overlap on every measurement and only pull apart when petal length and width are read together, which is what the scatter matrix is for."
+    layout: { x: 0, y: 6, w: 8, h: 1 }
+
   - tag: iris-scatter-matrix
     component_type: figure
     section: "Distributions"
@@ -358,11 +384,12 @@ components:
       )
       fig.update_traces(diagonal_visible=True, showupperhalf=True, marker=dict(size=4, opacity=0.75, line=dict(width=0.4, color='white')))
       fig.update_layout(dragmode='select')
-    layout: {x: 0, y: 5, w: 8, h: 6}
+    layout: { x: 0, y: 0, w: 8, h: 6 }
 
-  # The two boxes are a deliberate pair: same chart, same scale treatment,
-  # different column — petal length separates all three varieties, sepal length
-  # leaves Versicolor and Virginica overlapping.
+  # A box and a violin on the same axes, deliberately: petal length separates
+  # all three varieties, sepal length leaves Versicolor and Virginica
+  # overlapping. Two different marks rather than the same one twice, so the
+  # contrast is between the columns and not just between two identical charts.
   - tag: petal-length-box
     component_type: figure
     section: "Distributions"
@@ -379,25 +406,28 @@ components:
       points: all
       notched: true
       color_discrete_map: '{"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}'
-    layout: {x: 0, y: 11, w: 4, h: 5}
+    layout: { x: 0, y: 8, w: 4, h: 5 }
 
-  - tag: sepal-length-box
+  - tag: sepal-length-violin
     component_type: figure
     section: "Distributions"
     workflow_tag: python/iris_workflow
     data_collection_tag: iris_table
-    visu_type: box
+    visu_type: scatter
+    mode: code
     title: "Sepal Length by Variety"
-    description: "The same chart on the sepal side: Versicolor and Virginica overlap across most of their range, which is why the sepal-only panels of the matrix look mixed."
+    description: "The sepal side, drawn as violins so the full shape shows: Versicolor and Virginica overlap across most of their range and both are broad rather than tight, which is why the sepal-only panels of the matrix look mixed."
     title_size: h3
-    dict_kwargs:
-      x: variety
-      y: sepal.length
-      color: variety
-      points: all
-      notched: true
-      color_discrete_map: '{"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}'
-    layout: {x: 4, y: 11, w: 4, h: 5}
+    code_content: |
+      fig = px.violin(
+          df.to_pandas(),
+          x='variety', y='sepal.length', color='variety',
+          box=True, points='all',
+          color_discrete_map={'Setosa': '#4C72B0', 'Versicolor': '#DD8452', 'Virginica': '#55A467'},
+          labels={'sepal.length': 'Sepal length (cm)', 'variety': 'Variety'},
+      )
+      fig.update_traces(meanline_visible=True, marker=dict(size=4, opacity=0.6))
+    layout: { x: 4, y: 8, w: 4, h: 5 }
 
   # Bivariate scatter with marginal distributions (violin top, rug right).
   # Five visual channels: x, y, color, size, symbol — packs four numeric
@@ -422,7 +452,7 @@ components:
       marginal_y: rug
       opacity: 0.85
       color_discrete_map: '{"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}'
-    layout: {x: 0, y: 16, w: 8, h: 5}
+    layout: { x: 0, y: 13, w: 8, h: 5 }
 
   # Plain scatter (no marginals/trendline) so lasso selection stays direct:
   # selections narrow the dashboard and can be saved as named groups
@@ -444,9 +474,83 @@ components:
       color_discrete_map: '{"Setosa": "#4C72B0", "Versicolor": "#DD8452", "Virginica": "#55A467"}'
     selection_enabled: true
     selection_column: variety
-    layout: {x: 0, y: 21, w: 8, h: 5}
+    layout: { x: 0, y: 18, w: 8, h: 5 }
 
   # ── Data table ─────────────────────────────────────────────────────
+  - tag: text-raw-data
+    component_type: text
+    section: "Raw Data"
+    title: "Records in view"
+    order: 2
+    alignment: left
+    body: "This section is `persistent` and pinned to the bottom, so it follows you to the Petal tab: wherever you land, the cards and the table describe the rows the current filters actually leave standing. Collapsed by default because it is reference material, not the point of the page."
+    layout: { x: 0, y: 0, w: 8, h: 1 }
+
+  - tag: card-raw-flowers
+    component_type: card
+    section: "Raw Data"
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    title: "Flowers in view"
+    column_name: variety
+    column_type: object
+    aggregation: count
+    secondary_layout: coverage
+    coverage_max: 150
+    icon_name: mdi:counter
+    icon_color: "gray"
+    title_color: "gray"
+    layout: { x: 0, y: 1, w: 2, h: 2 }
+
+  - tag: card-raw-varieties
+    component_type: card
+    section: "Raw Data"
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    title: "Varieties in view"
+    column_name: variety
+    column_type: object
+    aggregation: nunique
+    secondary_layout: top_n
+    breakdown_col: variety
+    top_n_count: 3
+    icon_name: mdi:chart-bar
+    icon_color: "teal"
+    title_color: "teal"
+    layout: { x: 2, y: 1, w: 2, h: 2 }
+
+  - tag: card-raw-sepal-length
+    component_type: card
+    section: "Raw Data"
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    title: "Sepal length"
+    column_name: sepal.length
+    column_type: float64
+    aggregation: average
+    aggregations: [median, std_dev, min, max]
+    secondary_layout: compact
+    icon_name: mdi:ruler
+    icon_color: "indigo"
+    title_color: "indigo"
+    layout: { x: 4, y: 1, w: 2, h: 2 }
+
+  - tag: card-raw-petal-length
+    component_type: card
+    section: "Raw Data"
+    workflow_tag: python/iris_workflow
+    data_collection_tag: iris_table
+    title: "Petal length"
+    column_name: petal.length
+    column_type: float64
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    icon_name: mdi:chart-bell-curve
+    icon_color: "violet"
+    title_color: "violet"
+    layout: { x: 6, y: 1, w: 2, h: 2 }
+
   - tag: data-table
     component_type: table
     section: "Raw Data"
@@ -457,4 +561,4 @@ components:
     title_size: h3
     title_align: left
     page_size: 100
-    layout: {x: 0, y: 26, w: 8, h: 5}
+    layout: { x: 0, y: 3, w: 8, h: 5 }

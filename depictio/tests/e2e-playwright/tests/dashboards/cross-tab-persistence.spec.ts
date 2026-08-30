@@ -2,8 +2,8 @@
  * Cross-tab persistent sections & global filters (issue #858).
  *
  * Against the seeded nf-core/ampliseq multi-tab dashboard:
- *   - the "Sample metadata" grid section (owned by the Community tab, marked
- *     `persistent: true`) is present on the main tab via the fan-out host;
+ *   - the "Sample metadata" grid section (owned by the main tab, marked
+ *     `persistent: true`) is present on a sibling tab via the fan-out host;
  *   - a value picked in the persistent "Sample filters" section survives the
  *     full-page navigation of a tab switch (sessionStorage hydration) and the
  *     control itself is present on the sibling tab.
@@ -64,9 +64,9 @@ test.describe("Cross-tab persistent sections & filters", () => {
     await loginAsAdmin();
     await page.goto(`/dashboard/${family!.main.dashboard_id}`);
 
-    // The persistent grid section owned by the Community tab fans out to the
-    // main tab: its accordion header is the landing-slot for the metadata
-    // table.
+    // The persistent grid section lives on the main tab itself, so here it is
+    // rendered by its owner: its accordion header is the landing-slot for the
+    // metadata table and the four metadata cards.
     await expect(page.getByText("Sample metadata", { exact: true })).toBeVisible({
       timeout: 30_000,
     });

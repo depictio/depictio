@@ -9,10 +9,30 @@
     "$oid": "646b0f3c1e4a2d7f8e5b8e29"
   },
   "version": 1,
-  "tmp_children_data": [],
-  "stored_layout_data": [],
-  "stored_children_data": [],
   "stored_metadata": [
+    {
+      "index": "sunburst-text",
+      "component_type": "text",
+      "title": "Sunburst",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Taxonomic hierarchy",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Bracken output from an nf-core/taxprofiler run, drawn as rings from rank outwards. Bracken reports one rank per row rather than a full lineage, so the hierarchy here is rank then taxon rather than kingdom to species. Clicking a wedge zooms into it; the left panel is what narrows the data behind it.\n",
+      "wf_tag": "nf-core/nfcore_megatests"
+    },
     {
       "index": "nfcore-sunburst",
       "component_type": "advanced_viz",
@@ -28,7 +48,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "nf-core fixture: bracken_taxonomy",
+        "description": "Bracken per-sample taxonomy (nf-core/taxprofiler MOCK_001).",
         "data_collection_tag": "bracken_taxonomy",
         "dc_specific_properties": null,
         "_id": {
@@ -37,7 +57,11 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-18T00:00:00.000000",
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Bracken per-sample taxonomy from nf-core/taxprofiler. Single-rank (taxonomy_lvl) sunburst \u2014 multi-rank lineage needs a taxonkit join.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Taxonomic hierarchy",
       "viz_kind": "sunburst",
       "config": {
         "viz_kind": "sunburst",
@@ -45,20 +69,145 @@
           "taxonomy_lvl",
           "name"
         ],
-        "abundance_col": "new_est_reads"
+        "abundance_col": "new_est_reads",
+        "category_palette": null,
+        "start_rank": null,
+        "colour_by_rank": null,
+        "max_depth": 3,
+        "palette": "tab20",
+        "show_counts": true,
+        "min_percent": 0.5
       },
-      "wf_tag": "nf-core/nfcore_megatests",
-      "description": "Bracken per-sample taxonomy from nf-core/taxprofiler. Single-rank (taxonomy_lvl) sunburst \u2014 multi-rank lineage needs a taxonkit join."
+      "wf_tag": "nf-core/nfcore_megatests"
+    },
+    {
+      "index": "sunburst-f-level",
+      "component_type": "interactive",
+      "title": "Rank",
+      "workflow_tag": "nfcore_megatests",
+      "data_collection_tag": "bracken_taxonomy",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e18"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Bracken per-sample taxonomy (nf-core/taxprofiler MOCK_001).",
+        "data_collection_tag": "bracken_taxonomy",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8e18"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Taxon scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "taxonomy_lvl",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Taxon filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#F9A825",
+      "icon_name": "mdi:form-select",
+      "wf_tag": "nf-core/nfcore_megatests"
+    },
+    {
+      "index": "sunburst-f-fraction",
+      "component_type": "interactive",
+      "title": "Relative abundance",
+      "workflow_tag": "nfcore_megatests",
+      "data_collection_tag": "bracken_taxonomy",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e18"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Bracken per-sample taxonomy (nf-core/taxprofiler MOCK_001).",
+        "data_collection_tag": "bracken_taxonomy",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8e18"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Taxon scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "fraction_total_reads",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Taxon filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#F68B33",
+      "icon_name": "mdi:water-percent",
+      "wf_tag": "nf-core/nfcore_megatests"
     }
   ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
   "stored_edit_dashboard_mode_button": [],
-  "left_panel_layout_data": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-sunburst-f-level",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-sunburst-f-fraction",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
   "right_panel_layout_data": [
+    {
+      "i": "box-sunburst-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
     {
       "i": "box-nfcore-sunburst",
       "x": 0,
-      "y": 0,
-      "w": 12,
+      "y": 1,
+      "w": 8,
       "h": 8,
       "static": false,
       "resizeHandles": [
@@ -106,17 +255,41 @@
     "viewers": []
   },
   "is_public": true,
-  "last_saved_ts": "2026-05-18 14:49:24",
+  "last_saved_ts": "2026-05-12 00:00:00",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8e00"
   },
   "is_main_tab": false,
   "parent_dashboard_id": {
-    "$oid": "646b0f3c1e4a2d7f8e5b8e00"
+    "$oid": "646b0f3c1e4a2d7f8e5b8e20"
   },
   "tab_order": 10,
   "main_tab_name": null,
   "tab_icon": "mdi:sun-wireless",
   "tab_icon_color": "yellow",
-  "parent_dashboard_title": null
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Taxon scope",
+      "icon": "mdi:filter-variant",
+      "color": "yellow",
+      "description": "Restricts which ranks and abundances build the rings",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Taxonomic hierarchy",
+      "icon": "mdi:chart-donut",
+      "color": "yellow",
+      "description": "Bracken per-sample taxonomy as concentric rings",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
 }

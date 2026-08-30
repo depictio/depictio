@@ -9,10 +9,30 @@
     "$oid": "646b0f3c1e4a2d7f8e5b8e23"
   },
   "version": 1,
-  "tmp_children_data": [],
-  "stored_layout_data": [],
-  "stored_children_data": [],
   "stored_metadata": [
+    {
+      "index": "coverage_track-text",
+      "component_type": "text",
+      "title": "Coverage track",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Coverage track",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Per-region read depth from a real nf-core/viralrecon mosdepth run, one lane per sample. A dropout reads as a gap in one lane; a region the amplicon scheme never covers reads as a gap in all of them. Pick a few samples on the left before reading it: every lane at once is a wall.\n",
+      "wf_tag": "nf-core/nfcore_megatests"
+    },
     {
       "index": "nfcore-coverage_track",
       "component_type": "advanced_viz",
@@ -28,7 +48,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "nf-core fixture: mosdepth_coverage",
+        "description": "Per-region read depth from mosdepth (viralrecon sample 1, MN908947.3 reference).",
         "data_collection_tag": "mosdepth_coverage",
         "dc_specific_properties": null,
         "_id": {
@@ -37,30 +57,210 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-18T00:00:00.000000",
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Read depth along the MN908947.3 reference, mosdepth output from nf-core/viralrecon.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Coverage track",
       "viz_kind": "coverage_track",
       "config": {
         "viz_kind": "coverage_track",
         "chromosome_col": "chrom",
         "position_col": "start",
-        "end_col": "end",
         "value_col": "coverage",
+        "end_col": "end",
         "sample_col": "sample",
+        "category_col": null,
         "y_scale": "linear",
-        "smoothing_window": 0
+        "smoothing_window": 0,
+        "color_by": "single",
+        "show_annotation_lane": true,
+        "annotation_id": null,
+        "chromosomes_filter": null,
+        "samples_filter": null,
+        "view_mode": null,
+        "show_individuals": true
       },
-      "wf_tag": "nf-core/nfcore_megatests",
-      "description": "Read depth along the MN908947.3 reference, mosdepth output from nf-core/viralrecon."
+      "wf_tag": "nf-core/nfcore_megatests"
+    },
+    {
+      "index": "coverage_track-f-sample",
+      "component_type": "interactive",
+      "title": "Sample",
+      "workflow_tag": "nfcore_megatests",
+      "data_collection_tag": "mosdepth_coverage",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e12"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-region read depth from mosdepth (viralrecon sample 1, MN908947.3 reference).",
+        "data_collection_tag": "mosdepth_coverage",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8e12"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Track scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Track filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#45B8AC",
+      "icon_name": "mdi:flask",
+      "wf_tag": "nf-core/nfcore_megatests"
+    },
+    {
+      "index": "coverage_track-f-chrom",
+      "component_type": "interactive",
+      "title": "Reference",
+      "workflow_tag": "nfcore_megatests",
+      "data_collection_tag": "mosdepth_coverage",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e12"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-region read depth from mosdepth (viralrecon sample 1, MN908947.3 reference).",
+        "data_collection_tag": "mosdepth_coverage",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8e12"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Track scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "chrom",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Track filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#3F51B5",
+      "icon_name": "mdi:dna",
+      "wf_tag": "nf-core/nfcore_megatests"
+    },
+    {
+      "index": "coverage_track-f-coverage",
+      "component_type": "interactive",
+      "title": "Depth",
+      "workflow_tag": "nfcore_megatests",
+      "data_collection_tag": "mosdepth_coverage",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e12"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-region read depth from mosdepth (viralrecon sample 1, MN908947.3 reference).",
+        "data_collection_tag": "mosdepth_coverage",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8e12"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Track scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "coverage",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Track filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#00BCD4",
+      "icon_name": "mdi:chart-line",
+      "wf_tag": "nf-core/nfcore_megatests"
     }
   ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
   "stored_edit_dashboard_mode_button": [],
-  "left_panel_layout_data": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-coverage_track-f-sample",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-coverage_track-f-chrom",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-coverage_track-f-coverage",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
   "right_panel_layout_data": [
+    {
+      "i": "box-coverage_track-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
     {
       "i": "box-nfcore-coverage_track",
       "x": 0,
-      "y": 0,
-      "w": 12,
+      "y": 1,
+      "w": 8,
       "h": 8,
       "static": false,
       "resizeHandles": [
@@ -108,17 +308,41 @@
     "viewers": []
   },
   "is_public": true,
-  "last_saved_ts": "2026-05-18 14:49:24",
+  "last_saved_ts": "2026-05-12 00:00:00",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8e00"
   },
   "is_main_tab": false,
   "parent_dashboard_id": {
-    "$oid": "646b0f3c1e4a2d7f8e5b8e00"
+    "$oid": "646b0f3c1e4a2d7f8e5b8e20"
   },
   "tab_order": 4,
   "main_tab_name": null,
   "tab_icon": "mdi:chart-areaspline",
   "tab_icon_color": "teal",
-  "parent_dashboard_title": null
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Track scope",
+      "icon": "mdi:filter-variant",
+      "color": "teal",
+      "description": "Restricts which lanes and which depth range are drawn",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Coverage track",
+      "icon": "mdi:chart-line",
+      "color": "teal",
+      "description": "mosdepth read depth along the viral reference",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
 }

@@ -9,7 +9,7 @@ import {
   StoredMetadata,
 } from '../../api';
 import { InteractiveFrame, InteractiveTitle, interactiveAccentRaw } from './frame';
-import { buildNumericScale } from './numericScale';
+import { buildNumericScale, formatSliderValue } from './numericScale';
 
 const rangeCache = new Map<string, Promise<ColumnRange>>();
 
@@ -97,6 +97,12 @@ const RangeSliderRenderer: React.FC<{
         // Same accent the title row paints its icon and label with.
         color={interactiveAccentRaw(metadata)}
         step={scale.step}
+        // Hand the canonical formatter down rather than letting the slider fall
+        // back to its own copy: depictio-components cannot import from here (the
+        // dependency runs the other way, and the Dash bundle uses it standalone),
+        // so its mirror is a mirror, and this keeps the viewer reading the one in
+        // numericScale.ts.
+        format_value={formatSliderValue}
         marks={scale.marks}
         restrict_to_marks={scale.discrete}
         show_marks={

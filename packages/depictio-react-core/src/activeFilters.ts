@@ -9,6 +9,7 @@
  */
 
 import type { InteractiveFilter, StoredMetadata } from './api';
+import { formatSliderValue } from './components/interactive/numericScale';
 
 /** True when the filter carries a value that actually narrows the data. */
 export function isFilterActive(filter: InteractiveFilter): boolean {
@@ -82,11 +83,11 @@ function isRangeControl(filter: InteractiveFilter): boolean {
 
 function formatScalar(v: unknown): string {
   if (typeof v === 'boolean') return v ? 'on' : 'off';
-  if (typeof v === 'number') {
-    if (!Number.isFinite(v)) return String(v);
-    if (Number.isInteger(v)) return String(v);
-    return v.toFixed(2).replace(/\.?0+$/, '');
-  }
+  // Numbers go through the slider formatter rather than a second rounding rule
+  // of their own: a chip summarising a RangeSlider should read exactly like the
+  // marks and the drag readout on the control it came from, and one function
+  // deciding how many decimals a number is worth is one place to change it.
+  if (typeof v === 'number') return formatSliderValue(v);
   return String(v);
 }
 

@@ -9,10 +9,30 @@
     "$oid": "646b0f3c1e4a2d7f8e5b8d24"
   },
   "version": 1,
-  "tmp_children_data": [],
-  "stored_layout_data": [],
-  "stored_children_data": [],
   "stored_metadata": [
+    {
+      "index": "da-text",
+      "component_type": "text",
+      "title": "Differential abundance barplot",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Differential barplot",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "The same ANCOM-BC table as the previous tab, drawn the way a differential-abundance figure usually is: top-N features by effect, bars signed by direction, one panel per contrast. Where the volcano answers which features are significant, this answers how large the differences are.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
     {
       "index": "da-bar",
       "component_type": "advanced_viz",
@@ -28,7 +48,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Each panel shows the top-N taxa (by |lfc|) for one contrast. Bars coloured by direction; greyed when above the significance threshold.",
+        "description": "Synthetic ANCOM-BC: 200 taxa \u00d7 3 contrasts with lfc + significance + Phylum label",
         "data_collection_tag": "ancombc_demo",
         "dc_specific_properties": null,
         "_id": {
@@ -38,6 +58,10 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Each panel shows the top-N taxa (by |lfc|) for one contrast. Bars coloured by direction; greyed when above the significance threshold.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Differential barplot",
       "viz_kind": "da_barplot",
       "config": {
         "viz_kind": "da_barplot",
@@ -47,20 +71,139 @@
         "significance_col": "significance",
         "label_col": "label",
         "significance_threshold": 0.05,
-        "top_n": 15
+        "top_n": 15,
+        "contrast_view": "all"
       },
-      "wf_tag": "python/advanced_viz_demo",
-      "description": "Each panel shows the top-N taxa (by |lfc|) for one contrast. Bars coloured by direction; greyed when above the significance threshold."
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "da-f-contrast",
+      "component_type": "interactive",
+      "title": "Contrast",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "ancombc_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d21"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic ANCOM-BC: 200 taxa \u00d7 3 contrasts with lfc + significance + Phylum label",
+        "data_collection_tag": "ancombc_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d21"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Contrast scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "contrast",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Call filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#E91E63",
+      "icon_name": "mdi:bullseye-arrow",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "da-f-lfc",
+      "component_type": "interactive",
+      "title": "Log-fold change",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "ancombc_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d21"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic ANCOM-BC: 200 taxa \u00d7 3 contrasts with lfc + significance + Phylum label",
+        "data_collection_tag": "ancombc_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d21"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Contrast scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "lfc",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Call filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#1976D2",
+      "icon_name": "mdi:trending-up",
+      "wf_tag": "python/advanced_viz_demo"
     }
   ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
   "stored_edit_dashboard_mode_button": [],
-  "left_panel_layout_data": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-da-f-contrast",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-da-f-lfc",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
   "right_panel_layout_data": [
+    {
+      "i": "box-da-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
     {
       "i": "box-da-bar",
       "x": 0,
-      "y": 0,
-      "w": 12,
+      "y": 2,
+      "w": 8,
       "h": 8,
       "static": false,
       "resizeHandles": [
@@ -120,5 +263,29 @@
   "main_tab_name": null,
   "tab_icon": "mdi:chart-bar-stacked",
   "tab_icon_color": "pink",
-  "parent_dashboard_title": null
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Contrast scope",
+      "icon": "mdi:filter-variant",
+      "color": "pink",
+      "description": "One contrast at a time, then the effect floor",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Differential barplot",
+      "icon": "mdi:chart-bar",
+      "color": "pink",
+      "description": "The same calls, drawn as a ranked bar chart",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
 }

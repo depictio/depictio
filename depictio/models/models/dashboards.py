@@ -1205,6 +1205,22 @@ class DashboardDataLite(BaseModel):
             for provenance_field in ("catalog_source", "use"):
                 if comp_dict.get(provenance_field):
                     base[provenance_field] = comp_dict[provenance_field]
+            # A `use:` handle already names the tool and the output it came
+            # from, so a component that declares one has strictly more
+            # provenance than one the picker produced — and yet it went
+            # unbadged, because the chrome reads only `catalog_source`. Derive
+            # the one from the other rather than asking authors to write both
+            # and keep them in step. An explicit `catalog_source` still wins.
+            if base.get("use") and not base.get("catalog_source"):
+                # Lazy import: models.dashboards is imported early, and the
+                # catalog module pulls the whole entry set in behind it.
+                from depictio.models.components.advanced_viz.catalog import (
+                    catalog_source_for_use,
+                )
+
+                derived = catalog_source_for_use(base["use"])
+                if derived:
+                    base["catalog_source"] = derived
             return base
 
         full_dict: dict[str, Any] = {

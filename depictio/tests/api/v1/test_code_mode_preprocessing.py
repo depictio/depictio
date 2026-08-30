@@ -80,3 +80,50 @@ def test_post_figure_customisation_is_not_preprocessing() -> None:
     assert "counts =" in analysis["preprocessing_code"]
     assert "update_layout" in analysis["figure_code"]
     assert "update_layout" not in analysis["preprocessing_code"]
+
+
+def test_post_figure_loop_survives_whole() -> None:
+    """A block after the figure statement must reach the interpreter intact.
+
+    Post-figure lines used to be filtered down to the ones starting with `fig.`
+    and re-emitted at column 0. A `fig.add_scatter(...)` written in a loop body
+    therefore came back stranded, referring to a loop variable whose assignment
+    had been dropped, and rendering died on a NameError for a name the user had
+    in fact defined.
+    """
+    code = "\n".join(
+        [
+            "palette = {'a': '#111111', 'b': '#222222'}",
+            "fig = px.scatter(df.to_pandas(), x='x', y='y')",
+            "for name, colour in palette.items():",
+            "    sub = df.to_pandas()",
+            "    fig.add_scatter(x=sub['x'], y=sub['y'], name=name, marker=dict(color=colour))",
+        ]
+    )
+    analysis = analyze_constrained_code(code)
+
+    assert analysis["is_valid"]
+    figure_code = analysis["figure_code"]
+    assert "for name, colour in palette.items():" in figure_code
+    assert "    sub = df.to_pandas()" in figure_code
+    # Indentation is what makes the two lines above a loop body rather than two
+    # statements, so assert on the indented form, not merely on the substring.
+    assert "    fig.add_scatter(" in figure_code
+    compile(figure_code, "<figure_code>", "exec")
+
+
+def test_preprocessing_block_keeps_its_indentation() -> None:
+    """The same guarantee before the figure statement."""
+    code = "\n".join(
+        [
+            "totals = {}",
+            "for key in ['a', 'b']:",
+            "    totals[key] = 1",
+            "fig = px.bar(df.to_pandas(), x='x', y='y')",
+        ]
+    )
+    analysis = analyze_constrained_code(code)
+
+    assert analysis["is_valid"]
+    assert "    totals[key] = 1" in analysis["preprocessing_code"]
+    compile(analysis["preprocessing_code"], "<preprocessing>", "exec")

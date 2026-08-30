@@ -903,9 +903,28 @@ def compute_embedding(payload: dict) -> dict:
         pl.UInt32,
         pl.UInt64,
     }
-    feature_cols = [c for c in df.columns if c != feature_id_col and df[c].dtype in numeric_dtypes]
+    # Annotation columns are overlays, never features. `extra_cols` is exactly
+    # the renderer's colour-by / cluster / hover picks, and a numeric one lands
+    # in the feature matrix unless excluded here — on the clustering showcase
+    # the annotation column `color` is a Float64 derived from feat_0, so PCA /
+    # UMAP were being fed the very annotation the plot exists to illustrate and
+    # the projection ended up "explaining" its own colouring. They still reach
+    # the renderer through `passthrough` above; they are just not projected on.
+    annotation_cols = set(extra_cols)
+    feature_cols = [
+        c
+        for c in df.columns
+        if c != feature_id_col and c not in annotation_cols and df[c].dtype in numeric_dtypes
+    ]
     if not feature_cols:
         raise ValueError("compute_embedding: no numeric feature columns found in the matrix")
+    excluded = [c for c in extra_cols if c in df.columns and df[c].dtype in numeric_dtypes]
+    if excluded:
+        logger.info(
+            "compute_embedding[%s]: excluded annotation column(s) %s from the feature matrix",
+            method,
+            excluded,
+        )
     df = df.select([feature_id_col] + feature_cols)
 
     # Renderer requests `n_components` (2 or 3) via the params dict; clamped
@@ -1132,6 +1151,18 @@ def compute_complex_heatmap(payload: dict) -> dict:
     # task is actually invoked.
     from plotly_complexheatmap import ComplexHeatmap
 
+    # A dendrogram needs at least two leaves. Both axes can be narrowed to one
+    # by an ordinary filter — pick a single sample and the wide-matrix column
+    # subset leaves one column; pick a single Phylum and the row filter leaves
+    # one row — so this is a click away, not an edge case. Clustering is a
+    # presentation choice, so drop it rather than failing the tile.
+    if len(value_columns) < 2 and cluster_cols:
+        logger.info("not clustering heatmap columns: %d column(s) left", len(value_columns))
+        cluster_cols = False
+    if len(pdf) < 2 and cluster_rows:
+        logger.info("not clustering heatmap rows: %d row(s) left", len(pdf))
+        cluster_rows = False
+
     hm_kwargs: dict = {
         "index_column": index_column,
         "value_columns": value_columns,
@@ -1263,18 +1294,20 @@ def compute_complex_heatmap(payload: dict) -> dict:
 
     hm = ComplexHeatmap.from_dataframe(pdf, **hm_kwargs)
     fig = hm.to_plotly()
-    # Margin tweaks for the React viewer:
-    #   - b=110: x-tick labels rotated 45° don't get clipped (~14 char @10pt)
-    #   - r=200: row-annotation legend + col-annotation legend + colorbar all
-    #     stack on the right when the figure is rendered standalone. The lib
-    #     defaults to ~30px which works when its own baked-in width=900 is
-    #     used, but we strip width/height in the renderer to fit the chrome
-    #     panel — meaning the legend cluster gets clipped at 30px.
+    # Margin tweak for the React viewer: b=110 so the x-tick labels, which the
+    # library sizes from a 6px-per-char approximation, aren't clipped when a
+    # rotated sample id runs longer than that estimate (~14 chars @10pt).
+    #
+    # The right margin is left exactly as the library computed it. It sizes that
+    # side from the widest row label plus the widest of the legend / colorbar,
+    # and it now anchors both of those to the figure's right edge, so the reserved
+    # band holds regardless of the tile width we render into. Forcing a floor here
+    # would only pad the figure with empty space.
     try:
         existing_margin = fig.layout.margin
         new_margin = dict(
             l=getattr(existing_margin, "l", None) or 60,
-            r=max(getattr(existing_margin, "r", 30) or 30, 200),
+            r=getattr(existing_margin, "r", None) or 200,
             t=getattr(existing_margin, "t", None) or 60,
             b=max(getattr(existing_margin, "b", 50) or 50, 110),
         )
@@ -1506,10 +1539,40 @@ def compute_upset(payload: dict) -> dict:
     if annotation_cols or set_columns:
         annotations_spec: dict | list | None
         if annotation_cols:
-            # Build {col: {"column": col, "colors": {value: hex}}} for
-            # categorical columns so the library uses our pastel palette
-            # instead of the default UPSET_PALETTE. Numeric columns get
-            # an empty spec — the library auto-picks "box" or "bar" type.
+            # Build {col: {"column": col, "type": ..., "colors": {value: hex}}}
+            # for categorical columns so the library uses our pastel palette
+            # instead of the default UPSET_PALETTE. Numeric columns get an
+            # empty spec — the library auto-picks "box" or "bar" type.
+            #
+            # The category list is keyed on the UNFILTERED distinct-value
+            # universe, not on `pdf`. Derived from the filtered frame, a sidebar
+            # filter down to a single category re-derived a one-entry palette
+            # and that category jumped to the palette's first colour — which is
+            # the "colour scale resets when I filter by annotation" report.
+            # Same lazy single-column scan, and the same reason, as the
+            # row-annotation universe in `compute_complex_heatmap` above.
+            import polars as pl
+
+            anno_universes: dict[str, list] = {}
+            try:
+                from depictio.api.v1.s3 import polars_s3_config
+
+                unfiltered_lazy = pl.scan_delta(
+                    dt_doc["delta_table_location"], storage_options=polars_s3_config
+                )
+                for col in annotation_cols:
+                    if col not in pdf.columns:
+                        continue
+                    uniq = unfiltered_lazy.select(pl.col(col)).unique().collect()[col].to_list()
+                    anno_universes[col] = [v for v in uniq if v not in ("", None)]
+            except Exception as exc:  # pragma: no cover - logged + falls back
+                logger.warning(
+                    "compute_upset: unique-value lookup for annotations failed (%s); "
+                    "colours may shift under filtering",
+                    exc,
+                )
+                anno_universes = {}
+
             annotations_spec = {}
             for col in annotation_cols:
                 if col not in pdf.columns:
@@ -1518,10 +1581,32 @@ def compute_upset(payload: dict) -> dict:
                 spec: dict = {"column": col}
                 # Treat object/string columns and small-cardinality ints as
                 # categorical — matches the library's _infer_type heuristic.
+                # Cardinality is counted on the universe too, so a filter that
+                # narrows an int column can't flip its track from box to
+                # categorical halfway through a session.
+                universe = anno_universes.get(col)
+                distinct = len(universe) if universe is not None else int(series.nunique())
                 is_string = series.dtype.kind in ("U", "S", "O")
-                is_small_int = series.dtype.kind == "i" and series.nunique() <= 10
+                is_small_int = series.dtype.kind == "i" and distinct <= 10
                 if is_string or is_small_int:
-                    cats = sorted(str(v) for v in series.dropna().unique() if v not in ("", None))
+                    values = (
+                        universe
+                        if universe is not None
+                        else [v for v in series.dropna().unique() if v not in ("", None)]
+                    )
+                    cats = sorted(str(v) for v in values)
+                    # Pin the track type instead of leaving it to the library.
+                    # Left out, the type is re-inferred by the library's own
+                    # `_infer_type` — a second heuristic, run on the FILTERED
+                    # frame, where the test above ran on the universe. The two
+                    # can disagree (an int column with 12 distinct values in the
+                    # universe reads as numeric here, but filtered down to 5 the
+                    # library calls it categorical and mints its own palette
+                    # from UPSET_PALETTE, ignoring the map below). Pinning it
+                    # makes the branch that computes `colors` and the branch
+                    # that consumes them agree by construction, so the track
+                    # can't change shape or palette as filters narrow the data.
+                    spec["type"] = "categorical"
                     spec["colors"] = {
                         cat: _ANNOTATION_PALETTE[i % len(_ANNOTATION_PALETTE)]
                         for i, cat in enumerate(cats)

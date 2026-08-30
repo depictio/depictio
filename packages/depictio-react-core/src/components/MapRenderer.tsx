@@ -1,7 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box,
+  Button,
+  NumberInput,
   Paper,
+  Select,
+  Slider,
   Text,
   Stack,
   rgba,
@@ -22,6 +26,22 @@ import RefetchOverlay from './RefetchOverlay';
 import ComponentSkeleton from './ComponentSkeleton';
 import { useReportLoadStatus } from './DashboardLoadingProvider';
 import { collapseMapAttribution } from './map/collapseMapAttribution';
+import {
+  AppliedFit,
+  MapFitSpec,
+  computeMapFit,
+  mapSubplotKey,
+  parseMapFit,
+  sameFit,
+} from './map/fit';
+// The same settings popover every advanced_viz renderer uses, imported from the
+// leaf module rather than through AdvancedVizDispatch. That distinction is the
+// whole chunking story: `AdvancedVizExtras` imports no renderer, so a map picks
+// up the popover without dragging the ~17 plotly-heavy advanced_viz renderers
+// onto its chunk. The import lives HERE and not in ComponentRenderer on
+// purpose, because ComponentRenderer is eager and the map branch must not put
+// any of this on the dashboard's boot path.
+import { AdvancedVizSettingsPopover } from './advanced_viz/AdvancedVizExtras';
 
 interface MapRendererProps {
   dashboardId: string;
@@ -35,6 +55,12 @@ interface MapRendererProps {
   /** Called with whether this map's figure has a legend or colour bar to show
    *  at all, so a host can offer the toggle only when it would do something. */
   onLegendPresence?: (present: boolean) => void;
+  /** Receives the display-settings popover, for a host that has an action row
+   *  to hang it in. Same shape as TableRenderer's `onLoadAllState`: the
+   *  settings belong to the figure they restyle, so they are built here and
+   *  the host only has to find them a slot. Null while the figure is still in
+   *  flight, and on the map types none of the controls would reach. */
+  onSettingsNode?: (node: React.ReactNode) => void;
   /** Overrides for hosts that supply their own chrome. The floating panel draws
    *  its own bordered card and header, so it asks for `bare` to avoid a card
    *  inside a card. */
@@ -68,10 +94,12 @@ const MapRenderer: React.FC<MapRendererProps> = ({
   onFilterChange,
   refreshTick,
   onLegendPresence,
+  onSettingsNode,
   presentation,
 }) => {
   const plotRef = useRef<HTMLDivElement | null>(null);
   const [figure, setFigure] = useState<{ data?: unknown[]; layout?: Record<string, unknown> } | null>(null);
+  const [fitSpec, setFitSpec] = useState<MapFitSpec | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { colorScheme } = useMantineColorScheme();
@@ -117,6 +145,7 @@ const MapRenderer: React.FC<MapRendererProps> = ({
         // flight; Plotly diffs props so swapping data/layout in place
         // avoids the full tile-layer teardown the old loader pattern caused.
         setFigure(res.figure);
+        setFitSpec(parseMapFit(res.metadata));
       })
       .catch((err) => {
         if (cancelled) return;
@@ -176,6 +205,82 @@ const MapRenderer: React.FC<MapRendererProps> = ({
   const bare = Boolean(presentation?.bare);
   const showLegend = presentation?.showLegend ?? true;
 
+  // ---------------------------------------------------------------------
+  // Re-fitting the viewport to the box we actually got.
+  //
+  // `render_map` frames the data against a guessed 600x400 viewport, because
+  // the server has no idea who is rendering. A grid tile is close enough to
+  // that; the docked panel is neither as wide nor anywhere near as tall, so
+  // the server's zoom comes back about a level too tight and the outer points
+  // fall off the edges. So the server also ships the bounding box it fitted
+  // (`metadata.fit`) and we redo the same arithmetic against the measured
+  // container. It is the box and not the figure's own traces because a
+  // choropleth's geometry is server-side GeoJSON that never reaches us.
+  const [boxSize, setBoxSize] = useState<{ width: number; height: number } | null>(null);
+  const [appliedFit, setAppliedFit] = useState<AppliedFit | null>(null);
+  // True once the viewer has panned or zoomed by hand, which is what stops a
+  // resize or a filter change from dragging the map back out from under them.
+  // Deliberately never cleared while the plot stays mounted: that is already
+  // how the rest of the viewport behaves, because Plotly stores a direct GUI
+  // edit and `map.uirevision` holds it against every later figure.
+  const userMovedRef = useRef(false);
+  const appliedFitRef = useRef<AppliedFit | null>(null);
+  const fitRevRef = useRef(0);
+
+  useEffect(() => {
+    const el = plotRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect;
+      if (!rect) return;
+      // Rounded, and only stored when it actually changed: a sub-pixel
+      // reflow must not turn into a state update, let alone one that resizes
+      // the plot again.
+      const width = Math.round(rect.width);
+      const height = Math.round(rect.height);
+      if (width < 1 || height < 1) return;
+      setBoxSize((prev) =>
+        prev && prev.width === width && prev.height === height ? prev : { width, height },
+      );
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+    // The observed div only exists once there is a figure to draw, so the
+    // observer has to be (re)attached when that flips.
+  }, [isInitialLoad]);
+
+  useEffect(() => {
+    if (userMovedRef.current || !fitSpec || !boxSize) return;
+    // Plotly's margins come off the container before the map subplot gets what
+    // is left, so the fit has to be against the drawing area rather than the
+    // div. On a titled grid tile that is a 30px strip, which on a short panel
+    // would be a real slice of the height.
+    const margin = (figure?.layout?.margin as Record<string, unknown>) || {};
+    const width = boxSize.width - numberOr(margin.l, 0) - numberOr(margin.r, 0);
+    const height =
+      boxSize.height - (bare ? 0 : numberOr(margin.t, 30)) - numberOr(margin.b, 0);
+    if (width < 1 || height < 1) return;
+    const next = computeMapFit(fitSpec, width, height);
+    // The last fit is mirrored in a ref rather than read out of state, so the
+    // comparison happens once here instead of inside a state updater React is
+    // free to call more than once.
+    if (appliedFitRef.current && sameFit(appliedFitRef.current, next)) return;
+    fitRevRef.current += 1;
+    const applied: AppliedFit = { ...next, revision: `fit-${fitRevRef.current}` };
+    appliedFitRef.current = applied;
+    setAppliedFit(applied);
+  }, [fitSpec, boxSize, figure, bare]);
+
+  /** Plotly reports every user pan / zoom / rotate through relayout, keyed
+   *  under the map subplot. Our own re-fits go through props and reach the map
+   *  as a `Plotly.react`, which emits `plotly_react` and never this, so
+   *  anything arriving here is the viewer's own doing. */
+  const handleRelayout = useCallback((event: unknown) => {
+    if (!event || typeof event !== 'object') return;
+    const moved = Object.keys(event).some((key) => /^map(box)?[._]/.test(key));
+    if (moved) userMovedRef.current = true;
+  }, []);
+
   // Does this figure have anything to legend? Plotly only draws a legend for
   // more than one named trace, and a colour bar only for a colour axis — read
   // off the raw figure, not the layout below, so the answer does not flip when
@@ -198,6 +303,178 @@ const MapRenderer: React.FC<MapRendererProps> = ({
     const border = theme === 'dark' ? mantineTheme.colors.dark[4] : mantineTheme.colors.gray[3];
     return { bgcolor: rgba(surface, 0.85), bordercolor: rgba(border, 0.9) };
   }, [theme, mantineTheme]);
+
+  // ---------------------------------------------------------------------
+  // On-the-fly display settings.
+  //
+  // Deliberately cosmetic and deliberately client-side: every one of these
+  // restyles the figure the server has ALREADY returned, so none of them
+  // refetches. That is what makes them instant, and it is also their limit.
+  // Anything that would change which rows are drawn belongs in the component's
+  // authored config, not here.
+  //
+  // `null` means "whatever the server drew". The controls display the figure's
+  // own value until one is touched, so a control can never claim a value the
+  // map is not showing. That matters for the basemap in particular: the server
+  // swaps `map_style` by colour scheme (carto-positron ⇄ carto-darkmatter), so
+  // the authored value is not reliably what is on screen.
+  const [sizeOverride, setSizeOverride] = useState<number | null>(null);
+  const [opacityOverride, setOpacityOverride] = useState<number | null>(null);
+  const [styleOverride, setStyleOverride] = useState<string | null>(null);
+
+  /** What the server actually drew, read back off the figure. */
+  const shown = useMemo(() => {
+    const traces = (figure?.data as any[]) || [];
+    const typeOf = (t: any) => String(t?.type || '');
+    // `startsWith` rather than equality so the legacy `*mapbox` trace names are
+    // covered too; both carry the same marker / radius properties.
+    const point = traces.find((t) => typeOf(t).startsWith('scattermap'));
+    const density = traces.find((t) => typeOf(t).startsWith('densitymap'));
+    const region = traces.find((t) => typeOf(t).startsWith('choroplethmap'));
+    const rawSize = point?.marker?.size;
+    const mapLayout =
+      ((figure?.layout?.map || figure?.layout?.mapbox) as Record<string, unknown>) || {};
+    return {
+      hasPoints: Boolean(point),
+      hasDensity: Boolean(density),
+      // True when marker size encodes a column: sizes are then per-point and
+      // the scale is carried by `sizeref`, so writing a scalar would erase the
+      // encoding. The size control rescales `sizeref` in that case.
+      sizeEncoded: Array.isArray(rawSize),
+      sizeref: numberOr(point?.marker?.sizeref, null),
+      // With no size column the server writes `size_max` straight onto
+      // `marker.size` (see _render_scatter_map), so a scalar here IS the
+      // authored maximum. With one, `size_max` only reaches the figure through
+      // `sizeref` and has to come from the metadata.
+      size: numberOr(rawSize, numberOr(metadata.size_max, DEFAULT_SIZE_MAX)),
+      radius: numberOr(density?.radius, DEFAULT_DENSITY_RADIUS),
+      opacity: numberOr(
+        point?.marker?.opacity ?? region?.marker?.opacity ?? density?.opacity,
+        1,
+      ),
+      style: typeof mapLayout.style === 'string' ? (mapLayout.style as string) : null,
+    };
+  }, [figure, metadata.size_max]);
+
+  /** Restyle one trace, returning it UNTOUCHED when nothing is overridden. The
+   *  identity matters: a fresh object makes Plotly redraw the whole layer, the
+   *  same reason `selectedKey` stands in for `selectedValues` below. */
+  const applyDisplay = useCallback(
+    (trace: any) => {
+      const type = String(trace?.type || '');
+      if (type.startsWith('densitymap')) {
+        if (sizeOverride == null && opacityOverride == null) return trace;
+        return {
+          ...trace,
+          // A density layer has no markers; its `radius` is the equivalent
+          // knob, which is why the control relabels itself for one.
+          ...(sizeOverride != null ? { radius: sizeOverride } : {}),
+          ...(opacityOverride != null ? { opacity: opacityOverride } : {}),
+        };
+      }
+      const isPoint = type.startsWith('scattermap');
+      if (!isPoint && !type.startsWith('choroplethmap')) return trace;
+      const marker: Record<string, unknown> = {};
+      if (opacityOverride != null) marker.opacity = opacityOverride;
+      if (isPoint && sizeOverride != null) {
+        if (!shown.sizeEncoded) {
+          marker.size = sizeOverride;
+        } else if (shown.sizeref != null) {
+          // Plotly Express derives `sizeref` as max(value) / size_max², so a
+          // new maximum is a pure rescale of what the server computed and
+          // needs no knowledge of the data range. The per-point sizes stay as
+          // they are, which is what keeps the encoding intact.
+          marker.sizeref = shown.sizeref * (shown.size / sizeOverride) ** 2;
+        }
+      }
+      if (Object.keys(marker).length === 0) return trace;
+      return { ...trace, marker: { ...(trace?.marker || {}), ...marker } };
+    },
+    [sizeOverride, opacityOverride, shown],
+  );
+
+  const settingsControls = useMemo<React.ReactNode>(() => {
+    // Nothing to restyle before the first figure lands, and a choropleth has
+    // neither points nor a density layer to size.
+    if (!figure) return null;
+    const canSize = shown.hasPoints || shown.hasDensity;
+    const touched = sizeOverride != null || opacityOverride != null || styleOverride != null;
+    return (
+      <Stack gap="xs">
+        <Select
+          size="xs"
+          label="Basemap"
+          value={styleOverride ?? shown.style}
+          onChange={(v) => v && setStyleOverride(v)}
+          data={MAP_STYLE_OPTIONS}
+          allowDeselect={false}
+        />
+        {canSize && (
+          <NumberInput
+            size="xs"
+            label={shown.hasPoints ? 'Point size' : 'Radius'}
+            description={shown.sizeEncoded ? 'Largest marker; the encoding is kept' : undefined}
+            value={sizeOverride ?? (shown.hasPoints ? shown.size : shown.radius)}
+            onChange={(v) => setSizeOverride(Math.max(1, Number(v) || 1))}
+            min={1}
+            max={60}
+          />
+        )}
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            Opacity
+          </Text>
+          <Slider
+            size="xs"
+            min={0.1}
+            max={1}
+            step={0.1}
+            value={opacityOverride ?? shown.opacity}
+            onChange={setOpacityOverride}
+            marks={OPACITY_MARKS}
+            mb="xs"
+          />
+        </Stack>
+        <Button
+          size="compact-xs"
+          variant="subtle"
+          color="gray"
+          disabled={!touched}
+          onClick={() => {
+            setSizeOverride(null);
+            setOpacityOverride(null);
+            setStyleOverride(null);
+          }}
+        >
+          Reset
+        </Button>
+        <Text size="xs" c="dimmed">
+          Display only. Not saved with the dashboard.
+        </Text>
+      </Stack>
+    );
+  }, [figure, shown, sizeOverride, opacityOverride, styleOverride]);
+
+  // Keyed because the host flattens `extraActions` through
+  // `React.Children.toArray`, which keys an unkeyed child by position: the
+  // settings action appears only once the figure lands, and the actions in
+  // front of it come and go with the selection, so a positional key would
+  // remount the popover (closing it) whenever either happened.
+  const settingsNode = useMemo<React.ReactNode>(
+    () =>
+      settingsControls ? (
+        <AdvancedVizSettingsPopover key="map-settings" controls={settingsControls} />
+      ) : null,
+    [settingsControls],
+  );
+
+  // Two effects rather than one with a cleanup: a cleanup keyed on the node
+  // would publish null between every control change, and the host re-rendering
+  // without the popover would close it mid-adjustment.
+  useEffect(() => {
+    onSettingsNode?.(settingsNode);
+  }, [onSettingsNode, settingsNode]);
+  useEffect(() => () => onSettingsNode?.(null), [onSettingsNode]);
 
   const layout = useMemo<Record<string, unknown>>(() => {
     const base: Record<string, unknown> = {
@@ -304,6 +581,28 @@ const MapRenderer: React.FC<MapRendererProps> = ({
           : {}),
       };
     }
+
+    // Everything that lives on the map subplot itself. Spread over the server's
+    // own subplot object so whatever we do not touch — `center`, `zoom`, its
+    // `uirevision` — survives, which is what keeps the viewer's pan and zoom
+    // across a style change.
+    const subplotKey = mapSubplotKey(figure?.layout as Record<string, unknown> | undefined);
+    const subplot: Record<string, unknown> = {};
+    if (styleOverride) subplot.style = styleOverride;
+    if (appliedFit) {
+      subplot.center = appliedFit.center;
+      subplot.zoom = appliedFit.zoom;
+      // The subplot carries its OWN `uirevision` (the server pins it to
+      // "preserve") and does not inherit the one above, so without moving it
+      // Plotly would treat the fit as a value to reconcile against a stashed
+      // GUI edit and drop it on an already-mounted map. It changes only when
+      // the fit itself does, so a refetch that lands on the same framing still
+      // leaves the viewer's own pan and zoom alone.
+      subplot.uirevision = appliedFit.revision;
+    }
+    if (Object.keys(subplot).length > 0) {
+      base[subplotKey] = { ...((base[subplotKey] as Record<string, unknown>) || {}), ...subplot };
+    }
     return base;
   }, [
     figure,
@@ -314,6 +613,8 @@ const MapRenderer: React.FC<MapRendererProps> = ({
     selectedKey,
     showLegend,
     overlayPlate,
+    styleOverride,
+    appliedFit,
   ]);
 
   // Repaint the selection: dim every point the active filter excludes. Plotly
@@ -333,7 +634,10 @@ const MapRenderer: React.FC<MapRendererProps> = ({
   // cleared. ``null`` is Plotly's "no selection at all" value and turns the
   // selected/unselected styling off entirely.
   const data = useMemo<any[]>(() => {
-    const traces = (figure?.data as any[]) || [];
+    // Cosmetics first, selection second: the selection branch rebuilds traces
+    // anyway, and running the restyle over the raw list keeps each concern
+    // reading a plain trace rather than the other one's output.
+    const traces = ((figure?.data as any[]) || []).map(applyDisplay);
     if (!selectionEnabled) return traces;
     const wanted = new Set(selectedValues);
     return traces.map((trace) => {
@@ -355,7 +659,7 @@ const MapRenderer: React.FC<MapRendererProps> = ({
     // every render; without it Plotly would be handed new trace objects each
     // time and redraw the map for nothing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [figure, selectionEnabled, selectionColumnIndex, selectedKey]);
+  }, [figure, selectionEnabled, selectionColumnIndex, selectedKey, applyDisplay]);
 
   const Shell = bare ? Box : Paper;
   // `Box` takes no Paper props; keep the bordered card for the grid path only.
@@ -400,6 +704,7 @@ const MapRenderer: React.FC<MapRendererProps> = ({
             }}
             style={{ width: '100%', height: '100%' }}
             useResizeHandler
+            onRelayout={handleRelayout}
             onSelected={selectionEnabled ? handlePointSelection : undefined}
             onClick={selectionEnabled ? handlePointSelection : undefined}
             onDeselect={selectionEnabled ? handleDeselect : undefined}
@@ -414,6 +719,36 @@ const MapRenderer: React.FC<MapRendererProps> = ({
 /** Opacity applied to points outside the selection. Matches Plotly's own
  *  default dimming closely enough to read as "these are filtered out". */
 const UNSELECTED_OPACITY = 0.2;
+
+/** Basemaps offered on the fly: the same three the map builder offers
+ *  (MAP_STYLES in depictio/models/components/constants.py). Deliberately not a
+ *  wider list: a viewer should not be able to reach a style the author could
+ *  not have chosen, and the rest of Plotly's MapLibre styles need a MapTiler
+ *  token this deployment does not carry. */
+const MAP_STYLE_OPTIONS = [
+  { value: 'open-street-map', label: 'OpenStreetMap' },
+  { value: 'carto-positron', label: 'Carto Light' },
+  { value: 'carto-darkmatter', label: 'Carto Dark' },
+];
+
+/** Same marks the map builder puts on its opacity slider. */
+const OPACITY_MARKS = [
+  { value: 0.2, label: '0.2' },
+  { value: 0.5, label: '0.5' },
+  { value: 0.8, label: '0.8' },
+  { value: 1.0, label: '1.0' },
+];
+
+/** `size_max` default in depictio/api/v1/services/map/render.py. */
+const DEFAULT_SIZE_MAX = 15;
+/** Plotly Express' own density radius, used when the component authors none. */
+const DEFAULT_DENSITY_RADIUS = 30;
+
+/** Narrow an untyped figure / metadata field to a finite number. */
+function numberOr<T>(value: unknown, fallback: T): number | T {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
 
 /**
  * Positions within a trace whose ``customdata`` value is in ``wanted``.
