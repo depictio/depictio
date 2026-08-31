@@ -207,6 +207,14 @@ def resolve_sources(
 
         file_path = data_dir / rel_path
         if not file_path.exists():
+            # `optional` has always meant "pass None to transform() when this
+            # source cannot be resolved"; until now only dc_ref sources honoured
+            # it, so an optional *file* source still hard-failed the whole recipe.
+            # A recipe that can read either of two pipeline outputs (they vary by
+            # classifier / route) has no way to express that otherwise.
+            if source.optional:
+                sources[source.ref] = None  # type: ignore[assignment]
+                continue
             raise RecipeError(f"Source '{source.ref}': file not found: {file_path}")
 
         df = _read_source_file(file_path, source)

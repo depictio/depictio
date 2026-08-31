@@ -21,11 +21,36 @@ import polars as pl
 from depictio.models.models.transforms import RecipeSource
 
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="phylum", dc_ref="rel_abundance_phylum"),
-    RecipeSource(ref="class_", dc_ref="rel_abundance_class"),
-    RecipeSource(ref="order", dc_ref="rel_abundance_order"),
-    RecipeSource(ref="family", dc_ref="rel_abundance_family"),
-    RecipeSource(ref="genus", dc_ref="rel_abundance_genus"),
+    RecipeSource(
+        ref="phylum",
+        path="qiime2/rel_abundance_tables/rel-table-2.tsv",
+        format="TSV",
+        read_kwargs={"skip_rows": 1},
+    ),
+    RecipeSource(
+        ref="class_",
+        path="qiime2/rel_abundance_tables/rel-table-3.tsv",
+        format="TSV",
+        read_kwargs={"skip_rows": 1},
+    ),
+    RecipeSource(
+        ref="order",
+        path="qiime2/rel_abundance_tables/rel-table-4.tsv",
+        format="TSV",
+        read_kwargs={"skip_rows": 1},
+    ),
+    RecipeSource(
+        ref="family",
+        path="qiime2/rel_abundance_tables/rel-table-5.tsv",
+        format="TSV",
+        read_kwargs={"skip_rows": 1},
+    ),
+    RecipeSource(
+        ref="genus",
+        path="qiime2/rel_abundance_tables/rel-table-6.tsv",
+        format="TSV",
+        read_kwargs={"skip_rows": 1},
+    ),
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
 
@@ -88,9 +113,11 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """Combine 5 rank-level rel-tables + a derived Kingdom level."""
     pieces: list[pl.DataFrame] = []
 
-    # Map source ref → (rank, level). We tolerate missing levels (e.g. if the
-    # pipeline didn't emit a deeper collapse) by skipping them rather than
-    # failing the whole recipe.
+    # Map source ref → (rank, level). QIIME2 writes the five collapse levels
+    # together, and the engine rejects a required source that is missing or
+    # empty, so in practice all five arrive. The skip below is what keeps a
+    # level that was repointed at a glob matching nothing from poisoning the
+    # concat rather than a route the pipeline actually takes.
     level_specs = (
         ("phylum", "Phylum"),
         ("class_", "Class"),
