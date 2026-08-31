@@ -39,7 +39,10 @@ const SCAN_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx']);
 // reach the browser over the wire, so nothing in the TS sources mentions them
 // and they would resolve against the Iconify API, which the CSP blocks.
 const SCAN_FILES = [
-  join(REPO, 'depictio/api/v1/endpoints/advanced_viz_endpoints/routes.py'),
+  // KIND_METADATA — the advanced-viz kind registry. It used to live in
+  // advanced_viz_endpoints/routes.py; the route now serves it via
+  // kind_descriptors(), so this is where the `icon` values actually are.
+  join(REPO, 'depictio/models/components/advanced_viz/schemas.py'),
 ];
 
 // Shipped dashboard data. Seeded dashboards name their icons in YAML and in the

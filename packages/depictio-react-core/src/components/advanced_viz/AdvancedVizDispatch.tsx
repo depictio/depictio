@@ -20,6 +20,10 @@ import SunburstRenderer from './SunburstRenderer';
 import OncoplotRenderer from './OncoplotRenderer';
 import CoverageTrackRenderer from './CoverageTrackRenderer';
 import SankeyRenderer from './SankeyRenderer';
+import PrBenchmarkRenderer from './PrBenchmarkRenderer';
+import RocPrCurveRenderer from './RocPrCurveRenderer';
+import ConfusionMatrixRenderer from './ConfusionMatrixRenderer';
+import MetricCiBarsRenderer from './MetricCiBarsRenderer';
 import {
   AdvancedVizDataPopover,
   AdvancedVizExtrasProvider,
@@ -81,6 +85,13 @@ const RENDERERS: Record<string, React.ComponentType<any>> = {
   oncoplot: OncoplotRenderer,
   coverage_track: CoverageTrackRenderer,
   sankey: SankeyRenderer,
+  // Benchmark kinds. They aggregate rows into curves and summary points, so
+  // they take no `groupRender`: an analysis group is a cut through the rows,
+  // and there is no per-row mark here for such a cut to land on.
+  pr_benchmark: PrBenchmarkRenderer,
+  roc_pr_curve: RocPrCurveRenderer,
+  confusion_matrix: ConfusionMatrixRenderer,
+  metric_ci_bars: MetricCiBarsRenderer,
 };
 
 /**
