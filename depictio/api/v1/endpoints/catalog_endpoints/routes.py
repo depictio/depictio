@@ -168,13 +168,17 @@ def _multiqc_sections(dc_id: str) -> set[str] | None:
         return None
     present = {multiqc_module(str(m).lower()) for m in modules}
 
+    # An empty `plots_meta` is not treated as "unknown, trust presence": a
+    # module-wide extraction failure in `extract_multiqc_metadata` (one
+    # section's plot anchor missing from MultiQC's own report.plot_by_id) can
+    # leave `plots` empty on an otherwise-healthy, fully-populated report —
+    # confirmed happening intermittently on this exact fixture. Every module
+    # in `present` genuinely has no plot to show in that case, so offering
+    # them anyway only guarantees a `selected_plot` 400 at render time; the
+    # extraction side now recovers per-section instead of zeroing the whole
+    # report (see the `multiqc.list_plots()` reimplementation in
+    # `multiqc_processor.py`), so this branch should be rare going forward.
     plots_meta = metadata.get("plots") or {}
-    if not plots_meta:
-        # No plot metadata recorded at all for this report (older ingests, or a
-        # write that hasn't backfilled `plots` yet) — fall back to presence-only
-        # rather than reading "plots block entirely absent" as "nothing here is
-        # plottable" and dropping every section.
-        return present
     plottable = {multiqc_module(str(m).lower()) for m in plots_meta} | {"general_stats"}
     return present & plottable
 

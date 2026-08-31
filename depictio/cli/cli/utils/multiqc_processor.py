@@ -81,9 +81,41 @@ def extract_multiqc_metadata(parquet_path: str) -> Dict[str, Any]:
         samples = multiqc.list_samples()
         modules = multiqc.list_modules()
 
-        # Try to get plots, but handle errors gracefully
+        # `multiqc.list_plots()` walks every module's sections and raises the
+        # instant ONE section's `plot_anchor` isn't in `report.plot_by_id` —
+        # observed intermittently on custom-content sections like
+        # `summary_conformance_metrics` (the same parquet parses clean on a
+        # later run), which discards every OTHER module's perfectly good
+        # plots along with it. Reimplement the same walk (mirrors
+        # `multiqc.interactive.list_plots`) so one bad section is skipped and
+        # logged instead of zeroing the whole report's plot metadata — a
+        # report with 12 real modules should not end up offering none of them
+        # because one section's anchor didn't register.
         try:
-            plots = multiqc.list_plots()
+            from multiqc import report as mq_report
+            from multiqc.plots.plot import Plot
+
+            plots: Dict[str, list] = {}
+            for module in mq_report.modules:
+                plots[module.id] = []
+                for section in module.sections:
+                    if not section.plot_anchor:
+                        continue
+                    section_id = section.name or section.anchor
+                    plot_anchor = section.plot_anchor
+                    if plot_anchor not in mq_report.plot_by_id:
+                        logger.warning(
+                            f"Plot '{plot_anchor}' not found in report.plot_by_id "
+                            f"(module '{module.id}', section '{section_id}') — "
+                            "skipping this section, keeping the module's other plots"
+                        )
+                        continue
+                    plot = mq_report.plot_by_id[plot_anchor]
+                    if isinstance(plot, Plot):
+                        if len(plot.datasets) == 1:
+                            plots[module.id].append(section_id)
+                        elif len(plot.datasets) > 1:
+                            plots[module.id].append({section_id: [d.label for d in plot.datasets]})
         except Exception as e:
             logger.warning(f"Could not extract plots from MultiQC parquet: {e}")
             plots = {}
