@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sequencing QC &amp; variant benchmark — GHGA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/shared.css">
+<link rel="stylesheet" href="/qc-report.css">
+<link rel="stylesheet" href="/example.css">
+<script src="/vendor/plotly.min.js"></script>
+</head>
+<body class="ghga">
+
+<nav class="sitenav" id="sitenav"></nav>
+
+<header class="ghga-head">
+  <div class="ghga-wrap">
+    <div class="ghga-brand">
+      <img class="ghga-logo" src="/vendor/ghga-logo.png" alt="GHGA" width="650" height="179">
+      <span class="ghga-brand-text">
+        German Human Genome-Phenome Archive<br>
+        <em>Demonstration only — not an official GHGA page</em>
+      </span>
+    </div>
+    <h1>Submission QC and variant benchmark</h1>
+    <p class="subject" id="subject">—</p>
+    <p class="intro">
+      Every panel on this page is a Plotly specification fetched from a Depictio
+      instance on another origin and drawn by this page's own plotly.js, in this
+      site's typography and palette. Sequencing QC first, then the benchmark that
+      the QC has to be read alongside.
+    </p>
+    <div id="scoreboard" class="scoreboard scoreboard-ghga">Loading…</div>
+  </div>
+</header>
+
+<div class="ghga-wrap">
+
+  <dl class="verdict" id="verdict"></dl>
+
+  <div id="active-filters" class="filter-chips filter-chips-page"></div>
+
+  <section class="ghga-section" id="section-qc">
+    <h2>Sequencing quality control</h2>
+    <p class="section-note">
+      MultiQC output for the submitted runs, exported panel by panel. In the
+      pipeline report these are one large self-contained HTML file; here each is
+      an independently addressable figure that this page lays out itself.
+    </p>
+
+    <!-- Controls belong to the section, not the page: these filter the runs,
+         and sending them to the benchmark below would be meaningless. -->
+    <div class="ghga-controls">
+      <div class="control-intro">
+        <h3>Filter these runs</h3>
+        <p>
+          Built from the viralrecon dashboard's filter contract, published at
+          <code>?include_filter_options=true</code>. No Depictio code runs here.
+        </p>
+        <div id="controls-qc-req"></div>
+      </div>
+      <div id="controls-qc" class="control-fields"></div>
+    </div>
+
+    <div id="panels-qc" class="ex-grid"></div>
+  </section>
+
+  <section class="ghga-section" id="section-bench">
+    <h2>Variant call benchmark</h2>
+    <p class="section-note">
+      The submitted callset evaluated against a truth set with
+      <code>nf-core/variantbenchmarking</code>. Each panel carries an information
+      button: a quality plot a reader cannot interpret is decoration, so the
+      interpretation travels with the figure.
+    </p>
+
+    <div class="ghga-controls">
+      <div class="control-intro">
+        <h3>Filter the benchmark</h3>
+        <p>
+          A different data collection, so a different set of controls: caller,
+          true and false positive counts, F1, and the quality threshold that
+          sweeps the curves. A false-positive bound is the question a PR plot
+          provokes and cannot answer on its own.
+        </p>
+        <div id="controls-bench-req"></div>
+      </div>
+      <div id="controls-bench" class="control-fields"></div>
+    </div>
+
+    <div id="panels-bench" class="ex-grid"></div>
+  </section>
+
+  <section class="ghga-section">
+    <div class="provenance">
+      <h3>Where these figures came from</h3>
+      <p>
+        Fetched at page load as <code>format=json</code>. The response carries an
+        <code>ETag</code> and the source dashboard's version, both shown below,
+        so this report can state exactly which dashboard revision it depicts.
+      </p>
+      <dl id="provenance"></dl>
+    </div>
+  </section>
+
+</div>
+
+<footer class="ghga-foot">
+  <div class="ghga-wrap">
+    Demonstration of Depictio component export in a third-party page ·
+    <a href="/example-limited">where it stops</a> ·
+    <a href="/versioning">how versioning and freezing work</a>
+  </div>
+</footer>
+
+<script src="/shared.js"></script>
+<script src="/example_engine.js"></script>
+<script src="/example_clean.js"></script>
+</body>
+</html>

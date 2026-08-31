@@ -1,0 +1,315 @@
+/* GHGA-flavoured QC report.
+ *
+ * Deliberately *not* the Bench Notes palette: this page exists to show a
+ * Depictio export dropped into someone else's brand, so it takes GHGA's. If it
+ * looked like the rest of this site it would prove nothing.
+ *
+ * Tokens read off the **Data Portal** (data.ghga.de), not the corporate site.
+ * The two differ: the corporate site is Bootstrap with a #0d6efd-family blue,
+ * while the portal is Angular Material 3 with a deep teal primary and a
+ * vermilion tertiary. The portal is the right reference for a data page.
+ *
+ *   --mat-sys-primary    #00393f   deep teal
+ *   --mat-sys-secondary  #005a5a
+ *   --mat-sys-tertiary   #e84614   vermilion, used for emphasis only
+ *   --mat-sys-quaternary #007e8c
+ *   --mat-sys-surface    #faf9f9
+ *   Lexend throughout.
+ */
+
+:root {
+  /* Sampled from data.ghga.de's compiled Material 3 theme (styles-SC5JDETF.css)
+   * and cross-checked against docs.ghga.de/css/extra.css, which sets the same
+   * --md-primary-fg-color #00393F and link colour #E84614. Names below map to
+   * the --mat-sys-* tokens rather than inventing a parallel vocabulary. */
+  --ghga-primary:  #37656c;  /* --mat-sys-primary (light) */
+  --ghga-deep:     #00393f;  /* --mat-sys-primary-container / docs primary-fg */
+  --ghga-second:   #1c6868;  /* --mat-sys-secondary */
+  --ghga-accent:   #b12d00;  /* --mat-sys-tertiary */
+  --ghga-accent-lo:#e84614;  /* docs --md-typeset-a-color, links on light */
+  --ghga-quart:    #007e8c;  /* --mat-sys-quaternary */
+  --ghga-quinary:  #cfe7cd;  /* --mat-sys-quinary, the logo's own green */
+  --ghga-ink:      #1b1c1c;  /* --mat-sys-on-surface */
+  --ghga-grey:     #70787a;  /* --mat-sys-outline */
+  --ghga-line:     #c0c8c9;  /* --mat-sys-outline-variant */
+  --ghga-surface:  #faf9f9;  /* --mat-sys-surface */
+  --ghga-wash:     #f5f3f3;  /* --mat-sys-surface-container-low */
+  --ghga-container:#bbebf2;  /* --mat-sys-primary-container (light) */
+  --ghga-pass:     #16a34a;
+  --ghga-warn:     #d97706;
+  --ghga-fail:     #ea580c;
+
+  /* Drive the shared request-details panel from this page's palette. */
+  --req-line:   #c0c8c9;
+  --req-muted:  #70787a;
+  --req-ink:    #1b1c1c;
+  --req-accent: #007e8c;
+  --req-wash:   #f5f3f3;
+}
+
+body.ghga {
+  margin: 0;
+  background: var(--ghga-surface);
+  color: var(--ghga-ink);
+  font-family: 'Lexend', system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+body.ghga .sitenav {
+  background: var(--ghga-deep);
+  border-bottom: none;
+}
+body.ghga .sitenav a { color: rgba(255, 255, 255, .7); font-family: 'Lexend', sans-serif; }
+body.ghga .sitenav a:hover { color: #fff; }
+body.ghga .sitenav a[aria-current='page'] {
+  color: #fff;
+  border-bottom-color: var(--ghga-container);
+}
+
+.ghga-wrap { max-width: 1180px; margin: 0 auto; padding: 0 1.5rem; }
+
+/* ---------- masthead ---------- */
+
+.ghga-head {
+  background: var(--ghga-deep);
+  color: #fff;
+  padding: 2.5rem 0 2rem;
+}
+
+.ghga-brand {
+  display: flex;
+  align-items: center;
+  gap: .85rem;
+  margin-bottom: 1.75rem;
+}
+
+/* The portal's own logo (assets/images/ghga-logo-clean.png), which ships in the
+ * pale-green quinary #cfe7cd intended for dark backgrounds — exactly the header
+ * we put it on, so it needs no recolouring. */
+.ghga-logo {
+  height: 34px;
+  width: auto;
+  display: block;
+  flex: none;
+}
+.ghga-brand-text { font-size: .78rem; line-height: 1.3; color: rgba(255, 255, 255, .75); }
+
+.ghga-head h1 {
+  margin: 0 0 .4rem;
+  font-size: clamp(1.6rem, 3.5vw, 2.4rem);
+  font-weight: 600;
+  letter-spacing: -.01em;
+}
+.ghga-head .subject {
+  margin: 0;
+  font-family: 'Roboto Mono', ui-monospace, monospace;
+  font-size: .95rem;
+  color: var(--ghga-container);
+}
+.ghga-head .intro {
+  margin: 1rem 0 0;
+  max-width: 68ch;
+  color: rgba(255, 255, 255, .8);
+  font-size: .95rem;
+}
+
+/* ---------- verdict strip ---------- */
+
+.verdict {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  background: var(--ghga-line);
+  border: 1px solid var(--ghga-line);
+  margin: -1.5rem auto 2rem;
+  position: relative;
+  z-index: 2;
+  box-shadow: 0 2px 12px rgba(2, 10, 33, .08);
+}
+.verdict > div { background: #fff; padding: .8rem 1.1rem; flex: 1 1 140px; }
+.verdict dt {
+  font-size: .68rem;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--ghga-grey);
+  margin-bottom: .2rem;
+}
+.verdict dd { margin: 0; font-size: 1.05rem; font-weight: 600; }
+.verdict .pass { color: var(--ghga-pass); }
+.verdict .warn { color: var(--ghga-warn); }
+.verdict .fail { color: var(--ghga-fail); }
+
+/* ---------- section headers ---------- */
+
+.ghga-section { margin: 0 0 2.5rem; }
+
+.ghga-section > h2 {
+  margin: 0 0 .35rem;
+  font-size: 1.15rem;
+  font-weight: 600;
+  padding-bottom: .5rem;
+  border-bottom: 3px solid var(--ghga-second);
+}
+.ghga-section > .section-note {
+  margin: 0 0 1.25rem;
+  color: var(--ghga-grey);
+  font-size: .9rem;
+  max-width: 78ch;
+}
+
+/* ---------- file information table ---------- */
+
+.filetable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .88rem;
+  margin-bottom: 1rem;
+}
+.filetable td { padding: .5rem .75rem; border-bottom: 1px solid var(--ghga-line); }
+.filetable td:first-child { color: var(--ghga-grey); width: 42%; }
+.filetable td:last-child { font-weight: 500; }
+.filetable tr:hover td { background: var(--ghga-wash); }
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 0 2.5rem;
+}
+
+/* ---------- plot panels ---------- */
+
+.panels {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 1.25rem;
+}
+
+.panel {
+  grid-column: span 6;
+  border: 1px solid var(--ghga-line);
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.panel[data-width='full'] { grid-column: span 12; }
+.panel[data-width='third'] { grid-column: span 4; }
+
+.panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: .75rem;
+  padding: .7rem .9rem;
+  border-bottom: 1px solid var(--ghga-line);
+  background: var(--ghga-wash);
+}
+.panel-head h3 { margin: 0; font-size: .92rem; font-weight: 600; }
+.panel-head .tool {
+  font-family: 'Roboto Mono', monospace;
+  font-size: .68rem;
+  color: var(--ghga-quart);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+/* The "i" affordance is straight from the EGA report, which is the one piece of
+ * that layout worth keeping: a plot the reader cannot interpret is decoration. */
+.panel-info {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--ghga-grey);
+  background: #fff;
+  color: var(--ghga-grey);
+  font-size: .7rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  font-family: inherit;
+}
+.panel-info:hover { background: var(--ghga-quart); border-color: var(--ghga-quart); color: #fff; }
+.panel-info[aria-expanded='true'] {
+  background: var(--ghga-quart);
+  border-color: var(--ghga-quart);
+  color: #fff;
+}
+
+.panel-body { position: relative; height: 320px; }
+.panel[data-width='full'] .panel-body { height: 380px; }
+.panel-plot { width: 100%; height: 100%; }
+
+.panel-desc {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  padding: 1rem 1.1rem;
+  overflow-y: auto;
+  font-size: .85rem;
+  color: #33363e;
+}
+.panel-desc[hidden] { display: none; }
+.panel-desc p { margin: 0 0 .7rem; }
+.panel-desc strong { color: var(--ghga-ink); }
+
+.panel-foot {
+  margin-top: auto;
+  padding: .45rem .9rem;
+  border-top: 1px solid var(--ghga-line);
+  font-family: 'Roboto Mono', monospace;
+  font-size: .65rem;
+  color: var(--ghga-grey);
+  display: flex;
+  justify-content: space-between;
+  gap: .75rem;
+}
+.panel-foot a { color: var(--ghga-quart); }
+
+.panel-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--ghga-grey);
+  font-size: .85rem;
+}
+
+/* ---------- provenance ---------- */
+
+.provenance {
+  border: 1px solid var(--ghga-line);
+  border-left: 3px solid var(--ghga-accent);
+  background: var(--ghga-wash);
+  padding: 1rem 1.2rem;
+  font-size: .85rem;
+}
+.provenance h3 { margin: 0 0 .5rem; font-size: .95rem; font-weight: 600; }
+.provenance dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: .3rem 1rem;
+  margin: 0;
+  font-family: 'Roboto Mono', monospace;
+  font-size: .74rem;
+}
+.provenance dt { color: var(--ghga-grey); }
+.provenance dd { margin: 0; word-break: break-all; }
+
+/* ---------- footer ---------- */
+
+.ghga-foot {
+  margin-top: 3rem;
+  background: var(--ghga-deep);
+  color: rgba(255, 255, 255, .72);
+  padding: 1.5rem 0;
+  font-size: .8rem;
+}
+.ghga-foot a { color: var(--ghga-container); }
+
+@media (max-width: 900px) {
+  .panel[data-width] { grid-column: span 12; }
+}

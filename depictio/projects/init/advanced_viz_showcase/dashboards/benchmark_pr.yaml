@@ -1,0 +1,91 @@
+title: Precision-recall benchmark (demo)
+project_tag: Advanced Visualisations
+is_main_tab: false
+parent_dashboard_tag: Advanced Visualisations
+tab_order: 24
+icon: mdi:target-arrow
+icon_color: indigo
+components:
+- component_type: text
+  tag: pr-demo-intro
+  title: Precision–recall benchmark
+  order: 1
+  alignment: left
+  body: >
+    Each point is a variant caller at its (recall, precision); dotted lines are
+    equal-F1 contours, the diagonal is recall=precision. Top-right is best.
+    Synthetic demo data. Open the gear for colour scale, point-size and axis controls.
+  workflow_tag: advanced_viz_demo
+  data_collection_tag: benchmark_demo
+  layout: {x: 0, y: 0, w: 8, h: 1}
+
+# ── Filters ────────────────────────────────────────────────────────────────
+# The benchmark table's own columns, exposed as dashboard controls. They exist
+# for the dashboard, but they are also the *only* way an external page can
+# discover this data collection's filterable surface: the export manifest
+# describes interactive components, so a column with no control is invisible to
+# a host even though the filter would work if it guessed the name.
+#
+# tp/fp are the pair a reviewer actually reasons with — "show me the callers
+# that stay under N false positives" is the question a PR plot provokes and
+# cannot answer on its own, because a caller's position says nothing about the
+# scale it was evaluated at.
+- component_type: interactive
+  tag: pr-filter-tool
+  workflow_tag: advanced_viz_demo
+  data_collection_tag: benchmark_demo
+  interactive_component_type: MultiSelect
+  column_name: tool
+  column_type: object
+  custom_color: "#3F51B5"
+  icon_name: mdi:filter-variant
+  title: Caller
+  layout: {x: 0, y: 1, w: 2, h: 3}
+- component_type: interactive
+  tag: pr-filter-tp
+  workflow_tag: advanced_viz_demo
+  data_collection_tag: benchmark_demo
+  interactive_component_type: RangeSlider
+  column_name: tp
+  column_type: int64
+  custom_color: "#7E57C2"
+  icon_name: mdi:check-decagram
+  title: True positives
+  layout: {x: 2, y: 1, w: 2, h: 3}
+- component_type: interactive
+  tag: pr-filter-fp
+  workflow_tag: advanced_viz_demo
+  data_collection_tag: benchmark_demo
+  interactive_component_type: RangeSlider
+  column_name: fp
+  column_type: int64
+  custom_color: "#E64A19"
+  icon_name: mdi:alert-decagram
+  title: False positives
+  layout: {x: 4, y: 1, w: 2, h: 3}
+- component_type: interactive
+  tag: pr-filter-f1
+  workflow_tag: advanced_viz_demo
+  data_collection_tag: benchmark_demo
+  interactive_component_type: RangeSlider
+  column_name: f1
+  column_type: float64
+  custom_color: "#00897B"
+  icon_name: mdi:trophy
+  title: F1 score
+  layout: {x: 6, y: 1, w: 2, h: 3}
+
+- component_type: advanced_viz
+  workflow_tag: advanced_viz_demo
+  data_collection_tag: benchmark_demo
+  viz_kind: pr_benchmark
+  config:
+    viz_kind: pr_benchmark
+    label_col: tool
+    recall_col: recall
+    precision_col: precision
+    f1_col: f1
+    support_col: tp
+  tag: pr-demo-viz
+  title: Precision–recall benchmark
+  layout: {x: 0, y: 4, w: 8, h: 10}

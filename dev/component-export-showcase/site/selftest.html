@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Filter self-test</title>
+<link rel="stylesheet" href="/shared.css">
+<style>
+  body { margin: 0; background: #fbfbfa; color: #16181c;
+         font-family: 'Inter Tight', system-ui, sans-serif; }
+  main { max-width: 1000px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+  h1 { font-size: 1.4rem; margin: 0 0 .5rem; }
+  p.lede { margin: 0 0 1.5rem; color: #4c545e; max-width: 70ch; font-size: .92rem; }
+  #summary { font-family: 'JetBrains Mono', monospace; font-size: 1rem; padding: .8rem 1rem;
+             border: 1px solid #e2e4e8; background: #fff; margin-bottom: 1.5rem; }
+  #summary.pass { border-left: 4px solid #1a7f37; }
+  #summary.fail { border-left: 4px solid #cf222e; }
+  table { width: 100%; border-collapse: collapse; font-size: .82rem;
+          font-family: 'JetBrains Mono', monospace; background: #fff; }
+  th, td { text-align: left; padding: .4rem .6rem; border-bottom: 1px solid #eceff2; }
+  th { font-size: .68rem; letter-spacing: .06em; text-transform: uppercase; color: #77808b; }
+  td.ok { color: #1a7f37; } td.bad { color: #cf222e; }
+  .num { text-align: right; }
+</style>
+<script src="/vendor/plotly.min.js"></script>
+</head>
+<body>
+<main>
+  <h1>Filter self-test</h1>
+  <p class="lede">
+    Every case below fetches one component twice — once plain, once with a filter
+    a host page would build from the export manifest — and reports whether the
+    figure actually changed. A filter that is accepted but ignored looks like a
+    success from the outside: the response is a 200 and the figure is intact, so
+    only a comparison catches it.
+  </p>
+  <div id="summary">running…</div>
+  <table>
+    <thead>
+      <tr>
+        <th>case</th><th>column</th>
+        <th class="num">traces</th><th class="num">visible</th><th class="num">points</th>
+        <th>result</th><th>ignored</th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+</main>
+<script src="/shared.js"></script>
+<script src="/selftest.js"></script>
+</body>
+</html>

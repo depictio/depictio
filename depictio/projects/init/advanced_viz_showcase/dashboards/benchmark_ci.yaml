@@ -1,0 +1,87 @@
+title: Metric ± CI forest (demo)
+project_tag: Advanced Visualisations
+is_main_tab: false
+parent_dashboard_tag: Advanced Visualisations
+tab_order: 27
+icon: mdi:chart-timeline-variant
+icon_color: pink
+components:
+- component_type: text
+  tag: ci-demo-intro
+  title: Metric ± 95% CI (forest plot)
+  order: 1
+  alignment: left
+  body: >
+    Point estimate + 95% confidence interval per caller (synthetic). The dot is
+    the value, the horizontal line the CI; the x-axis auto-zooms so small values
+    stay readable. The gear exposes sort order, value labels, colour scale and
+    point size.
+  workflow_tag: advanced_viz_demo
+  data_collection_tag: benchmark_demo
+  layout: {x: 0, y: 0, w: 8, h: 1}
+# ── Filters ────────────────────────────────────────────────────────────────
+# Same data collection as the PR dashboard, so the same control vocabulary.
+# A forest plot with five callers is legible; with fifty it is not, which is
+# why the caller select matters more here than anywhere else.
+- component_type: interactive
+  tag: ci-filter-tool
+  workflow_tag: advanced_viz_demo
+  data_collection_tag: benchmark_demo
+  interactive_component_type: MultiSelect
+  column_name: tool
+  column_type: object
+  custom_color: "#E91E63"
+  icon_name: mdi:filter-variant
+  title: Caller
+  layout: {x: 0, y: 1, w: 3, h: 3}
+- component_type: interactive
+  tag: ci-filter-tp
+  workflow_tag: advanced_viz_demo
+  data_collection_tag: benchmark_demo
+  interactive_component_type: RangeSlider
+  column_name: tp
+  column_type: int64
+  custom_color: "#7E57C2"
+  icon_name: mdi:check-decagram
+  title: True positives
+  layout: {x: 3, y: 1, w: 3, h: 3}
+- component_type: interactive
+  tag: ci-filter-fp
+  workflow_tag: advanced_viz_demo
+  data_collection_tag: benchmark_demo
+  interactive_component_type: RangeSlider
+  column_name: fp
+  column_type: int64
+  custom_color: "#E64A19"
+  icon_name: mdi:alert-decagram
+  title: False positives
+  layout: {x: 6, y: 1, w: 2, h: 3}
+
+- component_type: advanced_viz
+  workflow_tag: advanced_viz_demo
+  data_collection_tag: benchmark_demo
+  viz_kind: metric_ci_bars
+  config:
+    viz_kind: metric_ci_bars
+    label_col: tool
+    value_col: precision
+    lower_col: precision_lower
+    upper_col: precision_upper
+    metric_name: Precision
+  tag: ci-demo-precision
+  title: Precision ± 95% CI
+  layout: {x: 0, y: 4, w: 4, h: 9}
+- component_type: advanced_viz
+  workflow_tag: advanced_viz_demo
+  data_collection_tag: benchmark_demo
+  viz_kind: metric_ci_bars
+  config:
+    viz_kind: metric_ci_bars
+    label_col: tool
+    value_col: recall
+    lower_col: recall_lower
+    upper_col: recall_upper
+    metric_name: Recall
+  tag: ci-demo-recall
+  title: Recall ± 95% CI
+  layout: {x: 4, y: 4, w: 4, h: 9}
