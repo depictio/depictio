@@ -127,7 +127,7 @@ class TestBaseLiteComponent:
     """Tests for BaseLiteComponent base class."""
 
     def test_auto_generate_index(self):
-        """Index UUID should be auto-generated when not provided."""
+        """An untagged component still falls back to a generated UUID."""
 
         class TestComponent(BaseLiteComponent):
             component_type: str = "test"
@@ -136,6 +136,20 @@ class TestBaseLiteComponent:
         assert comp.index is not None
         # Verify it's a valid UUID format
         uuid.UUID(comp.index)
+
+    def test_tag_becomes_index(self):
+        """A tagged component takes its tag as the index.
+
+        The index is what addresses a component from outside the dashboard, so a
+        generated UUID would change on every re-import and break every external
+        reference. The tag is the author's own stable name for it.
+        """
+
+        class TestComponent(BaseLiteComponent):
+            component_type: str = "test"
+
+        comp = TestComponent(tag="my-panel")
+        assert comp.index == "my-panel"
 
     def test_preserve_provided_index(self):
         """Provided index should be preserved."""
@@ -181,11 +195,12 @@ class TestFigureLiteComponent:
         assert comp.component_type == "figure"
 
     def test_auto_generate_index(self):
-        """Index UUID should be auto-generated."""
+        """A tagged figure takes its tag as the index; an untagged one gets a UUID."""
         comp = FigureLiteComponent(tag="test")
-        assert comp.index is not None
-        # Verify it's a valid UUID
-        uuid.UUID(comp.index)
+        assert comp.index == "test"
+
+        untagged = FigureLiteComponent()
+        uuid.UUID(str(untagged.index))
 
     def test_default_visu_type(self):
         """Default visu_type should be 'scatter'."""
@@ -581,17 +596,19 @@ class TestDashboardDataLite:
         assert "tag: scatter-1" in yaml_str
         assert "component_type: figure" in yaml_str
 
-    def test_to_yaml_excludes_index(self, sample_figure_lite: FigureLiteComponent):
-        """YAML output should use tag, not UUID index."""
+    def test_to_yaml_excludes_generated_index(self, sample_figure_lite: FigureLiteComponent):
+        """YAML output uses the tag; a derivable index is redundant noise.
+
+        Only a *generated* UUID index is dropped. An index equal to the tag is
+        also omitted, because re-importing the YAML reproduces it exactly.
+        """
         dash = DashboardDataLite(
             title="Test",
             components=[sample_figure_lite],
         )
         yaml_str = dash.to_yaml()
-        # Index should not appear in YAML output
         assert "index:" not in yaml_str
-        # Tag should appear
-        assert "tag:" in yaml_str
+        assert "tag: scatter-1" in yaml_str
 
     def test_from_full_generates_tags(self, sample_full_dashboard_dict: dict):
         """from_full() should generate readable tags with format {type}-{semantic_id}-{hash}."""
@@ -822,17 +839,21 @@ components:
             assert isinstance(comp["dc_config"], dict)
 
     def test_to_full_generates_unique_indices(self, yaml_with_tags: str):
-        """to_full() should generate unique UUID indices for all components."""
+        """to_full() indices are unique, and derived from the tags.
+
+        Uniqueness is the property that matters — indices address components and
+        a collision would make one unreachable. They are no longer UUIDs, since
+        a UUID regenerated on every import is precisely what broke external
+        references.
+        """
         lite = DashboardDataLite.from_yaml(yaml_with_tags)
         full_dict = lite.to_full()
 
         indices = [comp["index"] for comp in full_dict["stored_metadata"]]
-        # All indices should be unique
         assert len(indices) == len(set(indices))
-        # Indices should look like UUIDs (36 chars with hyphens)
-        for idx in indices:
-            assert len(idx) == 36
-            assert idx.count("-") == 4
+
+        tags = [comp["tag"] if isinstance(comp, dict) else comp.tag for comp in lite.components]
+        assert indices == tags
 
     def test_to_full_layout_references_match_indices(self, yaml_with_tags: str):
         """to_full() layout 'i' values should match component indices (split-panel)."""

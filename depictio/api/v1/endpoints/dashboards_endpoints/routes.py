@@ -4896,6 +4896,22 @@ def _regenerate_component_fields(component: dict) -> None:
             )
 
 
+def _is_uuid(value: object) -> bool:
+    """Is this string an actual UUID, rather than merely shaped like one?
+
+    Used to tell a generated component index from a semantic tag. Shape-based
+    guessing gets this wrong in both directions, and the cost is a component
+    that external references can no longer reach.
+    """
+    if not isinstance(value, str):
+        return False
+    try:
+        uuid.UUID(value)
+    except ValueError:
+        return False
+    return True
+
+
 def _regenerate_component_indices(dashboard_dict: dict) -> None:
     """Generate new UUIDs for UUID-like component indexes; preserve semantic ones."""
     if "stored_metadata" not in dashboard_dict:
@@ -4905,11 +4921,15 @@ def _regenerate_component_indices(dashboard_dict: dict) -> None:
 
     for component in dashboard_dict["stored_metadata"]:
         old_index = component.get("index", "")
-        # Keep semantic indexes (e.g. "multiqc-sampling-date"); only replace UUID-like ones
-        is_uuid_like = isinstance(old_index, str) and (
-            old_index.count("-") >= 4 or len(old_index) > 30
-        )
-        if not is_uuid_like:
+        # Keep semantic indexes (e.g. "multiqc-sampling-date"); only replace
+        # UUID-like ones.
+        #
+        # Parse rather than guess by shape: the old heuristic ("4+ dashes, or
+        # longer than 30 characters") also matched perfectly good semantic tags
+        # such as `multiqc-general-statistics-panel`, so a long descriptive tag
+        # was silently replaced by a UUID and the component became unaddressable
+        # from outside — the exact failure this function exists to avoid.
+        if not _is_uuid(old_index):
             continue
 
         new_index = str(uuid.uuid4())
