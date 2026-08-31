@@ -143,17 +143,33 @@ async function buildConfigFromRender(
  *  Report anchors are module-prefixed (`samtools_bowtie2`, `ivar_variants`)
  *  while the catalog names the module (`samtools`, `ivar`), so an exact match is
  *  tried first and a prefix match second — the same normalisation the compose
- *  endpoint applies when it decides which sections a report carries. */
+ *  endpoint applies when it decides which sections a report carries. Matching is
+ *  case-insensitive on both arms: a report anchor can carry its tool's own casing
+ *  (`iVar`) while the catalog always names the section lowercase (`ivar`), and the
+ *  compose endpoint already lowercases both sides the same way.
+ *
+ *  A module can be present without a plot (a custom-content *table*, e.g.
+ *  `summary_conformance_metrics`) — the compose endpoint excludes those from what
+ *  it offers (see `_multiqc_sections` in catalog_endpoints/routes.py), so this
+ *  should not see one under normal operation. Prefer a plottable candidate
+ *  anyway as defense in depth, rather than persisting a null `selected_plot`
+ *  that only surfaces as a render-time failure. */
 async function multiqcConfigForSection(
   dcId: string,
   section: string | undefined,
 ): Promise<Record<string, unknown>> {
   const opts = await fetchMultiQCBuilderOptions(dcId);
   const modulePrefix = (anchor: string) => anchor.split(/[-_]/)[0];
-  const anchor =
-    (section && opts.modules.find((m) => m === section)) ||
-    (section && opts.modules.find((m) => modulePrefix(m) === section)) ||
-    opts.modules[0];
+  const norm = (s: string) => s.toLowerCase();
+  const hasPlot = (m: string) => m === 'general_stats' || (opts.plots[m]?.length ?? 0) > 0;
+
+  const candidates = section
+    ? opts.modules.filter(
+        (m) => norm(m) === norm(section) || norm(modulePrefix(m)) === norm(section),
+      )
+    : [];
+  const anchor = candidates.find(hasPlot) ?? candidates[0] ?? opts.modules.find(hasPlot) ?? opts.modules[0];
+
   return {
     selected_module: anchor ?? null,
     selected_plot: (anchor && opts.plots[anchor]?.[0]) ?? null,
