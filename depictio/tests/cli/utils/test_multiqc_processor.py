@@ -2,9 +2,11 @@
 
 import builtins
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from multiqc.plots.plot import Plot
 
 from depictio.cli.cli.utils.multiqc_processor import (
     extract_multiqc_metadata,
@@ -14,6 +16,39 @@ from depictio.cli.cli.utils.multiqc_processor import (
 
 # Save original __import__ before any mocking happens
 _original_import = builtins.__import__
+
+
+class _RaisingIterable:
+    """A `.modules`-shaped stand-in that raises on iteration.
+
+    Mirrors a live `report.modules` walk blowing up (e.g. a genuinely corrupt
+    parquet), as opposed to `list_plots()`'s missing-anchor `ValueError` —
+    see `test_extract_multiqc_metadata_plots_error`.
+    """
+
+    def __iter__(self):
+        raise Exception("Plots extraction failed")
+
+
+def _make_multiqc_report(module_sections: dict) -> SimpleNamespace:
+    """Build a `multiqc.report`-shaped object for the extraction walk.
+
+    `module_sections` maps module id -> list of (section_id, num_datasets)
+    tuples, mirroring the module/section/plot_by_id shape that
+    `extract_multiqc_metadata` walks in place of `multiqc.list_plots()`.
+    """
+    modules = []
+    plot_by_id = {}
+    for module_id, sections in module_sections.items():
+        section_objs = []
+        for section_id, num_datasets in sections:
+            anchor = f"{module_id}-{section_id}-anchor"
+            section_objs.append(SimpleNamespace(plot_anchor=anchor, name=section_id, anchor=anchor))
+            plot = MagicMock(spec=Plot)
+            plot.datasets = [MagicMock(label=f"{section_id}_ds{i}") for i in range(num_datasets)]
+            plot_by_id[anchor] = plot
+        modules.append(SimpleNamespace(id=module_id, sections=section_objs))
+    return SimpleNamespace(modules=modules, plot_by_id=plot_by_id)
 
 
 class TestMultiQCProcessor:
@@ -27,10 +62,12 @@ class TestMultiQCProcessor:
         mock_multiqc.parse_logs.return_value = None
         mock_multiqc.list_samples.return_value = ["sample1", "sample2", "sample3"]
         mock_multiqc.list_modules.return_value = ["fastqc", "cutadapt"]
-        mock_multiqc.list_plots.return_value = {
-            "fastqc": ["quality", "length"],
-            "cutadapt": ["trimmed"],
-        }
+        # `extract_multiqc_metadata` walks `multiqc.report` directly instead
+        # of calling `multiqc.list_plots()` (see multiqc_processor.py) so the
+        # plot data comes from `.report`, not a `list_plots` return value.
+        mock_multiqc.report = _make_multiqc_report(
+            {"fastqc": [("quality", 1), ("length", 1)], "cutadapt": [("trimmed", 1)]}
+        )
         return mock_multiqc
 
     @pytest.fixture
@@ -88,7 +125,6 @@ class TestMultiQCProcessor:
         mock_multiqc_module.parse_logs.assert_called_once_with("/path/to/multiqc.parquet")
         mock_multiqc_module.list_samples.assert_called_once()
         mock_multiqc_module.list_modules.assert_called_once()
-        mock_multiqc_module.list_plots.assert_called_once()
 
         # Verify extracted metadata
         assert result["samples"] == ["sample1", "sample2", "sample3"]
@@ -108,8 +144,8 @@ class TestMultiQCProcessor:
             "sample3": ["sample3"],
         }
 
-        # Configure plots to raise an exception
-        mock_multiqc_module.list_plots.side_effect = Exception("Plots extraction failed")
+        # Configure the report walk to raise while iterating modules
+        mock_multiqc_module.report = SimpleNamespace(modules=_RaisingIterable(), plot_by_id={})
 
         def mock_import_func(name, *args, **kwargs):
             if name == "multiqc":
