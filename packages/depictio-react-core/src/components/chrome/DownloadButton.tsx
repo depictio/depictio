@@ -17,7 +17,15 @@ interface DownloadButtonProps {
 
 function exportKindFor(componentType: string): ExportKind {
   if (componentType === 'table') return 'csv';
-  if (componentType === 'figure' || componentType === 'map' || componentType === 'multiqc') {
+  if (
+    componentType === 'figure' ||
+    componentType === 'map' ||
+    componentType === 'multiqc' ||
+    // Every advanced_viz renderer mounts react-plotly and is wrapped by
+    // `wrapWithChrome` (ComponentRenderer.tsx), so `.js-plotly-plot` is present
+    // in the same wrapper the PNG path already queries.
+    componentType === 'advanced_viz'
+  ) {
     return 'png';
   }
   return 'none';

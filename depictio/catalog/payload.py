@@ -15,12 +15,17 @@ placeholder) — Phase B wires their computes.
 
 from __future__ import annotations
 
-import json
 import math
 from typing import Any
 
 import yaml
 
+from depictio.api.v1.services.export.bundle import (
+    OfflineBundleError,
+    inject,
+    json_safe,
+    svg_data_uris,
+)
 from depictio.models.components.advanced_viz.catalog import CATALOG_DIR, role_config_key
 
 # Prebuilt single-file viewer bundle (`pnpm run build:catalog-preview`).
@@ -1046,41 +1051,19 @@ def build_gallery_payload(entries: Any, theme: str = "light") -> dict[str, Any]:
 
 def _logo_data_uris() -> dict[str, str]:
     """Return base64 data-URIs for the MultiQC logo SVGs (offline-safe)."""
-    import base64
-
-    logos_dir = TEMPLATE_PATH.parent.parent / "public" / "logos"
-    result: dict[str, str] = {}
-    for name in ("multiqc_icon_dark.svg", "multiqc_icon_white.svg"):
-        path = logos_dir / name
-        if path.exists():
-            b64 = base64.b64encode(path.read_bytes()).decode()
-            result[f"/dashboard-beta/logos/{name}"] = f"data:image/svg+xml;base64,{b64}"
-    return result
+    return svg_data_uris(
+        TEMPLATE_PATH.parent.parent / "public" / "logos",
+        {
+            f"/dashboard-beta/logos/{name}": name
+            for name in ("multiqc_icon_dark.svg", "multiqc_icon_white.svg")
+        },
+    )
 
 
-def json_safe(o: Any) -> Any:
-    """Make a computed payload serialisable: no non-finite floats, no numpy.
-
-    Plotly figures and computed stats can carry NaN/Inf; Python's ``json`` emits
-    them as bare ``NaN``/``Infinity`` tokens, which are valid for ``json.loads``
-    but make the browser's ``JSON.parse`` throw — blanking the embedded bundle.
-
-    Public because the same payload is also served as JSON by the preview
-    endpoint, where FastAPI's serialiser raises outright on a numpy array
-    instead of blanking anything.
-    """
-    if isinstance(o, dict):
-        return {k: json_safe(v) for k, v in o.items()}
-    if isinstance(o, (list, tuple)):
-        return [json_safe(v) for v in o]
-    # numpy arrays / scalars — Plotly UI-mode figures (px.* on a pandas frame)
-    # keep numpy in their traces; json.dumps(default=str) would stringify an
-    # ndarray into a useless "['a' 'b']" blob. Convert to plain Python first.
-    if hasattr(o, "dtype") and hasattr(o, "tolist"):
-        return json_safe(o.tolist())
-    if isinstance(o, float):
-        return o if math.isfinite(o) else None
-    return o
+# ``json_safe`` moved to services/export/bundle.py when the catalog preview and
+# the component embed started sharing one injector. Re-exported here because
+# catalog_endpoints and the catalog tests already import it from this module.
+__all__ = ["json_safe"]
 
 
 def _inject(payload: dict[str, Any], nonce: str | None = None) -> str:
@@ -1090,29 +1073,17 @@ def _inject(payload: dict[str, Any], nonce: str | None = None) -> str:
     HTTP can admit exactly that script through a `script-src` policy. Opening
     the file from disk needs no nonce, which is why it is optional.
     """
-    if not TEMPLATE_PATH.exists():
-        raise CatalogPayloadError(
-            f"catalog-preview bundle not built: {TEMPLATE_PATH} is missing — run "
-            f"`cd depictio/viewer && pnpm run build:catalog-preview`"
+    try:
+        return inject(
+            TEMPLATE_PATH,
+            "__CATALOG_PAYLOAD__",
+            payload,
+            asset_replacements=_logo_data_uris(),
+            build_hint="cd depictio/viewer && pnpm run build:catalog-preview",
+            nonce=nonce,
         )
-    blob = json.dumps(json_safe(payload), default=str).replace("</", "<\\/")
-    html = TEMPLATE_PATH.read_text().replace("__CATALOG_PAYLOAD__", blob)
-    if nonce is not None:
-        # Only the module tag: it is the bundle's sole executable script, and
-        # matching bare "<script" would also rewrite the tag strings that appear
-        # inside its own inlined JS. The payload <script> is application/json,
-        # which never executes, so it needs no nonce.
-        marker = '<script type="module"'
-        if marker not in html:
-            raise CatalogPayloadError(
-                f"catalog-preview bundle at {TEMPLATE_PATH} has no {marker!r} tag to "
-                "nonce — rebuild it with `cd depictio/viewer && pnpm run build:catalog-preview`"
-            )
-        html = html.replace(marker, f'<script nonce="{nonce}" type="module"', 1)
-    # Patch server-relative logo paths → inline data URIs so they render offline.
-    for server_path, data_uri in _logo_data_uris().items():
-        html = html.replace(server_path, data_uri)
-    return html
+    except OfflineBundleError as exc:
+        raise CatalogPayloadError(str(exc)) from exc
 
 
 def render_html(

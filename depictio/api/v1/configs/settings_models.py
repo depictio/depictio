@@ -128,6 +128,33 @@ class FastAPIConfig(ServiceConfig):
         default=True,
         description="Whether the CORS layer attaches credentials (cookies / Authorization).",
     )
+    embed_enabled: bool = Field(
+        default=False,
+        description=(
+            "Enable the component export/embed API (/depictio/api/v1/export). Off by "
+            "default because serving embeds relaxes X-Frame-Options and CSP "
+            "frame-ancestors on that path, and lets anonymous callers read PUBLIC "
+            "projects even on instances that are not in public mode."
+        ),
+    )
+    embed_allowed_origins: list[str] | str = Field(
+        default_factory=list,
+        description=(
+            "Origins permitted to frame an exported component, as a comma-separated "
+            "list in DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS (e.g. "
+            "'https://lab.example.org'). Becomes the CSP frame-ancestors list. Empty "
+            "means frame-ancestors 'none' — embeds render standalone but cannot be "
+            "iframed. The wildcard '*' is rejected; list explicit origins."
+        ),
+    )
+    embed_csp_unsafe_inline: bool = Field(
+        default=False,
+        description=(
+            "Fall back to script-src 'unsafe-inline' for embed HTML instead of "
+            "per-script SHA-256 hashes. Escape hatch for when a bundled dependency "
+            "injects a script tag we cannot hash ahead of time."
+        ),
+    )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_FASTAPI_")
 
@@ -136,11 +163,20 @@ class FastAPIConfig(ServiceConfig):
         # Pydantic-settings parses lists from env via JSON by default; accept the
         # friendlier comma-separated form so deployments can set
         # DEPICTIO_FASTAPI_CORS_ALLOWED_ORIGINS=https://a,https://b
-        if isinstance(self.cors_allowed_origins, str):
-            object.__setattr__(
-                self,
-                "cors_allowed_origins",
-                [o.strip() for o in self.cors_allowed_origins.split(",") if o.strip()],
+        for field in ("cors_allowed_origins", "embed_allowed_origins"):
+            value = getattr(self, field)
+            if isinstance(value, str):
+                object.__setattr__(
+                    self,
+                    field,
+                    [o.strip() for o in value.split(",") if o.strip()],
+                )
+        # A wildcard frame-ancestors would let any site frame a public dashboard's
+        # component; that is a decision to make per-origin, never implicitly.
+        if "*" in self.embed_allowed_origins:
+            raise ValueError(
+                "DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS contains '*'. Frame-ancestors "
+                "must list explicit origins (e.g. https://lab.example.org)."
             )
         return self
 

@@ -1,18 +1,22 @@
 /**
- * Offline API shim for the standalone catalog-preview bundle.
+ * Offline API shim shared by every standalone Depictio bundle.
  *
- * The catalog-preview Vite build aliases every `depictio-react-core` import of
- * `./api` to this module (see vite.catalog-preview.config.ts). It re-exports the
- * real api unchanged, then overrides ONLY the data-fetching functions so the
- * viewer's real `ComponentRenderer` (and every per-type renderer) renders from
- * the payloads embedded in `window.__CATALOG_PREVIEW__` — no network, fully
+ * Two builds alias `depictio-react-core`'s `./api` import to this module:
+ * the catalog preview (`vite.catalog-preview.config.ts`) and the component embed
+ * (`vite.embed.config.ts`). It re-exports the real api unchanged, then overrides
+ * ONLY the data-fetching functions so the viewer's real `ComponentRenderer` (and
+ * every per-type renderer) renders from an embedded payload — no network, fully
  * offline. Everything else (types, auth helpers, formatting) comes from the real
  * api via `export *`.
  *
- * Keying: figure/table/map/image/multiqc requests carry a component id, so those
- * payloads are keyed by component index. interactive/advanced_viz requests carry
- * a `dc_id` instead, so the Python side gives every render a UNIQUE synthetic
- * `dc_id` ("catalog::<index>") and those payloads are keyed by dc_id.
+ * Keying contract, honoured by both Python payload builders:
+ *   - figure / table / map / image / multiqc requests carry a component id, so
+ *     those payloads are keyed by component index.
+ *   - interactive / advanced_viz requests carry a `dc_id` instead. Real dashboards
+ *     can bind two components to the same DC, so the Python side rewrites `dc_id`
+ *     in the embedded metadata to a UNIQUE synthetic value — `catalog::<index>`
+ *     for the catalog, `embed::<index>` for a component embed — and keys those
+ *     payloads by it.
  */
 
 // Real api (importer === this file, so the shim plugin lets it through).
@@ -22,7 +26,7 @@ import type {
   InteractiveFilter,
 } from '../../../../packages/depictio-react-core/src/api';
 
-export interface CatalogPreviewData {
+export interface OfflineData {
   figures: Record<string, { figure: unknown; metadata?: unknown }>;
   tables: Record<string, { columns: unknown[]; rows: Record<string, unknown>[]; total: number }>;
   maps: Record<string, { figure: unknown; metadata?: unknown }>;
@@ -37,6 +41,9 @@ export interface CatalogPreviewData {
   unique: Record<string, string[]>;
   ranges: Record<string, { min: number | null; max: number | null }>;
   specs: Record<string, Record<string, unknown>>;
+  /** `{dcId -> {column -> dtype}}`. Several advanced-viz renderers read the DC
+   *  schema to discover columns the stored config under-specifies. */
+  schemas: Record<string, Record<string, string>>;
   advancedVizData: Record<string, unknown>;
   compute: Record<string, unknown>;
 }
@@ -48,7 +55,7 @@ interface CatalogPreviewGlobal {
   // all outputs' component data is merged into the single top-level `data` map
   // (keys are globally unique), which is the only field this offline shim reads.
   tools: unknown[];
-  data: CatalogPreviewData;
+  data: OfflineData;
   // Single-output preview mode (built by `catalog preview`): these live at the
   // top level alongside `data`. Gallery mode omits them (they're nested inside
   // tools[].outputs[] instead).
@@ -57,17 +64,31 @@ interface CatalogPreviewGlobal {
   fixturePreview?: unknown;
 }
 
+/** Single-component embed payload — the shape services/export/embed.py injects. */
+export interface EmbedGlobal {
+  theme: 'light' | 'dark';
+  component: Record<string, unknown>;
+  title: string;
+  data: OfflineData;
+}
+
 declare global {
   interface Window {
-    __CATALOG_PREVIEW__: CatalogPreviewGlobal;
+    __CATALOG_PREVIEW__?: CatalogPreviewGlobal;
+    __DEPICTIO_EMBED__?: EmbedGlobal;
   }
 }
 
-const DATA = (): CatalogPreviewData => window.__CATALOG_PREVIEW__.data;
+/** Whichever payload this bundle was built for. Embed wins when both exist. */
+const DATA = (): OfflineData => {
+  const payload = window.__DEPICTIO_EMBED__ ?? window.__CATALOG_PREVIEW__;
+  if (!payload) throw new Error('offline shim: no embedded payload on window');
+  return payload.data;
+};
 
 function need<T>(map: Record<string, T>, key: string, kind: string): T {
   if (!(key in map)) {
-    throw new Error(`catalog preview: no ${kind} payload for "${key}"`);
+    throw new Error(`offline payload: no ${kind} entry for "${key}"`);
   }
   return map[key];
 }
@@ -145,6 +166,22 @@ export async function fetchSpecs(dcId: string): Promise<Record<string, unknown>>
   return need(DATA().specs, dcId, 'specs');
 }
 
+/** DC schema, read by several advanced-viz renderers to widen the column set the
+ *  stored config names.
+ *
+ *  Every renderer treats this as best-effort and catches, so leaving it out of the
+ *  shim did not break a render — it just meant the real `fetchPolarsSchema` ran
+ *  inside the bundle and hit the network, which an embed's own
+ *  `connect-src 'none'` CSP blocks. The result was a CSP violation in the host
+ *  page's console on every load, for a request that could never have succeeded.
+ *
+ *  Returns `{}` rather than throwing when a DC is absent: the callers' fallback
+ *  path is a legitimate outcome, unlike a genuinely missing figure payload.
+ */
+export async function fetchPolarsSchema(dcId: string): Promise<Record<string, string>> {
+  return DATA().schemas?.[dcId] ?? {};
+}
+
 // ---- image / multiqc (keyed by component id) ------------------------------
 
 export async function fetchImagePaths(_dashboardId: string, componentId: string) {
@@ -204,3 +241,6 @@ export async function dispatchSankey(p: { dc_id: string }) {
 export async function pollSankey(jobId: string) {
   return finishedJob(jobId) as never;
 }
+
+/** @deprecated Use `OfflineData`. Retained for the catalog-preview imports. */
+export type CatalogPreviewData = OfflineData;

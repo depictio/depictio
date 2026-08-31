@@ -427,6 +427,10 @@ depictio/viewer/dist-table-harness/
 # which every `pnpm dev` / `pnpm build` runs first). Regenerate with `pnpm run icons`.
 depictio/viewer/src/generated/
 
+# Generated component-embed single-file bundle (built via pnpm run build:embed).
+# The API image builds and copies this in; see docker-images/Dockerfile.api.
+depictio/viewer/dist-embed/
+
 # Nextflow runtime artifacts (from local pipeline validation runs)
 .nextflow/
 .nextflow.log*

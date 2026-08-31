@@ -8,7 +8,7 @@
  * the shim itself are let through so that re-export resolves.
  *
  * Two backend-less consumers use it, and they must not drift apart:
- *   depictio/viewer/vite.catalog-preview.config.ts → catalog-preview/mockApi.ts
+ *   depictio/viewer/vite.catalog-preview.config.ts → src/offline/mockApi.ts
  *      (looks up payloads Python precomputed into the bundle)
  *   packages/tool-studio/vite.config.ts            → src/api/studioApi.ts
  *      (computes them from the fixture in the browser)
