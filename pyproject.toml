@@ -103,6 +103,8 @@ dependencies = [
   # wraps celery in `watchmedo auto-restart` when DEPICTIO_DEV_MODE=true; in prod
   # it's installed (~1 MB) but never invoked. Celery has no built-in reloader.
   "watchdog==6.0.0",
+  "marimo==0.24.0",
+  "nbformat==5.10.4",
 ]
 authors = [{ name = "Thomas Weber", email = "thomas.weber@embl.de" }]
 urls = { Homepage = "http://github.com/depictio/depictio" }
