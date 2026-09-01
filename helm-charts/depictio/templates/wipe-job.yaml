@@ -31,9 +31,12 @@ rules:
 - apiGroups: ["apps"]
   resources: ["deployments/scale"]
   verbs: ["get", "patch", "update"]
+# `watch` is what makes `kubectl delete --wait` actually block. Without it
+# the delete still succeeds but the wait degrades to a "cannot watch"
+# reflector error, which is the opposite of what this hook needs.
 - apiGroups: [""]
   resources: ["persistentvolumeclaims"]
-  verbs: ["delete", "list", "get"]
+  verbs: ["delete", "list", "get", "watch"]
 - apiGroups: [""]
   resources: ["pods"]
   verbs: ["list", "get", "delete"]
