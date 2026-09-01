@@ -35,7 +35,7 @@ def compute_upset_layout(
     show_set_sizes: bool = True,
     n_sets: int = 1,
     intersection_bar_ratio: float = 0.45,
-    dot_matrix_base: float = 0.04,
+    dot_matrix_base: float = 0.075,
     set_size_ratio: float = 0.25,
 ) -> UpSetGridLayout:
     """Compute the subplot grid for an UpSet plot.
@@ -60,8 +60,12 @@ def compute_upset_layout(
     # Row heights: annotations, then intersection bars, then dot matrix
     row_heights: list[float] = []
 
-    # Dot matrix height scales with number of sets
-    dot_matrix_height = max(0.15, min(0.50, dot_matrix_base * n_sets))
+    # Dot matrix height scales with number of sets.
+    #
+    # The floor matters more than the slope: with four sets the old base gave
+    # the matrix 16% of the figure, so each set's row was about as tall as the
+    # dot drawn in it and the rows read as one band rather than four.
+    dot_matrix_height = max(0.22, min(0.50, dot_matrix_base * n_sets))
 
     # Annotation track heights
     anno_total = 0.0

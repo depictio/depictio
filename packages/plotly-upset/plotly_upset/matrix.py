@@ -20,7 +20,7 @@ def dot_matrix_traces(
     set_names: list[str],
     *,
     active_color: str = "#333333",
-    inactive_color: str = "#C2C2C2",
+    inactive_color: str = "#E4E4E4",
     set_colors: dict[str, str] | None = None,
     dot_size: int = 12,
     edge_color: str = "#333333",
@@ -62,7 +62,13 @@ def dot_matrix_traces(
 
     traces: list[go.BaseTraceType] = []
 
-    # Inactive dots (empty circles)
+    # Inactive dots.
+    #
+    # Light enough to read as an empty slot rather than as a membership. At the
+    # mid-grey this used to use, a column of four dots looked like a taxon found
+    # in all four sets whatever its actual pattern, which inverts the one thing
+    # the matrix exists to show. They stay visible because the grid still has to
+    # be readable: the eye needs the empty positions to see the filled ones.
     if inactive_x:
         traces.append(
             go.Scatter(

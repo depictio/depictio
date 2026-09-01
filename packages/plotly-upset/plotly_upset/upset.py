@@ -104,7 +104,7 @@ class UpSetPlot:
         show_set_sizes: bool = True,
         annotation: UpSetAnnotation | None = None,
         color: str = "#333333",
-        inactive_color: str = "#C2C2C2",
+        inactive_color: str = "#E4E4E4",
         set_colors: dict[str, str] | list[str] | None = None,
         color_intersections_by: str | None = None,
         degree_colors: dict[int, str] | None = None,
