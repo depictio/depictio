@@ -6,6 +6,7 @@ upsert, fetch, batch existence checks, and shape queries.
 """
 
 import hashlib
+import io
 import math
 from datetime import datetime
 
@@ -14,6 +15,7 @@ import polars as pl
 from botocore.exceptions import ClientError
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi.concurrency import run_in_threadpool
 
 from depictio.api.v1.celery_dispatch import offload_or_run
 from depictio.api.v1.celery_tasks import preview_deltatable as preview_deltatable_task
@@ -1007,6 +1009,70 @@ async def get_shape(
     except Exception as e:
         logger.error(f"Error reading delta table shape: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to read delta table shape: {e}")
+
+
+@deltatables_endpoint_router.get("/data/{data_collection_id}")
+async def get_data_parquet(
+    data_collection_id: PyObjectId,
+    columns: str | None = None,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """The whole table as Parquet — what a notebook reads.
+
+    Unfiltered, optionally projected to ``columns`` (comma-separated), behind
+    the same permission pipeline as every other read endpoint here. The
+    notebook applies the filters itself, in code, so the reader can see them.
+    Refused with 413 above ``settings.notebook_export.max_rows``: a notebook
+    must not become a way to pull an arbitrarily large table through the API.
+    """
+    if not settings.notebook_export.enabled:
+        raise HTTPException(status_code=404, detail="Notebook export is disabled.")
+    delta_table_location = _resolve_delta_location(data_collection_id, current_user)
+    wanted = [c.strip() for c in (columns or "").split(",") if c.strip()]
+
+    def _build() -> tuple[bytes, int, int]:
+        try:
+            lf = pl.scan_delta(delta_table_location, storage_options=polars_s3_config)
+            schema_names = list(lf.collect_schema().names())
+        except Exception as e:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Data collection {data_collection_id} has no readable Delta table: {e}",
+            ) from e
+        if wanted:
+            unknown = [c for c in wanted if c not in schema_names]
+            if unknown:
+                raise HTTPException(
+                    status_code=400, detail=f"Unknown column(s): {', '.join(unknown)}"
+                )
+            lf = lf.select(wanted)
+        n_rows = int(lf.select(pl.len()).collect().item())
+        cap = settings.notebook_export.max_rows
+        if n_rows > cap:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"{n_rows:,} rows exceed the {cap:,}-row limit for the data endpoint; "
+                    "narrow the columns or raise DEPICTIO_NOTEBOOK_EXPORT_MAX_ROWS"
+                ),
+            )
+        df = lf.collect()
+        if "depictio_aggregation_time" in df.columns:
+            df = df.drop("depictio_aggregation_time")
+        buf = io.BytesIO()
+        df.write_parquet(buf)
+        return buf.getvalue(), df.height, df.width
+
+    content, n_rows, n_cols = await run_in_threadpool(_build)
+    return Response(
+        content=content,
+        media_type="application/vnd.apache.parquet",
+        headers={
+            "Content-Disposition": f'attachment; filename="{data_collection_id}.parquet"',
+            "X-Depictio-Rows": str(n_rows),
+            "X-Depictio-Columns": str(n_cols),
+        },
+    )
 
 
 @deltatables_endpoint_router.get("/preview/{data_collection_id}")
