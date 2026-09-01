@@ -197,7 +197,6 @@ def _map_spec(
         trigger_data=component,
         theme=theme,
         existing_metadata=None,
-        active_selection_values=None,
         access_token=access_token,
     )
     return _normalise_figure(fig)
