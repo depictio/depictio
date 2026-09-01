@@ -20,6 +20,20 @@
 
 backend:
   env:
+    # Link-shareable, not world-open. Public mode alone hands a temporary
+    # session to anyone who loads the page; the shared access code that gates
+    # it lives in values-embl-internal-secrets.yaml (never committed), as
+    # secrets.publicAccessCode. Without that code set, this line ALONE would
+    # open the instance to the whole internet, so the two must move together.
+    #
+    # Consequences worth knowing before flipping this back and forth:
+    #   - PublicAccessGate replaces the login form for everyone, admins
+    #     included. Admin access becomes POST /auth/login by API, not UI.
+    #   - Visitors are throwaway users, so they only see projects flagged
+    #     public (or shared with "*"), and only ever as viewers.
+    #   - Dashboard import is refused in public mode, admin token or not.
+    DEPICTIO_AUTH_PUBLIC_MODE: "true"
+
     # No self-service accounts. /register returns 403 and the Register button
     # is hidden, AND the OAuth callback stops provisioning: the route passes
     # allow_create=not registration_disabled, so an unknown Google email gets
