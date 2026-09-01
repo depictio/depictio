@@ -11006,3 +11006,8 @@ def data_version_status_endpoint(
         raise HTTPException(status_code=400, detail=str(exc))
     identities = _project_collections(dashboard_data.get("project_id"))
     return {"collections": collection_statuses(pins, referenced, identities)}
+# Notebook export lives in its own module but registers on this router; the
+# import must come last so the helpers it borrows from here already exist.
+from depictio.api.v1.endpoints.dashboards_endpoints import (  # noqa: E402
+    notebook_export as _notebook_export,  # noqa: F401
+)
