@@ -6942,3 +6942,10 @@ def funnel_values_endpoint(
         "dc_labels": dc_labels,
         "filter_count": len(active_filters),
     }
+
+
+# Notebook export lives in its own module but registers on this router; the
+# import must come last so the helpers it borrows from here already exist.
+from depictio.api.v1.endpoints.dashboards_endpoints import (  # noqa: E402
+    notebook_export as _notebook_export,  # noqa: F401
+)
