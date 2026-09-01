@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ActionIcon,
   Button,
@@ -19,11 +19,13 @@ import {
   BrandThemePreview,
   isEmptyBrandTheme,
   useResolvedBrandTheme,
+  type AnalysisState,
   type BrandTheme,
   type DashboardData,
   type LogoMode,
 } from 'depictio-react-core';
 import DashboardInfoBody from './DashboardInfoBody';
+import NotebookExportModal from './NotebookExportModal';
 import { useBranding } from '../branding';
 import { useUiScalePref } from '../hooks/useUiScalePref';
 
@@ -312,7 +314,50 @@ interface SettingsDrawerProps {
   /** Editor only: uploads a dashboard logo (the server stamps it on the
    *  dashboard's brand theme) — reject to surface an error. */
   onUploadLogo?: (file: File) => Promise<void>;
+  /** Viewer: a snapshot of the current analysis state (filters, funnel order,
+   *  groups) for the notebook export. The Export section renders only when
+   *  this is provided. */
+  getAnalysisState?: () => AnalysisState;
 }
+
+/** "Export" section: the dashboard as a marimo / Jupyter / Quarto notebook. */
+const ExportBlock: React.FC<{
+  dashboard: DashboardData | null;
+  getAnalysisState: () => AnalysisState;
+}> = ({ dashboard, getAnalysisState }) => {
+  const [opened, setOpened] = useState(false);
+  const dashboardId = String(dashboard?.dashboard_id ?? dashboard?._id ?? '');
+  return (
+    <Stack gap="sm" data-testid="export-section">
+      <Group gap="xs">
+        <Icon icon="mdi:export-variant" width={18} />
+        <Text fw={600} size="sm">
+          Export
+        </Text>
+      </Group>
+      <Text size="xs" c="dimmed">
+        Take this dashboard with you as code: the same table, the same filters in funnel order,
+        every tile — as a marimo notebook, a Jupyter notebook or a Quarto report.
+      </Text>
+      <Button
+        variant="light"
+        leftSection={<Icon icon="mdi:notebook-outline" width={16} />}
+        onClick={() => setOpened(true)}
+        disabled={!dashboardId}
+        data-testid="export-notebook"
+      >
+        Export as notebook
+      </Button>
+      <NotebookExportModal
+        opened={opened}
+        onClose={() => setOpened(false)}
+        dashboardId={dashboardId}
+        dashboardTitle={dashboard?.title}
+        getAnalysisState={getAnalysisState}
+      />
+    </Stack>
+  );
+};
 
 /**
  * Right-side drawer for the current dashboard: metadata on top, then an
@@ -332,6 +377,7 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   onChangeBrandTheme,
   onToggleFunnelFiltering,
   onUploadLogo,
+  getAnalysisState,
 }) => (
   <Drawer
     opened={opened}
@@ -356,6 +402,12 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
             checked={dashboard?.funnel_filtering !== false}
             onChange={(e) => onToggleFunnelFiltering(e.currentTarget.checked)}
           />
+        </>
+      )}
+      {getAnalysisState && (
+        <>
+          <Divider />
+          <ExportBlock dashboard={dashboard} getAnalysisState={getAnalysisState} />
         </>
       )}
       <Divider />

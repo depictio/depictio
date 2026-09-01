@@ -77,9 +77,20 @@ export interface FunnelViewProps {
   dashboardId: string;
   /** The shell's (debounced) filter list, the same one the components use. */
   filters: InteractiveFilter[];
+  /** Stage order as component indexes, when the shell owns it (so it can be
+   *  exported with the analysis state). Uncontrolled when omitted. */
+  order?: string[];
+  onOrderChange?: (order: string[]) => void;
 }
 
-const FunnelView: React.FC<FunnelViewProps> = ({ opened, onClose, dashboardId, filters }) => {
+const FunnelView: React.FC<FunnelViewProps> = ({
+  opened,
+  onClose,
+  dashboardId,
+  filters,
+  order: controlledOrder,
+  onOrderChange,
+}) => {
   const theme = useMantineTheme();
   const { colorScheme } = useMantineColorScheme();
   const isDark = colorScheme === 'dark';
@@ -91,8 +102,17 @@ const FunnelView: React.FC<FunnelViewProps> = ({ opened, onClose, dashboardId, f
   /** DC ids to chart. `null` means "all of them", which is also what we fall
    *  back to when the user clears the selection. */
   const [visibleDcs, setVisibleDcs] = useState<string[] | null>(null);
-  /** User-chosen stage order, as component indexes. Empty = dashboard order. */
-  const [order, setOrder] = useState<string[]>([]);
+  /** User-chosen stage order, as component indexes. Empty = dashboard order.
+   *  Controlled by the shell when it passes `order`, local otherwise. */
+  const [localOrder, setLocalOrder] = useState<string[]>([]);
+  const order = controlledOrder ?? localOrder;
+  const setOrder = useCallback(
+    (next: string[]) => {
+      setLocalOrder(next);
+      onOrderChange?.(next);
+    },
+    [onOrderChange],
+  );
 
   // Must stay the shared rule: the server zips its `stages` array positionally
   // against this list, so a divergence mislabels every row past it.

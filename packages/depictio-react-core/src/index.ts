@@ -304,6 +304,8 @@ export {
   fetchLinkMappingPreview,
   // Funnel filtering (issue #939)
   fetchFunnelValues,
+  fetchNotebookPreflight,
+  exportNotebook,
   // MultiQC management (multipart uploads)
   createMultiQCDataCollection,
   checkMultiQCUniformity,
@@ -612,6 +614,10 @@ export type {
   FunnelTargetResult,
   FunnelStage,
   FunnelValuesResponse,
+  NotebookFormat,
+  NotebookInclusion,
+  NotebookPreflight,
+  NotebookPreflightComponent,
   // MultiQC management types
   CreateMultiQCDCInput,
   MultiQCMutationResult,
@@ -631,3 +637,24 @@ export { COMPONENT_TYPE_VISUALS, componentTypeVisual } from './componentTypeMeta
 export type { ComponentTypeVisual } from './componentTypeMeta';
 export { brandColors } from './brandColors';
 export { catalogToolUrl } from './catalogLinks';
+
+export {
+  ANALYSIS_STATE_VERSION,
+  buildAnalysisState,
+  toAnalysisFilter,
+  toAnalysisGroup,
+  toAnalysisColorBy,
+} from './analysisState';
+export type {
+  AnalysisState,
+  AnalysisFilter,
+  AnalysisFilterMetadata,
+  AnalysisGroup,
+  AnalysisColorBy,
+  AnalysisFunnel,
+  AnalysisSplitPanel,
+  AnalysisContext,
+  BuildAnalysisStateInput,
+} from './analysisState';
+
+export { panelsForGrouping } from './splitPanels';
