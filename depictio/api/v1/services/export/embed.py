@@ -23,6 +23,7 @@ needs the real id.
 from __future__ import annotations
 
 import hashlib
+import re
 from pathlib import Path
 from typing import Any
 
@@ -45,6 +46,32 @@ _VIEWER_DIR = Path(__file__).resolve().parents[4] / "viewer"
 EMBED_TEMPLATE_PATH = _VIEWER_DIR / "dist-embed" / "embed.html"
 
 _BUILD_HINT = "cd depictio/viewer && pnpm run build:embed"
+
+# The bundle ships `content="light dark"`, which is the right answer for a page
+# that follows the reader's system setting. An embed is not that page: the
+# caller named a theme in the export URL and the app applies it as soon as it
+# runs. Until it runs, the browser paints the document's initial canvas from
+# this meta, so on a machine set to dark every framed component flashes a black
+# rectangle on an otherwise light host page — most visibly when a host reloads
+# several frames at once after a filter change.
+_COLOR_SCHEME_META = re.compile(r'<meta\s+name="color-scheme"[^>]*>', re.IGNORECASE)
+
+
+def _declare_color_scheme(html: str, theme: str) -> str:
+    """Pin the embed document to the theme it was asked for."""
+    scheme = "dark" if theme == "dark" else "light"
+    html, count = _COLOR_SCHEME_META.subn(
+        f'<meta name="color-scheme" content="{scheme}" />', html, count=1
+    )
+    if not count:
+        # Cosmetic, so never fatal — but silence here would mean the flash comes
+        # back the next time the bundle's index template is reshaped.
+        logger.warning(
+            "export: embed bundle declares no color-scheme meta; framed components "
+            "may flash the wrong background before the app applies %s.",
+            scheme,
+        )
+    return html
 
 
 def _synthetic_dc_id(index: str, suffix: str = "") -> str:
@@ -180,6 +207,8 @@ def _add_map(data, dashboard_id, component_id, filters, theme, user, token) -> N
 
 
 def _add_table(data, dashboard_id, component_id, filters, user, token) -> None:
+    from fastapi import Response
+
     from depictio.api.v1.endpoints.dashboards_endpoints.routes import render_table_endpoint
 
     # The offline shim slices client-side from one block, so fetch the page the
@@ -188,6 +217,10 @@ def _add_table(data, dashboard_id, component_id, filters, user, token) -> None:
         dashboard_id=dashboard_id,
         component_id=component_id,
         request={"filters": filters, "start": 0, "limit": 1000},
+        # Same as _add_figure: the handler only uses this to set diagnostic
+        # X-Link-* headers describing cross-DC translation, which have nowhere
+        # to go on an embed. A throwaway Response absorbs them.
+        response=Response(),
         current_user=user,
         access_token=token,
     )
@@ -550,4 +583,5 @@ async def render_component_embed(
             detail={"code": "bundle_unavailable", "message": str(exc)},
         ) from exc
 
+    html = _declare_color_scheme(html, theme)
     return html, _finalise_csp(html)
