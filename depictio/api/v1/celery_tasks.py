@@ -1870,6 +1870,23 @@ def compute_coverage_track(payload: dict) -> dict:
     }
 
 
+def _sankey_value_format(mode: str, values: list[float]) -> str:
+    """The d3 format string for a Sankey's values, taken from its own config.
+
+    The React renderer makes this same decision in ``formatValue`` and applies
+    it by pre-formatting each value into ``customdata``. A figure that has to
+    speak for itself needs the decision expressed as a format string Plotly can
+    apply on its own.
+    """
+    if mode == "fraction":
+        return ".2%"
+    if mode == "count":
+        return ","
+    # "raw" covers both absolute counts and abundances, so take the precision
+    # from the data rather than printing 0.0000 for every abundance.
+    return ".4f" if values and max(abs(v) for v in values) < 1 else ".2f"
+
+
 @celery_app.task(
     name="depictio.advanced_viz.compute_sankey",
     soft_time_limit=120,
@@ -1905,6 +1922,8 @@ def compute_sankey(payload: dict) -> dict:
     min_link_value = max(0.0, float(payload.get("min_link_value") or 0.0))
     step_filters = payload.get("step_filters") or {}
     filter_metadata = payload.get("filter_metadata") or []
+    value_label = str(payload.get("value_label") or value_col or "flow")
+    value_format = str(payload.get("value_format") or "raw")
 
     if not wf_id or not dc_id:
         raise ValueError("compute_sankey: wf_id and dc_id are required")
@@ -2056,21 +2075,40 @@ def compute_sankey(payload: dict) -> dict:
         link_labels.append(f"{row['source_value']} → {row['target_value']}")
 
     # Plotly figure — minimal layout, renderer adds template / dark mode.
+    #
+    # The hover design, though, belongs to the figure rather than to the
+    # renderer. The React renderer does overwrite both hovertemplates with a
+    # richer version (it knows which rank each step column stands for), but it
+    # is no longer the only consumer: an export ships this figure verbatim, so
+    # whatever goes unsaid here is what an embedder ends up rendering. Unsaid
+    # means Plotly's defaults, and for a Sankey those are wrong twice over.
+    # `valueformat` defaults to SI notation, which turns a relative abundance
+    # of 0.881 into "881m" — read as milli, not as 88%. And with no template
+    # the trace name becomes a second label that Plotly parks *outside* the
+    # tooltip box, unboxed, over the diagram; `<extra></extra>` suppresses it.
     fig_dict = {
         "data": [
             {
                 "type": "sankey",
                 "arrangement": "snap",
+                "valueformat": _sankey_value_format(value_format, values),
                 "node": {
                     "label": [n["label"] for n in node_rows],
                     "pad": 14,
                     "thickness": 18,
+                    "hovertemplate": (
+                        f"<b>%{{label}}</b><br>total {value_label}: %{{value}}<extra></extra>"
+                    ),
                 },
                 "link": {
                     "source": sources,
                     "target": targets,
                     "value": values,
                     "label": link_labels,
+                    "hovertemplate": (
+                        "<b>%{source.label}</b> → <b>%{target.label}</b><br>"
+                        f"{value_label}: %{{value}}<extra></extra>"
+                    ),
                 },
             }
         ],
