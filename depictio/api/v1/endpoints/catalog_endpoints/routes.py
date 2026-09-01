@@ -131,7 +131,8 @@ def _match_dc_to_catalog(
 
 
 def _multiqc_sections(dc_id: str) -> set[str] | None:
-    """Modules actually present in a MultiQC DC's report, or None if unknown.
+    """Modules a MultiQC DC's report can actually render as a `multiqc` component,
+    or None if unknown.
 
     Every MultiQC catalog output keys on the same `multiqc.parquet` path, so path
     matching alone offers all of them (bcftools, ivar, samtools, ...) on a report
@@ -144,26 +145,52 @@ def _multiqc_sections(dc_id: str) -> set[str] | None:
     a catalog output's `section` names the module itself. `multiqc_module` is the
     normalisation the preview payload already applies to the same anchors, so both
     sides of the catalog agree on what a section means.
+
+    A module that is present but produced no *plot* (a custom-content table like
+    `summary_conformance_metrics`, or a `*_software_versions` module) is excluded
+    too: the picker (`multiqcConfigForSection` in CatalogTab.tsx) resolves a
+    section to `opts.plots[anchor][0]`, and a module with no `plots` entry there
+    persists a null `selected_plot` that `render_multiqc` then 400s on at render
+    time instead of never being offered. `general_stats` is the one exception —
+    it renders through its own stub path and needs no plot.
     """
-    doc = multiqc_collection.find_one({"data_collection_id": dc_id}, {"metadata.modules": 1})
+    doc = multiqc_collection.find_one(
+        {"data_collection_id": dc_id}, {"metadata.modules": 1, "metadata.plots": 1}
+    )
     if not doc:
         return None
-    modules = (doc.get("metadata") or {}).get("modules")
+    metadata = doc.get("metadata") or {}
+    modules = metadata.get("modules")
     if not isinstance(modules, list) or not modules:
         # An empty list means extraction produced nothing, not that the report is
         # empty. `_parsed_multiqc_report` in dashboards_endpoints treats it the
         # same way: keep every component rather than silently dropping them all.
         return None
-    return {multiqc_module(str(m).lower()) for m in modules}
+    present = {multiqc_module(str(m).lower()) for m in modules}
+
+    # An empty `plots_meta` is not treated as "unknown, trust presence": a
+    # module-wide extraction failure in `extract_multiqc_metadata` (one
+    # section's plot anchor missing from MultiQC's own report.plot_by_id) can
+    # leave `plots` empty on an otherwise-healthy, fully-populated report —
+    # confirmed happening intermittently on this exact fixture. Every module
+    # in `present` genuinely has no plot to show in that case, so offering
+    # them anyway only guarantees a `selected_plot` 400 at render time; the
+    # extraction side now recovers per-section instead of zeroing the whole
+    # report (see the `multiqc.list_plots()` reimplementation in
+    # `multiqc_processor.py`), so this branch should be rare going forward.
+    plots_meta = metadata.get("plots") or {}
+    plottable = {multiqc_module(str(m).lower()) for m in plots_meta} | {"general_stats"}
+    return present & plottable
 
 
 def _keep_present_multiqc_sections(
     matches: list[dict[str, Any]], sections: set[str] | None
 ) -> list[dict[str, Any]]:
-    """Keep only matches whose section renders exist in this report.
+    """Keep only matches whose section renders both exist in this report and are
+    renderable (see `_multiqc_sections`).
 
-    A match is dropped when it declares section renders and none of them is
-    present. Renders without a `section` (plain tables, cards) are never touched.
+    A match is dropped when it declares section renders and none of them is in
+    `sections`. Renders without a `section` (plain tables, cards) are never touched.
     """
     if sections is None:
         return matches

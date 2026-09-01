@@ -45,6 +45,18 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
+      // admin/backup-restore does a real destructive restore (wipe + reinsert
+      // every collection, including deltatables) against the shared stack.
+      // It runs in its own project below, gated to start only once every
+      // other spec here has finished — otherwise its restore can silently
+      // drop a data collection another spec is still relying on mid-run.
+      testIgnore: /admin\/backup-restore\.spec\.ts$/,
+    },
+    {
+      name: "chromium-destructive",
+      use: { ...devices["Desktop Chrome"] },
+      testMatch: /admin\/backup-restore\.spec\.ts$/,
+      dependencies: ["chromium"],
     },
     // Uncomment to add cross-browser coverage:
     // { name: "firefox",  use: { ...devices["Desktop Firefox"] } },
