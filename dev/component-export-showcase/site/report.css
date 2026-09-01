@@ -130,6 +130,12 @@ body.pp .sitenav a[aria-current='page'] { color: var(--pp-teal); border-bottom-c
   font-size: 1.5rem;
   font-weight: 400;
 }
+.pp-main h5 {
+  margin: 1.75rem 0 .5rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--pp-dark-blue);
+}
 .pp-main > p { margin: 0 0 1rem; max-width: 90ch; }
 .pp-main a { color: var(--pp-dark-blue); }
 .pp-main a:hover { color: var(--pp-teal); }
@@ -150,36 +156,68 @@ body.pp .sitenav a[aria-current='page'] { color: var(--pp-teal); border-bottom-c
   border-bottom: 1px solid var(--pp-dark-blue);
   font-weight: 500;
 }
+/* Buttons rather than the portal's links, because these switch panels on this
+ * page instead of loading another view. Reset to look exactly like the anchors
+ * they replace. */
 .pp-tab {
   margin: 0 1rem;
   padding: .5rem 1.25rem .25rem;
   color: var(--pp-dark-blue);
   text-decoration: none;
   border-radius: .5rem .5rem 0 0;
+  font: inherit;
+  font-weight: 500;
+  background: none;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  cursor: pointer;
+  line-height: inherit;
 }
-a.pp-tab:hover { background: #e5e7eb; }
+.pp-tab:hover { background: #e5e7eb; }
+.pp-tab:focus-visible { outline: 2px solid var(--pp-teal); outline-offset: -2px; }
 /* The current tab: bordered, bottomless, with a white shadow that punches
  * through the strip's own rule. Straight from the portal. */
-.pp-tab-current {
+.pp-tab-current,
+.pp-tab-current:hover {
   font-weight: 400;
-  border: 1px solid var(--pp-pale-grey);
-  border-bottom: 0;
+  border-color: var(--pp-pale-grey);
   box-shadow: 0 4px white;
+  background: none;
+  cursor: default;
 }
+
+.pp-tabpanel > h4:first-child { margin-top: 1.25rem; }
+.pp-tabpanel p { margin: 0 0 1rem; max-width: 90ch; }
+
+/* A cross-reference that switches tabs, styled as the link it stands in for. */
+.pp-inline-tab {
+  font: inherit;
+  color: var(--pp-dark-blue);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.pp-inline-tab:hover { color: var(--pp-teal); }
 
 /* ---------- control deck ---------- */
 
 .pp-filters {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 0;
+  /* Column gap stays 0 so the grey control heads still run edge to edge as the
+   * portal's do; the row gap is what a second row of controls needs. */
+  column-gap: 0;
+  row-gap: 1.25rem;
   justify-content: space-evenly;
   padding-bottom: 1rem;
-  margin: 1.5rem 0;
+  margin: 0;
   background: #f9fafb;
 }
 @media (max-width: 900px) {
   .pp-filters { grid-template-columns: 1fr; }
+  .pp-control-filler { display: none; }
 }
 
 .pp-control-head {
@@ -240,14 +278,6 @@ a.pp-tab:hover { background: #e5e7eb; }
 .pp-dates input:focus-visible { outline: 2px solid var(--pp-teal); outline-offset: 1px; }
 .pp-dates { display: flex; gap: .5rem; flex-wrap: wrap; }
 
-.pp-filter-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
 .pp-chips { display: flex; flex-wrap: wrap; gap: .4rem; }
 .pp-chip {
   background: rgba(55, 174, 148, .2);
@@ -259,6 +289,344 @@ a.pp-tab:hover { background: #e5e7eb; }
 }
 .pp-chip b { font-weight: 500; opacity: .7; margin-right: .3rem; }
 .pp-chip-empty { font-size: .875rem; color: var(--pp-dark-grey); }
+
+/* ---------- collapsible deck ---------- */
+
+.pp-deck {
+  margin: 1.5rem 0;
+  border: 1px solid var(--pp-pale-grey);
+  background: #f9fafb;
+}
+.pp-deck-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  padding: .5rem .75rem;
+  border-bottom: 1px solid var(--pp-pale-grey);
+}
+.pp-deck.is-collapsed .pp-deck-head { border-bottom: 0; }
+.pp-deck-head .pp-chips { flex: 1; }
+.pp-deck-body { padding: .75rem; }
+
+.pp-deck-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  font: inherit;
+  font-weight: 500;
+  font-size: .95rem;
+  color: var(--pp-dark-blue);
+  background: none;
+  border: 0;
+  padding: .25rem .25rem;
+  cursor: pointer;
+}
+.pp-deck-toggle:focus-visible { outline: 2px solid var(--pp-teal); outline-offset: 2px; }
+.pp-deck-caret {
+  border: solid var(--pp-dark-blue);
+  border-width: 0 2px 2px 0;
+  padding: 3px;
+  transform: rotate(45deg);
+  transition: transform .15s;
+  margin-bottom: 3px;
+}
+.pp-deck.is-collapsed .pp-deck-caret { transform: rotate(-45deg); margin-bottom: 0; }
+.pp-deck-count:empty { display: none; }
+.pp-deck-count {
+  min-width: 1.25rem;
+  padding: 0 .35rem;
+  border-radius: 999px;
+  background: var(--pp-teal);
+  color: #fff;
+  font-size: .72rem;
+  font-weight: 600;
+  text-align: center;
+}
+.pp-deck-reset {
+  font: inherit;
+  font-size: .8rem;
+  color: var(--pp-dark-grey);
+  background: #fff;
+  border: 1px solid #d1d5db;
+  padding: .2rem .6rem;
+  cursor: pointer;
+}
+.pp-deck-reset:disabled { opacity: .4; cursor: default; }
+.pp-deck-reset:not(:disabled):hover { color: var(--pp-dark-blue); border-color: var(--pp-dark-blue); }
+
+/* ---------- many-valued and numeric controls ---------- */
+
+.pp-checklist-search {
+  font: inherit;
+  font-size: .875rem;
+  width: 100%;
+  box-sizing: border-box;
+  padding: .35rem .5rem;
+  border: 1px solid #d1d5db;
+  background: #fff;
+}
+.pp-checklist-search:focus-visible { outline: 2px solid var(--pp-teal); outline-offset: 1px; }
+.pp-checklist {
+  max-height: 8.5rem;
+  overflow-y: auto;
+  margin-top: .4rem;
+  border: 1px solid #d1d5db;
+  background: #fff;
+}
+.pp-checklist-row {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .15rem .5rem;
+  font-size: .85rem;
+  cursor: pointer;
+}
+.pp-checklist-row:hover { background: #eef2f6; }
+.pp-checklist-row input { accent-color: var(--pp-dark-blue); }
+.pp-checklist-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: .5rem;
+  padding-top: .3rem;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .72rem;
+  color: var(--pp-dark-grey);
+}
+
+.pp-linkbutton {
+  font: inherit;
+  font-size: .78rem;
+  color: var(--pp-dark-blue);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.pp-linkbutton:hover { color: var(--pp-teal); }
+
+/* Two sliders sharing one track: the lower one is drawn on top of the upper so
+ * both handles stay grabbable at the ends of the range. */
+.pp-range { position: relative; height: 2rem; }
+.pp-range input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  margin: 0;
+  background: none;
+  pointer-events: none;
+  accent-color: var(--pp-dark-blue);
+  -webkit-appearance: none;
+  appearance: none;
+}
+.pp-range input::-webkit-slider-thumb {
+  pointer-events: auto;
+  -webkit-appearance: none;
+  appearance: none;
+  width: .9rem;
+  height: .9rem;
+  border-radius: 999px;
+  background: var(--pp-dark-blue);
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px var(--pp-dark-blue);
+  cursor: pointer;
+}
+.pp-range input::-moz-range-thumb {
+  pointer-events: auto;
+  width: .9rem;
+  height: .9rem;
+  border-radius: 999px;
+  background: var(--pp-dark-blue);
+  border: 2px solid #fff;
+  cursor: pointer;
+}
+.pp-range::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 3px;
+  transform: translateY(-50%);
+  background: #d1d5db;
+  border-radius: 999px;
+}
+.pp-range-readout {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .72rem;
+  color: var(--pp-dark-grey);
+}
+
+/* ---------- overview stat band ---------- */
+
+.pp-cards {
+  display: grid;
+  /* One column per card, so the band is a finished row rather than three cards
+     and an orphan. Each card is a frame of its own, so they do not reflow. */
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin: 1.25rem 0 1.75rem;
+}
+/* Four cards need the full width; below it they pair off rather than shrinking
+   to where a card's own legend wraps. */
+@media (max-width: 1180px) {
+  .pp-cards { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 900px) {
+  .pp-cards { grid-template-columns: 1fr; }
+}
+.pp-card {
+  border: 1px solid var(--pp-pale-grey);
+  background: #fff;
+}
+/* A framed component holds two iframes while it changes URL: the one on screen
+ * and the one loading over it. Stacking them means the box keeps its size
+ * whichever is live, so the page never reflows around a swap. */
+.pp-frame-stack {
+  position: relative;
+  display: block;
+  width: 100%;
+  background: #fff;
+}
+.pp-frame-stack > iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
+  /* This page is light whatever the reader's system says, and so is every
+   * component it frames — the theme is named in the export URL. Saying so on
+   * the frame keeps the browser from painting the embedded document's initial
+   * canvas dark on a machine set to dark, which showed up as a black rectangle
+   * flashing in each card while it reloaded after a filter change. */
+  color-scheme: light;
+}
+.pp-frame-stack > iframe.is-incoming {
+  opacity: 0;
+  pointer-events: none;
+}
+.pp-card .pp-frame-stack { height: 180px; }
+/* The stat band is three narrow columns, so its footers wrap rather than sit
+ * on one line. */
+.pp-card .pp-panel-foot { padding: .35rem .5rem 0; }
+.pp-card .pp-req { padding: 0 .5rem .5rem; }
+
+/* ---------- definition list ---------- */
+
+.pp-defs {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: .4rem 1.25rem;
+  margin: 0 0 1.5rem;
+  max-width: 90ch;
+}
+@media (max-width: 700px) {
+  .pp-defs { grid-template-columns: 1fr; gap: .1rem; }
+  .pp-defs dd { margin-bottom: .6rem; }
+}
+.pp-defs dt { font-weight: 500; }
+.pp-defs dd { margin: 0; font-size: .95rem; }
+
+/* ---------- the manifest, as a table ---------- */
+
+.pp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .9rem;
+  margin-bottom: 1.5rem;
+}
+.pp-table th {
+  text-align: left;
+  font-weight: 500;
+  font-size: .8rem;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  color: var(--pp-dark-grey);
+  border-bottom: 1px solid var(--pp-dark-blue);
+  padding: .4rem .6rem;
+}
+.pp-table td {
+  vertical-align: top;
+  padding: .5rem .6rem;
+  border-bottom: 1px solid #eceef0;
+}
+.pp-table tr:hover td { background: #f9fafb; }
+.pp-mono {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .68rem;
+  color: var(--pp-dark-grey);
+  word-break: break-all;
+}
+.pp-reason { font-size: .8rem; color: var(--pp-dark-grey); max-width: 26ch; }
+.pp-actions { white-space: nowrap; }
+.pp-actions a {
+  font-size: .78rem;
+  margin-right: .6rem;
+}
+.pp-badge {
+  display: inline-block;
+  border-radius: .25rem;
+  padding: .05rem .4rem;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .7rem;
+}
+.pp-badge-json { background: rgba(41, 89, 134, .15); color: var(--pp-dark-blue); }
+.pp-badge-html { background: rgba(85, 88, 90, .13); color: var(--pp-dark-grey); }
+.pp-badge-data { background: rgba(212, 222, 39, .35); color: #5b5f14; }
+.pp-badge-manifest { background: rgba(55, 174, 148, .2); color: #14503f; }
+.pp-badge-failed { background: rgba(239, 68, 68, .15); color: #b91c1c; }
+
+.pp-table-caption {
+  margin: 1.75rem 0 .25rem;
+  font-size: 1.05rem;
+  font-weight: 500;
+}
+.pp-table-note {
+  margin: 0 0 .75rem;
+  font-size: .85rem;
+  color: var(--pp-dark-grey);
+}
+
+/* A table this page renders from `format=data`, as opposed to a framed one. */
+.pp-tablewrap { overflow-x: auto; }
+.pp-datatable { table-layout: auto; }
+.pp-datatable td { white-space: nowrap; max-width: 26ch; overflow: hidden; text-overflow: ellipsis; }
+.pp-datatable .pp-num { text-align: right; font-family: 'IBM Plex Mono', monospace; }
+[data-table].is-loading { opacity: .4; transition: opacity .15s; }
+
+.pp-pager {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  padding: .25rem 0 .5rem;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .72rem;
+  color: var(--pp-dark-grey);
+}
+.pp-pager button:disabled { opacity: .35; cursor: default; text-decoration: none; }
+.pp-pager button:disabled:hover { color: var(--pp-dark-blue); }
+
+.pp-embed-slot { margin-top: 1rem; }
+.pp-frame-caption {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .72rem;
+  color: var(--pp-dark-grey);
+  margin-bottom: .5rem;
+}
+.pp-component-stack { border: 1px solid var(--pp-pale-grey); }
+
+/* The methodology tab's Depictio widget, which is framed but never re-pointed:
+ * it emits filters rather than answering them, so it needs no swap. */
+.pp-component-frame {
+  width: 100%;
+  height: 480px;
+  border: 1px solid var(--pp-pale-grey);
+  background: #fff;
+  color-scheme: light;
+}
 
 /* ---------- figure panels ---------- */
 
@@ -279,13 +647,29 @@ a.pp-tab:hover { background: #e5e7eb; }
   .pp-panel-pair { grid-template-columns: 1fr; }
 }
 
+/* Every panel's footer: the delivery badge and what it means on the left, the
+ * panel's own status on the right. Same shape for a figure, a card, a table,
+ * the embedded control and the filter deck, so a reader learns to look in one
+ * place. */
 .pp-panel-foot {
   display: flex;
-  justify-content: flex-end;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .5rem;
+  padding-top: .25rem;
   font-family: 'IBM Plex Mono', monospace;
   font-size: .72rem;
   color: var(--pp-dark-grey);
 }
+.pp-method {
+  display: inline-flex;
+  align-items: baseline;
+  gap: .45rem;
+  min-width: 0;
+}
+.pp-foot-note { font-family: 'IBM Plex Sans', Helvetica, Arial, sans-serif; }
+.pp-status { text-align: right; }
 
 .pp-error {
   min-height: 450px;

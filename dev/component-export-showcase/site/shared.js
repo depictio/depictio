@@ -44,11 +44,16 @@ function dashboardId(site, name) {
 }
 
 function exportUrl(apiBase, { dashboard, component, format = 'json', theme = 'light',
-                             filters = null, controls = null, expectVersion = null } = {}) {
+                             filters = null, controls = null, expectVersion = null,
+                             start = null, limit = null } = {}) {
   const params = new URLSearchParams({ format, theme });
   if (filters && filters.length) params.set('filters', JSON.stringify(filters));
   if (controls && Object.keys(controls).length) params.set('controls', JSON.stringify(controls));
   if (expectVersion != null) params.set('expect_version', String(expectVersion));
+  // `format=data` only: which page of a table's rows. Sent only when asked for,
+  // so every other format's URL is unchanged and still cache-shares with itself.
+  if (start != null) params.set('start', String(start));
+  if (limit != null) params.set('limit', String(limit));
   return `${apiBase}/export/dashboards/${dashboard}/components/${component}?${params}`;
 }
 

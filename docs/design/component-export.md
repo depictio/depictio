@@ -7,11 +7,12 @@ Before this existed, the only exports were *config* exports — `/dashboards/{id
 and `/dashboards/{id}/json` — which carry definitions for re-import into another
 Depictio instance, not rendered output.
 
-## The two formats, and why coverage differs
+## The three formats, and why coverage differs
 
 | Format | What you get | Size | Coverage |
 |---|---|---|---|
 | `json` | `{data, layout, config, meta}` — a Plotly spec for your own plotly.js | ~1–500 KB | Where a figure is built server-side |
+| `data` | `{columns, rows, total, meta}` — one page of rows | ~1–200 KB | `table` |
 | `html` | One self-contained HTML file, no network calls | ~7 MB | Every component type except `jbrowse` |
 
 **Prefer `json`.** Depictio is visualisation-oriented and the consumer already
@@ -26,6 +27,21 @@ no server-side figure — tables, cards, images, and the advanced-viz kinds whos
 Plotly spec is assembled in TypeScript — render correctly with no Python
 equivalent. `json` can only serve what Python can build.
 
+`data` exists because "has no Plotly spec" and "has nothing a host can use" are
+different statements, and a table is the case where they came apart. Framing a
+table ships several MB of Depictio to render rows the host could style itself, in
+a grid the host cannot theme. The rows were already computed server-side for the
+embed payload; `data` is the way to ask for them. It is a third shape rather than
+a second meaning for `json`, because a caller asking for `json` expects something
+it can hand to Plotly.
+
+Paging is explicit and belongs to the caller: `?start=` and `?limit=` name the
+window, the response repeats the window it served and carries `total`, and
+`meta.complete` says whether the page is the whole table. The limit is capped
+(5000) rather than rejected, so an over-large ask is answered rather than refused.
+Each window gets its own ETag; without that, page 2 would be served from page 1's
+cache entry.
+
 ### Per-component support
 
 | Component type | `json` | `html` | Notes |
@@ -34,12 +50,17 @@ equivalent. `json` can only serve what Python can build.
 | `map` | ✅ | ✅ | `services/map/render.py` |
 | `multiqc` | ✅ | ✅ | 503 while the figure cache warms; `html` waits it out |
 | `advanced_viz` | 12 of 18 kinds | ✅ | see below |
-| `table` | ❌ | ✅ | AG Grid, not Plotly |
+| `table` | ❌ | ✅ | AG Grid, not Plotly — but `data` returns its rows |
 | `card` | ❌ | ✅ | scalar + DOM |
 | `image` | ❌ | ✅ | S3 path list |
 | `interactive` | ❌ | ✅ | a filter control, not a visualisation |
 | `text` | ❌ | ✅ | needs no data at all |
 | `jbrowse` | ❌ | ❌ | an iframe onto a live JBrowse2 server; cannot be taken offline |
+
+`table` is the only type that supports `data` today. Nothing in the contract stops
+another type from joining it; a card, for instance, is a number and could return
+one. The reason to wait is that nobody has asked, and a format with one consumer
+is easier to change than a format with three.
 
 **`advanced_viz`** is gated per `viz_kind`:
 
@@ -72,9 +93,13 @@ curl "$BASE/export/dashboards/$DASH/components/$CID?format=json" | jq '.data | l
 
 # Self-contained page
 curl "$BASE/export/dashboards/$DASH/components/$CID?format=html" > embed.html
+
+# A table's rows, one page at a time
+curl "$BASE/export/dashboards/$DASH/components/$CID?format=data&start=0&limit=50" \
+  | jq '{rows: (.rows | length), total, complete: .meta.complete}'
 ```
 
-Query parameters: `format` (`json` \| `html`), `theme` (`light` \| `dark`), and
+Query parameters: `format` (`json` \| `data` \| `html`), `theme` (`light` \| `dark`), and
 `filters` (URL-encoded JSON array). A `POST` to the same path accepts
 `{"filters": [...], "theme": "..."}` in the body when filters are too large for a
 query string.
@@ -164,6 +189,7 @@ All four pieces — middleware exemption, handler headers, nginx block, script h
 | `api/v1/services/export/capabilities.py` | The support matrix — single source of truth |
 | `api/v1/services/export/resolve.py` | Dashboard + component lookup and permission gate |
 | `api/v1/services/export/plotly_export.py` | `json` format; dispatches to the live render paths |
+| `api/v1/services/export/table_export.py` | `data` format: one page of a table's rows |
 | `api/v1/services/export/embed.py` | `html` format: payload builder, bundle injection, CSP |
 | `api/v1/services/export/bundle.py` | Shared offline-bundle injection (also used by the catalog) |
 | `api/v1/services/advanced_viz/figure_registry.py` | Per-kind Python builder registry |

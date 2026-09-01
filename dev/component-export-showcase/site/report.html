@@ -45,110 +45,526 @@
 
   <p class="pp-notice">
     <strong>Demonstration page.</strong> Not an official Swedish Pathogens Portal
-    page. It reproduces the portal's dashboard layout, and every figure and every
-    control below is backed by Depictio's component-export API instead of the
-    portal's own Django views.
+    page. It reproduces the portal's dashboard layout, and every figure, table,
+    number and control below is backed by Depictio's component-export API instead
+    of the portal's own Django views. The data is the nf-core/ampliseq reference
+    dataset seeded into this Depictio instance, so the biology is real but the
+    survey it describes is not a Swedish monitoring programme.
   </p>
 
-  <!-- Tab strip: the current tab is a span, siblings are links, as the portal
-       renders it. -->
-  <div class="pp-tabs">
-    <a href="/qc-report" class="pp-tab">Overview</a>
-    <a href="/versioning" class="pp-tab">Methodology</a>
-    <span class="pp-tab pp-tab-current">Community composition</span>
-    <a href="/example-limited" class="pp-tab">Taxonomic flow</a>
-    <a href="/gallery" class="pp-tab">All components</a>
+  <!-- Tab strip. The portal renders the current tab as an unlinked span and its
+       siblings as links to other Django views; here the siblings are in-page
+       panels, so a visitor stays on this page and the filter deck above them
+       keeps its state across tabs. Each tab owns a URL fragment, so a tab is
+       still linkable and the back button still moves between them. -->
+  <div class="pp-tabs" id="pp-tabs" role="tablist" aria-label="Dashboard sections">
+    <button type="button" class="pp-tab" role="tab" id="tab-overview"
+            data-tab="overview" aria-controls="panel-overview" aria-selected="false">Overview</button>
+    <button type="button" class="pp-tab" role="tab" id="tab-methodology"
+            data-tab="methodology" aria-controls="panel-methodology" aria-selected="false">Methodology</button>
+    <button type="button" class="pp-tab" role="tab" id="tab-composition"
+            data-tab="composition" aria-controls="panel-composition" aria-selected="true">Community composition</button>
+    <button type="button" class="pp-tab" role="tab" id="tab-flow"
+            data-tab="flow" aria-controls="panel-flow" aria-selected="false">Taxonomic flow</button>
+    <button type="button" class="pp-tab" role="tab" id="tab-components"
+            data-tab="components" aria-controls="panel-components" aria-selected="false">All components</button>
   </div>
 
-  <h4>Quantitative data analysis</h4>
-  <p>
-    Here you can find plots generated from the data collected at sampling sites.
-    The plots can be re-generated using the interactive inputs below. Kindly refer
-    to the <a href="/versioning">Methodology</a> page for more information.
-  </p>
-
-  <!-- The portal's three-column grey control deck. Each control is bound to a
-       Depictio interactive component read from the export manifest. -->
-  <div id="plot-filters" class="pp-filters"></div>
-
-  <div class="pp-filter-meta">
-    <div id="active-filters" class="pp-chips"></div>
-    <div id="plot-filters-req"></div>
-  </div>
-
-  <section class="pp-panel" data-slot="quant">
-    <div class="pp-stage"></div>
-    <div class="pp-panel-foot">
-      <span class="pp-status">loading…</span>
+  <!-- The control deck, hoisted out of any one tab because the filters it holds
+       apply to every figure on the page. Collapsible, since five controls is a
+       lot of vertical space to cross before reaching a figure; the active-filter
+       chips stay outside the collapsing part, so folding the deck away never
+       hides what is currently being filtered. -->
+  <section class="pp-deck" id="filter-deck" hidden>
+    <div class="pp-deck-head">
+      <button type="button" class="pp-deck-toggle" id="filters-toggle"
+              aria-expanded="true" aria-controls="filters-body">
+        <span class="pp-deck-caret" aria-hidden="true"></span>Filters<span class="pp-deck-count" id="filters-count"></span>
+      </button>
+      <div id="active-filters" class="pp-chips"></div>
+      <button type="button" class="pp-deck-reset" id="filters-reset" disabled>Reset</button>
     </div>
-    <div class="pp-req"></div>
+    <div class="pp-deck-body" id="filters-body">
+      <div id="plot-filters" class="pp-filters"></div>
+      <div class="pp-panel-foot">
+        <span class="pp-method" id="plot-filters-method"></span>
+        <span class="pp-status" id="plot-filters-status"></span>
+      </div>
+      <div id="plot-filters-req"></div>
+    </div>
   </section>
 
-  <h4>Qualitative composition per sample</h4>
-  <p>
-    The figure displays the composition of each individual sample. Taxa below the
-    retention threshold are pooled; empty columns indicate samples with no
-    assigned reads.
-  </p>
+  <!-- ============================ Overview ============================ -->
+  <section class="pp-tabpanel" id="panel-overview" role="tabpanel"
+           aria-labelledby="tab-overview" data-deck="yes" hidden>
 
-  <section class="pp-panel" data-slot="stacked">
-    <div class="pp-stage"></div>
-    <div class="pp-panel-foot">
-      <span class="pp-status">loading…</span>
+    <h4>Survey at a glance</h4>
+    <p>
+      Twelve water and soil samples were collected across four habitat types
+      (groundwater, riverwater, sediment and soil) over three weeks in January
+      2023, and the 16S rRNA gene was amplified and sequenced for each. The four
+      figures below summarise what came back: how many habitat groups are
+      represented, how many bacterial and archaeal phyla were detected across the
+      whole survey, how many distinct taxa those phyla resolve into, and how
+      relative abundance is distributed once every taxon in every sample is
+      pooled.
+    </p>
+    <p>
+      Read the last one first. Amplicon relative abundance is heavily
+      right-skewed: a handful of taxa account for most of the reads and a long
+      tail sits near the detection limit. That shape is why the tabs that follow
+      use log scales and pooled "other" categories rather than plotting every
+      taxon at equal weight, and why the abundance filter in the deck above is
+      the fastest way to separate the community's structure from its noise.
+    </p>
+
+    <div class="pp-cards" id="overview-cards"></div>
+
+    <p>
+      These four numbers are Depictio <em>card</em> components. A card has no
+      Plotly specification to hand over, so each arrives as
+      <code>format=html</code> in its own frame rather than as JSON this page
+      draws. That is the honest answer for a card rather than a gap: the manifest
+      publishes which of the two formats each component supports, and this page
+      follows it instead of guessing. Every panel on this page carries a footer
+      saying which of the two it used.
+    </p>
+
+    <h4>Sequencing quality</h4>
+    <p>
+      Nothing below the Overview tab means anything if the sequencing failed, so
+      the quality report comes first. These six panels are the pipeline's own
+      MultiQC report, exported one module at a time from a <em>different</em>
+      Depictio dashboard (the ampliseq QC tab of the same project) and dropped
+      into this page beside the biology. That is worth noticing: a host page is
+      not restricted to one dashboard's worth of components, and the filter deck
+      above drives both.
+    </p>
+    <p>
+      The sample and habitat filters reach these panels through the pipeline's
+      sample sheet. The taxonomic filters do not, because a MultiQC module knows
+      nothing about phyla; when that happens the panel's status line says
+      <em>ignored</em> and names the column rather than showing you an unchanged
+      figure as though the filter had worked.
+    </p>
+
+    <h5>General statistics</h5>
+    <p>
+      One row per sample, the same table MultiQC puts at the top of its report:
+      read counts, duplication, GC content and the fraction surviving trimming.
+      Look for a sample that sits apart from the rest on any column; in a
+      four-habitat survey a single outlier is usually a sampling or extraction
+      problem rather than a biological signal, and it is worth excluding through
+      the Sample ID control before reading the composition tabs.
+    </p>
+      <section class="pp-panel" data-slot="qc-general">
+        <div class="pp-stage"></div>
+        <div class="pp-panel-foot">
+          <span class="pp-method"></span>
+          <span class="pp-status">loading…</span>
+        </div>
+        <div class="pp-req"></div>
+      </section>
+
+    <h5>Sequence counts and read survival</h5>
+    <p>
+      Total reads per sample, and how many of them survived primer removal and
+      quality trimming. Amplicon libraries are shallow by design, so what matters
+      is not the absolute depth but its evenness: relative abundance is a
+      composition, and a sample sequenced far below the others will look
+      artificially sparse in every downstream figure. The paired panel shows the
+      same libraries after Cutadapt, which is where a failed primer set announces
+      itself as a collapse in surviving reads rather than as a quality warning.
+    </p>
+
+    <div class="pp-panel-pair">
+      <section class="pp-panel" data-slot="qc-counts">
+        <div class="pp-stage pp-stage-short"></div>
+        <div class="pp-panel-foot">
+          <span class="pp-method"></span>
+          <span class="pp-status">loading…</span>
+        </div>
+        <div class="pp-req"></div>
+      </section>
+      <section class="pp-panel" data-slot="qc-filtered">
+        <div class="pp-stage pp-stage-short"></div>
+        <div class="pp-panel-foot">
+          <span class="pp-method"></span>
+          <span class="pp-status">loading…</span>
+        </div>
+        <div class="pp-req"></div>
+      </section>
     </div>
-    <div class="pp-req"></div>
+
+    <h5>Per-base quality and read length</h5>
+    <p>
+      The Phred profile along the read, and the length distribution after
+      trimming. For a 16S amplicon both are expected to be tight: one amplicon
+      length, one library preparation, so a broad or bimodal length distribution
+      points at off-target amplification rather than at natural variation. Quality
+      decaying at the 3' end is normal for Illumina chemistry and is what the
+      trimming step exists to remove; quality collapsing in the middle of the
+      read is not.
+    </p>
+
+    <div class="pp-panel-pair">
+      <section class="pp-panel" data-slot="qc-quality">
+        <div class="pp-stage pp-stage-short"></div>
+        <div class="pp-panel-foot">
+          <span class="pp-method"></span>
+          <span class="pp-status">loading…</span>
+        </div>
+        <div class="pp-req"></div>
+      </section>
+      <section class="pp-panel" data-slot="qc-lengths">
+        <div class="pp-stage pp-stage-short"></div>
+        <div class="pp-panel-foot">
+          <span class="pp-method"></span>
+          <span class="pp-status">loading…</span>
+        </div>
+        <div class="pp-req"></div>
+      </section>
+    </div>
+
+    <h5>Adapter content</h5>
+    <p>
+      The fraction of reads carrying adapter sequence at each position. For an
+      amplicon library this is the panel that reports the failure the previous
+      two only hint at: when the insert is shorter than the read, the sequencer
+      runs off the end of the fragment and into the adapter, and the curve
+      climbs toward the 3' end. A flat line near zero means the amplicon is
+      longer than the read and nothing was read through. A curve that lifts
+      early, or lifts for one sample and not its neighbours, points at
+      off-target amplification producing short products rather than at a
+      sequencing problem.
+    </p>
+      <section class="pp-panel" data-slot="qc-adapters">
+        <div class="pp-stage"></div>
+        <div class="pp-panel-foot">
+          <span class="pp-method"></span>
+          <span class="pp-status">loading…</span>
+        </div>
+        <div class="pp-req"></div>
+      </section>
   </section>
 
-  <h4>Taxonomic hierarchy and flow</h4>
-  <p>
-    The same survey read two further ways. Both are server-side figure builders,
-    so what arrives is a finished specification rather than a request for this
-    browser to compute one.
-  </p>
+  <!-- ========================== Methodology =========================== -->
+  <section class="pp-tabpanel" id="panel-methodology" role="tabpanel"
+           aria-labelledby="tab-methodology" hidden>
 
-  <div class="pp-panel-pair">
-    <section class="pp-panel" data-slot="sunburst">
-      <div class="pp-stage pp-stage-short"></div>
+    <h4>Sampling and sequencing</h4>
+    <p>
+      Twelve samples span four habitat types and a three-week window in January
+      2023. The 16S rRNA gene was amplified, sequenced, and processed with
+      <a href="https://nf-co.re/ampliseq" rel="noopener">nf-core/ampliseq</a>:
+      primer removal with Cutadapt, quality control with FastQC, denoising into
+      amplicon sequence variants, and taxonomic assignment against a reference
+      database. The quality panels on the Overview tab are that pipeline's own
+      MultiQC output, not a reconstruction of it.
+    </p>
+    <p>
+      Two consequences worth carrying into the other tabs. First, everything
+      downstream is <em>relative</em> abundance: amplicon sequencing measures
+      proportions within a library, not cell counts, so a taxon rising in one
+      habitat means it rose relative to the others in that habitat, not that
+      there is more of it per litre. Second, taxa that cannot be assigned at a
+      given rank are kept and labelled <code>Unclassified</code> rather than
+      dropped, which is why they appear as a real slice in the hierarchy figures.
+      A pipeline that silently discarded them would show a cleaner and less
+      truthful picture.
+    </p>
+
+    <h4>The sample metadata</h4>
+    <p>
+      Every filter on this page ultimately resolves against this table. It is also
+      the collection that makes cross-collection filtering possible: habitat and
+      sampling date live here, the taxonomy lives in a different collection, and
+      the project's declared link between the two is what lets a habitat filter
+      reach a taxonomy figure at all.
+    </p>
+    <p>
+      This one is kept as a frame on purpose. It is the same component type as the
+      taxonomy table on the Community composition tab, which this page draws
+      itself from <code>format=data</code>, so the two sit here as a comparison
+      rather than as a rule. A frame brings Depictio's grid with it, filtering and
+      column menus included, and costs a full bundle to do it; the rows cost one
+      request and leave the rendering to the host. Neither is the right answer in
+      general, which is why the manifest reports both and the footers say which
+      one produced what you are looking at.
+    </p>
+
+    <div class="pp-embed" data-frame="sample-table"></div>
+
+    <h4>How the binding works</h4>
+    <p>
+      Each control names a <em>column</em>, and the export manifest publishes which
+      interactive component drives which column, along with its option list. So the
+      deck is never hard-coded against the data: if a column has no control on the
+      dashboard, the deck omits it rather than rendering a widget that filters
+      nothing. Depictio resolves the rest server-side, including the joins between
+      this project's collections, so a filter on sample metadata still reaches a
+      figure drawn from the taxonomy table. When a filter reaches nothing, the
+      response says so and the panel reports it.
+    </p>
+
+    <h4>The request surface</h4>
+    <p>
+      Everything this page does is four query parameters on one endpoint. Open any
+      panel's <em>How this was fetched</em> footer to see the exact request that
+      produced what is on screen, including the parameters and the response's own
+      provenance block.
+    </p>
+    <dl class="pp-defs">
+      <dt><code>format</code></dt>
+      <dd><code>json</code> for a Plotly specification this page draws itself,
+          <code>html</code> for a self-contained frame Depictio draws.</dd>
+      <dt><code>filters</code></dt>
+      <dd>the array the deck above builds, each entry naming a column and a value.</dd>
+      <dt><code>controls</code></dt>
+      <dd>a component's own view options, for components that have more than one view.</dd>
+      <dt><code>expect_version</code></dt>
+      <dd>pins the dashboard revision, so a re-save cannot silently change a
+          published figure. The <a href="/versioning">versioning page</a> exercises it.</dd>
+    </dl>
+
+    <h4>Using Depictio's own control instead</h4>
+    <p>
+      The controls in the deck were rebuilt in this site's idiom from the
+      manifest's filter contract. The alternative is to embed Depictio's real
+      widget as <code>format=html</code> and listen for what it posts out. Both
+      paths end at the same <code>filters=</code> array on the export URL, so a
+      host chooses how much of Depictio's interface it adopts, not whether it can
+      use the data. Pick a sample below and the figures on the other tabs follow
+      it.
+    </p>
+
+    <div class="pp-embed">
+      <div id="embedded-control"></div>
       <div class="pp-panel-foot">
-        <span class="pp-status">loading…</span>
+        <span class="pp-method" id="embedded-control-method"></span>
       </div>
-      <div class="pp-req"></div>
-    </section>
+      <div id="embedded-control-req"></div>
+    </div>
 
-    <section class="pp-panel" data-slot="sankey">
-      <div class="pp-stage pp-stage-short"></div>
-      <div class="pp-panel-foot">
-        <span class="pp-status">loading…</span>
-      </div>
-      <div class="pp-req"></div>
-    </section>
-  </div>
+    <h4>Limitations</h4>
+    <p>
+      Twelve samples over three weeks is a snapshot, not a time series, and the
+      sampling date control is included to show that a date range reaches the
+      server rather than because three weeks supports a temporal claim. Habitat
+      groups are small enough that a single unusual sample moves a habitat mean
+      visibly, which is exactly what the Sample ID control is for: exclude one
+      sample and watch whether the pattern survives. Relative abundances are
+      compositional, so the phyla in a habitat are not independent of each other
+      and a rise in one is arithmetically a fall in the rest.
+    </p>
+  </section>
 
-  <h4>Using Depictio's own control instead</h4>
-  <p>
-    The controls above were rebuilt in this site's idiom from the manifest's
-    filter contract. The alternative is to embed Depictio's real widget as
-    <code>format=html</code> and listen for what it posts out. Both paths end at
-    the same <code>filters=</code> array on the export URL, so a host chooses how
-    much of Depictio's interface it adopts, not whether it can use the data.
-  </p>
+  <!-- ====================== Community composition ===================== -->
+  <section class="pp-tabpanel" id="panel-composition" role="tabpanel"
+           aria-labelledby="tab-composition" data-deck="yes">
 
-  <div class="pp-embed">
-    <div id="embedded-control"></div>
-    <div id="embedded-control-req"></div>
-  </div>
+    <h4>Quantitative data analysis</h4>
+    <p>
+      Mean relative abundance per phylum, faceted by habitat. Each row is one
+      habitat type and each bar one phylum, averaged across that habitat's
+      samples. The plots can be re-generated using the interactive inputs above;
+      kindly refer to the
+      <button type="button" class="pp-inline-tab" data-goto="methodology">Methodology</button>
+      tab for how the survey was processed.
+    </p>
+    <p>
+      <b>How to read it.</b> The four rows separate into two regimes. The two
+      water habitats are dominated by a single phylum: Proteobacteria account for
+      roughly 65% of both riverwater and groundwater. What differs is the
+      runner-up, and it is a meaningful difference: riverwater's second phylum is
+      Bacteroidetes at about 23%, a group associated with degrading complex
+      organic matter in flowing surface water, while groundwater's is the archaeal
+      Thaumarchaeota at about 11%, ammonia oxidisers characteristic of dark,
+      nutrient-poor subsurface water.
+    </p>
+    <p>
+      Soil and sediment are the other regime: far flatter, with no phylum above
+      about 25%. Soil spreads across Acidobacteria (about 25%), Proteobacteria
+      (22%), Thaumarchaeota (19%), Verrucomicrobia (11%) and Actinobacteria (10%),
+      which is the classic signature of a structurally complex habitat supporting
+      many metabolic strategies at once. Sediment sits between the two regimes,
+      still Proteobacteria-led at about 40% but with Acidobacteria and Chloroflexi
+      taking a real share. The single most useful thing to do here is to switch
+      the habitat toggle on and step through the four values: the water samples
+      barely change shape, the soil and sediment ones do.
+    </p>
 
-  <h4>How the binding works</h4>
-  <p>
-    Each control names a <em>column</em>, and the export manifest publishes which
-    interactive component drives which column, along with its option list. So the
-    deck is never hard-coded against the data: if a column has no control on the
-    dashboard, the deck omits it rather than rendering a widget that filters
-    nothing. A filter is only sent to figures whose data collection actually has
-    that column, because this dashboard spans several collections and a filter
-    naming <code>habitat</code> is meaningless to the taxonomy table. When a
-    filter reaches nothing, the response says so and the panel reports it.
-  </p>
+      <section class="pp-panel" data-slot="quant">
+        <div class="pp-stage"></div>
+        <div class="pp-panel-foot">
+          <span class="pp-method"></span>
+          <span class="pp-status">loading…</span>
+        </div>
+        <div class="pp-req"></div>
+      </section>
+
+    <h4>Qualitative composition per sample</h4>
+    <p>
+      The same data without the averaging: one column per sample, stacked by
+      taxon. Taxa below the retention threshold are pooled; empty columns indicate
+      samples with no assigned reads at that rank.
+    </p>
+    <p>
+      <b>How to read it.</b> A habitat mean is only trustworthy if the samples
+      behind it agree, and this is where that gets checked. Columns from the same
+      habitat should look like variations on one another; a column that does not
+      resemble its neighbours is the sample to exclude with the Sample ID control
+      before reading anything into the habitat it belongs to. The pooled
+      "other" band at the top is worth watching too: a sample whose pooled band is
+      much larger than its neighbours' is a sample whose community was too even to
+      be summarised by its top taxa, which is a real finding rather than a
+      plotting artefact.
+    </p>
+
+      <section class="pp-panel" data-slot="stacked">
+        <div class="pp-stage"></div>
+        <div class="pp-panel-foot">
+          <span class="pp-method"></span>
+          <span class="pp-status">loading…</span>
+        </div>
+        <div class="pp-req"></div>
+      </section>
+
+    <h4>The underlying table</h4>
+    <p>
+      The taxonomy table itself, one row per sample and taxon with its relative
+      abundance. It is the collection every figure on this tab is drawn from, and
+      it responds to the same filters.
+    </p>
+    <p>
+      This one is <em>not</em> framed. A table has no Plotly specification, but it
+      does have rows, and <code>format=data</code> hands those over as
+      <code>{columns, rows, total}</code>. So the markup below is this page's own,
+      in this page's type and alignment, with this page's pager: the same bargain
+      <code>format=json</code> offers for a figure. Compare it with the framed
+      table on the
+      <button type="button" class="pp-inline-tab" data-goto="methodology">Methodology</button>
+      tab, which is the same component type delivered the other way.
+    </p>
+
+    <div data-table="taxonomy-table"></div>
+  </section>
+
+  <!-- ========================= Taxonomic flow ========================= -->
+  <section class="pp-tabpanel" id="panel-flow" role="tabpanel"
+           aria-labelledby="tab-flow" data-deck="yes" hidden>
+
+    <h4>Taxonomic hierarchy</h4>
+    <p>
+      The survey as a nested hierarchy: domain at the centre, then phylum, class
+      and order outwards. Both this and the flow diagram below are server-side
+      figure builders, so what arrives is a finished specification rather than a
+      request for this browser to compute one.
+    </p>
+    <p>
+      <b>How to read it.</b> Bacteria carry roughly nine tenths of the summed
+      abundance and Archaea the rest, which is unremarkable for surface water and
+      soil. The informative ring is the third one. Proteobacteria is the largest
+      phylum overall, but it is not one thing: it splits into Betaproteobacteria
+      (the largest single class in the survey), Gammaproteobacteria,
+      Deltaproteobacteria and Alphaproteobacteria, and those classes have
+      genuinely different ecologies. A figure that stopped at phylum would report
+      "Proteobacteria dominate" for every habitat and hide the distinction.
+      Within the Archaea nearly all of the signal is Thaumarchaeota, and nearly
+      all of that is the order Nitrososphaerales, the ammonia oxidisers already
+      visible in the groundwater column on the previous tab.
+    </p>
+    <p>
+      Click a segment to zoom into that clade and click the centre to come back
+      out. The <code>Unclassified</code> slice is kept deliberately: at roughly a
+      tenth of the bacterial signal, dropping it would visibly inflate every other
+      group.
+    </p>
+
+      <section class="pp-panel" data-slot="sunburst">
+        <div class="pp-stage"></div>
+        <div class="pp-panel-foot">
+          <span class="pp-method"></span>
+          <span class="pp-status">loading…</span>
+        </div>
+        <div class="pp-req"></div>
+      </section>
+
+    <h4>Flow from domain to genus</h4>
+    <p>
+      The same hierarchy as a Sankey diagram, which trades the sunburst's sense of
+      proportion for a clearer view of where a clade's abundance actually goes.
+      Follow a band from left to right: a phylum that stays in one thick band is
+      taxonomically coherent in this survey, while one that fans out into many
+      thin bands is a group whose members here are only distantly related to each
+      other. The width of a band at the last rank is also a fair warning about
+      resolution: 16S amplicons often cannot separate genera reliably, so a thin
+      band at the right-hand edge should be read as "assigned here" and not as
+      "confidently identified".
+    </p>
+
+      <section class="pp-panel" data-slot="sankey">
+        <div class="pp-stage"></div>
+        <div class="pp-panel-foot">
+          <span class="pp-method"></span>
+          <span class="pp-status">loading…</span>
+        </div>
+        <div class="pp-req"></div>
+      </section>
+
+    <h4>Taxa shared across habitats</h4>
+    <p>
+      An UpSet plot of the taxa each combination of habitats has in common: the
+      bars count taxa, and the dot matrix underneath says which habitats each bar
+      refers to. It answers the question the other figures on this page cannot,
+      which is whether the four habitats are drawing on one regional pool of
+      organisms or on four largely separate ones.
+    </p>
+    <p>
+      <b>How to read it.</b> Compare the bars over single dots (taxa unique to one
+      habitat) with the bar over all four dots (the shared core). A large shared
+      core with small habitat-specific sets means the habitats differ mostly in
+      the <em>proportions</em> of a common pool, which is what the composition tab
+      suggests for these samples; large single-habitat bars would mean genuinely
+      different communities. Filtering to one habitat collapses the plot to that
+      habitat's own set, which is also the quickest way to confirm the deck above
+      is really reaching the server.
+    </p>
+
+      <section class="pp-panel" data-slot="upset">
+        <div class="pp-stage"></div>
+        <div class="pp-panel-foot">
+          <span class="pp-method"></span>
+          <span class="pp-status">loading…</span>
+        </div>
+        <div class="pp-req"></div>
+      </section>
+  </section>
+
+  <!-- ========================= All components ========================= -->
+  <section class="pp-tabpanel" id="panel-components" role="tabpanel"
+           aria-labelledby="tab-components" hidden>
+
+    <h4>Every component behind this page</h4>
+    <p>
+      Read straight from the manifests, which are the one request a host makes
+      before it knows anything about a dashboard. Two dashboards are listed
+      because this page draws from two: the community dashboard supplies the
+      composition figures, the cards, the tables and every control in the deck,
+      and the ampliseq QC dashboard supplies the sequencing panels on the Overview
+      tab.
+    </p>
+    <p>
+      The columns that matter are the last two. <em>Exports as</em> is what a host
+      can actually do with a component, and <em>why not JSON</em> is the manifest
+      explaining itself when a component offers only a frame. Nothing here is a
+      list this site maintains: add a component to either dashboard and it appears
+      in this table on the next load.
+    </p>
+
+    <div id="component-table"></div>
+    <div class="pp-embed pp-embed-slot" id="component-frame" hidden></div>
+  </section>
 
 </main>
 

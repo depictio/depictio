@@ -24,7 +24,9 @@ from __future__ import annotations
 
 import argparse
 import http.server
+import io
 import json
+import re
 import socketserver
 import sys
 from functools import partial
@@ -216,6 +218,58 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(body)
             return
         return super().do_GET()
+
+    def send_head(self):  # noqa: D102 - stdlib override
+        """Serve pages with their own asset URLs stamped by mtime.
+
+        `Cache-Control: no-store` below only governs responses the browser has
+        not already cached. An entry created before that header existed keeps
+        being reused for a `<script src>` across reloads, which is a very
+        convincing bug: the edit is on disk, `curl` returns it, and the page runs
+        the old one. Stamping `?v=<mtime>` makes an edited file a different URL,
+        so there is no entry to reuse.
+
+        Pages only. Assets are served untouched, so a deep-linked .js is still
+        the plain file.
+        """
+        path = Path(self.translate_path(self.path))
+        if path.suffix != ".html" or not path.is_file():
+            return super().send_head()
+
+        def stamp(match: "re.Match[str]") -> str:
+            attribute, url = match.group(1), match.group(2)
+            asset = SITE_DIR / url.lstrip("/")
+            if not asset.is_file():
+                return match.group(0)
+            return f'{attribute}="{url}?v={int(asset.stat().st_mtime)}"'
+
+        body = re.sub(
+            r'(src|href)="(/[^":?]+\.(?:js|css))"',
+            stamp,
+            path.read_text(encoding="utf-8"),
+        ).encode()
+
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        return io.BytesIO(body)
+
+    def end_headers(self):  # noqa: D102 - stdlib override
+        # This server exists to iterate on the site, and SimpleHTTPRequestHandler
+        # sends no cache directive at all, which lets a browser hold on to an
+        # edited .js or .css by heuristic freshness. The symptom is an edit that
+        # is on disk, served correctly by curl, and absent from the page.
+        if "Cache-Control" not in self._headers_buffer_keys():
+            self.send_header("Cache-Control", "no-store")
+        super().end_headers()
+
+    def _headers_buffer_keys(self) -> set[str]:
+        return {
+            line.split(b":")[0].decode("latin-1")
+            for line in getattr(self, "_headers_buffer", [])
+            if b":" in line
+        }
 
     def translate_path(self, path: str) -> str:
         clean = path.split("?")[0].split("#")[0]
