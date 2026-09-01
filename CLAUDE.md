@@ -103,6 +103,14 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
 ### Data Flow
 CLI ingests data → Delta/S3/MongoDB → API serves → React viewer renders
 
+### Notebook export & Python import
+- Dashboard → marimo/Jupyter/Quarto: `depictio/api/v1/services/notebook_export/` (generator),
+  `dashboards_endpoints/notebook_export.py` (endpoints), `AnalysisState` contract in
+  `depictio/models/models/analysis_state.py` (+ committed `analysis_state.schema.json`)
+- Any component in a notebook: `depictio/notebook/` (`DepictioClient`), headless figure
+  extraction via the viewer's `/embed/{dashboard}/{component}` route (`services/embed/`)
+- Design: `docs/design/rfc-notebook-export.md`
+
 ### Auth & Storage
 - JWT tokens, role-based access (users, groups, projects); single-user mode via
   `DEPICTIO_AUTH_SINGLE_USER_MODE`

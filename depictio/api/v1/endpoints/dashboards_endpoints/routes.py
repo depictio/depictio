@@ -6944,9 +6944,8 @@ def funnel_values_endpoint(
     }
 
 
-# Notebook export lives in its own module but registers on this router; the
-# import must come last so the helpers it borrows from here already exist.
-from depictio.api.v1.endpoints.dashboards_endpoints import (  # noqa: E402
-    embed as _embed,  # noqa: F401
-    notebook_export as _notebook_export,  # noqa: F401
-)
+# Notebook export and component embeds live in their own modules but register
+# on this router; the imports must come last so the helpers they borrow from
+# here already exist.
+import depictio.api.v1.endpoints.dashboards_endpoints.embed  # noqa: E402, F401
+import depictio.api.v1.endpoints.dashboards_endpoints.notebook_export  # noqa: E402, F401
