@@ -25,6 +25,12 @@ rules:
 - apiGroups: ["apps"]
   resources: ["deployments", "statefulsets"]
   verbs: ["get", "patch", "list"]
+# `kubectl scale` patches the scale subresource, not the deployment itself.
+# Without this the scale-down below fails, and it fails silently because the
+# job used to swallow the error.
+- apiGroups: ["apps"]
+  resources: ["deployments/scale"]
+  verbs: ["get", "patch", "update"]
 - apiGroups: [""]
   resources: ["persistentvolumeclaims"]
   verbs: ["delete", "list", "get"]
@@ -101,28 +107,57 @@ spec:
             set -e
             echo "🗑️ Demo auto-wipe: Cleaning data before upgrade..."
 
-            # Scale down services
-            echo "📉 Scaling down services..."
-            kubectl scale statefulset/{{ .Release.Name }}-mongo -n {{ .Release.Namespace }} --replicas=0 || true
-            kubectl scale statefulset/{{ .Release.Name }}-redis -n {{ .Release.Namespace }} --replicas=0 || true
-            kubectl scale deployment/{{ .Release.Name }}-depictio-backend -n {{ .Release.Namespace }} --replicas=0 || true
-            kubectl scale deployment/{{ .Release.Name }}-depictio-viewer -n {{ .Release.Namespace }} --replicas=0 || true
+            NS={{ .Release.Namespace }}
+            REL={{ .Release.Name }}
 
-            # Wait for pods to terminate
-            echo "⏳ Waiting for pods to terminate..."
-            sleep 15
+            # Blocks until no pod matches the selector. The hook also runs
+            # pre-install, where nothing exists yet, so "none left" has to be
+            # the success case rather than an error.
+            wait_gone() {
+              local sel="$1"
+              local deadline=$((SECONDS + 180))
+              while [ "$(kubectl get pods -n ${NS} -l "${sel}" --no-headers 2>/dev/null | wc -l)" -ne 0 ]; do
+                if [ ${SECONDS} -ge ${deadline} ]; then
+                  echo "❌ Timed out waiting for pods matching ${sel} to terminate"
+                  exit 1
+                fi
+                sleep 3
+              done
+            }
 
-            # Delete MongoDB PVC
-            echo "🗑️ Deleting MongoDB PVC..."
-            kubectl delete pvc mongo-storage-{{ .Release.Name }}-mongo-0 -n {{ .Release.Namespace }} --wait=false || echo "MongoDB PVC not found or already deleted"
+            # The keys and config PVCs are mounted by the backend *and* the
+            # celery worker. A PVC stays in Terminating for as long as any pod
+            # still mounts it (kubernetes.io/pvc-protection), so both have to
+            # go before the delete can complete. Scaling only the backend left
+            # celery holding the claims, so the delete hung and Helm went on to
+            # patch a PVC that was on its way out, failing the upgrade with
+            # `persistentvolumeclaims "<release>-depictio-keys-pvc" not found`.
+            echo "📉 Scaling down the workloads that mount the PVCs..."
+            for DEP in ${REL}-depictio-backend ${REL}-celery-worker; do
+              if kubectl get deployment/${DEP} -n ${NS} >/dev/null 2>&1; then
+                kubectl scale deployment/${DEP} -n ${NS} --replicas=0
+              else
+                echo "  ${DEP} is not deployed yet, nothing to scale down"
+              fi
+            done
 
-            # Delete config PVC
-            echo "🗑️ Deleting config PVC (.depictio)..."
-            kubectl delete pvc {{ .Release.Name }}-depictio-config-pvc -n {{ .Release.Namespace }} --wait=false || echo "Config PVC not found or already deleted"
+            echo "⏳ Waiting for those pods to terminate..."
+            wait_gone "release=${REL},app=depictio-backend"
+            wait_gone "release=${REL},app=celery-worker"
 
-            # Delete keys PVC
-            echo "🗑️ Deleting keys PVC..."
-            kubectl delete pvc {{ .Release.Name }}-depictio-keys-pvc -n {{ .Release.Namespace }} --wait=false || echo "Keys PVC not found or already deleted"
+            # MongoDB is not wiped here: the demo values set
+            # DEPICTIO_MONGODB_WIPE=true, so the backend drops the database on
+            # startup. The delete this job used to attempt named
+            # `mongo-storage-<release>-mongo-0`, which the replica-set
+            # migration renamed to `mongod-data-<release>-mongo-rs0-N`, so it
+            # had been a silent no-op.
+            for PVC in ${REL}-depictio-config-pvc ${REL}-depictio-keys-pvc; do
+              echo "🗑️ Deleting ${PVC}..."
+              # Blocking delete: Helm patches these same PVCs as soon as the
+              # hook returns, so the job must not hand back until they are
+              # really gone.
+              kubectl delete pvc ${PVC} -n ${NS} --ignore-not-found --wait=true --timeout=180s
+            done
 
             echo "✅ Demo auto-wipe complete! Fresh PVCs will be created on upgrade."
             echo "Note: S3 will be wiped by backend initialization (wipe: true)"
