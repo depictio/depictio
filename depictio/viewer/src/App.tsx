@@ -10,6 +10,7 @@ import {
   Title,
   Paper,
   Box,
+  useComputedColorScheme,
 } from '@mantine/core';
 import { useDebouncedValue, useDisclosure, useMediaQuery } from '@mantine/hooks';
 import { Icon } from '@iconify/react';
@@ -71,6 +72,8 @@ import {
   useCategoricalColumns,
   useColorByColumnRender,
   resolveGroupRender,
+  panelsForGrouping,
+  buildAnalysisState,
   SelectionGroupsPanel,
   SaveGroupContext,
   BrandScope,
@@ -266,6 +269,9 @@ const App: React.FC = () => {
   // before the field existed has no value and must still get the funnel.
   const [funnelEnabled, setFunnelEnabled] = useState(true);
   const [funnelViewOpen, setFunnelViewOpen] = useState(false);
+  // The funnel's stage order lives here rather than in the funnel modal so it
+  // can travel with the analysis state (notebook export). Empty = filter order.
+  const [funnelOrder, setFunnelOrder] = useState<string[]>([]);
   const funnelDefault = dashboard?.funnel_filtering !== false;
   useEffect(() => {
     setFunnelEnabled(funnelDefault);
@@ -1302,6 +1308,43 @@ const App: React.FC = () => {
     ],
   );
 
+  // Everything the viewer knows about *how* the user is looking at the data,
+  // as the one object the server accepts (notebook export, component embeds).
+  // A callback, not a memo: it is read once when the export modal opens.
+  const computedColorScheme = useComputedColorScheme('light');
+  const getAnalysisState = useCallback(
+    () =>
+      buildAnalysisState({
+        filters: combinedFilters,
+        groups: groupsApi.groups,
+        colorBy: groupsApi.colorBy,
+        displayMode: groupsApi.displayMode,
+        showOther: groupsApi.showOther,
+        showOverall: groupsApi.showOverall,
+        compareInCards: groupsApi.compareInCards,
+        funnel: { enabled: funnelEnabled, order: funnelOrder },
+        splitPanels: groupRender ? panelsForGrouping(groupRender, combinedFilters) : [],
+        dashboardId: dashboardId ?? '',
+        familyId: groupingScopeId ?? null,
+        theme: computedColorScheme,
+      }),
+    [
+      combinedFilters,
+      groupsApi.groups,
+      groupsApi.colorBy,
+      groupsApi.displayMode,
+      groupsApi.showOther,
+      groupsApi.showOverall,
+      groupsApi.compareInCards,
+      funnelEnabled,
+      funnelOrder,
+      groupRender,
+      dashboardId,
+      groupingScopeId,
+      computedColorScheme,
+    ],
+  );
+
   // Persistent grid sections owned by sibling tabs — the "always in view" slot
   // a metadata table lands in on every tab. Handed to DashboardGrid as
   // `beforeSections` so a `pin: top` section renders after this tab's own
@@ -2100,6 +2143,8 @@ const App: React.FC = () => {
           dashboardId={dashboardId}
           filters={tabDeferredFilters}
           groups={groupsApi.groups}
+          order={funnelOrder}
+          onOrderChange={setFunnelOrder}
         />
       )}
       {/* The page's fixed furniture sits above the Guide's layer; hidden
@@ -2171,6 +2216,7 @@ const App: React.FC = () => {
         onClose={closeSettings}
         dashboard={dashboard}
         initialSection={settingsSection}
+        getAnalysisState={getAnalysisState}
         filters={
           remembering
             ? {

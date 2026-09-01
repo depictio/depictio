@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Accordion,
   Anchor,
@@ -22,6 +22,7 @@ import {
   useBrandScopeAttributes,
   useResolvedBrandTheme,
   Z_LAYERS,
+  type AnalysisState,
   type BrandTheme,
   isControlsPlacement,
   type ControlsPlacement,
@@ -31,6 +32,7 @@ import {
 } from 'depictio-react-core';
 import DashboardInfoBody from './DashboardInfoBody';
 import ShareFiltersField from './ShareFiltersField';
+import NotebookExportModal from './NotebookExportModal';
 import {
   SECTION_ICON_STYLE,
   SettingsNavModal,
@@ -641,6 +643,41 @@ const FeedbackBlock: React.FC<{ href: string; label: string }> = ({ href, label 
   </Stack>
 );
 
+/** "Export" section: the dashboard as a notebook. */
+const ExportBlock: React.FC<{
+  dashboard: DashboardData | null;
+  getAnalysisState: () => AnalysisState;
+}> = ({ dashboard, getAnalysisState }) => {
+  const [opened, setOpened] = useState(false);
+  const dashboardId = String(dashboard?.dashboard_id ?? dashboard?._id ?? '');
+  return (
+    <Stack gap="sm" data-testid="export-section">
+      <Text size="sm" c="dimmed">
+        Take this dashboard with you as code: the same table, the same filters in funnel order,
+        every tile — as a marimo notebook, a Jupyter notebook or a Quarto report.
+      </Text>
+      <Group>
+        <Button
+          variant="light"
+          leftSection={<Icon icon="mdi:notebook-outline" width={16} />}
+          onClick={() => setOpened(true)}
+          disabled={!dashboardId}
+          data-testid="export-notebook"
+        >
+          Export as notebook
+        </Button>
+      </Group>
+      <NotebookExportModal
+        opened={opened}
+        onClose={() => setOpened(false)}
+        dashboardId={dashboardId}
+        dashboardTitle={dashboard?.title}
+        getAnalysisState={getAnalysisState}
+      />
+    </Stack>
+  );
+};
+
 // ---------------------------------------------------------------------------
 // Sections
 // ---------------------------------------------------------------------------
@@ -656,6 +693,7 @@ type SectionKey =
   | 'branding'
   | 'history'
   | 'data-version'
+  | 'export'
   | 'feedback';
 /** A settings section, for opening the settings on it (`initialSection`). */
 export type SettingsSectionKey = SectionKey;
@@ -830,6 +868,10 @@ interface SettingsDrawerProps {
   filters?: FilterSettings;
   /** The section to open on, instead of the one last visited. */
   initialSection?: SettingsSectionKey;
+  /** Viewer: a snapshot of the current analysis state (filters, funnel order,
+   *  groups) for the notebook export. The Export section renders only when
+   *  this is provided. */
+  getAnalysisState?: () => AnalysisState;
 }
 
 /** What the "Your filters" section needs from the viewer. */
@@ -888,6 +930,7 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   dataVersionPanel,
   filters,
   initialSection,
+  getAnalysisState,
 }) => {
   const surface: Surface =
     onChangeBrandTheme ||
@@ -1022,6 +1065,15 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
       title: 'Data version',
       subtitle: 'Draw this dashboard from earlier data, for you only, until you reload',
       body: dataVersionPanel,
+    });
+  }
+  if (getAnalysisState) {
+    sections.push({
+      key: 'export',
+      icon: 'mdi:export-variant',
+      title: 'Export',
+      subtitle: 'This dashboard as a notebook, with the view you are looking at',
+      body: <ExportBlock dashboard={dashboard} getAnalysisState={getAnalysisState} />,
     });
   }
   if (feedback) {
