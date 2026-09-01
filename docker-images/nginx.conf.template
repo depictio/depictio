@@ -98,7 +98,7 @@ server {
 
     # Other React-owned route prefixes — same SPA shell, different entry
     # paths. Keeps the vite.config.ts dev fallback list in sync with prod.
-    location ~ ^/(auth|dashboards|dashboard-edit|projects|about|admin|profile|cli-agents)(/|$) {
+    location ~ ^/(auth|dashboards|dashboard-edit|projects|about|admin|profile|cli-agents|embed)(/|$) {
         root /usr/share/nginx/html;
         try_files /dashboard/index.html =404;
         add_header Cache-Control "no-cache";

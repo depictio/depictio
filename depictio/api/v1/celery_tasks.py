@@ -2111,3 +2111,29 @@ __all__: list[str] = [
     "compute_coverage_track",
     "compute_sankey",
 ]
+
+
+@celery_app.task(name="depictio.embed.extract_figure", soft_time_limit=150, time_limit=200)
+def extract_component_figure_task(payload: dict) -> dict:
+    """Read a component's Plotly figure off the viewer's embed page (headless).
+
+    ``payload``: ``{dashboard_id, component_id, state, theme}``. Returns a
+    ``ComponentFigureResponse``-shaped dict; failures are reported in it rather
+    than raised so the poll endpoint can hand the reason to the notebook.
+    """
+    import asyncio
+
+    from depictio.api.v1.services.embed.extract import extract_component_figure
+
+    try:
+        return asyncio.run(
+            extract_component_figure(
+                dashboard_id=str(payload.get("dashboard_id")),
+                component_id=str(payload.get("component_id")),
+                state=dict(payload.get("state") or {}),
+                theme=str(payload.get("theme") or "light"),
+            )
+        )
+    except Exception as exc:
+        logger.warning(f"embed extract failed for {payload.get('component_id')}: {exc}")
+        return {"status": "error", "figure": None, "reason": str(exc)}
