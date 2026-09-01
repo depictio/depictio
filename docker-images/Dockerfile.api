@@ -2,9 +2,41 @@
 # Depictio API image (FastAPI only)
 # -----------------------------
 # Carries only what `depictio.api.main:app` needs at runtime: Python +
-# uv-installed deps. No Playwright (worker owns screenshots), no Node,
-# no Dash assets.
+# uv-installed deps. No Playwright (worker owns screenshots), no Dash assets.
+# The one Node artefact it needs is the single-file catalog-preview bundle
+# served by GET /catalog/output/{id}/preview-html, built in the stage below
+# and copied in — the runtime layer itself still carries no Node.
 # -----------------------------
+
+# -----------------------------
+# catalog-preview bundle stage
+# -----------------------------
+# `depictio/catalog/payload.py` injects the computed payload into a prebuilt
+# single-file HTML (`pnpm run build:catalog-preview`). It is gitignored build
+# output, so without this stage the released image ships without it and every
+# preview request 422s with "catalog-preview bundle not built".
+# Node/pnpm pins mirror docker-images/Dockerfile.viewer.
+FROM node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 AS catalog-preview-builder
+WORKDIR /build
+
+RUN corepack enable && corepack prepare pnpm@10 --activate
+
+# ---- Dependency layer (cached across viewer source changes) ----
+COPY pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY packages/depictio-components/package.json ./packages/depictio-components/
+COPY packages/depictio-react-core/package.json ./packages/depictio-react-core/
+COPY depictio/viewer/package.json ./depictio/viewer/
+RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
+
+# ---- Source + build ----
+COPY packages ./packages/
+COPY depictio/viewer ./depictio/viewer/
+
+# Same memory caps as the viewer build: sourcemaps off, heap capped at 4 GB
+# to leave cgroup headroom for native + worker stacks.
+RUN VITE_NO_SOURCEMAP=true NODE_OPTIONS="--max-old-space-size=4096" \
+    pnpm --filter depictio-viewer build:catalog-preview
 
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim@sha256:e5b65587bce7de595f299855d7385fe7fca39b8a74baa261ba1b7147afa78e58 AS base
 
@@ -49,6 +81,13 @@ COPY --chown=depictio:depictio VERSION ./
 COPY --chown=depictio:depictio depictio ./depictio/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev || uv sync --no-dev
+
+# Prebuilt catalog-preview bundle (one self-contained ~7 MB HTML). Copied after
+# the source layer so it lands on top of depictio/viewer/, and last-but-one so a
+# viewer edit does not invalidate the Python layers above.
+COPY --from=catalog-preview-builder --chown=depictio:depictio \
+    /build/depictio/viewer/dist-catalog-preview/catalog-preview.html \
+    /app/depictio/viewer/dist-catalog-preview/catalog-preview.html
 
 COPY --chown=depictio:depictio docker-images/run_fastapi.sh /app/run_fastapi.sh
 RUN chmod +x /app/run_fastapi.sh

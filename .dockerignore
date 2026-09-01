@@ -5,6 +5,10 @@
 # Dockerfile_depictio_uv.dockerfile. Excluding it from the docker context
 # prevents a stale host bundle from clobbering the freshly-built one.
 depictio/viewer/dist/
+# Same for the single-file catalog-preview bundle: Dockerfile.api builds it in
+# its catalog-preview-builder stage, so a host build must not ride along in the
+# `COPY depictio ./depictio/` layer.
+depictio/viewer/dist-catalog-preview/
 
 # -----------------------------
 # Exclude Legacy Directories
