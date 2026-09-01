@@ -70,6 +70,7 @@ def build_etag(
     theme: str,
     filters: list[dict] | None,
     controls: dict | None = None,
+    window: dict | None = None,
 ) -> str:
     """Weak ETag over everything that varies the response body.
 
@@ -78,6 +79,10 @@ def build_etag(
     the cache. ``controls`` has to be in here: a ROC and a PR curve come from the
     same component at the same dashboard version, and omitting it would serve one
     from cache when the caller asked for the other.
+
+    ``window`` is the same argument for paging: ``format=data`` returns one page
+    of a table's rows, and two pages of the same table differ in nothing else the
+    hash sees. Omitting it would serve page 1 to a request for page 2.
     """
     revision = dashboard_revision(dashboard_doc)
     material = json.dumps(
@@ -91,6 +96,7 @@ def build_etag(
             "theme": theme,
             "filters": filters or [],
             "controls": controls or {},
+            "window": window or {},
         },
         sort_keys=True,
         default=str,

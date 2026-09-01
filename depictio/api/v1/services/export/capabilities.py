@@ -21,8 +21,17 @@ The three tiers, for orientation:
   the real renderers) and become JSON-exportable one at a time as Python builders
   land in ``services/advanced_viz/kinds/``.
 * Not Plotly at all — ``card``, ``interactive``, ``table``, ``image``, ``text``.
-  HTML only. ``jbrowse`` is neither: it is an iframe onto a live JBrowse2 server,
-  so it cannot be made offline-self-contained and is unsupported in both formats.
+  HTML only, with one exception: ``table``. A table has no figure spec, but it does
+  have rows, and "no Plotly spec" is not the same statement as "nothing a host can
+  have". ``format=data`` hands over ``{columns, rows, total}`` so a host can render
+  the table in its own idiom instead of framing 7 MB of Depictio to show 12 rows.
+  ``jbrowse`` is neither: it is an iframe onto a live JBrowse2 server, so it cannot
+  be made offline-self-contained and is unsupported in every format.
+
+The formats are three different *shapes*, not three quality tiers, which is why a
+table's rows are not squeezed into ``json``: a consumer that asks for ``json``
+expects something it can hand to Plotly, and returning rows there would break that
+promise for the sake of reusing a name.
 """
 
 from enum import Enum
@@ -34,8 +43,13 @@ from depictio.models.components.types import AdvancedVizKind, ComponentType
 class ExportFormat(str, Enum):
     """Wire value of the ``format`` query parameter."""
 
+    #: A Plotly figure specification the caller draws itself.
     JSON = "json"
+    #: A self-contained page Depictio draws, for embedding in a frame.
     HTML = "html"
+    #: The component's underlying rows, for components that have rows rather
+    #: than a figure. ``table`` only, today.
+    DATA = "data"
 
 
 #: Legacy ``viz_kind`` strings that are still present in persisted ``stored_metadata``
@@ -62,7 +76,9 @@ COMPONENT_FORMATS: dict[str, frozenset[ExportFormat]] = {
     "map": frozenset({ExportFormat.JSON, ExportFormat.HTML}),
     "multiqc": frozenset({ExportFormat.JSON, ExportFormat.HTML}),
     "advanced_viz": frozenset({ExportFormat.JSON, ExportFormat.HTML}),
-    "table": frozenset({ExportFormat.HTML}),
+    # `data` as well as `html`: the rows are what a table actually is, and they
+    # are already computed server-side for the embed payload.
+    "table": frozenset({ExportFormat.HTML, ExportFormat.DATA}),
     "card": frozenset({ExportFormat.HTML}),
     "image": frozenset({ExportFormat.HTML}),
     "interactive": frozenset({ExportFormat.HTML}),
@@ -184,6 +200,11 @@ def unsupported_reason(component_type: str, viz_kind: str | None = None) -> str 
             f"The {kind!r} visualisation builds its Plotly spec in the browser, so no "
             "server-side figure exists yet. Use format=html, which runs the real "
             "renderer offline."
+        )
+    if component_type == "table":
+        return (
+            "'table' components are not Plotly figures. Use format=data for the rows "
+            "as JSON, or format=html to embed Depictio's own grid."
         )
     return (
         f"{component_type!r} components are not Plotly figures. Use format=html to embed "

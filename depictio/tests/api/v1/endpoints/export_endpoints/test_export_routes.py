@@ -13,7 +13,7 @@ anything. See ``TestSecurityHeaderExemption``.
 from __future__ import annotations
 
 import json
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -32,6 +32,9 @@ WF_ID = "507f1f77bcf86cd799439066"
 DC_ID = "507f1f77bcf86cd799439055"
 
 _ROUTES = "depictio.api.v1.endpoints.export_endpoints.routes"
+#: The manifest imports the schema helper from here, function-locally, so this
+#: is where it has to be patched.
+_DC_UTILS = "depictio.api.v1.endpoints.datacollections_endpoints.utils"
 _RESOLVE = "depictio.api.v1.services.export.resolve"
 
 
@@ -53,6 +56,15 @@ STORED_METADATA = [
     _component("card-1", "card", column_name="a", aggregation="mean"),
     _component("txt-1", "text", body="hello"),
     _component("jb-1", "jbrowse"),
+    # MultiQC panels are seeded untitled, which is what makes the module/plot
+    # pair the only thing distinguishing two of them in a manifest.
+    _component(
+        "mqc-1",
+        "multiqc",
+        title="",
+        selected_module="fastqc",
+        selected_plot="per_base_sequence_quality",
+    ),
     _component("av-volcano", "advanced_viz", viz_kind="volcano", config={}),
     _component("av-phylo", "advanced_viz", viz_kind="phylogenetic", config={}),
     _component("av-sankey", "advanced_viz", viz_kind="sankey", config={}),
@@ -150,7 +162,7 @@ class TestManifest:
         by_id = {entry["component_id"]: entry for entry in response.json()}
 
         assert by_id["fig-1"]["formats"] == ["html", "json"]
-        assert by_id["tbl-1"]["formats"] == ["html"]
+        assert by_id["tbl-1"]["formats"] == ["data", "html"]
         assert by_id["txt-1"]["formats"] == ["html"]
         assert by_id["jb-1"]["formats"] == []
         assert by_id["av-sankey"]["formats"] == ["html", "json"]
@@ -182,6 +194,60 @@ class TestManifest:
             "column_type": "object",
         }
         assert "filter" not in by_id["fig-1"], "only interactive components carry one"
+
+    def test_names_the_multiqc_module_a_panel_shows(self, client, mongo):
+        """MultiQC panels are untitled, so the manifest has to say which is which.
+
+        Without this a dashboard's dozen QC panels are a dozen identical entries
+        and picking one means fetching every spec to read its Plotly title. The
+        module/plot pair also survives a reseed, which the generated component
+        id does not.
+        """
+        response = client.get(f"{API_PREFIX}/dashboards/{DASHBOARD_ID}/components")
+        by_id = {entry["component_id"]: entry for entry in response.json()}
+        assert by_id["mqc-1"]["multiqc"] == {
+            "module": "fastqc",
+            "plot": "per_base_sequence_quality",
+        }
+        assert "multiqc" not in by_id["fig-1"], "only multiqc components carry one"
+
+    def test_publishes_collection_columns_on_request(self, client, mongo):
+        """A consumer cannot otherwise tell which filters a component can answer.
+
+        Two collections on one dashboard can hold the same data under different
+        column names, and a filter naming a column the component's collection
+        does not have is dropped by the render path: a healthy 200 carrying an
+        unchanged figure.
+        """
+        schema = {"sample": "str", "habitat": "str", "abundance": "f64"}
+        with patch(
+            f"{_DC_UTILS}._get_data_collection_polars_schema",
+            new=AsyncMock(return_value=schema),
+        ):
+            response = client.get(
+                f"{API_PREFIX}/dashboards/{DASHBOARD_ID}/components?include_columns=true"
+            )
+        by_id = {entry["component_id"]: entry for entry in response.json()}
+        assert by_id["fig-1"]["dc_columns"] == ["sample", "habitat", "abundance"]
+
+    def test_omits_collection_columns_by_default(self, client, mongo):
+        """Reading a Delta schema per collection is not free, so it is opt-in."""
+        response = client.get(f"{API_PREFIX}/dashboards/{DASHBOARD_ID}/components")
+        by_id = {entry["component_id"]: entry for entry in response.json()}
+        assert "dc_columns" not in by_id["fig-1"]
+
+    def test_a_collection_without_a_delta_table_does_not_fail_the_manifest(self, client, mongo):
+        """The manifest is what a page needs to render anything at all."""
+        with patch(
+            f"{_DC_UTILS}._get_data_collection_polars_schema",
+            new=AsyncMock(side_effect=RuntimeError("no delta table")),
+        ):
+            response = client.get(
+                f"{API_PREFIX}/dashboards/{DASHBOARD_ID}/components?include_columns=true"
+            )
+        assert response.status_code == 200
+        by_id = {entry["component_id"]: entry for entry in response.json()}
+        assert "dc_columns" not in by_id["fig-1"]
 
     def test_reports_dc_id_so_filters_can_be_matched_to_figures(self, client, mongo):
         """A filter only applies to components over the same data collection."""
@@ -218,6 +284,77 @@ class TestAccessControl:
         assert response.json()["detail"]["code"] == "embed_disabled"
 
 
+# --- table rows, without a frame --------------------------------------------
+
+
+#: The export service calls the viewer's own handler, so that is where it is
+#: patched: patching a name inside table_export would miss the import it does.
+_RENDER_TABLE = "depictio.api.v1.endpoints.dashboards_endpoints.routes.render_table_endpoint"
+
+
+def _fake_rows(count: int, total: int) -> dict:
+    return {
+        "columns": [{"field": "sample", "headerName": "sample", "type": "textColumn"}],
+        "rows": [{"sample": f"S{i}"} for i in range(count)],
+        "total": total,
+        "sort_by": None,
+        "sort_dir": "asc",
+    }
+
+
+class TestDataFormat:
+    """`format=data` exists so a host is not forced to frame a table to show rows.
+
+    The rows were always computed server-side; before this format the only way to
+    get a Depictio table onto a third-party page was an iframe carrying a whole
+    Depictio bundle to render twelve rows.
+    """
+
+    def test_table_returns_rows_and_columns(self, client, mongo):
+        with patch(_RENDER_TABLE, return_value=_fake_rows(3, 3)):
+            response = client.get(_url("tbl-1", format="data"))
+        assert response.status_code == 200
+        body = response.json()
+        assert [c["field"] for c in body["columns"]] == ["sample"]
+        assert len(body["rows"]) == 3
+        assert body["total"] == 3
+        assert body["meta"]["complete"] is True
+
+    def test_window_is_reported_and_clamped(self, client, mongo):
+        """A caller asking for more than the cap is served the cap, and told so."""
+        with patch(_RENDER_TABLE, return_value=_fake_rows(10, 900)) as render:
+            response = client.get(_url("tbl-1", format="data", start=20, limit=999999))
+        body = response.json()
+        assert body["start"] == 20
+        assert body["limit"] == 5000, "limit is capped, not rejected"
+        assert render.call_args.kwargs["request"]["start"] == 20
+        assert render.call_args.kwargs["request"]["limit"] == 5000
+        # A page that is not the whole table has to say so, or a host cannot tell
+        # a short table from a first page.
+        assert body["meta"]["complete"] is False
+
+    def test_pages_do_not_share_an_etag(self, client, mongo):
+        """Two pages differ in nothing else the ETag hashes."""
+        with patch(_RENDER_TABLE, return_value=_fake_rows(5, 50)):
+            first = client.get(_url("tbl-1", format="data", start=0, limit=5))
+            second = client.get(_url("tbl-1", format="data", start=5, limit=5))
+        assert first.headers["etag"] != second.headers["etag"]
+
+    def test_carries_provenance_like_every_other_format(self, client, mongo):
+        with patch(_RENDER_TABLE, return_value=_fake_rows(1, 1)):
+            response = client.get(_url("tbl-1", format="data"))
+        meta = response.json()["meta"]
+        assert meta["export_contract"]
+        assert meta["etag"] == response.headers["etag"]
+
+    def test_figure_is_422_because_it_has_no_rows(self, client, mongo):
+        response = client.get(_url("fig-1", format="data"))
+        assert response.status_code == 422
+        detail = response.json()["detail"]
+        assert detail["code"] == "format_unsupported"
+        assert detail["supported_formats"] == ["html", "json"]
+
+
 # --- unsupported combinations ----------------------------------------------
 
 
@@ -227,7 +364,7 @@ class TestUnsupportedFormats:
         assert response.status_code == 422
         detail = response.json()["detail"]
         assert detail["code"] == "unsupported_export"
-        assert detail["supported_formats"] == ["html"]
+        assert detail["supported_formats"] == ["data", "html"]
         assert detail["html_available"] is True
         assert "format=html" in detail["html_url"]
 

@@ -49,10 +49,22 @@ def test_plotly_backed_types_support_both_formats() -> None:
 
 
 def test_non_plotly_types_are_html_only() -> None:
-    for component_type in ("table", "card", "image", "interactive", "text"):
+    for component_type in ("card", "image", "interactive", "text"):
         assert formats_for(component_type) == {ExportFormat.HTML}
         reason = unsupported_reason(component_type)
         assert reason and "format=html" in reason
+
+
+def test_table_also_exports_its_rows() -> None:
+    """A table has no figure spec, but it does have rows.
+
+    `data` is a third shape, not a second name for `json`: a caller asking for
+    `json` expects something it can hand to Plotly, so the refusal stands and the
+    reason points at both alternatives.
+    """
+    assert formats_for("table") == {ExportFormat.HTML, ExportFormat.DATA}
+    reason = unsupported_reason("table")
+    assert reason and "format=data" in reason and "format=html" in reason
 
 
 def test_jbrowse_supports_nothing() -> None:
