@@ -1,0 +1,1216 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8cb3"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8cb3"
+  },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "34c0eee4-ce9a-4053-962b-2378f868fdca",
+      "component_type": "interactive",
+      "title": "Sample ID",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Community filters",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Sample scope",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#45B8AC",
+      "icon_name": "mdi:flask",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "18ae2217-1f3f-41c7-9b27-69fe206eecb5",
+      "component_type": "interactive",
+      "title": "Habitat",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Community filters",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "habitat",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Sample scope",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#984EA3",
+      "icon_name": "mdi:earth",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "883a9ec3-3980-4f63-8ec2-f014a686b613",
+      "component_type": "interactive",
+      "title": "Kingdom",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "taxonomy_rel_abundance",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca9"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Taxonomic relative abundance at Phylum level (from raw abundance table)",
+        "data_collection_tag": "taxonomy_rel_abundance",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca9"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Community filters",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "Kingdom",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Taxonomy",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#377EB8",
+      "icon_name": "mdi:bacteria",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "e70322a9-b6da-49bc-9c7e-aa7d736f5d3d",
+      "component_type": "interactive",
+      "title": "Phylum",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "taxonomy_rel_abundance",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca9"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Taxonomic relative abundance at Phylum level (from raw abundance table)",
+        "data_collection_tag": "taxonomy_rel_abundance",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca9"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Community filters",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "Phylum",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Taxonomy",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#8BC34A",
+      "icon_name": "mdi:bacteria-outline",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "range-rel-abundance-slider",
+      "component_type": "interactive",
+      "title": "Relative Abundance Range",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "taxonomy_rel_abundance",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca9"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Taxonomic relative abundance at Phylum level (from raw abundance table)",
+        "data_collection_tag": "taxonomy_rel_abundance",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca9"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Community filters",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "rel_abundance",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Taxonomy",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#FF9800",
+      "icon_name": "mdi:counter",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "community-section-header",
+      "component_type": "text",
+      "title": "Community composition",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Overview",
+      "order": 2,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "Relative abundance per sample from the QIIME 2 taxonomic classification. The cards report how much of the table the current filters leave: how many distinct taxa remain, how the samples split across Habitat, how the abundances are distributed, and what the phyla are made of.",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "2996b8cf-bafe-4f00-8757-bb9aa5261062",
+      "component_type": "card",
+      "title": "Rel. abundance (distribution)",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "taxonomy_rel_abundance",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca9"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Taxonomic relative abundance at Phylum level (from raw abundance table)",
+        "data_collection_tag": "taxonomy_rel_abundance",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca9"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Overview",
+      "aggregation": "median",
+      "column_name": "rel_abundance",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": [
+        "box_plot_stats"
+      ],
+      "filter_expr": null,
+      "secondary_layout": "box_plot",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-bell-curve-cumulative",
+      "icon_color": "#FF9800",
+      "title_color": "#FF9800",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "87c023eb-f3c3-45af-be74-57d222eb2907",
+      "component_type": "card",
+      "title": "Distinct taxa",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "taxonomy_rel_abundance",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca9"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Taxonomic relative abundance at Phylum level (from raw abundance table)",
+        "data_collection_tag": "taxonomy_rel_abundance",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca9"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Overview",
+      "aggregation": "nunique",
+      "column_name": "taxonomy",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "top_n",
+      "breakdown_col": "Phylum",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:bacteria",
+      "icon_color": "#8BC34A",
+      "title_color": "#8BC34A",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "96ae0bf1-10dd-47d7-8e28-9454d62e1647",
+      "component_type": "card",
+      "title": "Habitat groups",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Overview",
+      "aggregation": "nunique",
+      "column_name": "habitat",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "donut",
+      "breakdown_col": "habitat",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:earth",
+      "icon_color": "#984EA3",
+      "title_color": "#984EA3",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "community-phyla",
+      "component_type": "card",
+      "title": "Phyla detected",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "taxonomy_rel_abundance",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca9"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Taxonomic relative abundance at Phylum level (from raw abundance table)",
+        "data_collection_tag": "taxonomy_rel_abundance",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca9"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Overview",
+      "aggregation": "nunique",
+      "column_name": "Phylum",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "composition",
+      "breakdown_col": "Kingdom",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-donut",
+      "icon_color": "#8E44AD",
+      "title_color": "#8E44AD",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "community-composition-header",
+      "component_type": "text",
+      "title": "What the samples are made of",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Composition",
+      "order": 2,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "The bar chart ranks phyla by mean relative abundance across the current selection. The stacked view below breaks the same numbers down sample by sample, so a phylum that dominates one group but is absent elsewhere reads as a block rather than as an average.",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "21b375c2-80a8-4b7e-a7fc-592de1824a33",
+      "component_type": "figure",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "taxonomy_rel_abundance",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca9"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Taxonomic relative abundance at Phylum level (from raw abundance table)",
+        "data_collection_tag": "taxonomy_rel_abundance",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca9"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Composition",
+      "visu_type": "bar",
+      "dict_kwargs": {
+        "color": "Phylum",
+        "facet_row": "habitat",
+        "labels": {
+          "Phylum": "Phylum",
+          "mean_rel_abundance": "Mean Relative Abundance"
+        },
+        "title": "Mean Relative Abundance by Habitat",
+        "x": "Phylum",
+        "y": "mean_rel_abundance"
+      },
+      "mode": "code",
+      "code_content": "# The axis this figure groups on: the dashboard's analysis groups when the\n# viewer has made some, else the pipeline's own Habitat. One\n# grouping axis, not two stacked on each other.\ngrp_col = depictio_group_by[0] if depictio_group_by else 'habitat'\ndf_grp = df.with_columns(pl.col(grp_col).alias('_facet')) if grp_col in df.columns else df.with_columns(pl.lit('All samples').alias('_facet'))\n# Sorted so the panels come out in a stable order: px lays facets out in\n# order of first appearance, which otherwise follows the row order.\ndf_modified = df_grp.group_by(['_facet', 'Phylum']).agg(pl.col('rel_abundance').mean().alias('mean_rel_abundance')).sort('_facet')\n# Bars run horizontally and the groups are columns, not rows: a phylum name\n# is long, so it belongs on the shared y axis where it is written once and\n# read level, rather than rotated under every band.\ncolors = depictio_group_kwargs.get('color_discrete_map') or {}\nfig = px.bar(\n    df_modified.to_pandas(),\n    x='mean_rel_abundance', y='Phylum', color='_facet',\n    color_discrete_map=colors,\n    orientation='h',\n    facet_col='_facet',\n    title='Mean Relative Abundance by Habitat',\n    labels={'Phylum': 'Phylum', 'mean_rel_abundance': 'Mean Relative Abundance'},\n)\n# Most abundant at the top, so the tile opens on what carries the community.\nfig.update_yaxes(categoryorder='total ascending', tickfont={'size': 9})\nfig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1]))\nfig.update_layout(showlegend=False)",
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": false,
+      "selection_column": null,
+      "font_scale": null,
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "adv-stacked-taxonomy",
+      "component_type": "advanced_viz",
+      "title": "Stacked taxonomy (advanced)",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "stacked_taxonomy_canonical",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cb1"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Stacked-taxonomy-ready relative abundance (sample/taxon/rank/abundance)",
+        "data_collection_tag": "stacked_taxonomy_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cb1"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "qiime2/stacked_taxonomy",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_stacked_taxonomy_canonical",
+        "use": "qiime2/stacked_taxonomy",
+        "description": "Long-format stacked-taxonomy abundance (sample \u00d7 rank \u00d7 taxon) fanned in from the per-rank QIIME2 rel-table-{2..6}.tsv collapses, with a derived Kingdom level."
+      },
+      "section": "Composition",
+      "viz_kind": "stacked_taxonomy",
+      "config": {
+        "viz_kind": "stacked_taxonomy",
+        "sample_id_col": "sample_id",
+        "taxon_col": "taxon",
+        "rank_col": "rank",
+        "abundance_col": "abundance",
+        "default_rank": "Phylum",
+        "top_n": 15,
+        "sort_by": "abundance",
+        "normalise_to_one": true,
+        "annotation_strips": [
+          {
+            "column": "habitat",
+            "label": "Habitat",
+            "position": "top"
+          }
+        ],
+        "sample_sort": "input",
+        "show_legend": true,
+        "log_y": false
+      },
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "community-structure-header",
+      "component_type": "text",
+      "title": "Taxonomic structure",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Taxonomic structure",
+      "order": 2,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "The same abundances read as a hierarchy. The sunburst drills from kingdom to genus in place; the Sankey shows how abundance flows between ranks, which is the view that makes a lineage collapsing into a single dominant genus obvious.",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "adv-sunburst",
+      "component_type": "advanced_viz",
+      "title": "Taxonomic hierarchy (sunburst)",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "sunburst_canonical",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cd3"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sunburst-ready hierarchical taxonomy (Kingdom/Phylum/taxon + abundance)",
+        "data_collection_tag": "sunburst_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cd3"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "qiime2/sunburst_taxonomy",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_sunburst_canonical",
+        "use": "qiime2/sunburst_taxonomy",
+        "description": "Hierarchical taxonomic composition (Kingdom\u2192\u2026\u2192Genus with relative abundance) for a sunburst, collapsed per sample from the QIIME2 per-rank rel-abundance tables."
+      },
+      "section": "Taxonomic structure",
+      "viz_kind": "sunburst",
+      "config": {
+        "viz_kind": "sunburst",
+        "rank_cols": [
+          "Kingdom",
+          "Phylum",
+          "Class"
+        ],
+        "abundance_col": "abundance",
+        "category_palette": null,
+        "start_rank": null,
+        "colour_by_rank": null,
+        "max_depth": 3,
+        "palette": "tab10",
+        "show_counts": true,
+        "min_percent": 0
+      },
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "adv-sankey",
+      "component_type": "advanced_viz",
+      "title": "Taxonomic flow (Kingdom \u2192 Phylum \u2192 taxon)",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "sankey_canonical",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cd4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sankey-ready hierarchical flow (Kingdom \u2192 Phylum \u2192 taxon, weight=abundance)",
+        "data_collection_tag": "sankey_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cd4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Taxonomic structure",
+      "viz_kind": "sankey",
+      "config": {
+        "viz_kind": "sankey",
+        "step_cols": [
+          "Kingdom",
+          "Phylum",
+          "Class"
+        ],
+        "available_step_cols": [
+          "Kingdom",
+          "Phylum",
+          "Class",
+          "Order",
+          "Family",
+          "Genus"
+        ],
+        "value_col": "abundance",
+        "value_label": "rel. abundance",
+        "value_format": "fraction",
+        "sort_mode": "total_flow",
+        "color_mode": "source",
+        "link_opacity": 0.5,
+        "min_link_value": 0.005,
+        "show_node_labels": true,
+        "depth": null
+      },
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "community-upset-header",
+      "component_type": "text",
+      "title": "Shared and exclusive taxa",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Set overlap",
+      "order": 2,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "Which taxa are found in which Habitat groups. The bars count taxa, the dot matrix below names the combination. Filtering Habitat on the left removes sets from the matrix and filtering Phylum removes rows from it, because the underlying wide matrix carries both the group columns and the taxonomic ranks.",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "adv-upset",
+      "component_type": "advanced_viz",
+      "title": "Taxa shared across Habitat groups (UpSet)",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "upset_canonical",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cd6"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "UpSet-ready taxon \u00d7 habitat binary presence matrix",
+        "data_collection_tag": "upset_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cd6"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Set overlap",
+      "viz_kind": "upset_plot",
+      "config": {
+        "viz_kind": "upset_plot",
+        "matrix_wf_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+        },
+        "matrix_dc_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cd6"
+        },
+        "set_columns": null,
+        "sort_by": "cardinality",
+        "sort_order": "descending",
+        "min_size": 1,
+        "max_degree": null,
+        "show_set_sizes": true,
+        "color_intersections_by": "set",
+        "set_colors": {
+          "Groundwater": "#45B8AC",
+          "Riverwater": "#348ABD",
+          "Sediment": "#8B5A2B",
+          "Soil": "#E24A33"
+        },
+        "default_annotation_cols": [
+          "taxon"
+        ],
+        "show_values": false,
+        "show_annotations": true
+      },
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "community-tables-header",
+      "component_type": "text",
+      "title": "Relative abundance table",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Tables",
+      "order": 2,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "The full per-sample, per-taxon abundance table behind every tile above.",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "9b8b57b7-c002-4e82-b0de-f0ac984e7a01",
+      "component_type": "table",
+      "title": "Taxonomy Relative Abundance",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "taxonomy_rel_abundance",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca9"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Taxonomic relative abundance at Phylum level (from raw abundance table)",
+        "data_collection_tag": "taxonomy_rel_abundance",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca9"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Tables",
+      "columns": [],
+      "page_size": 100,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
+      "wf_tag": "nextflow/ampliseq"
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-34c0eee4-ce9a-4053-962b-2378f868fdca",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-18ae2217-1f3f-41c7-9b27-69fe206eecb5",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 2,
+      "static": false
+    },
+    {
+      "i": "box-883a9ec3-3980-4f63-8ec2-f014a686b613",
+      "x": 0,
+      "y": 5,
+      "w": 1,
+      "h": 2,
+      "static": false
+    },
+    {
+      "i": "box-e70322a9-b6da-49bc-9c7e-aa7d736f5d3d",
+      "x": 0,
+      "y": 7,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-range-rel-abundance-slider",
+      "x": 0,
+      "y": 10,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-community-section-header",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-2996b8cf-bafe-4f00-8757-bb9aa5261062",
+      "x": 0,
+      "y": 1,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-87c023eb-f3c3-45af-be74-57d222eb2907",
+      "x": 2,
+      "y": 1,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-96ae0bf1-10dd-47d7-8e28-9454d62e1647",
+      "x": 4,
+      "y": 1,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-community-phyla",
+      "x": 6,
+      "y": 1,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-community-composition-header",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-21b375c2-80a8-4b7e-a7fc-592de1824a33",
+      "x": 0,
+      "y": 1,
+      "w": 8,
+      "h": 9,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-adv-stacked-taxonomy",
+      "x": 0,
+      "y": 10,
+      "w": 8,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-community-structure-header",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-adv-sunburst",
+      "x": 0,
+      "y": 1,
+      "w": 8,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-adv-sankey",
+      "x": 0,
+      "y": 9,
+      "w": 8,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-community-upset-header",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-adv-upset",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-community-tables-header",
+      "x": 0,
+      "y": 60,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-9b8b57b7-c002-4e82-b0de-f0ac984e7a01",
+      "x": 0,
+      "y": 61,
+      "w": 8,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "filter_sections": [
+    {
+      "name": "Community filters",
+      "icon": "mdi:filter-variant",
+      "color": "teal",
+      "description": "Sample scope first, then the taxonomic slice",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Overview",
+      "icon": "mdi:counter",
+      "color": "teal",
+      "description": "How much of the abundance table the current filters leave",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Composition",
+      "icon": "mdi:chart-bar",
+      "color": "grape",
+      "description": "What the samples are made of, ranked and per sample",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Taxonomic structure",
+      "icon": "mdi:relation-many-to-many",
+      "color": "violet",
+      "description": "The same abundances read as a hierarchy",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Set overlap",
+      "icon": "mdi:set-merge",
+      "color": "indigo",
+      "description": "Which taxa are shared between groups and which are exclusive",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Tables",
+      "icon": "mdi:table",
+      "color": "gray",
+      "description": "The abundance table behind every tile above",
+      "collapsed": true,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Community & Diversity",
+  "subtitle": "Alpha diversity, rarefaction, taxonomic composition (sunburst + Sankey + stacked taxonomy)",
+  "icon": "/assets/images/workflows/nf-core.png",
+  "icon_color": "green",
+  "icon_variant": "filled",
+  "workflow_system": "nf-core",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-08-29 00:00:00",
+  "creation_time": "2023-05-22 06:44:12",
+  "screenshot_ts": "",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
+  },
+  "tab_order": 2,
+  "main_tab_name": null,
+  "tab_icon": "mdi:bacteria-outline",
+  "tab_icon_color": "teal",
+  "parent_dashboard_title": null,
+  "project_realtime": null
+}

@@ -1,0 +1,1710 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
+  },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "multiqc-sample-filter",
+      "component_type": "interactive",
+      "title": "Sample ID",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Sample filters",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Sample scope",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#45B8AC",
+      "icon_name": "mdi:flask",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "multiqc-habitat-filter",
+      "component_type": "interactive",
+      "title": "Habitat",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Sample filters",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "habitat",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Sample scope",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#984EA3",
+      "icon_name": "mdi:earth",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "multiqc-section-header",
+      "component_type": "text",
+      "title": "Run quality at a glance",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "QC overview",
+      "order": 2,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "MultiQC aggregates the per-sample FastQC and Cutadapt reports for this run. The four panels here answer the questions asked first: how many reads survived trimming, how evenly they are spread across samples, and whether base quality holds to the end of the read. The remaining ten panels are folded into *QC details* below. Pick a sample on the left to narrow every panel at once.",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "a679a6a9-c4e6-4a4d-b5cd-a120c842fb78",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "QC overview",
+      "selected_module": "general_stats",
+      "selected_plot": "general_stats",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "9de261de-1730-46fa-a0b1-5f3a39a603b0",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/cutadapt",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_cutadapt",
+        "use": "multiqc/cutadapt",
+        "description": "Adapter/primer trimming summary (filtered reads, trimmed sequence lengths) \u2014 Cutadapt, surfaced via MultiQC."
+      },
+      "section": "QC overview",
+      "selected_module": "cutadapt",
+      "selected_plot": "Filtered Reads",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "f107c9e0-ae02-4f72-8b69-7939c6896b67",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/fastqc",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_fastqc",
+        "use": "multiqc/fastqc",
+        "description": "Raw-read sequencing QC (per-base quality, GC content, duplication, adapter content) \u2014 FastQC plots aggregated by MultiQC."
+      },
+      "section": "QC overview",
+      "selected_module": "fastqc",
+      "selected_plot": "Sequence Counts",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "29ee57e4-4c08-40de-9c62-78d2f56b5932",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/fastqc",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_fastqc",
+        "use": "multiqc/fastqc",
+        "description": "Raw-read sequencing QC (per-base quality, GC content, duplication, adapter content) \u2014 FastQC plots aggregated by MultiQC."
+      },
+      "section": "QC overview",
+      "selected_module": "fastqc",
+      "selected_plot": "Sequence Quality Histograms",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "multiqc-details-header",
+      "component_type": "text",
+      "title": "The rest of the QC report",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "QC details",
+      "order": 2,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "Ten more MultiQC panels, one per FastQC or Cutadapt module: GC content, adapter contamination, duplication, length distribution, N content and overrepresented sequences. They start collapsed because each only becomes interesting once a panel above has flagged something. A tile inside a collapsed section is also never fetched, so opening this section is what triggers the requests.",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "93beccd8-b868-4ca7-aa8e-347d099eac62",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/fastqc",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_fastqc",
+        "use": "multiqc/fastqc",
+        "description": "Raw-read sequencing QC (per-base quality, GC content, duplication, adapter content) \u2014 FastQC plots aggregated by MultiQC."
+      },
+      "section": "QC details",
+      "selected_module": "fastqc",
+      "selected_plot": "Adapter Content",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "97d24527-1c36-445f-8db1-3b7c2dd7707d",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/cutadapt",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_cutadapt",
+        "use": "multiqc/cutadapt",
+        "description": "Adapter/primer trimming summary (filtered reads, trimmed sequence lengths) \u2014 Cutadapt, surfaced via MultiQC."
+      },
+      "section": "QC details",
+      "selected_module": "cutadapt",
+      "selected_plot": "Trimmed Sequence Lengths (5')",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "00504d86-9d09-4cc4-9379-aac727720158",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/fastqc",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_fastqc",
+        "use": "multiqc/fastqc",
+        "description": "Raw-read sequencing QC (per-base quality, GC content, duplication, adapter content) \u2014 FastQC plots aggregated by MultiQC."
+      },
+      "section": "QC details",
+      "selected_module": "fastqc",
+      "selected_plot": "Per Sequence Quality Scores",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "47500892-1f96-4319-9009-6e00ed4b496c",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/fastqc",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_fastqc",
+        "use": "multiqc/fastqc",
+        "description": "Raw-read sequencing QC (per-base quality, GC content, duplication, adapter content) \u2014 FastQC plots aggregated by MultiQC."
+      },
+      "section": "QC details",
+      "selected_module": "fastqc",
+      "selected_plot": "Sequence Duplication Levels",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "a26f5798-48e9-45e5-a26e-08428e3e9066",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/fastqc",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_fastqc",
+        "use": "multiqc/fastqc",
+        "description": "Raw-read sequencing QC (per-base quality, GC content, duplication, adapter content) \u2014 FastQC plots aggregated by MultiQC."
+      },
+      "section": "QC details",
+      "selected_module": "fastqc",
+      "selected_plot": "Sequence Length Distribution",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "e9122459-077b-43e6-84c8-622b214fcf06",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/fastqc",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_fastqc",
+        "use": "multiqc/fastqc",
+        "description": "Raw-read sequencing QC (per-base quality, GC content, duplication, adapter content) \u2014 FastQC plots aggregated by MultiQC."
+      },
+      "section": "QC details",
+      "selected_module": "fastqc",
+      "selected_plot": "Per Base N Content",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "b70125ff-e3b6-4d15-88d9-d06339da8ec2",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/fastqc",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_fastqc",
+        "use": "multiqc/fastqc",
+        "description": "Raw-read sequencing QC (per-base quality, GC content, duplication, adapter content) \u2014 FastQC plots aggregated by MultiQC."
+      },
+      "section": "QC details",
+      "selected_module": "fastqc",
+      "selected_plot": "Top overrepresented sequences",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "07438fbb-aa75-4e8f-98ac-805aaec5c4dd",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/fastqc",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_fastqc",
+        "use": "multiqc/fastqc",
+        "description": "Raw-read sequencing QC (per-base quality, GC content, duplication, adapter content) \u2014 FastQC plots aggregated by MultiQC."
+      },
+      "section": "QC details",
+      "selected_module": "fastqc",
+      "selected_plot": "Overrepresented sequences by sample",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "2ea20b8c-956a-4728-8783-b842ac707a8b",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/fastqc",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_fastqc",
+        "use": "multiqc/fastqc",
+        "description": "Raw-read sequencing QC (per-base quality, GC content, duplication, adapter content) \u2014 FastQC plots aggregated by MultiQC."
+      },
+      "section": "QC details",
+      "selected_module": "fastqc",
+      "selected_plot": "Status Checks",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "meta-header",
+      "component_type": "text",
+      "title": "Sample metadata",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sample metadata",
+      "order": 2,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "The sample sheet this project was ingested with, plus four summaries of it. The section is pinned to the bottom of every tab, so the cohort stays one scroll away wherever the viewer lands. The cards count the samples, show how they split across Habitat, and report how complete and how unique the two key columns are.",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "meta-samples",
+      "component_type": "card",
+      "title": "Samples",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sample metadata",
+      "aggregation": "nunique",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "top_n",
+      "breakdown_col": "habitat",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:flask",
+      "icon_color": "#45B8AC",
+      "title_color": "#45B8AC",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "meta-groups",
+      "component_type": "card",
+      "title": "Habitat groups",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sample metadata",
+      "aggregation": "nunique",
+      "column_name": "habitat",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "donut",
+      "breakdown_col": "habitat",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:earth",
+      "icon_color": "#984EA3",
+      "title_color": "#984EA3",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "meta-filled",
+      "component_type": "card",
+      "title": "Habitat coverage",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sample metadata",
+      "aggregation": "count",
+      "column_name": "habitat",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "completeness",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:check-decagram",
+      "icon_color": "#2E7D32",
+      "title_color": "#2E7D32",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "meta-unique",
+      "component_type": "card",
+      "title": "Sample identifiers",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sample metadata",
+      "aggregation": "count",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "uniqueness",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:fingerprint",
+      "icon_color": "#1976D2",
+      "title_color": "#1976D2",
+      "title_font_size": "xl",
+      "value_font_size": "xl",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "fd34fbe1-b839-4d14-8701-ff04a647a035",
+      "component_type": "table",
+      "title": "Sample Metadata",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sample metadata",
+      "columns": [],
+      "page_size": 100,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": true,
+      "row_selection_column": "sample",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-sampling-date",
+      "component_type": "interactive",
+      "title": "Sampling date",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Campaign design",
+      "interactive_component_type": "DateRangePicker",
+      "column_name": "sampling_date",
+      "column_type": "datetime",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Where & when",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#3F51B5",
+      "icon_name": "mdi:calendar-outline",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-city",
+      "component_type": "interactive",
+      "title": "Site",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Campaign design",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "city",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Where & when",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#3F51B5",
+      "icon_name": "mdi:map-marker-outline",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-ctd-temperature",
+      "component_type": "interactive",
+      "title": "Temperature (\u00b0C)",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Environment",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "ctd_temperature_c",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Sonde readings",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#00BCD4",
+      "icon_name": "mdi:thermometer",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-ctd-conductivity",
+      "component_type": "interactive",
+      "title": "Conductivity (\u00b5S/cm)",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Environment",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "ctd_conductivity_us_cm",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Sonde readings",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#00BCD4",
+      "icon_name": "mdi:flash",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-ctd-do",
+      "component_type": "interactive",
+      "title": "Dissolved O\u2082 (mg/L)",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Environment",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "ctd_do_mg_l",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Sonde readings",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#00BCD4",
+      "icon_name": "mdi:water-percent",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-ctd-nitrate",
+      "component_type": "interactive",
+      "title": "Nitrate (mg/L)",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Environment",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "ctd_nitrate_mg_l",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Sonde readings",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#00BCD4",
+      "icon_name": "mdi:molecule",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-sampling-sites",
+      "component_type": "map",
+      "title": "Sampling sites",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": null,
+      "map_type": "scatter_map",
+      "lat_column": "lat",
+      "lon_column": "lon",
+      "color_column": "habitat",
+      "size_column": null,
+      "hover_columns": [
+        "sample",
+        "city",
+        "sampling_date"
+      ],
+      "text_column": null,
+      "map_style": "carto-positron",
+      "default_zoom": null,
+      "default_center": null,
+      "opacity": 0.9,
+      "size_max": 22,
+      "z_column": null,
+      "radius": null,
+      "selection_enabled": true,
+      "selection_column": "sample",
+      "dict_kwargs": {
+        "color_discrete_map": {
+          "Groundwater": "#45B8AC",
+          "Riverwater": "#348ABD",
+          "Sediment": "#8B5A2B",
+          "Soil": "#E24A33"
+        }
+      },
+      "locations_column": null,
+      "featureidkey": "id",
+      "geojson_data": null,
+      "geojson_url": null,
+      "geojson_dc_id": null,
+      "geojson_dc_tag": null,
+      "choropleth_aggregation": null,
+      "color_continuous_scale": null,
+      "range_color": null,
+      "placement": "floating",
+      "floating_initial_state": "compact",
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "wf_tag": "nextflow/ampliseq"
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-multiqc-sample-filter",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-multiqc-habitat-filter",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 2,
+      "static": false
+    },
+    {
+      "i": "box-ref-sampling-date",
+      "x": 0,
+      "y": 5,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-ref-city",
+      "x": 0,
+      "y": 8,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-ref-ctd-temperature",
+      "x": 0,
+      "y": 11,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-ref-ctd-conductivity",
+      "x": 0,
+      "y": 14,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-ref-ctd-do",
+      "x": 0,
+      "y": 17,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-ref-ctd-nitrate",
+      "x": 0,
+      "y": 20,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-multiqc-section-header",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-a679a6a9-c4e6-4a4d-b5cd-a120c842fb78",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-9de261de-1730-46fa-a0b1-5f3a39a603b0",
+      "x": 0,
+      "y": 7,
+      "w": 8,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-f107c9e0-ae02-4f72-8b69-7939c6896b67",
+      "x": 0,
+      "y": 11,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-29ee57e4-4c08-40de-9c62-78d2f56b5932",
+      "x": 4,
+      "y": 11,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-multiqc-details-header",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-93beccd8-b868-4ca7-aa8e-347d099eac62",
+      "x": 4,
+      "y": 2,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-97d24527-1c36-445f-8db1-3b7c2dd7707d",
+      "x": 0,
+      "y": 2,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-00504d86-9d09-4cc4-9379-aac727720158",
+      "x": 4,
+      "y": 7,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-47500892-1f96-4319-9009-6e00ed4b496c",
+      "x": 0,
+      "y": 7,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-a26f5798-48e9-45e5-a26e-08428e3e9066",
+      "x": 4,
+      "y": 12,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-e9122459-077b-43e6-84c8-622b214fcf06",
+      "x": 0,
+      "y": 12,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-b70125ff-e3b6-4d15-88d9-d06339da8ec2",
+      "x": 4,
+      "y": 17,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-07438fbb-aa75-4e8f-98ac-805aaec5c4dd",
+      "x": 0,
+      "y": 17,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-2ea20b8c-956a-4728-8783-b842ac707a8b",
+      "x": 0,
+      "y": 22,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-meta-header",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-meta-samples",
+      "x": 0,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-meta-groups",
+      "x": 2,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-meta-filled",
+      "x": 4,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-meta-unique",
+      "x": 6,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-fd34fbe1-b839-4d14-8701-ff04a647a035",
+      "x": 0,
+      "y": 5,
+      "w": 8,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "filter_sections": [
+    {
+      "name": "Sample filters",
+      "icon": "mdi:filter-variant",
+      "color": "teal",
+      "description": "Applies to every tab",
+      "collapsed": false,
+      "persistent": true,
+      "pin": "top"
+    },
+    {
+      "name": "Campaign design",
+      "icon": "mdi:calendar-outline",
+      "color": "indigo",
+      "description": "When and where each sample was taken",
+      "collapsed": false,
+      "persistent": true,
+      "pin": "top"
+    },
+    {
+      "name": "Environment",
+      "icon": "mdi:waves",
+      "color": "cyan",
+      "description": "Sonde readings; synthetic in this reference dataset",
+      "collapsed": true,
+      "persistent": true,
+      "pin": "bottom"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "QC overview",
+      "icon": "mdi:chart-box-outline",
+      "color": "teal",
+      "description": "Read yield and base quality for the whole run",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "QC details",
+      "icon": "mdi:file-document-outline",
+      "color": "gray",
+      "description": "The remaining FastQC and Cutadapt panels",
+      "collapsed": true,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Sample metadata",
+      "icon": "mdi:table-account",
+      "color": "teal",
+      "description": "The sample sheet every other tab is filtered by",
+      "collapsed": true,
+      "persistent": true,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "nf-core/ampliseq",
+  "subtitle": "Ammer catchment reference dataset \u2014 QC, diversity, campaign and environment",
+  "icon": "/assets/images/workflows/nf-core.png",
+  "icon_color": "green",
+  "icon_variant": "filled",
+  "workflow_system": "nf-core",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-08-29 00:00:00",
+  "creation_time": "2023-05-22 06:44:12",
+  "screenshot_ts": "",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
+  },
+  "is_main_tab": true,
+  "parent_dashboard_id": null,
+  "tab_order": 0,
+  "main_tab_name": "MultiQC",
+  "tab_icon": "/assets/images/logos/multiqc.png",
+  "tab_icon_color": "orange",
+  "parent_dashboard_title": null,
+  "project_realtime": null
+}

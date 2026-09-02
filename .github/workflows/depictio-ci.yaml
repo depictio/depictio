@@ -1537,7 +1537,8 @@ jobs:
 
       - name: Download ampliseq test data from public S3
         run: |
-          S3_URL="https://nf-core-awsmegatests.s3.amazonaws.com/ampliseq/results-3d5c7e5bec28de279337f3ffe3c312a45940b782"
+          # Megatest of the shipped template version (see depictio/projects/nf-core/ampliseq/<latest>/download_test_data.sh)
+          S3_URL="https://nf-core-awsmegatests.s3.amazonaws.com/ampliseq/results-2723d4c298d48321594920d0324697e14d73ee94"
           TARGET="ampliseq-testdata"
           echo "📥 Downloading ampliseq test data..."
 
