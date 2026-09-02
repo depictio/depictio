@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 import polars as pl
@@ -214,6 +214,55 @@ class DashboardContext:
             f"- {f.component_id} ({f.component_type}, col={f.column}): {f.value}"
             for f in self.filters
         )
+
+    def with_active_filters(self, active: list[dict[str, Any]] | None) -> DashboardContext:
+        """Overlay the client's live filter state on the stored widget values.
+
+        `_summarize_dashboard` reads each interactive's *saved* value, i.e.
+        what a fresh visitor sees, not what the asking user sees. The client
+        sends its live filters separately, and the sandbox frames are built
+        from those. Without this overlay the prompt says the widgets are
+        unset while the data is already narrowed, and the model reports the
+        mismatch as a data-access anomaly instead of using it.
+
+        Widget entries (`index` + `value`) replace the matching summary's
+        value. Expression-only entries (`filter_expr` without a widget
+        value — the AI panel's own `source: 'ai_prompt'` filters) have no
+        stored counterpart and are appended as `filter_expr` lines.
+        """
+        if not active:
+            return self
+        by_index: dict[str, dict[str, Any]] = {}
+        expressions: list[FilterSummary] = []
+        for entry in active:
+            if not isinstance(entry, dict):
+                continue
+            index = entry.get("index")
+            value = entry.get("value")
+            expr = entry.get("filter_expr") or (entry.get("metadata") or {}).get("filter_expr")
+            if entry.get("column_name") and index is not None:
+                by_index[str(index)] = entry
+            elif expr:
+                column = entry.get("column_name") or (entry.get("metadata") or {}).get(
+                    "column_name"
+                )
+                expressions.append(
+                    FilterSummary(
+                        component_id=str(index or "expression"),
+                        component_type="filter_expr",
+                        column=column if isinstance(column, str) else None,
+                        value=expr,
+                    )
+                )
+            elif index is not None and value not in (None, [], ""):
+                by_index[str(index)] = entry
+        filters = [
+            replace(f, value=by_index[f.component_id].get("value"))
+            if f.component_id in by_index
+            else f
+            for f in self.filters
+        ]
+        return replace(self, filters=[*filters, *expressions])
 
 
 # ---------- Loaders ----------

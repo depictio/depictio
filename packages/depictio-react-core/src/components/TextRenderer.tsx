@@ -16,7 +16,7 @@ interface TextRendererProps {
  * Maps the body's inline-markdown tokens to React nodes. The grammar itself
  * lives in `inlineMarkdown.ts` so it can be unit-tested without a DOM.
  */
-const renderInlineMarkdown = (input: string): React.ReactNode[] =>
+export const renderInlineMarkdown = (input: string): React.ReactNode[] =>
   parseInlineMarkdown(input).map((token, idx) => {
     switch (token.type) {
       case 'bold':

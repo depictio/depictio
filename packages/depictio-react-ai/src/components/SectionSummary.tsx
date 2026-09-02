@@ -1,6 +1,6 @@
 /**
- * Section-summary UI: the sparkle trigger (slotted into a section
- * header's `trailing` area) and the dismissible summary panel rendered
+ * Section-summary UI: the sparkle trigger (slotted into the section
+ * accordion's actions slot, beside the header) and the dismissible summary panel rendered
  * above the section's grid content.
  *
  * State handling lives in the host via `useSectionSummaries` — this file
@@ -25,6 +25,7 @@ import { Icon } from '@iconify/react';
 import { getSummaries } from '../api';
 import { useSummarizeSection } from '../hooks';
 import { AI_ICON } from '../icons';
+import MarkdownLite from './MarkdownLite';
 import type {
   SummarizeSectionResponse,
   SummaryComponentPayload,
@@ -171,7 +172,9 @@ interface ButtonProps {
   onGenerate: (section: string | null, force?: boolean) => void;
 }
 
-/** Sparkle affordance for a section header's `trailing` slot. */
+/** Sparkle affordance for a section header. Hosts must place it in the
+ *  accordion's actions slot (beside the header button), never inside the
+ *  header: it is a button, and a button inside a button is invalid DOM. */
 export const SummarizeSectionButton: React.FC<ButtonProps> = ({
   section,
   hasSummary,
@@ -218,7 +221,6 @@ export const SectionSummaryPanel: React.FC<PanelProps> = ({
   onRegenerate,
   onDismiss,
 }) => {
-  const lines = entry.summary_md.split('\n');
   return (
     <Paper
       withBorder
@@ -273,19 +275,7 @@ export const SectionSummaryPanel: React.FC<PanelProps> = ({
             <Text size="xs">{error}</Text>
           </Alert>
         )}
-        <Stack gap={2}>
-          {lines.map((line, i) =>
-            line.trim().startsWith('- ') ? (
-              <Text key={i} size="sm" pl="sm">
-                • {line.trim().slice(2)}
-              </Text>
-            ) : line.trim() ? (
-              <Text key={i} size="sm">
-                {line}
-              </Text>
-            ) : null,
-          )}
-        </Stack>
+        <MarkdownLite text={entry.summary_md} />
         <Text size="xs" c="dimmed">
           Generated {entry.generated_at ? new Date(entry.generated_at).toLocaleString() : ''}
           {entry.model ? ` · ${entry.model.split('/').pop()}` : ''}
