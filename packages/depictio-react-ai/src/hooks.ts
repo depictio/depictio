@@ -14,7 +14,7 @@ import {
   getAnalyses as apiGetAnalyses,
   resolveFilters as apiResolveFilters,
   streamAnalyze as apiStreamAnalyze,
-  suggestFigures as apiSuggestFigures,
+  suggestComponents as apiSuggestComponents,
   summarizeSection as apiSummarizeSection,
   type AIHealth,
 } from './api';
@@ -27,10 +27,11 @@ import type {
   BudgetTick,
   ComponentFromPromptRequest,
   ComponentFromPromptResponse,
+  ComponentSuggestion,
   DashboardActions,
   ExecutionStep,
-  PlotSuggestion,
   ResolveFiltersResponse,
+  SuggestComponentsRequest,
   SummarizeSectionRequest,
   SummarizeSectionResponse,
 } from './types';
@@ -113,25 +114,31 @@ export function useComponentFromPrompt(dashboardId: string) {
   );
 }
 
-/** Data-grounded figure suggestions for one data collection. Suggestions
- *  reset when the target DC changes so a stale list is never shown against
- *  the wrong columns. */
-export function useSuggestFigures(dashboardId: string) {
+/** Typed component suggestions for one dashboard ("what would you add?").
+ *  Either pin is optional; null means Auto. Callers are expected to `reset()`
+ *  when the pins change so a stale list is never applied against the wrong
+ *  collection. `warnings` carries what the server could not do (an LLM
+ *  failure with ranked suggestions still shown, for instance). */
+export function useSuggestComponents(dashboardId: string) {
   const session = useAISession(dashboardId);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [suggestions, setSuggestions] = useState<PlotSuggestion[]>([]);
+  const [suggestions, setSuggestions] = useState<ComponentSuggestion[]>([]);
+  const [warnings, setWarnings] = useState<string[]>([]);
 
   const run = useCallback(
-    async (dataCollectionId: string, n = 4): Promise<PlotSuggestion[]> => {
+    async (
+      body: Omit<SuggestComponentsRequest, 'dashboard_id'>,
+    ): Promise<ComponentSuggestion[]> => {
       setPending(true);
       setError(null);
       try {
-        const res = await apiSuggestFigures(
-          { data_collection_id: dataCollectionId, n },
+        const res = await apiSuggestComponents(
+          { ...body, dashboard_id: dashboardId, n: body.n ?? 4 },
           session.llmKey || null,
         );
         setSuggestions(res.suggestions);
+        setWarnings(res.warnings ?? []);
         return res.suggestions;
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -141,17 +148,18 @@ export function useSuggestFigures(dashboardId: string) {
         setPending(false);
       }
     },
-    [session.llmKey],
+    [dashboardId, session.llmKey],
   );
 
   const reset = useCallback(() => {
     setSuggestions([]);
+    setWarnings([]);
     setError(null);
   }, []);
 
   return useMemo(
-    () => ({ run, reset, suggestions, pending, error }),
-    [run, reset, suggestions, pending, error],
+    () => ({ run, reset, suggestions, warnings, pending, error }),
+    [run, reset, suggestions, warnings, pending, error],
   );
 }
 

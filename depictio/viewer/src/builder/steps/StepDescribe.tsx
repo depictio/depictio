@@ -17,11 +17,15 @@
  * its live preview take over on Design, where the AI button reads "Refine
  * with AI".
  *
- * Figures also get the data-grounded suggestions mode (/ai/suggest-figures)
- * once a collection is resolvable client-side (pinned, or the dashboard uses
- * exactly one). Typed suggestions for every component type are the next lot.
+ * The Suggestions mode asks the other question, "what would you add to this
+ * dashboard?" (/ai/suggest-components). The same two pins scope it: nothing
+ * pinned means a mix of types across the dashboard's collections, a pinned
+ * type or collection narrows the answer. Each suggestion is a validated lite
+ * component, so "Use this" lands through the same hydration path as a
+ * prompt. Under the AI's list sit the catalog's offers for the same scope,
+ * deterministic and free of any model call.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Badge,
@@ -37,8 +41,17 @@ import {
   Title,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { fetchDashboard, fetchProjectFromDashboard } from 'depictio-react-core';
-import type { WorkflowEntry } from 'depictio-react-core';
+import {
+  fetchCatalogCompose,
+  fetchDashboard,
+  fetchProjectFromDashboard,
+} from 'depictio-react-core';
+import type {
+  CatalogModule,
+  CatalogOutputMatch,
+  CatalogRender,
+  WorkflowEntry,
+} from 'depictio-react-core';
 import {
   AI_COLOR,
   AI_ICON,
@@ -47,16 +60,16 @@ import {
   useAIHealth,
   useAISession,
   useComponentFromPrompt,
-  useSuggestFigures,
+  useSuggestComponents,
 } from 'depictio-react-ai';
 import type {
   ComponentType as AIComponentType,
   ComponentFromPromptResponse,
-  PlotSuggestion,
+  ComponentSuggestion,
 } from 'depictio-react-ai';
 import { useServerStatus } from '../../hooks/useServerStatus';
 import { useBuilderStore } from '../store/useBuilderStore';
-import type { AIRouting, ComponentType } from '../store/useBuilderStore';
+import type { AIRouting, AISource, ComponentType } from '../store/useBuilderStore';
 import { applyLiteComponent } from '../store/applyLiteComponent';
 import { COMPONENT_TYPES, getComponentTypeMeta } from '../componentTypes';
 import { TypeCard } from './StepType';
@@ -64,8 +77,15 @@ import type { TypeCardMeta } from './StepType';
 import AISuggestionPreview from '../ai/AISuggestionPreview';
 import CollectionPicker, { AUTO_COLLECTION } from '../ai/CollectionPicker';
 import type { CollectionOption } from '../ai/CollectionPicker';
+import { catalogUseRef, matchTitle } from '../catalog/CatalogPreviewPanel';
+import { buildConfigFromRender } from '../catalog/renderConfig';
 
 const AUTO = 'auto';
+
+/** How many suggestions one Suggest asks for. */
+const SUGGEST_N = 4;
+/** How many catalog offers the Suggestions mode lists under the AI's. */
+const MAX_CATALOG_OFFERS = 6;
 
 /** The "let the AI choose" tile, drawn with the same card as the nine types
  *  so the grid reads as one set of choices. */
@@ -94,6 +114,15 @@ const PROMPT_EXAMPLES: Record<ComponentType | typeof AUTO, string> = {
 
 type PromptMode = 'prompt' | 'suggest';
 
+/** One catalog render offered in the Suggestions mode, with the tool and the
+ *  matched output it came from (what `initFromCatalog` needs as provenance). */
+interface CatalogOffer {
+  toolId: string;
+  toolName: string;
+  match: CatalogOutputMatch;
+  render: CatalogRender;
+}
+
 /** Flatten the project's workflows into picker options, dashboard collections
  *  first so "the only candidate" and the picker's first chip agree with what
  *  the server prefers. */
@@ -114,11 +143,255 @@ function toCollectionOptions(
   return options.sort((a, b) => Number(b.onDashboard) - Number(a.onDashboard));
 }
 
+/** One line saying what the suggested component is made of, per type, read
+ *  off its lite dict. The title says why; this says what, so two suggestions
+ *  with similar titles can be told apart before a preview renders. */
+function summarizeComponent(s: ComponentSuggestion): string {
+  const c = s.component;
+  const str = (k: string): string | null => (typeof c[k] === 'string' ? (c[k] as string) : null);
+  const obj = (k: string): Record<string, unknown> => {
+    const value = c[k];
+    return value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+  };
+  switch (s.component_type) {
+    case 'card':
+      return [str('aggregation'), str('column_name')].filter(Boolean).join(' of ');
+    case 'interactive':
+      return `${str('interactive_component_type') ?? 'widget'} on ${str('column_name') ?? '?'}`;
+    case 'figure': {
+      const kwargs = obj('dict_kwargs');
+      const axes = ['x', 'y', 'color']
+        .filter((k) => typeof kwargs[k] === 'string')
+        .map((k) => `${k}=${String(kwargs[k])}`);
+      return [str('visu_type'), ...axes].filter(Boolean).join(' ');
+    }
+    case 'table': {
+      const count = Array.isArray(c.columns)
+        ? c.columns.length
+        : Object.keys(obj('cols_json')).length;
+      return `${count} column${count === 1 ? '' : 's'}`;
+    }
+    case 'advanced_viz': {
+      const roles = Object.entries(obj('config'))
+        .filter(([k, v]) => k.endsWith('_col') && typeof v === 'string')
+        .map(([k, v]) => `${k.slice(0, -4)}=${String(v)}`);
+      return `${str('viz_kind') ?? 'viz'}${roles.length ? `: ${roles.join(', ')}` : ''}`;
+    }
+    case 'map':
+      return `lat=${str('lat_column') ?? str('lat') ?? '?'} lon=${str('lon_column') ?? str('lon') ?? '?'}`;
+    case 'multiqc':
+      return [str('selected_module') ?? str('module'), str('selected_plot') ?? str('plot')]
+        .filter(Boolean)
+        .join(' / ');
+    case 'text': {
+      const body = str('body') ?? str('content') ?? '';
+      return body.length > 80 ? `${body.slice(0, 80)}...` : body;
+    }
+    default:
+      return '';
+  }
+}
+
+/** What distinguishes a catalog render from its siblings on the same output,
+ *  without the viz-kind labels the catalog tab loads separately. */
+function offerVariant(render: CatalogRender): string {
+  if (render.kind) return render.kind.replace(/_/g, ' ');
+  if (render.visu_type) return render.visu_type;
+  if (render.aggregation)
+    return render.column ? `${render.aggregation} of ${render.column}` : render.aggregation;
+  return '';
+}
+
+/** The figure grammar of a suggestion, when its lite component carries one
+ *  to render a preview from (only figures do). */
+function figureGrammar(
+  s: ComponentSuggestion,
+): { visuType: string; dictKwargs: Record<string, unknown> } | null {
+  if (s.component_type !== 'figure') return null;
+  const { visu_type: visuType, dict_kwargs: dictKwargs } = s.component;
+  if (typeof visuType !== 'string' || !dictKwargs || typeof dictKwargs !== 'object') return null;
+  return { visuType, dictKwargs: dictKwargs as Record<string, unknown> };
+}
+
+interface SuggestionCardProps {
+  suggestion: ComponentSuggestion;
+  index: number;
+  /** The collection's workflow, resolved by the caller against the project. */
+  wfId: string | null;
+  dashboardId: string;
+  onUse: () => void;
+}
+
+/** One AI suggestion: what it is, why it was proposed, what it is made of,
+ *  and a live preview when it is a figure. */
+const SuggestionCard: React.FC<SuggestionCardProps> = ({
+  suggestion,
+  index,
+  wfId,
+  dashboardId,
+  onUse,
+}) => {
+  const meta = getComponentTypeMeta(suggestion.component_type as ComponentType);
+  const summary = summarizeComponent(suggestion);
+  const figure = figureGrammar(suggestion);
+  const dcId = suggestion.data_collection_id;
+  return (
+    <Paper
+      withBorder
+      radius="md"
+      p="sm"
+      data-testid={`ai-suggestion-${index}`}
+      data-component-type={suggestion.component_type}
+      data-origin={suggestion.origin}
+    >
+      <Stack gap={6}>
+        <Group gap="xs" align="center" wrap="nowrap">
+          <Badge
+            size="sm"
+            variant="light"
+            color={AI_COLOR}
+            leftSection={<Icon icon={meta.icon} width={12} />}
+            style={{ flexShrink: 0 }}
+          >
+            {meta.label}
+          </Badge>
+          {suggestion.data_collection_tag && (
+            <Badge size="sm" variant="outline" color="gray" style={{ flexShrink: 0 }}>
+              {suggestion.data_collection_tag}
+            </Badge>
+          )}
+          <Text size="sm" fw={600} style={{ flex: 1, minWidth: 0 }} lineClamp={1}>
+            {suggestion.title}
+          </Text>
+          <Button
+            size="compact-xs"
+            variant="light"
+            color={AI_COLOR}
+            onClick={onUse}
+            data-testid={`ai-suggestion-use-${index}`}
+          >
+            Use this
+          </Button>
+        </Group>
+        <Text size="xs" c="dimmed">
+          {suggestion.rationale}
+        </Text>
+        {summary && (
+          <Text size="xs" ff="monospace" c="dimmed">
+            {summary}
+            {suggestion.origin === 'ranked' && (
+              <Text span size="xs" c="dimmed">
+                {' '}
+                (ranked from the data)
+              </Text>
+            )}
+          </Text>
+        )}
+        {figure && dcId && (
+          <AISuggestionPreview
+            visuType={figure.visuType}
+            dictKwargs={figure.dictKwargs}
+            dcId={dcId}
+            wfId={wfId}
+            dashboardId={dashboardId}
+          />
+        )}
+        {suggestion.code && (
+          <Code block fz={11}>
+            {suggestion.code}
+          </Code>
+        )}
+      </Stack>
+    </Paper>
+  );
+};
+
+interface CatalogOfferCardProps {
+  offer: CatalogOffer;
+  index: number;
+  pending: boolean;
+  disabled: boolean;
+  onUse: () => void;
+}
+
+/** One catalog offer: the tool output it comes from and the collection it
+ *  matched, with no model in the loop. */
+const CatalogOfferCard: React.FC<CatalogOfferCardProps> = ({
+  offer,
+  index,
+  pending,
+  disabled,
+  onUse,
+}) => {
+  const meta = getComponentTypeMeta(offer.render.component as ComponentType);
+  const variant = offerVariant(offer.render);
+  return (
+    <Paper
+      withBorder
+      radius="md"
+      p="sm"
+      data-testid={`ai-catalog-offer-${index}`}
+      data-tool-id={offer.toolId}
+      data-output-id={offer.match.output_id}
+    >
+      <Stack gap={6} h="100%" justify="space-between">
+        <Stack gap={4}>
+          <Group gap="xs" align="center" wrap="nowrap">
+            <Badge
+              size="sm"
+              variant="light"
+              color="violet"
+              leftSection={<Icon icon={meta.icon} width={12} />}
+              style={{ flexShrink: 0 }}
+            >
+              {meta.label}
+            </Badge>
+            {variant && variant !== meta.label && (
+              <Text size="xs" c="dimmed" lineClamp={1}>
+                {variant}
+              </Text>
+            )}
+          </Group>
+          <Text size="sm" fw={600} lineClamp={1}>
+            {offer.toolName}
+            <Text span size="sm" c="dimmed" fw={400}>
+              {' '}
+              / {matchTitle(offer.match)}
+            </Text>
+          </Text>
+          {offer.match.description && (
+            <Text size="xs" c="dimmed" lineClamp={2}>
+              {offer.match.description}
+            </Text>
+          )}
+          <Text size="xs" c="dimmed" ff="monospace">
+            {offer.match.dc_tag}
+          </Text>
+        </Stack>
+        <Group justify="flex-end">
+          <Button
+            size="compact-xs"
+            variant="light"
+            color="violet"
+            onClick={onUse}
+            loading={pending}
+            disabled={disabled}
+            data-testid={`ai-catalog-offer-use-${index}`}
+          >
+            Use this
+          </Button>
+        </Group>
+      </Stack>
+    </Paper>
+  );
+};
+
 const StepDescribe: React.FC = () => {
   const dashboardId = useBuilderStore((s) => s.dashboardId);
   const storedType = useBuilderStore((s) => s.componentType);
   const storedDcId = useBuilderStore((s) => s.dcId);
   const initFromAI = useBuilderStore((s) => s.initFromAI);
+  const initFromCatalog = useBuilderStore((s) => s.initFromCatalog);
 
   const { features: serverFeatures } = useServerStatus();
   const aiHealth = useAIHealth(serverFeatures.ai);
@@ -126,7 +399,7 @@ const StepDescribe: React.FC = () => {
   const hasCreds = Boolean(session.llmKey) || aiHealth?.server_key_configured === true;
 
   const { run, pending, error } = useComponentFromPrompt(dashboardId ?? '');
-  const suggest = useSuggestFigures(dashboardId ?? '');
+  const suggest = useSuggestComponents(dashboardId ?? '');
   const [prompt, setPrompt] = useState('');
   const [mode, setMode] = useState<PromptMode>('prompt');
   // Coming back from Design pins what was used, so a correction is one
@@ -137,6 +410,13 @@ const StepDescribe: React.FC = () => {
   const [collections, setCollections] = useState<CollectionOption[] | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  // The catalog's offers, fetched once the first time Suggestions opens. The
+  // whole compose result is kept and filtered client-side so pinning a type
+  // or a collection never re-fetches.
+  const [catalogModules, setCatalogModules] = useState<CatalogModule[] | null>(null);
+  const catalogRequested = useRef(false);
+  const [offerPending, setOfferPending] = useState<number | null>(null);
 
   useEffect(() => {
     if (!dashboardId) return;
@@ -162,6 +442,17 @@ const StepDescribe: React.FC = () => {
     };
   }, [dashboardId]);
 
+  // No cancellation flag here on purpose: the ref guard already makes this a
+  // one-shot, and under StrictMode's double effect run a cancelled first call
+  // would leave the guard set with nothing ever arriving.
+  useEffect(() => {
+    if (mode !== 'suggest' || !projectId || catalogRequested.current) return;
+    catalogRequested.current = true;
+    fetchCatalogCompose(projectId)
+      .then((r) => setCatalogModules(r.modules))
+      .catch(() => setCatalogModules([]));
+  }, [mode, projectId]);
+
   const byId = useMemo(
     () => new Map((collections ?? []).map((c) => [c.dcId, c])),
     [collections],
@@ -170,37 +461,50 @@ const StepDescribe: React.FC = () => {
     () => (collections ?? []).filter((c) => c.onDashboard),
     [collections],
   );
+  const dashboardDcIds = useMemo(
+    () => new Set(dashboardCollections.map((c) => c.dcId)),
+    [dashboardCollections],
+  );
 
   const isText = typeSel === 'text';
   const effectiveDcSel = isText ? AUTO_COLLECTION : dcSel;
-  // The figure suggestions need a concrete collection before any answer
-  // exists: the pinned one, or the dashboard's only one.
-  const suggestDcId = ((): string | null => {
-    if (typeSel !== 'figure') return null;
-    if (dcSel !== AUTO_COLLECTION) return dcSel;
-    if (dashboardCollections.length === 1) return dashboardCollections[0].dcId;
-    return null;
-  })();
-  const suggestMode = Boolean(suggestDcId) && mode === 'suggest';
+  const typePinned = typeSel !== AUTO;
+  const dcPinned = effectiveDcSel !== AUTO_COLLECTION;
+  const suggestMode = mode === 'suggest';
+  // What the two panels below pin, as the server reads them: null is Auto.
+  const pinnedType = typePinned ? (typeSel as AIComponentType) : null;
+  const pinnedDcId = dcPinned ? effectiveDcSel : null;
 
-  // Suggestions are per collection: switching the target drops the old list
-  // so a stale suggestion is never applied against the wrong columns.
+  // Suggestions are scoped by the two pins: changing either drops the old
+  // list so a stale suggestion is never applied against the wrong collection
+  // or shown under the wrong type.
+  const resetSuggestions = suggest.reset;
   useEffect(() => {
-    suggest.reset();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [suggestDcId]);
+    resetSuggestions();
+  }, [typeSel, dcSel, resetSuggestions]);
+
+  const catalogOffers = useMemo<CatalogOffer[]>(() => {
+    const offers: CatalogOffer[] = [];
+    for (const mod of catalogModules ?? []) {
+      for (const match of mod.matches) {
+        const inScope = dcPinned
+          ? match.dc_id === effectiveDcSel
+          : dashboardDcIds.has(match.dc_id);
+        if (!inScope) continue;
+        for (const render of match.renders_as) {
+          if (typePinned && render.component !== typeSel) continue;
+          offers.push({ toolId: mod.tool_id, toolName: mod.tool_name, match, render });
+          if (offers.length >= MAX_CATALOG_OFFERS) return offers;
+        }
+      }
+    }
+    return offers;
+  }, [catalogModules, dcPinned, effectiveDcSel, dashboardDcIds, typePinned, typeSel]);
 
   if (!dashboardId) return null;
 
   const canGenerate = Boolean(prompt.trim()) && hasCreds && !pending && collections !== null;
-  const canSuggest = hasCreds && Boolean(suggestDcId) && !suggest.pending;
-
-  /** Pin a type (or Auto). Suggestions only exist for figures, so any other
-   *  pick drops back to the prompt. */
-  const pickType = (type: string) => {
-    setTypeSel(type);
-    if (type !== 'figure') setMode('prompt');
-  };
+  const canSuggest = hasCreds && !suggest.pending && collections !== null;
 
   const routingFor = (
     dcId: string | null,
@@ -222,7 +526,7 @@ const StepDescribe: React.FC = () => {
     dcId: string | null,
     wfIdFromServer: string | null | undefined,
     parsed: Record<string, unknown>,
-    source: { prompt?: string },
+    source: { flow?: AISource['flow']; prompt?: string },
     routing: AIRouting | null,
   ) => {
     const dc = dcId ? byId.get(dcId) : undefined;
@@ -241,44 +545,90 @@ const StepDescribe: React.FC = () => {
   const generate = async () => {
     if (!canGenerate) return;
     const text = prompt.trim();
-    const pinnedType = typeSel === AUTO ? null : (typeSel as AIComponentType);
-    const pinnedDc = isText || dcSel === AUTO_COLLECTION ? null : dcSel;
     try {
       const res = await run({
         prompt: text,
         component_type: pinnedType,
-        data_collection_id: pinnedDc,
+        data_collection_id: pinnedDcId,
         dashboard_id: dashboardId,
         current: null,
       });
       const usedType = res.component_type as ComponentType;
-      const usedDc = usedType === 'text' ? null : (res.data_collection_id ?? pinnedDc);
+      const usedDc = usedType === 'text' ? null : (res.data_collection_id ?? pinnedDcId);
       const routing =
         usedType === 'text' && !res.routing
           ? null
-          : routingFor(usedDc, res.routing, pinnedType && pinnedDc ? 'user' : 'auto');
+          : routingFor(usedDc, res.routing, pinnedType && pinnedDcId ? 'user' : 'auto');
       land(usedType, usedDc, res.workflow_id, res.parsed, { prompt: text }, routing);
     } catch {
       // useComponentFromPrompt surfaces the failure through `error`.
     }
   };
 
-  const useSuggestion = (s: PlotSuggestion) => {
-    if (!suggestDcId) return;
-    // Same shape /ai/component-from-prompt returns for a figure, so the
-    // hydration path is the one the prompt mode uses.
+  const runSuggest = () => {
+    if (!canSuggest) return;
+    suggest
+      .run({ component_type: pinnedType, data_collection_id: pinnedDcId, n: SUGGEST_N })
+      .catch(() => {
+        // useSuggestComponents surfaces the failure through `error`.
+      });
+  };
+
+  /** A suggestion's `component` is the same validated lite dict the prompt
+   *  flow returns in `parsed`, so it lands through the same path. */
+  const landSuggestion = (s: ComponentSuggestion) => {
     land(
-      'figure',
-      suggestDcId,
-      null,
-      { component_type: 'figure', visu_type: s.visu_type, dict_kwargs: s.dict_kwargs, title: s.title },
-      { prompt: s.title },
-      routingFor(suggestDcId, null, dcSel === AUTO_COLLECTION ? 'single' : 'user'),
+      s.component_type as ComponentType,
+      s.data_collection_id,
+      s.workflow_id,
+      s.component,
+      { flow: 'suggest-components', prompt: s.title },
+      // Text is written from the dashboard, so there is nothing to route;
+      // for the others the rationale is the reason the notice shows.
+      s.component_type === 'text'
+        ? null
+        : routingFor(
+            s.data_collection_id,
+            { source: typePinned && dcPinned ? 'user' : 'auto', reason: s.rationale, alternatives: [] },
+            'auto',
+          ),
     );
   };
 
-  const typeSummary =
-    typeSel === AUTO ? 'Auto: chosen from the prompt' : getComponentTypeMeta(typeSel as ComponentType).label;
+  /** A catalog offer lands the way the Catalog tab lands it: the render is
+   *  translated to the builder config and the store is seeded with the
+   *  catalog provenance, so the Design step and the saved component are the
+   *  same as if it had been picked in that tab. Only MultiQC can fail the
+   *  translation (its plot list comes from the collection); the store is
+   *  still seeded so the user lands on Design with the collection bound. */
+  const landCatalogOffer = async (offer: CatalogOffer, i: number) => {
+    if (!projectId) return;
+    setOfferPending(i);
+    let config: Record<string, unknown> = {};
+    try {
+      config = await buildConfigFromRender(offer.render, offer.match.dc_id);
+    } catch {
+      config = {};
+    }
+    setOfferPending(null);
+    initFromCatalog({
+      componentType: offer.render.component as ComponentType,
+      wfId: offer.match.wf_id,
+      dcId: offer.match.dc_id,
+      projectId,
+      config,
+      source: {
+        toolId: offer.toolId,
+        toolName: offer.toolName,
+        outputId: offer.match.output_id,
+        description: offer.match.description,
+        use: catalogUseRef(offer.toolId, offer.match.output_id, offer.render),
+      },
+    });
+  };
+
+  const typeLabel = typePinned ? getComponentTypeMeta(typeSel as ComponentType).label : null;
+  const typeSummary = typeLabel ?? 'Auto: chosen from the prompt';
   const dcSummary = ((): string => {
     if (isText) return 'Not needed for text';
     if (effectiveDcSel !== AUTO_COLLECTION) {
@@ -289,6 +639,16 @@ const StepDescribe: React.FC = () => {
     }
     return 'Auto: chosen from the prompt, dashboard collections first';
   })();
+  const scopeCaption =
+    [
+      typeLabel ? `for ${typeLabel}` : null,
+      dcPinned ? `on ${byId.get(effectiveDcSel)?.tag ?? effectiveDcSel}` : null,
+    ]
+      .filter(Boolean)
+      .join(' ') || 'for this dashboard';
+
+  const showEmptyState =
+    suggest.suggestions.length === 0 && !suggest.pending && catalogOffers.length === 0;
 
   return (
     <Stack gap="lg" pt="md" maw={1040} mx="auto">
@@ -297,8 +657,8 @@ const StepDescribe: React.FC = () => {
           Describe the component
         </Title>
         <Text size="sm" c="gray" ta="center">
-          Say what it should show. The AI picks the kind of component and the data
-          collection unless you pin them below.
+          Say what it should show, or ask for suggestions. The AI picks the kind of
+          component and the data collection unless you pin them below.
         </Text>
         {session.model && (
           <Badge variant="light" color="blue" mt={4}>
@@ -322,26 +682,24 @@ const StepDescribe: React.FC = () => {
         </Alert>
       )}
 
-      {/* 1. The prompt (or, for a figure with a known collection, suggestions). */}
+      {/* 1. The prompt, or the AI's suggestions for the current scope. */}
       <Paper withBorder radius="md" p="md">
         <Stack gap="sm">
           <Group justify="space-between" align="center">
             <Text fw={600} size="sm">
-              What should it show?
+              {suggestMode ? 'What would fit this dashboard?' : 'What should it show?'}
             </Text>
-            {suggestDcId && (
-              <SegmentedControl
-                size="xs"
-                color={AI_COLOR}
-                value={mode}
-                onChange={(v) => setMode(v as PromptMode)}
-                data={[
-                  { value: 'prompt', label: 'Describe' },
-                  { value: 'suggest', label: 'Suggestions' },
-                ]}
-                data-testid="ai-figure-mode"
-              />
-            )}
+            <SegmentedControl
+              size="xs"
+              color={AI_COLOR}
+              value={mode}
+              onChange={(v) => setMode(v as PromptMode)}
+              data={[
+                { value: 'prompt', label: 'Describe' },
+                { value: 'suggest', label: 'Suggestions' },
+              ]}
+              data-testid="ai-describe-mode"
+            />
           </Group>
 
           {!suggestMode && (
@@ -365,51 +723,33 @@ const StepDescribe: React.FC = () => {
 
           {suggestMode && (
             <Stack gap="xs">
-              {suggest.suggestions.length === 0 && !suggest.pending && (
-                <Text size="sm" c="dimmed" ta="center">
-                  The AI reads the collection's columns and proposes a few plots
-                  grounded in the actual data.
+              <Text size="xs" c="dimmed" data-testid="ai-suggest-scope">
+                Suggestions {scopeCaption}
+              </Text>
+
+              {showEmptyState && (
+                <Text size="sm" c="dimmed" ta="center" py="sm" data-testid="ai-suggest-empty">
+                  No suggestions yet. Suggest asks the AI what would fit this dashboard;
+                  catalog offers appear when a collection matches a known tool output.
                 </Text>
               )}
+
               {suggest.suggestions.map((s, i) => (
-                <Paper key={i} withBorder radius="md" p="sm" data-testid={`ai-suggestion-${i}`}>
-                  <Stack gap={6}>
-                    <Group gap="xs" align="center" wrap="nowrap">
-                      <Badge size="xs" variant="light" color={AI_COLOR}>
-                        {s.visu_type}
-                      </Badge>
-                      <Text size="sm" fw={600} style={{ flex: 1 }}>
-                        {s.title}
-                      </Text>
-                      <Button
-                        size="compact-xs"
-                        variant="light"
-                        color={AI_COLOR}
-                        onClick={() => useSuggestion(s)}
-                        data-testid={`ai-suggestion-use-${i}`}
-                      >
-                        Use this
-                      </Button>
-                    </Group>
-                    <Text size="xs" c="dimmed">
-                      {s.explanation}
-                    </Text>
-                    {suggestDcId && (
-                      <AISuggestionPreview
-                        suggestion={s}
-                        dcId={suggestDcId}
-                        wfId={byId.get(suggestDcId)?.wfId ?? null}
-                        dashboardId={dashboardId}
-                      />
-                    )}
-                    {s.code && (
-                      <Code block fz={11}>
-                        {s.code}
-                      </Code>
-                    )}
-                  </Stack>
-                </Paper>
+                <SuggestionCard
+                  key={`${s.component_type}-${s.data_collection_id ?? 'none'}-${i}`}
+                  suggestion={s}
+                  index={i}
+                  wfId={byId.get(s.data_collection_id ?? '')?.wfId ?? s.workflow_id ?? null}
+                  dashboardId={dashboardId}
+                  onUse={() => landSuggestion(s)}
+                />
               ))}
+
+              {suggest.warnings.length > 0 && (
+                <Text size="xs" c="dimmed" data-testid="ai-suggest-warnings">
+                  {suggest.warnings.join(' ')}
+                </Text>
+              )}
             </Stack>
           )}
 
@@ -432,7 +772,7 @@ const StepDescribe: React.FC = () => {
                 variant="filled"
                 color={AI_COLOR}
                 leftSection={<Icon icon={AI_ICON} width={14} />}
-                onClick={() => void (suggestDcId && suggest.run(suggestDcId).catch(() => {}))}
+                onClick={runSuggest}
                 disabled={!canSuggest}
                 loading={suggest.pending}
                 data-testid="ai-suggest-run"
@@ -456,6 +796,35 @@ const StepDescribe: React.FC = () => {
         </Stack>
       </Paper>
 
+      {/* 1b. The catalog's offers for the same scope: deterministic, no model. */}
+      {suggestMode && catalogOffers.length > 0 && (
+        <Paper withBorder radius="md" p="md" data-testid="ai-catalog-offers">
+          <Stack gap="sm">
+            <Stack gap={0}>
+              <Text fw={600} size="sm">
+                From the catalog
+              </Text>
+              <Text size="xs" c="dimmed">
+                Known tool outputs matched to {dcPinned ? 'this collection' : "the dashboard's collections"},
+                without asking the AI.
+              </Text>
+            </Stack>
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs">
+              {catalogOffers.map((offer, i) => (
+                <CatalogOfferCard
+                  key={`${offer.toolId}-${offer.match.output_id}-${offer.match.dc_id}-${i}`}
+                  offer={offer}
+                  index={i}
+                  pending={offerPending === i}
+                  disabled={offerPending !== null && offerPending !== i}
+                  onUse={() => void landCatalogOffer(offer, i)}
+                />
+              ))}
+            </SimpleGrid>
+          </Stack>
+        </Paper>
+      )}
+
       {/* 2. The two things the AI decides unless pinned. */}
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
         <Paper withBorder radius="md" p="md">
@@ -474,7 +843,7 @@ const StepDescribe: React.FC = () => {
                 compact
                 accent={AI_COLOR}
                 selected={typeSel === AUTO}
-                onClick={() => pickType(AUTO)}
+                onClick={() => setTypeSel(AUTO)}
                 testId="ai-describe-type-auto"
               />
               {COMPONENT_TYPES.map((t) => (
@@ -484,7 +853,7 @@ const StepDescribe: React.FC = () => {
                   compact
                   accent={AI_COLOR}
                   selected={typeSel === t.type}
-                  onClick={() => pickType(t.type)}
+                  onClick={() => setTypeSel(t.type)}
                   testId={`ai-describe-type-${t.type}`}
                 />
               ))}
