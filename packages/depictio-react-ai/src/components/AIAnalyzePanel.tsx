@@ -19,6 +19,7 @@ import { Icon } from '@iconify/react';
 
 import { useAnalyze } from '../hooks';
 import { AI_ICON } from '../icons';
+import MarkdownLite from './MarkdownLite';
 import { useAISession, useAIStore } from '../store';
 import type { AIChatMessage } from '../store';
 import type { AnalyzeMode } from '../types';
@@ -405,11 +406,7 @@ const AIAnalyzePanel: React.FC<Props> = ({
 
                       <Collapse in={isOpen}>
                         <Stack gap={6} mt={6} pl={22}>
-                          {a?.content && (
-                            <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
-                              {a.content}
-                            </Text>
-                          )}
+                          {a?.content && <MarkdownLite text={a.content} />}
                           {a && !a.content && !session.pending && (
                             <Text size="xs" c="dimmed" fs="italic">
                               The run ended without an answer — check the execution

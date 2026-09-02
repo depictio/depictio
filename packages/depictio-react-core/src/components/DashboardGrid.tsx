@@ -111,9 +111,12 @@ interface DashboardGridProps {
   /**
    * Host-provided per-section extras (e.g. the AI summarize affordances).
    * Called with the section name (`null` for the unsectioned grid).
-   * `trailing` lands in the section header next to the fold chips;
-   * `panelTop` renders inside the section panel above its grid (for the
-   * unsectioned grid, directly above it). Keeps this package AI-free.
+   * `trailing` joins `renderSectionActions` in the header's actions slot,
+   * ahead of the host's own controls: it is interactive, so it must sit
+   * beside the `Accordion.Control` button, not inside it (see
+   * `SectionAccordionItem.actions`). `panelTop` renders inside the section
+   * panel above its grid (for the unsectioned grid, directly above it).
+   * Keeps this package AI-free.
    */
   renderSectionExtras?: (
     sectionName: string | null,
@@ -689,32 +692,39 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
           )
         }
       >
-        {list.map((section) => (
+        {list.map((section) => {
+          const sectionName = section.sectionName ?? null;
+          const extras = renderSectionExtras?.(sectionName);
+          const hostActions = renderSectionActions?.(sectionName);
+          return (
           <SectionAccordionItem
             key={section.key}
             value={section.key}
             color={section.spec?.color}
-            actions={renderSectionActions?.(section.sectionName ?? null)}
+            actions={
+              extras?.trailing || hostActions ? (
+                <>
+                  {extras?.trailing}
+                  {hostActions}
+                </>
+              ) : undefined
+            }
           >
             <Accordion.Control>
               <SectionHeader
                 spec={section.spec}
                 name={section.sectionName}
                 // Metric chips only while folded: expanded, these numbers
-                // are already on screen as the cards themselves. Host
-                // extras (e.g. AI summarize) render in both states.
+                // are already on screen as the cards themselves.
                 trailing={
-                  <>
-                    {!sectionCollapse.isOpen(section.key) ? (
-                      <SectionSummary section={section} cardValues={cardValues} />
-                    ) : undefined}
-                    {renderSectionExtras?.(section.sectionName ?? null)?.trailing}
-                  </>
+                  !sectionCollapse.isOpen(section.key) ? (
+                    <SectionSummary section={section} cardValues={cardValues} />
+                  ) : undefined
                 }
               />
             </Accordion.Control>
             <Accordion.Panel>
-              {renderSectionExtras?.(section.sectionName ?? null)?.panelTop}
+              {extras?.panelTop}
               {/* Plain wrapper so the width available inside the section box
                   can be read off the DOM — see `sectionInset`. Absent until
                   the section has been opened once: see `renderedSections`. */}
@@ -723,7 +733,8 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
               )}
             </Accordion.Panel>
           </SectionAccordionItem>
-        ))}
+          );
+        })}
       </SectionAccordion>
     );
 

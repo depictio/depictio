@@ -21,6 +21,8 @@ import { Icon } from '@iconify/react';
 
 import { useAnalysisReport } from '../hooks';
 import { AI_ICON } from '../icons';
+import { renderInlineMarkdown } from 'depictio-react-core';
+import MarkdownLite from './MarkdownLite';
 import type { AnalysisReport, Finding } from '../types';
 import ExecutionTrace from './ExecutionTrace';
 
@@ -150,9 +152,7 @@ const AIAnalysisModal: React.FC<Props> = ({ dashboardId, opened, onClose, active
                 icon={<Icon icon="material-symbols:route" width={16} />}
                 title="Plan"
               >
-                <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
-                  {state.plan}
-                </Text>
+                <MarkdownLite text={state.plan} />
               </Alert>
             )}
 
@@ -177,9 +177,7 @@ const AIAnalysisModal: React.FC<Props> = ({ dashboardId, opened, onClose, active
 
                 {report.narrative_md && (
                   <Card withBorder radius="md" p="md">
-                    <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
-                      {report.narrative_md}
-                    </Text>
+                    <MarkdownLite text={report.narrative_md} />
                   </Card>
                 )}
 
@@ -197,7 +195,7 @@ const AIAnalysisModal: React.FC<Props> = ({ dashboardId, opened, onClose, active
                             {f.confidence}
                           </Badge>
                           <Text size="sm" flex={1}>
-                            {f.claim}
+                            {renderInlineMarkdown(f.claim)}
                           </Text>
                           <Tooltip label="Steps this claim is grounded in">
                             <Badge size="sm" variant="outline" color="gray">
