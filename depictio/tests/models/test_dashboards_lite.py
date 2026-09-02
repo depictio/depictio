@@ -1479,3 +1479,139 @@ class TestParseComponentLines:
         raw = "   \n[comp] loc: msg\n   "
         result = self._parse(raw)
         assert len(result) == 1
+
+
+# ============================================================================
+# Domain validation covers every lite type (text and advanced_viz included)
+# ============================================================================
+
+
+class TestDomainValidationCoversEveryLiteType:
+    """`_COMPONENT_TYPE_MAP` drives the second validation pass for components
+    that fell through the union to a plain dict. Text and advanced_viz were
+    absent from it, so a bad heading level or an unknown config key validated
+    silently and only failed at render time."""
+
+    def test_type_map_matches_the_lite_union(self):
+        from typing import get_args
+
+        from depictio.models.components.lite import LiteComponent
+
+        union_types = {
+            model.model_fields["component_type"].default for model in get_args(LiteComponent)
+        }
+        assert set(DashboardDataLite._COMPONENT_TYPE_MAP) == union_types
+
+    def test_text_heading_level_out_of_range_is_reported(self):
+        with pytest.raises(ValidationError, match="order"):
+            DashboardDataLite.model_validate(
+                {
+                    "title": "T",
+                    "components": [
+                        {"component_type": "text", "tag": "intro", "title": "Intro", "order": 9}
+                    ],
+                }
+            )
+
+    def test_advanced_viz_unknown_config_key_is_reported_per_field(self):
+        with pytest.raises(ValidationError, match="foo_col"):
+            DashboardDataLite.model_validate(
+                {
+                    "title": "T",
+                    "components": [
+                        {
+                            "component_type": "advanced_viz",
+                            "tag": "volcano",
+                            "workflow_tag": "wf",
+                            "data_collection_tag": "dc",
+                            "viz_kind": "volcano",
+                            "config": {"viz_kind": "volcano", "foo_col": "gene_id"},
+                        }
+                    ],
+                }
+            )
+
+    def test_valid_text_and_advanced_viz_are_typed(self):
+        dash = DashboardDataLite.model_validate(
+            {
+                "title": "T",
+                "components": [
+                    {"component_type": "text", "tag": "intro", "title": "Intro", "order": 2},
+                    {
+                        "component_type": "advanced_viz",
+                        "tag": "volcano",
+                        "workflow_tag": "wf",
+                        "data_collection_tag": "dc",
+                        "viz_kind": "volcano",
+                        "config": {
+                            "viz_kind": "volcano",
+                            "feature_id_col": "gene_id",
+                            "effect_size_col": "log2FoldChange",
+                            "significance_col": "padj",
+                        },
+                    },
+                ],
+            }
+        )
+        assert [type(c).__name__ for c in dash.components] == [
+            "TextLiteComponent",
+            "AdvancedVizLiteComponent",
+        ]
+
+
+# ============================================================================
+# ai_source provenance survives import and export
+# ============================================================================
+
+
+class TestAiSourceProvenance:
+    """`ai_source` (`{flow, prompt}`) is what the builder writes when the
+    assistant drafted a tile. It rides on `extra="allow"` in the lite models,
+    so `to_full` and `from_full` each hand it over explicitly, the way
+    `catalog_source` is carried on import."""
+
+    AI_SOURCE = {"flow": "component-from-prompt", "prompt": "count of samples"}
+
+    def _card(self, **extra) -> dict:
+        return {
+            "component_type": "card",
+            "tag": "c1",
+            "index": "c1",
+            "workflow_tag": "wf",
+            "data_collection_tag": "dc",
+            "aggregation": "count",
+            "column_name": "x",
+            "column_type": "object",
+            "layout": {"x": 0, "y": 0, "w": 3, "h": 2},
+            **extra,
+        }
+
+    def _dashboard(self, **extra) -> DashboardDataLite:
+        return DashboardDataLite.model_validate(
+            {"title": "Provenance", "components": [self._card(**extra)]}
+        )
+
+    def test_import_carries_ai_source_into_stored_metadata(self):
+        stored = self._dashboard(ai_source=self.AI_SOURCE).to_full()["stored_metadata"]
+        assert stored[0]["ai_source"] == self.AI_SOURCE
+
+    def test_export_keeps_ai_source(self):
+        full = self._dashboard(ai_source=self.AI_SOURCE).to_full()
+        exported = DashboardDataLite.from_full(full)
+        comp = exported.components[0]
+        comp_dict = comp if isinstance(comp, dict) else comp.model_dump()
+        assert comp_dict["ai_source"] == self.AI_SOURCE
+
+    def test_yaml_round_trip_keeps_ai_source(self):
+        yaml_text = self._dashboard(ai_source=self.AI_SOURCE).to_yaml()
+        assert "ai_source" in yaml_text
+        again = DashboardDataLite.from_yaml(yaml_text)
+        assert again.to_full()["stored_metadata"][0]["ai_source"] == self.AI_SOURCE
+
+    def test_absent_ai_source_is_not_invented(self):
+        stored = self._dashboard().to_full()["stored_metadata"]
+        assert "ai_source" not in stored[0]
+        exported = DashboardDataLite.from_full(self._dashboard().to_full())
+        comp = exported.components[0]
+        comp_dict = comp if isinstance(comp, dict) else comp.model_dump()
+        assert "ai_source" not in comp_dict

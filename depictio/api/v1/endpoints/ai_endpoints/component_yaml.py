@@ -16,11 +16,12 @@ include it in the prompt as the state the user is asking to revise.
 from __future__ import annotations
 
 import textwrap
-from typing import Any
+from typing import Any, get_args
 
 import yaml
 from pydantic import ValidationError
 
+from depictio.api.v1.endpoints.ai_endpoints.schemas import ComponentType
 from depictio.models.models.dashboards import DashboardDataLite
 
 # Keys that only make sense at the dashboard level (not on a single
@@ -99,11 +100,11 @@ def validate_single(yaml_text: str) -> dict[str, Any]:
         # returned a dict here it means the LiteComponent union fell
         # through without raising. Treat as a hard error so the LLM
         # can't slip past with an unknown shape.
+        accepted = ", ".join(get_args(ComponentType))
         raise ValueError(
             f"Component validated to an untyped dict (component_type="
             f"{first.get('component_type')!r}). The component_type is "
-            "either missing or not one of: figure, card, interactive, "
-            "table, image, multiqc, map."
+            f"either missing or not one of: {accepted}."
         )
     return first.model_dump(mode="json", exclude_none=True)
 

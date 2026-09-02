@@ -109,6 +109,9 @@ class DataContext:
     # `DashboardDataLite.from_yaml`.
     workflow_tag: str | None = None
     data_collection_tag: str | None = None
+    # The DC's `config.type` ("table", "phylogeny", ...). The advanced_viz
+    # ranker gates some kinds on it; None means unknown and gates nothing.
+    dc_type: str | None = None
 
     def schema_block(self) -> str:
         return "\n".join(c.to_prompt_line() for c in self.columns)
@@ -387,6 +390,7 @@ async def build_data_context(
         row_count=df.height,
         workflow_tag=workflow_tag,
         data_collection_tag=dc_tag,
+        dc_type=(dc_doc.get("config") or {}).get("type"),
     )
 
 
@@ -716,4 +720,325 @@ async def build_dashboard_context(
             dc_ids=dc_ids,
         ),
         dc_ids[0] if dc_ids else None,
+    )
+
+
+# ---------- Project inventory (routing + whole-dashboard generation) ----------
+#
+# A cheap, Mongo-only picture of every data collection the dashboard's
+# project offers: tags, types, stored column specs, and whether the
+# dashboard already uses the collection. No delta table is read. The
+# component router consumes it to choose a type and a collection before
+# generation; a later lot can feed the same block to a whole-dashboard
+# generator, which is why it is not shaped around a single request.
+
+# Collections that materialise a delta table and can back any of the
+# tabular component types (figure, card, interactive, table, ...). Image
+# collections are tables with an image-path column, so they qualify.
+TABLE_LIKE_DC_TYPES: frozenset[str] = frozenset({"table", "image"})
+
+# Which `config.type` values a component type can be built on. `map` is
+# further narrowed to collections with coordinate columns (see
+# `dc_has_coordinates`) and `text` has no data source at all.
+COMPONENT_DC_TYPES: dict[str, frozenset[str]] = {
+    "figure": TABLE_LIKE_DC_TYPES,
+    "card": TABLE_LIKE_DC_TYPES,
+    "interactive": TABLE_LIKE_DC_TYPES,
+    "table": TABLE_LIKE_DC_TYPES,
+    "advanced_viz": TABLE_LIKE_DC_TYPES | {"phylogeny"},
+    "multiqc": frozenset({"multiqc"}),
+    "image": frozenset({"image"}),
+    "map": TABLE_LIKE_DC_TYPES,
+    "text": frozenset(),
+}
+
+MAX_INVENTORY_COLLECTIONS = 30
+MAX_INVENTORY_COLUMNS = 40
+# Per-collection line budget in `text_block()`. Thirty lines at this size
+# plus the type sheet keep the routing prompt around 10k characters.
+MAX_INVENTORY_LINE_CHARS = 260
+MAX_INVENTORY_DESCRIPTION_CHARS = 120
+
+_LAT_NAME_RE = re.compile(r"(^|[_.\- ])(lat|latitude)([_.\- ]|$)", re.IGNORECASE)
+_LON_NAME_RE = re.compile(r"(^|[_.\- ])(lon|lng|long|longitude)([_.\- ]|$)", re.IGNORECASE)
+_NUMERIC_DTYPE_RE = re.compile(r"int|float|double|decimal", re.IGNORECASE)
+
+
+@dataclass
+class InventoryEntry:
+    """One data collection of the project, as the router sees it."""
+
+    data_collection_id: str
+    data_collection_tag: str
+    workflow_id: str
+    workflow_tag: str | None
+    dc_type: str | None
+    description: str | None
+    # (name, dtype) from the stored column specs, capped at
+    # MAX_INVENTORY_COLUMNS. Empty for collections without a delta table
+    # (multiqc, jbrowse2, ...) or not yet ingested.
+    columns: list[tuple[str, str]] = field(default_factory=list)
+    on_dashboard: bool = False
+    # Explicit lat/lon hints from a coordinates table config, when the DC
+    # was declared with them; the name heuristic covers the rest.
+    coordinate_columns: tuple[str, str] | None = None
+
+    def to_prompt_line(self, max_chars: int = MAX_INVENTORY_LINE_CHARS) -> str:
+        """One line: tag, type, on-dashboard marker, description, columns.
+
+        Columns are appended while the line stays under `max_chars`; the
+        rest is summarised as a count so the model knows the list is cut.
+        """
+        flags = [self.dc_type or "unknown type"]
+        if self.on_dashboard:
+            flags.append("on dashboard")
+        head = f"- {self.data_collection_tag} [{', '.join(flags)}]"
+        if self.description:
+            desc = " ".join(self.description.split())
+            if len(desc) > MAX_INVENTORY_DESCRIPTION_CHARS:
+                desc = desc[: MAX_INVENTORY_DESCRIPTION_CHARS - 3].rstrip() + "..."
+            head += f": {desc}"
+        if not self.columns:
+            return head
+        line = f"{head}. columns: "
+        shown = 0
+        for name, dtype in self.columns:
+            token = f"{name}:{dtype}"
+            sep = "" if shown == 0 else ", "
+            remaining = len(self.columns) - shown - 1
+            tail = f" (+{remaining} more)" if remaining > 0 else ""
+            if len(line) + len(sep) + len(token) + len(tail) > max_chars and shown > 0:
+                break
+            line += sep + token
+            shown += 1
+        hidden = len(self.columns) - shown
+        if hidden > 0:
+            line += f" (+{hidden} more)"
+        return line
+
+
+def dc_has_coordinates(entry: InventoryEntry) -> bool:
+    """Whether a collection looks mappable.
+
+    True when the DC was declared with explicit `lat_column` / `lon_column`
+    hints, or when its stored columns contain one latitude-looking and one
+    longitude-looking numeric column (name match; dtype must be numeric
+    when known).
+    """
+    if entry.coordinate_columns is not None:
+        return True
+
+    def numeric(dtype: str) -> bool:
+        return not dtype or bool(_NUMERIC_DTYPE_RE.search(dtype))
+
+    has_lat = any(_LAT_NAME_RE.search(n) and numeric(d) for n, d in entry.columns)
+    has_lon = any(_LON_NAME_RE.search(n) and numeric(d) for n, d in entry.columns)
+    return has_lat and has_lon
+
+
+@dataclass
+class ProjectInventory:
+    """Every data collection the dashboard's project offers, dashboard DCs first."""
+
+    dashboard_id: str
+    project_id: str
+    project_name: str | None
+    entries: list[InventoryEntry] = field(default_factory=list)
+    # How many collections were left out by MAX_INVENTORY_COLLECTIONS.
+    dropped: int = 0
+
+    def tags(self) -> list[str]:
+        return [e.data_collection_tag for e in self.entries]
+
+    def entry_for_tag(self, tag: str | None) -> InventoryEntry | None:
+        """Exact tag match first, then case-insensitive, then id match.
+
+        The router is told to answer with tags, but a model occasionally
+        echoes an id it saw elsewhere in the conversation; accepting it
+        costs nothing and saves a retry.
+        """
+        if not tag:
+            return None
+        wanted = tag.strip()
+        for e in self.entries:
+            if e.data_collection_tag == wanted:
+                return e
+        lowered = wanted.lower()
+        for e in self.entries:
+            if e.data_collection_tag.lower() == lowered:
+                return e
+        return self.entry_for_id(wanted)
+
+    def entry_for_id(self, data_collection_id: str | None) -> InventoryEntry | None:
+        if not data_collection_id:
+            return None
+        for e in self.entries:
+            if e.data_collection_id == data_collection_id:
+                return e
+        return None
+
+    def candidates_for(self, component_type: str) -> list[InventoryEntry]:
+        """Collections a component of this type can be built on, inventory order.
+
+        Table-like DCs for the tabular types (plus phylogeny for
+        advanced_viz), multiqc DCs for multiqc, image DCs for image,
+        coordinate-bearing table-like DCs for map, nothing for text.
+        """
+        allowed = COMPONENT_DC_TYPES.get(component_type, frozenset())
+        out = [e for e in self.entries if (e.dc_type or "").lower() in allowed]
+        if component_type == "map":
+            out = [e for e in out if dc_has_coordinates(e)]
+        return out
+
+    def text_block(self) -> str:
+        if not self.entries:
+            return "(the project has no data collections)"
+        lines = [e.to_prompt_line() for e in self.entries]
+        if self.dropped:
+            lines.append(f"(+{self.dropped} more collections not listed)")
+        return "\n".join(lines)
+
+
+def _stored_columns_by_dc(dc_ids: list[str]) -> dict[str, list[tuple[str, str]]]:
+    """(name, dtype) per DC from the latest aggregation's column specs.
+
+    Read from the `deltatables` documents the ingest writes, so no frame
+    is loaded. Collections without a delta table simply get no columns.
+    """
+    oids = []
+    for dc_id in dc_ids:
+        try:
+            oids.append(ObjectId(dc_id))
+        except Exception:  # noqa: BLE001
+            continue
+    if not oids:
+        return {}
+    cursor = deltatables_collection.find(
+        {"data_collection_id": {"$in": oids}},
+        {
+            "data_collection_id": 1,
+            "aggregation.aggregation_columns_specs.name": 1,
+            "aggregation.aggregation_columns_specs.type": 1,
+        },
+    )
+    out: dict[str, list[tuple[str, str]]] = {}
+    for doc in cursor:
+        dc_id = _coerce_id(doc.get("data_collection_id"))
+        aggregations = doc.get("aggregation") or []
+        if not dc_id or not aggregations:
+            continue
+        specs = (aggregations[-1] or {}).get("aggregation_columns_specs") or []
+        columns: list[tuple[str, str]] = []
+        if isinstance(specs, list):
+            for spec in specs:
+                if isinstance(spec, dict) and spec.get("name"):
+                    columns.append((str(spec["name"]), str(spec.get("type") or "")))
+        elif isinstance(specs, dict):  # legacy name-keyed shape
+            for name, spec in specs.items():
+                dtype = spec.get("type") if isinstance(spec, dict) else ""
+                columns.append((str(name), str(dtype or "")))
+        out[dc_id] = columns[:MAX_INVENTORY_COLUMNS]
+    return out
+
+
+async def build_project_inventory(
+    dashboard_id: str,
+    current_user: Any,
+    *,
+    prioritize: list[str] | None = None,
+) -> ProjectInventory:
+    """Inventory the data collections of the dashboard's project.
+
+    Same gate as `build_dashboard_context` (viewer permission on the
+    dashboard's project via `check_project_permission`), same error
+    codes. Collections already used by the dashboard come first, after
+    any ids in `prioritize` (a pinned collection must survive the
+    MAX_INVENTORY_COLLECTIONS cut, whatever its position in the project).
+    """
+    from depictio.api.v1.endpoints.dashboards_endpoints.routes import check_project_permission
+
+    try:
+        d_oid = ObjectId(dashboard_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"invalid dashboard_id: {e}")
+
+    doc = dashboards_collection.find_one({"dashboard_id": d_oid})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Dashboard not found.")
+
+    project_id = doc.get("project_id")
+    if not project_id:
+        raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
+
+    if not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to access this dashboard.",
+        )
+
+    project = projects_collection.find_one(
+        {"_id": ObjectId(project_id)},
+        {
+            "name": 1,
+            "workflows._id": 1,
+            "workflows.workflow_tag": 1,
+            "workflows.data_collections._id": 1,
+            "workflows.data_collections.data_collection_tag": 1,
+            "workflows.data_collections.description": 1,
+            "workflows.data_collections.config.type": 1,
+            "workflows.data_collections.config.description": 1,
+            "workflows.data_collections.config.dc_specific_properties.lat_column": 1,
+            "workflows.data_collections.config.dc_specific_properties.lon_column": 1,
+        },
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found.")
+
+    _, _, _, dashboard_dc_ids = _summarize_dashboard(doc)
+    on_dashboard = set(dashboard_dc_ids)
+
+    entries: list[InventoryEntry] = []
+    for wf in project.get("workflows") or []:
+        if not isinstance(wf, dict):
+            continue
+        wf_id = _coerce_id(wf.get("_id")) or ""
+        wf_tag = wf.get("workflow_tag")
+        for dc in wf.get("data_collections") or []:
+            if not isinstance(dc, dict):
+                continue
+            dc_id = _coerce_id(dc.get("_id"))
+            if not dc_id:
+                continue
+            cfg = dc.get("config") or {}
+            props = cfg.get("dc_specific_properties") or {}
+            lat, lon = props.get("lat_column"), props.get("lon_column")
+            entries.append(
+                InventoryEntry(
+                    data_collection_id=dc_id,
+                    data_collection_tag=str(dc.get("data_collection_tag") or dc_id),
+                    workflow_id=wf_id,
+                    workflow_tag=wf_tag if isinstance(wf_tag, str) else None,
+                    dc_type=str(cfg["type"]).lower() if cfg.get("type") else None,
+                    description=cfg.get("description") or dc.get("description") or None,
+                    on_dashboard=dc_id in on_dashboard,
+                    coordinate_columns=(str(lat), str(lon)) if lat and lon else None,
+                )
+            )
+
+    rank = {dc_id: i for i, dc_id in enumerate([*(prioritize or []), *dashboard_dc_ids])}
+    # Stable sort: unranked collections keep their project order.
+    entries.sort(key=lambda e: rank.get(e.data_collection_id, len(rank)))
+    dropped = max(len(entries) - MAX_INVENTORY_COLLECTIONS, 0)
+    entries = entries[:MAX_INVENTORY_COLLECTIONS]
+
+    columns = _stored_columns_by_dc([e.data_collection_id for e in entries])
+    for e in entries:
+        e.columns = columns.get(e.data_collection_id, [])
+
+    return ProjectInventory(
+        dashboard_id=dashboard_id,
+        project_id=str(project_id),
+        project_name=project.get("name"),
+        entries=entries,
+        dropped=dropped,
     )
