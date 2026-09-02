@@ -77,7 +77,14 @@ __pycache__/
 # -----------------------------
 # Exclude Node.js Dependencies (if applicable)
 # -----------------------------
+# Root-anchored patterns only match the top-level dir; the pnpm workspaces
+# (depictio/viewer, packages/*) each carry their own node_modules of symlinks
+# into the host's virtual store. Copied into an image after its own
+# `pnpm install`, they overwrite the container's links with targets that do
+# not exist there (different pnpm version => different .pnpm dir names) and
+# the Vite build fails to resolve e.g. @mantine/core.
 node_modules/
+**/node_modules/
 
 # -----------------------------
 # Exclude Temporary Files and OS Files
