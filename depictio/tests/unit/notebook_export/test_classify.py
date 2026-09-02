@@ -28,7 +28,10 @@ def test_every_advanced_viz_kind_has_a_figure_strategy():
 
 
 def test_figure_modes():
-    assert classify({"component_type": "figure", "mode": "ui", "visu_type": "box"}).status == "code"
+    # UI-built figures go through the API so the notebook shows Depictio's
+    # own render, not a reconstructed px.* call; code-mode figures are the
+    # author's own Python, so they stay inlined verbatim.
+    assert classify({"component_type": "figure", "mode": "ui", "visu_type": "box"}).status == "api"
     assert classify({"component_type": "figure", "mode": "code"}).status == "code"
     assert classify({"component_type": "figure", "visu_type": "heatmap"}).status == "api"
 

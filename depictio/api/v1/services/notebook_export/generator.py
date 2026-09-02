@@ -110,16 +110,6 @@ def _comment(text: str) -> str:
     return "\n".join(f"# {line}" if line else "#" for line in _sentence(text).split("\n"))
 
 
-def _kwargs_source(kwargs: dict[str, Any]) -> list[str]:
-    lines = []
-    for k, v in kwargs.items():
-        rendered = pprint.pformat(v, width=80, sort_dicts=False)
-        if "\n" in rendered:
-            rendered = rendered.replace("\n", "\n    ")
-        lines.append(f"    {k}={rendered},")
-    return lines
-
-
 def _fmt_value(value: Any) -> str:
     if isinstance(value, list):
         shown = ", ".join(str(v) for v in value[:6])
@@ -226,6 +216,7 @@ class NotebookBuilder:
         cells: list[Cell] = []
         cells.append(self._imports_cell())
         cells.append(self._connection_cell())
+        cells.append(self._metric_card_cell())
         cells.append(md_cell(self._header()))
         cells.append(self._state_cell())
         cells.extend(self._data_cells())
@@ -264,6 +255,37 @@ class NotebookBuilder:
             + "\nclient = DepictioClient()\n"
             + f"DASHBOARD_ID = {self.plan.dashboard_id!r}"
         )
+
+    def _metric_card_cell(self) -> Cell:
+        # A dashboard card is a number with a label; the honest notebook
+        # equivalent of that is a bare print, but a report reads better as a
+        # tile. mo.Html carries both marimo's own display protocol and
+        # _repr_html_, so this renders the same in marimo, Jupyter and
+        # Quarto without needing marimo's runtime at read time. No leading
+        # underscore: that would make marimo treat it as cell-local (like
+        # `_scoped` below), invisible to every other cell that calls it.
+        body = '''def metric_card(title, value):
+    """The card look, as inline HTML: a label over a big number."""
+    if value is None:
+        text = "\N{EM DASH}"
+    elif isinstance(value, bool):
+        text = str(value)
+    elif isinstance(value, float):
+        text = f"{value:,.2f}" if not value.is_integer() else f"{value:,.0f}"
+    elif isinstance(value, int):
+        text = f"{value:,}"
+    else:
+        text = str(value)
+    return mo.Html(
+        f'<div style="display:inline-block;min-width:11rem;margin:0 0.5rem 0.5rem 0;'
+        f'padding:0.85rem 1.1rem;border:1px solid #e3e3e8;border-radius:12px;'
+        f'font-family:inherit;background:#fafafa">'
+        f'<div style="font-size:0.78rem;color:#6b7280;text-transform:uppercase;'
+        f'letter-spacing:0.02em;margin-bottom:0.3rem">{title}</div>'
+        f'<div style="font-size:1.65rem;font-weight:650;color:#111827">{text}</div>'
+        f'</div>'
+    )'''
+        return Cell(body)
 
     def _header(self) -> str:
         return header_markdown(
@@ -509,7 +531,7 @@ class NotebookBuilder:
                 _comment(f'Card "{title}": {agg} of {column} over the filtered rows'),
                 *prelude,
                 f"{name} = {source}.select({expr}).item()",
-                name,
+                f"metric_card({title!r}, {name})",
             ]
             return Cell("\n".join(body))
         if ctype == "table":
@@ -560,36 +582,21 @@ class NotebookBuilder:
     def _figure_cell(
         self, meta: dict[str, Any], name: str, source: str, prelude: list[str], title: str
     ) -> Cell:
-        from depictio.api.v1.services.figure.figure_builder import clean_px_kwargs
-
-        mode = str(meta.get("mode") or "ui")
-        if mode == "code":
-            code = str(meta.get("code_content") or "").rstrip()
-            code_lines = ["    " + line if line.strip() else "" for line in code.split("\n")]
-            body = [
-                _comment(f'Figure "{title}", code mode: the author\'s code, verbatim'),
-                *prelude,
-                f"def _make_{name}(df):",
-                *code_lines,
-                "    return fig",
-                "",
-                f"{name} = _make_{name}({source})",
-                name,
-            ]
-            return Cell("\n".join(body))
-        visu = str(meta.get("visu_type") or "scatter")
-        kwargs = clean_px_kwargs(dict(meta.get("dict_kwargs") or {}))
-        kwargs.pop("template", None)
+        # classify() only sends a figure here in code mode: the author wrote
+        # this figure's Python themselves, so showing it back is showing
+        # their own code, not a guess. A UI-built figure is classified "api"
+        # instead and goes through _api_cell, so it renders through
+        # client.component(...) rather than a reconstructed px.* call.
+        code = str(meta.get("code_content") or "").rstrip()
+        code_lines = ["    " + line if line.strip() else "" for line in code.split("\n")]
         body = [
-            _comment(
-                f'Figure "{title}": px.{visu} over the filtered frame. The dashboard theme '
-                "is not reproduced"
-            ),
+            _comment(f'Figure "{title}", code mode: the author\'s code, verbatim'),
             *prelude,
-            f"{name} = px.{visu}(",
-            f"    {source},",
-            *_kwargs_source(kwargs),
-            ")",
+            f"def _make_{name}(df):",
+            *code_lines,
+            "    return fig",
+            "",
+            f"{name} = _make_{name}({source})",
             name,
         ]
         return Cell("\n".join(body))

@@ -53,13 +53,15 @@ def _figure(meta: dict[str, Any]) -> Classification:
     visu = str(meta.get("visu_type") or "scatter")
     if mode == "code":
         return Classification("code", "the author's code, inlined verbatim", kind="code")
-    if visu.lower() == "heatmap":
-        return Classification(
-            "api",
-            "a clustered heatmap is drawn by plotly-complexheatmap on the server; " + API_REASON,
-            kind=visu,
-        )
-    return Classification("code", f"px.{visu} over the filtered frame", kind=visu)
+    # A UI-built figure's px.* call was reconstructed from the tile's stored
+    # kwargs, which drifts from what the chart builder actually draws (theme,
+    # any option the builder computes rather than stores) and reads as new
+    # code rather than the dashboard's own. `client.component(...)` asks
+    # Depictio for the real figure instead, so the notebook shows the same
+    # picture the dashboard does, not a lookalike.
+    return Classification(
+        "api", f"a {visu} figure built by Depictio's chart builder; " + API_REASON, kind=visu
+    )
 
 
 def _card(meta: dict[str, Any]) -> Classification:
