@@ -1,5 +1,5 @@
 /**
- * Component creation page. A two-tile chooser (`ChoiceScreen`) fronts two paths:
+ * Component creation page. A tile chooser (`ChoiceScreen`) fronts three paths:
  *
  *   - Manual  → the three-step Mantine stepper (Type → Data → Design), mirroring
  *               the old Dash stepper at /dashboard-edit/{id}/component/add/{newId}.
@@ -7,10 +7,15 @@
  *               preview) that recognises the project's ingested tool outputs.
  *               "Add" persists directly; "Edit & Add" pre-fills the store and
  *               drops into the Design step (catalogMode) for customisation.
+ *   - AI      → prompt first (Describe → Design). The Describe step sends the
+ *               prompt with the component type and the data collection left
+ *               to the assistant or pinned, hydrates the store with what came
+ *               back and advances; Design shows the choice and offers "Refine
+ *               with AI". Only offered when the server enables the assistant.
  *
- * `sourceMode` ('unset' | 'manual' | 'catalog') + `catalogMode` in the builder
- * store drive which surface renders. The same `<ComponentBuilder>` powers the
- * Design step here and `EditComponentPage`.
+ * `sourceMode` ('unset' | 'manual' | 'catalog' | 'ai') + `catalogMode` in the
+ * builder store drive which surface renders. The same `<ComponentBuilder>`
+ * powers the Design step here and `EditComponentPage`.
  */
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -27,51 +32,21 @@ import {
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { fetchDashboard } from 'depictio-react-core';
-import { useBuilderStore } from './store/useBuilderStore';
-import type { ComponentType, SourceMode } from './store/useBuilderStore';
+import { designStepFor, useBuilderStore } from './store/useBuilderStore';
+import type { SourceMode } from './store/useBuilderStore';
 import StepType from './steps/StepType';
 import StepData from './steps/StepData';
+import StepDescribe from './steps/StepDescribe';
 import StepDesign from './steps/StepDesign';
 import ChoiceScreen from './ChoiceScreen';
 import CatalogTab from './catalog/CatalogTab';
 import BrandMark from '../chrome/BrandMark';
 import { COMPONENT_SOURCE } from './componentSource';
+import { useServerStatus } from '../hooks/useServerStatus';
 
 export interface CreateComponentPageProps {
   dashboardId: string;
   newComponentId: string;
-}
-
-/** Shape written by EditorApp's "Add component → With AI…" flow. */
-interface AIPendingFill {
-  componentType: ComponentType;
-  config: Record<string, unknown>;
-  dcId: string;
-  wfId: string | null;
-  projectId: string | null;
-}
-
-/** Pop (read + clear) the AI pre-fill stash for this component id, if any.
- *  Cleared on consumption so a refresh restarts the manual stepper instead
- *  of silently re-applying a stale AI fill. */
-function popAIPendingFill(newComponentId: string): AIPendingFill | null {
-  const key = `depictio.ai.pending-fill.${newComponentId}`;
-  try {
-    const raw = sessionStorage.getItem(key);
-    if (!raw) return null;
-    sessionStorage.removeItem(key);
-    const parsed = JSON.parse(raw) as Partial<AIPendingFill>;
-    if (!parsed.componentType || !parsed.config || !parsed.dcId) return null;
-    return {
-      componentType: parsed.componentType,
-      config: parsed.config,
-      dcId: parsed.dcId,
-      wfId: parsed.wfId ?? null,
-      projectId: parsed.projectId ?? null,
-    };
-  } catch {
-    return null;
-  }
 }
 
 const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
@@ -80,7 +55,6 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
 }) => {
   const init = useBuilderStore((s) => s.init);
   const reset = useBuilderStore((s) => s.reset);
-  const initFromPrompt = useBuilderStore((s) => s.initFromPrompt);
   const step = useBuilderStore((s) => s.step);
   const setStep = useBuilderStore((s) => s.setStep);
   const wfId = useBuilderStore((s) => s.wfId);
@@ -89,54 +63,47 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
   const sourceMode = useBuilderStore((s) => s.sourceMode);
   const catalogMode = useBuilderStore((s) => s.catalogMode);
   const setSourceMode = useBuilderStore((s) => s.setSourceMode);
+  const aiEnabled = useServerStatus().features.ai;
 
   // The catalog browser matches the whole project's ingested DCs, so it needs
   // the project id — resolved once from the dashboard. `undefined` = still
   // loading, `null` = resolved but the dashboard carries no project id.
   const [projectId, setProjectId] = useState<string | null | undefined>(undefined);
 
-  // The stash is cleared on first read, but under React.StrictMode this
-  // effect runs twice (mount → cleanup+reset → remount): the second pass
-  // would find sessionStorage empty and dump the user on the bare type
-  // grid. Keep the popped value in a ref so every re-run of the effect
-  // can re-hydrate from it.
-  const pendingRef = useRef<AIPendingFill | null>(null);
-
   useEffect(() => {
     init({ mode: 'create', dashboardId, componentId: newComponentId });
     fetchDashboard(dashboardId)
       .then((dash) => setProjectId(dash.project_id ?? null))
       .catch(() => setProjectId(null));
-    // AI hand-off: hydrate AFTER init() so the reset doesn't clobber the
-    // pre-fill. Lands the user directly on the Design step with the live
-    // preview rendering the AI-authored component.
-    const pending = popAIPendingFill(newComponentId) ?? pendingRef.current;
-    pendingRef.current = pending;
-    if (pending && pending.wfId) {
-      initFromPrompt({
-        componentType: pending.componentType,
-        wfId: pending.wfId,
-        dcId: pending.dcId,
-        projectId: pending.projectId,
-        config: pending.config,
-      });
-    }
     return () => reset();
-  }, [dashboardId, newComponentId, init, initFromPrompt, reset]);
+  }, [dashboardId, newComponentId, init, reset]);
 
-  // Text components don't bind to a workflow/DC — the Data Source step is
-  // hidden entirely. The global `step` state still uses 0,1,2; for text the
-  // stepper UI just renders 2 children (Type → Design), so internal state 2
-  // maps to stepper position 1.
+  // Step model (see useBuilderStore): manual/catalog 0 Type, 1 Data, 2 Design;
+  // AI 0 Describe, 1 Design. In the manual flow text components don't bind
+  // to a workflow/DC, so the Data Source step is hidden and the global `step`
+  // skips 1: the stepper renders one child less and every internal step past
+  // 1 maps to the stepper position one lower.
+  const isAI = sourceMode === 'ai';
   const isText = componentType === 'text';
+  const skipsData = !isAI && isText;
+  const designStep = designStepFor(sourceMode);
   const canAdvanceFromZero = Boolean(componentType);
   const canAdvanceFromOne = isText || Boolean(wfId && dcId);
-  const stepperActive = isText ? (step >= 2 ? 1 : 0) : step;
+  const toPosition = (internal: number) => (skipsData && internal >= 2 ? internal - 1 : internal);
+  const toInternal = (position: number) => (skipsData && position >= 1 ? position + 1 : position);
+  const stepperActive = toPosition(step);
+  // Text skips Data in both directions.
+  const previousStep = skipsData && step === 2 ? 0 : step - 1;
+  const nextStep = skipsData && step === 0 ? 2 : step + 1;
 
   // Which surface is showing.
   const showChoice = sourceMode === 'unset';
   const showCatalogBrowser = sourceMode === 'catalog' && !catalogMode;
   const showStepper = !showChoice && !showCatalogBrowser;
+  // The Describe step carries its own Generate action and cannot be skipped,
+  // so the AI flow shows the footer only on Design, and only its Back button:
+  // Next has nowhere to go there.
+  const showFooter = showStepper && !(isAI && step === 0);
 
   // Browser back/forward across the in-page steps.
   //
@@ -191,7 +158,7 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
     window.location.assign(`/dashboard-edit/${dashboardId}`);
   };
 
-  // Back to the two-tile chooser — a clean slate on the same component id.
+  // Back to the tile chooser — a clean slate on the same component id.
   const backToChoice = () => {
     init({ mode: 'create', dashboardId, componentId: newComponentId });
   };
@@ -208,7 +175,7 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
 
   const headerBack = (() => {
     if (showChoice) return null;
-    if (showCatalogBrowser || sourceMode === 'manual') {
+    if (showCatalogBrowser || sourceMode === 'manual' || isAI) {
       return (
         <Button
           variant="subtle"
@@ -235,10 +202,10 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
     );
   })();
 
-  // Both header states of the catalog path show the catalog's own mark, so the
-  // band agrees with the tile directly beneath it and with the badge the added
-  // component ends up carrying.
-  const headerSource = sourceMode === 'catalog' ? COMPONENT_SOURCE.catalog : COMPONENT_SOURCE.manual;
+  // The header band shows the mark of the source the user picked, so it agrees
+  // with the tile beneath it and with the badge the added component ends up
+  // carrying. Before a pick it shows the plain builder mark.
+  const headerSource = COMPONENT_SOURCE[sourceMode === 'unset' ? 'manual' : sourceMode];
   // The catalog's Design step is the one state whose title is not just the
   // name of the source it came from.
   const headerTitle =
@@ -250,7 +217,7 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
     <AppShell
       padding="md"
       header={{ height: 50 }}
-      footer={showStepper ? { height: 80 } : { height: 0 }}
+      footer={{ height: showFooter ? 80 : 0 }}
     >
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between">
@@ -280,6 +247,7 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
             <ChoiceScreen
               onManual={() => setSourceMode('manual')}
               onCatalog={() => setSourceMode('catalog')}
+              onAI={aiEnabled ? () => setSourceMode('ai') : undefined}
             />
           </Container>
         )}
@@ -335,49 +303,44 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
           <Container size="xl" px="md" py="xl">
             <Stepper
               active={stepperActive}
-              onStepClick={(n) => {
-                if (isText) {
-                  // 2-step stepper for text: 0 → Type, 1 → Design (internal step=2)
-                  if (n === 0) setStep(0);
-                  else if (n === 1 && canAdvanceFromZero) setStep(2);
-                  return;
-                }
-                if (n < step) setStep(n);
-                else if (n === 1 && canAdvanceFromZero) setStep(1);
-                else if (n === 2 && canAdvanceFromZero && canAdvanceFromOne)
-                  setStep(2);
+              onStepClick={(position) => {
+                const target = toInternal(position);
+                if (target < step) setStep(target);
+                else if (isAI) return; // Design is reached through Generate only
+                else if (target === 1 && canAdvanceFromZero) setStep(1);
+                else if (target === 2 && canAdvanceFromZero && canAdvanceFromOne) setStep(2);
               }}
               allowNextStepsSelect={false}
               color="gray"
               size="lg"
               iconSize={42}
+              // One row whatever the mode: four steps with a description each
+              // wrapped onto a second line, which read as two separate flows.
+              wrap={false}
               data-tour-id="component-wizard-stepper"
               styles={{
                 stepLabel: { fontSize: '16px', fontWeight: 700 },
                 stepDescription: {
-                  fontSize: '14px',
+                  fontSize: '13px',
                   color: 'var(--mantine-color-dimmed)',
                 },
               }}
             >
-              <Stepper.Step
-                label="Component Type"
-                description="Choose the type of dashboard component to create"
-              >
-                <StepType />
-              </Stepper.Step>
-              {!isText && (
-                <Stepper.Step
-                  label="Data Source"
-                  description="Connect your component to data"
-                >
+              {isAI ? (
+                <Stepper.Step label="Describe" description="Tell the AI what to show">
+                  <StepDescribe />
+                </Stepper.Step>
+              ) : (
+                <Stepper.Step label="Component Type" description="Pick what to add">
+                  <StepType />
+                </Stepper.Step>
+              )}
+              {!isAI && !isText && (
+                <Stepper.Step label="Data Source" description="Connect it to data">
                   <StepData />
                 </Stepper.Step>
               )}
-              <Stepper.Step
-                label="Component Design"
-                description="Customize the appearance and behavior of your component"
-              >
+              <Stepper.Step label="Component Design" description="Customize and save">
                 <StepDesign />
               </Stepper.Step>
               <Stepper.Completed>
@@ -412,7 +375,7 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
         )}
       </AppShell.Main>
 
-      {showStepper && (
+      {showFooter && (
         <AppShell.Footer
           withBorder
           style={{
@@ -426,33 +389,31 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
                 color="gray"
                 size="lg"
                 leftSection={<Icon icon="mdi:arrow-left" width={20} />}
-                disabled={step === 0 || (step >= 2 && !isText)}
-                onClick={() => {
-                  // Text components skip Step 1 in both directions.
-                  if (isText && step === 2) setStep(0);
-                  else setStep(Math.max(0, step - 1));
-                }}
+                // Design is a one-way door for data-bound types in the manual
+                // flow: going back to Data Source would reset the config. Text
+                // has no such step, and the AI flow's Describe keeps its own
+                // state, so both can go back.
+                disabled={step === 0 || (step >= designStep && !isText && !isAI)}
+                onClick={() => setStep(Math.max(0, previousStep))}
               >
                 Back
               </Button>
-              <Button
-                variant="filled"
-                color="gray"
-                size="lg"
-                rightSection={<Icon icon="mdi:arrow-right" width={20} />}
-                disabled={
-                  (step === 0 && !canAdvanceFromZero) ||
-                  (step === 1 && !canAdvanceFromOne) ||
-                  step >= 2
-                }
-                onClick={() => {
-                  // Text jumps 0 → 2 directly (no data binding required).
-                  if (isText && step === 0) setStep(2);
-                  else setStep(step + 1);
-                }}
-              >
-                Next Step
-              </Button>
+              {!isAI && (
+                <Button
+                  variant="filled"
+                  color="gray"
+                  size="lg"
+                  rightSection={<Icon icon="mdi:arrow-right" width={20} />}
+                  disabled={
+                    (step === 0 && !canAdvanceFromZero) ||
+                    (step === 1 && !canAdvanceFromOne) ||
+                    step >= designStep
+                  }
+                  onClick={() => setStep(nextStep)}
+                >
+                  Next Step
+                </Button>
+              )}
             </Group>
           </Container>
         </AppShell.Footer>

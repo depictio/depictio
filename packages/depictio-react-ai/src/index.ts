@@ -4,15 +4,13 @@
 
 // The one AI affordance icon (star) — hosts reuse it for their own AI
 // entry points (menus, builder buttons) so the cue stays uniform.
-export { AI_ICON } from './icons';
+export { AI_COLOR, AI_ICON, aiColorVar } from './icons';
 
 // Components
 export { default as AIAnalyzePanel } from './components/AIAnalyzePanel';
 export { default as AIKeySection } from './components/AIKeySection';
 export { default as ActionsPreview } from './components/ActionsPreview';
 export type { ApplyActionsPayload } from './components/ActionsPreview';
-export { default as AddWithAIModal } from './components/AddWithAIModal';
-export type { AvailableDataCollection } from './components/AddWithAIModal';
 export { default as AiFillModal } from './components/AiFillModal';
 export { default as AIAnalysisModal } from './components/AIAnalysisModal';
 export { default as ExecutionTrace } from './components/ExecutionTrace';
@@ -73,6 +71,8 @@ export type {
   ResolveFiltersRequest,
   ResolveFiltersResponse,
   ResolvedFilter,
+  RoutedCollection,
+  RoutingInfo,
   SuggestFiguresRequest,
   SuggestFiguresResponse,
   SummariesResponse,
