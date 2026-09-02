@@ -831,7 +831,7 @@ def _stringify_provenance_value(v: Any) -> str:
 
 
 def collect_run_provenance(
-    data_root: str,
+    data_root: str | None,
     spec: ProvenanceSpec | None,
     extra_files: list[str] | None = None,
 ) -> tuple[list[ProvenanceEntry], list[str]]:
@@ -850,7 +850,9 @@ def collect_run_provenance(
     from fnmatch import fnmatch
 
     spec = spec or _DEFAULT_PROVENANCE_SPEC
-    root = Path(data_root)
+    # Manifest-driven templates have no local run directory: only the explicit
+    # --provenance-file entries can be collected, the spec's globs have no root.
+    root = Path(data_root) if data_root is not None else None
 
     def assign_group(key: str, source: ProvenanceSource | None) -> str:
         if source is not None and source.group:
@@ -864,7 +866,7 @@ def collect_run_provenance(
     collected: list[tuple[str, str, str, Any]] = []  # (source, group, key, value)
     files_read: list[str] = []
 
-    for source in spec.sources:
+    for source in spec.sources if root is not None else []:
         matches = sorted(root.glob(source.glob))
         if not matches:
             # sequencing-runs layouts keep pipeline_info one level down
@@ -1261,9 +1263,13 @@ def resolve_template(
     #     gated-out DC stays gated out even when a seed sits next to it, and
     #     before `_strip_ids` / `_build_expected_dcs` so tags and links are still
     #     intact and the manifest reflects the final config.
-    materialized_seeds, _ = materialize_recipe_seeds(
-        resolved_config, data_root_abs, drop_missing=False
-    )
+    #     Seeds live under DATA_ROOT, so manifest-driven templates (no local
+    #     root) have nothing to materialize.
+    materialized_seeds: list[str] = []
+    if data_root_abs is not None:
+        materialized_seeds, _ = materialize_recipe_seeds(
+            resolved_config, data_root_abs, drop_missing=False
+        )
     if materialized_seeds:
         logger.info(
             f"Materialized {len(materialized_seeds)} recipe DC(s) from pre-computed seeds: "

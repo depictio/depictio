@@ -479,6 +479,8 @@ class TestMaterializeRecipeSeeds:
 
         dc_config = config["workflows"][0]["data_collections"][0]["config"]
         assert dc_config["dc_specific_properties"] == {"format": "tsv"}
+
+
 class TestManifestModeResolution:
     """resolve_template with data_root=None (manifest-driven templates)."""
 
