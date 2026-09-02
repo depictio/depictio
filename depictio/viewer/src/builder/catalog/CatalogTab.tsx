@@ -30,7 +30,7 @@ import {
 import { useBuilderStore } from '../store/useBuilderStore';
 import type { ComponentType } from '../store/useBuilderStore';
 import { buildMetadata } from '../buildMetadata';
-import { rolesFromConfigBlob } from '../advanced_viz/configBlob';
+import { advancedVizConfig } from '../store/applyLiteComponent';
 import CatalogPreviewPanel, {
   catalogUseRef,
   matchTitle,
@@ -52,24 +52,17 @@ async function buildConfigFromRender(
   dcId: string,
 ): Promise<Record<string, unknown>> {
   if (render.component === 'advanced_viz') {
+    // Same mapping the AI answers go through (see applyLiteComponent):
     // `preset_config` carries the catalog preview's computed config (role
-    // bindings + data-derived viz-control defaults). buildMetadata overlays its
-    // non-role extras so the added component renders exactly like its preview.
-    //
-    // The mapping is seeded from that grounded config *and* the declared roles,
-    // declared last so they win. A list-typed binding has no role to travel in
-    // — a sunburst declares only `abundance` and gets its hierarchy inferred
-    // server-side — so reading the roles alone left the binding form short of a
-    // requirement the offer actually satisfies, and "Edit" rejected an offer
-    // whose preview had just rendered.
-    return {
-      viz_kind: render.kind ?? null,
-      column_mapping: {
-        ...rolesFromConfigBlob(render.kind, render.config),
-        ...(render.roles ?? {}),
-      },
-      preset_config: render.config ?? null,
-    };
+    // bindings + data-derived viz-control defaults), and buildMetadata overlays
+    // its non-role extras so the added component renders exactly like its
+    // preview. The bindings are seeded from that grounded config *and* the
+    // declared roles, declared last so they win. A list-typed binding has no
+    // role to travel in — a sunburst declares only `abundance` and gets its
+    // hierarchy inferred server-side — so reading the roles alone left the
+    // binding form short of a requirement the offer actually satisfies, and
+    // "Edit" rejected an offer whose preview had just rendered.
+    return advancedVizConfig(render.kind, render.config, render.roles);
   }
   if (render.component === 'figure') {
     return {

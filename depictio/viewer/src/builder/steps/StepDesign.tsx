@@ -7,25 +7,14 @@ import { Alert, Button, Center, Group, Paper, Stack, Switch, Text, Title } from 
 import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
 import { fetchSpecs, upsertComponent } from 'depictio-react-core';
-import { AI_ICON, AiFillModal, useAIHealth } from 'depictio-react-ai';
+import { AI_COLOR, AI_ICON, AiFillModal, useAIHealth } from 'depictio-react-ai';
 import { useServerStatus } from '../../hooks/useServerStatus';
 import { useBuilderStore } from '../store/useBuilderStore';
 import type { ColumnSpec } from '../store/useBuilderStore';
+import { applyLiteComponent } from '../store/applyLiteComponent';
 import ComponentBuilder from '../ComponentBuilder';
 import { buildMetadata } from '../buildMetadata';
 import { getComponentTypeMeta } from '../componentTypes';
-
-/** Component types the AI fill flow can author (matches the backend's
- *  ComponentType literal — text/jbrowse/advanced_viz are out of scope). */
-const AI_FILL_TYPES = new Set([
-  'figure',
-  'card',
-  'interactive',
-  'table',
-  'image',
-  'multiqc',
-  'map',
-]);
 
 const StepDesign: React.FC = () => {
   const state = useBuilderStore();
@@ -33,28 +22,18 @@ const StepDesign: React.FC = () => {
   const [aiFillOpened, setAiFillOpened] = useState(false);
   const { features: serverFeatures } = useServerStatus();
   const aiHealth = useAIHealth(serverFeatures.ai);
+  // Every builder type can be filled; text is the one that needs no data
+  // collection (it is written with the dashboard as context).
   const aiFillAvailable =
-    serverFeatures.ai &&
-    Boolean(state.dcId) &&
-    Boolean(state.componentType && AI_FILL_TYPES.has(state.componentType));
+    serverFeatures.ai && Boolean(state.componentType) &&
+    (Boolean(state.dcId) || state.componentType === 'text');
 
-  /** Hydrate the builder from an AI-validated component dict. Field names
-   *  match the lite-model shape the per-type builders read; figure needs its
-   *  top-level store fields synced too. Deliberately does NOT touch
-   *  figureMode when the AI omitted `mode` — the user's current editing mode
-   *  must survive a non-figure or partial fill. */
+  /** Hydrate the builder from an AI-validated component dict, through the
+   *  same mapping the Describe step and the catalog use, and mark the
+   *  component as AI-authored for the saved `ai_source` provenance. */
   const applyAiFill = (parsed: Record<string, unknown>) => {
-    const store = useBuilderStore.getState();
-    store.patchConfig(parsed);
-    if (store.componentType === 'figure') {
-      const mode = parsed.mode as string | undefined;
-      if (mode === 'code' || mode === 'ui') store.setFigureMode(mode);
-      if (typeof parsed.visu_type === 'string') store.setVisuType(parsed.visu_type);
-      if (parsed.dict_kwargs && typeof parsed.dict_kwargs === 'object') {
-        store.patchDictKwargs(parsed.dict_kwargs as Record<string, unknown>);
-      }
-      if (typeof parsed.code_content === 'string') store.setCodeContent(parsed.code_content);
-    }
+    applyLiteComponent(parsed);
+    if (!state.aiSource) state.setAiSource({ flow: 'component-from-prompt' });
   };
 
   /** Current component state for the revision prompt — lets the LLM patch
@@ -157,6 +136,13 @@ const StepDesign: React.FC = () => {
   }
 
   const meta = getComponentTypeMeta(state.componentType);
+  // What the AI routing notice says after the type name: the collection the
+  // component was generated against, or the fact that text has none.
+  const routedOn = ((): string => {
+    if (state.componentType === 'text') return ', written with the dashboard as context';
+    if (state.aiRouting?.dcTag) return ` on ${state.aiRouting.dcTag}`;
+    return '';
+  })();
 
   return (
     <Stack gap="md" pt="md">
@@ -172,7 +158,7 @@ const StepDesign: React.FC = () => {
             <Button
               size="xs"
               variant="light"
-              color="violet"
+              color={AI_COLOR}
               leftSection={<Icon icon={AI_ICON} width={14} />}
               onClick={() => setAiFillOpened(true)}
               data-testid="ai-fill-open"
@@ -184,6 +170,45 @@ const StepDesign: React.FC = () => {
           </Group>
         )}
       </Stack>
+
+      {state.sourceMode === 'ai' && state.aiSource && (
+        <Paper withBorder radius="md" p="sm" data-testid="ai-routing-notice">
+          <Group gap="xs" wrap="nowrap" align="flex-start">
+            <Icon icon={AI_ICON} width={18} style={{ flexShrink: 0, marginTop: 2 }} />
+            <Stack gap={2}>
+              <Text size="sm">
+                <Text span fw={600}>
+                  {meta.label}
+                </Text>
+                {routedOn}
+                {state.aiRouting?.source === 'auto' && (
+                  <Text span c="dimmed">
+                    {' '}
+                    · chosen by the AI
+                    {state.aiRouting.reason ? `: ${state.aiRouting.reason}` : ''}
+                  </Text>
+                )}
+                {state.aiRouting?.source === 'single' && (
+                  <Text span c="dimmed">
+                    {' '}
+                    · the only matching collection
+                  </Text>
+                )}
+              </Text>
+              {state.aiRouting && state.aiRouting.alternatives.length > 0 && (
+                <Text size="xs" c="dimmed">
+                  Also plausible:{' '}
+                  {state.aiRouting.alternatives.map((a) => a.data_collection_tag).join(', ')}
+                </Text>
+              )}
+              <Text size="xs" c="dimmed">
+                Not what you meant? Use Back to change the type or the collection and
+                generate again.
+              </Text>
+            </Stack>
+          </Group>
+        </Paper>
+      )}
 
       {/* MultiQC previews render pre-aggregated report plots (no row-filter
           concept) and text components have no data at all — no banner there. */}
@@ -217,12 +242,12 @@ const StepDesign: React.FC = () => {
           </Paper>
         )}
 
-      {aiFillAvailable && state.dashboardId && state.dcId && (
+      {aiFillAvailable && state.dashboardId && (
         <AiFillModal
           opened={aiFillOpened}
           onClose={() => setAiFillOpened(false)}
           dashboardId={state.dashboardId}
-          componentType={state.componentType as never}
+          componentType={state.componentType}
           dataCollectionId={state.dcId}
           current={currentForAiFill()}
           onApply={applyAiFill}

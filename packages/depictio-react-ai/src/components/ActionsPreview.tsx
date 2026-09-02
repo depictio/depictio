@@ -1,6 +1,7 @@
 import React from 'react';
 import { Badge, Button, Code, Group, Paper, Stack, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import { AI_COLOR, aiColorVar } from '../icons';
 
 import type { DashboardActions, ResolvedFilter } from '../types';
 
@@ -63,7 +64,7 @@ const ActionsPreview: React.FC<Props> = ({
     <Button
       size="xs"
       variant={applied ? 'light' : 'filled'}
-      color={applied ? 'teal' : 'violet'}
+      color={applied ? 'teal' : AI_COLOR}
       style={applied ? { pointerEvents: 'none' } : undefined}
       leftSection={<Icon icon="material-symbols:check" width={14} />}
       onClick={() => onApply({ actions, resolved })}
@@ -81,7 +82,7 @@ const ActionsPreview: React.FC<Props> = ({
       radius="sm"
       p="xs"
       mt={6}
-      style={{ borderColor: 'var(--mantine-color-violet-3)' }}
+      style={{ borderColor: aiColorVar(3) }}
     >
     <Stack gap={6}>
       <Group gap="xs" align="center" wrap="nowrap">
@@ -113,7 +114,7 @@ const ActionsPreview: React.FC<Props> = ({
           {/* Both kinds narrow the data — "filter" is the user-facing
               category. Whether it lands as a moved control (set_widget) or
               an injected expression is plumbing, not meaning. */}
-          <Badge color="violet" variant="light" size="xs">
+          <Badge color={AI_COLOR} variant="light" size="xs">
             filter
           </Badge>
           <Text size="xs" style={{ flex: 1 }}>
