@@ -35,6 +35,7 @@ RESERVED_NAMES: frozenset[str] = frozenset(
         "DASHBOARD_ID",
         "DepictioClient",
         "depictio_state",
+        "metric_card",
     }
     | set(keyword.kwlist)
     | set(dir(builtins))

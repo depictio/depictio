@@ -257,9 +257,9 @@ def test_penguins_export_content(penguins_tabs):
     # Code-mode figures are inlined verbatim, wrapped so `df`/`fig` stay local.
     assert "def _make_fig_" in src and "    return fig" in src
     assert "px.violin(" in src
-    # UI figures become px calls over the final frame with cleaned kwargs.
-    assert "px.scatter(\n        final_penguins_complete," in src
-    assert "template=" not in src
+    # UI figures render through the API, not a reconstructed px.* call.
+    assert "px.scatter(\n        final_penguins_complete," not in src
+    assert "a scatter figure built by Depictio's chart builder" in src
     # Cards and the table are explicit reductions.
     assert ".select(pl.col('individual_id').drop_nulls().len()).item()" in src
     assert ".head(100)" in src
@@ -293,7 +293,9 @@ def test_preflight_lists_every_tile_with_a_verdict(penguins_tabs):
     assert {c.index for c in pre.components} == tiles
     assert all(c.status in ("code", "api", "omitted") for c in pre.components)
     assert pre.counts["stages"] == 3 and pre.counts["dcs"] == 1
-    assert pre.counts["code"] == len(pre.components)  # penguins is fully code-expressible
+    # UI-built figures render through the API; the rest (text, cards, the
+    # table, and the few code-mode figures) stay closed-form Python.
+    assert pre.counts["code"] == 26 and pre.counts["api"] == 8
     assert all(c.tab for c in pre.components)
     named = [c for c in pre.components if c.component_type != "text"]
     assert all(c.name for c in named)

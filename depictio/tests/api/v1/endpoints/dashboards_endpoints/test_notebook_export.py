@@ -307,7 +307,10 @@ def test_stage_row_counts_match_funnel_values(patched_env, tmp_path, monkeypatch
     assert defs["card_samples"] == defs["final_samples"].height
     assert defs["card_mean_temperature"] == pytest.approx(defs["final_samples"]["temp"].mean())
     assert defs["table_rows"].columns == ["habitat", "temp"]
-    assert defs["fig_temperature_by_habitat"].data
+    # UI-built, so it renders through client.component(...) like the child
+    # tab's advanced viz (api-mode names get the "viz_" prefix, not "fig_");
+    # the offline stub stands in for the real API.
+    assert defs["viz_temperature_by_habitat"] == "rendered by Depictio"
     assert defs["fig_custom"].data[0].type == "scatter"
 
 
@@ -331,19 +334,20 @@ def test_export_headers_and_content(patched_env):
     assert "Groundwater" in src and "Riverwater" in src
     assert "client.component(" in src and "'viz-1'" in src  # the child tab's advanced viz
     assert "## Details" in src  # child tab heading
-    assert "labels={'temp': 'Temperature'}" in src  # JSON-string kwargs parsed like the server
-    assert "color=" not in src  # None kwargs dropped like the server
+    assert "'fig-1'" in src  # the UI-built figure, rendered through the API too
 
 
 def test_preflight_verdicts(patched_env):
     pre = _preflight(_state(FILTERS))
     by_index = {c.index: c for c in pre.components}
-    assert by_index["fig-1"].status == "code" and by_index["fig-2"].status == "code"
+    # fig-1 is UI-built, so it goes through the API like fig-2 would if it
+    # were not the author's own code; fig-2 is mode="code" and stays inlined.
+    assert by_index["fig-1"].status == "api" and by_index["fig-2"].status == "code"
     assert by_index["viz-1"].status == "api" and by_index["viz-1"].kind == "embedding"
     assert by_index["card-1"].name == "card_samples"
     assert [s.index for s in pre.stages] == ["comp-habitat", "comp-temp", "comp-depth"]
     assert pre.dcs[0].tag == "samples" and pre.dcs[0].rows == BASE_DF.height
-    assert pre.counts["code"] == 6 and pre.counts["api"] == 1
+    assert pre.counts["code"] == 5 and pre.counts["api"] == 2
     assert pre.ipynb_available == ipynb_available()
 
 
