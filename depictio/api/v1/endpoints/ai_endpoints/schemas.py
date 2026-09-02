@@ -44,7 +44,11 @@ class PlotSuggestion(BaseModel):
 
 
 class SuggestFiguresResponse(BaseModel):
-    """Returned by `/ai/suggest-figures` (data-driven flow)."""
+    """Returned by `/ai/suggest-figures` (data-driven flow).
+
+    Deprecated: the viewer calls `/ai/suggest-components` instead, which
+    proposes any component type; this stays for older clients.
+    """
 
     suggestions: list[PlotSuggestion]
 
@@ -95,6 +99,48 @@ class RoutingInfo(BaseModel):
     # Other plausible collections the router named, resolved against the
     # inventory. Empty when none were named (and always for "user").
     alternatives: list[RoutedCollection] = Field(default_factory=list)
+
+
+SuggestionOrigin = Literal["llm", "ranked"]
+"""Where a `/ai/suggest-components` item came from.
+
+``llm``: proposed by the model and validated server-side.
+``ranked``: built deterministically from the data (no LLM), for the types
+the model never handles (advanced_viz, table).
+"""
+
+
+class ComponentSuggestion(BaseModel):
+    """One proposed component for the dashboard, ready to land in the builder.
+
+    `component` is the validated lite component (the output of
+    `component_yaml.validate_single`): it carries component_type,
+    workflow_tag, data_collection_tag, title and the type's own fields.
+    `data_collection_id` / `workflow_id` resolve the tags for the client
+    (None for text). `code` is the Plotly Express rendering of a figure,
+    display-only.
+    """
+
+    component_type: ComponentType
+    data_collection_id: str | None = None
+    data_collection_tag: str | None = None
+    workflow_id: str | None = None
+    title: str
+    rationale: str
+    component: dict[str, Any]
+    code: str | None = None
+    origin: SuggestionOrigin
+
+
+class SuggestComponentsResponse(BaseModel):
+    """Returned by `/ai/suggest-components`.
+
+    `warnings` explains a degraded answer, e.g. the LLM call failed and only
+    the ranked (deterministic) suggestions are shown.
+    """
+
+    suggestions: list[ComponentSuggestion]
+    warnings: list[str] = Field(default_factory=list)
 
 
 class ComponentFromPromptResponse(BaseModel):
@@ -302,7 +348,24 @@ class AnalysisReport(BaseModel):
 
 
 class SuggestFiguresRequest(BaseModel):
+    """Body for the deprecated `/ai/suggest-figures`."""
+
     data_collection_id: str
+    n: int = Field(default=4, ge=1, le=8)
+
+
+class SuggestComponentsRequest(BaseModel):
+    """Body for `/ai/suggest-components` ("what would you add to this dashboard?").
+
+    Everything is derived from the dashboard: its project inventory says
+    which collections exist and what they can back, its components say
+    what is already shown. `component_type` and `data_collection_id` are
+    optional pins (None = let the server mix types / pick collections).
+    """
+
+    dashboard_id: str
+    component_type: ComponentType | None = None
+    data_collection_id: str | None = None
     n: int = Field(default=4, ge=1, le=8)
 
 
