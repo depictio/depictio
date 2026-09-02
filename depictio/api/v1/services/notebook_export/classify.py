@@ -66,6 +66,21 @@ def _figure(meta: dict[str, Any]) -> Classification:
 
 def _card(meta: dict[str, Any]) -> Classification:
     agg = str(meta.get("aggregation") or "")
+    layout = str(meta.get("secondary_layout") or "")
+    secondary_aggs = meta.get("aggregations") or []
+    breakdown = meta.get("breakdown_col")
+    if layout or secondary_aggs or breakdown:
+        # A multi-metric card (a box plot, a top-N breakdown, a trend
+        # sparkline, a completeness/coverage gauge, icon and colour
+        # styling...) is drawn by the React card renderer from several
+        # fields this dict carries, not by one scalar Polars reduction.
+        # Reproducing only the hero number would show less than the
+        # dashboard does, so the whole card renders through the API instead.
+        return Classification(
+            "api",
+            f"a {layout or 'multi-metric'} card built by Depictio's card renderer; " + API_REASON,
+            kind=layout or agg or None,
+        )
     if agg_expr_source("x", agg) is not None:
         return Classification("code", f"{agg} of the column over the filtered frame", kind=agg)
     return Classification(

@@ -260,11 +260,14 @@ def test_penguins_export_content(penguins_tabs):
     # UI figures render through the API, not a reconstructed px.* call.
     assert "px.scatter(\n        final_penguins_complete," not in src
     assert "a scatter figure built by Depictio's chart builder" in src
-    # Cards and the table are explicit reductions.
-    assert ".select(pl.col('individual_id').drop_nulls().len()).item()" in src
+    # The table is an explicit reduction; every seeded card carries a
+    # secondary visualization (donut, box plot, gauge...), so cards render
+    # through the API too rather than showing only the hero number.
     assert ".head(100)" in src
-    # A card with a filter_expr scopes its rows first.
-    assert "_scoped = final_penguins_complete.filter(col('bill_length_mm') > 50)" in src
+    assert "a gauge card built by Depictio's card renderer" in src
+    assert (
+        "'938c7080-b193-5529-8dcd-673f4fa917ae'" in src
+    )  # "Bills > 50 mm", filter_expr applied server-side
     # Text tiles and section titles are markdown.
     assert "## Cohort" in src and "# Penguins Species Analysis" in src
     assert "How to run" in src
@@ -293,9 +296,10 @@ def test_preflight_lists_every_tile_with_a_verdict(penguins_tabs):
     assert {c.index for c in pre.components} == tiles
     assert all(c.status in ("code", "api", "omitted") for c in pre.components)
     assert pre.counts["stages"] == 3 and pre.counts["dcs"] == 1
-    # UI-built figures render through the API; the rest (text, cards, the
-    # table, and the few code-mode figures) stay closed-form Python.
-    assert pre.counts["code"] == 26 and pre.counts["api"] == 8
+    # UI-built figures and every multi-metric card render through the API;
+    # the rest (text, the table, and the few code-mode figures) stay
+    # closed-form Python.
+    assert pre.counts["code"] == 10 and pre.counts["api"] == 24
     assert all(c.tab for c in pre.components)
     named = [c for c in pre.components if c.component_type != "text"]
     assert all(c.name for c in named)
