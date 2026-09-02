@@ -422,21 +422,150 @@ class CardComponent(DepictioComponent):
     def value(self) -> Any:
         return self.data.get("value")
 
-    def _display_html(self) -> str:
-        value = self.value
+    @staticmethod
+    def _fmt(value: Any) -> str:
         if isinstance(value, float):
-            shown = f"{value:,.4g}" if abs(value) < 1e6 else f"{value:,.0f}"
-        else:
-            shown = "–" if value is None else _html.escape(str(value))
+            return f"{value:,.4g}" if abs(value) < 1e6 else f"{value:,.0f}"
+        return "–" if value is None else _html.escape(str(value))
+
+    def _display_html(self) -> str:
         agg = _html.escape(str(self.meta.get("aggregation") or ""))
         column = _html.escape(str(self.meta.get("column_name") or ""))
         return (
             '<div style="display:inline-block;min-width:180px;padding:12px 16px;border:1px solid '
             '#dee2e6;border-radius:8px;font-family:system-ui,sans-serif">'
             f'<div style="font-size:12px;color:#868e96">{_html.escape(self.title)}</div>'
-            f'<div style="font-size:28px;font-weight:600;line-height:1.2">{shown}</div>'
-            f'<div style="font-size:11px;color:#adb5bd">{agg} · {column}</div></div>'
+            f'<div style="font-size:28px;font-weight:600;line-height:1.2">{self._fmt(self.value)}</div>'
+            f'<div style="font-size:11px;color:#adb5bd">{agg} · {column}</div>'
+            f"{self._secondary_html()}</div>"
         )
+
+    def _bar(self, label: str, fraction: float, note: str = "") -> str:
+        pct = max(0.0, min(1.0, fraction)) * 100
+        return (
+            '<div style="margin:4px 0 0;font-size:11px;color:#495057">'
+            f'<div style="display:flex;justify-content:space-between">'
+            f"<span>{_html.escape(label)}</span><span>{_html.escape(note)}</span></div>"
+            '<div style="background:#f1f3f5;border-radius:3px;height:6px;margin-top:2px">'
+            f'<div style="background:#4c6ef5;border-radius:3px;height:6px;width:{pct:.1f}%"></div>'
+            "</div></div>"
+        )
+
+    def _secondary_html(self) -> str:
+        """The card's secondary visualization, from the same numbers the React
+        renderer draws (``bulk_compute_cards``' ``secondary_values``), not a
+        reconstruction: a top-N breakdown, a box plot's five-number summary, a
+        histogram, a pass/warn/fail count, a trend sparkline... The exact
+        chrome differs from the dashboard's chart, but every number in it is
+        the one Depictio computed, keyed by ``secondary_layout``.
+        """
+        layout = str(self.meta.get("secondary_layout") or "")
+        sec = self.data.get("secondary") or {}
+        if layout in ("top_n", "concentration", "composition", "donut"):
+            breakdown = sec.get("__breakdown__")
+            if not breakdown:
+                return ""
+            rows = "".join(
+                self._bar(
+                    item["name"], item["percent"], f"{item['count']:,} ({item['percent']:.0%})"
+                )
+                for item in breakdown.get("top") or []
+            )
+            return rows
+        if layout == "box_plot":
+            s = sec.get("box_plot_stats")
+            if not s:
+                return ""
+            tail = f" · {s['outlier_count']:,} outlier(s)" if s.get("outlier_count") else ""
+            return (
+                '<div style="margin-top:4px;font-size:11px;color:#495057">'
+                f"min {self._fmt(s['min'])} · q1 {self._fmt(s['q1'])} · "
+                f"median {self._fmt(s['median'])} · q3 {self._fmt(s['q3'])} · "
+                f"max {self._fmt(s['max'])}{tail}</div>"
+            )
+        if layout == "histogram":
+            h = sec.get("__histogram__")
+            bins = (h or {}).get("bins") or []
+            if not bins:
+                return ""
+            peak = max(bins) or 1
+            bars = "".join(
+                f'<div style="flex:1;background:#4c6ef5;height:{c / peak * 24:.0f}px;'
+                f'align-self:flex-end;margin:0 1px" title="{c:,}"></div>'
+                for c in bins
+            )
+            return (
+                '<div style="margin-top:6px;display:flex;align-items:flex-end;height:24px">'
+                f"{bars}</div>"
+                f'<div style="font-size:10px;color:#adb5bd">'
+                f"{self._fmt(h['min'])} – {self._fmt(h['max'])}</div>"
+            )
+        if layout == "trend":
+            t = sec.get("__trend__")
+            points = (t or {}).get("points") or []
+            values = [p["value"] for p in points]
+            if len(values) < 2:
+                return ""
+            lo, hi = min(values), max(values)
+            span = (hi - lo) or 1
+            width, height = 120, 28
+            step = width / (len(values) - 1)
+            poly = " ".join(
+                f"{i * step:.1f},{height - (v - lo) / span * height:.1f}"
+                for i, v in enumerate(values)
+            )
+            change = t.get("change")
+            note = f"{change:+.0%}" if change is not None else ""
+            return (
+                f'<div style="margin-top:6px"><svg width="{width}" height="{height}">'
+                f'<polyline points="{poly}" fill="none" stroke="#4c6ef5" stroke-width="1.5"/></svg>'
+                f'<div style="font-size:10px;color:#adb5bd">{_html.escape(note)}</div></div>'
+            )
+        if layout == "threshold":
+            th = sec.get("__threshold__")
+            if not th:
+                return ""
+            warn = (
+                f' · <span style="color:#f08c00">{th["warning"]:,} warn</span>'
+                if th.get("warning")
+                else ""
+            )
+            return (
+                '<div style="margin-top:4px;font-size:11px">'
+                f'<span style="color:#2f9e44">{th["passing"]:,} pass</span>{warn} · '
+                f'<span style="color:#e03131">{th["failing"]:,} fail</span></div>'
+            )
+        if layout == "completeness":
+            c = sec.get("__completeness__")
+            if not c:
+                return ""
+            return self._bar("Filled", c["fill_rate"], f"{c['filled']:,}/{c['total']:,}")
+        if layout == "uniqueness":
+            u = sec.get("__uniqueness__")
+            if not u:
+                return ""
+            return self._bar("Distinct", u["unique_rate"], f"{u['distinct']:,}/{u['measured']:,}")
+        if layout == "attrition":
+            a = sec.get("__attrition__")
+            if not a:
+                return ""
+            return "".join(
+                self._bar(s["name"], s["share"], f"{s['value']:,.0f}")
+                for s in a.get("stages") or []
+            )
+        if layout in ("coverage", "gauge"):
+            cap = self.meta.get("coverage_max")
+            value = self.value
+            if not isinstance(cap, (int, float)) or not cap or not isinstance(value, (int, float)):
+                return ""
+            return self._bar(layout.capitalize(), value / cap, f"/{cap:,}")
+        if layout in ("vertical", "compact", "grid"):
+            names = [n for n in self.meta.get("aggregations") or [] if n in sec]
+            if not names:
+                return ""
+            rows = " · ".join(f"{_html.escape(n)} {self._fmt(sec[n])}" for n in names)
+            return f'<div style="margin-top:4px;font-size:11px;color:#495057">{rows}</div>'
+        return ""
 
 
 class InteractiveComponent(DepictioComponent):

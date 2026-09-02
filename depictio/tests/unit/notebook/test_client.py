@@ -41,6 +41,16 @@ DASHBOARD = {
             "dc_id": DC,
         },
         {
+            "index": "card-2",
+            "component_type": "card",
+            "title": "Species mix",
+            "aggregation": "nunique",
+            "column_name": "species",
+            "secondary_layout": "donut",
+            "breakdown_col": "species",
+            "dc_id": DC,
+        },
+        {
             "index": "flt-1",
             "component_type": "interactive",
             "title": "Species",
@@ -102,12 +112,32 @@ class FakeApi:
             rows = TABLE.to_dicts()[start : start + 2]
             return httpx.Response(200, json={"columns": [], "rows": rows, "total": TABLE.height})
         if "/bulk_compute_cards/" in path:
+            wanted = body["component_ids"]
+            values, secondary, aggs = {}, {}, {}
+            if "card-1" in wanted:
+                values["card-1"], aggs["card-1"] = 3, ["count"]
+            if "card-2" in wanted:
+                values["card-2"], aggs["card-2"] = 2, []
+                secondary["card-2"] = {
+                    "__breakdown__": {
+                        "column": "species",
+                        "total": 3,
+                        "top": [
+                            {"name": "Adelie", "count": 2, "percent": 2 / 3},
+                            {"name": "Gentoo", "count": 1, "percent": 1 / 3},
+                        ],
+                        "top_share": 1.0,
+                        "unique_values": 2,
+                        "breakdown_kind": "count",
+                        "evenness": 0.92,
+                    }
+                }
             return httpx.Response(
                 200,
                 json={
-                    "values": {"card-1": 3},
-                    "secondary_values": {},
-                    "aggregations": {"card-1": ["count"]},
+                    "values": values,
+                    "secondary_values": secondary,
+                    "aggregations": aggs,
                     "filter_applied": False,
                 },
             )
@@ -251,6 +281,19 @@ def test_card_component_value_and_html(client):
     assert comp.value == 3
     html = comp._repr_mimebundle_()["text/html"]
     assert "Individuals" in html and ">3<" in html
+
+
+def test_multi_metric_card_shows_the_real_breakdown(client):
+    # A card with a secondary_layout draws it from bulk_compute_cards's own
+    # numbers (the same ones the React card renderer uses), not just the
+    # hero value: the notebook shows less chrome than the dashboard's card,
+    # but nothing in it is guessed.
+    comp = client.component(DASH, "Species mix")
+    assert isinstance(comp, CardComponent)
+    html = comp._repr_mimebundle_()["text/html"]
+    assert "Species mix" in html and ">2<" in html
+    assert "Adelie" in html and "Gentoo" in html
+    assert "67%" in html  # 2/3, the top breakdown entry's share
 
 
 def test_text_component_is_markdown(client):

@@ -42,6 +42,36 @@ def test_cards_without_a_closed_form_go_through_the_api():
     assert classify({"component_type": "card", "aggregation": "mode"}).status == "api"
 
 
+def test_multi_metric_cards_go_through_the_api():
+    # A closed-form hero aggregation isn't enough on its own: any secondary
+    # visualization (breakdown, box plot, trend...) lives in the React card
+    # renderer, so a card carrying one renders through the API to keep it
+    # rather than showing only the hero number.
+    assert (
+        classify(
+            {
+                "component_type": "card",
+                "aggregation": "nunique",
+                "secondary_layout": "donut",
+                "breakdown_col": "species",
+            }
+        ).status
+        == "api"
+    )
+    assert (
+        classify(
+            {
+                "component_type": "card",
+                "aggregation": "median",
+                "aggregations": ["box_plot_stats"],
+                "secondary_layout": "box_plot",
+            }
+        ).status
+        == "api"
+    )
+    assert classify({"component_type": "card", "aggregation": "count"}).status == "code"
+
+
 def test_unknown_type_is_omitted_with_reason():
     verdict = classify({"component_type": "hologram"})
     assert verdict.status == "omitted"
