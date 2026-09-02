@@ -42,7 +42,13 @@ class TestDeadline:
 
     def test_step_is_killed_mid_flight_not_relabelled_afterwards(self):
         with AnalysisSandbox(inline_frames={"obs": _slow_frame()}, default_tag="obs") as box:
-            # First establish what the query actually costs, uncapped.
+            # A fresh child pays one-off costs on its first query (thread pool,
+            # allocator warm-up) that the capped run below does not, so the
+            # baseline is the second uncapped run, not the first: on a slow CI
+            # runner the cold run measured several times the warm cost and
+            # the capped run finished inside its quarter.
+            warmup = box.run(SLOW_CODE, deadline_s=120.0)
+            assert warmup.status == "success", warmup.output
             baseline = box.run(SLOW_CODE, deadline_s=120.0)
             assert baseline.status == "success", baseline.output
             cost = baseline.seconds
