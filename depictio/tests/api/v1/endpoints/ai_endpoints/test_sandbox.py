@@ -26,15 +26,20 @@ def frames() -> dict[str, pl.DataFrame]:
     }
 
 
-# A self-join on a constant key: every verb is inside the allowlist, and
-# the cost is entirely in the data, which is exactly the case policy
-# cannot price. Selecting the key column keeps the output narrow, so this
-# is slow without being a memory hazard on CI.
-SLOW_CODE = "df.join(df.select('k'), on='k', how='inner').height"
+# A regex replace over a long string column: every verb is inside the
+# allowlist, and the cost is entirely in the data, which is exactly the
+# case policy cannot price. The work is per-row and cannot be skipped by
+# the optimiser, so the query costs the same on every run (about 0.15s per
+# million rows on a laptop, more on a CI runner), and the frame is a single
+# column, so it is slow without being a memory hazard on CI. The earlier
+# self-join on a constant key was faster than the deadline floor once the
+# child was warm.
+SLOW_CODE = "df.select(pl.col('v').str.replace_all(r'(\\d)(\\d)', '$2$1')).height"
 
 
 def _slow_frame() -> pl.DataFrame:
-    return pl.DataFrame({"k": [1] * 4000, "v": list(range(4000))})
+    n = 2_000_000
+    return pl.DataFrame({"v": pl.int_range(0, n, eager=True).shuffle(seed=0).cast(pl.Utf8)})
 
 
 class TestDeadline:
