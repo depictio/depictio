@@ -61,6 +61,14 @@ pre-commit run --all-files         # mandatory after all code changes
 
 ### Docker
 - Don't run docker commands except `docker logs`
+- **Worktree that changes dependencies** (`pyproject.toml` / `uv.lock`, `pnpm-lock.yaml`,
+  a new `packages/*` workspace, Dockerfile edits): give it its own image tags so it
+  stops rebuilding the shared `:dev` images under the other worktrees. In that
+  worktree's `.env.instance`, set the four tags the compose file already reads,
+  suffixed with the instance id:
+  `DEPICTIO_VERSION=depictio-api:<suffix>`, `DEPICTIO_VIEWER_DEV_VERSION=depictio-viewer-dev:<suffix>`,
+  `DEPICTIO_WORKER_VERSION=depictio-worker:<suffix>`, `DEPICTIO_VIEWER_VERSION=depictio-viewer:<suffix>`.
+  Layer cache is still shared across tags, so unchanged layers are reused.
 
 ### Code Quality
 - **Mandatory**: run `pre-commit run --all-files` after every code change
