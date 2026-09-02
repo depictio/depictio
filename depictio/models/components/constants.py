@@ -5,7 +5,8 @@ Extracted from dash modules so the model layer can validate enum-like fields
 without importing Dash/DMC dependencies (which would cause circular imports).
 
 Sources:
-    - VISU_TYPES: dash/modules/figure_component/definitions.py (ALLOWED_VISUALIZATIONS)
+    - ALLOWED_VISUALIZATIONS / VISU_TYPES: defined here; the figure service
+      (depictio/api/v1/services/figure/definitions.py) re-exports the former
     - INTERACTIVE_COMPATIBILITY: dash/modules/interactive_component/utils.py (agg_functions dict)
     - AGGREGATION_COMPATIBILITY: dash/modules/card_component/utils.py (agg_functions dict)
 """
@@ -28,14 +29,37 @@ COLUMN_TYPES: tuple[str, ...] = (
 # Valid figure visualization types
 # ---------------------------------------------------------------------------
 
-VISU_TYPES: tuple[str, ...] = (
+# Plotly Express constructors the figure builder exposes. One list for every
+# consumer: the API's figure registry re-exports it, the lite model checks
+# ``visu_type`` against ``VISU_TYPES`` below, and the AI prompts recite it.
+# The dependency direction is api -> models, so it lives here rather than
+# next to the registry.
+#
+# ``heatmap`` and ``scatter_matrix`` are excluded on purpose: the first is not
+# a Plotly Express constructor of its own (heatmap rendering goes through the
+# complex-heatmap path), and scatter_matrix has a per-viz parameter shape that
+# does not match the rest of the builder. Add them back only alongside
+# dedicated builder support.
+ALLOWED_VISUALIZATIONS: tuple[str, ...] = (
     "scatter",
     "line",
     "bar",
     "box",
     "histogram",
-    "heatmap",
+    "violin",
+    "ecdf",
+    "density_heatmap",
+    "density_contour",
+    "area",
+    "funnel",
+    "strip",
 )
+
+# Everything a stored ``visu_type`` may be: the builder's constructors plus
+# ``heatmap``, which persisted dashboards still carry and which renders
+# outside Plotly Express. A superset of ALLOWED_VISUALIZATIONS by design so
+# no existing YAML stops validating.
+VISU_TYPES: tuple[str, ...] = ALLOWED_VISUALIZATIONS + ("heatmap",)
 
 # ---------------------------------------------------------------------------
 # Interactive component type × column_type compatibility
