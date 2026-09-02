@@ -449,7 +449,7 @@ DASHBOARD COMPONENTS:
 CURRENT DASHBOARD FIGURES:
 {dashboard_ctx.figures_block()}
 
-CURRENT FILTERS:
+CURRENT FILTERS (already applied to the data above; None = unset):
 {dashboard_ctx.filters_block()}
 {selected}
 
@@ -568,7 +568,7 @@ DATASET SCHEMA:
 SAMPLE ROWS:
 {data_ctx.sample_block()}
 
-CURRENT FILTERS (interactive components on the dashboard):
+CURRENT FILTERS (interactive components on the dashboard, with their applied values):
 {dashboard_ctx.filters_block()}
 
 Respond with valid JSON of the form:

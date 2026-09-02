@@ -237,6 +237,7 @@ async def resolve_filters(
     what the client may safely apply.
     """
     dashboard_ctx, primary_dc = await build_dashboard_context(body.dashboard_id, current_user)
+    dashboard_ctx = dashboard_ctx.with_active_filters(body.filters)
     if not primary_dc:
         raise HTTPException(
             status_code=422,
@@ -476,6 +477,10 @@ async def _run_analyze(
 
     try:
         dashboard_ctx, primary_dc = await build_dashboard_context(body.dashboard_id, current_user)
+        # The sandbox frames below are built from `body.filters`; the prompt
+        # must describe the same state or the model sees narrowed data it
+        # was told is unfiltered.
+        dashboard_ctx = dashboard_ctx.with_active_filters(body.filters)
     except Exception as e:  # noqa: BLE001
         yield _sse(StreamEvent(type="error", data={"detail": str(e)}))
         yield _sse(StreamEvent(type="done"))
@@ -665,6 +670,10 @@ async def _run_analysis(
 
     try:
         dashboard_ctx, primary_dc = await build_dashboard_context(body.dashboard_id, current_user)
+        # The sandbox frames below are built from `body.filters`; the prompt
+        # must describe the same state or the model sees narrowed data it
+        # was told is unfiltered.
+        dashboard_ctx = dashboard_ctx.with_active_filters(body.filters)
     except Exception as e:  # noqa: BLE001
         yield _sse(StreamEvent(type="error", data={"detail": str(e)}))
         yield _sse(StreamEvent(type="done"))
