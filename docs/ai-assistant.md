@@ -105,9 +105,9 @@ five user-facing flows:
    (cohort filters, KPI cards, figures, a reference table), fills and
    validates every component the way the Describe step does, lays it out
    deterministically and lands it as a new dashboard flagged as an **AI
-   draft**. In the editor every generated tile then carries one AI mark
-   that opens its review (why the planner asked for it, *Regenerate*,
-   *Keep*, *Remove*) and the banner tracks how much of the draft you have
+   draft**. In the editor a review bar in the draft banner then walks you
+   through the generated tiles one by one (why the planner asked for each,
+   *Regenerate*, *Keep*, *Remove*), tracking how much of the draft you have
    been through, before you promote or discard it. Details in
    [Generate a dashboard](#generate-a-dashboard).
 
@@ -135,32 +135,42 @@ is refused in public mode, since a generation is a dashboard import.
    warning), or pick the subset the dashboard should be about. The
    **intent** is optional free text (up to 2000 characters: the audience,
    the questions to answer, what matters most); left empty, the planner
-   builds the most useful overview of the project it can. The **title** is
+   builds the most useful overview of the project it can. Naming a colour,
+   a palette or a brand in it ("in green", "our brand is teal") steers the
+   section colours. The **title** is
    optional too: pinned, a name collision is refused; left empty, the
    planner chooses one and a collision gets an *(AI draft N)* suffix plus
    a warning. Without a server-side key the tab shows the same key field
    as the other AI surfaces.
-3. *Generate* opens a panel of its own under the form and streams the run
+3. **Review the plan before building** is on by default. With it checked,
+   *Generate* only plans: the run stops after the plan, saves nothing, and
+   the panel shows what would be built so it can be judged before any of
+   it is paid for. *Build this plan* sends the plan back and fills it;
+   *Re-plan* asks for another plan, with the intent edited if you like.
+   Unchecked, the run plans and fills in one pass, as it used to.
+4. *Generate* opens a panel of its own under the form and streams the run
    into it: a stage rail (reading the project, inventory, planning,
-   filling, layout, saving) that marks where the run is, the budget spent
-   against its token and wall-clock caps, the **plan** (title, subtitle,
-   the sections and, behind *Why these sections*, the planner's reason for
-   each), and then **one card per planned component** that settles on *ok*,
-   *repaired* (validated after a repair round) or *dropped* (with the
-   reason). A component nobody has reported on yet stays colourless, so
-   colour on that grid only ever means an outcome. *Stop generating* ends
-   the run; a run that does not reach its terminal event saves no
-   dashboard.
-4. When the terminal event arrives the panel shows the dashboard title,
+   filling, checking, layout, saving) that names the current stage, counts
+   the steps and times each one, the **run limit** spent against its token
+   and wall-clock caps (with the cost the provider billed, when it reports
+   one), the **plan** (title, subtitle, the collections it uses, a tally
+   by component type, then one block per section with its icon, its
+   rationale and the components it holds with their tags, types,
+   collections and intents), and **one card per planned component**,
+   grouped by section, each settling on *ok*, *repaired* (validated after
+   a repair round) or *dropped* (with the reason). A component nobody has
+   reported on yet stays colourless, so colour on that grid only ever
+   means an outcome. *Stop generating* ends the run; a run that does not
+   reach its terminal event saves no dashboard.
+5. When the terminal event arrives the panel shows the dashboard title,
    the warnings (dropped components, collections left out, a renamed
-   title) and an *Open in editor* button, and navigates to the editor on
-   its own after a moment.
-5. The editor opens with a **draft banner** above the dashboard: the model
+   title) and an *Open in editor* button. Nothing navigates on its own:
+   the click is the hand-off.
+6. The editor opens with a **draft banner** above the dashboard: the model
    that produced it, the date, a *Why this layout* fold with the planner's
    reason for each section, the warnings behind a fold of their own, a
-   *reviewed n of m* counter and two actions, with every generated tile
-   carrying its own review mark below the banner (see
-   [Reviewing a draft](#reviewing-a-draft)). *Promote* flips the status to
+   *reviewed n of m* counter, the review bar that walks the generated tiles
+   (see [Reviewing a draft](#reviewing-a-draft)) and two actions. *Promote* flips the status to
    `promoted`: the banner and the badges go away and the provenance
    (model, prompt, run id) stays on the document. *Discard* asks for
    confirmation, deletes the dashboard and returns to `/dashboards`. Until
@@ -171,33 +181,46 @@ is refused in public mode, since a generation is a dashboard import.
 
 ### Reviewing a draft
 
-A draft is reviewed tile by tile, not as one block. In the editor every
-generated component carries a single AI mark in its chrome: the sparkle
-while the tile is still unreviewed, a subdued check once it has been
-through. Clicking it opens the review, which holds the whole decision:
+A draft is reviewed tile by tile, not as one block, and the review lives
+in the banner rather than on the tiles. Nothing is added to a generated
+component: the banner carries a cursor over the draft's tiles in plan
+order, *3 of 12*, naming the one under review, and the canvas answers with
+two cues. A tile nobody has been through yet keeps a hairline dashed
+outline; the tile the cursor names is outlined solid, and it is scrolled
+into view when the cursor moves.
 
-- **Why this component**: the planner's own brief for the tile, and the
-  reason it gave for the section the tile sits in. Both are what the
-  planner wrote before anything was filled, so they say why the component
-  was asked for rather than what it ended up showing.
+The banner is at the top of the page and the tile under review is often
+far down it, so the bar follows: once the banner has scrolled out of
+sight a compact version of it floats at the bottom of the viewport, and
+it goes away again as soon as the banner is back on screen. Only one of
+the two is ever on the page.
+
+Under the cursor the banner quotes the planner: the brief it wrote for
+that tile, and the reason it gave for the tile's section. Both were
+written before anything was filled, so they say why the component was
+asked for rather than what it ended up showing. Then the three decisions:
+
 - *Regenerate* re-runs that one tile, with an optional instruction ("use a
   box plot", "group by cohort"). It goes through the same fill and the same
   validation as the original run, repair round included, and the result
   replaces the component in place: its position, its size and its section
   stay as they were and the rest of the dashboard is untouched. A
   regeneration that fails validation leaves the tile as it was and reports
-  the error in the same place.
-- *Keep* marks the tile reviewed without changing it.
-- *Remove* takes the tile out of the draft.
+  the error in the bar, with the cursor still on it.
+- *Keep* marks the tile reviewed without changing it and steps to the next
+  tile that has not been through, so twelve tiles are twelve clicks. On a
+  tile already reviewed it reads *Reviewed, undo*.
+- *Remove* takes the tile out of the draft and steps on as well.
 
-One mark rather than three buttons is deliberate: on a draft of a dozen
-tiles the actions are permanently visible, and three icons per tile read as
-clutter over the components they are meant to be judging.
+Keeping the actions off the tiles is deliberate. They have to be visible
+for as long as the draft is one, and icons sitting permanently on every
+component crowd the very thing they are asking you to judge.
 
 A whole grid section can also be regenerated at once, from *Whole section*
-in any of its tiles' reviews: the components of that section are filled
-again and the layout pass re-runs for that section only, so the other
-sections keep the boxes they had.
+inside the bar's regenerate popover, offered when the tile under review
+sits in a grid section: the components of that section are filled again
+and the layout pass re-runs for that section only, so the other sections
+keep the boxes they had.
 
 The banner counts the progress, *reviewed n of m*, and gates the promotion
 on it. Once every tile is either reviewed or removed, *Promote* applies
@@ -218,7 +241,11 @@ redacted sample rows and declared joins of the selected table collections,
 the catalog offers matched to the project, and the advanced visualization
 kinds each collection can feed, ranked from the data) and returns a JSON
 plan that is normalised before anything is generated; each planned
-component is then filled and checked one at a time.
+component is then filled and checked one at a time. A visualization kind
+is only offered when every role it requires matched a column on its name
+and not merely on its dtype: a kind that fits the table's shape by
+accident is worse than no suggestion, because the planner reads the list
+as a recommendation.
 
 - **Plan**: one model call. The plan is validated against a strict schema,
   clamped to `DEPICTIO_AI_GENERATE_MAX_COMPONENTS` and
@@ -237,8 +264,18 @@ component is then filled and checked one at a time.
   CLI's `dashboard validate` runs online: every referenced column exists
   in the collection, card aggregations and interactive widgets are
   compatible with the column type, breakdown and trend columns exist and
-  the secondary card layouts have their required companions, and a
-  multi-select never lands on a column with more than 50 distinct values.
+  the secondary card layouts have their required companions, a
+  multi-select never lands on a column with more than 50 distinct values,
+  and an advanced visualization's role bindings name real columns of the
+  right dtype.
+- **Render check**: once every component is filled, each one is asked to
+  produce what it would show, through the same server-side path the viewer
+  calls, with the cheapest projection that would still fail (one row, one
+  shape, one aggregation). A component that cannot render is dropped with
+  its reason rather than saved into a dashboard where it would answer 500.
+  Text has nothing to probe, and image, map and MultiQC tiles have no
+  in-process probe cheap enough to be worth its cost, so they are not
+  checked.
 - **Repair, then drop**: a component that fails gets
   `DEPICTIO_AI_GENERATE_MAX_REPAIRS_PER_COMPONENT` repair rounds with the
   formatted error; once they are exhausted the component is dropped and
@@ -274,8 +311,8 @@ The layout pass is deterministic and writes explicit boxes on the
 
 A draft is not the only trace a run leaves. The *Generate with AI* tab
 lists what the selected project has generated before, newest first: the
-prompt, the model, the status (`running`, `complete`, `failed` or
-`cancelled`), the date, how many components came out *ok*, *repaired* or
+prompt, the model, the status (`running`, `planned` for a run that stopped
+at the plan on purpose, `complete`, `failed` or `cancelled`), the date, how many components came out *ok*, *repaired* or
 *dropped*, and the warnings the run collected. Each row is named by the
 dashboard it saved, falling back to the title the plan chose, then to what
 was asked for, then to the date, so a row is worth reading even when the

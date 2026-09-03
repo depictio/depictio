@@ -36,14 +36,15 @@
  *     banner: Promote posts once and clears it; Discard confirms, DELETEs
  *     and lands on /dashboards. The "draft" is a seeded dashboard whose GET
  *     is proxied and stamped, so nothing is generated or deleted for real.
- *  7. Reviewing that draft tile by tile: every generated tile carries the
- *     review strip, Keep posts once and moves the banner's counter, a
- *     mocked regenerate stream replaces exactly one tile (the replacement
- *     comes back under a new generation tag, which is what the assertion
- *     reads) and Promote asks for a confirmation while tiles are still
- *     unreviewed. The Generate tab's "Previous generations" column lists a
- *     project's mocked runs, with the counts, the warnings and a link into
- *     the draft a run saved.
+ *  7. Reviewing that draft tile by tile, from the banner's review bar: the
+ *     bar names one tile at a time, Keep posts once, moves the banner's
+ *     counter and steps to the next tile, a mocked regenerate stream
+ *     replaces exactly one tile (the replacement comes back under a new
+ *     generation tag, which is what the assertions read off the bar) and
+ *     Promote asks for a confirmation while tiles are still unreviewed. The
+ *     Generate tab's "Previous generations" column lists a project's mocked
+ *     runs, with the counts, the warnings and a link into the draft a run
+ *     saved.
  *
  * The seeded dashboard's collection ids are never hard-coded: the project
  * payload is sniffed as the SPA loads it and the collection the mock
@@ -336,13 +337,22 @@ interface GenerateDashboardBody {
   prompt: string;
   title: string | null;
   data_collection_ids: string[];
+  /** Phase one: plan and stop. Phase two sends the approved plan back. */
+  plan_only?: boolean;
+  plan?: unknown;
 }
 
 /** Canned generation run over SSE: a plan with two components, one filled
  *  clean and one repaired, a budget tick, then the terminal `dashboard`
  *  event naming `dashboardId()`. That id is an EXISTING dashboard, so the
  *  hand-off opens a real editor; it is resolved per request so the test can
- *  learn it before the mock needs it. */
+ *  learn it before the mock needs it.
+ *
+ *  The route answers both phases off the request body, the way the server
+ *  does: a `plan_only` call stops after the plan, and a call carrying an
+ *  approved `plan` re-emits it and then fills. A call with neither is the
+ *  one-shot flow, so the mock covers the panel whether or not the plan is
+ *  reviewed first. */
 async function mockGenerateDashboard(page: Page, dashboardId: () => string): Promise<void> {
   await page.route(GENERATE_DASHBOARD_GLOB, (route) => {
     const id = dashboardId();
@@ -372,18 +382,24 @@ async function mockGenerateDashboard(page: Page, dashboardId: () => string): Pro
         },
       ],
     });
-    const sse = [
-      'event: status\ndata: {"message":"reading the project"}',
+    const body = route.request().postDataJSON() as GenerateDashboardBody;
+    const frames = [
+      'event: status\ndata: {"message":"reading project"}',
       `event: plan\ndata: {"plan":${plan}}`,
-      'event: budget\ndata: {"steps_used":1,"tokens_used":1200,"seconds":3,"max_steps":20,"max_tokens":150000,"max_seconds":180}',
-      'event: component\ndata: {"tag":"species_filter","section":"Cohort","component_type":"interactive","status":"ok","attempts":1}',
-      'event: component\ndata: {"tag":"mass_card","section":"Metrics","component_type":"card","status":"ok","attempts":1}',
-      // The same tag reports again after a repair: the row must update in
-      // place, not duplicate.
-      'event: component\ndata: {"tag":"mass_card","section":"Metrics","component_type":"card","status":"repaired","attempts":2,"error":"unknown column body_mass"}',
-      `event: dashboard\ndata: {"dashboard_id":"${id}","title":"Penguin morphology","project_id":"p1","yaml":"title: Penguin morphology\\n","warnings":["mass_card needed one repair"],"dropped":[]}`,
-      "event: done\ndata: {}",
-    ].join("\n\n");
+      'event: budget\ndata: {"steps_used":1,"tokens_used":1200,"seconds":3,"cost_usd":0.0134,"max_steps":20,"max_tokens":150000,"max_seconds":180}',
+    ];
+    if (!body.plan_only) {
+      frames.push(
+        'event: component\ndata: {"tag":"species_filter","section":"Cohort","component_type":"interactive","status":"ok","attempts":1}',
+        'event: component\ndata: {"tag":"mass_card","section":"Metrics","component_type":"card","status":"ok","attempts":1}',
+        // The same tag reports again after a repair: the row must update in
+        // place, not duplicate.
+        'event: component\ndata: {"tag":"mass_card","section":"Metrics","component_type":"card","status":"repaired","attempts":2,"error":"unknown column body_mass"}',
+        `event: dashboard\ndata: {"dashboard_id":"${id}","title":"Penguin morphology","project_id":"p1","yaml":"title: Penguin morphology\\n","warnings":["mass_card needed one repair"],"dropped":[]}`,
+      );
+    }
+    frames.push("event: done\ndata: {}");
+    const sse = frames.join("\n\n");
     return route.fulfill({
       contentType: "text/event-stream",
       body: `${sse}\n\n`,
@@ -676,16 +692,37 @@ async function mockDraftReview(page: Page): Promise<DraftReviewState> {
   return state;
 }
 
-/** Opens the editor on the mocked draft and waits for the banner and the
- *  first review strip, which is where every review test starts. */
+/** Opens the editor on the mocked draft and waits for the banner and its
+ *  review bar, which is where every review test starts. */
 async function openDraftEditor(page: Page, dashboardId: string): Promise<void> {
   await page.goto(`/dashboard-edit/${dashboardId}`);
   await expect(page.locator("[data-testid='ai-draft-banner']")).toBeVisible({
     timeout: 30_000,
   });
-  await expect(page.locator("[data-testid='draft-tile-actions']").first()).toBeVisible({
+  await expect(page.locator("[data-testid='draft-review-bar']")).toBeVisible({
     timeout: 30_000,
   });
+}
+
+/** Tags of the draft's tiles in the bar's own order, read by walking its
+ *  cursor forward from the tile it is on. The bar names one tile at a time,
+ *  so this is the only way to see them all, and walking it is what a
+ *  reviewer does anyway. Leaves the cursor on the last tile. */
+async function walkReviewTags(page: Page, count: number): Promise<(string | null)[]> {
+  const position = page.locator("[data-testid='draft-review-position']");
+  const current = page.locator("[data-testid='draft-review-current']");
+  // Precondition, asserted rather than assumed: the walk only covers the whole
+  // draft when it starts on the first tile.
+  await expect(position).toHaveText(`1 / ${count}`);
+  const tags: (string | null)[] = [await current.getAttribute("data-tag")];
+  for (let i = 1; i < count; i += 1) {
+    await page.locator("[data-testid='draft-review-next']").click();
+    // The position is the render's own signal that the cursor has moved, so
+    // the tag read below is never the previous tile's.
+    await expect(position).toHaveText(`${i + 1} / ${count}`);
+    tags.push(await current.getAttribute("data-tag"));
+  }
+  return tags;
 }
 
 /** Mirrors one row of GET /ai/generations/{project_id} (GenerationSummary):
@@ -1315,18 +1352,31 @@ test.describe("AI assistant", () => {
     await runButton.click();
 
     // Nothing pinned beyond the project: no title, every table collection.
+    // Plan review is on by default, so the first call only asks for a plan.
     const body = (await requestPromise).postDataJSON() as GenerateDashboardBody;
     expect(body.project_id).toBeTruthy();
     expect(body.prompt).toBe("compare body mass across species");
     expect(body.title).toBeNull();
     expect(body.data_collection_ids).toEqual([]);
+    expect(body.plan_only).toBe(true);
 
-    // The plan renders, then one row per planned component carrying its
-    // latest outcome (the repaired tag reported twice and shows once).
+    // The plan comes back for a verdict, and nothing is filled until Build:
+    // the second call carries the approved plan and no `plan_only`.
     await expect(page.locator("[data-testid='generate-plan']")).toContainText(
       "Penguin morphology",
       { timeout: 15_000 },
     );
+    const buildPromise = page.waitForRequest(
+      (req) => req.method() === "POST" && req.url().includes("/ai/generate-dashboard"),
+      { timeout: 15_000 },
+    );
+    await page.locator("[data-testid='generate-build-plan']").click();
+    const buildBody = (await buildPromise).postDataJSON() as GenerateDashboardBody;
+    expect(buildBody.plan).toBeTruthy();
+    expect(buildBody.plan_only).toBeFalsy();
+
+    // Then one row per planned component carrying its latest outcome (the
+    // repaired tag reported twice and shows once).
     const rows = page.locator("[data-testid='generate-progress-component']");
     await expect(rows).toHaveCount(2);
     await expect(rows.filter({ hasText: "species_filter" })).toHaveAttribute(
@@ -1338,8 +1388,8 @@ test.describe("AI assistant", () => {
       "repaired",
     );
 
-    // The terminal event names the draft. "Open in editor" is the hand-off
-    // (the panel would follow on its own 1.5 s later).
+    // The terminal event names the draft. "Open in editor" is the only
+    // hand-off: the panel never navigates on its own.
     const open = page.locator("[data-testid='generate-open-editor']");
     await expect(open).toBeVisible();
     await open.click();
@@ -1400,7 +1450,7 @@ test.describe("AI assistant", () => {
     expect(deleted).toEqual([dashboardId]);
   });
 
-  test("AI draft: every generated tile carries a review strip, Keep moves the banner counter", async ({
+  test("AI draft: the review bar walks the tiles, Keep moves the banner counter", async ({
     loginAsAdmin,
     page,
   }) => {
@@ -1419,25 +1469,33 @@ test.describe("AI assistant", () => {
     const counter = page.locator("[data-testid='ai-draft-review-count']");
     await expect(counter).toHaveText(`Reviewed 0 of ${total}`);
 
-    const strips = page.locator("[data-testid='draft-tile-actions']");
-    const first = strips.first();
-    await expect(first).toHaveAttribute("data-reviewed", "false");
-    const tag = await first.getAttribute("data-tag");
+    // Nothing reviewed yet, so the bar opens on the first tile.
+    const bar = page.locator("[data-testid='draft-review-bar']");
+    const position = page.locator("[data-testid='draft-review-position']");
+    const current = page.locator("[data-testid='draft-review-current']");
+    await expect(position).toHaveText(`1 / ${total}`);
+    await expect(current).toHaveAttribute("data-reviewed", "false");
+    const tag = await current.getAttribute("data-tag");
     expect(tag).toBeTruthy();
 
-    // Keep posts once, flips the tile's control and moves the counter with the
-    // click. The verdicts live inside the review popover, so open it first;
-    // its dropdown is portalled, hence the page-level locator.
+    // Keep posts once and moves the counter with the click.
     const reviewRequest = page.waitForRequest(
       (req) => req.method() === "POST" && req.url().includes("/generated-dashboards/"),
       { timeout: 15_000 },
     );
-    await first.locator("[data-testid='draft-tile-regenerate']").click();
-    await page.locator("[data-testid='draft-tile-keep']").click();
+    await page.locator("[data-testid='draft-review-keep']").click();
     await reviewRequest;
-    await expect(first).toHaveAttribute("data-reviewed", "true");
     await expect(counter).toHaveText(`Reviewed 1 of ${total}`);
     expect(draft.reviews).toEqual([{ tag, action: "keep" }]);
+
+    if (total > 1) {
+      // And the bar has moved on by itself: reviewing n tiles is n clicks.
+      await expect(position).toHaveText(`2 / ${total}`);
+      await expect(current).not.toHaveAttribute("data-tag", String(tag));
+    } else {
+      // A one-tile draft has nothing left to walk, so the bar says so.
+      await expect(bar).toContainText("reviewed");
+    }
   });
 
   test("AI draft: a mocked regenerate replaces one tile and leaves the others alone", async ({
@@ -1453,16 +1511,18 @@ test.describe("AI assistant", () => {
     const draft = await mockDraftReview(page);
     await openDraftEditor(page, dashboardId);
 
-    const strips = page.locator("[data-testid='draft-tile-actions']");
-    const before = await strips.evaluateAll((els) =>
-      els.map((el) => el.getAttribute("data-tag")),
-    );
+    // What the GET proxy stamped, in the order the bar walks them.
+    const before = [...draft.tags];
+    const total = before.length;
     const target = before[0];
     expect(target).toBeTruthy();
 
+    const current = page.locator("[data-testid='draft-review-current']");
+    await expect(current).toHaveAttribute("data-tag", target);
+
     // The instruction is optional, but it is what the popover exists for.
-    await strips.first().locator("[data-testid='draft-tile-regenerate']").click();
-    const instruction = page.locator("[data-testid='draft-tile-instruction']");
+    await page.locator("[data-testid='draft-review-regenerate']").click();
+    const instruction = page.locator("[data-testid='draft-review-instruction']");
     await expect(instruction).toBeVisible();
     await instruction.fill("use a box plot");
 
@@ -1470,24 +1530,21 @@ test.describe("AI assistant", () => {
       (req) => req.method() === "POST" && req.url().includes("/regenerate"),
       { timeout: 15_000 },
     );
-    await page.locator("[data-testid='draft-tile-regenerate-run']").click();
+    await page.locator("[data-testid='draft-review-regenerate-run']").click();
     const request = await regenerateRequest;
     expect(request.url()).toContain("/components/");
     expect((request.postDataJSON() as { instruction?: string }).instruction).toBe(
       "use a box plot",
     );
 
-    // The replacement carries a new tag: the tile it landed on is the one that
-    // changed, and every other tile kept the tag it had.
-    await expect(
-      page.locator(`[data-testid='draft-tile-actions'][data-tag='${target}_v2']`),
-    ).toBeVisible({ timeout: 30_000 });
-    await expect(
-      page.locator(`[data-testid='draft-tile-actions'][data-tag='${target}']`),
-    ).toHaveCount(0);
-    const after = await strips.evaluateAll((els) =>
-      els.map((el) => el.getAttribute("data-tag")),
-    );
+    // The replacement carries a new tag, and the cursor stays on it: the tile
+    // that changed is the one whose result was being judged.
+    await expect(current).toHaveAttribute("data-tag", `${target}_v2`, {
+      timeout: 30_000,
+    });
+    // And every other tile kept the tag it had. The walk starts on the tile
+    // just regenerated, which is where the cursor was left.
+    const after = await walkReviewTags(page, total);
     expect(after).toEqual(before.map((t) => (t === target ? `${target}_v2` : t)));
     expect(draft.regenerated).toHaveLength(1);
     expect(draft.regenerated[0].instruction).toBe("use a box plot");
