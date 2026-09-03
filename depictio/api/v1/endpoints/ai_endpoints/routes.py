@@ -25,7 +25,9 @@ The router is only registered when ``settings.ai.enabled`` is true (see
   optional dashboard mutations (filter proposals + existing-figure
   patches).
 * ``POST /ai/generate-dashboard``: a whole dashboard draft from a prompt
-  (plan, per-component fill, layout, persist; see ``dashboard_gen``), and
+  (plan, per-component fill, render check, layout, persist; see
+  ``dashboard_gen``), in one shot or in two phases (``plan_only`` returns
+  the plan and stops, ``plan`` fills the plan that came back approved), and
   ``POST /ai/generated-dashboards/{id}/promote`` to clear its draft flag.
 * Reviewing that draft:
   ``POST /ai/generated-dashboards/{id}/components/{index}/regenerate`` and
@@ -1053,13 +1055,22 @@ async def generate_dashboard(
     """A whole dashboard draft from a prompt. Streams `StreamEvent` chunks as SSE.
 
     The gates run before the stream opens so they answer with real HTTP
-    codes (`dashboard_gen.gate_generate_request`): 404 when
+    codes: 422 from the request model when `plan_only` and `plan` are sent
+    together (they are the two phases of one flow, never one request), then
+    `dashboard_gen.gate_generate_request`: 404 when
     `settings.ai.generate_dashboard_enabled` is off, 403 in public mode or
     for an anonymous user outside single-user mode (the YAML import rule),
     403 without editor permission on the project, 400 for a
     `data_collection_id` outside the project. Everything after that is
     reported inside the stream (`error` + `done`), the draft included
     (`dashboard` + `done`).
+
+    Two-phase runs use the same route: `plan_only` stops on the plan event
+    and saves nothing, and sending that plan back as `plan` skips the
+    planning call and fills it. A `plan` that does not parse, or that names
+    a data collection outside this request's subset, is an `error` event
+    inside the stream, not an HTTP status: the body was well-formed, the
+    plan was not usable.
     """
     project_doc = await asyncio.to_thread(dashboard_gen.gate_generate_request, body, current_user)
     return StreamingResponse(

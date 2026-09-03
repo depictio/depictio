@@ -6,7 +6,8 @@ regenerate streams (`run_regeneration`), `review_dashboard` and
 `list_generations`. The stream is one SSE frame per event, in the order the
 React panel consumes them:
 
-  status* -> budget -> plan -> status -> (budget*, component)* -> status* -> dashboard -> done
+  status* -> budget -> plan -> status -> (budget*, component)* -> status ->
+  component* -> status* -> dashboard -> done
 
 or ``error`` then ``done`` when the run cannot produce a draft. The pipeline:
 
@@ -24,12 +25,31 @@ or ``error`` then ``done`` when the run cannot produce a draft. The pipeline:
    exhausts its repairs is dropped, never the run; once the token or
    wall-clock budget is spent the remaining LLM-filled components are dropped
    with error ``budget``;
-4. layout: `layout_dashboard`, then `validate_envelope` once;
-5. persist: `_persist_lite_dashboard` with the ``ai_generation`` draft stamp;
+4. check: every filled component is probed through `dashboard_probe`
+   (`_Generation.check_render`) before the draft exists. The offline
+   validator cannot see a binding that only fails against the data, so a
+   component that would 500 in the viewer is dropped here with a
+   ``render: `` error rather than saved; a run with nothing data-bound left
+   ends in ``error``, like an empty fill;
+5. layout: `layout_dashboard`, then `validate_envelope` once;
+6. persist: `_persist_lite_dashboard` with the ``ai_generation`` draft stamp;
    an LLM-chosen title that collides gets an ``(AI draft N)`` suffix, a
    client-pinned one is a 409 reported inside the stream.
 
-Reviewing the draft afterwards reuses steps 3 and 4 for one tile or one
+Steps 2 and 3 can also be paid for separately, which is what lets a plan be
+approved before anything is filled. `GenerateDashboardRequest.plan_only`
+runs steps 1 and 2 and stops on the plan event, saving no dashboard and
+writing no draft; the run record keeps the plan, and its budget covers the
+planning call alone. `GenerateDashboardRequest.plan` is the other half: the
+plan the user approved comes back in the request body, the planning call is
+skipped, and the run goes straight to step 3. That plan is client input like
+any other, so `_Generation.adopt_plan` puts it through the same `parse_plan`
+and `normalize_plan` a model answer goes through and re-checks every
+collection it names against the ones the run was given; it is then re-emitted
+as a ``plan`` event, so the client's progress panel reads both phases the
+same way.
+
+Reviewing the draft afterwards reuses steps 3 and 5 for one tile or one
 section (`run_regeneration`): the plan entry comes from the run record (or
 is reconstructed from the stored tile when the run is gone), the fill and
 repair path is the same coroutine (`fill_component`), and the result is
@@ -45,10 +65,10 @@ stays inspectable. Every collaborator that touches Mongo or another
 endpoint module is a module attribute here (``projects_collection``,
 ``dashboards_collection``, ``build_project_data_context``,
 ``compose_offers_for_project``, ``check_project_permission``,
-``check_dashboard_mutation_permission``, ``_persist_lite_dashboard``) so the
-route tests can substitute them without a database. The ones that live in
-the big endpoint modules are lazy wrappers: importing
-``dashboards_endpoints.routes`` at module load would pull the whole
+``check_dashboard_mutation_permission``, ``_persist_lite_dashboard``,
+``probe_component``) so the route tests can substitute them without a
+database. The ones that live in the big endpoint modules are lazy wrappers:
+importing ``dashboards_endpoints.routes`` at module load would pull the whole
 dashboard API in behind the AI package.
 """
 
@@ -128,6 +148,17 @@ PLAN_ATTEMPTS = 2
 MAX_TITLE_DRAFTS = 5
 # Header text tiles are H3 like the seeded dashboards' section headers.
 HEADER_ORDER = 3
+# The advanced_viz config keys that hold a *list* of columns, or a setting
+# rather than a column: `role_config_key` maps the list-typed roles of
+# sankey, sunburst and complex_heatmap onto these. They are the exception to
+# the one-column-one-role rule `_role_bindings` enforces.
+MULTI_COLUMN_CONFIG_KEYS: frozenset[str] = frozenset(
+    {"rank_cols", "step_cols", "value_columns", "row_annotation_cols", "compute_method"}
+)
+# Said in the run's warnings when it stopped at the plan: the record's status
+# is `complete` (it did all it was asked) with no dashboard and no YAML, and
+# this is what tells the two apart at a glance.
+PLAN_ONLY_NOTE = "Plan-only run: the plan was returned and nothing was filled or saved."
 
 FillMode = Literal["text", "advanced_viz", "llm"]
 
@@ -188,6 +219,19 @@ def regenerate_component_fields(component: dict[str, Any]) -> None:
     regenerate(component)
 
 
+def probe_component(component: dict[str, Any], ctx: Any | None, user: Any) -> str | None:
+    """`dashboard_probe.probe_component`, imported on first use.
+
+    None when the component renders (or when its type has no cheap probe),
+    a short human-readable reason otherwise. Lazy like the collaborators
+    above: the probe reaches into the advanced_viz compute endpoint, which
+    has no business being imported behind a dashboard that never generates.
+    """
+    from depictio.api.v1.endpoints.ai_endpoints import dashboard_probe
+
+    return dashboard_probe.probe_component(component, ctx, user)
+
+
 def _sse(event: StreamEvent) -> bytes:
     """`routes._sse`: same framing as every other AI stream (lazy: routes imports this module)."""
     from depictio.api.v1.endpoints.ai_endpoints.routes import _sse as frame
@@ -202,12 +246,18 @@ def _sse(event: StreamEvent) -> bytes:
 
 @dataclass
 class Budget:
-    """Token, wall-clock and call accounting of one run.
+    """Token, wall-clock, call and money accounting of one run.
 
     `event()` is the payload of the ``budget`` stream event, in the shape the
     analysis flow already emits so the React panel reads both the same way.
     A cached completion is not charged (it cost nothing) but still counts as
     a step.
+
+    `cost_usd` is what the provider said it billed, summed over the calls
+    that reported a figure at all (`CompletionUsage.cost_usd`). It stays
+    None until one does, which is why it is not a plain 0.0: nothing
+    reported is not the same claim as nothing spent. Only the tokens and
+    the clock gate the run; the cost is reported, never enforced.
     """
 
     max_tokens: int
@@ -216,11 +266,15 @@ class Budget:
     started: float = field(default_factory=time.monotonic)
     tokens_used: int = 0
     steps_used: int = 0
+    cost_usd: float | None = None
 
     def charge(self, completion: llm_client.Completion) -> None:
         self.steps_used += 1
         if not completion.cached:
             self.tokens_used += completion.usage.total_tokens
+            cost = completion.usage.cost_usd
+            if cost is not None:
+                self.cost_usd = (self.cost_usd or 0.0) + cost
 
     @property
     def seconds(self) -> float:
@@ -234,6 +288,7 @@ class Budget:
             "steps_used": self.steps_used,
             "tokens_used": self.tokens_used,
             "seconds": round(self.seconds, 1),
+            "cost_usd": self.cost_usd,
             "max_steps": self.max_steps,
             "max_tokens": self.max_tokens,
             "max_seconds": self.max_seconds,
@@ -241,7 +296,10 @@ class Budget:
 
     def spent(self) -> BudgetSpent:
         return BudgetSpent(
-            steps=self.steps_used, tokens=self.tokens_used, seconds=round(self.seconds, 1)
+            steps=self.steps_used,
+            tokens=self.tokens_used,
+            seconds=round(self.seconds, 1),
+            cost_usd=self.cost_usd,
         )
 
 
@@ -368,6 +426,30 @@ def component_event(
     )
 
 
+def render_drop_event(
+    component: dict[str, Any], planned: PlannedComponent | None, error: str
+) -> GeneratedComponentEvent:
+    """The ``component`` event of a filled tile the render check dropped.
+
+    The error is prefixed ``render: `` so a client can tell the two kinds of
+    drop apart: a tile that never validated, and a tile that validated,
+    was filled, and then would not draw. `attempts` is 0 the way every drop
+    that cost no fill call is 0. The plan entry names the section; a tile
+    whose entry cannot be found still gets an event, written from the tile.
+    """
+    detail = f"render: {error}"
+    if planned is not None:
+        return component_event(planned, "dropped", attempts=0, error=detail)
+    return GeneratedComponentEvent(  # pragma: no cover, every filled tile has its entry
+        tag=str(component.get("tag") or ""),
+        section=str(component.get("section") or ""),
+        component_type=component.get("component_type"),
+        status="dropped",
+        attempts=0,
+        error=detail,
+    )
+
+
 @dataclass
 class FillTarget:
     """One planned component with the collection it binds and how it is filled."""
@@ -416,6 +498,23 @@ def plan_to_targets(
         )
         targets.append(FillTarget(planned, ctx, "advanced_viz" if deterministic else "llm"))
     return targets, dropped
+
+
+def unknown_collection_tags(plan: DashboardPlan, contexts: dict[str, DataContext]) -> list[str]:
+    """The data collection tags `plan` names that this run was not given, sorted and unique.
+
+    The check `plan_to_targets` makes per component, asked of the plan as a
+    whole: the one-shot run drops such a component and carries on, but a
+    plan handed back by the client is only trustworthy as far as it is
+    checked, so naming a collection outside the run's subset ends it.
+    """
+    return sorted(
+        {
+            str(c.data_collection_tag or "")
+            for c in plan.components
+            if c.component_type != "text" and (c.data_collection_tag or "") not in contexts
+        }
+    )
 
 
 def fill_text(planned: PlannedComponent, plan: DashboardPlan, *, first: bool) -> dict[str, Any]:
@@ -622,20 +721,47 @@ def schema_error(component: dict[str, Any], ctx: DataContext) -> str | None:
 
 
 def _role_bindings(kind: str, suggestion: dict[str, Any]) -> tuple[dict[str, str], str | None]:
-    """config key -> column for every required role of `kind`, from the ranker's candidates."""
+    """config key -> column for every required role of `kind`, from the ranker's candidates.
+
+    Roles are bound in the order `role_dtype_specs` lists them, each to its
+    first candidate column that no other required role has taken. The
+    ranker offers the same column to several roles whenever their accepted
+    dtypes overlap (on a numeric-only collection a `rarefaction` took the
+    same float column for `depth` and `metric`), and a column bound twice
+    reaches `/advanced_viz/data` twice: Polars rejects the duplicate with a
+    `ComputeError` and the tile 500s in the viewer. A role whose candidates
+    are all taken fails the binding, so the component is dropped with a
+    reason the stream can show rather than saved broken.
+
+    List-typed roles are exempt: `rank_cols`, `step_cols` and friends
+    (`role_config_key`) carry several columns on purpose and may repeat
+    what a scalar role bound.
+    """
     try:
         specs = role_dtype_specs(kind)  # type: ignore[arg-type]
     except Exception:  # noqa: BLE001, an unknown kind
         return {}, f"viz_kind '{kind}' is not an advanced_viz kind"
     candidates = suggestion.get("role_candidates") or {}
     bindings: dict[str, str] = {}
+    taken: set[str] = set()
     for role, spec in specs.items():
         if not spec.get("required"):
             continue
-        columns = candidates.get(role) or []
+        columns = [str(c) for c in (candidates.get(role) or [])]
         if not columns:
             return {}, f"viz_kind '{kind}': no column of the collection fills the role '{role}'"
-        bindings[role_config_key(kind, role)] = str(columns[0])
+        key = role_config_key(kind, role)
+        if key in MULTI_COLUMN_CONFIG_KEYS:
+            bindings[key] = columns[0]
+            continue
+        free = next((c for c in columns if c not in taken), None)
+        if free is None:
+            return {}, (
+                f"viz_kind '{kind}': every column that fills the role '{role}' "
+                f"({', '.join(columns)}) is already bound to another role"
+            )
+        bindings[key] = free
+        taken.add(free)
     return bindings, None
 
 
@@ -1014,6 +1140,9 @@ class _Generation(_Stream):
         self.components: list[dict[str, Any]] = []
         self.dropped: list[str] = []
         self.filled_tags: list[str] = []
+        # tag -> the plan entry it was filled from, so the render check can
+        # report a drop as the same `component` event the fill loop emits.
+        self.planned_by_tag: dict[str, PlannedComponent] = {}
 
     # -- run record ---------------------------------------------------------
 
@@ -1051,7 +1180,21 @@ class _Generation(_Stream):
     # -- steps --------------------------------------------------------------
 
     def record_component(self, event: GeneratedComponentEvent) -> None:
-        self.run.components.append(event.model_dump(mode="json"))
+        """One outcome per planned component in the run record, latest word wins.
+
+        The render check reports a second outcome for a tag the fill loop
+        already wrote (filled, then dropped because it would not draw), so
+        the row is replaced rather than appended: the record keeps one entry
+        per planned component, and the history counts a tile as either ok or
+        dropped, never as both.
+        """
+        row = event.model_dump(mode="json")
+        for position, existing in enumerate(self.run.components):
+            if existing.get("tag") == event.tag:
+                self.run.components[position] = row
+                break
+        else:
+            self.run.components.append(row)
         if event.status == "dropped":
             self.dropped.append(event.tag)
 
@@ -1060,6 +1203,57 @@ class _Generation(_Stream):
         slim["ai_source"] = ai_source_stamp(planned.tag, planned.intent or self.body.prompt)
         self.components.append(slim)
         self.filled_tags.append(planned.tag)
+        self.planned_by_tag[planned.tag] = planned
+
+    def accept_plan(
+        self, parsed: Any, *, strict: bool = False
+    ) -> tuple[DashboardPlan | None, list[FillTarget], str | None]:
+        """Parse, normalise and bind one plan payload: (plan, targets, None) or (None, [], error).
+
+        The tail both plan sources share, so a plan the client approved goes
+        through exactly the checks a model answer does: `parse_plan`,
+        `normalize_plan`, the pinned title, then the binding of every
+        component to a collection of this run.
+
+        `strict` is the one difference, and it is about trust rather than
+        shape: the model is planning from the collections it was shown, so a
+        component bound to an unknown one is that component's problem and it
+        is dropped; a plan arriving in a request body is client input, so a
+        collection outside the run's subset ends the run instead of being
+        quietly trimmed out of it.
+        """
+        try:
+            plan = parse_plan(parsed)
+        except (ValueError, ValidationError, json.JSONDecodeError) as e:
+            return None, [], component_yaml.format_validation_error_for_llm(e)
+        plan, plan_warnings = normalize_plan(
+            plan,
+            max_components=settings.ai.generate_max_components,
+            max_sections=settings.ai.generate_max_sections,
+        )
+        if self.body.title and self.body.title.strip():
+            plan = plan.model_copy(update={"title": self.body.title.strip()})
+        outside = unknown_collection_tags(plan, self.contexts) if strict else []
+        if outside:
+            known = ", ".join(sorted(self.contexts)) or "(none)"
+            named = ", ".join(repr(t) for t in outside)
+            verb = "is" if len(outside) == 1 else "are"
+            detail = (
+                f"the plan binds {named}, which {verb} not among the data collections this "
+                f"run was given (available: {known})"
+            )
+            return None, [], detail
+        targets, unknown = plan_to_targets(plan, self.contexts)
+        if not targets:
+            notes = plan_warnings + [str(e.error) for e in unknown]
+            detail = "The plan has no usable component."
+            if notes:
+                detail += " " + " ".join(f"{n}." for n in notes)
+            return None, [], detail
+        self.warnings.extend(plan_warnings)
+        for event in unknown:
+            self.record_component(event)
+        return plan, targets, None
 
     async def try_plan(
         self, messages: list[dict[str, Any]]
@@ -1069,27 +1263,46 @@ class _Generation(_Stream):
         raw = completion.content
         try:
             parsed = routing._parse_json_lenient(raw)
-            plan = parse_plan(parsed)
-        except (ValueError, ValidationError, json.JSONDecodeError) as e:
+        except (ValueError, json.JSONDecodeError) as e:
             return None, [], component_yaml.format_validation_error_for_llm(e), raw
-        plan, plan_warnings = normalize_plan(
-            plan,
-            max_components=settings.ai.generate_max_components,
-            max_sections=settings.ai.generate_max_sections,
-        )
-        if self.body.title and self.body.title.strip():
-            plan = plan.model_copy(update={"title": self.body.title.strip()})
-        targets, unknown = plan_to_targets(plan, self.contexts)
-        if not targets:
-            notes = plan_warnings + [str(e.error) for e in unknown]
-            detail = "The plan has no usable component."
-            if notes:
-                detail += " " + " ".join(f"{n}." for n in notes)
-            return None, [], detail, raw
-        self.warnings.extend(plan_warnings)
-        for event in unknown:
-            self.record_component(event)
-        return plan, targets, None, raw
+        plan, targets, error = self.accept_plan(parsed)
+        return plan, targets, error, raw
+
+    def adopt_plan(self) -> tuple[DashboardPlan, list[FillTarget]]:
+        """The plan the client approved, re-checked as if the model had just answered it.
+
+        No LLM call and no retry: there is no one to send the error back to,
+        so a plan that does not parse, or that names a collection this run
+        was not given, is an `_Abort` and therefore an ``error`` event.
+        """
+        plan, targets, error = self.accept_plan(self.body.plan, strict=True)
+        if plan is None:
+            raise _Abort(f"The approved plan cannot be used: {error or '(unknown)'}")
+        return plan, targets
+
+    async def check_render(self, component: dict[str, Any]) -> str | None:
+        """One filled component through `dashboard_probe`; None when it renders.
+
+        `probe_component` never raises by contract, and the probe is a
+        safety net around the fill rather than a gate on it: should it fail
+        anyway (an unavailable module, a collaborator that changed shape)
+        the component is kept and the run says once that it went unchecked,
+        because a broken probe is not evidence about the tile.
+        """
+        ctx = self.contexts.get(str(component.get("data_collection_tag") or ""))
+        tag = str(component.get("tag") or "")
+        try:
+            return await asyncio.to_thread(probe_component, component, ctx, self.user)
+        except Exception as e:  # noqa: BLE001, see the docstring
+            note = "The render check could not run; the components were kept unchecked."
+            if note in self.warnings:
+                # Whatever broke breaks for every tile: one traceback is the
+                # diagnosis, the other N are noise.
+                logger.warning("generate-dashboard: the render check failed on '%s': %s", tag, e)
+            else:
+                logger.exception("generate-dashboard: the render check could not run")
+                self.warnings.append(note)
+            return None
 
     async def fill_llm(
         self, target: FillTarget
@@ -1163,6 +1376,10 @@ async def run_generation(
     `project_doc` is the document the route already loaded for its gates
     (loaded here when absent, e.g. when driven directly). `frame` formats
     one `StreamEvent`; it defaults to the routes' ``_sse``.
+
+    `body.plan_only` stops the run at the plan and `body.plan` fills one the
+    caller already approved; the two are mutually exclusive by the request
+    model, and leaving both alone is the one-shot run.
     """
     gen = _Generation(
         body,
@@ -1224,46 +1441,67 @@ async def _generate(gen: _Generation) -> AsyncIterator[bytes]:
             gen.warnings.append("Catalog offers could not be read; planning without them.")
 
     # 2. Plan --------------------------------------------------------------
-    yield gen.status("planning")
-    messages = prompts.dashboard_plan_messages(
-        ctx,
-        body.prompt,
-        body.title,
-        max_components=settings.ai.generate_max_components,
-        max_sections=settings.ai.generate_max_sections,
-        warnings=gen.warnings,
-    )
     plan: DashboardPlan | None = None
     targets: list[FillTarget] = []
-    plan_error: str | None = None
-    for _ in range(PLAN_ATTEMPTS):
-        try:
-            plan, targets, plan_error, raw = await gen.try_plan(messages)
-        except Exception as e:  # noqa: BLE001
-            raise _Abort(f"LLM error: {e}") from e
-        yield gen.budget_frame()
-        if plan is not None:
-            break
-        messages = messages + [
-            {"role": "assistant", "content": raw},
-            {
-                "role": "user",
-                "content": (
-                    f"{plan_error}\n\nRespond again with the corrected JSON plan only, "
-                    "no prose, no fences."
-                ),
-            },
-        ]
-    if plan is None:
-        raise _Abort(f"The planner did not produce a usable plan: {plan_error or '(unknown)'}")
+    if body.plan is not None:
+        # Approved-plan phase: no planning call, the same parse and the same
+        # checks, so the plan event below says exactly what will be filled.
+        yield gen.status("reading the approved plan")
+        plan, targets = gen.adopt_plan()
+    else:
+        yield gen.status("planning")
+        messages = prompts.dashboard_plan_messages(
+            ctx,
+            body.prompt,
+            body.title,
+            max_components=settings.ai.generate_max_components,
+            max_sections=settings.ai.generate_max_sections,
+            warnings=gen.warnings,
+        )
+        plan_error: str | None = None
+        for _ in range(PLAN_ATTEMPTS):
+            try:
+                plan, targets, plan_error, raw = await gen.try_plan(messages)
+            except Exception as e:  # noqa: BLE001
+                raise _Abort(f"LLM error: {e}") from e
+            yield gen.budget_frame()
+            if plan is not None:
+                break
+            messages = messages + [
+                {"role": "assistant", "content": raw},
+                {
+                    "role": "user",
+                    "content": (
+                        f"{plan_error}\n\nRespond again with the corrected JSON plan only, "
+                        "no prose, no fences."
+                    ),
+                },
+            ]
+        if plan is None:
+            raise _Abort(f"The planner did not produce a usable plan: {plan_error or '(unknown)'}")
     gen.plan = plan
     gen.budget.max_steps = _max_steps(len(targets))
     gen.run.plan = plan.model_dump(mode="json")
+    if body.plan is not None:
+        # The frame the planning call would have emitted, so the panel reads
+        # the same budget-then-plan pair in both phases; nothing was spent.
+        yield gen.budget_frame()
     yield gen.frame(StreamEvent(type="plan", data={"plan": gen.run.plan}))
     for event in gen.run.components:
         # Components the plan bound to an unknown collection: dropped before any fill.
         yield gen.frame(StreamEvent(type="component", data=event))
     await gen.save()
+
+    if body.plan_only:
+        # Plan-only phase: the caller pays for the plan, looks at it, and
+        # pays for the fill separately by sending it back as `plan`. The
+        # record keeps the plan and its budget; there is no draft to save.
+        gen.warnings.append(PLAN_ONLY_NOTE)
+        gen.run.status = "planned"
+        await gen.save()
+        yield gen.budget_frame()
+        yield gen.done()
+        return
 
     # 3. Fill --------------------------------------------------------------
     yield gen.status("filling")
@@ -1299,6 +1537,29 @@ async def _generate(gen: _Generation) -> AsyncIterator[bytes]:
         yield gen.component_frame(event)
         await gen.save()
 
+    # 4. Render check -------------------------------------------------------
+    # A component can validate offline and still refuse to draw: a role bound
+    # to a column another role already took, a binding the data does not
+    # support, a collection that cannot be read. Probing here, while the
+    # draft is still a list of dicts, is what keeps a tile that 500s in the
+    # viewer out of it; a probe with nothing to say keeps the tile.
+    yield gen.status("checking")
+    kept: list[dict[str, Any]] = []
+    for component in gen.components:
+        error = await gen.check_render(component)
+        if error is None:
+            kept.append(component)
+            continue
+        tag = str(component.get("tag") or "")
+        event = render_drop_event(component, gen.planned_by_tag.get(tag), error)
+        gen.record_component(event)
+        gen.warnings.append(f"'{tag}' does not render and was dropped: {error}")
+        yield gen.component_frame(event)
+    if len(kept) != len(gen.components):
+        gen.components = kept
+        gen.filled_tags = [str(c.get("tag") or "") for c in kept]
+        await gen.save()
+
     if gen.dropped:
         gen.warnings.append(
             f"{len(gen.dropped)} planned component(s) were left out: {', '.join(gen.dropped)}"
@@ -1306,7 +1567,7 @@ async def _generate(gen: _Generation) -> AsyncIterator[bytes]:
     if not gen.has_data_bound():
         raise _Abort("no component could be generated")
 
-    # 4. Layout + envelope ---------------------------------------------------
+    # 5. Layout + envelope ---------------------------------------------------
     yield gen.status("laying out")
     title = pick_title(body.title, plan.title)
     lite_dict = gen.envelope(title)
@@ -1331,7 +1592,7 @@ async def _generate(gen: _Generation) -> AsyncIterator[bytes]:
         except (ValidationError, ValueError) as e2:
             raise _Abort(_envelope_error(e2)) from e2
 
-    # 5. Persist ------------------------------------------------------------
+    # 6. Persist ------------------------------------------------------------
     yield gen.status("saving")
     project_oid = ObjectId(body.project_id)
     for draft in range(1, MAX_TITLE_DRAFTS + 1):

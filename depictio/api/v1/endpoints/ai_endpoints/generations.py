@@ -21,7 +21,10 @@ from pydantic import BaseModel, Field, ValidationError
 
 from depictio.api.v1.endpoints.ai_endpoints.schemas import BudgetSpent
 
-GenerationStatus = Literal["running", "complete", "failed", "cancelled"]
+# "planned" is a run that stopped after the plan on purpose (`plan_only`):
+# it spent tokens and produced a plan, but no draft, so calling it
+# "complete" would have the history promise a dashboard that is not there.
+GenerationStatus = Literal["running", "planned", "complete", "failed", "cancelled"]
 
 
 class GenerationRun(BaseModel):
