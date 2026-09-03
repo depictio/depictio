@@ -35,6 +35,7 @@ export interface GenerationHistoryProps {
 // undefined colour.
 const STATUS_COLOR: Record<string, string> = {
   running: 'blue',
+  planned: 'gray',
   complete: 'teal',
   failed: 'red',
   cancelled: 'yellow',

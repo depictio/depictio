@@ -58,7 +58,7 @@ const COLOR_OPTIONS: { value: string; label: string }[] = [
 const DEFAULT_ICON = 'mdi:view-dashboard';
 const DEFAULT_COLOR = 'orange';
 
-type CreateTab = 'create' | 'import' | 'generate';
+export type CreateTab = 'create' | 'import' | 'generate';
 
 /** Wiring for the "Generate with AI" tab; the host owns the project fetch
  *  and the navigation into the editor. */
@@ -87,6 +87,9 @@ interface CreateDashboardModalProps {
   /** The "Generate with AI" tab. Undefined hides it, which is the case
    *  whenever the server's `ai_generate_dashboard` feature is off. */
   generate?: GenerateTabProps;
+  /** Tab the dialog opens on. Defaults to Create; a host re-entering a
+   *  generation run it left in flight opens on Generate. */
+  initialTab?: CreateTab;
 }
 
 const projectOptions = (projects: ProjectListEntry[]) =>
@@ -106,9 +109,11 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
   onImport,
   disableImport = false,
   generate,
+  initialTab = 'create',
 }) => {
   const accent = useBrandAccents();
   const [tab, setTab] = useState<CreateTab>('create');
+  const canGenerate = Boolean(generate);
 
   // Which project the Generate tab is pointed at, so "Previous generations"
   // beside it lists that project's runs. The panel owns the picker, and the
@@ -148,7 +153,9 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
 
   useEffect(() => {
     if (!opened) return;
-    setTab('create');
+    // Asking for a tab that is not on offer lands on Create rather than on a
+    // panel with no tab above it.
+    setTab(initialTab === 'generate' && !canGenerate ? 'create' : initialTab);
     setTitle('');
     setSubtitle('');
     setProjectId('');
@@ -163,7 +170,9 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
     setValidateIntegrity(true);
     setImportSubmitting(false);
     setImportError(null);
-  }, [opened]);
+    // `initialTab` is only ever changed by the host in the same commit that
+    // opens the dialog, so this cannot reset a form under the user.
+  }, [opened, initialTab, canGenerate]);
 
   const trimmedTitle = title.trim();
   const titleConflict =

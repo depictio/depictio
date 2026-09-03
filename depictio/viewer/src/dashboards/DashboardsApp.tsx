@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionIcon,
   AppShell,
@@ -23,7 +23,7 @@ import type {
   ImportDashboardOptions,
   ProjectListEntry,
 } from 'depictio-react-core';
-import { useAIHealth } from 'depictio-react-ai';
+import { AI_COLOR, useAIHealth, useGenerationRun } from 'depictio-react-ai';
 import type { GenerateDataCollection, GenerateJoinInfo } from 'depictio-react-ai';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
@@ -31,6 +31,7 @@ import { useServerStatus } from '../hooks/useServerStatus';
 import { AppSidebar } from '../chrome';
 import DashboardsList from './DashboardsList';
 import CreateDashboardModal from './CreateDashboardModal';
+import type { CreateTab } from './CreateDashboardModal';
 import EditDashboardModal from './EditDashboardModal';
 import DeleteDashboardModal from './DeleteDashboardModal';
 import { recordOpen as recordDashboardOpen } from './lib/dashboardRecents';
@@ -65,6 +66,10 @@ function useDashboardsSidebar(): [boolean, () => void] {
   return [opened, toggle];
 }
 
+/** One id for the generation outcome, so a second run's notification replaces
+ *  the previous one instead of stacking under it. */
+const GENERATION_NOTIFICATION_ID = 'ai-generation-outcome';
+
 /** The fields of a project-level `joins[]` entry the Generate picker needs.
  *  Same subset the builder reads in `builder/steps/StepData.tsx`; the
  *  endpoint returns more plumbing around them. */
@@ -85,6 +90,9 @@ const DashboardsApp: React.FC = () => {
   const [refreshKey, setRefreshKey] = useState(0);
 
   const [createOpened, { open: openCreate, close: closeCreate }] = useDisclosure(false);
+  /** Which tab the dialog opens on: Create for the usual entry points,
+   *  Generate when the user comes back to a run left in flight. */
+  const [createTab, setCreateTab] = useState<CreateTab>('create');
   const [editTarget, setEditTarget] = useState<DashboardListEntry | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DashboardListEntry | null>(null);
 
@@ -105,6 +113,21 @@ const DashboardsApp: React.FC = () => {
   const aiGenerateEnabled = serverFeatures.ai_generate_dashboard;
   const aiHealth = useAIHealth(aiGenerateEnabled);
   const aiServerKeyAvailable = aiHealth?.server_key_configured === true;
+
+  // A whole-dashboard generation takes minutes and lives in the AI store, not
+  // in the dialog: it keeps streaming after the dialog is closed. This page
+  // reads it to offer a way back into it, and to say how it ended.
+  const generation = useGenerationRun();
+
+  const openCreateOn = useCallback(
+    (tab: CreateTab) => {
+      setCreateTab(tab);
+      openCreate();
+    },
+    [openCreate],
+  );
+  const openCreateNew = useCallback(() => openCreateOn('create'), [openCreateOn]);
+  const openGenerateTab = useCallback(() => openCreateOn('generate'), [openCreateOn]);
 
   usePageTitle('Dashboards');
 
@@ -270,6 +293,62 @@ const DashboardsApp: React.FC = () => {
     window.location.assign(`/dashboard-edit/${dashboardId}`);
   }, []);
 
+  /** Runs already announced, so a re-render never repeats one. */
+  const announcedRun = useRef<string | null>(null);
+
+  // A run can reach its end with nobody watching it. Say so once, and only
+  // when the dialog is closed: the panel spells out the same outcome, draft
+  // and failure alike, and does not need repeating over the top of itself.
+  useEffect(() => {
+    const { id, pending, dashboard, error } = generation;
+    // A planning call that stopped for its verdict has not ended; the header
+    // indicator is what leads back to it.
+    if (!id || pending || (!dashboard && !error)) return;
+    if (announcedRun.current === id) return;
+    announcedRun.current = id;
+    if (createOpened) return;
+    if (dashboard) {
+      notifications.show({
+        id: GENERATION_NOTIFICATION_ID,
+        color: 'teal',
+        title: 'Dashboard draft ready',
+        message: (
+          <Stack gap="xs" data-testid="generation-ready-notification">
+            <Text size="sm">&quot;{dashboard.title}&quot; is saved as an AI draft.</Text>
+            <Button
+              size="xs"
+              variant="light"
+              color={AI_COLOR}
+              radius="md"
+              leftSection={<Icon icon="mdi:open-in-new" width={14} />}
+              onClick={() => {
+                notifications.hide(GENERATION_NOTIFICATION_ID);
+                handleOpenGenerated(dashboard.dashboard_id);
+              }}
+              data-testid="generation-ready-open"
+            >
+              Open in editor
+            </Button>
+          </Stack>
+        ),
+        // Long enough to be read and acted on, since it carries the only
+        // hand-off into the draft the user has not seen yet.
+        autoClose: 12000,
+      });
+      return;
+    }
+    notifications.show({
+      id: GENERATION_NOTIFICATION_ID,
+      color: 'red',
+      title: 'Generation failed',
+      message: (
+        <Text size="sm" data-testid="generation-failed-notification">
+          {error}
+        </Text>
+      ),
+    });
+  }, [generation, createOpened, handleOpenGenerated]);
+
   const handleExport = useCallback(async (dashboard: DashboardListEntry) => {
     try {
       const payload = await exportDashboardJson(dashboard.dashboard_id);
@@ -308,6 +387,38 @@ const DashboardsApp: React.FC = () => {
     },
     [handleExport],
   );
+
+  /** Wiring for the Generate tab, memoised: the dialog keys effects on it,
+   *  and this page now re-renders as a run streams. */
+  const generateTab = useMemo(
+    () =>
+      aiGenerateEnabled
+        ? {
+            loadProject: loadProjectCollections,
+            onOpen: handleOpenGenerated,
+            serverKeyAvailable: aiServerKeyAvailable,
+            // Same gate as Import: generation writes a dashboard into a
+            // shared project, which an anonymous visitor must not do.
+            disabled: importDisabled,
+          }
+        : undefined,
+    [
+      aiGenerateEnabled,
+      loadProjectCollections,
+      handleOpenGenerated,
+      aiServerKeyAvailable,
+      importDisabled,
+    ],
+  );
+
+  /** What the header indicator says a run is doing: the stage the stream last
+   *  named, or the verdict a plan is waiting for, and the project either way. */
+  const stageText = generation.pending
+    ? `Generating: ${generation.status || 'starting'}`
+    : 'Plan ready for review';
+  const generationLabel = generation.projectName
+    ? `${stageText} · ${generation.projectName}`
+    : stageText;
 
   const handleBulkDelete = useCallback(
     (targets: DashboardListEntry[]) => {
@@ -365,17 +476,45 @@ const DashboardsApp: React.FC = () => {
               Dashboards
             </Title>
           </Group>
-          <Button
-            color={accent.tertiary}
-            variant="filled"
-            size="md"
-            onClick={openCreate}
-            data-testid="new-dashboard-btn"
-            style={{ fontFamily: 'Virgil' }}
-            data-tour-id="dashboards-create"
-          >
-            + New Dashboard
-          </Button>
+          <Group gap="sm" wrap="nowrap">
+            {/* The way back into a run the user walked away from. It sits
+                beside the action that started it rather than floating over
+                the list, and goes when the run does. Nothing to come back to
+                while the dialog holding the run is open. */}
+            {generation.active && !createOpened && (
+              <Button
+                variant="light"
+                color={AI_COLOR}
+                size="md"
+                radius="md"
+                maw={340}
+                onClick={openGenerateTab}
+                leftSection={
+                  generation.pending ? (
+                    <Loader size="xs" color={AI_COLOR} />
+                  ) : (
+                    <Icon icon="mdi:clipboard-check-outline" width={18} />
+                  )
+                }
+                data-testid="generation-running-indicator"
+              >
+                <Text size="sm" fw={500} truncate>
+                  {generationLabel}
+                </Text>
+              </Button>
+            )}
+            <Button
+              color={accent.tertiary}
+              variant="filled"
+              size="md"
+              onClick={openCreateNew}
+              data-testid="new-dashboard-btn"
+              style={{ fontFamily: 'Virgil' }}
+              data-tour-id="dashboards-create"
+            >
+              + New Dashboard
+            </Button>
+          </Group>
         </Group>
       </AppShell.Header>
 
@@ -413,7 +552,7 @@ const DashboardsApp: React.FC = () => {
               onDelete={(d) => setDeleteTarget(d)}
               onDuplicate={handleDuplicate}
               onExport={handleExport}
-              onCreateClick={openCreate}
+              onCreateClick={openCreateNew}
               onBulkExport={handleBulkExport}
               onBulkDelete={handleBulkDelete}
             />
@@ -429,18 +568,8 @@ const DashboardsApp: React.FC = () => {
         onCreate={handleCreate}
         onImport={handleImport}
         disableImport={importDisabled}
-        generate={
-          aiGenerateEnabled
-            ? {
-                loadProject: loadProjectCollections,
-                onOpen: handleOpenGenerated,
-                serverKeyAvailable: aiServerKeyAvailable,
-                // Same gate as Import: generation writes a dashboard into a
-                // shared project, which an anonymous visitor must not do.
-                disabled: importDisabled,
-              }
-            : undefined
-        }
+        generate={generateTab}
+        initialTab={createTab}
       />
       <EditDashboardModal
         opened={Boolean(editTarget)}
