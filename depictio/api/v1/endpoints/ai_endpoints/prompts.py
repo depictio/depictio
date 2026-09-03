@@ -165,14 +165,21 @@ _CONSTRAINT_SHEETS: dict[str, str | Callable[[DataContext | None], str]] = {
         "  Optional: mode='ui' (default) or mode='code' with code_content for custom code."
     ),
     "card": (
-        "CARD: single aggregated statistic. Required: aggregation, column_name, column_type.\n"
+        "CARD: an aggregated statistic and the metrics that give it context.\n"
+        "Required: aggregation, column_name, column_type.\n"
         "Allowed aggregation × column_type:\n"
         f"{_aggregation_lines()}\n"
-        "Optional: aggregations (list of secondary stats, same compatibility rules),\n"
-        "secondary_layout — how the strip under the hero renders. Match the user's\n"
-        "wording: 'histogram'/'distribution' -> histogram, 'box plot' -> box_plot,\n"
-        "'trend'/'over time' -> trend, 'top N'/'breakdown' -> top_n. Never leave the\n"
-        "default 'vertical' when the user names a visual style.\n"
+        "DEFAULT TO A MULTI-METRIC CARD. Unless a single number was explicitly\n"
+        "asked for, always fill `aggregations` with 2 to 5 secondary stats taken\n"
+        "from the allowed list for that column type, and pick the secondary_layout\n"
+        "that suits them: grid for four to six, compact for two or three,\n"
+        "box_plot for the spread of a numeric column, top_n (with breakdown_col)\n"
+        "for a count or nunique card. A tile that shows one number alone has\n"
+        "spent the same space to answer a quarter as many questions.\n"
+        "secondary_layout is how the strip under the hero renders. Match the\n"
+        "user's wording: 'histogram'/'distribution' -> histogram, 'box plot' ->\n"
+        "box_plot, 'trend'/'over time' -> trend, 'top N'/'breakdown' -> top_n.\n"
+        "Never leave the default 'vertical' when the user names a visual style.\n"
         f"{_card_layout_lines()}\n"
         "filter_expr (Polars expression scoped to the DC), icon_name, icon_color, title."
     ),
@@ -239,6 +246,8 @@ component_type: card
 workflow_tag: <workflow_tag from context>
 data_collection_tag: <data_collection_tag from context>
 aggregation: average
+aggregations: [median, std_dev, min, max]
+secondary_layout: grid
 column_name: <column>
 column_type: float64
 """,
@@ -1153,6 +1162,10 @@ LIMITS:
 - At least one interactive filter, in a filter section.
 - Card rows come in multiples of 4 per section: plan 4 or 8 cards in a section,
   never 3.
+- Every card is a multi-metric card: its intent names the hero statistic AND the
+  secondary ones the tile carries with it (a median, a spread, a top-N
+  breakdown, a distribution). A card intent that asks for one number alone is
+  a wasted tile.
 - At most one table, last, in the reference section.
 - MultiSelect only on columns with at most {MAX_MULTISELECT_DISTINCT} distinct
   values (see distinct= in the schema); numbers get a Slider or RangeSlider.
