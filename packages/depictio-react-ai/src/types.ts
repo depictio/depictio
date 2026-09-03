@@ -356,6 +356,9 @@ export interface PlannedSection {
   icon?: string | null;
   color?: string | null;
   description?: string | null;
+  /** The planner's own reason for the section, shown to whoever reviews the
+   *  draft. Absent from runs generated before the planner was asked for it. */
+  rationale?: string | null;
 }
 
 /** One component the plan intends to fill. `tag` is the handle every later
@@ -410,6 +413,15 @@ export interface GeneratedDashboardEvent {
  *  depictio/models/models/dashboards.py; structurally identical to
  *  depictio-react-core's DashboardAIGeneration so hosts pass the
  *  dashboard's field straight through. */
+/** One planned section with the planner's reason for it; mirrors
+ *  AISectionRationale in depictio/models/models/dashboards.py and
+ *  DashboardAISection in depictio-react-core. */
+export interface AISectionRationale {
+  name: string;
+  kind: 'filter' | 'grid';
+  rationale: string;
+}
+
 export interface AIGenerationInfo {
   status: 'draft' | 'promoted';
   model: string;
@@ -422,6 +434,10 @@ export interface AIGenerationInfo {
    *  by the review route; autosave strips the whole block. Absent on drafts
    *  saved before the review flow existed, so readers default it to []. */
   reviewed?: string[];
+  /** The planner's reason for each section, filter panel first then the
+   *  grid, in plan order. Absent on drafts generated before the planner was
+   *  asked to explain itself, so readers default it to []. */
+  sections?: AISectionRationale[];
 }
 
 /** Answer of POST /ai/generated-dashboards/{id}/promote. */
@@ -488,8 +504,9 @@ export interface GenerationCounts {
 /** One row of GET /ai/generations/{project_id}: a past whole-dashboard run,
  *  without its plan or its YAML. Mirrors GenerationSummary in schemas.py.
  *  `dashboard_id` is null while the run saved nothing (cancelled, or failed
- *  before the draft landed), and `title` is the saved dashboard's, so it is
- *  null for the same runs. */
+ *  before the draft landed). `title` is the saved dashboard's, falling back
+ *  to the title the plan chose, so it is null only for a run that never got
+ *  as far as a plan. */
 export interface GenerationSummary {
   id: string;
   dashboard_id: string | null;
@@ -503,6 +520,9 @@ export interface GenerationSummary {
   repaired: number;
   dropped: number;
   warnings: string[];
+  /** The run saved a draft that has since been deleted: the row still
+   *  reports what the run did, without a way back into it. */
+  dashboard_deleted?: boolean;
   /** Not on the wire today: tolerated so a nested tally would render rather
    *  than read as three zeroes. */
   counts?: GenerationCounts | null;

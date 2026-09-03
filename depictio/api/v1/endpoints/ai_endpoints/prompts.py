@@ -1048,11 +1048,13 @@ PLAN_ANSWER_SHAPE = """{
   "subtitle": "<one sentence on what the dashboard answers>",
   "filter_sections": [
     {"name": "<section name>", "icon": "<Iconify id, e.g. mdi:filter-variant>",
-     "color": "<Mantine palette name, e.g. teal>", "description": "<one sentence>"}
+     "color": "<Mantine palette name, e.g. teal>", "description": "<one sentence>",
+     "rationale": "<one sentence: why this section is here, and why these components rather than others>"}
   ],
   "grid_sections": [
     {"name": "<section name>", "icon": "<Iconify id>", "color": "<palette name>",
-     "description": "<one sentence; becomes the section header text>"}
+     "description": "<one sentence; becomes the section header text>",
+     "rationale": "<one sentence: why this section is here, and why these components rather than others>"}
   ],
   "components": [
     {"tag": "<unique snake_case handle>",
@@ -1132,6 +1134,8 @@ LAYOUT (a funnel, top to bottom):
 3. Figures: charts, and advanced_viz when a candidate below fits the data.
 4. Reference table: one table at the end for the raw rows.
 Each grid section opens with a header the server writes from its description.
+A section's rationale is not rendered: it is shown to the person reviewing the
+generated dashboard, so justify the choice instead of restating the name.
 Typical grid sections: an overview of cards, one or two analysis sections of
 figures, a reference section holding the table.
 

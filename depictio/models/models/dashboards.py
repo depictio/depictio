@@ -175,6 +175,16 @@ class FilterSectionSpec(BaseModel):
     )
 
 
+class AISectionRationale(BaseModel):
+    """Why the planner gave a generated dashboard one of its sections."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    kind: Literal["filter", "grid"] = "grid"
+    rationale: str = ""
+
+
 class AIGenerationInfo(BaseModel):
     """Provenance of a dashboard drafted by the AI generator.
 
@@ -185,8 +195,9 @@ class AIGenerationInfo(BaseModel):
 
     `reviewed` and `dropped` back the review pass over a draft: which tiles
     the user has accepted (or regenerated and kept) and which planned tiles
-    never made it into the draft. Both default to empty, so a draft stamped
-    before they existed still loads.
+    never made it into the draft. `sections` carries the planner's reason for
+    each section it laid out, which the draft itself never shows. All three
+    default to empty, so a draft stamped before they existed still loads.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -206,6 +217,10 @@ class AIGenerationInfo(BaseModel):
     dropped: list[str] = Field(
         default_factory=list,
         description="Generation tags the run planned but could not deliver",
+    )
+    sections: list[AISectionRationale] = Field(
+        default_factory=list,
+        description="The planner's reason for each section, filter panel first then grid",
     )
 
 

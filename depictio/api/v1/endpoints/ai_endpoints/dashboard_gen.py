@@ -488,6 +488,27 @@ def section_headers(plan: DashboardPlan, components: list[dict[str, Any]]) -> li
     return headers
 
 
+def section_rationales(plan: DashboardPlan | None) -> list[dict[str, Any]]:
+    """The planner's reason for each section, filter panel first then the grid.
+
+    `AISectionRationale` rows in plan order, stamped into the draft so the
+    review panel can say why a section is there. The section header text
+    (`description`) says what the section shows; this says why it was chosen,
+    and nothing renders it into the dashboard. A section the planner gave no
+    reason for is skipped rather than carried as an empty row: an empty
+    rationale explains less than no entry at all.
+    """
+    if plan is None:
+        return []
+    rows: list[dict[str, Any]] = []
+    for kind, sections in (("filter", plan.filter_sections), ("grid", plan.grid_sections)):
+        for spec in sections:
+            rationale = (spec.rationale or "").strip()
+            if rationale:
+                rows.append({"name": spec.name, "kind": kind, "rationale": rationale})
+    return rows
+
+
 def validate_component(component: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
     """One component dict through the CLI validator: (validated, None) or (None, error text).
 
@@ -917,6 +938,10 @@ def promote_dashboard(dashboard_id: str, user: Any) -> PromoteResponse:
         raise HTTPException(
             status_code=403, detail="You don't have permission to promote this dashboard."
         )
+    # A dotted key on purpose: the rest of the stamp (the warnings, the
+    # dropped tags, the planner's section rationales) is not the promote
+    # route's to rewrite, and replacing `ai_generation` wholesale would drop
+    # whatever a later run added to it.
     dashboards_collection.update_one(
         {"dashboard_id": oid}, {"$set": {"ai_generation.status": "promoted"}}
     )
@@ -1107,9 +1132,10 @@ class _Generation(_Stream):
     def generation_info(self) -> dict[str, Any]:
         """The ``ai_generation`` stamp of the draft (`AIGenerationInfo` fields).
 
-        `dropped` carries the tags that never made it, so the review pass can
-        say what is missing without reading the run record; `reviewed` starts
-        empty and is written by the review route.
+        `dropped` carries the tags that never made it and `sections` the
+        planner's reason for each section, so the review pass can say what is
+        missing and why the layout looks like it does without reading the run
+        record; `reviewed` starts empty and is written by the review route.
         """
         return {
             "status": "draft",
@@ -1120,6 +1146,7 @@ class _Generation(_Stream):
             "warnings": list(self.warnings),
             "reviewed": [],
             "dropped": list(self.dropped),
+            "sections": section_rationales(self.plan),
         }
 
 
@@ -1861,6 +1888,8 @@ def review_dashboard(dashboard_id: str, body: ReviewRequest, user: Any) -> Revie
     else:
         reviewed = [t for t in reviewed if t != tag]
     kept, total = review_counts(doc, reviewed)
+    # Dotted, like the promote route's `$set`: only `reviewed` is this
+    # route's to write, and the section rationales beside it must survive.
     dashboards_collection.update_one(
         {"dashboard_id": oid}, {"$set": {"ai_generation.reviewed": kept}}
     )
@@ -1905,11 +1934,19 @@ def list_generations(project_id: str, user: Any, limit: int = 20) -> Generations
     rows: list[GenerationSummary] = []
     for run in runs:
         counts = Counter(str(c.get("status") or "") for c in run.components)
+        dashboard_id = str(run.dashboard_id or "")
+        # A run whose draft was deleted, or that failed or was cancelled
+        # before one was saved, has no live title to read; the plan it stored
+        # already named the dashboard, so fall back to that rather than let
+        # the history call the run untitled. A run that never got as far as a
+        # plan has no name at all, which is what None says.
+        title = titles.get(dashboard_id) or str((run.plan or {}).get("title") or "").strip() or None
         rows.append(
             GenerationSummary(
                 id=run.id,
                 dashboard_id=run.dashboard_id,
-                title=titles.get(str(run.dashboard_id or "")) or None,
+                title=title,
+                dashboard_deleted=bool(dashboard_id) and dashboard_id not in titles,
                 prompt=run.prompt,
                 model=run.model,
                 status=run.status,
