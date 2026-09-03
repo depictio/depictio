@@ -750,7 +750,10 @@ class TestHistory:
         assert [row["id"] for row in rows] == ["run-0", "run-1", "run-2"]
         assert rows[0]["title"] == "Iris overview"
         assert rows[0]["dashboard_id"] == DASHBOARD_ID
-        assert rows[1]["title"] is None
+        # A run whose dashboard is gone still has a name: the title falls back
+        # to the plan's, so the row reads as the run it was and not "untitled".
+        assert rows[1]["title"] == "Iris overview"
+        assert rows[1]["dashboard_id"] is None
         assert (rows[0]["ok"], rows[0]["repaired"], rows[0]["dropped"]) == (2, 1, 1)
         assert rows[0]["prompt"] == "an overview"
         assert rows[0]["status"] == "complete"
