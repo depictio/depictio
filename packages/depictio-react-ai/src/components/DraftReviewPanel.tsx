@@ -3,6 +3,7 @@ import {
   ActionIcon,
   Box,
   Button,
+  Collapse,
   Divider,
   Group,
   Loader,
@@ -13,6 +14,7 @@ import {
   Text,
   Textarea,
   Tooltip,
+  UnstyledButton,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
@@ -35,6 +37,10 @@ export interface DraftTile {
    *  is worth showing even though a fold cannot be regenerated as a section
    *  (see `sectionRegenerable`). */
   section: string | null;
+  /** Tab the tile lives on, for a draft that spans a tab family. Null on a
+   *  single-tab draft, which is what the generator produces today: the tab
+   *  level of the list then has one member and is not drawn. */
+  tab?: string | null;
   /** The planner's brief for this tile, stamped on it at generation time.
    *  Null on a draft made before the planner was asked to explain itself. */
   intent: string | null;
@@ -85,6 +91,8 @@ export interface DraftReviewPanelProps {
 
 /** The tiles of one section, in the order the plan put them. */
 interface ReviewGroup {
+  /** Fold key, unique across tabs: two tabs may hold sections of one name. */
+  key: string;
   /** Null on a tile the generator left unsectioned. */
   name: string | null;
   label: string;
@@ -95,11 +103,72 @@ interface ReviewGroup {
   items: { tile: DraftTile; index: number }[];
 }
 
+/** The sections of one tab. Drawn as a fold of its own only when the draft
+ *  actually spans tabs, so a single-tab draft keeps a flat list of sections. */
+interface ReviewTabGroup {
+  key: string;
+  label: string;
+  sections: ReviewGroup[];
+}
+
 /** Size and radius shared by every button in the panel, so the three
  *  decisions and the regenerate form read as one set of controls rather than
  *  as three surfaces that happen to sit together. */
 const BUTTON_SIZE = 'sm';
 const BUTTON_RADIUS = 'sm';
+
+/**
+ * One fold of the list: a tab or a section, with how far its own review has
+ * got. Both levels share it so a nested fold reads as the same control one
+ * step in, and the count is the reason to open a fold that is shut.
+ */
+const FoldHeader: React.FC<{
+  icon: string;
+  /** Mantine palette name from the section's spec; null draws it neutral. */
+  color: string | null;
+  label: string;
+  tiles: DraftTile[];
+  open: boolean;
+  onToggle: () => void;
+  testId: string;
+}> = ({ icon, color, label, tiles, open, onToggle, testId }) => {
+  const reviewed = tiles.filter((t) => t.reviewed).length;
+  return (
+    <UnstyledButton
+      onClick={onToggle}
+      w="100%"
+      px="sm"
+      py={4}
+      data-testid={testId}
+      data-open={open ? 'true' : 'false'}
+      data-label={label}
+    >
+      <Group gap={6} wrap="nowrap">
+        <Box c="dimmed" style={{ display: 'inline-flex' }}>
+          <Icon icon={open ? 'mdi:chevron-down' : 'mdi:chevron-right'} width={14} height={14} />
+        </Box>
+        <Box c={color ?? 'dimmed'} style={{ display: 'inline-flex' }}>
+          <Icon icon={icon} width={13} height={13} />
+        </Box>
+        <Text
+          size="xs"
+          c={color ?? 'dimmed'}
+          tt="uppercase"
+          fw={700}
+          truncate
+          style={{ flex: 1, minWidth: 0 }}
+        >
+          {label}
+        </Text>
+        {/* Reviewed over total, in the same order the header above the list
+            says it, so one glance answers "what is left in here". */}
+        <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
+          {reviewed}/{tiles.length}
+        </Text>
+      </Group>
+    </UnstyledButton>
+  );
+};
 
 /**
  * Right-hand panel that carries the whole review of an AI draft.
@@ -148,31 +217,66 @@ const DraftReviewPanel: React.FC<DraftReviewPanelProps> = ({
     return byName;
   }, [sections]);
 
-  /** Grouped by section, sections in first-appearance order. The tile list
-   *  arrives in plan order, so that is the plan's own order of sections:
+  /** Grouped by tab, then by section, both in first-appearance order. The
+   *  tile list arrives in plan order, so that is the plan's own order:
    *  filter panel first, then each grid section. */
-  const groups = useMemo<ReviewGroup[]>(() => {
-    const byName = new Map<string, ReviewGroup>();
-    const ordered: ReviewGroup[] = [];
+  const tabGroups = useMemo<ReviewTabGroup[]>(() => {
+    const tabsByKey = new Map<string, ReviewTabGroup>();
+    const sectionsByKey = new Map<string, ReviewGroup>();
+    const ordered: ReviewTabGroup[] = [];
     tiles.forEach((tile, i) => {
-      const key = tile.section ?? '';
-      let group = byName.get(key);
+      const tabKey = tile.tab ?? '';
+      let tab = tabsByKey.get(tabKey);
+      if (!tab) {
+        tab = { key: `tab:${tabKey}`, label: tile.tab ?? 'This tab', sections: [] };
+        tabsByKey.set(tabKey, tab);
+        ordered.push(tab);
+      }
+      const sectionKey = `${tabKey}\u0000${tile.section ?? ''}`;
+      let group = sectionsByKey.get(sectionKey);
       if (!group) {
         const spec = tile.section ? sectionByName.get(tile.section) : undefined;
         group = {
+          key: `section:${sectionKey}`,
           name: tile.section,
           label: tile.section ?? 'Unsectioned',
           icon: sectionIconId(spec?.icon, spec?.kind),
           color: spec?.color || null,
           items: [],
         };
-        byName.set(key, group);
-        ordered.push(group);
+        sectionsByKey.set(sectionKey, group);
+        tab.sections.push(group);
       }
       group.items.push({ tile, index: i });
     });
     return ordered;
   }, [tiles, sectionByName]);
+
+  /** The tab level is a fold only when there is more than one tab to fold:
+   *  a single-tab draft would otherwise pay a click and a heading for a
+   *  grouping that groups nothing. */
+  const tabbed = tabGroups.length > 1;
+
+  // Folds are open until closed, so `collapsed` holds only what the reviewer
+  // shut. The two folds around the cursor are forced open whatever it says:
+  // the tile under review has to be visible in the list that names it.
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const toggleFold = (key: string) =>
+    setCollapsed((state) => ({ ...state, [key]: !state[key] }));
+
+  const cursorKeys = useMemo(() => {
+    for (const tab of tabGroups) {
+      for (const section of tab.sections) {
+        if (section.items.some((item) => item.index === index)) {
+          return { tab: tab.key, section: section.key };
+        }
+      }
+    }
+    return { tab: '', section: '' };
+  }, [tabGroups, index]);
+
+  const foldOpen = (key: string) =>
+    key === cursorKeys.tab || key === cursorKeys.section || !collapsed[key];
 
   const brief = (current?.intent ?? '').trim();
   const currentSection = current?.section ? sectionByName.get(current.section) : undefined;
@@ -276,58 +380,86 @@ const DraftReviewPanel: React.FC<DraftReviewPanelProps> = ({
           put however many components the plan asked for. */}
       <ScrollArea type="auto" style={{ flex: 1, minHeight: 0 }}>
         <Stack gap="xs" py="xs">
-          {groups.map((group) => (
-            <Stack key={group.label} gap={0}>
-              {/* The section as the dashboard draws it: its own icon and its
-                  own colour, so the list is recognisably the same dashboard
-                  the reviewer is scrolling. */}
-              <Group gap={6} wrap="nowrap" px="sm" pb={4}>
-                <Box c={group.color ?? 'dimmed'} style={{ display: 'inline-flex' }}>
-                  <Icon icon={group.icon} width={13} height={13} />
-                </Box>
-                <Text size="xs" c={group.color ?? 'dimmed'} tt="uppercase" fw={700} truncate>
-                  {group.label}
-                </Text>
-              </Group>
-              {group.items.map(({ tile, index: tileIndex }) => {
-                const visual = componentTypeVisual(tile.componentType);
-                return (
-                  <NavLink
-                    key={tile.tag}
-                    active={tileIndex === index}
-                    color={AI_COLOR}
-                    label={
-                      <Text size="sm" truncate title={tile.title}>
-                        {tile.title}
-                      </Text>
-                    }
-                    // The type is the icon and the colour the builder's type
-                    // grid and the catalog picker already use for it, which
-                    // says more in one glyph than a second line of label did.
-                    leftSection={
-                      <Tooltip label={visual.label} withArrow position="right" openDelay={400}>
-                        <Box c={visual.color} style={{ display: 'inline-flex' }}>
-                          <Icon icon={visual.icon} width={16} height={16} />
-                        </Box>
-                      </Tooltip>
-                    }
-                    // Reviewed on the trailing edge, where the checks line up
-                    // as a column of progress against a ragged column of
-                    // titles.
-                    rightSection={
-                      tile.reviewed ? (
-                        <Box c="teal" style={{ display: 'inline-flex' }}>
-                          <Icon icon="mdi:check-circle" width={15} height={15} />
-                        </Box>
-                      ) : null
-                    }
-                    onClick={() => onSelect(tileIndex)}
-                    data-testid="draft-review-item"
-                    data-tag={tile.tag}
-                    data-reviewed={tile.reviewed ? 'true' : 'false'}
-                  />
-                );
-              })}
+          {tabGroups.map((tab) => (
+            <Stack key={tab.key} gap={0}>
+              {tabbed && (
+                <FoldHeader
+                  icon="mdi:tab"
+                  color={null}
+                  label={tab.label}
+                  tiles={tab.sections.flatMap((s) => s.items.map((i) => i.tile))}
+                  open={foldOpen(tab.key)}
+                  onToggle={() => toggleFold(tab.key)}
+                  testId="draft-review-tab"
+                />
+              )}
+              <Collapse in={!tabbed || foldOpen(tab.key)}>
+                <Stack gap="xs">
+                  {tab.sections.map((group) => (
+                    <Stack key={group.key} gap={0}>
+                      {/* The section as the dashboard draws it: its own icon
+                          and its own colour, so the list is recognisably the
+                          same dashboard the reviewer is scrolling. */}
+                      <FoldHeader
+                        icon={group.icon}
+                        color={group.color}
+                        label={group.label}
+                        tiles={group.items.map((i) => i.tile)}
+                        open={foldOpen(group.key)}
+                        onToggle={() => toggleFold(group.key)}
+                        testId="draft-review-section"
+                      />
+                      <Collapse in={foldOpen(group.key)}>
+                        {group.items.map(({ tile, index: tileIndex }) => {
+                          const visual = componentTypeVisual(tile.componentType);
+                          return (
+                            <NavLink
+                              key={tile.tag}
+                              active={tileIndex === index}
+                              color={AI_COLOR}
+                              label={
+                                <Text size="sm" truncate title={tile.title}>
+                                  {tile.title}
+                                </Text>
+                              }
+                              // The type is the icon and the colour the
+                              // builder's type grid and the catalog picker
+                              // already use for it, which says more in one
+                              // glyph than a second line of label did.
+                              leftSection={
+                                <Tooltip
+                                  label={visual.label}
+                                  withArrow
+                                  position="right"
+                                  openDelay={400}
+                                >
+                                  <Box c={visual.color} style={{ display: 'inline-flex' }}>
+                                    <Icon icon={visual.icon} width={16} height={16} />
+                                  </Box>
+                                </Tooltip>
+                              }
+                              // Reviewed on the trailing edge, where the checks
+                              // line up as a column of progress against a
+                              // ragged column of titles.
+                              rightSection={
+                                tile.reviewed ? (
+                                  <Box c="teal" style={{ display: 'inline-flex' }}>
+                                    <Icon icon="mdi:check-circle" width={15} height={15} />
+                                  </Box>
+                                ) : null
+                              }
+                              onClick={() => onSelect(tileIndex)}
+                              data-testid="draft-review-item"
+                              data-tag={tile.tag}
+                              data-reviewed={tile.reviewed ? 'true' : 'false'}
+                            />
+                          );
+                        })}
+                      </Collapse>
+                    </Stack>
+                  ))}
+                </Stack>
+              </Collapse>
             </Stack>
           ))}
         </Stack>
