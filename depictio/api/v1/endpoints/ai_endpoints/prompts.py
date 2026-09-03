@@ -12,6 +12,10 @@ from typing import cast, get_args
 from pydantic import BaseModel
 
 from depictio.api.v1.configs.config import settings
+from depictio.api.v1.endpoints.ai_endpoints.component_style import (
+    color_choices,
+    icon_choices,
+)
 from depictio.api.v1.endpoints.ai_endpoints.context import (
     COMPONENT_DC_TYPES,
     DashboardContext,
@@ -181,15 +185,29 @@ _CONSTRAINT_SHEETS: dict[str, str | Callable[[DataContext | None], str]] = {
         "box_plot, 'trend'/'over time' -> trend, 'top N'/'breakdown' -> top_n.\n"
         "Never leave the default 'vertical' when the user names a visual style.\n"
         f"{_card_layout_lines()}\n"
-        "filter_expr (Polars expression scoped to the DC), icon_name, icon_color, title."
+        "ALWAYS set icon_name and icon_color: an unstyled card reads as a\n"
+        "placeholder next to one that carries its subject. Pick the icon for what\n"
+        "the column measures, and give the cards of one row the same colour so the\n"
+        "row reads as a row.\n"
+        f"  icon_name: {icon_choices('card')}\n"
+        f"  icon_color, title_color: {color_choices()}\n"
+        "Optional: filter_expr (Polars expression scoped to the DC), title."
     ),
     "interactive": (
         "INTERACTIVE: filter control. Required: interactive_component_type, column_name, column_type.\n"
         "Allowed interactive_component_type × column_type:\n"
         f"{_interactive_lines()}\n"
         "Timeline requires timescale ∈ (year, month, day, hour, minute).\n"
-        "Optional: filter_expr, placement (left|top — only Timeline supports top),\n"
-        f"group (≤ {MAX_INTERACTIVE_GROUP_SIZE} components share a group), title, icon_name."
+        "ALWAYS set icon_name and custom_color: a filter panel of unnamed grey\n"
+        "controls tells the reader nothing about what each one narrows.\n"
+        f"  icon_name: {icon_choices('interactive')}\n"
+        f"  custom_color: {color_choices()}\n"
+        "group: filters that answer one question share a group name and render\n"
+        "together in one collapsible card. Group whenever a section holds more\n"
+        "than two filters (the four measurement ranges of a table, the three\n"
+        f"identity columns of a cohort): at most {MAX_INTERACTIVE_GROUP_SIZE} per group,\n"
+        "and every ungrouped control costs a card of chrome of its own.\n"
+        "Optional: filter_expr, placement (left|top — only Timeline supports top), title."
     ),
     "table": (
         "TABLE: tabular view of the DC. Optional: columns (list of column names to show),\n"
@@ -250,6 +268,8 @@ aggregations: [median, std_dev, min, max]
 secondary_layout: grid
 column_name: <column>
 column_type: float64
+icon_name: mdi:ruler
+icon_color: "#12b886"
 """,
     "interactive": """\
 component_type: interactive
@@ -258,6 +278,9 @@ data_collection_tag: <data_collection_tag from context>
 interactive_component_type: MultiSelect
 column_name: <column>
 column_type: object
+icon_name: mdi:form-select
+custom_color: "#228be6"
+group: <group name shared with the sibling filters, or omit>
 """,
     "table": """\
 component_type: table
@@ -1082,7 +1105,8 @@ PLAN_ANSWER_SHAPE = """{
      "data_collection_tag": "<tag copied from a dc[...] heading, or null for text>",
      "intent": "<one or two sentences: what it shows, which columns, which aggregation or chart>",
      "use": "<tool/render_id copied from CATALOG OFFERS; omit unless reproducing an offer>",
-     "viz_kind": "<kind copied from ADVANCED VIZ CANDIDATES; advanced_viz only, omit otherwise>"}
+     "viz_kind": "<kind copied from ADVANCED VIZ CANDIDATES; advanced_viz only, omit otherwise>",
+     "group": "<filter group name; interactive only, omit otherwise>"}
   ]
 }"""
 
@@ -1181,6 +1205,11 @@ LIMITS:
   tile.
 - At most {max_components} components and at most {max_sections} grid sections.
 - At least one interactive filter, in a filter section.
+- Group the filters that answer one question: give them the same `group` name
+  and they render together in one collapsible card, up to
+  {MAX_INTERACTIVE_GROUP_SIZE} per group. Group whenever a filter section holds
+  more than two controls (the measurement ranges of a table, the identity
+  columns of a cohort); an ungrouped control costs a card of chrome of its own.
 - Card rows come in multiples of 4 per section: plan 4 or 8 cards in a section,
   never 3.
 - Every card is a multi-metric card: its intent names the hero statistic AND the
