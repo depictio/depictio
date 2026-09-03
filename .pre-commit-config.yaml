@@ -8,7 +8,11 @@ repos:
     rev: v6.0.0
     hooks:
     -   id: trailing-whitespace
-        exclude: '^dev/|.bumpversion\.cfg$'
+        # Bundled project data is generated, not written by hand: a TSV row whose
+        # last column is an empty value legitimately ends in a tab, and stripping
+        # it makes the committed file differ from what the generator emits — so
+        # every regeneration would come back as a diff the hook undoes again.
+        exclude: '^dev/|.bumpversion\.cfg$|^depictio/projects/.*\.(tsv|csv)$'
     -   id: end-of-file-fixer
         exclude: ^dev/
     -   id: check-yaml

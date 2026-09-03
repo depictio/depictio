@@ -330,8 +330,20 @@ workflows:
         config:
           type: "Table"
           source: "transformed"
+          # ampliseq 2.18.0 classifies against `sbdi-gtdb` by default, whose
+          # DADA2 taxlevels are Domain,Kingdom,Phylum,… — one rank deeper than
+          # the 7-rank databases earlier releases defaulted to. QIIME2's
+          # collapsed outputs are addressed by DEPTH, so the Phylum that used to
+          # sit at level 2 now sits at level 3. The override below pins that
+          # depth for this template version; the recipe reads the ranks from the
+          # tail of the lineage, so it needs no other change.
+          # A run that overrides --dada_ref_taxonomy with a 7-rank database
+          # (rdp, silva, unite…) must point these back at level 2.
           transform:
             recipe: "qiime2/taxonomy_composition.py"
+            source_overrides:
+              barplot_csv:
+                path: "qiime2/barplot/level-3.csv"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -348,6 +360,11 @@ workflows:
           source: "transformed"
           transform:
             recipe: "nf-core/ampliseq/taxonomy_rel_abundance.py"
+            source_overrides:
+              rel_table:
+                # Phylum depth for this release's default database (see the
+                # taxonomy_composition note above).
+                path: "qiime2/rel_abundance_tables/rel-table-3.tsv"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -400,17 +417,19 @@ workflows:
           source: "transformed"
           transform:
             recipe: "qiime2/ancombc.py"
+            # level-3 is the Phylum for this release's default database (see
+            # the taxonomy_composition note above).
             source_overrides:
               lfc:
-                path: "qiime2/ancombc/differentials/Category-{GROUP_COL}-level-2/lfc_slice.csv"
+                path: "qiime2/ancombc/differentials/Category-{GROUP_COL}-level-3/lfc_slice.csv"
               p_val:
-                path: "qiime2/ancombc/differentials/Category-{GROUP_COL}-level-2/p_val_slice.csv"
+                path: "qiime2/ancombc/differentials/Category-{GROUP_COL}-level-3/p_val_slice.csv"
               q_val:
-                path: "qiime2/ancombc/differentials/Category-{GROUP_COL}-level-2/q_val_slice.csv"
+                path: "qiime2/ancombc/differentials/Category-{GROUP_COL}-level-3/q_val_slice.csv"
               w:
-                path: "qiime2/ancombc/differentials/Category-{GROUP_COL}-level-2/w_slice.csv"
+                path: "qiime2/ancombc/differentials/Category-{GROUP_COL}-level-3/w_slice.csv"
               se:
-                path: "qiime2/ancombc/differentials/Category-{GROUP_COL}-level-2/se_slice.csv"
+                path: "qiime2/ancombc/differentials/Category-{GROUP_COL}-level-3/se_slice.csv"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -438,6 +457,22 @@ workflows:
           source: "transformed"
           transform:
             recipe: "qiime2/stacked_taxonomy_canonical.py"
+            # Each rank shifted one level deeper (see the taxonomy_composition
+            # note above). rel-table-7 does not exist — ampliseq collapses to
+            # level 6 — so the Genus source resolves to nothing and the recipe
+            # drops that rank: under an 8-rank database the deepest collapsed
+            # rank the pipeline emits is the Family.
+            source_overrides:
+              phylum:
+                path: "qiime2/rel_abundance_tables/rel-table-3.tsv"
+              class_:
+                path: "qiime2/rel_abundance_tables/rel-table-4.tsv"
+              order:
+                path: "qiime2/rel_abundance_tables/rel-table-5.tsv"
+              family:
+                path: "qiime2/rel_abundance_tables/rel-table-6.tsv"
+              genus:
+                path: "qiime2/rel_abundance_tables/rel-table-7.tsv"
           dc_specific_properties:
             format: "TSV"
             columns_description:

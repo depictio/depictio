@@ -67,8 +67,13 @@ for metric in faith_pd shannon observed_features; do
   fetch "qiime2/alpha-rarefaction/${metric}.csv"
 done
 
-# --- Taxonomy composition: barplot level-2 ---
+# --- Taxonomy composition: barplot levels ---
+# level-3 is the Phylum for this release's default database (sbdi-gtdb, 8 ranks)
+# and is what template.yaml points the recipe at; level-2 is kept because the
+# recipes' own default paths (used by `depictio-cli dev recipe run` and CI's
+# standalone recipe step) still name it.
 fetch "qiime2/barplot/level-2.csv"
+fetch "qiime2/barplot/level-3.csv"
 
 # --- Relative abundance tables: level 2 (Phylum) … 6 (Genus) + ASV with DADA2 taxonomy ---
 # rel-table-2: taxonomy_rel_abundance; 2–6: stacked_taxonomy_canonical;
@@ -82,9 +87,12 @@ fetch "qiime2/rel_abundance_tables/rel-table-ASV_with-DADA2-tax.tsv"
 fetch "qiime2/taxonomy/taxonomy.tsv"
 fetch "qiime2/phylogenetic_tree/tree.nwk"
 
-# --- ANCOM-BC: 5 slices for Category-habitat-level-2 ---
-for f in lfc_slice.csv p_val_slice.csv q_val_slice.csv w_slice.csv se_slice.csv; do
-  fetch "qiime2/ancombc/differentials/Category-habitat-level-2/$f"
+# --- ANCOM-BC: 5 slices per level (level-3 = Phylum here, level-2 for the
+#     recipe defaults) ---
+for level in 2 3; do
+  for f in lfc_slice.csv p_val_slice.csv q_val_slice.csv w_slice.csv se_slice.csv; do
+    fetch "qiime2/ancombc/differentials/Category-habitat-level-${level}/$f"
+  done
 done
 
 echo ""

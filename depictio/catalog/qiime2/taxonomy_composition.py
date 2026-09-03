@@ -3,6 +3,7 @@
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.recipes.lib.lineage import kingdom_phylum
 
 SOURCES: list[RecipeSource] = [
     RecipeSource(
@@ -65,10 +66,12 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     # lineage in the column *name*, so the ranks only exist once it is melted —
     # and a taxon-count chart is read by rank, not by lineage string. Mirrors
     # nf-core/ampliseq/taxonomy_rel_abundance.py, which splits the same strings.
-    df = df.with_columns(
-        pl.col("taxonomy").str.split(";").list.get(0).alias("Kingdom"),
-        pl.col("taxonomy").str.split(";").list.get(1).fill_null("Unclassified").alias("Phylum"),
-    )
+    #
+    # Read from the tail, not by absolute position: the template points this
+    # recipe at whichever barplot level *is* Phylum for the run's reference
+    # database (level 2 for a 7-rank database, level 3 for an 8-rank one such as
+    # sbdi-gtdb), and the leaf of that lineage is the Phylum either way.
+    df = df.with_columns(kingdom_phylum(pl.col("taxonomy")))
 
     # Core columns first, then any metadata columns appended
     core = ["sample", "taxonomy", "count", "Kingdom", "Phylum"]

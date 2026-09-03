@@ -1569,8 +1569,17 @@ jobs:
           fetch "qiime2/alpha-rarefaction/faith_pd.csv" "qiime2/alpha-rarefaction/faith_pd.csv"
           fetch "qiime2/barplot/level-2.csv" "qiime2/barplot/level-2.csv"
           fetch "qiime2/rel_abundance_tables/rel-table-2.tsv" "qiime2/rel_abundance_tables/rel-table-2.tsv"
-          for f in lfc_slice.csv p_val_slice.csv q_val_slice.csv w_slice.csv se_slice.csv; do
-            fetch "qiime2/ancombc/differentials/Category-habitat-level-2/$f" "qiime2/ancombc/differentials/Category-habitat-level-2/$f"
+          # ampliseq 2.18.0 defaults to an 8-rank taxonomy (sbdi-gtdb), where the
+          # Phylum sits one QIIME2 level deeper — the shipped template points its
+          # taxonomy DCs at level 3. Both levels are fetched: level-2 feeds the
+          # standalone recipe step below (recipes keep their 7-rank default
+          # paths), level-3 feeds the full template run.
+          fetch "qiime2/barplot/level-3.csv" "qiime2/barplot/level-3.csv"
+          fetch "qiime2/rel_abundance_tables/rel-table-3.tsv" "qiime2/rel_abundance_tables/rel-table-3.tsv"
+          for level in 2 3; do
+            for f in lfc_slice.csv p_val_slice.csv q_val_slice.csv w_slice.csv se_slice.csv; do
+              fetch "qiime2/ancombc/differentials/Category-habitat-level-${level}/$f" "qiime2/ancombc/differentials/Category-habitat-level-${level}/$f"
+            done
           done
 
           # Phase E (added in feat(ampliseq) funnel restructure, commit 7b7db7ccf):
@@ -1582,6 +1591,10 @@ jobs:
           fetch "qiime2/phylogenetic_tree/tree.nwk" "data/qiime2/phylogenetic_tree/tree.nwk"
           fetch "qiime2/taxonomy/taxonomy.tsv" "data/qiime2/taxonomy/taxonomy.tsv"
           fetch "qiime2/rel_abundance_tables/rel-table-ASV.tsv" "data/qiime2/rel_abundance_tables/rel-table-ASV.tsv"
+          # Named-rank ASV table: the source the hierarchical DCs (sunburst,
+          # Sankey, tree tip metadata) prefer, since its ranks are columns rather
+          # than positions in a lineage string.
+          fetch "qiime2/rel_abundance_tables/rel-table-ASV_with-DADA2-tax.tsv" "qiime2/rel_abundance_tables/rel-table-ASV_with-DADA2-tax.tsv"
 
           # Generate samplesheet from Metadata_full.tsv (ID column → sampleID)
           echo "sampleID" > "$TARGET/samplesheet.csv"

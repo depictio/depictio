@@ -41,6 +41,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[5]
 sys.path.insert(0, str(REPO_ROOT))
 
+from depictio.cli.cli.utils.templates import substitute_template_variables  # noqa: E402
 from depictio.recipes import (  # noqa: E402
     RecipeError,
     load_recipe,
@@ -94,6 +95,34 @@ def _transformed_dcs(template: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
+def _reference_vars(template: dict[str, Any]) -> dict[str, str]:
+    """``template.reference.vars`` — the values the bundled demo is built with.
+
+    The same map ``db_init_reference_datasets.resolve_template_for_init`` feeds
+    the reference project, and what ``{GROUP_COL}``-style tokens in a DC's
+    ``source_overrides`` resolve against.
+    """
+    reference = (template.get("template", {}).get("reference", {}) or {}).get("vars", {}) or {}
+    return {k: str(v) for k, v in reference.items()}
+
+
+def _source_overrides(dc: dict[str, Any], variables: dict[str, str]) -> dict[str, str]:
+    """A DC's ``transform.source_overrides`` as ``{source_ref: path}``.
+
+    Overrides are how a template version pins pipeline-specific paths (the
+    ANCOM-BC group directory, and from 2.18.0 the taxonomic level each collapsed
+    table sits at), so the seeds must be built through them or they would be
+    generated from different files than an ingest reads.
+    """
+    raw = (dc.get("config", {}).get("transform") or {}).get("source_overrides") or {}
+    resolved: dict[str, str] = {}
+    for ref, override in raw.items():
+        path = override.get("path") if isinstance(override, dict) else override
+        if path:
+            resolved[ref] = substitute_template_variables(str(path), variables)
+    return resolved
+
+
 def _template_version(template: dict[str, Any]) -> str | None:
     """``nf-core/ampliseq/2.18.0`` → ``2.18.0`` (version-override recipe lookup)."""
     template_id = str(template.get("template", {}).get("template_id", ""))
@@ -113,6 +142,7 @@ def build_seeds(raw_root: Path, only: set[str] | None = None) -> dict[str, pl.Da
     """
     template = yaml.safe_load(TEMPLATE.read_text())
     version = _template_version(template)
+    variables = _reference_vars(template)
     produced: dict[str, pl.DataFrame] = {}
 
     def dc_frame(dc_ref: str) -> pl.DataFrame | None:
@@ -133,9 +163,10 @@ def build_seeds(raw_root: Path, only: set[str] | None = None) -> dict[str, pl.Da
             continue
         recipe = dc["config"]["transform"]["recipe"]
         module = load_recipe(recipe, version)
+        overrides = _source_overrides(dc, variables)
 
         try:
-            sources = resolve_sources(module, raw_root)
+            sources = resolve_sources(module, raw_root, overrides)
         except RecipeError as exc:
             raise RecipeError(
                 f"{tag} ({recipe}): {exc}\n"

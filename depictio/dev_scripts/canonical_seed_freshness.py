@@ -144,6 +144,15 @@ def discover(project: ProjectSeeds) -> tuple[list[SeedSpec], list[tuple[str, str
         if missing:
             skipped.append((dc_tag, f"source(s) not committed: {', '.join(sorted(missing))}"))
             continue
+        # A recipe whose file sources are *all* optional (one artefact or another
+        # depending on the run's route) is only checkable when at least one of
+        # them is actually committed — otherwise transform() would be handed an
+        # empty source set and fail on a bundle that is perfectly fine.
+        if any(s.path or s.glob_pattern for s in getattr(module, "SOURCES", [])) and not any(
+            ref for ref in sources if any(s.ref == ref and s.dc_ref is None for s in module.SOURCES)
+        ):
+            skipped.append((dc_tag, "no optional file source committed — nothing to run against"))
+            continue
 
         checkable.append(
             SeedSpec(
