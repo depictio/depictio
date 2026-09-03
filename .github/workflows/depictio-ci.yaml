@@ -2722,6 +2722,18 @@ jobs:
           sed -i 's/^DEPICTIO_AUTH_PUBLIC_MODE=.*/DEPICTIO_AUTH_PUBLIC_MODE=${{ matrix.public_mode }}/' docker-compose/.env
           sed -i 's/^DEPICTIO_AUTH_DEMO_MODE=.*/DEPICTIO_AUTH_DEMO_MODE=${{ matrix.demo_mode }}/' docker-compose/.env
           sed -i 's/^#* *DEPICTIO_DEV_MODE=.*/DEPICTIO_DEV_MODE=true/' docker-compose/.env
+          # Standard leg only: the create-from-manifest spec fetches a Data
+          # Manifest the runner serves at http://host.docker.internal:8099 (see
+          # the step below). That name maps to the docker bridge gateway, a
+          # private address the SSRF gateway rejects unless the host is
+          # allowlisted. DEPICTIO_REMOTE_ALLOW_HTTP=true is already the committed
+          # dev default in docker-compose/.env and the sed edits above leave it
+          # alone. The allowlist is exclusive while set; no other spec fetches
+          # a remote URL, and the storage panel's own-endpoint exemption is
+          # checked before it.
+          if [ "${{ matrix.auth_mode }}" = "standard" ]; then
+            echo "DEPICTIO_REMOTE_URL_ALLOWLIST=host.docker.internal" >> docker-compose/.env
+          fi
           # Seed the catalog conformance project on top of the default set. It is
           # opt-in because it is a test fixture, and the catalog coverage spec is
           # the only thing that needs it.
@@ -2743,7 +2755,13 @@ jobs:
           docker pull "${DEPICTIO_VIEWER_VERSION}" &
           wait
           export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
-          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env --profile ci up -d mongo redis minio depictio-backend depictio-celery-worker depictio-viewer
+          COMPOSE_FILES="-f docker-compose.dev.yaml"
+          if [ "${{ matrix.auth_mode }}" = "standard" ]; then
+            # host.docker.internal for the backend + worker (Linux docker does
+            # not provide it): lets them reach the manifest server on the runner.
+            COMPOSE_FILES="$COMPOSE_FILES -f docker-compose/docker-compose.e2e-manifest.yaml"
+          fi
+          docker compose $COMPOSE_FILES --env-file docker-compose/.env --profile ci up -d mongo redis minio depictio-backend depictio-celery-worker depictio-viewer
 
       # Node + Playwright setup runs while the docker stack boots; the
       # explicit health gate below is the only wait.
@@ -2807,10 +2825,34 @@ jobs:
           echo "🔍 Auth mode reported by API:"
           curl -s http://localhost:8058/depictio/api/v1/auth/me/optional || true
 
+      # Standard leg only: generate the demo Data Manifest kit on the runner
+      # and serve it over plain HTTP so the create-from-manifest spec runs
+      # end to end (it self-skips without MANIFEST_E2E_URL). The entry URLs
+      # are absolute and must be the address the *backend* resolves, hence
+      # host.docker.internal (mapped by the compose overlay above).
+      - name: Serve a Data Manifest for the create-from-manifest flow
+        if: matrix.auth_mode == 'standard'
+        run: |
+          MANIFEST_DIR="${RUNNER_TEMP}/demo-manifest-data"
+          python3 depictio/dev_scripts/demo_manifest/generate.py \
+            --base-url http://host.docker.internal:8099 \
+            --output-dir "$MANIFEST_DIR"
+          (cd "$MANIFEST_DIR" && nohup python3 -m http.server 8099 --bind 0.0.0.0 > "${RUNNER_TEMP}/manifest-server.log" 2>&1 &)
+          for i in {1..15}; do
+            curl -fs http://localhost:8099/manifest.json > /dev/null && break
+            [ "$i" = "15" ] && { echo "❌ Manifest server never came up"; cat "${RUNNER_TEMP}/manifest-server.log"; exit 1; }
+            sleep 1
+          done
+          # Prove the backend can reach it through the overlay's host mapping
+          # and the allowlist (curl is not in the image; python is).
+          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.e2e-manifest.yaml --env-file docker-compose/.env exec -T depictio-backend \
+            python -c "import urllib.request; print('manifest reachable from backend:', urllib.request.urlopen('http://host.docker.internal:8099/manifest.json', timeout=10).status)"
+
       - name: Run Playwright tests (${{ matrix.auth_mode }})
         run: |
           cd depictio/tests/e2e-playwright
           CATALOG_CONFORMANCE_REQUIRED=1 \
+          MANIFEST_E2E_URL="${{ matrix.auth_mode == 'standard' && 'http://host.docker.internal:8099/manifest.json' || '' }}" \
           PLAYWRIGHT_BASE_URL=http://localhost:5080 \
           PLAYWRIGHT_API_URL=http://localhost:8058 \
           npx playwright test
@@ -2835,6 +2877,9 @@ jobs:
         if: failure()
         run: |
           docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env logs > e2e-${{ matrix.auth_mode }}-services.log 2>&1 || true
+          if [ -f "${RUNNER_TEMP}/manifest-server.log" ]; then
+            { echo "===== manifest server (runner) ====="; cat "${RUNNER_TEMP}/manifest-server.log"; } >> e2e-${{ matrix.auth_mode }}-services.log
+          fi
 
       - name: Upload service logs on failure
         uses: actions/upload-artifact@v7

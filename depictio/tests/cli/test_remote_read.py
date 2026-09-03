@@ -562,3 +562,203 @@ def test_manifest_id_column_injected(http_fixture_server):
     df = read_single_file_lazy(file_info, "csv", {}).collect()
     assert df["depictio_manifest_id"].to_list() == ["S1", "S1"]
     assert set(df["depictio_run_id"].to_list()) == {"remote-run"}
+
+
+class TestUrlScan:
+    """scan mode "url": one synthesized File per DC, keyed by the remote URL."""
+
+    @staticmethod
+    def _dc_and_workflow(url: str):
+        from depictio.models.models.data_collections import (
+            DataCollection,
+            DataCollectionConfig,
+            Scan,
+            ScanURL,
+        )
+        from depictio.models.models.workflows import (
+            Workflow,
+            WorkflowConfig,
+            WorkflowDataLocation,
+            WorkflowEngine,
+        )
+
+        dc = DataCollection(
+            data_collection_tag="remote",
+            config=DataCollectionConfig(
+                type="table",
+                metatype="aggregate",
+                scan=Scan(mode="url", scan_parameters=ScanURL(url=url)),
+                dc_specific_properties={"format": "csv"},
+            ),
+        )
+        workflow = Workflow(
+            name="wf",
+            workflow_tag="wf",
+            engine=WorkflowEngine(name="python"),
+            config=WorkflowConfig(),
+            data_location=WorkflowDataLocation(structure="flat", locations=[url]),
+            data_collections=[dc],
+        )
+        return dc, workflow
+
+    @pytest.fixture()
+    def api(self, monkeypatch):
+        """Stub the API round-trips the scan makes.
+
+        ``existing`` and ``status`` shape the existing-files lookup;
+        ``created`` records ``(files, update)`` per registration call and
+        ``deleted`` the ids of stale records the scan removed.
+        """
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
+
+        from depictio.cli.cli.utils import scan as scan_mod
+
+        recorder = SimpleNamespace(existing=[], status=200, created=[], deleted=[])
+
+        def _lookup(**_):
+            response = MagicMock(status_code=recorder.status)
+            response.json.return_value = recorder.existing
+            return response
+
+        monkeypatch.setattr(scan_mod, "api_get_files_by_dc_id", _lookup)
+        monkeypatch.setattr(
+            scan_mod,
+            "api_create_files",
+            lambda files, CLI_config, update: recorder.created.append((list(files), update)),
+        )
+        monkeypatch.setattr(
+            scan_mod,
+            "api_delete_file",
+            lambda file_id, CLI_config: recorder.deleted.append(file_id),
+        )
+        return recorder
+
+    def _scan(self, url: str, update_files: bool = False):
+        from unittest.mock import MagicMock
+
+        from depictio.cli.cli.utils.scan import scan_url_for_data_collection
+
+        dc, workflow = self._dc_and_workflow(url)
+        owner = UserBase(id=PyObjectId(), email="o@example.com", is_admin=False)
+        result = scan_url_for_data_collection(
+            workflow=workflow,
+            data_collection=dc,
+            CLI_config=MagicMock(),
+            permissions=Permission(owners=[owner]),
+            update_files=update_files,
+        )
+        return result, dc
+
+    @staticmethod
+    def _identity_hash(url: str, etag: str = "") -> str:
+        import hashlib
+
+        return hashlib.sha256(f"{url}|{etag}".encode()).hexdigest()
+
+    @staticmethod
+    def _existing(url: str, file_hash: str) -> dict:
+        from bson import ObjectId
+
+        return {"_id": str(ObjectId()), "file_location": url, "file_hash": file_hash}
+
+    def test_registers_the_url_as_one_file(self, api, http_fixture_server):
+        url = f"{http_fixture_server}/table.csv"
+
+        result, dc = self._scan(url)
+
+        assert result == {"result": "success"}
+        ((files, update),) = api.created
+        assert update is False
+        (file,) = files
+        assert file.file_location == url
+        assert file.filename == "table.csv"
+        assert file.filesize == len("sample,value\nS1,1\nS2,2\n")  # from the HEAD probe
+        # The fixture server sends no ETag: the identity hash is url + "".
+        assert file.file_hash == self._identity_hash(url)
+        assert file.data_collection_id == dc.id
+        assert file.run_tag == "remote-url-scan"
+        assert api.deleted == []
+
+    def test_unchanged_url_is_skipped(self, api, http_fixture_server):
+        url = f"{http_fixture_server}/table.csv"
+        api.existing = [self._existing(url, self._identity_hash(url))]
+
+        result, _ = self._scan(url)
+
+        assert result == {"result": "success"}
+        assert api.created == []
+        assert api.deleted == []
+
+    def test_update_files_re_registers_an_unchanged_url_under_its_existing_id(
+        self, api, http_fixture_server
+    ):
+        url = f"{http_fixture_server}/table.csv"
+        known = self._existing(url, self._identity_hash(url))
+        api.existing = [known]
+
+        self._scan(url, update_files=True)
+
+        ((files, update),) = api.created
+        assert update is True
+        assert str(files[0].id) == known["_id"]
+
+    def test_changed_remote_content_is_registered_as_an_update(self, api, http_fixture_server):
+        url = f"{http_fixture_server}/table.csv"
+        known = self._existing(url, "0" * 64)  # hash recorded before the content changed
+        api.existing = [known]
+
+        self._scan(url)
+
+        ((files, update),) = api.created
+        assert update is True
+        assert str(files[0].id) == known["_id"]
+        assert files[0].file_hash == self._identity_hash(url)
+
+    def test_repointed_dc_drops_the_stale_record(self, api, http_fixture_server):
+        old_url = f"{http_fixture_server}/table.tsv"
+        new_url = f"{http_fixture_server}/table.csv"
+        stale = self._existing(old_url, self._identity_hash(old_url))
+        api.existing = [stale]
+
+        self._scan(new_url)
+
+        assert api.deleted == [stale["_id"]]
+        ((files, update),) = api.created
+        assert update is False
+        assert files[0].file_location == new_url
+
+    def test_unreachable_url_is_registered_with_the_size_fallback_hash(self, api, caplog):
+        import hashlib
+
+        url = "http://127.0.0.1:1/data.csv"
+
+        with caplog.at_level(logging.WARNING, logger="depictio-cli"):
+            result, _ = self._scan(url)
+
+        assert result == {"result": "success"}
+        ((files, _),) = api.created
+        assert files[0].filesize == -1
+        # Failed probe: the weaker url + size hash, and it says so.
+        assert files[0].file_hash == hashlib.sha256(f"{url}|size=-1".encode()).hexdigest()
+        assert any("Could not probe" in rec.message for rec in caplog.records)
+        assert any("falls back to URL + size" in rec.message for rec in caplog.records)
+
+    def test_lookup_failure_warns_and_still_registers(self, api, http_fixture_server, caplog):
+        url = f"{http_fixture_server}/table.csv"
+        api.status = 500
+
+        with caplog.at_level(logging.WARNING, logger="depictio-cli"):
+            result, _ = self._scan(url)
+
+        assert result == {"result": "success"}
+        assert any("Failed to retrieve existing files" in rec.message for rec in caplog.records)
+        ((files, update),) = api.created
+        assert update is False
+        assert files[0].file_location == url
+
+    def test_url_without_a_basename_gets_a_placeholder_filename(self, api, http_fixture_server):
+        self._scan(f"{http_fixture_server}/")
+
+        ((files, _),) = api.created
+        assert files[0].filename == "remote-file"
