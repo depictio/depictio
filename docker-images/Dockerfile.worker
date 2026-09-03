@@ -56,6 +56,20 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# Quarto renders the exported notebook into the HTML report
+# (`render_notebook_report`). It is a binary with its own pandoc, not a
+# library, so it is installed rather than depended on — ~250 MB, which is why
+# the feature it serves is off by default (DEPICTIO_NOTEBOOK_EXPORT_RENDER_*).
+# It ships here and not in the API image: the render is worker work, minutes
+# long and a browser pass per rendered tile.
+ARG QUARTO_VERSION=1.9.37
+RUN arch="$(dpkg --print-architecture)" \
+    && curl -fsSL -o /tmp/quarto.deb \
+        "https://github.com/quarto-dev/quarto-cli/releases/download/v${QUARTO_VERSION}/quarto-${QUARTO_VERSION}-linux-${arch}.deb" \
+    && dpkg -i /tmp/quarto.deb \
+    && rm /tmp/quarto.deb \
+    && quarto --version
+
 ARG UID=1000
 ARG GID=1000
 RUN groupadd -g ${GID} depictio && \
@@ -66,11 +80,15 @@ RUN groupadd -g ${GID} depictio && \
 # (--no-install-project), so a source edit or the per-release version churn in
 # pyproject/VERSION doesn't reinstall everything — see Dockerfile.api for the
 # full rationale.
+#
+# `--extra render` adds the Jupyter kernel Quarto executes the notebook
+# through. Without it Quarto renders a report with every result missing, and
+# exits 0 while doing it.
 COPY --chown=depictio:depictio pyproject.toml uv.lock* ./
 COPY --chown=depictio:depictio packages ./packages/
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project --no-dev \
-    || uv sync --no-install-project --no-dev
+    uv sync --frozen --no-install-project --no-dev --extra render \
+    || uv sync --no-install-project --no-dev --extra render
 
 # Browser bundle target inside the image. We download into a BuildKit
 # cache mount and copy out — caches the chromium payload across rebuilds
@@ -97,10 +115,13 @@ RUN --mount=type=cache,target=/var/cache/playwright,sharing=locked \
     chmod -R 755 ${PLAYWRIGHT_BROWSERS_PATH}
 
 # ---- Project layer (source + VERSION last) ----
+# `--extra render` again: `uv sync` makes the environment match what it is
+# given, so leaving it off here would uninstall the kernel the layer above
+# installed.
 COPY --chown=depictio:depictio VERSION ./
 COPY --chown=depictio:depictio depictio ./depictio/
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev || uv sync --no-dev
+    uv sync --frozen --no-dev --extra render || uv sync --no-dev --extra render
 
 COPY --chown=depictio:depictio docker-images/run_celery_worker.sh /app/run_celery_worker.sh
 RUN chmod +x /app/run_celery_worker.sh

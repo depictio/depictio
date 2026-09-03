@@ -1649,6 +1649,24 @@ class NotebookExportConfig(BaseSettings):
             "React-rendered component."
         ),
     )
+    render_enabled: bool = Field(
+        default=False,
+        description=(
+            "Offer the rendered HTML report as well as the notebook. Off by default: the "
+            "render executes the exported notebook on a worker, which needs Quarto and a "
+            "Jupyter kernel in the worker image and costs a browser pass per rendered tile. "
+            "A dashboard carrying code-mode figures is only rendered for its owners, since "
+            "their Python runs on the worker."
+        ),
+    )
+    render_timeout_s: int = Field(
+        default=900,
+        description="Seconds allowed for one `quarto render` of an exported notebook.",
+    )
+    render_prefix: str = Field(
+        default="notebook_reports",
+        description="S3 key prefix the rendered reports and their staged notebooks are written to.",
+    )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_NOTEBOOK_EXPORT_")
 

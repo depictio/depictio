@@ -693,7 +693,19 @@ export interface NotebookPreflight {
   stages: { index?: string | null; label?: string | null; rows_by_dc: Record<string, number | null> }[];
   warnings: string[];
   ipynb_available: boolean;
+  /** Whether this deployment offers the rendered HTML report as well. */
+  render_available?: boolean;
   counts: Record<string, number>;
+}
+
+/** A render job: the notebook being executed on a worker, which takes minutes. */
+export interface NotebookRenderStatus {
+  job_id: string;
+  status: 'queued' | 'running' | 'ready' | 'error';
+  phase?: string | null;
+  filename?: string | null;
+  size?: number | null;
+  reason?: string | null;
 }
 
 /** What an export will contain, before anything is generated. `state` is an
@@ -735,6 +747,56 @@ export async function exportNotebook(
   const filename = filenameFromDisposition(
     res.headers.get('Content-Disposition'),
     `dashboard_${dashboardId}.${ext}`,
+  );
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  return filename;
+}
+
+/** Start rendering the dashboard's notebook into an HTML report.
+ *
+ *  This is the one export path that executes: the notebook runs end to end on
+ *  a worker, with the caller's own rights, and every tile the export renders
+ *  rather than computes costs a browser pass. Minutes, not seconds — hence a
+ *  job id to poll rather than a file. */
+export async function startNotebookRender(
+  dashboardId: string,
+  state: unknown,
+): Promise<NotebookRenderStatus> {
+  const res = await authFetch(`${API_BASE}/dashboards/notebook_export/${dashboardId}/render`, {
+    method: 'POST',
+    body: JSON.stringify({ state, format: 'quarto' }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to start the report render');
+  return res.json();
+}
+
+/** Where a render job is: queued, running, ready to download, or failed. */
+export async function fetchNotebookRenderStatus(
+  jobId: string,
+  signal?: AbortSignal,
+): Promise<NotebookRenderStatus> {
+  const res = await authFetch(`${API_BASE}/dashboards/notebook_export/render/${jobId}`, { signal });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to read the render status');
+  return res.json();
+}
+
+/** Download a finished report. */
+export async function downloadNotebookRender(jobId: string): Promise<string> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/notebook_export/render/${jobId}/download`,
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to download the report');
+  const blob = await res.blob();
+  const filename = filenameFromDisposition(
+    res.headers.get('Content-Disposition'),
+    `report_${jobId}.html`,
   );
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

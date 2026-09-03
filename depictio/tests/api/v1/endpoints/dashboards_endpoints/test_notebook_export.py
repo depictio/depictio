@@ -9,8 +9,10 @@ stage. Reordering stages changes the intermediate counts, never the last.
 
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import json
+import re
 from unittest.mock import patch
 
 import mongomock
@@ -333,7 +335,9 @@ def test_export_headers_and_content(patched_env):
     assert "t.weber@example.org" in src
     assert "Groundwater" in src and "Riverwater" in src
     assert "client.component(" in src and "'viz-1'" in src  # the child tab's advanced viz
-    assert "## Details" in src  # child tab heading
+    # The child tab's own heading: an h3 like every other tab, under the
+    # results h2, carrying the marker the export's fold/rail script keys on.
+    assert re.search(r"^\s*### <span data-dpx-accent=.*Details", src, re.M)
     assert "'fig-1'" in src  # the UI-built figure, rendered through the API too
 
 
@@ -407,3 +411,105 @@ def test_ipynb_unavailable_is_501(patched_env):
         with pytest.raises(HTTPException) as exc:
             _export(_state([]), fmt="ipynb")
     assert exc.value.status_code == 501
+
+
+# ── The rendered report ───────────────────────────────────────────────────────
+
+
+class _RenderUser:
+    email = "t.weber@example.org"
+    id = ObjectId()
+
+
+def _render(state):
+    return asyncio.run(
+        nbx.notebook_export_render(
+            dashboard_id=DASHBOARD_ID,  # type: ignore[arg-type]
+            request=NotebookExportRequest(state=state, format="quarto"),
+            current_user=_RenderUser(),  # type: ignore[arg-type]
+            access_token=None,
+        )
+    )
+
+
+def test_render_off_by_default_is_501(patched_env):
+    with pytest.raises(HTTPException) as exc:
+        _render(_state([]))
+    assert exc.value.status_code == 501
+
+
+@pytest.mark.skipif(not ipynb_available(), reason="marimo/nbformat not installed")
+def test_render_stages_the_notebook_and_queues_the_job(patched_env):
+    """The notebook goes to S3 under the caller's prefix; the broker gets its key."""
+    staged: dict[str, bytes] = {}
+    queued: dict[str, object] = {}
+
+    class _Token:
+        id = ObjectId()
+
+    async def _fake_add_token(token_data):
+        assert token_data.token_lifetime == "short-lived"
+        return _Token()
+
+    with (
+        patch.object(nbx.settings.notebook_export, "render_enabled", True),
+        patch(
+            "depictio.api.v1.services.screenshot_service.check_dashboard_owner_permission_sync",
+            lambda *a: True,
+        ),
+        patch(
+            "depictio.api.v1.services.notebook_export.store.put",
+            lambda key, body, content_type: staged.__setitem__(key, body),
+        ),
+        patch(
+            "depictio.api.v1.endpoints.user_endpoints.core_functions._add_token", _fake_add_token
+        ),
+        patch(
+            "depictio.api.celery_app.render_notebook_report.apply_async",
+            lambda **kw: queued.update(kw),
+        ),
+    ):
+        status = _render(_state(FILTERS))
+
+    assert status.status == "queued" and status.filename.endswith(".html")
+    key = next(iter(staged))
+    assert key.startswith(f"notebook_reports/{_RenderUser.id}/{status.job_id}/")
+    assert key.endswith(".quarto.ipynb")
+    # What was staged is the Quarto notebook, front matter and all.
+    assert json.loads(staged[key])["cells"][0]["cell_type"] == "raw"
+    # The job is addressed by the id the caller was handed, and carries the
+    # token by id rather than the token itself.
+    assert queued["task_id"] == status.job_id
+    assert queued["kwargs"]["notebook_key"] == key
+    assert queued["kwargs"]["token_id"] == str(_Token.id)
+    assert "access_token" not in queued["kwargs"]
+
+
+def test_a_render_job_of_another_user_is_not_found(patched_env):
+    class _Result:
+        state = "SUCCESS"
+        result = {"user_id": str(ObjectId()), "key": "k", "filename": "r.html"}
+
+    with (
+        patch.object(nbx.settings.notebook_export, "render_enabled", True),
+        patch("celery.result.AsyncResult", lambda *a, **k: _Result()),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            nbx.notebook_export_render_status(job_id="someone-elses", current_user=_RenderUser())  # type: ignore[arg-type]
+    assert exc.value.status_code == 404
+
+
+def test_a_non_owner_cannot_render_author_written_code(patched_env):
+    """A code-mode figure is the author's Python, and the render is what runs it."""
+    with (
+        patch.object(nbx.settings.notebook_export, "render_enabled", True),
+        patch.object(type(nbx.settings.auth), "is_single_user_mode", False),
+        patch(
+            "depictio.api.v1.services.screenshot_service.check_dashboard_owner_permission_sync",
+            lambda *a: False,
+        ),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            _render(_state(FILTERS))
+    assert exc.value.status_code == 403
+    assert "code-mode" in exc.value.detail

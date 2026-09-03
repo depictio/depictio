@@ -17,20 +17,26 @@ import {
 import { Icon } from '@iconify/react';
 
 import {
+  downloadNotebookRender,
   exportNotebook,
   fetchNotebookPreflight,
+  fetchNotebookRenderStatus,
+  startNotebookRender,
   type AnalysisState,
   type NotebookFormat,
   type NotebookInclusion,
   type NotebookPreflight,
+  type NotebookRenderStatus,
 } from 'depictio-react-core';
 
 /**
  * Export the dashboard as a notebook: preflight first (what each tile becomes,
  * with a reason written for the reader), then the format, then the download.
  *
- * The server never executes anything: the marimo file is generated text and
- * the Jupyter / Quarto variants are derived from it with outputs excluded.
+ * Three of the four choices are generated text: the marimo file, and the
+ * Jupyter / Quarto variants derived from it with outputs excluded. The fourth
+ * is the rendered report, and it is the one thing that executes — on a worker,
+ * over minutes, so it is started, polled, then downloaded.
  */
 interface NotebookExportModalProps {
   opened: boolean;
@@ -46,11 +52,21 @@ const STATUS_META: Record<NotebookInclusion, { label: string; color: string }> =
   omitted: { label: 'omitted', color: 'gray' },
 };
 
-const FORMAT_HINT: Record<NotebookFormat, string> = {
+/** The report is not a notebook format; it is what rendering one produces. */
+type ExportChoice = NotebookFormat | 'report';
+
+const FORMAT_HINT: Record<ExportChoice, string> = {
   marimo: 'A reactive Python notebook: marimo edit <file>.py',
   ipynb: 'Open in JupyterLab: jupyter lab <file>.ipynb',
-  quarto: 'Render a report: quarto render <file>.quarto.ipynb',
+  quarto: 'The notebook to render yourself: quarto render <file>.quarto.ipynb',
+  report: 'That same notebook, rendered here: one HTML file, nothing to install.',
 };
+
+function elapsedLabel(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m ? `${m}m ${String(s).padStart(2, '0')}s` : `${s}s`;
+}
 
 const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
   opened,
@@ -62,9 +78,12 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
   const [state, setState] = useState<AnalysisState | null>(null);
   const [preflight, setPreflight] = useState<NotebookPreflight | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [format, setFormat] = useState<NotebookFormat>('marimo');
+  const [format, setFormat] = useState<ExportChoice>('marimo');
   const [downloading, setDownloading] = useState(false);
   const [downloaded, setDownloaded] = useState<string | null>(null);
+  const [job, setJob] = useState<NotebookRenderStatus | null>(null);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
     if (!opened) return;
@@ -73,6 +92,8 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
     setPreflight(null);
     setError(null);
     setDownloaded(null);
+    setJob(null);
+    setStartedAt(null);
     const controller = new AbortController();
     fetchNotebookPreflight(dashboardId, snapshot, controller.signal)
       .then((res) => setPreflight(res))
@@ -86,12 +107,42 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opened, dashboardId]);
 
+  // A render is a job on a worker: ask it where it is until it stops moving.
+  useEffect(() => {
+    if (!job || job.status === 'ready' || job.status === 'error') return;
+    const controller = new AbortController();
+    const tick = window.setInterval(
+      () => setElapsed(startedAt ? Math.round((Date.now() - startedAt) / 1000) : 0),
+      1000,
+    );
+    const poll = window.setInterval(() => {
+      fetchNotebookRenderStatus(job.job_id, controller.signal)
+        .then((next) =>
+          setJob((prev) =>
+            prev && prev.job_id === next.job_id
+              ? { ...next, filename: next.filename ?? prev.filename }
+              : prev,
+          ),
+        )
+        .catch((err) => {
+          if (!controller.signal.aborted) {
+            setError(err instanceof Error ? err.message : String(err));
+          }
+        });
+    }, 3000);
+    return () => {
+      window.clearInterval(poll);
+      window.clearInterval(tick);
+      controller.abort();
+    };
+  }, [job, startedAt]);
+
   const handleDownload = async () => {
     if (!state) return;
     setDownloading(true);
     setError(null);
     try {
-      const filename = await exportNotebook(dashboardId, state, format);
+      const filename = await exportNotebook(dashboardId, state, format as NotebookFormat);
       setDownloaded(filename);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -100,8 +151,41 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
     }
   };
 
+  const handleRender = async () => {
+    if (!state) return;
+    setDownloading(true);
+    setError(null);
+    setDownloaded(null);
+    try {
+      const started = await startNotebookRender(dashboardId, state);
+      setStartedAt(Date.now());
+      setElapsed(0);
+      setJob(started);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleDownloadReport = async () => {
+    if (!job) return;
+    setDownloading(true);
+    setError(null);
+    try {
+      setDownloaded(await downloadNotebookRender(job.job_id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   const ipynbAvailable = preflight?.ipynb_available ?? true;
+  const renderAvailable = preflight?.render_available ?? false;
   const counts = preflight?.counts ?? {};
+  const isReport = format === 'report';
+  const rendering = Boolean(job && job.status !== 'ready' && job.status !== 'error');
 
   return (
     <Modal
@@ -224,25 +308,65 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
           </Text>
           <SegmentedControl
             value={format}
-            onChange={(v) => setFormat(v as NotebookFormat)}
+            onChange={(v) => setFormat(v as ExportChoice)}
             data={[
               { label: 'marimo', value: 'marimo' },
               { label: 'Jupyter', value: 'ipynb', disabled: !ipynbAvailable },
               { label: 'Quarto', value: 'quarto', disabled: !ipynbAvailable },
+              { label: 'Quarto report', value: 'report', disabled: !renderAvailable },
             ]}
             data-testid="notebook-export-format"
           />
           <Text size="xs" c="dimmed">
             {FORMAT_HINT[format]}
             {!ipynbAvailable && ' — Jupyter and Quarto variants need marimo on the server.'}
+            {ipynbAvailable && !renderAvailable && ' — rendered reports are off on this server.'}
           </Text>
         </Stack>
 
+        {isReport && !job && renderAvailable && (
+          <Alert color="blue" variant="light" data-testid="notebook-export-render-hint">
+            The Quarto notebook above, executed on the server: every tile is recomputed and every
+            rendered figure costs a browser pass, so a dashboard this size takes a few minutes.
+            You can leave this open while it builds.
+          </Alert>
+        )}
+
+        {job && rendering && (
+          <Alert color="blue" variant="light" data-testid="notebook-export-rendering">
+            <Group gap="xs">
+              <Loader size="xs" />
+              <Text size="sm">
+                {job.status === 'queued' ? 'Queued' : 'Rendering'} · {elapsedLabel(elapsed)}
+              </Text>
+            </Group>
+          </Alert>
+        )}
+
+        {job?.status === 'error' && (
+          <Alert color="red" title="Render failed" data-testid="notebook-export-render-error">
+            {job.reason || 'The worker could not render this notebook.'}
+          </Alert>
+        )}
+
+        {job?.status === 'ready' && !downloaded && (
+          <Alert color="teal" variant="light" data-testid="notebook-export-render-ready">
+            <code>{job.filename}</code> is ready
+            {job.size ? ` (${(job.size / 1e6).toFixed(1)} MB)` : ''}, built in{' '}
+            {elapsedLabel(elapsed)}.
+          </Alert>
+        )}
+
         {downloaded && (
           <Alert color="teal" variant="light" data-testid="notebook-export-done">
-            Downloaded <code>{downloaded}</code>. Set <code>DEPICTIO_API_URL</code> and{' '}
-            <code>DEPICTIO_API_TOKEN</code> (a long-lived token from the CLI agents page) before
-            running it.
+            Downloaded <code>{downloaded}</code>.
+            {!isReport && (
+              <>
+                {' '}
+                Set <code>DEPICTIO_API_URL</code> and <code>DEPICTIO_API_TOKEN</code> (a
+                long-lived token from the CLI agents page) before running it.
+              </>
+            )}
           </Alert>
         )}
 
@@ -250,15 +374,27 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
           <Button variant="default" onClick={onClose}>
             Close
           </Button>
-          <Button
-            leftSection={<Icon icon="mdi:download" width={16} />}
-            onClick={handleDownload}
-            loading={downloading}
-            disabled={!state || !preflight}
-            data-testid="notebook-export-download"
-          >
-            Download
-          </Button>
+          {isReport && job?.status !== 'ready' ? (
+            <Button
+              leftSection={<Icon icon="mdi:file-document-outline" width={16} />}
+              onClick={handleRender}
+              loading={downloading || rendering}
+              disabled={!state || !preflight || !renderAvailable}
+              data-testid="notebook-export-render"
+            >
+              {job?.status === 'error' ? 'Render again' : 'Render report'}
+            </Button>
+          ) : (
+            <Button
+              leftSection={<Icon icon="mdi:download" width={16} />}
+              onClick={isReport ? handleDownloadReport : handleDownload}
+              loading={downloading}
+              disabled={!state || !preflight}
+              data-testid="notebook-export-download"
+            >
+              {isReport ? 'Download report' : 'Download'}
+            </Button>
+          )}
         </Group>
       </Stack>
     </Modal>

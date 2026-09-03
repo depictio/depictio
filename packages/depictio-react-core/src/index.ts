@@ -306,6 +306,9 @@ export {
   fetchFunnelValues,
   fetchNotebookPreflight,
   exportNotebook,
+  startNotebookRender,
+  fetchNotebookRenderStatus,
+  downloadNotebookRender,
   // MultiQC management (multipart uploads)
   createMultiQCDataCollection,
   checkMultiQCUniformity,
@@ -618,6 +621,7 @@ export type {
   NotebookInclusion,
   NotebookPreflight,
   NotebookPreflightComponent,
+  NotebookRenderStatus,
   // MultiQC management types
   CreateMultiQCDCInput,
   MultiQCMutationResult,
