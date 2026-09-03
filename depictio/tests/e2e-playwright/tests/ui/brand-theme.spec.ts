@@ -17,7 +17,7 @@
 import {
   API_PREFIX,
   API_URL,
-  loginAsTestUserWithToken,
+  apiOnlyToken,
   test,
   expect,
 } from "@fixtures/auth";
@@ -51,16 +51,16 @@ test.describe("Instance brand theme", () => {
   // put them back, whatever the test did in between.
   let savedOverrides: Record<string, unknown> | null = null;
 
-  test.beforeEach(async ({ page, request }) => {
-    const { access_token } = await loginAsTestUserWithToken(page, request, "adminUser");
+  test.beforeEach(async ({ request }) => {
+    const { access_token } = await apiOnlyToken(request, "adminUser");
     const response = await request.get(`${API_URL}${API_PREFIX}/utils/branding`, {
       headers: { Authorization: `Bearer ${access_token}` },
     });
     savedOverrides = response.ok() ? ((await response.json()).overrides ?? null) : null;
   });
 
-  test.afterEach(async ({ page, request }) => {
-    const { access_token } = await loginAsTestUserWithToken(page, request, "adminUser");
+  test.afterEach(async ({ request }) => {
+    const { access_token } = await apiOnlyToken(request, "adminUser");
     const headers = { Authorization: `Bearer ${access_token}` };
     const url = `${API_URL}${API_PREFIX}/utils/branding`;
     if (savedOverrides && Object.keys(savedOverrides).length > 0) {
@@ -130,7 +130,12 @@ test.describe("Instance brand theme", () => {
     page,
     request,
   }) => {
-    const { access_token } = await loginAsTestUserWithToken(page, request, "adminUser");
+    // A token of its own, not the one seeded into the page: the SPA refreshes
+    // its stored session on expiry and /auth/refresh rotates the token
+    // document, which revokes the access token any other holder is still
+    // sending. Sharing one bundle between the browser and these calls is what
+    // turned the PUT below into an unexplained 401.
+    const { access_token } = await apiOnlyToken(request, "adminUser");
     const headers = { Authorization: `Bearer ${access_token}` };
     const url = `${API_URL}${API_PREFIX}/utils/branding`;
     const attribution = page.locator("[data-testid='powered-by']");
