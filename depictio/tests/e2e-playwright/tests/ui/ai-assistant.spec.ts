@@ -288,7 +288,9 @@ async function openFirstDashboard(page: Page): Promise<string> {
 async function openAddComponentChooser(page: Page, dashboardId: string): Promise<void> {
   await page.goto(`/dashboard-edit/${dashboardId}`);
   const addButton = page.locator("[data-tour-id='editor-add-component']");
-  await expect(addButton).toBeEnabled({ timeout: 20_000 });
+  // The editor enables Add once the dashboard and its project are loaded; on
+  // a cold instance (a CI worker's first editor visit) that takes a while.
+  await expect(addButton).toBeEnabled({ timeout: 45_000 });
   await addButton.click();
   await page.locator("[data-testid='add-component']").click();
   await page.waitForURL(/\/component\/add\//, { timeout: 15_000 });
@@ -668,7 +670,9 @@ test.describe("AI assistant", () => {
     await page.getByRole("button", { name: "Back" }).click();
     await expect(activeStep(page)).toContainText("Describe");
     await expect(describeSummary(page, "type")).toHaveText("Card");
-    await expect(describeSummary(page, "dc")).toHaveText(routed.tag);
+    // Describe remounts and reloads the project before it can name the
+    // collection; on a cold instance that fetch is the slow part.
+    await expect(describeSummary(page, "dc")).toHaveText(routed.tag, { timeout: 20_000 });
     await expect(
       page.locator(`input[data-testid='${DC_CHIP_PREFIX}${routed.id}']`),
     ).toBeChecked();
