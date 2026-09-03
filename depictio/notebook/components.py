@@ -21,6 +21,7 @@ from __future__ import annotations
 import base64
 import html as _html
 import json
+import re
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -38,15 +39,128 @@ PLOTLY_MIME = "application/vnd.plotly.v1+json"
 # extracted from the React renderer by the ``component_figure`` endpoint.
 SERVER_PLOTLY_KINDS = frozenset({"complex_heatmap", "upset_plot", "sankey"})
 
+_HEX8_RE = re.compile(r"^#([0-9a-fA-F]{2}){4}$")
+
+
+def _hex8_to_rgba(color: str) -> str:
+    r, g, b, a = (int(color[i : i + 2], 16) for i in (1, 3, 5, 7))
+    return f"rgba({r}, {g}, {b}, {a / 255:.3f})"
+
+
+_HEX6_RE = re.compile(r"^[0-9a-fA-F]{6}$")
+_RGB_PREFIX_RE = re.compile(r"^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)")
+
+
+def _hex_with_alpha(color: str | None, alpha: float) -> str:
+    """Tint ``color`` to ``alpha``, mirroring the card strips' own
+    ``hexWithAlpha`` (``depictio-react-core``'s ``metrics/format.ts``) so a
+    card's secondary visualisation is tinted with its *own* accent colour
+    instead of a fixed blue. Same teal fallback for a missing/unrecognised
+    colour, so an unstyled card still reads as intentional.
+    """
+    fallback = f"rgba(69, 184, 172, {alpha})"
+    if not color:
+        return fallback
+    m = _RGB_PREFIX_RE.match(color)
+    if m:
+        r, g, b = m.groups()
+        return f"rgba({r}, {g}, {b}, {alpha})"
+    cleaned = color.lstrip("#").strip()
+    if not _HEX6_RE.match(cleaned):
+        return fallback
+    r, g, b = (int(cleaned[i : i + 2], 16) for i in (0, 2, 4))
+    return f"rgba({r}, {g}, {b}, {alpha})"
+
+
+def _normalize_colors(obj: Any) -> Any:
+    """Rewrite 8-digit hex colours (``#RRGGBBAA``) to ``rgba(...)``.
+
+    A figure extracted from the React renderer (``component_figure``) is
+    Plotly.js's own JSON, and Plotly.js accepts 8-digit hex for an alpha
+    channel; the Python ``plotly`` package's validator does not and raises
+    constructing the figure. Same data, just a spelling Python doesn't
+    accept — translate it rather than losing the figure.
+    """
+    if isinstance(obj, dict):
+        return {k: _normalize_colors(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_normalize_colors(v) for v in obj]
+    if isinstance(obj, str) and _HEX8_RE.match(obj):
+        return _hex8_to_rgba(obj)
+    return obj
+
 
 def _figure_from_dict(fig_dict: dict[str, Any]):
     import plotly.graph_objects as go
     import plotly.io as pio
 
+    # The figure is Plotly.js's own JSON, extracted from the live React
+    # renderer; the schema it validates against there can be a little ahead
+    # of the Python plotly package pinned here (e.g. a newer `legend`
+    # property JS accepts and Python doesn't yet). skip_invalid drops what
+    # Python's schema doesn't recognise rather than losing the whole figure
+    # over one cosmetic property it has no way to honour anyway.
+    fig_dict = _normalize_colors(fig_dict)
     try:
-        return pio.from_json(json.dumps(fig_dict))
+        return pio.from_json(json.dumps(fig_dict), skip_invalid=True)
     except Exception:
-        return go.Figure(fig_dict)
+        return go.Figure(fig_dict, skip_invalid=True)
+
+
+# plotly.js is a 5 MB library, and a figure's HTML asks for it by default.
+# Quarto's ``embed-resources`` then inlines that request once per figure, so a
+# report with 35 figures carried 35 copies of the library and came to 170 MB
+# for 2.5 MB of data. The library belongs to the document, not to the figure:
+# the export's setup cell activates plotly's ``notebook`` renderer, which emits
+# one copy for the whole notebook, and marimo and JupyterLab both load their
+# own — so a figure here only ever needs its own div.
+PLOTLY_JS = False
+
+# Plotly's notebook renderer hard-codes a MathJax CDN tag onto every figure it
+# draws (``HtmlRenderer.to_mimebundle``: ``include_mathjax = "cdn"``), for TeX
+# in axis titles. ``embed-resources`` inlines it, MathJax then lazy-loads
+# ``[MathJax]/extensions/MathZoom.js`` from a path that is not in the file, and
+# the reader of a supposedly self-contained report gets a "failed to load".
+_MATHJAX_TAG_RE = re.compile(r'\s*<script src="[^"]*mathjax[^"]*"></script>', re.IGNORECASE)
+
+
+def use_document_renderer() -> bool:
+    """Draw figures once per document rather than once per figure.
+
+    Activates plotly's ``notebook`` renderer, which emits one copy of
+    plotly.js for the whole notebook instead of one per figure, and drops the
+    MathJax request it would otherwise put on each of them: a dashboard
+    figure's labels are data, never TeX.
+
+    Returns whether the renderer was activated. It needs IPython, which marimo
+    does not use — there marimo draws the figures itself, so a ``False`` here
+    is the normal marimo path and not a failure.
+    """
+    import plotly.io as pio
+
+    try:
+        renderer = pio.renderers["notebook"]
+    except (KeyError, ValueError):
+        return False
+
+    if not getattr(renderer, "_dpx_no_mathjax", False):
+        inner = renderer.to_mimebundle
+
+        def to_mimebundle(fig_dict, _inner=inner):
+            bundle = _inner(fig_dict)
+            html = bundle.get(HTML_MIME)
+            if isinstance(html, str):
+                bundle[HTML_MIME] = _MATHJAX_TAG_RE.sub("", html)
+            return bundle
+
+        renderer.to_mimebundle = to_mimebundle
+        renderer._dpx_no_mathjax = True
+
+    try:
+        pio.renderers.default = "notebook"
+    except (ImportError, ValueError):
+        return False
+    return True
 
 
 def figure_bundle(fig) -> dict[str, Any]:
@@ -59,7 +173,7 @@ def figure_bundle(fig) -> dict[str, Any]:
     """
     return {
         PLOTLY_MIME: json.loads(fig.to_json()),
-        HTML_MIME: fig.to_html(full_html=False, include_plotlyjs="cdn"),
+        HTML_MIME: fig.to_html(full_html=False, include_plotlyjs=PLOTLY_JS),
         PLAIN_MIME: "Plotly figure",
     }
 
@@ -206,7 +320,7 @@ class DepictioComponent:
 
                 return mo.as_html(self.figure)._mime_()
             except Exception:
-                return HTML_MIME, self.figure.to_html(full_html=False, include_plotlyjs="cdn")
+                return HTML_MIME, self.figure.to_html(full_html=False, include_plotlyjs=PLOTLY_JS)
         if mode == "data":
             df = self.data
             if isinstance(df, pl.DataFrame):
@@ -224,7 +338,7 @@ class DepictioComponent:
     def _repr_html_(self) -> str | None:
         mode = self.default_display
         if mode == "figure":
-            return self.figure.to_html(full_html=False, include_plotlyjs="cdn")
+            return self.figure.to_html(full_html=False, include_plotlyjs=PLOTLY_JS)
         if mode == "data" and isinstance(self.data, pl.DataFrame):
             return self.data._repr_html_()
         if mode == "markdown":
@@ -409,12 +523,17 @@ class CardComponent(DepictioComponent):
     def _fetch_data(self) -> dict[str, Any]:
         payload = self.client.post(
             f"/dashboards/bulk_compute_cards/{self.dashboard_id}",
-            {"filters": self.filters, "component_ids": [self.index]},
+            {
+                "filters": self.filters,
+                "component_ids": [self.index],
+                "include_icons": True,
+            },
         )
         return {
             "value": (payload.get("values") or {}).get(self.index),
             "secondary": (payload.get("secondary_values") or {}).get(self.index),
             "aggregations": (payload.get("aggregations") or {}).get(self.index),
+            "icon_svg": (payload.get("icons") or {}).get(str(self.meta.get("icon_name") or "")),
             "filter_applied": payload.get("filter_applied"),
         }
 
@@ -431,25 +550,140 @@ class CardComponent(DepictioComponent):
     def _display_html(self) -> str:
         agg = _html.escape(str(self.meta.get("aggregation") or ""))
         column = _html.escape(str(self.meta.get("column_name") or ""))
+        icon_color = str(self.meta.get("icon_color") or "#868e96")
+        title_color = str(self.meta.get("title_color") or "#868e96")
+        background = str(self.meta.get("background_color") or "#ffffff")
+        icon_svg = self.data.get("icon_svg") or ""
+        icon = (
+            f'<span style="color:{_html.escape(icon_color)};font-size:20px;line-height:1;'
+            f'position:absolute;top:12px;right:14px">{icon_svg}</span>'
+            if icon_svg
+            else ""
+        )
         return (
-            '<div style="display:inline-block;min-width:180px;padding:12px 16px;border:1px solid '
-            '#dee2e6;border-radius:8px;font-family:system-ui,sans-serif">'
-            f'<div style="font-size:12px;color:#868e96">{_html.escape(self.title)}</div>'
+            # The card's own frame, as `DepictioCard.css` draws it: a 1.5px
+            # gray-2 border at radius 12, not the generic 1px box.
+            f'<div style="position:relative;display:inline-block;min-width:180px;padding:12px 16px;'
+            f"border:1.5px solid #e9ecef;border-radius:12px;font-family:inherit;"
+            f'background:{_html.escape(background)}">'
+            f"{icon}"
+            f'<div style="font-size:12px;color:{_html.escape(title_color)}">{_html.escape(self.title)}</div>'
             f'<div style="font-size:28px;font-weight:600;line-height:1.2">{self._fmt(self.value)}</div>'
             f'<div style="font-size:11px;color:#adb5bd">{agg} · {column}</div>'
             f"{self._secondary_html()}</div>"
         )
 
-    def _bar(self, label: str, fraction: float, note: str = "") -> str:
+    @property
+    def _accent_color(self) -> str | None:
+        """The card's own accent colour — its icon colour, falling back to
+        its title colour — the same precedence ``ComponentRenderer`` uses to
+        pick what it hands the React secondary-metric strips. ``None`` when
+        the card carries neither, which tints strips with the same teal
+        fallback the live strips use.
+        """
+        icon_color = self.meta.get("icon_color")
+        if icon_color:
+            return str(icon_color)
+        title_color = self.meta.get("title_color")
+        return str(title_color) if title_color else None
+
+    def _bar(
+        self,
+        label: str,
+        fraction: float,
+        note: str = "",
+        color: str | None = None,
+        alpha: float = 0.75,
+    ) -> str:
         pct = max(0.0, min(1.0, fraction)) * 100
+        fill = _hex_with_alpha(color, alpha)
         return (
             '<div style="margin:4px 0 0;font-size:11px;color:#495057">'
             f'<div style="display:flex;justify-content:space-between">'
             f"<span>{_html.escape(label)}</span><span>{_html.escape(note)}</span></div>"
-            '<div style="background:#f1f3f5;border-radius:3px;height:6px;margin-top:2px">'
-            f'<div style="background:#4c6ef5;border-radius:3px;height:6px;width:{pct:.1f}%"></div>'
+            '<div style="background:rgba(160,160,160,0.18);border-radius:3px;height:6px;margin-top:2px">'
+            f'<div style="background:{fill};border-radius:3px;height:6px;width:{pct:.1f}%"></div>'
             "</div></div>"
         )
+
+    def _box_plot_html(self, s: dict[str, Any]) -> str:
+        """A static Tukey box-and-whisker plot, replicating the live card's
+        ``BoxPlot.tsx`` geometry (whisker line + caps, an IQR box tinted with
+        the card's own accent colour, a median line, a mean marker, outlier
+        dots) as absolutely-positioned divs. Raw HTML in a markdown cell
+        renders the same in marimo, Jupyter and Quarto. The full five-number
+        summary the live card keeps in a hover tooltip has no static
+        equivalent; the caption row below carries min/median/max instead.
+        """
+        lo, hi, median = s.get("min"), s.get("max"), s.get("median")
+        if lo is None or hi is None:
+            return ""
+        if lo == hi:
+            return (
+                '<div style="margin-top:4px;font-size:11px;color:#495057;text-align:center">'
+                f"{self._fmt(median)} (constant)</div>"
+            )
+        rng = hi - lo
+
+        def frac(v: Any) -> float:
+            return 0.0 if v is None else max(0.0, min(1.0, (v - lo) / rng))
+
+        color = self._accent_color
+        track_h, box_h, cap_h, whisker_t, outlier_r = 28, 14, 10, 1.5, 2.5
+        axis_y = track_h / 2
+        box_top = axis_y - box_h / 2
+        ink = "#111"
+        f_low, f_up = frac(s.get("lower_whisker", lo)), frac(s.get("upper_whisker", hi))
+        f_q1, f_q3, f_med = frac(s.get("q1")), frac(s.get("q3")), frac(median)
+        f_mean = frac(s.get("mean", median))
+
+        box = (
+            f'<div style="position:absolute;left:{f_q1 * 100:.2f}%;'
+            f"width:{(f_q3 - f_q1) * 100:.2f}%;top:{box_top:.1f}px;height:{box_h}px;"
+            f"background:{_hex_with_alpha(color, 0.45)};"
+            f'border:1px solid {_hex_with_alpha(color, 0.95)};border-radius:2px"></div>'
+            if f_q3 > f_q1
+            else ""
+        )
+        caps = "".join(
+            f'<div style="position:absolute;left:{f * 100:.2f}%;top:{axis_y - cap_h / 2:.1f}px;'
+            f"height:{cap_h}px;width:{whisker_t}px;margin-left:-{whisker_t / 2}px;"
+            f'background:{ink};opacity:0.85"></div>'
+            for f in (f_low, f_up)
+        )
+        outliers = "".join(
+            f'<div style="position:absolute;left:{frac(v) * 100:.2f}%;'
+            f"top:{axis_y - outlier_r:.1f}px;width:{outlier_r * 2}px;height:{outlier_r * 2}px;"
+            f"margin-left:-{outlier_r}px;border-radius:50%;background:rgba(127,127,127,0.85);"
+            f'border:0.5px solid {ink}"></div>'
+            for v in (s.get("outliers") or [])[:100]
+        )
+        plot = (
+            f'<div style="width:100%;position:relative;height:{track_h}px;margin-top:6px">'
+            f'<div style="position:absolute;left:{f_low * 100:.2f}%;'
+            f"width:{max(0.0, f_up - f_low) * 100:.2f}%;top:{axis_y - whisker_t / 2:.2f}px;"
+            f'height:{whisker_t}px;background:{ink};opacity:0.7"></div>'
+            f"{caps}{box}"
+            f'<div style="position:absolute;left:{f_med * 100:.2f}%;top:{box_top:.1f}px;'
+            f'height:{box_h}px;width:2px;margin-left:-1px;background:{ink}"></div>'
+            f'<div style="position:absolute;left:{f_mean * 100:.2f}%;top:{axis_y - 5:.1f}px;'
+            f"margin-left:-4px;width:0;height:0;border-left:4px solid transparent;"
+            f'border-right:4px solid transparent;border-bottom:6px solid #E74C3C"></div>'
+            f"{outliers}</div>"
+        )
+        caption = (
+            '<div style="display:flex;justify-content:space-between;font-size:10px;'
+            'color:#495057;margin-top:2px">'
+            f"<span>{self._fmt(lo)}</span>"
+            f'<span style="font-weight:600">{self._fmt(median)}</span>'
+            f"<span>{self._fmt(hi)}</span></div>"
+        )
+        tail = (
+            f'<div style="font-size:10px;color:#adb5bd">{s["outlier_count"]:,} outlier(s)</div>'
+            if s.get("outlier_count")
+            else ""
+        )
+        return plot + caption + tail
 
     def _secondary_html(self) -> str:
         """The card's secondary visualization, from the same numbers the React
@@ -467,7 +701,10 @@ class CardComponent(DepictioComponent):
                 return ""
             rows = "".join(
                 self._bar(
-                    item["name"], item["percent"], f"{item['count']:,} ({item['percent']:.0%})"
+                    item["name"],
+                    item["percent"],
+                    f"{item['count']:,} ({item['percent']:.0%})",
+                    self._accent_color,
                 )
                 for item in breakdown.get("top") or []
             )
@@ -476,21 +713,16 @@ class CardComponent(DepictioComponent):
             s = sec.get("box_plot_stats")
             if not s:
                 return ""
-            tail = f" · {s['outlier_count']:,} outlier(s)" if s.get("outlier_count") else ""
-            return (
-                '<div style="margin-top:4px;font-size:11px;color:#495057">'
-                f"min {self._fmt(s['min'])} · q1 {self._fmt(s['q1'])} · "
-                f"median {self._fmt(s['median'])} · q3 {self._fmt(s['q3'])} · "
-                f"max {self._fmt(s['max'])}{tail}</div>"
-            )
+            return self._box_plot_html(s)
         if layout == "histogram":
             h = sec.get("__histogram__")
             bins = (h or {}).get("bins") or []
             if not bins:
                 return ""
             peak = max(bins) or 1
+            fill = _hex_with_alpha(self._accent_color, 0.8)
             bars = "".join(
-                f'<div style="flex:1;background:#4c6ef5;height:{c / peak * 24:.0f}px;'
+                f'<div style="flex:1;background:{fill};height:{c / peak * 24:.0f}px;'
                 f'align-self:flex-end;margin:0 1px" title="{c:,}"></div>'
                 for c in bins
             )
@@ -516,9 +748,10 @@ class CardComponent(DepictioComponent):
             )
             change = t.get("change")
             note = f"{change:+.0%}" if change is not None else ""
+            stroke = _hex_with_alpha(self._accent_color, 0.9)
             return (
                 f'<div style="margin-top:6px"><svg width="{width}" height="{height}">'
-                f'<polyline points="{poly}" fill="none" stroke="#4c6ef5" stroke-width="1.5"/></svg>'
+                f'<polyline points="{poly}" fill="none" stroke="{stroke}" stroke-width="1.5"/></svg>'
                 f'<div style="font-size:10px;color:#adb5bd">{_html.escape(note)}</div></div>'
             )
         if layout == "threshold":
@@ -539,26 +772,41 @@ class CardComponent(DepictioComponent):
             c = sec.get("__completeness__")
             if not c:
                 return ""
-            return self._bar("Filled", c["fill_rate"], f"{c['filled']:,}/{c['total']:,}")
+            return self._bar(
+                "Filled",
+                c["fill_rate"],
+                f"{c['filled']:,}/{c['total']:,}",
+                self._accent_color,
+                0.85,
+            )
         if layout == "uniqueness":
             u = sec.get("__uniqueness__")
             if not u:
                 return ""
-            return self._bar("Distinct", u["unique_rate"], f"{u['distinct']:,}/{u['measured']:,}")
+            return self._bar(
+                "Distinct",
+                u["unique_rate"],
+                f"{u['distinct']:,}/{u['measured']:,}",
+                self._accent_color,
+                0.85,
+            )
         if layout == "attrition":
             a = sec.get("__attrition__")
             if not a:
                 return ""
+            color = self._accent_color
             return "".join(
-                self._bar(s["name"], s["share"], f"{s['value']:,.0f}")
-                for s in a.get("stages") or []
+                self._bar(
+                    s["name"], s["share"], f"{s['value']:,.0f}", color, max(0.35, 0.85 - i * 0.12)
+                )
+                for i, s in enumerate(a.get("stages") or [])
             )
         if layout in ("coverage", "gauge"):
             cap = self.meta.get("coverage_max")
             value = self.value
             if not isinstance(cap, (int, float)) or not cap or not isinstance(value, (int, float)):
                 return ""
-            return self._bar(layout.capitalize(), value / cap, f"/{cap:,}")
+            return self._bar(layout.capitalize(), value / cap, f"/{cap:,}", self._accent_color, 0.8)
         if layout in ("vertical", "compact", "grid"):
             names = [n for n in self.meta.get("aggregations") or [] if n in sec]
             if not names:

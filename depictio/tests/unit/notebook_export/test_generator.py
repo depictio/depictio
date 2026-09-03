@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import re
 import subprocess
 import sys
 
@@ -268,15 +269,62 @@ def test_penguins_export_content(penguins_tabs):
     assert (
         "'938c7080-b193-5529-8dcd-673f4fa917ae'" in src
     )  # "Bills > 50 mm", filter_expr applied server-side
-    # Text tiles and section titles are markdown.
-    assert "## Cohort" in src and "# Penguins Species Analysis" in src
+    # Text tiles and section titles stay real ATX headings — the table of
+    # contents, the anchors and the fold script are all built from them — with
+    # the icon/colour/fold marker riding inline inside the line. Tabs are h3 and
+    # sections h4 wherever they sit in the family, under the one h2 the tabs
+    # hang off, so the outline reads title > results > tab > section rather
+    # than jumping a level between tabs.
+    # The main tab carries its own sidebar label ("Species"), not the
+    # dashboard's title, which the document already prints as its h1.
+    assert re.search(r"^\s*# Penguins Species Analysis", src, re.M)
+    assert re.search(r"^\s*## <span data-dpx-accent=.*Results", src, re.M)
+    assert re.search(r"^\s*### <span data-dpx-accent=.*Species", src, re.M)
+    assert re.search(r"^\s*#### <span data-dpx-accent=.*Cohort", src, re.M)
     assert "How to run" in src
+    # A section's cards fold into one row (card_row, an even CSS grid), same
+    # shape as the dashboard's own card strip, instead of stacking one per cell.
+    assert "card_row([viz_individuals, viz_species_mix, viz_island_balance, " in src
+    assert "viz_sex_recorded])" in src
+    # A persistent link back to the live dashboard, and the metadata as a
+    # scannable table rather than a run-on sentence.
+    assert "https://depictio.example.org/dashboard/6824cb3b89d2b72169309738" in src
+    assert "| **Live dashboard** |" in src
+    assert "| **Exported** |" in src
     # Groups and panels.
     assert (
         "group_heavy_adelie = group_heavy_adelie.filter("
         "pl.col('individual_id').is_in(['N1A1', 'N2A2']))" in src
     )
     assert "panel_biscoe = panel_biscoe.filter(pl.col('island').is_in(['Biscoe']))" in src
+
+
+def test_card_row_reads_the_real_display_not_the_iframe_tile():
+    # card_row's members are a mix of mo.Html (code-mode cards) and Depictio
+    # components (api-mode, multi-metric cards). A Depictio component's
+    # `.html` is a different thing — an embeddable iframe tile pointing back
+    # at a live session — while `_repr_html_()` is the same self-contained
+    # look the object would show if displayed bare. Grouping cards into a
+    # row must read the latter: exec the generator's own injected cell so
+    # this exercises the exact code that ships, not a reimplementation.
+    import marimo as mo
+
+    body = NotebookBuilder._metric_card_cell(None).body
+    ns: dict = {}
+    exec(compile(body, "<metric_card_cell>", "exec"), {"mo": mo}, ns)
+    card_row, metric_card = ns["card_row"], ns["metric_card"]
+
+    class FakeApiCard:
+        def _repr_html_(self) -> str:
+            return '<div style="display:inline-block">Species mix</div>'
+
+        @property
+        def html(self) -> str:  # pragma: no cover - must not be touched
+            raise AssertionError("card_row must not read .html, the iframe tile")
+
+    row = card_row([metric_card("Samples", 3), FakeApiCard()])
+    assert "iframe" not in row.text
+    assert "Samples" in row.text and "Species mix" in row.text
 
 
 def test_unknown_schema_falls_back_to_string_cast(penguins_tabs):

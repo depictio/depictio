@@ -2947,7 +2947,8 @@ def bulk_compute_cards(
             "component_ids": ["...", ...],  # optional; defaults to all cards
             "as_of_version": "<version id>",   # optional, see ``_data_pins``
             "data_versions": {"<dc_id>": <int | null>},
-            "definition_version": "<version id>"  # optional, see below
+            "definition_version": "<version id>",  # optional, see below
+            "include_icons": bool           # default False; see below
         }
 
     ``definition_version`` computes the cards as that version defined them on
@@ -2964,9 +2965,15 @@ def bulk_compute_cards(
             },
             "aggregations": {"<component_index>": ["<aggregation>", ...], ...},
             "group_status": {"<component_index>": [<group status>, ...], ...},
+            "icons": {"<icon_id>": "<svg markup>", ...},
             "filter_applied": bool,
             "filter_count": int
         }
+
+        ``icons`` is only populated when ``include_icons`` is set — the React
+        viewer draws icons itself and never needs this; ``depictio.notebook``
+        sets it to get an inline SVG (resolved from Iconify, cached) it can
+        bake into a self-contained notebook cell.
 
         ``secondary_values`` and ``aggregations`` are only populated for cards
         that declare ``aggregations`` in YAML (multi-metrics card).
@@ -3001,6 +3008,11 @@ def bulk_compute_cards(
 
     filters = request.get("filters") or []
     requested_ids: list[str] | None = request.get("component_ids")
+    # The React viewer draws icons itself (@iconify/react) and never sets
+    # this, so the default path here does no icon work at all. Only
+    # depictio.notebook's CardComponent sets it, to get an inline SVG it can
+    # bake into a self-contained notebook cell.
+    include_icons = bool(request.get("include_icons"))
     # "Compare groups in cards" (issue #89): sanitized at this trust boundary,
     # reduced per group on the frame path below. ``include_other`` mirrors the
     # figure toggle: False omits the "Other" bucket from the comparison strip.
@@ -3037,6 +3049,7 @@ def bulk_compute_cards(
     if not cards and not texts:
         empty: dict[str, Any] = {
             "values": {idx: None for idx in definition_errors},
+            "icons": {},
             "filter_applied": bool(filters),
             "filter_count": len(filters),
         }
@@ -3649,11 +3662,18 @@ def bulk_compute_cards(
             folded[f"param:{key}"] = run_params.get(key)
         values[text_idx] = folded
 
+    icons: dict[str, str] = {}
+    if include_icons:
+        from depictio.api.v1.services.icons import resolve_icons
+
+        icons = resolve_icons(m.get("icon_name") for m in cards)
+
     result: dict[str, Any] = {
         "values": values,
         "secondary_values": secondary_values,
         "aggregations": aggregations_per_card,
         "group_status": group_status,
+        "icons": icons,
         "filter_applied": len(base_filter_metadata) > 0,
         "filter_count": len(base_filter_metadata),
     }

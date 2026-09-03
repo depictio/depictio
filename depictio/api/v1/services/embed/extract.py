@@ -10,11 +10,36 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 from typing import Any
 from urllib.parse import quote
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
+
+# A trace read straight off a live Plotly.js graph div can carry 8-digit hex
+# colours (``#RRGGBBAA``, an alpha channel) — valid Plotly.js, not valid
+# Python plotly (used below to round-trip the figure through go.Figure).
+# Same fix as depictio.notebook.components._normalize_colors; duplicated
+# rather than imported so this server module and the standalone notebook
+# client keep their separate dependency footprints.
+_HEX8_RE = re.compile(r"^#([0-9a-fA-F]{2}){4}$")
+
+
+def _hex8_to_rgba(color: str) -> str:
+    r, g, b, a = (int(color[i : i + 2], 16) for i in (1, 3, 5, 7))
+    return f"rgba({r}, {g}, {b}, {a / 255:.3f})"
+
+
+def _normalize_colors(obj: Any) -> Any:
+    if isinstance(obj, dict):
+        return {k: _normalize_colors(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_normalize_colors(v) for v in obj]
+    if isinstance(obj, str) and _HEX8_RE.match(obj):
+        return _hex8_to_rgba(obj)
+    return obj
+
 
 # JS evaluated in the embed page once the component reports ready. Typed
 # arrays (plotly.js keeps large columns as Float64Array) are not JSON, so the
@@ -70,12 +95,16 @@ def parse_extracted(raw: str) -> dict[str, Any]:
     figure = payload.get("figure")
     if status == "ready" and figure:
         # Round-trip through plotly so the dict validates and typed-array
-        # leftovers or private keys never reach the client.
+        # leftovers or private keys never reach the client. go.Figure()
+        # normalises (and, on a validation error, has been seen to pop
+        # trace keys such as ``type`` off its input dict before raising) —
+        # feed it a normalised copy, never the dict we fall back to below.
         try:
             import plotly.graph_objects as go
 
-            figure = json.loads(go.Figure(figure).to_json())
-        except Exception as exc:  # keep the raw dict rather than fail the whole job
+            normalized = _normalize_colors(json.loads(json.dumps(figure)))
+            figure = json.loads(go.Figure(normalized, skip_invalid=True).to_json())
+        except Exception as exc:  # keep the original raw dict rather than fail the whole job
             logger.debug(f"embed extract: plotly normalisation skipped: {exc}")
         return {"status": "ready", "figure": figure, "source": "extracted"}
     if status == "unsupported":

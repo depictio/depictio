@@ -26,10 +26,11 @@ def test_penguins_family_order(penguins_tabs):
     units = ordered_units(penguins_tabs)
     headings = [u for u in units if isinstance(u, MarkdownUnit)]
     names = [h.text for h in headings]
-    # Main tab, its declared sections in order, then the child tab, then the
-    # persistent "Raw Data" section pinned bottom by the parent.
+    # Main tab (under its own sidebar label, not the dashboard's title), its
+    # declared sections in order, then the child tab, then the persistent
+    # "Raw Data" section pinned bottom by the parent.
     assert names == [
-        "Penguins Species Analysis",
+        "Species",
         "Cohort",
         "Morphometrics",
         "Composition",
@@ -39,7 +40,7 @@ def test_penguins_family_order(penguins_tabs):
         "Raw Data",
     ]
     levels = {h.text: h.level for h in headings}
-    assert levels["Penguins Species Analysis"] == 1
+    assert levels["Species"] == 1
     assert levels["Cohort"] == 2
     assert levels["Island & Season"] == 2
     assert levels["Island composition"] == 3
