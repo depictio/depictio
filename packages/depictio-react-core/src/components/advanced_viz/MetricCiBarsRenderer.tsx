@@ -53,7 +53,14 @@ const MetricCiBarsRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchAdvancedVizData(metadata.wf_id, metadata.dc_id, requiredCols, filters)
+    fetchAdvancedVizData({
+      wfId: metadata.wf_id,
+      dcId: metadata.dc_id,
+      columns: requiredCols,
+      filters,
+      vizKind: 'metric_ci_bars',
+      roles: { label: config.label_col, value: config.value_col, lower: config.lower_col, upper: config.upper_col },
+    })
       .then((res) => {
         if (!cancelled) setRows(res.rows);
       })

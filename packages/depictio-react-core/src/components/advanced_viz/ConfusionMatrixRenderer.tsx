@@ -59,7 +59,14 @@ const ConfusionMatrixRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchAdvancedVizData(metadata.wf_id, metadata.dc_id, requiredCols, filters)
+    fetchAdvancedVizData({
+      wfId: metadata.wf_id,
+      dcId: metadata.dc_id,
+      columns: requiredCols,
+      filters,
+      vizKind: 'confusion_matrix',
+      roles: { label: config.label_col, tp: config.tp_col, fp: config.fp_col, fn: config.fn_col },
+    })
       .then((res) => {
         if (!cancelled) setRows(res.rows);
       })
