@@ -2144,17 +2144,24 @@ def review_counts(doc: dict[str, Any], reviewed: list[str]) -> tuple[list[str], 
 
 
 def review_dashboard(dashboard_id: str, body: ReviewRequest, user: Any) -> ReviewResponse:
-    """Mark one tile of a draft reviewed (or take the mark back); sync (pymongo).
+    """Mark tiles of a draft reviewed (or take the marks back); sync (pymongo).
 
-    404 without an ``ai_generation`` stamp, 403 without editor permission.
-    Returns the counts the review panel shows: how many of the draft's tiles
-    are kept, out of how many.
+    One tile with `keep` / `unkeep`, the whole draft with `keep-all` /
+    `unkeep-all`. 404 without an ``ai_generation`` stamp, 403 without editor
+    permission. Returns the counts the review panel shows: how many of the
+    draft's tiles are kept, out of how many.
     """
     oid, doc = require_draft_dashboard(dashboard_id, user)
     info = doc.get("ai_generation") or {}
     reviewed = [str(t) for t in (info.get("reviewed") or [])]
     tag = body.tag.strip()
-    if body.action == "keep":
+    if body.action == "keep-all":
+        # Read off the document rather than taken from the client: the tiles
+        # the dashboard actually carries are what `review_counts` will count.
+        reviewed = [t for t in (generation_tag(c) for c in stored_components(doc)) if t]
+    elif body.action == "unkeep-all":
+        reviewed = []
+    elif body.action == "keep":
         if tag not in reviewed:
             reviewed.append(tag)
     else:

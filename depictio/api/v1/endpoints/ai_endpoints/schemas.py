@@ -485,11 +485,19 @@ class ReviewRequest(BaseModel):
 
     `tag` is a component's generation tag (`ai_source.tag` in
     ``stored_metadata``); `keep` marks it reviewed, `unkeep` takes the mark
-    back.
+    back. The `-all` actions take no tag: the server reads the draft's tiles
+    off the document, so a reviewer who has read the whole thing settles it in
+    one call instead of one call per tile.
     """
 
-    tag: str = Field(..., min_length=1, max_length=200)
-    action: Literal["keep", "unkeep"] = "keep"
+    tag: str = Field(default="", max_length=200)
+    action: Literal["keep", "unkeep", "keep-all", "unkeep-all"] = "keep"
+
+    @model_validator(mode="after")
+    def _tag_names_a_tile(self) -> "ReviewRequest":
+        if self.action in ("keep", "unkeep") and not self.tag.strip():
+            raise ValueError("tag is required unless the action is keep-all or unkeep-all")
+        return self
 
 
 class ReviewResponse(BaseModel):

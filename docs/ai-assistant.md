@@ -132,7 +132,10 @@ is refused in public mode, since a generation is a dashboard import.
    join the way the component builder's data collection dropdown does:
    leave it empty to let the planner see all of them (up to
    `DEPICTIO_AI_GENERATE_MAX_COLLECTIONS`; the rest are left out with a
-   warning), or pick the subset the dashboard should be about. The
+   warning), or pick the subset the dashboard should be about. *Select all*
+   next to the label fills the picker with every collection, which sends the
+   same run as leaving it empty but gives you a list you can then take one
+   collection out of; it reads *Clear* once everything is in. The
    **intent** is optional free text (up to 2000 characters: the audience,
    the questions to answer, what matters most); left empty, the planner
    builds the most useful overview of the project it can. Naming a colour,
@@ -230,6 +233,15 @@ whole section* under the same instruction field, offered when the tile under
 review sits in a grid section: the components of that section are filled again
 and the layout pass re-runs for that section only, so the other sections keep
 the boxes they had.
+
+A draft can also be settled in one click, from the pair of controls under the
+progress bar. *Keep all* marks every tile reviewed and turns into *Unkeep all*
+once they are, which is the undo a bulk action needs; the server reads the
+draft's tiles off the document rather than taking a list from the browser, so
+the two cannot disagree about what "all" is. *Remove all* deletes every
+generated tile in one save, behind a confirmation: the dashboard itself stays,
+holding whatever was added to it by hand, and deleting the draft outright is
+*Discard* on the banner.
 
 The banner counts the progress, *reviewed n of m*, and gates the promotion on
 it. Once every tile is either reviewed or removed, *Promote* applies outright;

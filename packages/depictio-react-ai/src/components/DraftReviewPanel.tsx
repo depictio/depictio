@@ -7,6 +7,7 @@ import {
   Divider,
   Group,
   Loader,
+  Modal,
   NavLink,
   Progress,
   ScrollArea,
@@ -79,6 +80,13 @@ export interface DraftReviewPanelProps {
   onClose: () => void;
   onKeep: (tile: DraftTile) => void | Promise<void>;
   onRemove: (tile: DraftTile) => void | Promise<void>;
+  /** Settle every tile at once: mark them all reviewed, or take every mark
+   *  back. Absent on a host that cannot, which takes the control off the
+   *  panel. */
+  onKeepAll?: (keep: boolean) => void | Promise<void>;
+  /** Drop every generated tile. The dashboard itself survives; deleting it is
+   *  the banner's Discard. */
+  onRemoveAll?: () => void | Promise<void>;
   onRegenerate: (tile: DraftTile, instruction: string) => void | Promise<void>;
   /** Absent on a host that cannot refill a whole section, which is what
    *  takes the secondary regenerate action off the panel. */
@@ -192,6 +200,8 @@ const DraftReviewPanel: React.FC<DraftReviewPanelProps> = ({
   onClose,
   onKeep,
   onRemove,
+  onKeepAll,
+  onRemoveAll,
   onRegenerate,
   onRegenerateSection,
   busy = false,
@@ -199,6 +209,7 @@ const DraftReviewPanel: React.FC<DraftReviewPanelProps> = ({
 }) => {
   const [regenerateOpen, setRegenerateOpen] = useState(false);
   const [instruction, setInstruction] = useState('');
+  const [removeAllOpen, setRemoveAllOpen] = useState(false);
 
   // The host owns the cursor, but a list that just lost a tile can reach the
   // panel one render before the clamp does, so read it defensively.
@@ -372,6 +383,39 @@ const DraftReviewPanel: React.FC<DraftReviewPanelProps> = ({
           color={AI_COLOR}
           aria-label={`${reviewedCount} of ${tiles.length} components reviewed`}
         />
+        {/* The whole draft in one click, for the reviewer who has read the
+            page rather than the list. Keep-all flips to its undo once
+            everything is through, because a bulk action needs one. */}
+        {tiles.length > 0 && (onKeepAll || onRemoveAll) && (
+          <Group gap="xs" wrap="nowrap">
+            {onKeepAll && (
+              <Button
+                size="compact-xs"
+                variant="subtle"
+                color="teal"
+                leftSection={<Icon icon="mdi:check-all" width={14} />}
+                disabled={busy}
+                onClick={() => void onKeepAll(!allReviewed)}
+                data-testid="draft-review-keep-all"
+              >
+                {allReviewed ? 'Unkeep all' : 'Keep all'}
+              </Button>
+            )}
+            {onRemoveAll && (
+              <Button
+                size="compact-xs"
+                variant="subtle"
+                color="red"
+                leftSection={<Icon icon="mdi:delete-sweep-outline" width={14} />}
+                disabled={busy}
+                onClick={() => setRemoveAllOpen(true)}
+                data-testid="draft-review-remove-all"
+              >
+                Remove all
+              </Button>
+            )}
+          </Group>
+        )}
       </Stack>
 
       <Divider />
@@ -657,6 +701,36 @@ const DraftReviewPanel: React.FC<DraftReviewPanelProps> = ({
           </Text>
         )}
       </Stack>
+
+      <Modal
+        opened={removeAllOpen}
+        onClose={() => setRemoveAllOpen(false)}
+        title="Remove every generated component?"
+        centered
+      >
+        <Stack gap="md">
+          <Text size="sm">
+            All {tiles.length} generated component{tiles.length === 1 ? '' : 's'} are deleted
+            from this dashboard. The dashboard itself stays, with whatever was added to it by
+            hand; deleting the draft outright is <b>Discard</b> on the banner.
+          </Text>
+          <Group justify="flex-end" gap="xs">
+            <Button variant="default" onClick={() => setRemoveAllOpen(false)}>
+              Keep reviewing
+            </Button>
+            <Button
+              color="red"
+              onClick={() => {
+                setRemoveAllOpen(false);
+                void onRemoveAll?.();
+              }}
+              data-testid="draft-review-remove-all-confirm"
+            >
+              Remove all
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Stack>
   );
 };

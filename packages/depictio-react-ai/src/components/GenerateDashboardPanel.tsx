@@ -202,6 +202,9 @@ const GenerateDashboardPanel: React.FC<Props> = ({
     return 'All table collections';
   }
 
+  const allCollectionsPicked =
+    collections.length > 0 && selectedIds.length === collections.length;
+
   // Same visual language as the builder's Data Collection dropdown, so a
   // joined collection is recognisable wherever it is picked.
   const joinById = new Map(collections.map((dc) => [dc.id, dc.join ?? null]));
@@ -258,7 +261,27 @@ const GenerateDashboardPanel: React.FC<Props> = ({
       />
 
       <MultiSelect
-        label="Data collections"
+        label={
+          <Group gap="xs" wrap="nowrap">
+            <Text size="sm" fw={500}>
+              Data collections
+            </Text>
+            {collections.length > 0 && (
+              <Button
+                size="compact-xs"
+                variant="subtle"
+                // Selecting every collection and selecting none send the same
+                // run, but they do not read the same: the filled list is the
+                // one you can then take a collection out of.
+                onClick={() => setSelectedIds(allCollectionsPicked ? [] : collections.map((dc) => dc.id))}
+                disabled={pending || awaitingPlan}
+                data-testid="generate-dashboard-collections-all"
+              >
+                {allCollectionsPicked ? 'Clear' : `Select all ${collections.length}`}
+              </Button>
+            )}
+          </Group>
+        }
         description="Leave empty to let the assistant use every table collection of the project."
         placeholder={collectionsPlaceholder()}
         data={collections.map((dc) => ({ value: dc.id, label: dc.tag }))}
