@@ -21,7 +21,7 @@ Policy knobs live in ``RemoteConfig`` (``depictio.api.v1.configs.settings_models
 and are read from the environment on every call through :func:`remote_policy`.
 CLI context (``DEPICTIO_CONTEXT=CLI``) reads directly, since loopback and
 intranet hosts are the user's own, but reuses the same redirect and size caps
-through :func:`stream_to_file` / :func:`stream_to_text`.
+through the ``direct_*`` counterparts at the bottom of this module.
 
 Known residual risk (documented in the RFC): DNS rebinding between the check
 and the fetch. Hardened deployments should run allowlist-only.
@@ -80,11 +80,11 @@ def is_server_context() -> bool:
     """Whether remote reads must go through the gateway.
 
     Uses the process-wide ``DEPICTIO_CONTEXT`` switch (``depictio_cli.py`` sets
-    it to ``CLI``; the API and worker run as ``server``). Anything that is not
-    an explicit CLI/client value counts as server context, so an unset or
-    unexpected value fails closed.
+    it to ``CLI``; the API and worker run as ``server``). Only an explicit
+    ``cli`` value opts out of the gateway, so an unset or unexpected value
+    fails closed. Same rule as ``templates._is_cli_context``.
     """
-    return get_depictio_context().strip().lower() not in ("cli", "client")
+    return get_depictio_context().strip().lower() != "cli"
 
 
 def _split_hosts(raw: str) -> set[str]:
@@ -321,3 +321,46 @@ def _cleanup_partial(dest_path: str) -> None:
         os.unlink(dest_path)
     except OSError:
         pass
+
+
+# ── CLI-context counterparts ────────────────────────────────────────────────
+# The CLI reads without host gating (loopback and intranet hosts are the user's
+# own), but with the very same policy timeout, redirect cap and size cap. They
+# live here so no call site has to know the shape of ``RemoteConfig``, and so
+# the CLI and gateway paths cannot drift apart. Unlike the gateway functions
+# these do not sanitize failures: httpx's own error is what the user needs.
+
+
+def _direct_client(policy: RemoteConfig, timeout: float | None = None) -> httpx.Client:
+    return httpx.Client(
+        timeout=policy.timeout_s if timeout is None else timeout,
+        follow_redirects=True,
+        max_redirects=policy.max_redirects,
+    )
+
+
+def direct_probe(url: str, timeout_s: float | None = None) -> dict:
+    """CLI counterpart of :func:`probe_remote_url`, same ``{"size", "etag"}`` shape."""
+    with _direct_client(remote_policy(), timeout=timeout_s) as client:
+        response = client.head(url)
+        return {"size": _content_length(response), "etag": response.headers.get("etag", "")}
+
+
+def direct_download(url: str, dest_path: str) -> int:
+    """CLI counterpart of :func:`bounded_download`. Returns the bytes written.
+
+    Removing a partial file on failure is the caller's job here, since the CLI
+    owns the temp file it asked for.
+    """
+    policy = remote_policy()
+    with _direct_client(policy) as client, client.stream("GET", url) as response:
+        response.raise_for_status()
+        return stream_to_file(response, dest_path, policy.max_download_bytes)
+
+
+def direct_fetch_text(url: str) -> str:
+    """CLI counterpart of :func:`fetch_validated_text`."""
+    policy = remote_policy()
+    with _direct_client(policy) as client, client.stream("GET", url) as response:
+        response.raise_for_status()
+        return stream_to_text(response, policy.max_download_bytes)

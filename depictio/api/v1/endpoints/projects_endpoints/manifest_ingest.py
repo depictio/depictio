@@ -654,7 +654,7 @@ def _dispatch_refresh_tasks(
     to_dispatch: list[tuple[str, str, int, int]],
     current_user,
     report: ManifestRefreshReport,
-    preflight_failed: list[tuple[str, str, str]] | None = None,
+    preflight_failed: list[tuple[str, str, str]],
 ) -> bool:
     """Fan the per-DC refreshes out to Celery, backed by an ingestion run.
 
@@ -678,8 +678,19 @@ def _dispatch_refresh_tasks(
         IngestionStep,
     )
 
-    preflight_failed = preflight_failed or []
     run_id = uuid4().hex
+    # Pre-flight failures first, then the DCs a worker will actually run.
+    data_collections = [
+        IngestionDataCollection(tag=tag, scan_mode="manifest", file_count=0)
+        for tag, _dc_id, _message in preflight_failed
+    ] + [
+        IngestionDataCollection(tag=tag, scan_mode="manifest", file_count=entries)
+        for tag, _dc_id, _wf_i, entries in to_dispatch
+    ]
+    steps = [
+        IngestionStep(name=tag, status="failed", detail=message)
+        for tag, _dc_id, message in preflight_failed
+    ] + [IngestionStep(name=tag, status="pending") for tag, _dc_id, _wf_i, _entries in to_dispatch]
     store.create_ingestion_run(
         IngestionRun(
             run_id=run_id,
@@ -690,23 +701,9 @@ def _dispatch_refresh_tasks(
             project_id=str(project_dict["_id"]),
             project_name=project_dict.get("name"),
             command="refresh_manifest",
-            data_collections=[
-                IngestionDataCollection(tag=tag, scan_mode="manifest", file_count=0)
-                for tag, _dc_id, _message in preflight_failed
-            ]
-            + [
-                IngestionDataCollection(tag=tag, scan_mode="manifest", file_count=entries)
-                for tag, _dc_id, _wf_i, entries in to_dispatch
-            ],
+            data_collections=data_collections,
             status="running",
-            steps=[
-                IngestionStep(name=tag, status="failed", detail=message)
-                for tag, _dc_id, message in preflight_failed
-            ]
-            + [
-                IngestionStep(name=tag, status="pending")
-                for tag, _dc_id, _wf_i, _entries in to_dispatch
-            ],
+            steps=steps,
         )
     )
     report.run_id = run_id

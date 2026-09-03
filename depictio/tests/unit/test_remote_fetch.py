@@ -145,11 +145,14 @@ class TestIsServerContext:
     def test_cli_marker_disables_gateway(self, monkeypatch):
         monkeypatch.setenv("DEPICTIO_CONTEXT", "CLI")
         assert is_server_context() is False
-        monkeypatch.setenv("DEPICTIO_CONTEXT", "client")
+        monkeypatch.setenv("DEPICTIO_CONTEXT", " cli ")
         assert is_server_context() is False
 
     def test_server_and_unknown_values_fail_closed(self, monkeypatch):
         monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
+        assert is_server_context() is True
+        # Only the explicit CLI marker opts out; legacy-looking values do not.
+        monkeypatch.setenv("DEPICTIO_CONTEXT", "client")
         assert is_server_context() is True
         monkeypatch.setenv("DEPICTIO_CONTEXT", "something-else")
         assert is_server_context() is True

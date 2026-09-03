@@ -266,6 +266,14 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
     }
   };
 
+  // Non-owners get the actions disabled, not hidden (same rule as
+  // create-dc-btn): the affordance stays discoverable and the title explains
+  // what is missing.
+  const ownerOnly = {
+    disabled: !canManage,
+    title: canManage ? undefined : 'Owner permission required',
+  };
+
   return (
     <Paper withBorder radius="md" p="sm" data-testid="storage-panel">
       <Group justify="space-between" wrap="nowrap">
@@ -292,9 +300,6 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
             </Badge>
           )}
         </Group>
-        {/* Non-owners get the actions disabled, not hidden (same rule as
-            create-dc-btn): the affordance stays discoverable and the title
-            explains what is missing. */}
         {!loading && !editing && (
           <Group gap="xs" wrap="nowrap">
             {config && (
@@ -306,8 +311,7 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
                   leftSection={<Icon icon="mdi:connection" width={14} />}
                   onClick={handleTest}
                   loading={testing}
-                  disabled={!canManage}
-                  title={canManage ? undefined : 'Owner permission required'}
+                  {...ownerOnly}
                 >
                   Test connection
                 </Button>
@@ -316,8 +320,7 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
                   variant="light"
                   leftSection={<Icon icon="mdi:pencil" width={14} />}
                   onClick={() => setEditing(true)}
-                  disabled={!canManage}
-                  title={canManage ? undefined : 'Owner permission required'}
+                  {...ownerOnly}
                 >
                   Edit
                 </Button>
@@ -327,8 +330,7 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
                   color="red"
                   leftSection={<Icon icon="mdi:delete-outline" width={14} />}
                   onClick={() => setConfirmRemoveOpened(true)}
-                  disabled={!canManage}
-                  title={canManage ? undefined : 'Owner permission required'}
+                  {...ownerOnly}
                 >
                   Remove
                 </Button>
@@ -340,8 +342,7 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
                 data-testid="storage-configure-button"
                 leftSection={<Icon icon="mdi:plus" width={14} />}
                 onClick={() => setEditing(true)}
-                disabled={!canManage}
-                title={canManage ? undefined : 'Owner permission required'}
+                {...ownerOnly}
               >
                 Configure storage
               </Button>

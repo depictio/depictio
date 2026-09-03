@@ -93,6 +93,19 @@ def http_fixture_server(tmp_path):
     server.shutdown()
 
 
+@pytest.fixture(autouse=True)
+def _isolated_tempdir(monkeypatch, tmp_path):
+    """Give every test its own temp directory.
+
+    The leftover-file assertions list ``depictio_remote_*`` entries in the
+    temp dir; under xdist another worker's in-flight download would show up
+    there and fail the check, so the module never shares the system one.
+    """
+    import tempfile
+
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+
+
 def _leftover_temp_files() -> list[str]:
     import tempfile
 
