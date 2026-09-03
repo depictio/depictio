@@ -21,6 +21,7 @@ import { Icon } from '@iconify/react';
 
 import type { DashboardData } from 'depictio-react-core';
 import { fetchProject } from 'depictio-react-core';
+import { AI_COLOR, AI_ICON } from 'depictio-react-ai';
 import { parseTemplateOrigin, TemplateChip } from '../projects/template';
 import RunProvenanceCard from '../projects/detail/RunProvenanceCard';
 import { formatDateTime } from '../lib/datetime';
@@ -81,6 +82,9 @@ const DashboardInfoBody: React.FC<DashboardInfoBodyProps> = ({ dashboard, active
   const isMainTab =
     typeof dashboard?.is_main_tab === 'boolean' ? (dashboard.is_main_tab as boolean) : null;
   const parentDashboardId = (dashboard?.parent_dashboard_id as string | undefined) || null;
+  // Only an unreviewed draft is worth a row; a promoted dashboard reads like
+  // any other.
+  const aiDraft = dashboard?.ai_generation?.status === 'draft' ? dashboard.ai_generation : null;
 
   // Resolve project_id → project.name + template_origin asynchronously.
   // Skip enrichment to keep the request small (we only need name +
@@ -239,6 +243,23 @@ const DashboardInfoBody: React.FC<DashboardInfoBodyProps> = ({ dashboard, active
             </Badge>
           }
         />
+        {aiDraft && (
+          <MetaRow
+            icon={AI_ICON}
+            color={AI_COLOR}
+            label="AI draft"
+            value={
+              <Group gap="xs" wrap="nowrap">
+                <Badge color={AI_COLOR} variant="light" size="md">
+                  Not yet promoted
+                </Badge>
+                <Text size="xs" c="dimmed" lineClamp={1}>
+                  {aiDraft.model}
+                </Text>
+              </Group>
+            }
+          />
+        )}
         {lastSaved && (
           <MetaRow
             icon="mdi:clock-outline"

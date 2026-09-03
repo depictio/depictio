@@ -528,6 +528,7 @@ export {
 export type {
   StoredMetadata,
   DashboardData,
+  DashboardAIGeneration,
   FilterSectionSpec,
   DashboardSummary,
   InteractiveFilter,

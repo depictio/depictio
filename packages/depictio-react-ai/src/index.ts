@@ -13,7 +13,13 @@ export { default as ActionsPreview } from './components/ActionsPreview';
 export type { ApplyActionsPayload } from './components/ActionsPreview';
 export { default as AiFillModal } from './components/AiFillModal';
 export { default as AIAnalysisModal } from './components/AIAnalysisModal';
+export { default as AIDraftBanner } from './components/AIDraftBanner';
 export { default as ExecutionTrace } from './components/ExecutionTrace';
+export { default as GenerateDashboardPanel } from './components/GenerateDashboardPanel';
+export type {
+  GenerateDataCollection,
+  GenerateProjectOption,
+} from './components/GenerateDashboardPanel';
 export {
   SectionSummaryPanel,
   SummarizeSectionButton,
@@ -27,28 +33,33 @@ export {
   getAIHealth,
   getAnalyses,
   getSummaries,
+  promoteGeneratedDashboard,
   resolveFilters,
   streamAnalyze,
+  streamGenerateDashboard,
   suggestComponents,
   summarizeSection,
 } from './api';
-export type { AIHealth, AnalyzeStreamHandlers } from './api';
+export type { AIHealth, AIStreamHandlers, AnalyzeStreamHandlers } from './api';
 
 export { useAISession, useAIStore } from './store';
 export type { AIChatMessage, AISession } from './store';
 
 export {
+  GENERATE_DASHBOARD_SESSION_ID,
   useAIHealth,
   useAnalysisReport,
   useAnalyze,
   useComponentFromPrompt,
+  useGenerateDashboard,
   useResolveFilters,
   useSuggestComponents,
   useSummarizeSection,
 } from './hooks';
-export type { AnalysisRunState } from './hooks';
+export type { AnalysisRunState, GenerateDashboardRunState } from './hooks';
 
 export type {
+  AIGenerationInfo,
   AIStreamEvent,
   AIStreamEventType,
   AnalysesResponse,
@@ -64,10 +75,17 @@ export type {
   ComponentSuggestion,
   ComponentType,
   DashboardActions,
+  DashboardPlan,
   ExecutionStep,
   FigureMutation,
   FilterAction,
   FilterProposal,
+  GenerateDashboardRequest,
+  GeneratedComponentEvent,
+  GeneratedDashboardEvent,
+  PlannedComponent,
+  PlannedSection,
+  PromoteGeneratedDashboardResponse,
   ResolveFiltersRequest,
   ResolveFiltersResponse,
   ResolvedFilter,

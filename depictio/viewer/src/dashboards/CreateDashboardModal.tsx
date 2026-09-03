@@ -26,6 +26,8 @@ import type {
   ImportDashboardOptions,
   ProjectListEntry,
 } from 'depictio-react-core';
+import { AI_ICON, GenerateDashboardPanel } from 'depictio-react-ai';
+import type { GenerateDataCollection } from 'depictio-react-ai';
 
 import { UnstyledDropZone } from '../components/UnstyledDropZone';
 import {
@@ -56,6 +58,18 @@ const COLOR_OPTIONS: { value: string; label: string }[] = [
 const DEFAULT_ICON = 'mdi:view-dashboard';
 const DEFAULT_COLOR = 'orange';
 
+type CreateTab = 'create' | 'import' | 'generate';
+
+/** Wiring for the "Generate with AI" tab; the host owns the project fetch
+ *  and the navigation into the editor. */
+export interface GenerateTabProps {
+  loadProject: (projectId: string) => Promise<{ dataCollections: GenerateDataCollection[] }>;
+  onOpen: (dashboardId: string) => void;
+  serverKeyAvailable: boolean;
+  /** Public/demo mode: the tab stays visible but inert, like Import. */
+  disabled?: boolean;
+}
+
 interface CreateDashboardModalProps {
   opened: boolean;
   projects: ProjectListEntry[];
@@ -70,6 +84,9 @@ interface CreateDashboardModalProps {
    *  inert. Set in public/demo deployments where importing user-supplied
    *  YAML/JSON would let an anonymous visitor write into shared projects. */
   disableImport?: boolean;
+  /** The "Generate with AI" tab. Undefined hides it, which is the case
+   *  whenever the server's `ai_generate_dashboard` feature is off. */
+  generate?: GenerateTabProps;
 }
 
 const projectOptions = (projects: ProjectListEntry[]) =>
@@ -88,9 +105,10 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
   onCreate,
   onImport,
   disableImport = false,
+  generate,
 }) => {
   const accent = useBrandAccents();
-  const [tab, setTab] = useState<'create' | 'import'>('create');
+  const [tab, setTab] = useState<CreateTab>('create');
 
   const [title, setTitle] = useState('');
   const [subtitle, setSubtitle] = useState('');
@@ -230,7 +248,7 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
 
         <Tabs
           value={tab}
-          onChange={(v) => setTab((v as 'create' | 'import') ?? 'create')}
+          onChange={(v) => setTab((v as CreateTab | null) ?? 'create')}
           variant="pills"
           color={accent.tertiary}
         >
@@ -257,6 +275,23 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
                 Import
               </Text>
             </Tabs.Tab>
+            {generate && (
+              <Tabs.Tab
+                value="generate"
+                leftSection={<Icon icon={AI_ICON} width={18} />}
+                disabled={generate.disabled}
+                title={
+                  generate.disabled
+                    ? 'Dashboard generation is disabled in public/demo mode'
+                    : undefined
+                }
+                data-testid="generate-dashboard-tab"
+              >
+                <Text size="md" fw={500} style={{ fontFamily: 'Virgil' }}>
+                  Generate with AI
+                </Text>
+              </Tabs.Tab>
+            )}
           </Tabs.List>
 
         <Tabs.Panel value="create" pt="lg">
@@ -546,6 +581,18 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
             </Group>
           </Stack>
         </Tabs.Panel>
+
+        {generate && (
+          // keepMounted: a run in flight survives a look at the other tabs.
+          <Tabs.Panel value="generate" pt="lg" keepMounted>
+            <GenerateDashboardPanel
+              projects={projectOptions(projects).map((o) => ({ id: o.value, name: o.label }))}
+              loadProject={generate.loadProject}
+              onOpen={generate.onOpen}
+              serverKeyAvailable={generate.serverKeyAvailable}
+            />
+          </Tabs.Panel>
+        )}
       </Tabs>
       </Stack>
     </Modal>

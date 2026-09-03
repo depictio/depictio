@@ -62,6 +62,7 @@ import 'react-resizable/css/styles.css';
 import {
   fetchDashboard,
   fetchAllDashboards,
+  deleteDashboard,
   bulkComputeCards,
   createTab,
   deleteTab,
@@ -101,7 +102,14 @@ import {
   applyAIPlanToFilters,
   revertAIPlanFilters,
 } from 'depictio-react-core';
-import { AI_COLOR, AIAnalyzePanel, AIKeySection, useAIHealth } from 'depictio-react-ai';
+import {
+  AI_COLOR,
+  AIAnalyzePanel,
+  AIDraftBanner,
+  AIKeySection,
+  promoteGeneratedDashboard,
+  useAIHealth,
+} from 'depictio-react-ai';
 import type { ApplyActionsPayload, ResolvedFilter } from 'depictio-react-ai';
 import type {
   DashboardData,
@@ -1179,6 +1187,40 @@ const EditorApp: React.FC = () => {
   const aiEnabled = serverFeatures.ai;
   const aiHealth = useAIHealth(aiEnabled);
   const aiServerKeyAvailable = aiHealth?.server_key_configured === true;
+
+  // ---- AI-generated draft (banner above the canvas) -------------------------
+  // Only an unreviewed draft gets a banner; a promoted dashboard is ordinary.
+  const aiDraft = dashboard?.ai_generation?.status === 'draft' ? dashboard.ai_generation : null;
+  /** Promote keeps the dashboard: the server flips `ai_generation.status`
+   *  (autosave never writes that field) and the local copy follows, which
+   *  unmounts the banner. */
+  const handlePromoteDraft = useCallback(async () => {
+    if (!dashboardId) return;
+    await promoteGeneratedDashboard(dashboardId);
+    const cur = dashboardRef.current;
+    if (cur?.ai_generation) {
+      applyDashboard({ ...cur, ai_generation: { ...cur.ai_generation, status: 'promoted' } });
+    }
+    notifications.show({
+      color: 'teal',
+      title: 'Dashboard promoted',
+      message: 'The AI draft is now a regular dashboard.',
+      autoClose: 2500,
+    });
+  }, [dashboardId, applyDashboard]);
+  /** Discard is the ordinary delete; the editor has nothing left to show, so
+   *  it returns to the list. A pending autosave is dropped first: landing
+   *  after the delete, it would write the dashboard straight back. */
+  const handleDiscardDraft = useCallback(async () => {
+    if (!dashboardId) return;
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    await deleteDashboard(dashboardId);
+    window.location.assign('/dashboards');
+  }, [dashboardId]);
+
   const [aiFilterDescriptions, setAiFilterDescriptions] = useState<string[]>([]);
   // Transient per-figure dict_kwargs overrides from applied AI plans, keyed by
   // component index. Threaded into the render request; never persisted.
@@ -1984,6 +2026,15 @@ const EditorApp: React.FC = () => {
                 ...contentScaleStyle,
               }}
             >
+              {/* An unreviewed AI draft announces itself before anything
+                  else: promote or discard is the first decision here. */}
+              {aiDraft && (
+                <AIDraftBanner
+                  info={aiDraft}
+                  onPromote={handlePromoteDraft}
+                  onDiscard={handleDiscardDraft}
+                />
+              )}
               {/* Same placement as the viewer: the tab's description leads
                   the canvas, ahead of any foreign pinned section. */}
               <TabIntro dashboard={dashboard} activeTab={activeTab} />
