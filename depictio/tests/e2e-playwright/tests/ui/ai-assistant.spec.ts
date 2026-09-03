@@ -1425,12 +1425,15 @@ test.describe("AI assistant", () => {
     const tag = await first.getAttribute("data-tag");
     expect(tag).toBeTruthy();
 
-    // Keep posts once, flips the strip and moves the counter with the click.
+    // Keep posts once, flips the tile's control and moves the counter with the
+    // click. The verdicts live inside the review popover, so open it first;
+    // its dropdown is portalled, hence the page-level locator.
     const reviewRequest = page.waitForRequest(
       (req) => req.method() === "POST" && req.url().includes("/generated-dashboards/"),
       { timeout: 15_000 },
     );
-    await first.locator("[data-testid='draft-tile-keep']").click();
+    await first.locator("[data-testid='draft-tile-regenerate']").click();
+    await page.locator("[data-testid='draft-tile-keep']").click();
     await reviewRequest;
     await expect(first).toHaveAttribute("data-reviewed", "true");
     await expect(counter).toHaveText(`Reviewed 1 of ${total}`);

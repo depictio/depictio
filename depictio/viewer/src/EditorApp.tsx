@@ -1426,6 +1426,14 @@ const EditorApp: React.FC = () => {
   const draftReviewControl = useMemo<DraftReviewControl | null>(() => {
     if (!aiDraft || !dashboardId) return null;
     const reviewedSet = new Set(reviewedTags);
+    // Built once per draft rather than scanned per tile: every generated tile
+    // asks for its section's reason, and a draft saved before the planner was
+    // asked to explain itself simply has none.
+    const rationaleBySection = new Map<string, string>(
+      (aiDraft.sections ?? [])
+        .filter((s) => (s.rationale ?? '').trim())
+        .map((s) => [s.name, s.rationale] as const),
+    );
     return {
       renderActions: (metadata: StoredMetadata) => {
         const tag = generationTagOf(metadata);
@@ -1438,6 +1446,16 @@ const EditorApp: React.FC = () => {
         const section =
           metadata.component_type === 'interactive' ? null : (metadata.section ?? null);
         const failed = lastRegenTargets.includes(metadata.index);
+        // The planner's brief for this tile, stamped on it at generation
+        // time. Read off `metadata.section` rather than `section` above: a
+        // filter control has a section reason too, only no section regenerate.
+        const intent =
+          typeof metadata.ai_source?.prompt === 'string' && metadata.ai_source.prompt
+            ? metadata.ai_source.prompt
+            : null;
+        const sectionRationale = metadata.section
+          ? (rationaleBySection.get(metadata.section) ?? null)
+          : null;
         return (
           <DraftTileActions
             tag={tag}
@@ -1445,6 +1463,8 @@ const EditorApp: React.FC = () => {
             busy={busy}
             disabled={regeneratePending && !busy}
             section={section}
+            intent={intent}
+            sectionRationale={sectionRationale}
             error={failed ? regenerateState.error : null}
             onRegenerate={(instruction) => handleRegenerateTile(metadata.index, instruction)}
             onRegenerateSection={

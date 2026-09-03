@@ -62,10 +62,14 @@ const AIDraftBanner: React.FC<Props> = ({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [promoteConfirmOpen, setPromoteConfirmOpen] = useState(false);
   const [warningsOpen, setWarningsOpen] = useState(false);
+  const [rationaleOpen, setRationaleOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const busy = promoting || discarding;
   const when = formatGeneratedAt(info.generated_at);
   const warnings = info.warnings ?? [];
+  // A section the planner gave no reason for explains nothing, so it is left
+  // out rather than shown as a bare name.
+  const sections = (info.sections ?? []).filter((s) => (s.rationale ?? '').trim());
   // Removing a tile is a decision too, so a draft whose leftovers were all
   // deleted counts as fully reviewed: `total` only ever counts the tiles
   // still there.
@@ -151,6 +155,46 @@ const AIDraftBanner: React.FC<Props> = ({
                 color={AI_COLOR}
                 aria-label={`Reviewed ${reviewed} of ${total} components`}
               />
+            </Stack>
+          )}
+          {/* Above the warnings on purpose: this one explains the dashboard
+              the reviewer is looking at, the warnings only explain the run. */}
+          {sections.length > 0 && (
+            <Stack gap={2} align="flex-start">
+              <Button
+                size="compact-xs"
+                variant="subtle"
+                color="gray"
+                rightSection={
+                  <Icon icon={rationaleOpen ? 'mdi:chevron-up' : 'mdi:chevron-down'} width={14} />
+                }
+                onClick={() => setRationaleOpen((o) => !o)}
+                data-testid="ai-draft-rationale-toggle"
+              >
+                Why this layout
+              </Button>
+              <Collapse in={rationaleOpen} data-testid="ai-draft-rationale">
+                <Stack gap={6}>
+                  {sections.map((s, i) => (
+                    <Group key={`${s.name}-${i}`} gap={6} wrap="nowrap" align="flex-start">
+                      <Icon
+                        icon={s.kind === 'filter' ? 'mdi:filter-variant' : 'mdi:view-grid-outline'}
+                        width={14}
+                        height={14}
+                        style={{ flexShrink: 0, marginTop: 2 }}
+                      />
+                      <Stack gap={0}>
+                        <Text fw={600} size="xs">
+                          {s.name}
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          {s.rationale}
+                        </Text>
+                      </Stack>
+                    </Group>
+                  ))}
+                </Stack>
+              </Collapse>
             </Stack>
           )}
           {warnings.length > 0 && (
