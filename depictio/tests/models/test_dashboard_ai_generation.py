@@ -26,6 +26,10 @@ STAMP = {
     "warnings": ["Dropped 1 component: budget"],
 }
 
+# The same stamp once the model has loaded it: a draft written before the
+# review pass existed gains the two empty bookkeeping lists.
+STAMP_STORED = {**STAMP, "reviewed": [], "dropped": []}
+
 
 def _dashboard(**extra) -> DashboardData:
     owner = UserBase(id=ObjectId(), email="owner@example.com")
@@ -73,7 +77,7 @@ class TestDashboardDataField:
         assert isinstance(dashboard.ai_generation, AIGenerationInfo)
 
         doc = dashboard.mongo()
-        assert doc["ai_generation"] == STAMP
+        assert doc["ai_generation"] == STAMP_STORED
 
         reloaded = DashboardData.from_mongo(doc)
         assert reloaded.ai_generation == dashboard.ai_generation

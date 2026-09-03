@@ -408,6 +408,80 @@ class PromoteResponse(BaseModel):
     status: Literal["promoted"] = "promoted"
 
 
+# ---------- Reviewing a draft ----------
+
+
+class RegenerateRequest(BaseModel):
+    """Body of both regenerate routes (one component, or a whole section).
+
+    `instruction` is the reviewer's steer ("make it a box plot by species");
+    appended to the planned intent of every tile the call regenerates. None
+    or empty re-runs the original intent unchanged.
+    """
+
+    instruction: str | None = Field(default=None, max_length=500)
+
+
+class RegeneratedEvent(BaseModel):
+    """Payload of the terminal `regenerated` stream event of both regenerate routes.
+
+    `components` always lists every tile written back, in the order they sit
+    in ``stored_metadata``, as the stored (full) component dicts the viewer
+    already renders; the single-component route also repeats its one tile in
+    `component` and names its `index` (its position in ``stored_metadata``)
+    and `tag`. `section` is set by the section route only.
+    """
+
+    dashboard_id: str
+    section: str | None = None
+    index: int | None = None
+    tag: str | None = None
+    component: dict[str, Any] | None = None
+    components: list[dict[str, Any]] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ReviewRequest(BaseModel):
+    """Body of `/ai/generated-dashboards/{dashboard_id}/review`.
+
+    `tag` is a component's generation tag (`ai_source.tag` in
+    ``stored_metadata``); `keep` marks it reviewed, `unkeep` takes the mark
+    back.
+    """
+
+    tag: str = Field(..., min_length=1, max_length=200)
+    action: Literal["keep", "unkeep"] = "keep"
+
+
+class ReviewResponse(BaseModel):
+    """Counts after one review call: how many of the draft's tiles are kept."""
+
+    reviewed: int = 0
+    total: int = 0
+
+
+class GenerationSummary(BaseModel):
+    """One row of `/ai/generations/{project_id}`: a run without its YAML or plan."""
+
+    id: str
+    dashboard_id: str | None = None
+    title: str | None = None
+    prompt: str = ""
+    model: str = ""
+    status: str = "running"
+    created_at: str = ""
+    ok: int = 0
+    repaired: int = 0
+    dropped: int = 0
+    warnings: list[str] = Field(default_factory=list)
+
+
+class GenerationsResponse(BaseModel):
+    """Returned by `/ai/generations/{project_id}`, newest run first."""
+
+    generations: list[GenerationSummary] = Field(default_factory=list)
+
+
 # ---------- Request bodies ----------
 
 
@@ -575,6 +649,9 @@ StreamEventType = Literal[
     # (GeneratedDashboardEvent), before `done`.
     "component",
     "dashboard",
+    # Reviewing a draft: the terminal payload of both regenerate routes
+    # (RegeneratedEvent), after their per-tile `component` events.
+    "regenerated",
     "error",
     "done",
 ]

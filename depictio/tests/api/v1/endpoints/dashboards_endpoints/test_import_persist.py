@@ -61,6 +61,10 @@ AI_STAMP = {
     "warnings": ["Dropped 1 component: budget"],
 }
 
+# What a stamp written before the review pass existed looks like once the
+# model has loaded it: `reviewed` and `dropped` default to empty lists.
+AI_STAMP_STORED = {**AI_STAMP, "reviewed": [], "dropped": []}
+
 
 def _project_doc(owner: UserBase) -> dict:
     return {
@@ -216,12 +220,12 @@ class TestExtraFields:
             doc = db["dashboards"].find_one({"dashboard_id": ObjectId(payload["dashboard_id"])})
 
         assert doc is not None
-        assert doc["ai_generation"] == AI_STAMP
+        assert doc["ai_generation"] == AI_STAMP_STORED
 
         loaded = DashboardData.from_mongo(doc)
         assert loaded.ai_generation is not None
         assert loaded.ai_generation.status == "draft"
-        assert loaded.ai_generation.model_dump() == AI_STAMP
+        assert loaded.ai_generation.model_dump() == AI_STAMP_STORED
 
     def test_without_extra_fields_no_stamp_is_written(self, owner, iris_yaml):
         with _stack(owner) as db:
@@ -281,4 +285,4 @@ class TestTitleCollision:
         assert second["dashboard_id"] == first["dashboard_id"]
         assert doc is not None
         assert doc["version"] == 2
-        assert doc["ai_generation"] == AI_STAMP
+        assert doc["ai_generation"] == AI_STAMP_STORED
