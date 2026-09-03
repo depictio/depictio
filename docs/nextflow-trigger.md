@@ -1,0 +1,248 @@
+# Automatic triggering from Nextflow
+
+A Nextflow pipeline can push its own results into a running Depictio instance
+when it finishes. The mechanism is a `workflow.onComplete` handler shipped as a
+drop-in config snippet, `depictio/cli/configs/nextflow/depictio.config`, which
+runs `depictio-cli run` on the pipeline's output directory.
+
+## What the handler does
+
+On completion, in this order:
+
+1. Returns immediately if `params.depictio_enabled` is false.
+2. **Skips with a warning if `workflow.success` is false.** The output directory
+   of a failed run is partial by definition, and a half-filled project is worse
+   than no project.
+3. Resolves the data root: `params.depictio_data_root`, else `params.outdir`.
+   A relative path is made absolute against `workflow.launchDir`. If neither is
+   set, it warns and returns.
+4. Builds the `depictio-cli run` argument list.
+5. Runs it as a child process with stderr merged into stdout, exporting
+   `DEPICTIO_DATA_ROOT` into the child environment, and streams the CLI's output
+   line by line into the Nextflow log.
+6. Warns on a non-zero exit code.
+
+The whole handler is wrapped in a `try`/`catch`. A missing `depictio-cli`, an
+unreachable server, or any ingestion failure logs a warning and **never changes
+the pipeline's own exit status**. The handler is also additive: it does not
+replace a `workflow.onComplete` the pipeline defines for itself.
+
+## Requirements
+
+- `depictio-cli` installed and on the PATH of the **Nextflow head job**, that is
+  the shell or scheduler job running `nextflow run`. The handler executes there,
+  never on a compute node. On an HPC cluster this usually means the submit node
+  or the job that launches Nextflow, and it is the machine that must have network
+  access to the Depictio API.
+- Credentials reachable from that job, either a CLI config file or environment
+  variables (see [Authentication](#authentication)).
+
+## Enabling it
+
+For a single run:
+
+```bash
+nextflow run <pipeline> -c /path/to/depictio/cli/configs/nextflow/depictio.config
+```
+
+Permanently, from your own `nextflow.config`:
+
+```groovy
+includeConfig '/path/to/depictio/cli/configs/nextflow/depictio.config'
+```
+
+Include order does not matter. Every default in the snippet is written as "keep
+what is already set, otherwise use mine", because include order and `-c`
+precedence are not predictable. A `--depictio_*` value on the `nextflow run`
+command line always wins.
+
+## nf-core pipelines
+
+```bash
+nextflow run nf-core/ampliseq \
+  -profile docker \
+  --outdir results \
+  -c /path/to/depictio.config
+```
+
+The handler always forwards the pipeline manifest as
+`--nextflow-manifest "<manifest.name>/<manifest.version>"` (falling back to
+`latest` when the manifest declares no version). The CLI resolves it against its
+bundled templates and builds the project and its dashboards from there.
+
+The manifest is forwarded even when a template or project config is given: the
+CLI ignores it in that case, so an explicit choice is never overridden.
+
+To pin a template explicitly instead of relying on manifest resolution:
+
+```groovy
+params.depictio_template = 'nf-core/ampliseq/2.16.0'
+```
+
+## Custom pipelines
+
+For a pipeline Depictio ships no template for, point the trigger at a Depictio
+project YAML:
+
+```groovy
+params.depictio_project_config = "${projectDir}/depictio_project.yaml"
+```
+
+`params.depictio_project_config` wins over `params.depictio_template` when both
+are set.
+
+Because the handler exports `DEPICTIO_DATA_ROOT` into the CLI's environment, the
+YAML does not have to hardcode an output directory:
+
+```yaml
+name: "Nextflow trigger example"
+workflows:
+  - name: "nextflow-trigger-example"
+    engine:
+      name: "nextflow"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DEPICTIO_DATA_ROOT}"
+    data_collections:
+      - data_collection_tag: "measurements"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "measurements\\.tsv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              has_header: true
+```
+
+`structure: "flat"` means the data root itself is the run directory. Use
+`structure: "sequencing-runs"` with a `runs_regex` when the root holds one
+subdirectory per run.
+
+A complete runnable example, pipeline plus config plus project YAML, is in
+`depictio/cli/configs/nextflow/example/`.
+
+## New project or additional run
+
+Two shapes of repeated execution, two settings:
+
+- **A project per execution.** Leave `params.depictio_attach` at its default of
+  `false`. Set `params.depictio_project` to name the project, or let the CLI
+  derive a name from the template. Each run creates its own project.
+- **One project, many runs.** Set `params.depictio_attach = true`, which passes
+  `--attach-run`. The data root of this execution is registered as an additional
+  run of the existing project named by `params.depictio_project`, rather than
+  creating a new project. Use it when the same pipeline is executed repeatedly,
+  per sample batch or per sequencing run, and all of it belongs in one place.
+
+```groovy
+params.depictio_project = 'Ampliseq 16S survey'
+params.depictio_attach  = true
+```
+
+## Authentication
+
+The head job typically has environment variables but no interactive login and
+sometimes no writable home directory. Two paths, depending on how many people
+the results belong to.
+
+### Single user or CI: `DEPICTIO_CLI_TOKEN`
+
+One identity owns everything the pipeline produces. Commit a CLI config without
+secrets and inject the token at runtime:
+
+```bash
+export DEPICTIO_CLI_TOKEN=<long-lived CLI token>
+export DEPICTIO_CLI_API_BASE_URL=https://depictio.example.org
+nextflow run <pipeline> --outdir results -c depictio.config
+```
+
+| Variable | Effect |
+| --- | --- |
+| `DEPICTIO_CLI_TOKEN` | Injected as `user.token.access_token`, overriding the file |
+| `DEPICTIO_CLI_API_BASE_URL` | Overrides `api_base_url` from the file |
+| `DEPICTIO_CLI_CONFIG_PATH` | Selects which CLI config file to load. It only applies when the caller left the path at its default, so an explicit `--CLI-config-path` (or `params.depictio_cli_config`) is never clobbered |
+
+This is the right shape for a CI runner, a shared service account, or a single
+analyst's laptop.
+
+### Multi-user cluster: `--user` plus a provisioning key
+
+On a shared cluster the results belong to whoever launched the pipeline, not to
+a service account. Set `params.depictio_user` and make the provisioning secret
+available to the head job:
+
+```bash
+export DEPICTIO_AUTH_PROVISIONING_API_KEY=<shared secret>
+nextflow run <pipeline> --outdir results \
+  -c depictio.config \
+  --depictio_user alice@lab.org
+```
+
+The CLI creates or fetches Alice's account, runs the whole ingestion as her, so
+the project and its dashboards are owned by her, and prints a single-use
+passwordless login link to her dashboard. The provisioning key is read from
+`DEPICTIO_AUTH_PROVISIONING_API_KEY`, which the child process inherits from the
+head job, so it never appears in the config or on a command line.
+
+The server must have `DEPICTIO_AUTH_PROVISIONING_API_KEY` set as well, otherwise
+the provisioning endpoints return `503`. Full setup, security model and the
+lifetime of the link: [Pipeline provisioning and passwordless
+login](pipeline-provisioning-magic-link.md).
+
+## Parameters
+
+| Parameter | Default | CLI option it drives |
+| --- | --- | --- |
+| `depictio_enabled` | `true` | none, set to `false` to disable the trigger |
+| `depictio_data_root` | `params.outdir` | `--data-root` |
+| `depictio_cli_config` | `$DEPICTIO_CLI_CONFIG_PATH`, else `~/.depictio/CLI.yaml` | `--CLI-config-path` |
+| `depictio_template` | none | `--template` |
+| `depictio_project_config` | none | `--project-config-path` (wins over `--template`) |
+| `depictio_project` | none | `--project-name` |
+| `depictio_attach` | `false` | `--attach-run` |
+| `depictio_user` | none | `--user` |
+| `depictio_cli_executable` | `depictio-cli` | the executable that is run |
+
+Booleans are coerced explicitly, so `--depictio_enabled false` and
+`--depictio_attach false` behave as expected. Groovy treats every non-empty
+string as true, and command-line and params-file values arrive as strings.
+
+## Troubleshooting
+
+Everything the handler emits is prefixed with `[depictio]`, on the console and in
+`.nextflow.log`.
+
+| Symptom | Cause |
+| --- | --- |
+| No `[depictio]` lines at all | `params.depictio_enabled` is false, or the snippet was never included. Check `nextflow config` for the `depictio_*` parameters |
+| `Pipeline did not complete successfully, skipping ingestion` | Working as designed. Fix the pipeline first |
+| `No data root to ingest` | Neither `params.depictio_data_root` nor `params.outdir` is set |
+| `Ingestion trigger failed ... Cannot run program` | `depictio-cli` is not on the head job's PATH. Set `params.depictio_cli_executable` to an absolute path, for example the CLI inside a virtual environment |
+| `depictio-cli exited with code N` | The ingestion itself failed. The CLI's own output is in the log above that line, prefixed with `[depictio]` |
+
+To see the exact command without running a pipeline, read the
+`[depictio] <executable> run ...` line: it is the full argument list, logged
+before the process starts.
+
+## Notes on the snippet's implementation
+
+Two details are load-bearing and easy to break when editing the snippet:
+
+- **The child's output is drained before `waitFor()`.** Waiting first would
+  deadlock as soon as the CLI fills the operating system's pipe buffer, and the
+  head job would hang after the pipeline is otherwise finished.
+- **The handler binds its own logger.** A handler defined in a config file does
+  not get the script-level `log` binding, which resolves to `null` there, so the
+  snippet obtains an SLF4J logger under the `nextflow.` namespace. That prefix is
+  what puts messages on the console as well as in `.nextflow.log`.
+
+The strict Nextflow config language (25.10 and later) also rejects helper
+closures assigned with `def` and then invoked as `helper(...)`, which is why the
+string and boolean handling in the snippet is spelled out inline.
