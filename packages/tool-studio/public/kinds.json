@@ -34,6 +34,117 @@
     },
     {
       "category": "plot",
+      "description": "TP / FP / FN (/ TN) counts per callset as a compact heatmap; optional row-normalisation.",
+      "heavy": false,
+      "icon": "tabler:grid-dots",
+      "label": "Confusion matrix",
+      "required_roles": [
+        "label",
+        "tp",
+        "fp",
+        "fn"
+      ],
+      "role_names": {
+        "fn": [
+          "false_negatives",
+          "fn"
+        ],
+        "fp": [
+          "false_positives",
+          "fp"
+        ],
+        "label": [
+          "caller",
+          "label",
+          "name",
+          "sample",
+          "tool"
+        ],
+        "tp": [
+          "tp",
+          "tp_base",
+          "tp_comp",
+          "true_positives"
+        ]
+      },
+      "roles": {
+        "fn": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "fp": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "label": {
+          "description": "Optional text label for points.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "tn": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "tp": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "confusion_matrix"
+    },
+    {
+      "category": "plot",
       "description": "Read depth / signal along a coordinate axis. Optional per-sample faceting and categorical annotation lane (gene region, peak class, \u2026).",
       "heavy": false,
       "icon": "tabler:chart-area-line",
@@ -707,6 +818,81 @@
     },
     {
       "category": "plot",
+      "description": "Precision / recall / F1 bars with 95% confidence-interval whiskers.",
+      "heavy": false,
+      "icon": "tabler:chart-bar",
+      "label": "Metric bars with CI",
+      "required_roles": [
+        "label",
+        "value",
+        "lower",
+        "upper"
+      ],
+      "role_names": {
+        "label": [
+          "caller",
+          "label",
+          "name",
+          "sample",
+          "tool"
+        ],
+        "lower": [
+          "ci_lower",
+          "lower",
+          "precision_lower",
+          "recall_lower"
+        ],
+        "upper": [
+          "ci_upper",
+          "precision_upper",
+          "recall_upper",
+          "upper"
+        ],
+        "value": [
+          "f1",
+          "precision",
+          "recall",
+          "value"
+        ]
+      },
+      "roles": {
+        "label": {
+          "description": "Optional text label for points.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "lower": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": true
+        },
+        "upper": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": true
+        },
+        "value": {
+          "description": "Numeric value plotted (e.g. coverage).",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "metric_ci_bars"
+    },
+    {
+      "category": "plot",
       "description": "Sample \u00d7 gene mutation matrix with discrete mutation-type colours and frequency strips.",
       "heavy": true,
       "icon": "tabler:grid-pattern",
@@ -817,6 +1003,101 @@
         }
       },
       "viz_kind": "phylogenetic"
+    },
+    {
+      "category": "plot",
+      "description": "Recall vs precision per callset with F1 iso-contours and y=x diagonal \u2014 top-right is best.",
+      "heavy": false,
+      "icon": "tabler:target-arrow",
+      "label": "Precision-recall benchmark",
+      "required_roles": [
+        "label",
+        "recall",
+        "precision",
+        "f1"
+      ],
+      "role_names": {
+        "f1": [
+          "f1",
+          "f1_score",
+          "fmeasure"
+        ],
+        "label": [
+          "caller",
+          "label",
+          "name",
+          "sample",
+          "tool"
+        ],
+        "precision": [
+          "ppv",
+          "precision"
+        ],
+        "recall": [
+          "recall",
+          "sensitivity",
+          "tpr"
+        ]
+      },
+      "roles": {
+        "category": {
+          "description": "Categorical grouping / annotation.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "f1": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": true
+        },
+        "label": {
+          "description": "Optional text label for points.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "precision": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": true
+        },
+        "recall": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": true
+        },
+        "support": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        }
+      },
+      "viz_kind": "pr_benchmark"
     },
     {
       "category": "plot",
@@ -964,6 +1245,71 @@
         }
       },
       "viz_kind": "rarefaction"
+    },
+    {
+      "category": "plot",
+      "description": "Threshold-sweep precision-recall curve with AUC, one line per tool / caller.",
+      "heavy": false,
+      "icon": "tabler:chart-line",
+      "label": "ROC / PR curve",
+      "required_roles": [
+        "recall",
+        "precision"
+      ],
+      "role_names": {
+        "precision": [
+          "ppv",
+          "precision"
+        ],
+        "recall": [
+          "recall",
+          "sensitivity",
+          "tpr"
+        ]
+      },
+      "roles": {
+        "group": {
+          "description": "Grouping column for colouring / faceting.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "precision": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": true
+        },
+        "recall": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": true
+        },
+        "threshold": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        }
+      },
+      "viz_kind": "roc_pr_curve"
     },
     {
       "category": "plot",

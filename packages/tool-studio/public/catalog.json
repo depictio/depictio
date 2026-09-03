@@ -1,6 +1,101 @@
 {
   "tools": [
     {
+      "biotools_url": "https://bio.tools/hap.py",
+      "description": "",
+      "dir": "depictio/catalog/happy",
+      "homepage": null,
+      "id": "happy",
+      "name": "hap.py",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/happy/happy",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "Germline hap.py SNP precision-recall sweep across quality thresholds (one row per QQ threshold).",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/benchmarks/happy/*.roc.Locations.SNP.PASS.csv.gz"
+          },
+          "fixture": "roc.tsv",
+          "fixtureContent": "quality\trecall\tprecision\tf1\n0.0\t0.957749\t0.9995930000000001\t0.978224\n30.0\t0.957693\t0.9995930000000001\t0.978195\n",
+          "id": "happy_roc",
+          "mode": "roc",
+          "name": "hap.py threshold sweep",
+          "path_glob": "**/benchmarks/happy/*.roc.Locations.SNP.PASS.csv.gz",
+          "rawYaml": "id: happy_roc\nname: hap.py threshold sweep\nmode: roc\ndescription: >-\n  Germline hap.py SNP precision-recall sweep across quality thresholds (one row\n  per QQ threshold).\nfind: { path_glob: \"**/benchmarks/happy/*.roc.Locations.SNP.PASS.csv.gz\" }\nrecipe: happy/roc.py\nfixture: roc.tsv\nrenders_as:\n  - { id: pr_curve, component: advanced_viz, kind: roc_pr_curve, roles: {recall: recall, precision: precision} } # threshold-sweep PR curve + AUC\n  - { component: table }\n",
+          "recipe": "happy/roc.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "pr_curve",
+              "kind": "roc_pr_curve",
+              "roles": {
+                "precision": "precision",
+                "recall": "recall"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "roc",
+          "yamlPath": "depictio/catalog/happy/roc.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Germline SNP/INDEL accuracy from hap.py, pooled across samples by variant type and filter (ALL/PASS) with recomputed precision/recall/F1.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/benchmarks/happy/*.summary.csv"
+          },
+          "fixture": "summary.tsv",
+          "fixtureContent": "variant_type\tfilter\ttruth_tp\ttruth_fn\tquery_fp\trecall\tprecision\tf1\nINDEL\tALL\t7585.0\t181.0\t2.0\t0.9766932783929951\t0.999736391195466\t0.9880805054386765\nINDEL\tPASS\t7585.0\t181.0\t2.0\t0.9766932783929951\t0.999736391195466\t0.9880805054386765\nSNP\tALL\t35155.0\t773.0\t14.0\t0.9784847472723224\t0.9996019221473457\t0.9889306159190965\nSNP\tPASS\t35155.0\t773.0\t14.0\t0.9784847472723224\t0.9996019221473457\t0.9889306159190965\n",
+          "id": "happy_summary",
+          "mode": "benchmark-summary",
+          "name": "hap.py pooled summary",
+          "path_glob": "**/benchmarks/happy/*.summary.csv",
+          "rawYaml": "id: happy_summary\nname: hap.py pooled summary\nmode: benchmark-summary\ndescription: >-\n  Germline SNP/INDEL accuracy from hap.py, pooled across samples by variant type\n  and filter (ALL/PASS) with recomputed precision/recall/F1.\nfind: { path_glob: \"**/benchmarks/happy/*.summary.csv\" }\nrecipe: happy/summary.py\nfixture: summary.tsv\nrenders_as:\n  - { component: figure, visu_type: bar, dict_kwargs: {x: variant_type, y: f1, color: filter} } # F1 by SNP/INDEL\n  - { component: table }\n",
+          "recipe": "happy/summary.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "filter",
+                "x": "variant_type",
+                "y": "f1"
+              },
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "summary",
+          "yamlPath": "depictio/catalog/happy/summary.yaml"
+        }
+      ]
+    },
+    {
       "biotools_url": "https://bio.tools/andersen-lab_ivar",
       "description": "",
       "dir": "depictio/catalog/ivar",
@@ -521,6 +616,35 @@
         },
         {
           "columns": {},
+          "description": "Germline small-variant accuracy per callset (SNP / INDEL precision, recall, F1) as hap.py reports it through MultiQC.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet"
+          },
+          "fixtureContent": null,
+          "id": "multiqc_happy",
+          "mode": "happy",
+          "name": "Germline benchmark (hap.py)",
+          "origin_tool": "hap.py",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_happy\nname: Germline benchmark (hap.py)\norigin_tool: hap.py\nmode: happy\ndescription: Germline small-variant accuracy per callset (SNP / INDEL precision, recall, F1) as hap.py reports it through MultiQC.\nfind: { path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\" }\n# No bundled fixture: the nf-core/variantbenchmarking MultiQC parquet is not\n# shipped with the repo. `section` selects this module's plot anchors out of\n# the shared report.\nrenders_as:\n  - { component: multiqc, section: happy }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "happy"
+            }
+          ],
+          "slug": "happy",
+          "yamlPath": "depictio/catalog/multiqc/happy.yaml"
+        },
+        {
+          "columns": {},
           "description": "Amplicon primer-trimming and variant section metrics \u2014 iVar, surfaced via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -701,6 +825,35 @@
         },
         {
           "columns": {},
+          "description": "Somatic small-variant accuracy per caller (combined / indel / SNV precision, recall, F1) as som.py reports it through MultiQC.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet"
+          },
+          "fixtureContent": null,
+          "id": "multiqc_sompy",
+          "mode": "sompy",
+          "name": "Somatic benchmark (som.py)",
+          "origin_tool": "som.py",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_sompy\nname: Somatic benchmark (som.py)\norigin_tool: som.py\nmode: sompy\ndescription: Somatic small-variant accuracy per caller (combined / indel / SNV precision, recall, F1) as som.py reports it through MultiQC.\nfind: { path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\" }\n# No bundled fixture: the nf-core/variantbenchmarking MultiQC parquet is not\n# shipped with the repo. `section` selects this module's plot anchors out of\n# the shared report.\nrenders_as:\n  - { component: multiqc, section: sompy }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "sompy"
+            }
+          ],
+          "slug": "sompy",
+          "yamlPath": "depictio/catalog/multiqc/sompy.yaml"
+        },
+        {
+          "columns": {},
           "description": "Per-sample pipeline summary metrics (assembly + variant calling) \u2014 viralrecon summary tables, via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -782,6 +935,35 @@
           ],
           "slug": "summary_metrics",
           "yamlPath": "depictio/catalog/multiqc/summary_metrics.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Structural-variant accuracy per callset (precision vs recall, TP / FP / FN classifications) as Truvari reports it through MultiQC.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet"
+          },
+          "fixtureContent": null,
+          "id": "multiqc_truvari",
+          "mode": "truvari",
+          "name": "Structural-variant benchmark (Truvari)",
+          "origin_tool": "Truvari",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_truvari\nname: Structural-variant benchmark (Truvari)\norigin_tool: Truvari\nmode: truvari\ndescription: Structural-variant accuracy per callset (precision vs recall, TP / FP / FN classifications) as Truvari reports it through MultiQC.\nfind: { path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\" }\n# No bundled fixture: the nf-core/variantbenchmarking MultiQC parquet is not\n# shipped with the repo. `section` selects this module's plot anchors out of\n# the shared report.\nrenders_as:\n  - { component: multiqc, section: truvari }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "truvari"
+            }
+          ],
+          "slug": "truvari",
+          "yamlPath": "depictio/catalog/multiqc/truvari.yaml"
         }
       ]
     },
@@ -1567,6 +1749,428 @@
           ],
           "slug": "tree_metadata",
           "yamlPath": "depictio/catalog/qiime2/tree_metadata.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": "https://bio.tools/rtg-tools",
+      "description": "",
+      "dir": "depictio/catalog/rtgtools",
+      "homepage": null,
+      "id": "rtgtools",
+      "name": "RTG Tools",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/rtgtools/vcfeval",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "Per-sample / per-caller variant-calling accuracy (TP/FP/FN, precision, recall, F1) from rtg-tools vcfeval's aggregated summary. Serves both germline (small/) and somatic (indel/) categories.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/summary/tables/rtgtools/rtgtools.summary.csv"
+          },
+          "fixture": "vcfeval_summary.tsv",
+          "fixtureContent": "label\tcaller\ttp_base\ttp_comp\tfp\tfn\tprecision\trecall\tf1\ntest2\tgiab_v2\t21742\t21742\t104\t104\t0.9952\t0.9952\t0.9952\ntest1\tgiab_v1\t20827\t20827\t97\t1019\t0.9954\t0.9534\t0.9739\ntest3\tgiab_beta\t16240\t16226\t78\t5606\t0.9952\t0.7434\t0.8511\n",
+          "id": "rtgtools_vcfeval_summary",
+          "mode": "benchmark-summary",
+          "name": "vcfeval benchmark summary",
+          "path_glob": "**/summary/tables/rtgtools/rtgtools.summary.csv",
+          "rawYaml": "id: rtgtools_vcfeval_summary\nname: vcfeval benchmark summary\nmode: benchmark-summary\ndescription: >-\n  Per-sample / per-caller variant-calling accuracy (TP/FP/FN, precision, recall,\n  F1) from rtg-tools vcfeval's aggregated summary. Serves both germline (small/)\n  and somatic (indel/) categories.\nfind: { path_glob: \"**/summary/tables/rtgtools/rtgtools.summary.csv\" }\nrecipe: rtgtools/vcfeval_summary.py\nfixture: vcfeval_summary.tsv\nrenders_as:\n  - { id: pr_scatter, component: advanced_viz, kind: pr_benchmark, roles: {label: label, recall: recall, precision: precision, f1: f1} } # precision-recall benchmark (F1 iso-contours)\n  - { id: confusion, component: advanced_viz, kind: confusion_matrix, roles: {label: label, tp: tp_comp, fp: fp, fn: fn} } # TP/FP/FN matrix\n  - { component: figure, visu_type: bar, dict_kwargs: {x: label, y: f1} } # f1_by_tool\n  - { component: card, column: f1, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot } # best F1\n  - { component: table }\n",
+          "recipe": "rtgtools/vcfeval_summary.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "pr_scatter",
+              "kind": "pr_benchmark",
+              "roles": {
+                "f1": "f1",
+                "label": "label",
+                "precision": "precision",
+                "recall": "recall"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "confusion",
+              "kind": "confusion_matrix",
+              "roles": {
+                "fn": "fn",
+                "fp": "fp",
+                "label": "label",
+                "tp": "tp_comp"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "x": "label",
+                "y": "f1"
+              },
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "f1",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "vcfeval_summary",
+          "yamlPath": "depictio/catalog/rtgtools/vcfeval_summary.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": "https://bio.tools/hap.py",
+      "description": "",
+      "dir": "depictio/catalog/sompy",
+      "homepage": null,
+      "id": "sompy",
+      "name": "som.py",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/happy/sompy",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "Somatic accuracy stratified by allele-fraction bin (caller x AF-bin recall / precision / F1).",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/summary/tables/sompy/sompy.regions.csv"
+          },
+          "fixture": "regions.tsv",
+          "fixtureContent": "caller\taf_bin\trecall\tprecision\tf1\ttp\tfp\tfn\nstrelka\t0.000000-0.200000\t0.0\t0.0\t0.0\t0\t105\t0\nstrelka\t0.200000-0.400000\t0.0\t0.0\t0.0\t0\t0\t0\nstrelka\t0.400000-0.600000\t0.0\t0.0\t0.0\t0\t0\t0\nstrelka\t0.600000-0.800000\t0.0\t0.0\t0.0\t0\t0\t0\nstrelka\t0.800000-1.000000\t0.0\t0.0\t0.0\t0\t0\t0\n",
+          "id": "sompy_regions",
+          "mode": "stratified",
+          "name": "som.py allele-fraction strata",
+          "path_glob": "**/summary/tables/sompy/sompy.regions.csv",
+          "rawYaml": "id: sompy_regions\nname: som.py allele-fraction strata\nmode: stratified\ndescription: >-\n  Somatic accuracy stratified by allele-fraction bin (caller x AF-bin recall /\n  precision / F1).\nfind: { path_glob: \"**/summary/tables/sompy/sompy.regions.csv\" }\nrecipe: sompy/regions.py\nfixture: regions.tsv\nrenders_as:\n  - { component: figure, visu_type: bar, dict_kwargs: {x: af_bin, y: f1, color: caller} } # F1 across AF bins\n  - { component: table }\n",
+          "recipe": "sompy/regions.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "caller",
+                "x": "af_bin",
+                "y": "f1"
+              },
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "regions",
+          "yamlPath": "depictio/catalog/sompy/regions.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Somatic small-variant accuracy from som.py: precision/recall/F1 per caller with binomial confidence intervals.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/summary/tables/sompy/sompy.summary.csv"
+          },
+          "fixture": "summary.tsv",
+          "fixtureContent": "caller\tvariant_type\ttp\tfp\tfn\trecall\tprecision\tf1\trecall_lower\trecall_upper\tprecision_lower\tprecision_upper\nmutect2\tindels\t46\t18\t1531\t0.0291693088142041\t0.71875\t0.05606337599024969\t0.0217058224076835\t0.0383576703548163\t0.6007421174995636\t0.8174777400154283\nstrelka\tindels\t54\t105\t1523\t0.0342422320862396\t0.3396226415094339\t0.06221198156682012\t0.026102885349639\t0.0440881266569628\t0.2694228684239977\t0.415601419243406\nfreebayes\tindels\t56\t19101\t1521\t0.0355104629042485\t0.0029232134467818\t0.005401755570560337\t0.0272107979219772\t0.0455120815858859\t0.002231592988374\t0.003764896615605\n",
+          "id": "sompy_summary",
+          "mode": "benchmark-summary",
+          "name": "som.py benchmark summary",
+          "path_glob": "**/summary/tables/sompy/sompy.summary.csv",
+          "rawYaml": "id: sompy_summary\nname: som.py benchmark summary\nmode: benchmark-summary\ndescription: >-\n  Somatic small-variant accuracy from som.py: precision/recall/F1 per caller with\n  binomial confidence intervals.\nfind: { path_glob: \"**/summary/tables/sompy/sompy.summary.csv\" }\nrecipe: sompy/summary.py\nfixture: summary.tsv\nrenders_as:\n  - { id: pr_scatter, component: advanced_viz, kind: pr_benchmark, roles: {label: caller, recall: recall, precision: precision, f1: f1} } # precision-recall benchmark\n  - { id: confusion, component: advanced_viz, kind: confusion_matrix, roles: {label: caller, tp: tp, fp: fp, fn: fn} } # TP/FP/FN matrix\n  - { id: precision_ci, component: advanced_viz, kind: metric_ci_bars, roles: {label: caller, value: precision, lower: precision_lower, upper: precision_upper} } # precision \u00b1 95% CI\n  - { id: recall_ci, component: advanced_viz, kind: metric_ci_bars, roles: {label: caller, value: recall, lower: recall_lower, upper: recall_upper} } # recall \u00b1 95% CI\n  - { component: figure, visu_type: bar, dict_kwargs: {x: caller, y: f1} } # f1 by caller\n  - { component: card, column: f1, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot } # best F1\n  - { component: table }\n",
+          "recipe": "sompy/summary.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "pr_scatter",
+              "kind": "pr_benchmark",
+              "roles": {
+                "f1": "f1",
+                "label": "caller",
+                "precision": "precision",
+                "recall": "recall"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "confusion",
+              "kind": "confusion_matrix",
+              "roles": {
+                "fn": "fn",
+                "fp": "fp",
+                "label": "caller",
+                "tp": "tp"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "precision_ci",
+              "kind": "metric_ci_bars",
+              "roles": {
+                "label": "caller",
+                "lower": "precision_lower",
+                "upper": "precision_upper",
+                "value": "precision"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "recall_ci",
+              "kind": "metric_ci_bars",
+              "roles": {
+                "label": "caller",
+                "lower": "recall_lower",
+                "upper": "recall_upper",
+                "value": "recall"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "x": "caller",
+                "y": "f1"
+              },
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "f1",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "summary",
+          "yamlPath": "depictio/catalog/sompy/summary.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": "https://bio.tools/svanalyzer",
+      "description": "",
+      "dir": "depictio/catalog/svanalyzer",
+      "homepage": null,
+      "id": "svanalyzer",
+      "name": "SVanalyzer",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/svanalyzer/svbenchmark",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "Structural-variant accuracy from SVanalyzer svbenchmark (precision/recall/F1). Optional \u2014 not produced by the public megatest; tolerant column matching.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/summary/tables/svbenchmark/svbenchmark.summary.csv"
+          },
+          "fixture": "svbenchmark.tsv",
+          "fixtureContent": "label\tprecision\trecall\tf1\ttp\tfp\tfn\nsampleA\t0.9\t0.82\t0.858\t1150\t120\t250\nsampleB\t0.84\t0.76\t0.798\t1050\t180\t330\n",
+          "id": "svanalyzer_svbenchmark",
+          "mode": "benchmark-summary",
+          "name": "svbenchmark SV summary",
+          "path_glob": "**/summary/tables/svbenchmark/svbenchmark.summary.csv",
+          "rawYaml": "id: svanalyzer_svbenchmark\nname: svbenchmark SV summary\nmode: benchmark-summary\ndescription: >-\n  Structural-variant accuracy from SVanalyzer svbenchmark (precision/recall/F1).\n  Optional \u2014 not produced by the public megatest; tolerant column matching.\nfind: { path_glob: \"**/summary/tables/svbenchmark/svbenchmark.summary.csv\" }\nrecipe: svanalyzer/svbenchmark.py\nfixture: svbenchmark.tsv\nrenders_as:\n  - { component: figure, visu_type: bar, dict_kwargs: {x: label, y: f1} } # f1 by sample/caller\n  - { component: table }\n",
+          "recipe": "svanalyzer/svbenchmark.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "x": "label",
+                "y": "f1"
+              },
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "svbenchmark",
+          "yamlPath": "depictio/catalog/svanalyzer/svbenchmark.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": "https://bio.tools/truvari",
+      "description": "",
+      "dir": "depictio/catalog/truvari",
+      "homepage": null,
+      "id": "truvari",
+      "name": "Truvari",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/truvari/bench",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "Structural-variant accuracy from Truvari (precision/recall/F1). Optional \u2014 not produced by the public megatest; recipe uses tolerant column matching.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/summary/tables/truvari/truvari.summary.csv"
+          },
+          "fixture": "summary.tsv",
+          "fixtureContent": "label\tprecision\trecall\tf1\ttp_base\ttp_comp\tfp\tfn\nsampleA\t0.92\t0.85\t0.884\t1200\t1190\t100\t210\nsampleB\t0.88\t0.79\t0.833\t1100\t1095\t150\t290\n",
+          "id": "truvari_summary",
+          "mode": "benchmark-summary",
+          "name": "Truvari SV summary",
+          "path_glob": "**/summary/tables/truvari/truvari.summary.csv",
+          "rawYaml": "id: truvari_summary\nname: Truvari SV summary\nmode: benchmark-summary\ndescription: >-\n  Structural-variant accuracy from Truvari (precision/recall/F1). Optional \u2014 not\n  produced by the public megatest; recipe uses tolerant column matching.\nfind: { path_glob: \"**/summary/tables/truvari/truvari.summary.csv\" }\nrecipe: truvari/summary.py\nfixture: summary.tsv\nrenders_as:\n  - { id: pr_scatter, component: advanced_viz, kind: pr_benchmark, roles: {label: label, recall: recall, precision: precision, f1: f1} } # precision-recall benchmark\n  - { component: table }\n",
+          "recipe": "truvari/summary.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "pr_scatter",
+              "kind": "pr_benchmark",
+              "roles": {
+                "f1": "f1",
+                "label": "label",
+                "precision": "precision",
+                "recall": "recall"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "summary",
+          "yamlPath": "depictio/catalog/truvari/summary.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": "https://bio.tools/wittyer",
+      "description": "",
+      "dir": "depictio/catalog/wittyer",
+      "homepage": null,
+      "id": "wittyer",
+      "name": "Wittyer",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/wittyer",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "CNV/SV accuracy from Wittyer, stratified by event type and size bin (precision/recall/F1). Optional \u2014 not produced by the public megatest.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/summary/tables/wittyer/wittyer.summary.csv"
+          },
+          "fixture": "summary.tsv",
+          "fixtureContent": "label\tevent_type\tsize_bin\tprecision\trecall\tf1\nsampleA\tDEL\t1-1k\t0.95\t0.91\t0.929\nsampleA\tDEL\t1k-10k\t0.9\t0.85\t0.874\nsampleA\tDUP\t1-1k\t0.88\t0.83\t0.854\nsampleA\tDUP\t1k-10k\t0.8\t0.74\t0.769\n",
+          "id": "wittyer_summary",
+          "mode": "stratified",
+          "name": "Wittyer CNV summary",
+          "path_glob": "**/summary/tables/wittyer/wittyer.summary.csv",
+          "rawYaml": "id: wittyer_summary\nname: Wittyer CNV summary\nmode: stratified\ndescription: >-\n  CNV/SV accuracy from Wittyer, stratified by event type and size bin\n  (precision/recall/F1). Optional \u2014 not produced by the public megatest.\nfind: { path_glob: \"**/summary/tables/wittyer/wittyer.summary.csv\" }\nrecipe: wittyer/summary.py\nfixture: summary.tsv\nrenders_as:\n  - { component: figure, visu_type: bar, dict_kwargs: {x: size_bin, y: f1, color: event_type} } # F1 by event type x size\n  - { component: table }\n",
+          "recipe": "wittyer/summary.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "event_type",
+                "x": "size_bin",
+                "y": "f1"
+              },
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "summary",
+          "yamlPath": "depictio/catalog/wittyer/summary.yaml"
         }
       ]
     }
