@@ -202,6 +202,8 @@ export interface AnalysisResult {
  *  Analyze mode: status* → (plan) → (budget|step)* → answer → report →
  *  result → done.
  *  Generation: status* → plan → (budget|component)* → dashboard → done.
+ *  Regeneration: status* → (budget|component)* → a terminal event carrying
+ *  the replacing component dict(s) → done.
  *  `error` may interrupt the stream at any point and is followed by `done`. */
 export type AIStreamEventType =
   | 'status'
@@ -213,6 +215,8 @@ export type AIStreamEventType =
   | 'budget'
   | 'report'
   | 'component'
+  | 'components'
+  | 'replacement'
   | 'dashboard'
   | 'error'
   | 'done';
@@ -414,10 +418,97 @@ export interface AIGenerationInfo {
   generated_at: string;
   run_id: string;
   warnings: string[];
+  /** Generation tags of the tiles the owner has been through. Written only
+   *  by the review route; autosave strips the whole block. Absent on drafts
+   *  saved before the review flow existed, so readers default it to []. */
+  reviewed?: string[];
 }
 
 /** Answer of POST /ai/generated-dashboards/{id}/promote. */
 export interface PromoteGeneratedDashboardResponse {
   dashboard_id: string;
   status: 'promoted';
+}
+
+// ---------- Reviewing a generated draft ----------
+
+/** Body of the two regenerate routes
+ *  (`.../components/{index}/regenerate`, `.../sections/{section}/regenerate`).
+ *  `instruction` refines what the tile should show ("use a box plot",
+ *  "group by cohort"); omitted, the tile is filled again from the plan's
+ *  original intent. */
+export interface RegenerateRequest {
+  instruction?: string;
+}
+
+/** Body of POST /ai/generated-dashboards/{id}/review. `tag` is the
+ *  generation handle of one tile (`ai_source.tag` on its stored metadata),
+ *  not its runtime `index`. */
+export interface ReviewComponentRequest {
+  tag: string;
+  action: 'keep' | 'unkeep';
+}
+
+/** Answer of the review route: the draft's progress after the write. */
+export interface ReviewComponentResponse {
+  reviewed: number;
+  total: number;
+}
+
+/** Payload of the terminal `regenerated` event of both regenerate routes
+ *  (RegeneratedEvent server-side): the components written back, as the full
+ *  stored dicts the viewer renders, so a host swaps them into its local
+ *  dashboard by `index` without waiting for a refetch.
+ *
+ *  `components` always lists every tile written; the single-tile route also
+ *  repeats its one tile in `component` and names its position and tag.
+ *  `normalizeReplacement` in hooks.ts reads whichever is there, and keys off
+ *  the payload rather than the event name. */
+export interface RegeneratedComponentsEvent {
+  dashboard_id: string;
+  /** Set by the section route only. */
+  section?: string | null;
+  /** Position in `stored_metadata`, single-tile route only. */
+  index?: number | null;
+  tag?: string | null;
+  component?: Record<string, unknown> | null;
+  components: Record<string, unknown>[];
+  warnings: string[];
+}
+
+/** Per-outcome tally of one generation run. The wire shape spells the three
+ *  out flat on the row (see `GenerationSummary`); this is what
+ *  `GenerationHistory` reduces them to before rendering. */
+export interface GenerationCounts {
+  ok: number;
+  repaired: number;
+  dropped: number;
+}
+
+/** One row of GET /ai/generations/{project_id}: a past whole-dashboard run,
+ *  without its plan or its YAML. Mirrors GenerationSummary in schemas.py.
+ *  `dashboard_id` is null while the run saved nothing (cancelled, or failed
+ *  before the draft landed), and `title` is the saved dashboard's, so it is
+ *  null for the same runs. */
+export interface GenerationSummary {
+  id: string;
+  dashboard_id: string | null;
+  title: string | null;
+  prompt: string;
+  model: string;
+  status: 'running' | 'complete' | 'failed' | 'cancelled';
+  /** Naive UTC ISO timestamp, the API's wire convention (no offset). */
+  created_at: string;
+  ok: number;
+  repaired: number;
+  dropped: number;
+  warnings: string[];
+  /** Not on the wire today: tolerated so a nested tally would render rather
+   *  than read as three zeroes. */
+  counts?: GenerationCounts | null;
+}
+
+/** Answer of GET /ai/generations/{project_id} (GenerationsResponse). */
+export interface GenerationsResponse {
+  generations: GenerationSummary[];
 }
