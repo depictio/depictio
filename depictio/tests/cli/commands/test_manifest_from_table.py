@@ -135,9 +135,7 @@ def test_tsv_is_read_with_the_right_delimiter(tmp_path):
         ["manifest", "from-table", str(table), "--base-url", "s3://b/r", "-o", str(out)],
     )
     assert result.exit_code == 0, result.output
-    assert json.loads(out.read_text()) == [
-        {"id": "s1", "type": "reads", "url": "s3://b/r/a.csv"}
-    ]
+    assert json.loads(out.read_text()) == [{"id": "s1", "type": "reads", "url": "s3://b/r/a.csv"}]
 
 
 def test_explicit_file_cols_must_exist(tmp_path):
