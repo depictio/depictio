@@ -7,16 +7,24 @@ the loopback host in via ``DEPICTIO_REMOTE_ALLOW_HTTP`` +
 deployments bypass the private-range rejection).
 """
 
+import ipaddress
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
+from pydantic import ValidationError
 
+from depictio.api.v1 import remote_fetch
+from depictio.api.v1.configs.settings_models import RemoteConfig
 from depictio.api.v1.remote_fetch import (
-    MAX_REDIRECTS,
+    RemoteFetchFailed,
     RemoteURLRejected,
     bounded_download,
+    fetch_validated_text,
+    is_server_context,
+    open_validated_stream,
     probe_remote_url,
+    remote_policy,
     validate_remote_url,
 )
 
@@ -29,6 +37,8 @@ _GATEWAY_ENV_VARS = (
     "DEPICTIO_REMOTE_URL_ALLOWLIST",
     "DEPICTIO_REMOTE_URL_DENYLIST",
     "DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES",
+    "DEPICTIO_REMOTE_TIMEOUT_S",
+    "DEPICTIO_REMOTE_MAX_REDIRECTS",
 )
 
 _PROXY_ENV_VARS = (
@@ -61,6 +71,90 @@ def loopback_env(monkeypatch):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv("DEPICTIO_REMOTE_ALLOW_HTTP", "true")
     monkeypatch.setenv("DEPICTIO_REMOTE_URL_ALLOWLIST", "127.0.0.1")
+
+
+# ---------------------------------------------------------------------------
+# Policy (RemoteConfig) and context switch
+# ---------------------------------------------------------------------------
+
+
+class TestRemoteConfig:
+    def test_defaults(self):
+        policy = remote_policy()
+        assert isinstance(policy, RemoteConfig)
+        assert policy.allow_http is False
+        assert policy.url_allowlist == ""
+        assert policy.url_denylist == ""
+        assert policy.max_download_bytes == 500 * 1024 * 1024
+        assert policy.timeout_s == 30.0
+        assert policy.max_redirects == 3
+
+    def test_env_parsing(self, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_REMOTE_ALLOW_HTTP", "true")
+        monkeypatch.setenv("DEPICTIO_REMOTE_URL_ALLOWLIST", "a.example, B.example")
+        monkeypatch.setenv("DEPICTIO_REMOTE_URL_DENYLIST", "evil.example")
+        monkeypatch.setenv("DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES", "123")
+        monkeypatch.setenv("DEPICTIO_REMOTE_TIMEOUT_S", "1.5")
+        monkeypatch.setenv("DEPICTIO_REMOTE_MAX_REDIRECTS", "1")
+        policy = remote_policy()
+        assert policy.allow_http is True
+        assert policy.url_allowlist == "a.example, B.example"
+        assert policy.url_denylist == "evil.example"
+        assert policy.max_download_bytes == 123
+        assert policy.timeout_s == 1.5
+        assert policy.max_redirects == 1
+
+    def test_policy_is_read_per_call(self, monkeypatch):
+        assert remote_policy().max_redirects == 3
+        monkeypatch.setenv("DEPICTIO_REMOTE_MAX_REDIRECTS", "0")
+        assert remote_policy().max_redirects == 0
+
+    def test_allowlist_is_exclusive(self, monkeypatch):
+        # A listed host passes without DNS; an unlisted public host is rejected
+        # even though it would pass the private-range check.
+        monkeypatch.setenv("DEPICTIO_REMOTE_URL_ALLOWLIST", "trusted.invalid")
+        validate_remote_url("https://trusted.invalid/data.csv")
+        with pytest.raises(RemoteURLRejected, match="not in the administrator allowlist"):
+            validate_remote_url("https://example.org/data.csv")
+
+    def test_invalid_max_download_bytes_raises(self, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES", "lots")
+        with pytest.raises(ValidationError, match="max_download_bytes"):
+            remote_policy()
+
+    def test_zero_max_download_bytes_raises(self, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES", "0")
+        with pytest.raises(ValidationError, match="max_download_bytes"):
+            remote_policy()
+
+    def test_invalid_policy_fails_loudly_on_fetch(self, monkeypatch, tmp_path):
+        # No silent fallback to the default cap: the download must not start.
+        monkeypatch.setenv("DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES", "lots")
+        with pytest.raises(ValidationError):
+            bounded_download("https://example.org/x", str(tmp_path / "o.bin"))
+        with pytest.raises(ValidationError):
+            validate_remote_url("https://example.org/x")
+
+    def test_allow_http_from_policy(self, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_REMOTE_ALLOW_HTTP", "true")
+        monkeypatch.setenv("DEPICTIO_REMOTE_URL_ALLOWLIST", "trusted.invalid")
+        validate_remote_url("http://trusted.invalid/data.csv")
+
+
+class TestIsServerContext:
+    def test_cli_marker_disables_gateway(self, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_CONTEXT", "CLI")
+        assert is_server_context() is False
+        monkeypatch.setenv("DEPICTIO_CONTEXT", "client")
+        assert is_server_context() is False
+
+    def test_server_and_unknown_values_fail_closed(self, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
+        assert is_server_context() is True
+        monkeypatch.setenv("DEPICTIO_CONTEXT", "something-else")
+        assert is_server_context() is True
+        monkeypatch.delenv("DEPICTIO_CONTEXT", raising=False)
+        assert is_server_context() is True
 
 
 # ---------------------------------------------------------------------------
@@ -153,6 +247,11 @@ ETAG = '"abc123"'
 
 
 class _Handler(BaseHTTPRequestHandler):
+    def _redirect(self, location: str) -> None:
+        self.send_response(302)
+        self.send_header("Location", location)
+        self.end_headers()
+
     def _serve(self, include_body: bool) -> None:
         if self.path == "/data.bin":
             self.send_response(200)
@@ -166,17 +265,17 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_header("ETag", ETAG)
             self.end_headers()
         elif self.path == "/redirect":
-            self.send_response(302)
-            self.send_header("Location", "/data.bin")
-            self.end_headers()
+            self._redirect("/data.bin")
         elif self.path == "/redirect-evil":
-            self.send_response(302)
-            self.send_header("Location", "https://10.0.0.1/secret")
-            self.end_headers()
+            self._redirect("https://10.0.0.1/secret")
+        elif self.path == "/redirect-ftp":
+            self._redirect("ftp://example.org/secret")
         elif self.path == "/loop":
-            self.send_response(302)
-            self.send_header("Location", "/loop")
-            self.end_headers()
+            self._redirect("/loop")
+        elif self.path.startswith("/hop/"):
+            # /hop/3 -> /hop/2 -> /hop/1 -> /data.bin: a chain of N redirects.
+            remaining = int(self.path.rsplit("/", 1)[1])
+            self._redirect(f"/hop/{remaining - 1}" if remaining > 1 else "/data.bin")
         else:
             self.send_response(404)
             self.send_header("Content-Length", "0")
@@ -203,6 +302,89 @@ def http_server():
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+# ---------------------------------------------------------------------------
+# open_validated_stream
+# ---------------------------------------------------------------------------
+
+
+class TestOpenValidatedStream:
+    def test_yields_streamed_body_and_closes(self, loopback_env, http_server):
+        with open_validated_stream(f"{http_server}/data.bin", timeout=5) as response:
+            assert response.status_code == 200
+            assert b"".join(response.iter_bytes()) == PAYLOAD
+        assert response.is_closed
+
+    def test_head_method(self, loopback_env, http_server):
+        with open_validated_stream(f"{http_server}/data.bin", timeout=5, method="HEAD") as r:
+            assert r.headers["etag"] == ETAG
+
+    def test_rejects_before_opening_a_client(self):
+        with pytest.raises(RemoteURLRejected, match="scheme not allowed"):
+            with open_validated_stream("ftp://example.org/x"):
+                pass
+
+    def test_s3_rejected(self):
+        with pytest.raises(RemoteURLRejected, match="object store"):
+            with open_validated_stream("s3://bucket/key"):
+                pass
+
+    def test_redirect_to_private_address_rejected(self, monkeypatch, http_server):
+        # No allowlist: the loopback origin is made to look public by stubbing
+        # its DNS answer, so the private-range check fires on the hop target
+        # (10.0.0.1) and nowhere else.
+        for var in _PROXY_ENV_VARS:
+            monkeypatch.delenv(var, raising=False)
+        monkeypatch.setenv("DEPICTIO_REMOTE_ALLOW_HTTP", "true")
+        real_resolve = remote_fetch._resolve_addresses
+
+        def fake_resolve(host):
+            if host == "127.0.0.1":
+                return [ipaddress.ip_address("93.184.216.34")]
+            return real_resolve(host)
+
+        monkeypatch.setattr(remote_fetch, "_resolve_addresses", fake_resolve)
+        with pytest.raises(RemoteURLRejected, match="non-public address"):
+            with open_validated_stream(f"{http_server}/redirect-evil", timeout=5):
+                pass
+
+    def test_redirect_to_disallowed_scheme_rejected(self, loopback_env, http_server):
+        with pytest.raises(RemoteURLRejected, match="scheme not allowed"):
+            with open_validated_stream(f"{http_server}/redirect-ftp", timeout=5):
+                pass
+
+    def test_redirect_to_unlisted_host_rejected(self, loopback_env, http_server):
+        # Allowlist is exclusive on every hop, not only on the first URL.
+        with pytest.raises(RemoteURLRejected, match="not in the administrator allowlist"):
+            with open_validated_stream(f"{http_server}/redirect-evil", timeout=5):
+                pass
+
+    def test_follows_up_to_max_redirects(self, loopback_env, http_server):
+        with open_validated_stream(f"{http_server}/hop/3", timeout=5) as response:
+            assert b"".join(response.iter_bytes()) == PAYLOAD
+
+    def test_honours_max_redirects_from_policy(self, loopback_env, http_server, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_REMOTE_MAX_REDIRECTS", "2")
+        with pytest.raises(RemoteURLRejected, match=r"Too many redirects \(> 2\)"):
+            with open_validated_stream(f"{http_server}/hop/3", timeout=5):
+                pass
+
+    def test_zero_max_redirects_refuses_any_hop(self, loopback_env, http_server, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_REMOTE_MAX_REDIRECTS", "0")
+        with pytest.raises(RemoteURLRejected, match=r"Too many redirects \(> 0\)"):
+            with open_validated_stream(f"{http_server}/redirect", timeout=5):
+                pass
+
+    def test_timeout_from_policy(self, loopback_env, monkeypatch):
+        # Port 1 is closed: the connection error surfaces as-is from the raw
+        # stream (callers sanitize), proving the client was built.
+        import httpx
+
+        monkeypatch.setenv("DEPICTIO_REMOTE_TIMEOUT_S", "1")
+        with pytest.raises(httpx.HTTPError):
+            with open_validated_stream("http://127.0.0.1:1/x"):
+                pass
 
 
 # ---------------------------------------------------------------------------
@@ -234,9 +416,15 @@ class TestProbeRemoteURL:
 
     def test_probe_unreachable_url_sanitized(self, loopback_env):
         # A closed port on an allowlisted host passes validation but fails to
-        # connect; the raised message must stay generic (no internal details).
-        with pytest.raises(RemoteURLRejected, match="Could not reach"):
+        # connect; the raised message must stay generic (no internal details),
+        # and the narrower RemoteFetchFailed lets callers degrade on it.
+        with pytest.raises(RemoteFetchFailed, match="Could not reach"):
             probe_remote_url("http://127.0.0.1:1/x", timeout_s=2)
+
+    def test_policy_rejection_is_not_a_fetch_failure(self, loopback_env, http_server):
+        with pytest.raises(RemoteURLRejected) as excinfo:
+            probe_remote_url(f"{http_server}/redirect-evil", timeout_s=5)
+        assert not isinstance(excinfo.value, RemoteFetchFailed)
 
 
 # ---------------------------------------------------------------------------
@@ -280,6 +468,7 @@ class TestBoundedDownload:
         dest = tmp_path / "out.bin"
         with pytest.raises(RemoteURLRejected):
             bounded_download(f"{http_server}/redirect-evil", str(dest), timeout_s=5)
+        assert not dest.exists()
 
     def test_redirect_to_private_ip_rejected_without_allowlist(
         self, loopback_env, http_server, tmp_path, monkeypatch
@@ -294,8 +483,40 @@ class TestBoundedDownload:
     def test_too_many_redirects_rejected(self, loopback_env, http_server, tmp_path):
         with pytest.raises(RemoteURLRejected, match="Too many redirects"):
             bounded_download(f"{http_server}/loop", str(tmp_path / "o.bin"), timeout_s=5)
-        assert MAX_REDIRECTS == 3
+        assert RemoteConfig().max_redirects == 3
 
     def test_http_error_status_sanitized(self, loopback_env, http_server, tmp_path):
-        with pytest.raises(RemoteURLRejected, match="Could not download"):
+        with pytest.raises(RemoteFetchFailed, match="Could not download"):
             bounded_download(f"{http_server}/missing", str(tmp_path / "o.bin"), timeout_s=5)
+        assert not (tmp_path / "o.bin").exists()
+
+
+# ---------------------------------------------------------------------------
+# fetch_validated_text
+# ---------------------------------------------------------------------------
+
+
+class TestFetchValidatedText:
+    def test_roundtrip(self, loopback_env, http_server):
+        text = fetch_validated_text(f"{http_server}/data.bin", timeout=5)
+        assert text == PAYLOAD.decode()
+
+    def test_follows_redirect(self, loopback_env, http_server):
+        assert fetch_validated_text(f"{http_server}/redirect", timeout=5) == PAYLOAD.decode()
+
+    def test_cap_exceeded(self, loopback_env, http_server):
+        with pytest.raises(RemoteURLRejected, match="exceeds the download cap"):
+            fetch_validated_text(f"{http_server}/data.bin", max_bytes=len(PAYLOAD) - 1, timeout=5)
+
+    def test_cap_from_env(self, loopback_env, http_server, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES", str(len(PAYLOAD) - 1))
+        with pytest.raises(RemoteURLRejected, match="exceeds the download cap"):
+            fetch_validated_text(f"{http_server}/data.bin", timeout=5)
+
+    def test_policy_rejection_propagates(self, loopback_env, http_server):
+        with pytest.raises(RemoteURLRejected, match="not in the administrator allowlist"):
+            fetch_validated_text(f"{http_server}/redirect-evil", timeout=5)
+
+    def test_http_error_status_sanitized(self, loopback_env, http_server):
+        with pytest.raises(RemoteFetchFailed, match="Could not fetch"):
+            fetch_validated_text(f"{http_server}/missing", timeout=5)
