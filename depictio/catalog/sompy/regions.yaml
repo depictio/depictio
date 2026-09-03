@@ -1,4 +1,5 @@
 id: sompy_regions
+name: som.py allele-fraction strata
 mode: stratified
 description: >-
   Somatic accuracy stratified by allele-fraction bin (caller x AF-bin recall /

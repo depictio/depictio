@@ -1,4 +1,5 @@
 id: sompy_summary
+name: som.py benchmark summary
 mode: benchmark-summary
 description: >-
   Somatic small-variant accuracy from som.py: precision/recall/F1 per caller with
@@ -12,5 +13,5 @@ renders_as:
   - { id: precision_ci, component: advanced_viz, kind: metric_ci_bars, roles: {label: caller, value: precision, lower: precision_lower, upper: precision_upper} } # precision ± 95% CI
   - { id: recall_ci, component: advanced_viz, kind: metric_ci_bars, roles: {label: caller, value: recall, lower: recall_lower, upper: recall_upper} } # recall ± 95% CI
   - { component: figure, visu_type: bar, dict_kwargs: {x: caller, y: f1} } # f1 by caller
-  - { component: card, column: f1, aggregation: max } # best F1
+  - { component: card, column: f1, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot } # best F1
   - { component: table }

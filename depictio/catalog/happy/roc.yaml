@@ -1,4 +1,5 @@
 id: happy_roc
+name: hap.py threshold sweep
 mode: roc
 description: >-
   Germline hap.py SNP precision-recall sweep across quality thresholds (one row

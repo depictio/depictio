@@ -43,7 +43,9 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
 
     for out, src in (("recall", "Recall"), ("precision", "Precision"), ("f1", "F1")):
         df = df.with_columns(pl.col(src).cast(pl.Float64, strict=False).alias(out))
-    for out, src in (("tp", "TP_base"), ("fp", "FP"), ("fn", "FN")):
+    # The pipeline's harmonised som.py table puts the truth-set size in TP_base and the
+    # true positives in TP_comp (TP_comp + FN == TP_base), so `tp` reads TP_comp.
+    for out, src in (("tp", "TP_comp"), ("fp", "FP"), ("fn", "FN")):
         if src in df.columns:
             df = df.with_columns(pl.col(src).cast(pl.Int64, strict=False).alias(out))
 

@@ -1,4 +1,5 @@
 id: truvari_summary
+name: Truvari SV summary
 mode: benchmark-summary
 description: >-
   Structural-variant accuracy from Truvari (precision/recall/F1). Optional — not

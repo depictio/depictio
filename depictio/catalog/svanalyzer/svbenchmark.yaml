@@ -1,4 +1,5 @@
 id: svanalyzer_svbenchmark
+name: svbenchmark SV summary
 mode: benchmark-summary
 description: >-
   Structural-variant accuracy from SVanalyzer svbenchmark (precision/recall/F1).

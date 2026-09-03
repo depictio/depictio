@@ -352,6 +352,107 @@ def summary(sample: str) -> dict[str, str]:
     }
 
 
+def happy(sample: str) -> dict[str, str]:
+    """hap.py `*.summary.csv` — MultiQC keys on the `Type,Filter,TRUTH` header.
+
+    One row per variant type × filter; the numbers are recomputed so recall,
+    precision and F1 agree with the TP / FN / FP counts they sit next to.
+    """
+    header = (
+        "Type,Filter,TRUTH.TOTAL,TRUTH.TP,TRUTH.FN,QUERY.TOTAL,QUERY.FP,QUERY.UNK,"
+        "FP.gt,FP.al,METRIC.Recall,METRIC.Precision,METRIC.Frac_NA,METRIC.F1_Score,"
+        "TRUTH.TOTAL.TiTv_ratio,QUERY.TOTAL.TiTv_ratio,"
+        "TRUTH.TOTAL.het_hom_ratio,QUERY.TOTAL.het_hom_ratio"
+    )
+    rows = [header]
+    for vtype, total, unk in (
+        ("INDEL", _vary(sample, 3_500, 4_200), 3_000),
+        ("SNP", _vary(sample, 20_000, 24_000), 9_000),
+    ):
+        tp = total - _vary(sample, 120, 400)
+        fn = total - tp
+        fp = _vary(sample, 1, 60)
+        query_total = tp + fp + unk
+        recall = tp / total
+        precision = tp / (tp + fp)
+        f1 = 2 * precision * recall / (precision + recall)
+        for flt in ("ALL", "PASS"):
+            rows.append(
+                f"{vtype},{flt},{total},{tp},{fn},{query_total},{fp},{unk},0,0,"
+                f"{recall:.6f},{precision:.6f},{unk / query_total:.6f},{f1:.6f},"
+                f"{'' if vtype == 'INDEL' else '2.05'},{'' if vtype == 'INDEL' else '2.03'},1.71,1.69"
+            )
+    return {f"{sample}.summary.csv": "\n".join(rows) + "\n"}
+
+
+def sompy(sample: str) -> dict[str, str]:
+    """som.py `*.stats.csv` — MultiQC keys on `,sompyversion,sompycmd` in the header.
+
+    Three rows (`records`, `indels`, `SNVs`) the module splits into its
+    combined / indel / SNV tables; `records` is the sum of the other two.
+    """
+    header = (
+        ",type,total.truth,total.query,tp,fp,fn,unk,ambi,recall,recall_lower,"
+        "recall_upper,recall2,precision,precision_lower,precision_upper,na,ambiguous,"
+        "fp.region.size,fp.rate,sompyversion,sompycmd"
+    )
+    rows = [header]
+    counts = {
+        "indels": (_vary(sample, 1_400, 1_700), _vary(sample, 40, 400), _vary(sample, 10, 120)),
+        "SNVs": (_vary(sample, 3_000, 3_600), _vary(sample, 2_200, 3_200), _vary(sample, 20, 300)),
+    }
+    counts["records"] = tuple(sum(c[i] for c in counts.values()) for i in range(3))
+    for idx, vtype in enumerate(("records", "indels", "SNVs")):
+        total, tp, fp = counts[vtype]
+        fn = total - tp
+        recall = tp / total
+        precision = tp / (tp + fp)
+        rows.append(
+            f"{idx},{vtype},{total},{tp + fp},{tp},{fp},{fn},0,0,{recall:.6f},"
+            f"{max(recall - 0.02, 0):.6f},{min(recall + 0.02, 1):.6f},{recall:.6f},"
+            f"{precision:.6f},{max(precision - 0.03, 0):.6f},{min(precision + 0.03, 1):.6f},"
+            f"0,0,2900000000,{fp / 2900:.6f},0.3.15,som.py {sample}.vcf.gz"
+        )
+    return {f"{sample}.stats.csv": "\n".join(rows) + "\n"}
+
+
+def truvari(sample: str) -> dict[str, str]:
+    """truvari bench `log.txt` — MultiQC keys on a `truvari … bench` line and the
+    `Stats:` JSON block; the sample name is the directory holding the log.
+    """
+    base = _vary(sample, 9_000, 11_000)
+    tp_base = base - _vary(sample, 400, 1_500)
+    fn = base - tp_base
+    fp = _vary(sample, 200, 900)
+    tp_comp = tp_base - _vary(sample, 0, 25)
+    precision = tp_comp / (tp_comp + fp)
+    recall = tp_base / base
+    f1 = 2 * precision * recall / (precision + recall)
+    tp_gt = tp_comp - _vary(sample, 50, 300)
+    body = f"""2026-04-22 10:00:00,000 [INFO] Truvari v4.3.1
+2026-04-22 10:00:00,001 [INFO] Command /usr/bin/truvari bench -b truth.vcf.gz -c {sample}.vcf.gz -o {sample}
+2026-04-22 10:00:00,002 [INFO] Params:
+2026-04-22 10:00:41,000 [INFO] Stats: {{
+    "TP-base": {tp_base},
+    "TP-comp": {tp_comp},
+    "FP": {fp},
+    "FN": {fn},
+    "precision": {precision:.6f},
+    "recall": {recall:.6f},
+    "f1": {f1:.6f},
+    "base cnt": {base},
+    "comp cnt": {tp_comp + fp},
+    "TP-comp_TP-gt": {tp_gt},
+    "TP-comp_FP-gt": {tp_comp - tp_gt},
+    "TP-base_TP-gt": {tp_gt},
+    "TP-base_FP-gt": {tp_base - tp_gt},
+    "gt_concordance": {tp_gt / tp_comp:.6f}
+}}
+2026-04-22 10:00:41,100 [INFO] Finished bench
+"""
+    return {f"truvari_bench/{sample}/log.txt": body}
+
+
 # Catalog `section` value → stub builder. Keyed on the catalog's own vocabulary
 # so a new MultiQC output shows up as a KeyError in the generator, not as a
 # section that silently never appears in the report.
@@ -361,13 +462,16 @@ STUB_BUILDERS = {
     "cutadapt": cutadapt,
     "fastp": fastp,
     "fastqc": fastqc,
+    "happy": happy,
     "ivar": ivar,
     "kraken": kraken,
     "mosdepth": mosdepth,
     "quast": quast,
     "samtools": samtools,
     "snpeff": snpeff,
+    "sompy": sompy,
     "summary": summary,
+    "truvari": truvari,
 }
 
 

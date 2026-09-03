@@ -4,6 +4,8 @@
     "catalog_conformance": "045f1f968289500c09ea3939"
   },
   "data_collections": {
+    "happy_roc": "7dfb6a2a8decc2592e83e7e9",
+    "happy_summary": "8f15e6d58e41b27de15e8772",
     "ivar_variants_long": "f7cf57984ff91bc0a9c56aa2",
     "mosdepth_amplicon_heatmap": "125be31f418373fc3af51f4d",
     "mosdepth_genome_coverage": "e74743af38abd00631cdb34e",
@@ -25,6 +27,12 @@
     "qiime2_stacked_taxonomy_canonical": "699d5b99fbfd6ea1284b97db",
     "qiime2_taxonomy_composition": "05f969cd3e8e71e3f5f44e03",
     "qiime2_taxonomy_heatmap": "91160b8b0941b0eabd936b82",
+    "rtgtools_vcfeval_summary": "66c445ba5533899d4a79f912",
+    "sompy_regions": "b6cadfd2d7681afe6f2a40df",
+    "sompy_summary": "18c6df01271b54827815a327",
+    "svanalyzer_svbenchmark": "5e879bae6dfa087c7a8a0804",
+    "truvari_summary": "6badabd9545cadd3f6250bdf",
+    "wittyer_summary": "38b53c76db4df0bb7c781007",
     "metaphlan_profile": "1a4e0ceb9acb74eb0809fde7",
     "mosdepth_amplicon_coverage": "514e95803abf5b1bcbc9f60d",
     "multiqc_report": "7a60dd03a5c6749cc2bfea48"

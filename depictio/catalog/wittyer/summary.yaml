@@ -1,4 +1,5 @@
 id: wittyer_summary
+name: Wittyer CNV summary
 mode: stratified
 description: >-
   CNV/SV accuracy from Wittyer, stratified by event type and size bin

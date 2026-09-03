@@ -1,4 +1,5 @@
 id: happy_summary
+name: hap.py pooled summary
 mode: benchmark-summary
 description: >-
   Germline SNP/INDEL accuracy from hap.py, pooled across samples by variant type

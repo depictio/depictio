@@ -1,0 +1,11 @@
+id: multiqc_happy
+name: Germline benchmark (hap.py)
+origin_tool: hap.py
+mode: happy
+description: Germline small-variant accuracy per callset (SNP / INDEL precision, recall, F1) as hap.py reports it through MultiQC.
+find: { path_glob: "**/multiqc/multiqc_data/multiqc.parquet" }
+# No bundled fixture: the nf-core/variantbenchmarking MultiQC parquet is not
+# shipped with the repo. `section` selects this module's plot anchors out of
+# the shared report.
+renders_as:
+  - { component: multiqc, section: happy }
