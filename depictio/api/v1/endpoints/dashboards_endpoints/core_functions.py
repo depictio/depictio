@@ -210,6 +210,9 @@ def load_dashboards_from_db(owner, admin_mode=False, user=None, include_child_ta
         "notes_content": 1,
         "project_id": 1,
         "is_public": 1,
+        # AI-draft provenance: the listing badges drafts and the editor shows
+        # the promote banner from it.
+        "ai_generation": 1,
         # Tab-specific fields (needed for sidebar tab navigation)
         "is_main_tab": 1,
         "parent_dashboard_id": 1,

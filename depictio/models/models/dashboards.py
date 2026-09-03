@@ -175,6 +175,27 @@ class FilterSectionSpec(BaseModel):
     )
 
 
+class AIGenerationInfo(BaseModel):
+    """Provenance of a dashboard drafted by the AI generator.
+
+    Stamped once by the generation route, flipped to ``promoted`` by the
+    promote route, and never writable through the editor's autosave. Absent
+    (``None``) on every hand-made dashboard, so it is not part of the YAML
+    surface (``DashboardDataLite``) either.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["draft", "promoted"] = "draft"
+    model: str = Field(..., description="Id of the LLM that produced the draft")
+    prompt: str = Field(default="", description="User intent the draft was generated from")
+    generated_at: str = Field(..., description="ISO 8601 timestamp of the generation")
+    run_id: str = Field(..., description="Id of the generation run record")
+    warnings: list[str] = Field(
+        default_factory=list, description="Non-fatal issues raised while generating"
+    )
+
+
 class DashboardDataLite(BaseModel):
     """Minimal dashboard format for YAML import/export.
 
@@ -1594,6 +1615,10 @@ class DashboardData(MongoModel):
     # defaults). None for dashboards saved before the feature existed — those
     # inherit the instance branding exactly as they did before.
     brand_theme: BrandTheme | None = None
+    # Provenance of an AI-drafted dashboard. None for every hand-made
+    # dashboard. The editor's autosave never writes it (see save_dashboard),
+    # so a stored value survives editing untouched.
+    ai_generation: AIGenerationInfo | None = None
 
     @model_validator(mode="before")
     @classmethod
