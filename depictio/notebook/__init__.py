@@ -30,6 +30,11 @@ In marimo::
 """
 
 from .client import DepictioClient, DepictioClientError
-from .components import DepictioComponent
+from .components import DepictioComponent, use_document_renderer
 
-__all__ = ["DepictioClient", "DepictioClientError", "DepictioComponent"]
+__all__ = [
+    "DepictioClient",
+    "DepictioClientError",
+    "DepictioComponent",
+    "use_document_renderer",
+]

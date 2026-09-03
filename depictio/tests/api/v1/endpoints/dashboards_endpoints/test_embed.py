@@ -187,3 +187,38 @@ def test_parse_extracted_normalises_figures():
         == "unsupported"
     )
     assert parse_extracted(json.dumps({"status": "error", "figure": None}))["status"] == "error"
+
+
+def test_parse_extracted_survives_8digit_hex_alpha_without_losing_the_trace_type():
+    # A trace read straight off a live Sankey graph div (SankeyRenderer.tsx
+    # colours each link via hexWithAlpha, an 8-digit #RRGGBBAA) used to blow
+    # up go.Figure()'s validation; the except handler then returned the SAME
+    # dict go.Figure() had already started mutating — it pops a trace's
+    # ``type`` off before validating the rest, so the fallback figure came
+    # back with no ``type`` at all (real bug: rendered as a blank scatter).
+    raw = json.dumps(
+        {
+            "status": "ready",
+            "figure": {
+                "data": [
+                    {
+                        "type": "sankey",
+                        "node": {"label": ["a", "b"], "color": ["#339af0", "#51cf66"]},
+                        "link": {
+                            "source": [0],
+                            "target": [1],
+                            "value": [1],
+                            "color": ["#339af033"],
+                        },
+                    }
+                ],
+                "layout": {},
+            },
+        }
+    )
+    out = parse_extracted(raw)
+    assert out["status"] == "ready"
+    trace = out["figure"]["data"][0]
+    assert trace["type"] == "sankey"
+    assert trace["link"]["color"] == ["rgba(51, 154, 240, 0.200)"]
+    assert trace["node"]["color"] == ["#339af0", "#51cf66"]  # a plain 6-digit hex is untouched

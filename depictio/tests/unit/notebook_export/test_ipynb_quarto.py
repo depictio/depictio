@@ -60,4 +60,8 @@ def test_quarto_variant_prepends_front_matter_only():
 def test_front_matter_yaml_shape():
     text = QuartoFrontMatter(title="T", subtitle="S").to_yaml()
     assert text.startswith("title: T\nsubtitle: S\n")
-    assert "code-fold: true" in text
+    # Code is hidden by default (no box per cell, just the results — figures,
+    # cards, tables); one global code-tools "View Source" replaces the click
+    # a reader would otherwise need on every single cell to see it at all.
+    assert "echo: false" in text
+    assert "code-tools: true" in text
