@@ -2140,6 +2140,7 @@ def manifest_refresh_dc_task(payload: dict) -> dict:
     from depictio.api.v1.db import projects_collection
     from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import _run_dc_ingest
     from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
+        ProjectStorageUnusable,
         storage_options_for_project,
     )
     from depictio.api.v1.monitoring import store
@@ -2166,6 +2167,14 @@ def manifest_refresh_dc_task(payload: dict) -> dict:
             # Resolved worker-side so credentials never cross the broker.
             remote_storage_options=storage_options_for_project(payload["project_id"]),
         )
+    except ProjectStorageUnusable as exc:
+        # The project's stored storage config cannot be used from this worker
+        # (secret encrypted with a key this worker does not have, or endpoint
+        # no longer allowed). Reading with the instance credentials instead
+        # would be silent misbehaviour, so the DC step fails with the reason;
+        # the operator context (key path) goes to the worker log only.
+        logger.error(f"Manifest refresh for DC '{tag}' cannot use project storage: {exc}")
+        ok, message = False, exc.detail
     except Exception as exc:  # noqa: BLE001 — any crash is a per-DC failure
         logger.error(f"Manifest refresh task crashed for DC '{tag}': {exc}")
         ok, message = False, str(exc)

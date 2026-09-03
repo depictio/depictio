@@ -14,6 +14,7 @@ from depictio.api.v1.db import (
     files_collection,
     jbrowse_collection,
     multiqc_collection,
+    project_storage_collection,
     projects_collection,
     runs_collection,
     users_collection,
@@ -49,6 +50,7 @@ from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
 from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
     ProjectStorageConfigIn,
     ProjectStorageConfigOut,
+    ProjectStorageUnusable,
     StorageTestResult,
     _delete_project_storage,
     _get_project_storage,
@@ -163,8 +165,42 @@ def _cascade_delete_project(project_id: PyObjectId, project_name: str) -> None:
         )
 
     dashboards_collection.delete_many({"project_id": ObjectId(project_id)})
+    # Per-project storage credentials live in their own collection (never on
+    # the project document); an orphaned config would keep an encrypted
+    # secret around for a project that no longer exists.
+    project_storage_collection.delete_one({"project_id": ObjectId(project_id)})
     projects_collection.delete_one({"_id": ObjectId(project_id)})
     logger.info(f"Project '{project_name}' ({project_id}) deleted with cascade.")
+
+
+async def _run_ingest_off_loop(fn, **kwargs):
+    """Run a sync ingest helper via ``asyncio.to_thread``.
+
+    A project's stored storage config that cannot be used (secret encrypted
+    with a key this instance does not have, endpoint no longer allowed) is
+    turned into a clean HTTP error carrying the client-safe ``detail`` instead
+    of a 500 traceback; the operator context stays in the log line.
+    """
+    try:
+        return await asyncio.to_thread(fn, **kwargs)
+    except ProjectStorageUnusable as exc:
+        logger.error(f"Project storage unusable during {fn.__name__}: {exc}")
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+
+def _reject_non_admin_in_public_mode(current_user, action: str) -> None:
+    """Public/demo-mode gate shared by the project-mutating manifest routes.
+
+    Mirrors ``create_project``: visitors are auto-minted as authenticated temp
+    users, so the per-project owner/editor gate alone would not stop them
+    from ingesting arbitrary remote data into (or exporting) a project they
+    can edit. Admins bypass it so they can still administer a demo.
+    """
+    if settings.auth.is_public_mode and not current_user.is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail=f"{action} is disabled in public/demo mode for non-admin users",
+        )
 
 
 # Endpoints
@@ -324,13 +360,14 @@ async def ingest_manifest(
     """
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
+    _reject_non_admin_in_public_mode(current_user, "Manifest ingestion")
     if not payload.dry_run:
         from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
             _ensure_user_cli_token,
         )
 
         await _ensure_user_cli_token(current_user)
-    return await asyncio.to_thread(
+    return await _run_ingest_off_loop(
         _ingest_manifest_into_project,
         project_id=payload.project_id,
         manifest_url=payload.manifest_url,
@@ -359,13 +396,14 @@ async def refresh_manifest(
     """
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
+    _reject_non_admin_in_public_mode(current_user, "Manifest refresh")
     if not payload.dry_run:
         from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
             _ensure_user_cli_token,
         )
 
         await _ensure_user_cli_token(current_user)
-    return await asyncio.to_thread(
+    return await _run_ingest_off_loop(
         _refresh_manifest_in_project,
         project_id=payload.project_id,
         current_user=current_user,
@@ -406,6 +444,7 @@ async def export_project_template(
     """
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
+    _reject_non_admin_in_public_mode(current_user, "Template export")
     bundle = await asyncio.to_thread(
         build_template_bundle,
         project_id,
@@ -497,11 +536,7 @@ async def create_project_from_manifest(
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
     # Mirror POST /projects/create's public/demo-mode gate.
-    if settings.auth.is_public_mode and not current_user.is_admin:
-        raise HTTPException(
-            status_code=403,
-            detail="Project creation is disabled in public/demo mode for non-admin users",
-        )
+    _reject_non_admin_in_public_mode(current_user, "Project creation")
     if not payload.dry_run:
         from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
             _ensure_user_cli_token,
