@@ -39,7 +39,10 @@ from typing import Any
 
 import polars as pl
 
+from depictio.cli.cli.utils.templates import latest_template_version
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
+_AMPLISEQ_DIR = REPO_ROOT / "depictio/projects/nf-core/ampliseq"
 
 # Float columns survive a TSV round-trip only to within the decimal repr, so an
 # exact comparison reports every seed as drifted. `ma_canonical` differs from
@@ -63,9 +66,10 @@ class ProjectSeeds:
 PROJECTS: tuple[ProjectSeeds, ...] = (
     ProjectSeeds(
         name="ampliseq",
-        data_root=REPO_ROOT / "depictio/projects/nf-core/ampliseq/2.16.0",
+        # The bundle db_init actually seeds: the highest shipped template version.
+        data_root=_AMPLISEQ_DIR / (latest_template_version(_AMPLISEQ_DIR) or ""),
         recipe_dirs=(
-            REPO_ROOT / "depictio/projects/nf-core/ampliseq/recipes",
+            _AMPLISEQ_DIR / "recipes",
             REPO_ROOT / "depictio/catalog",
         ),
         source_overrides={"metadata": "input/Metadata_full.tsv"},
@@ -139,6 +143,15 @@ def discover(project: ProjectSeeds) -> tuple[list[SeedSpec], list[tuple[str, str
                 missing.append(str(path.relative_to(project.data_root)))
         if missing:
             skipped.append((dc_tag, f"source(s) not committed: {', '.join(sorted(missing))}"))
+            continue
+        # A recipe whose file sources are *all* optional (one artefact or another
+        # depending on the run's route) is only checkable when at least one of
+        # them is actually committed — otherwise transform() would be handed an
+        # empty source set and fail on a bundle that is perfectly fine.
+        if any(s.path or s.glob_pattern for s in getattr(module, "SOURCES", [])) and not any(
+            ref for ref in sources if any(s.ref == ref and s.dc_ref is None for s in module.SOURCES)
+        ):
+            skipped.append((dc_tag, "no optional file source committed — nothing to run against"))
             continue
 
         checkable.append(

@@ -19,6 +19,7 @@ Optional roles:
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.recipes.lib.lineage import parent_rank
 
 SOURCES: list[RecipeSource] = [
     RecipeSource(
@@ -50,6 +51,13 @@ SOURCES: list[RecipeSource] = [
         path="qiime2/rel_abundance_tables/rel-table-6.tsv",
         format="TSV",
         read_kwargs={"skip_rows": 1},
+        # Optional because the deepest collapsed table a run produces depends on
+        # how many ranks its reference database declares. A 7-rank database
+        # (rdp, silva) reaches Genus at level 6; an 8-rank one (sbdi-gtdb, the
+        # nf-core/ampliseq default from 2.18.0) needs level 7, which the
+        # pipeline does not emit — the template repoints the refs one level
+        # deeper and this last one simply drops out.
+        optional=True,
     ),
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
@@ -141,13 +149,13 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     long = pl.concat(pieces, how="vertical")
 
     # Derive Kingdom by summing Phylum-level rows per (sample, kingdom).
-    # Kingdom is the first ";"-separated lineage segment.
+    # Kingdom is the lineage segment directly above the Phylum leaf — read from
+    # the tail rather than as segment 0, so a database that prefixes the lineage
+    # with a Domain rank (sbdi-gtdb) doesn't label the Domain as the Kingdom.
     if "Phylum" in long["rank"].unique().to_list():
         phylum_rows = long.filter(pl.col("rank") == "Phylum")
         kingdom = (
-            phylum_rows.with_columns(
-                pl.col("lineage").str.split(";").list.first().str.strip_chars().alias("taxon")
-            )
+            phylum_rows.with_columns(parent_rank(pl.col("lineage")).alias("taxon"))
             .group_by(["sample_id", "taxon"])
             .agg(pl.col("abundance").sum())
             .with_columns(

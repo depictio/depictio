@@ -103,6 +103,6 @@ In order of value-per-effort:
 
 ## MultiQC version compatibility note
 
-viralrecon 3.0.0 ships MultiQC **1.31**; ampliseq 2.16.0 and 2.17.0 ship **1.33**.
+viralrecon 3.0.0 ships MultiQC **1.31**; ampliseq 2.16.0 and 2.17.0 ship **1.33**; ampliseq 2.18.0 ships **1.34**.
 If a depictio template reads MultiQC parquet, verify that column names and schema are
 stable across those two minor versions before assuming cross-pipeline portability.

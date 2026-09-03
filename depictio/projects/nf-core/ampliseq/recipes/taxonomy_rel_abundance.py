@@ -8,6 +8,7 @@ abundance + taxonomy columns are returned.
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.recipes.lib.lineage import kingdom_phylum
 
 SOURCES: list[RecipeSource] = [
     RecipeSource(
@@ -45,10 +46,10 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         on=sample_cols, index="taxonomy", variable_name="sample", value_name="rel_abundance"
     )
     df = df.filter(pl.col("rel_abundance").is_not_null() & (pl.col("rel_abundance") > 0))
-    df = df.with_columns(
-        pl.col("taxonomy").str.split(";").list.get(0).alias("Kingdom"),
-        pl.col("taxonomy").str.split(";").list.get(1).fill_null("Unclassified").alias("Phylum"),
-    )
+    # Tail-read the ranks: the template points this at the rel-table level that
+    # *is* Phylum for the run's reference database (rel-table-2 on a 7-rank
+    # database, rel-table-3 on an 8-rank one like sbdi-gtdb).
+    df = df.with_columns(kingdom_phylum(pl.col("taxonomy")))
 
     # Join ALL metadata columns generically when metadata is available
     metadata = sources.get("metadata")

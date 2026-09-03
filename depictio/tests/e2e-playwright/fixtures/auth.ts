@@ -151,23 +151,33 @@ export async function seedTokenInStorage(
     }, tokens);
   } else {
     await page.addInitScript((t) => {
-      // Keep a session the SPA has already refreshed for itself. This script
-      // re-runs on every navigation, and an unconditional write would restore
-      // `t.access_token` — which /auth/refresh revokes when it rotates the
-      // token document (the API resolves a caller by looking the access token
-      // up in the store, so the previous one stops authenticating). A caller
-      // still holding the original bundle would then start getting 401s.
-      // Matching on refresh_token — stable across refreshes, distinct per
-      // login — keeps the switch-user case (loginAsUser then loginAsAdmin on
-      // the same page) working.
-      let keepStored = false;
+      // Seed this bundle ONCE per page context, then never again.
+      //
+      // This script re-runs on every navigation, so an unconditional write
+      // would undo whatever the app itself did to the session in between:
+      //   - /auth/refresh rotates the stored access token (the API resolves a
+      //     caller by looking the access token up in the token document, so
+      //     the previous one stops authenticating). Restoring `t.access_token`
+      //     hands the page a revoked credential and every call 401s.
+      //   - a logout clears `local-store` on purpose. Re-seeding it puts the
+      //     user straight back into a valid session on the next navigation,
+      //     so the app bounces off /auth and the logout looks like it failed.
+      //
+      // Keying the guard on a marker this script writes itself covers both:
+      // it does not care what the app left behind, only whether *this* bundle
+      // has already been injected. Keying on the refresh_token keeps the
+      // switch-user case (loginAsUser then loginAsAdmin on the same page)
+      // working — a different login re-seeds, the same one never does.
+      // sessionStorage is per-tab and outlives navigations within it, which is
+      // exactly the scope of one addInitScript registration.
+      const MARKER = "e2e-seeded-refresh";
       try {
-        const raw = window.localStorage.getItem("local-store");
-        keepStored = !!raw && JSON.parse(raw).refresh_token === t.refresh_token;
+        if (window.sessionStorage.getItem(MARKER) === t.refresh_token) return;
+        window.sessionStorage.setItem(MARKER, t.refresh_token);
       } catch {
-        keepStored = false;
+        // sessionStorage unavailable (blocked storage): fall back to seeding
+        // on every navigation, i.e. the pre-marker behaviour.
       }
-      if (keepStored) return;
       window.localStorage.setItem(
         "local-store",
         JSON.stringify({

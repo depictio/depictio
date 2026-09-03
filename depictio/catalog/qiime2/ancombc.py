@@ -3,6 +3,7 @@
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.recipes.lib.lineage import kingdom_phylum
 
 SOURCES: list[RecipeSource] = [
     RecipeSource(
@@ -64,9 +65,11 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     for name in ["p_val", "q_val", "w", "se"]:
         result = result.join(melted[name], on=["id", "contrast"], how="left")
 
+    # Ranks are read from the tail of the lineage: the template points the five
+    # slices at the ANCOM-BC level that *is* Phylum for the run's reference
+    # database, so the leaf is the Phylum whatever depth sits above it.
     result = result.with_columns(
-        pl.col("id").str.split(";").list.get(0).alias("Kingdom"),
-        pl.col("id").str.split(";").list.get(1).fill_null("Unclassified").alias("Phylum"),
+        *kingdom_phylum(pl.col("id")),
         (-pl.col("q_val").log(base=10)).alias("neg_log10_qval"),
         (pl.col("q_val") < 0.05).alias("significant"),
     )

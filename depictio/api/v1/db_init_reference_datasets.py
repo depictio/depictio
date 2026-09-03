@@ -804,7 +804,7 @@ async def create_reference_datasets(
             ``OPTIONAL_DATASETS`` are honoured.
 
     Note: ampliseq dataset uses 16S rRNA microbiome data from nf-core/ampliseq.
-    Data files are included under depictio/projects/nf-core/ampliseq/2.16.0/.
+    Data files are included under depictio/projects/nf-core/ampliseq/<latest version>/.
     """
     created_projects = []
 

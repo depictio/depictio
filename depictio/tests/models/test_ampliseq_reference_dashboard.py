@@ -19,9 +19,12 @@ import pytest
 import yaml
 
 from depictio.api.v1.db_init_reference_datasets import STATIC_IDS
+from depictio.cli.cli.utils.templates import latest_template_version
 from depictio.models.models.dashboards import DashboardDataLite
 
-PROJECT_DIR = Path(__file__).resolve().parents[3] / "depictio/projects/nf-core/ampliseq/2.16.0"
+# The version db_init seeds from (highest shipped version), so the guard follows a bump.
+_AMPLISEQ_DIR = Path(__file__).resolve().parents[3] / "depictio/projects/nf-core/ampliseq"
+PROJECT_DIR = _AMPLISEQ_DIR / (latest_template_version(_AMPLISEQ_DIR) or "")
 GENERATOR = PROJECT_DIR / "build_reference_dashboard.py"
 COMMITTED = PROJECT_DIR / "dashboards" / "reference_extended.yaml"
 
@@ -29,7 +32,7 @@ _PLACEHOLDER = re.compile(r"\{[A-Z_][A-Z0-9_]*\}")
 
 
 def _load_generator() -> ModuleType:
-    """Import the generator by path — `nf-core` and `2.16.0` are not module names."""
+    """Import the generator by path — `nf-core` and a version dir are not module names."""
     spec = importlib.util.spec_from_file_location("build_reference_dashboard", GENERATOR)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
@@ -51,7 +54,7 @@ def test_committed_yaml_matches_the_generator(generated: dict, committed: dict) 
     assert committed == generated, (
         "dashboards/reference_extended.yaml is out of date with base.yaml. "
         "Regenerate it with:\n"
-        "  python depictio/projects/nf-core/ampliseq/2.16.0/build_reference_dashboard.py"
+        f"  python {GENERATOR.relative_to(PROJECT_DIR.parents[3])}"
     )
 
 

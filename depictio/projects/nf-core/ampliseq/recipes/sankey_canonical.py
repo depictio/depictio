@@ -27,13 +27,27 @@ Output schema:
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.recipes.lib.lineage import CANONICAL_RANKS, UNCLASSIFIED, asv_table_to_ranks
 
 SOURCES: list[RecipeSource] = [
+    RecipeSource(
+        ref="asv_tax",
+        path="qiime2/rel_abundance_tables/rel-table-ASV_with-DADA2-tax.tsv",
+        format="TSV",
+        # All-text read: a sample column whose first few thousand ASVs are all
+        # absent infers as integer until a scientific-notation abundance lands.
+        read_kwargs={"infer_schema_length": 0},
+        optional=True,
+    ),
     RecipeSource(
         ref="genus",
         path="qiime2/rel_abundance_tables/rel-table-6.tsv",
         format="TSV",
         read_kwargs={"skip_rows": 1},
+        # Fallback for runs without the DADA2 ASV table. Optional on both
+        # counts: level 6 is the Genus only under a 7-rank reference database —
+        # under an 8-rank one (sbdi-gtdb) it is the Family.
+        optional=True,
     ),
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
@@ -58,8 +72,9 @@ _METADATA_ID_COL = "sample"
 # QIIME2 ``rel_abundance_tables/rel-table-N.tsv`` lineage strings use the
 # bare ``Bacteria;Proteobacteria;Gammaproteobacteria;...`` form (no
 # ``k__/p__/...`` prefixes — those are stripped when biom→TSV happens in
-# the ampliseq pipeline). Split positionally instead.
-_RANKS_BY_POSITION = ["Kingdom", "Phylum", "Class", "Order", "Family", "Genus"]
+# the ampliseq pipeline). Split positionally instead — only valid for a
+# 7-rank reference database, hence the ASV-table route preferred below.
+_RANKS_BY_POSITION = list(CANONICAL_RANKS)
 
 
 def _parse_rank_at(lineage: pl.Expr, position: int) -> pl.Expr:
@@ -70,40 +85,58 @@ def _parse_rank_at(lineage: pl.Expr, position: int) -> pl.Expr:
     ``Bacteria;Proteobacteria;;;;`` for a Class-level-unknown row).
     """
     seg = lineage.str.split(";").list.get(position, null_on_oob=True).str.strip_chars()
-    return pl.when(seg.is_null() | (seg == "")).then(pl.lit("Unclassified")).otherwise(seg)
+    return pl.when(seg.is_null() | (seg == "")).then(pl.lit(UNCLASSIFIED)).otherwise(seg)
 
 
-def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
-    """Unpivot the QIIME2 rel-table-6 wide table into a long Sankey-ready DF."""
-    wide = sources["genus"]
-    if wide is None or wide.is_empty():
-        # Defensive fallback to Phylum-only data if the deeper rel-tables
-        # weren't bundled for this project.
-        raise ValueError("ampliseq sankey: rel-table-6 (Genus) source required but missing")
+def _from_collapsed_table(wide: pl.DataFrame) -> pl.DataFrame:
+    """Fallback: unpivot a collapsed ``rel-table-N`` and split its lineage.
 
+    Missing intermediate ranks (adjacent ``;``) cleanly resolve to
+    'Unclassified'.
+    """
     lineage_col = wide.columns[0]
     sample_cols = [c for c in wide.columns if c != lineage_col]
-
     long = wide.unpivot(
         on=sample_cols,
         index=[lineage_col],
         variable_name="sample_id",
         value_name="abundance",
     )
-
-    # Parse the lineage string into per-rank columns by positional split.
-    # Missing intermediate ranks (adjacent ``;``) cleanly resolve to
-    # 'Unclassified'.
     rank_exprs = [
         _parse_rank_at(pl.col(lineage_col), i).alias(name)
         for i, name in enumerate(_RANKS_BY_POSITION)
     ]
-    long = long.with_columns(rank_exprs).drop(lineage_col)
-
-    long = long.with_columns(
-        pl.col("sample_id").cast(pl.Utf8),
-        pl.col("abundance").cast(pl.Float64, strict=False),
+    return (
+        long.with_columns(rank_exprs)
+        .drop(lineage_col)
+        .with_columns(
+            pl.col("sample_id").cast(pl.Utf8),
+            pl.col("abundance").cast(pl.Float64, strict=False),
+        )
     )
+
+
+def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
+    """Build the long Sankey-ready DF from whichever taxonomy artefact exists.
+
+    The ASV table wins when present: its ranks are named columns, so every step
+    of the flow is labelled correctly whatever depth the run's reference
+    database has. A collapsed rel-table is the fallback for runs that ship no
+    DADA2 ASV table.
+    """
+    asv_tax = sources.get("asv_tax")
+    genus = sources.get("genus")
+
+    if asv_tax is not None and not asv_tax.is_empty():
+        long = asv_table_to_ranks(asv_tax)
+    elif genus is not None and not genus.is_empty():
+        long = _from_collapsed_table(genus)
+    else:
+        raise ValueError(
+            "ampliseq sankey: no taxonomy source found — expected either "
+            "qiime2/rel_abundance_tables/rel-table-ASV_with-DADA2-tax.tsv or a "
+            "collapsed rel-table under the run directory"
+        )
 
     # Per-sample relative abundance sums to ~1.0 per sample. The Sankey
     # renderer (compute_sankey) sums weights across all matching rows when
