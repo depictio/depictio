@@ -36,11 +36,11 @@
  *     banner: Promote posts once and clears it; Discard confirms, DELETEs
  *     and lands on /dashboards. The "draft" is a seeded dashboard whose GET
  *     is proxied and stamped, so nothing is generated or deleted for real.
- *  7. Reviewing that draft tile by tile, from the banner's review bar: the
- *     bar names one tile at a time, Keep posts once, moves the banner's
+ *  7. Reviewing that draft tile by tile, from the right-hand review panel:
+ *     the panel lists every tile, Keep posts once, moves the banner's
  *     counter and steps to the next tile, a mocked regenerate stream
  *     replaces exactly one tile (the replacement comes back under a new
- *     generation tag, which is what the assertions read off the bar) and
+ *     generation tag, which is what the assertions read off the panel) and
  *     Promote asks for a confirmation while tiles are still unreviewed. The
  *     Generate tab's "Previous generations" column lists a project's mocked
  *     runs, with the counts, the warnings and a link into the draft a run
@@ -692,37 +692,35 @@ async function mockDraftReview(page: Page): Promise<DraftReviewState> {
   return state;
 }
 
-/** Opens the editor on the mocked draft and waits for the banner and its
- *  review bar, which is where every review test starts. */
+/** Opens the editor on the mocked draft and waits for the banner and the
+ *  review panel, which opens by itself on an unreviewed draft and is where
+ *  every review test starts. */
 async function openDraftEditor(page: Page, dashboardId: string): Promise<void> {
   await page.goto(`/dashboard-edit/${dashboardId}`);
   await expect(page.locator("[data-testid='ai-draft-banner']")).toBeVisible({
     timeout: 30_000,
   });
-  await expect(page.locator("[data-testid='draft-review-bar']")).toBeVisible({
+  await expect(page.locator("[data-testid='draft-review-panel']")).toBeVisible({
     timeout: 30_000,
   });
 }
 
-/** Tags of the draft's tiles in the bar's own order, read by walking its
- *  cursor forward from the tile it is on. The bar names one tile at a time,
- *  so this is the only way to see them all, and walking it is what a
- *  reviewer does anyway. Leaves the cursor on the last tile. */
-async function walkReviewTags(page: Page, count: number): Promise<(string | null)[]> {
-  const position = page.locator("[data-testid='draft-review-position']");
-  const current = page.locator("[data-testid='draft-review-current']");
-  // Precondition, asserted rather than assumed: the walk only covers the whole
-  // draft when it starts on the first tile.
-  await expect(position).toHaveText(`1 / ${count}`);
-  const tags: (string | null)[] = [await current.getAttribute("data-tag")];
-  for (let i = 1; i < count; i += 1) {
-    await page.locator("[data-testid='draft-review-next']").click();
-    // The position is the render's own signal that the cursor has moved, so
-    // the tag read below is never the previous tile's.
-    await expect(position).toHaveText(`${i + 1} / ${count}`);
-    tags.push(await current.getAttribute("data-tag"));
-  }
-  return tags;
+/** Tags of the draft's tiles as the panel lists them, sorted. The panel shows
+ *  every tile at once, grouped by section, so the whole draft is readable
+ *  without moving the cursor; the sort is what keeps the assertions about
+ *  WHICH tiles are listed independent of how the plan grouped them. */
+async function reviewPanelTags(page: Page, count: number): Promise<string[]> {
+  const items = page.locator("[data-testid='draft-review-item']");
+  await expect(items).toHaveCount(count);
+  const tags = await items.evaluateAll((els) =>
+    els.map((el) => el.getAttribute("data-tag") ?? ""),
+  );
+  return tags.sort();
+}
+
+/** The panel row for one tile, which is also how a reviewer selects it. */
+function reviewPanelItem(page: Page, tag: string): Locator {
+  return page.locator(`[data-testid='draft-review-item'][data-tag='${tag}']`);
 }
 
 /** Mirrors one row of GET /ai/generations/{project_id} (GenerationSummary):
@@ -1450,7 +1448,7 @@ test.describe("AI assistant", () => {
     expect(deleted).toEqual([dashboardId]);
   });
 
-  test("AI draft: the review bar walks the tiles, Keep moves the banner counter", async ({
+  test("AI draft: the review panel lists the tiles, Keep moves the banner counter", async ({
     loginAsAdmin,
     page,
   }) => {
@@ -1469,14 +1467,18 @@ test.describe("AI assistant", () => {
     const counter = page.locator("[data-testid='ai-draft-review-count']");
     await expect(counter).toHaveText(`Reviewed 0 of ${total}`);
 
-    // Nothing reviewed yet, so the bar opens on the first tile.
-    const bar = page.locator("[data-testid='draft-review-bar']");
+    // The panel lists every tile of the draft, in plan order, and its own
+    // progress agrees with the banner's counter.
+    const panel = page.locator("[data-testid='draft-review-panel']");
     const position = page.locator("[data-testid='draft-review-position']");
     const current = page.locator("[data-testid='draft-review-current']");
-    await expect(position).toHaveText(`1 / ${total}`);
+    await expect(position).toHaveText(`0 of ${total} reviewed`);
+    expect(await reviewPanelTags(page, total)).toEqual([...draft.tags].sort());
+
+    // Nothing reviewed yet, so the cursor sits on the first tile.
     await expect(current).toHaveAttribute("data-reviewed", "false");
-    const tag = await current.getAttribute("data-tag");
-    expect(tag).toBeTruthy();
+    const tag = String(draft.tags[0]);
+    await expect(current).toHaveAttribute("data-tag", tag);
 
     // Keep posts once and moves the counter with the click.
     const reviewRequest = page.waitForRequest(
@@ -1486,15 +1488,25 @@ test.describe("AI assistant", () => {
     await page.locator("[data-testid='draft-review-keep']").click();
     await reviewRequest;
     await expect(counter).toHaveText(`Reviewed 1 of ${total}`);
+    await expect(position).toHaveText(`1 of ${total} reviewed`);
     expect(draft.reviews).toEqual([{ tag, action: "keep" }]);
+    // The tile's row carries the verdict, so the list is a map of what is
+    // left rather than a static index.
+    await expect(reviewPanelItem(page, tag)).toHaveAttribute("data-reviewed", "true");
 
     if (total > 1) {
-      // And the bar has moved on by itself: reviewing n tiles is n clicks.
-      await expect(position).toHaveText(`2 / ${total}`);
-      await expect(current).not.toHaveAttribute("data-tag", String(tag));
+      // And the cursor has moved on by itself: reviewing n tiles is n clicks.
+      await expect(current).toHaveAttribute("data-tag", String(draft.tags[1]));
+      // Clicking a row is the other way to walk the draft: it puts the cursor
+      // back on the tile just kept, undo and all.
+      await reviewPanelItem(page, tag).click();
+      await expect(current).toHaveAttribute("data-tag", tag);
+      await expect(current).toHaveAttribute("data-reviewed", "true");
     } else {
-      // A one-tile draft has nothing left to walk, so the bar says so.
-      await expect(bar).toContainText("reviewed");
+      // A one-tile draft has nothing left to decide, so the panel says so
+      // instead of offering three dead buttons.
+      await expect(panel).toContainText("reviewed");
+      await expect(page.locator("[data-testid='draft-review-keep']")).toHaveCount(0);
     }
   });
 
@@ -1511,7 +1523,7 @@ test.describe("AI assistant", () => {
     const draft = await mockDraftReview(page);
     await openDraftEditor(page, dashboardId);
 
-    // What the GET proxy stamped, in the order the bar walks them.
+    // What the GET proxy stamped; the cursor opens on the first of them.
     const before = [...draft.tags];
     const total = before.length;
     const target = before[0];
@@ -1520,7 +1532,8 @@ test.describe("AI assistant", () => {
     const current = page.locator("[data-testid='draft-review-current']");
     await expect(current).toHaveAttribute("data-tag", target);
 
-    // The instruction is optional, but it is what the popover exists for.
+    // The instruction is optional, but it is what the reveal exists for: the
+    // form opens inside the panel, not over the dashboard being judged.
     await page.locator("[data-testid='draft-review-regenerate']").click();
     const instruction = page.locator("[data-testid='draft-review-instruction']");
     await expect(instruction).toBeVisible();
@@ -1542,10 +1555,10 @@ test.describe("AI assistant", () => {
     await expect(current).toHaveAttribute("data-tag", `${target}_v2`, {
       timeout: 30_000,
     });
-    // And every other tile kept the tag it had. The walk starts on the tile
-    // just regenerated, which is where the cursor was left.
-    const after = await walkReviewTags(page, total);
-    expect(after).toEqual(before.map((t) => (t === target ? `${target}_v2` : t)));
+    // And every other tile kept the tag it had: the panel lists the whole
+    // draft, so one read covers all of them.
+    const after = await reviewPanelTags(page, total);
+    expect(after).toEqual(before.map((t) => (t === target ? `${target}_v2` : t)).sort());
     expect(draft.regenerated).toHaveLength(1);
     expect(draft.regenerated[0].instruction).toBe("use a box plot");
   });
