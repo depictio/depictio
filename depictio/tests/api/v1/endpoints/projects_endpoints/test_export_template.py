@@ -41,12 +41,20 @@ def _manifest_project_doc(owner_id: ObjectId) -> dict:
     manifest_url = "https://data.example.org/run42/manifest.json"
     workflow = Workflow(
         name="manifest",
+        # Apostrophes are stored HTML-escaped by MongoModel.sanitize_description.
+        description="Run42's workflow",
         engine=WorkflowEngine(name="python"),
         config=WorkflowConfig(),
         data_location=WorkflowDataLocation(structure="flat", locations=[manifest_url]),
         data_collections=[
             DataCollection(
                 data_collection_tag="samples",
+                description="Sample's data",
+                # Ingest bookkeeping the deltatable upsert writes per DC.
+                flexible_metadata={
+                    "deltatable_size_bytes": 4096,
+                    "deltatable_size_updated": "2026-01-01T00:00:00",
+                },
                 config=DataCollectionConfig(
                     type="table",
                     metatype="metadata",
@@ -64,13 +72,30 @@ def _manifest_project_doc(owner_id: ObjectId) -> dict:
     return {
         "_id": ObjectId(),
         "name": "Run42 Analysis",
+        # As persisted: already through the validator once.
+        "description": "Run42&#x27;s project",
         "project_type": "basic",
         "is_public": False,
         "permissions": {"owners": [{"_id": owner_id}], "editors": [], "viewers": []},
         "hash": "abc123",
         "registration_time": "2026-01-01 00:00:00",
+        "last_modified": "2026-01-02 00:00:00",
         "workflows": [workflow.mongo()],
     }
+
+
+def _instantiate(bundle: dict[str, str]):
+    """Re-instantiate a bundle the way template instantiation does."""
+    from depictio.cli.cli.utils.templates import substitute_template_variables
+    from depictio.models.models.projects import Project
+
+    cfg = yaml.safe_load(bundle["template.yaml"])
+    cfg.pop("template")
+    cfg = substitute_template_variables(
+        cfg, {"MANIFEST_URL": "https://mirror.example.org/manifest.json"}
+    )
+    cfg["permissions"] = {"owners": [{"_id": ObjectId(), "email": "owner@example.com"}]}
+    return Project(**cfg)
 
 
 def _dashboard_doc(project_oid: ObjectId, wf_id, dc_id) -> dict:
@@ -160,7 +185,15 @@ def test_bundle_sanitized_and_parameterized(mock_db):
     assert meta["dashboards"] == ["dashboards/run42_overview.yaml"]
 
     # Sanitization: no runtime key survives at any nesting level.
-    forbidden_keys = {"permissions", "_id", "id", "hash", "registration_time"}
+    forbidden_keys = {
+        "permissions",
+        "_id",
+        "id",
+        "hash",
+        "registration_time",
+        "last_modified",
+        "flexible_metadata",
+    }
 
     def _assert_clean(node):
         if isinstance(node, dict):
@@ -173,6 +206,13 @@ def test_bundle_sanitized_and_parameterized(mock_db):
 
     _assert_clean(template)
     assert "abc123" not in bundle["template.yaml"]  # the stored project hash
+    assert "deltatable_size" not in bundle["template.yaml"]  # per-DC ingest bookkeeping
+
+    # Descriptions are authored text again, not the HTML-escaped stored form.
+    assert "&#x27;" not in bundle["template.yaml"]
+    assert template["description"] == "Run42's project"
+    assert template["workflows"][0]["description"] == "Run42's workflow"
+    assert template["workflows"][0]["data_collections"][0]["description"] == "Sample's data"
 
     # Reverse parameterization: stored URL became the placeholder everywhere.
     scan = template["workflows"][0]["data_collections"][0]["config"]["scan"]
@@ -185,6 +225,28 @@ def test_bundle_sanitized_and_parameterized(mock_db):
     assert "workflow_tag" in dash_yaml
     assert "data_collection_tag" in dash_yaml
     assert str(wf["_id"]) not in dash_yaml
+
+
+def test_descriptions_round_trip_unchanged(mock_db):
+    """Project -> bundle -> Project must give back the stored description
+    (escaped exactly once), not an ever-growing &amp;#x27; chain."""
+    user = _user()
+    doc = _manifest_project_doc(user.id)
+    mock_db["projects"].insert_one(doc)
+    wf = doc["workflows"][0]
+    dc = wf["data_collections"][0]
+    assert dc["description"] == "Sample&#x27;s data"  # stored form, escaped once
+
+    project = _instantiate(_build(str(doc["_id"]), user))
+
+    assert project.description == doc["description"]
+    assert project.workflows[0].description == wf["description"]
+    assert project.workflows[0].data_collections[0].description == dc["description"]
+    assert project.workflows[0].data_collections[0].flexible_metadata is None
+
+    # A second export/instantiate cycle is a fixed point.
+    again = _instantiate(_build(str(doc["_id"]), user))
+    assert again.workflows[0].data_collections[0].description == dc["description"]
 
 
 def test_data_root_parameterization(mock_db):

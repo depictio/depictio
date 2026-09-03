@@ -101,6 +101,31 @@ class TestWorkflowDataLocation:
         config = WorkflowDataLocation(structure="flat", locations=["/path/with/{ENV_VAR}"])
         assert config.locations == ["/path/with/{ENV_VAR}"]
 
+    @pytest.mark.parametrize("location", ["s3://bucket/run42/", "S3://bucket/run42/"])
+    def test_remote_location_scheme_case_insensitive(self, location, monkeypatch):
+        """Scheme matching follows is_remote_url: S3:// is as remote as s3://."""
+        monkeypatch.setattr("depictio.models.models.workflows.DEPICTIO_CONTEXT", "cli")
+        config = WorkflowDataLocation(structure="flat", locations=[location])
+        # Kept verbatim: no DirectoryPath existence check for a remote location.
+        assert config.locations == [location]
+
+    def test_http_location_rejected_without_opt_in(self, monkeypatch):
+        monkeypatch.delenv("DEPICTIO_REMOTE_ALLOW_HTTP", raising=False)
+        with pytest.raises(ValidationError, match="URL scheme not allowed for 'http://"):
+            WorkflowDataLocation(structure="flat", locations=["http://host:8099/manifest.json"])
+
+    def test_http_location_accepted_with_opt_in(self, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_REMOTE_ALLOW_HTTP", "true")
+        config = WorkflowDataLocation(
+            structure="flat", locations=["http://host:8099/manifest.json"]
+        )
+        assert config.locations == ["http://host:8099/manifest.json"]
+
+    def test_unknown_scheme_rejected(self, monkeypatch):
+        monkeypatch.delenv("DEPICTIO_REMOTE_ALLOW_HTTP", raising=False)
+        with pytest.raises(ValidationError, match="URL scheme not allowed for 'ftp://"):
+            WorkflowDataLocation(structure="flat", locations=["ftp://host/run42/"])
+
 
 class TestWorkflowConfig:
     """Test suite for WorkflowConfig model."""
@@ -194,19 +219,9 @@ class TestWorkflowRun:
         # Would be validated by DirectoryPath
         assert isinstance(run.run_location, str)
 
-    @pytest.mark.parametrize(
-        "location",
-        [
-            "s3://bucket/run42/",
-            "https://data.example.org/manifest.json",
-            "http://host:8099/manifest.json",
-        ],
-    )
-    def test_remote_run_location_skips_the_directory_check(self, location):
-        """Remote acquisition modes (url / s3_prefix / manifest) record their
-        source URL here. There is nothing local to stat, and the CLI-context
-        branch would otherwise reject every remote run."""
-        run = WorkflowRun(
+    @staticmethod
+    def _run_at(location: str) -> WorkflowRun:
+        return WorkflowRun(
             workflow_id=PyObjectId(),
             run_tag="test",
             workflow_config_id=PyObjectId(),
@@ -219,7 +234,34 @@ class TestWorkflowRun:
                 viewers=[],
             ),
         )
-        assert run.run_location == location
+
+    @pytest.mark.parametrize(
+        "location",
+        [
+            "s3://bucket/run42/",
+            "S3://bucket/run42/",
+            "https://data.example.org/manifest.json",
+            "HTTPS://data.example.org/manifest.json",
+        ],
+    )
+    @patch("depictio.models.models.workflows.DEPICTIO_CONTEXT", "CLI")
+    def test_remote_run_location_skips_the_directory_check(self, location):
+        """Remote acquisition modes (url / s3_prefix / manifest) record their
+        source URL here. There is nothing local to stat, and the CLI-context
+        branch would otherwise reject every remote run. Scheme matching is
+        case-insensitive, like is_remote_url."""
+        assert self._run_at(location).run_location == location
+
+    def test_http_run_location_rejected_without_opt_in(self, monkeypatch):
+        """http:// follows DEPICTIO_REMOTE_ALLOW_HTTP, exactly like ScanURL."""
+        monkeypatch.delenv("DEPICTIO_REMOTE_ALLOW_HTTP", raising=False)
+        with pytest.raises(ValidationError, match="URL scheme not allowed for 'http://"):
+            self._run_at("http://host:8099/manifest.json")
+
+    def test_http_run_location_accepted_with_opt_in(self, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_REMOTE_ALLOW_HTTP", "true")
+        run = self._run_at("http://host:8099/manifest.json")
+        assert run.run_location == "http://host:8099/manifest.json"
 
     @patch("depictio.models.config.DEPICTIO_CONTEXT", "CLI")
     def test_file_run_location_accepted_in_cli_context(self, tmp_path):
