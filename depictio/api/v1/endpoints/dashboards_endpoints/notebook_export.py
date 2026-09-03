@@ -9,10 +9,15 @@ funnel view showed, computed by the same code.
 
 from __future__ import annotations
 
+import base64
 import json
+import mimetypes
 from datetime import datetime, timezone
+from functools import lru_cache
+from pathlib import Path
 from typing import Annotated, Any
 from urllib.parse import urlparse
+from uuid import uuid4
 
 from bson import ObjectId
 from fastapi import Depends, HTTPException, Response
@@ -38,10 +43,12 @@ from depictio.api.v1.services.notebook_export.ipynb import (
     to_ipynb,
 )
 from depictio.api.v1.services.notebook_export.quarto import QuartoFrontMatter, to_quarto_ipynb
+from depictio.api.v1.services.notebook_export.reading_order import filter_icon_id
 from depictio.models.models.analysis_state import (
     AnalysisState,
     NotebookExportRequest,
     NotebookPreflight,
+    NotebookRenderStatus,
 )
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.users import User
@@ -64,6 +71,13 @@ TAB_PROJECTION = {
         "filter_sections",
         "stored_metadata",
         "project_id",
+        "brand_theme",
+        # Sidebar precedence is tab_icon(_color) || icon(_color) — both are
+        # needed to replicate a tab's own icon in the export.
+        "tab_icon",
+        "tab_icon_color",
+        "icon",
+        "icon_color",
     )
 }
 
@@ -153,6 +167,172 @@ def _who(current_user: Any) -> str | None:
         if value:
             return str(value)
     return None
+
+
+# The default wordmark shipped with the app — what an unbranded ("inherit")
+# instance shows in its own chrome, so an unbranded export's header matches it
+# rather than looking generic. Read from disk once; nothing here changes at
+# runtime, unlike an admin-uploaded logo.
+_DEFAULT_LOGO_PATH = (
+    Path(__file__).resolve().parents[3] / "static_assets/images/logos/logo_black.svg"
+)
+
+
+def _data_uri(content: bytes, content_type: str | None) -> str:
+    mime = content_type or mimetypes.guess_type("x.svg")[0] or "application/octet-stream"
+    return f"data:{mime};base64,{base64.b64encode(content).decode('ascii')}"
+
+
+# The tab icon, which is the app's own and not the brand's: the live SPA ships
+# one favicon whatever an instance is branded as, and a reader with the report
+# and the dashboard open in two tabs should see the same mark on both.
+_FAVICON_PATH = Path(__file__).resolve().parents[3] / "static_assets/images/icons/favicon.png"
+
+
+@lru_cache(maxsize=1)
+def _favicon_data_uri() -> str | None:
+    try:
+        return _data_uri(_FAVICON_PATH.read_bytes(), "image/png")
+    except OSError as exc:  # a missing icon is never worth failing the export over
+        logger.debug(f"notebook export: favicon unavailable: {exc}")
+        return None
+
+
+@lru_cache(maxsize=1)
+def _depictio_version() -> str | None:
+    try:
+        from depictio.version import get_version
+
+        return get_version()
+    except Exception as exc:  # the export is not worth failing over a version string
+        logger.debug(f"notebook export: version unavailable: {exc}")
+        return None
+
+
+def _resolve_export_brand(
+    dashboard_id: Any, dashboard_brand_theme: dict[str, Any] | None
+) -> dict[str, Any]:
+    """The header byline: instance identity, with this dashboard's own override on top.
+
+    Mirrors what the live app's chrome shows (``/utils/public-config`` +
+    ``useBrandLogoMode``): env defaults, folded with the admin panel's live
+    overrides, folded with this dashboard's own ``brand_theme`` — so a
+    dashboard branded for e.g. a specific project carries that identity into
+    its export too, not just the instance default. The logo is baked in as a
+    data URI (base64) rather than linked, matching every other asset in these
+    exports: the file is meant to still work months later, off the network
+    that served it.
+    """
+    from depictio.api.v1.services.branding import (
+        dashboard_logo_key,
+        get_effective_brand_theme,
+        instance_logo_key,
+        read_logo_asset,
+    )
+    from depictio.models.models.branding import BrandTheme, merge_brand_themes, resolve_brand_theme
+
+    try:
+        instance_theme = get_effective_brand_theme()
+        dash_theme = BrandTheme(**(dashboard_brand_theme or {}))
+        theme = resolve_brand_theme(merge_brand_themes(instance_theme, dash_theme))
+    except Exception as exc:  # a broken theme document should not break the export
+        logger.debug(f"notebook export: brand theme unavailable: {exc}")
+        theme = None
+
+    brand: dict[str, Any] = {"app_name": (theme.app_name if theme else None) or "Depictio"}
+    if theme:
+        brand["primary"] = theme.primary
+
+    logo_data_uri: str | None = None
+    try:
+        if theme and theme.logo_mode == "custom" and theme.logo_url:
+            # An upload (dashboard-level or instance-level) lives in Mongo under
+            # a predictable key — read the bytes directly rather than looping
+            # the export's own HTTP request back through the API. Only a
+            # genuinely external `logo_url` (an admin-configured CDN link) ever
+            # needs the network.
+            stored = read_logo_asset(dashboard_logo_key(dashboard_id)) or read_logo_asset(
+                instance_logo_key("light")
+            )
+            if stored:
+                logo_data_uri = _data_uri(*stored)
+            elif theme.logo_url.startswith("http"):
+                import httpx
+
+                resp = httpx.get(theme.logo_url, timeout=5.0)
+                resp.raise_for_status()
+                logo_data_uri = _data_uri(resp.content, resp.headers.get("content-type"))
+        elif not theme or theme.logo_mode == "inherit":
+            content = _DEFAULT_LOGO_PATH.read_bytes()
+            logo_data_uri = _data_uri(content, "image/svg+xml")
+        # logo_mode == "none": the brand explicitly asks for no logo.
+    except Exception as exc:  # a cosmetic byline is never worth failing the export over
+        logger.debug(f"notebook export: brand logo unavailable: {exc}")
+    if logo_data_uri:
+        brand["logo_data_uri"] = logo_data_uri
+    return brand
+
+
+def _resolve_tab_brands(
+    tabs: list[dict[str, Any]], *, main_brand: dict[str, Any]
+) -> dict[str, dict[str, Any]]:
+    """Every tab's own resolved brand, keyed by its ``dashboard_id``.
+
+    Each tab in a family is its own dashboard document with its own possible
+    ``brand_theme`` override (#397), the same as the main tab; ``main_brand``
+    is already resolved by the caller and reused here rather than twice.
+    """
+    out: dict[str, dict[str, Any]] = {}
+    for i, tab in enumerate(tabs):
+        dash_id = str(tab.get("dashboard_id") or "")
+        if not dash_id:
+            continue
+        out[dash_id] = (
+            main_brand if i == 0 else _resolve_export_brand(dash_id, tab.get("brand_theme"))
+        )
+    return out
+
+
+def _resolve_tab_icons(tabs: list[dict[str, Any]]) -> dict[str, str]:
+    """Every Iconify id a tab or one of its grid sections uses, resolved once.
+
+    Ids repeat across a family's tabs and sections; ``resolve_icons`` itself
+    caches per process (``icons.py``), so this just gathers the set the
+    export needs before asking.
+    """
+    from depictio.api.v1.services.icons import resolve_icons
+    from depictio.api.v1.services.notebook_export.generator import (
+        FILTERS_ICON,
+        FUNNEL_ICON,
+        RESULTS_ICON,
+        SUMMARY_ICON,
+    )
+    from depictio.api.v1.services.notebook_export.provenance import (
+        EXPORT_DETAILS_ICON,
+        PROVENANCE_ICON,
+    )
+    from depictio.api.v1.services.notebook_export.reading_order import tab_icon_id
+
+    # The headings the export writes itself, alongside the dashboard's own.
+    icon_ids: set[str] = {
+        PROVENANCE_ICON,
+        EXPORT_DETAILS_ICON,
+        RESULTS_ICON,
+        FILTERS_ICON,
+        SUMMARY_ICON,
+        FUNNEL_ICON,
+    }
+    for tab in tabs:
+        icon_ids.add(tab_icon_id(tab))
+        for spec in tab.get("grid_sections") or []:
+            if isinstance(spec, dict):
+                icon_ids.add(str(spec.get("icon") or ""))
+        # Every filter the panel could list, so the export's own summary can
+        # show the same icon the panel does.
+        for meta in tab.get("stored_metadata") or []:
+            if isinstance(meta, dict) and meta.get("component_type") == "interactive":
+                icon_ids.add(filter_icon_id(meta))
+    return resolve_icons(icon_ids)
 
 
 def build_export_plan(
@@ -263,6 +443,10 @@ def build_export_plan(
                 value=f.get("value"),
                 source_dc_id=str((f.get("metadata") or {}).get("dc_id") or meta.get("dc_id") or "")
                 or None,
+                icon=filter_icon_id(meta),
+                # `interactiveAccentRaw`: the control's own colour, whichever
+                # of the three fields carries it.
+                color=(meta.get("icon_color") or meta.get("color") or meta.get("custom_color")),
                 per_dc=per_dc,
                 rows_by_dc=dict(row.get("rows_by_dc") or {}),
             )
@@ -271,6 +455,7 @@ def build_export_plan(
     api_url = settings.fastapi.external_url
     instance = urlparse(api_url).netloc or api_url
     main = tabs[0]
+    brand = _resolve_export_brand(dashboard_id, main.get("brand_theme"))
     return ExportPlan(
         tabs=tabs,
         project=project,
@@ -285,6 +470,10 @@ def build_export_plan(
         api_url=api_url,
         warnings=warnings,
         marimo_version=marimo_version() or "0.24.0",
+        depictio_version=_depictio_version(),
+        brand=brand,
+        tab_brands=_resolve_tab_brands(tabs, main_brand=brand),
+        icons=_resolve_tab_icons(tabs),
     )
 
 
@@ -300,7 +489,27 @@ def notebook_export_preflight(
     """What the export will contain: one verdict per tile, stage counts, warnings."""
     _require_enabled()
     plan = build_export_plan(dashboard_id, request.state, current_user, access_token)
-    return NotebookBuilder(plan).preflight(ipynb_available=ipynb_available())
+    # Whether the *worker* can render is not something the API can see (Quarto
+    # lives in the worker image), so this is the operator's switch, not a probe.
+    return NotebookBuilder(plan).preflight(
+        ipynb_available=ipynb_available(),
+        render_available=settings.notebook_export.render_enabled and ipynb_available(),
+    )
+
+
+def _quarto_ipynb(plan: ExportPlan, source: str) -> bytes:
+    """The Quarto-ready notebook for a plan: the ``.ipynb`` plus its front matter."""
+    ipynb = to_ipynb(source, timeout_s=settings.notebook_export.ipynb_timeout_s, stem=plan.stem)
+    return to_quarto_ipynb(
+        ipynb,
+        QuartoFrontMatter(
+            title=plan.title,
+            subtitle=plan.subtitle or f"Exported from Depictio on {plan.exported_at:%Y-%m-%d}",
+            author=plan.exported_by,
+            date=plan.exported_at.strftime("%Y-%m-%d"),
+            favicon_data_uri=_favicon_data_uri(),
+        ),
+    )
 
 
 @dashboards_endpoint_router.post("/notebook_export/{dashboard_id}")
@@ -314,6 +523,8 @@ def notebook_export(
 
     Nothing runs on the server: the marimo file is generated text, the
     ``.ipynb`` variants come from marimo's converter with outputs excluded.
+    The rendered report is the one thing that does execute, and it is a
+    separate, opt-in endpoint below.
     """
     _require_enabled()
     plan = build_export_plan(dashboard_id, request.state, current_user, access_token)
@@ -326,23 +537,204 @@ def notebook_export(
             headers={"Content-Disposition": f'attachment; filename="{stem}.py"'},
         )
     try:
-        ipynb = to_ipynb(source, timeout_s=settings.notebook_export.ipynb_timeout_s, stem=stem)
+        if request.format == "quarto":
+            ipynb = _quarto_ipynb(plan, source)
+            filename = f"{stem}.quarto.ipynb"
+        else:
+            ipynb = to_ipynb(source, timeout_s=settings.notebook_export.ipynb_timeout_s, stem=stem)
+            filename = f"{stem}.ipynb"
     except IpynbExportUnavailable as exc:
         raise HTTPException(status_code=501, detail=str(exc)) from exc
-    filename = f"{stem}.ipynb"
-    if request.format == "quarto":
-        ipynb = to_quarto_ipynb(
-            ipynb,
-            QuartoFrontMatter(
-                title=plan.title,
-                subtitle=plan.subtitle or f"Exported from Depictio on {plan.exported_at:%Y-%m-%d}",
-                author=plan.exported_by,
-                date=plan.exported_at.strftime("%Y-%m-%d"),
-            ),
-        )
-        filename = f"{stem}.quarto.ipynb"
     return Response(
         content=ipynb,
         media_type="application/x-ipynb+json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ── The rendered report ───────────────────────────────────────────────────────
+#
+# The one path in the export that executes anything. It is a job and not a
+# request: the notebook is run end to end on a worker, and every tile the
+# export renders rather than computes costs a browser pass, so a dashboard's
+# report is minutes of work. The client starts it, polls the status, then
+# downloads.
+
+
+def _require_render_enabled() -> None:
+    _require_enabled()
+    if not settings.notebook_export.render_enabled:
+        raise HTTPException(
+            status_code=501,
+            detail=(
+                "Rendered HTML reports are not enabled on this deployment "
+                "(DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED)."
+            ),
+        )
+
+
+def _require_owner_for_authored_code(
+    dashboard_id: PyObjectId, current_user: User, builder: NotebookBuilder
+) -> None:
+    """Only an owner may render a dashboard that carries its author's own code.
+
+    A code-mode figure is Python somebody wrote in the chart builder, and this
+    is the one path that runs it: on a worker, with a token minted for whoever
+    asked for the report. Rendering someone else's dashboard would therefore
+    run their code with the reader's rights. An owner can already change that
+    code, so for them the render adds nothing they could not do; for everyone
+    else the report is refused rather than quietly downgraded — a report
+    missing its figures is not the report they asked for.
+    """
+    authored = [
+        c
+        for c in builder.preflight(ipynb_available=True).components
+        if c.status == "code" and c.kind == "code"
+    ]
+    if not authored or settings.auth.is_single_user_mode:
+        return
+    from depictio.api.v1.services.screenshot_service import check_dashboard_owner_permission_sync
+
+    if check_dashboard_owner_permission_sync(str(dashboard_id), str(current_user.id)):
+        return
+    titles = ", ".join(sorted({c.title or c.index for c in authored})[:3])
+    raise HTTPException(
+        status_code=403,
+        detail=(
+            f"This dashboard has {len(authored)} code-mode figure(s) ({titles}) whose Python "
+            "would run on the server. Rendering a report is limited to the dashboard's owners; "
+            "download the notebook and run it yourself instead."
+        ),
+    )
+
+
+def _render_job(job_id: str, current_user: User) -> tuple[Any, dict[str, Any]]:
+    """The job's Celery result, plus its payload once it has one.
+
+    A job is addressed by an id the server minted, and its artefacts live under
+    the prefix of the user who asked for it: a result that names another user
+    is not this caller's job to read.
+    """
+    from celery.result import AsyncResult
+
+    from depictio.api.celery_app import celery_app
+
+    result = AsyncResult(job_id, app=celery_app)
+    payload = result.result if isinstance(result.result, dict) else {}
+    owner = str(payload.get("user_id") or "")
+    if owner and owner != str(current_user.id):
+        raise HTTPException(status_code=404, detail=f"No render job '{job_id}'.")
+    return result, payload
+
+
+@dashboards_endpoint_router.post(
+    "/notebook_export/{dashboard_id}/render",
+    response_model=NotebookRenderStatus,
+    status_code=202,
+)
+async def notebook_export_render(
+    dashboard_id: PyObjectId,
+    request: NotebookExportRequest,
+    current_user: User = Depends(get_user_or_anonymous),
+    access_token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
+) -> NotebookRenderStatus:
+    """Start rendering the dashboard's notebook into an HTML report."""
+    _require_render_enabled()
+    if not current_user or not getattr(current_user, "id", None):
+        raise HTTPException(status_code=401, detail="Rendering a report needs a signed-in user.")
+
+    from depictio.api.celery_app import render_notebook_report
+    from depictio.api.v1.endpoints.user_endpoints.core_functions import _add_token
+    from depictio.api.v1.services.notebook_export import store
+    from depictio.models.models.users import TokenData
+
+    plan = build_export_plan(dashboard_id, request.state, current_user, access_token)
+    builder = NotebookBuilder(plan)
+    _require_owner_for_authored_code(dashboard_id, current_user, builder)
+    try:
+        ipynb = _quarto_ipynb(plan, builder.build())
+    except IpynbExportUnavailable as exc:
+        raise HTTPException(status_code=501, detail=str(exc)) from exc
+
+    job_id = uuid4().hex
+    user_id = str(current_user.id)
+    notebook_key = store.job_key(user_id, job_id, f"{plan.stem}.quarto.ipynb")
+    store.put(notebook_key, ipynb, store.IPYNB_MEDIA_TYPE)
+
+    # The notebook runs as the user who asked for it, so the report holds what
+    # they can see and nothing more. A token of its own, so the render can be
+    # revoked on its own: the caller's session is not handed to a worker.
+    token = await _add_token(
+        TokenData(
+            sub=current_user.id,
+            name=f"notebook-report-{job_id}",
+            token_lifetime="short-lived",
+        )
+    )
+    render_notebook_report.apply_async(
+        kwargs={
+            "job_id": job_id,
+            "user_id": user_id,
+            "notebook_key": notebook_key,
+            "stem": plan.stem,
+            "api_url": settings.fastapi.internal_url,
+            "token_id": str(token.id),
+        },
+        task_id=job_id,
+    )
+    logger.info(f"📄 Notebook report {job_id} queued for dashboard {dashboard_id}")
+    return NotebookRenderStatus(
+        job_id=job_id, status="queued", filename=f"{plan.stem}.html", phase="queued"
+    )
+
+
+@dashboards_endpoint_router.get(
+    "/notebook_export/render/{job_id}", response_model=NotebookRenderStatus
+)
+def notebook_export_render_status(
+    job_id: str,
+    current_user: User = Depends(get_user_or_anonymous),
+) -> NotebookRenderStatus:
+    """Where a render job is: queued, running, ready to download, or failed."""
+    _require_render_enabled()
+    result, payload = _render_job(job_id, current_user)
+    if result.successful():
+        return NotebookRenderStatus(
+            job_id=job_id,
+            status="ready",
+            filename=payload.get("filename"),
+            size=payload.get("size"),
+        )
+    if result.failed():
+        return NotebookRenderStatus(job_id=job_id, status="error", reason=str(result.result))
+    return NotebookRenderStatus(
+        job_id=job_id,
+        status="running" if result.state == "PROGRESS" else "queued",
+        phase=str(payload.get("phase") or "").strip() or None,
+    )
+
+
+@dashboards_endpoint_router.get("/notebook_export/render/{job_id}/download")
+def notebook_export_render_download(
+    job_id: str,
+    current_user: User = Depends(get_user_or_anonymous),
+) -> Response:
+    """The rendered report, as a file."""
+    _require_render_enabled()
+    from depictio.api.v1.services.notebook_export import store
+
+    result, payload = _render_job(job_id, current_user)
+    if not result.successful():
+        raise HTTPException(status_code=409, detail=f"Render job '{job_id}' is not ready.")
+    filename = str(payload.get("filename") or "report.html")
+    try:
+        html = store.get(str(payload["key"]))
+    except Exception as exc:  # noqa: BLE001 — a missing object is a gone report
+        raise HTTPException(
+            status_code=404, detail=f"Report '{job_id}' is no longer stored."
+        ) from exc
+    return Response(
+        content=html,
+        media_type=store.HTML_MEDIA_TYPE,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

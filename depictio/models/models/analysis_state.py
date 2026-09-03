@@ -184,7 +184,23 @@ class NotebookPreflight(BaseModel):
     stages: list[NotebookPreflightStage] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     ipynb_available: bool = False
+    render_available: bool = False
     counts: dict[str, int] = Field(default_factory=dict)
+
+
+class NotebookRenderStatus(BaseModel):
+    """A render job: where it is, and what it left behind when it is done.
+
+    The job is the notebook being executed on a worker, which takes minutes —
+    the client starts it, then asks this until it is ``ready`` or ``error``.
+    """
+
+    job_id: str
+    status: Literal["queued", "running", "ready", "error"]
+    phase: str | None = None
+    filename: str | None = None
+    size: int | None = None
+    reason: str | None = None
 
 
 # ---------------------------------------------------------------------------
