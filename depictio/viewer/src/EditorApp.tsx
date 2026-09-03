@@ -108,13 +108,12 @@ import {
   AIAnalyzePanel,
   AIDraftBanner,
   AIKeySection,
-  DraftTileActions,
   promoteGeneratedDashboard,
   reviewComponent,
   useAIHealth,
   useRegenerateComponent,
 } from 'depictio-react-ai';
-import type { ApplyActionsPayload, ResolvedFilter } from 'depictio-react-ai';
+import type { ApplyActionsPayload, DraftTile, ResolvedFilter } from 'depictio-react-ai';
 import type {
   DashboardData,
   DashboardPermissions,
@@ -1244,25 +1243,12 @@ const EditorApp: React.FC = () => {
   /** The generator stamps the plan's handle on every tile it produced; the
    *  review and regenerate routes address a tile by that handle, not by its
    *  runtime `index`. A tile without one was added by hand on top of the
-   *  draft and carries no review strip. */
+   *  draft, so it stays out of the review entirely. */
   const generationTagOf = useCallback((m: StoredMetadata): string | null => {
     const stamped = m.ai_source?.tag;
     if (typeof stamped === 'string' && stamped) return stamped;
     return typeof m.tag === 'string' && m.tag ? m.tag : null;
   }, []);
-
-  /** Handles of the generated tiles still on the dashboard. Removing a tile
-   *  takes it out of the denominator, so a draft whose leftovers were all
-   *  deleted counts as fully reviewed. */
-  const draftTags = useMemo(() => {
-    if (!aiDraft) return [] as string[];
-    const tags: string[] = [];
-    for (const m of dashboard?.stored_metadata ?? []) {
-      const tag = generationTagOf(m);
-      if (tag) tags.push(tag);
-    }
-    return tags;
-  }, [aiDraft, dashboard?.stored_metadata, generationTagOf]);
 
   // The review list lives on the document (only the review route writes it);
   // this mirror is what lets the counter move with the click instead of with
@@ -1271,10 +1257,75 @@ const EditorApp: React.FC = () => {
   useEffect(() => {
     setReviewedTags(dashboard?.ai_generation?.reviewed ?? []);
   }, [dashboard?.ai_generation]);
-  const reviewedCount = useMemo(() => {
-    const present = new Set(draftTags);
-    return reviewedTags.filter((t) => present.has(t)).length;
-  }, [draftTags, reviewedTags]);
+
+  /** The generated tiles still on the dashboard, in the order the document
+   *  keeps them (the plan's own: filter panel first, then each grid
+   *  section), which is what the banner's review bar walks. Removing a tile
+   *  takes it out of the list, so a draft whose leftovers were all deleted
+   *  counts as fully reviewed. */
+  const draftTiles = useMemo<DraftTile[]>(() => {
+    if (!aiDraft) return [];
+    const reviewedSet = new Set(reviewedTags);
+    const tiles: DraftTile[] = [];
+    for (const m of dashboard?.stored_metadata ?? []) {
+      const tag = generationTagOf(m);
+      if (!tag) continue;
+      tiles.push({
+        tag,
+        componentId: m.index,
+        // The tag is the fallback name: every generated tile has one, and it
+        // is what the planner itself called the component.
+        title: (typeof m.title === 'string' && m.title.trim()) || tag,
+        componentType: m.component_type,
+        // The real section, filter-panel folds included: the banner decides
+        // which of them can be regenerated as a whole, and shows the
+        // planner's reason for all of them.
+        section: m.section ?? null,
+        intent:
+          typeof m.ai_source?.prompt === 'string' && m.ai_source.prompt
+            ? m.ai_source.prompt
+            : null,
+        reviewed: reviewedSet.has(tag),
+      });
+    }
+    return tiles;
+  }, [aiDraft, dashboard?.stored_metadata, generationTagOf, reviewedTags]);
+
+  // Which tile the review bar is on, owned here so the bar and the outline on
+  // the canvas cannot disagree about it. Null until the reviewer moves it
+  // themselves, so the cursor can be derived rather than seeded by an effect:
+  // an effect would first render (and scroll to) the wrong tile.
+  const [pickedReviewIndex, setPickedReviewIndex] = useState<number | null>(null);
+  const reviewIndex = useMemo(() => {
+    if (draftTiles.length === 0) return 0;
+    // Opens on the first tile still to review; once moved, the cursor is the
+    // reviewer's and only the list's length constrains it.
+    if (pickedReviewIndex === null) {
+      const first = draftTiles.findIndex((t) => !t.reviewed);
+      return first >= 0 ? first : 0;
+    }
+    // A removed tile shortens the list under the cursor: the slot it leaves
+    // behind now holds the tile after it, and past the end it clamps back.
+    return Math.min(pickedReviewIndex, draftTiles.length - 1);
+  }, [draftTiles, pickedReviewIndex]);
+
+  const currentDraftTileId = draftTiles[reviewIndex]?.componentId ?? null;
+  /** Bring the tile the bar names into view, and only when it changes: the
+   *  bar says "3 / 12" and the canvas has to be showing that third tile.
+   *  Silent when it finds nothing, since a tile can be on another tab. */
+  useEffect(() => {
+    if (!currentDraftTileId) return;
+    const inner = document.querySelector(`[data-component-id="${currentDraftTileId}"]`);
+    // The .react-grid-item ancestor is the absolutely-positioned cell (same
+    // reasoning as the duplicate flow above); a filter-panel tile has none.
+    const el =
+      (inner?.closest('.react-grid-item') as HTMLElement | null) ??
+      (inner as HTMLElement | null);
+    // Centred rather than 'nearest': the review controls float at the bottom
+    // of the viewport once the banner has scrolled away, and a tile brought
+    // to the nearest edge lands under them.
+    el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [currentDraftTileId]);
 
   const {
     run: runRegenerate,
@@ -1418,69 +1469,29 @@ const EditorApp: React.FC = () => {
     [handleDeleteComponent],
   );
 
-  /** What every generated tile's chrome renders, threaded through
-   *  `DraftReviewProvider` rather than as a prop: the strip has to reach
+  /** A regeneration reports its failure on the tile it was about, so the bar
+   *  only carries the message while its cursor is on one of those tiles. */
+  const draftReviewError =
+    currentDraftTileId && lastRegenTargets.includes(currentDraftTileId)
+      ? regenerateState.error
+      : null;
+
+  /** How the chrome marks the tiles of the draft, threaded through
+   *  `DraftReviewProvider` rather than as a prop: the marks have to reach
    *  ComponentChrome through the grid and the renderer dispatch, neither of
    *  which knows anything about drafts. Null on any dashboard that is not an
    *  unreviewed draft, which is the provider's off state. */
   const draftReviewControl = useMemo<DraftReviewControl | null>(() => {
     if (!aiDraft || !dashboardId) return null;
     const reviewedSet = new Set(reviewedTags);
-    // Built once per draft rather than scanned per tile: every generated tile
-    // asks for its section's reason, and a draft saved before the planner was
-    // asked to explain itself simply has none.
-    const rationaleBySection = new Map<string, string>(
-      (aiDraft.sections ?? [])
-        .filter((s) => (s.rationale ?? '').trim())
-        .map((s) => [s.name, s.rationale] as const),
-    );
     return {
-      renderActions: (metadata: StoredMetadata) => {
-        const tag = generationTagOf(metadata);
-        if (!tag) return null;
-        const reviewed = reviewedSet.has(tag);
-        const busy = regenTargets.includes(metadata.index);
-        // Grid sections only: the section regenerate re-runs the grid layout
-        // pass for the section it is given, and a filter-panel control's
-        // section is a fold of the left panel, not a row of boxes.
-        const section =
-          metadata.component_type === 'interactive' ? null : (metadata.section ?? null);
-        const failed = lastRegenTargets.includes(metadata.index);
-        // The planner's brief for this tile, stamped on it at generation
-        // time. Read off `metadata.section` rather than `section` above: a
-        // filter control has a section reason too, only no section regenerate.
-        const intent =
-          typeof metadata.ai_source?.prompt === 'string' && metadata.ai_source.prompt
-            ? metadata.ai_source.prompt
-            : null;
-        const sectionRationale = metadata.section
-          ? (rationaleBySection.get(metadata.section) ?? null)
-          : null;
-        return (
-          <DraftTileActions
-            tag={tag}
-            reviewed={reviewed}
-            busy={busy}
-            disabled={regeneratePending && !busy}
-            section={section}
-            intent={intent}
-            sectionRationale={sectionRationale}
-            error={failed ? regenerateState.error : null}
-            onRegenerate={(instruction) => handleRegenerateTile(metadata.index, instruction)}
-            onRegenerateSection={
-              section ? (instruction) => handleRegenerateSection(section, instruction) : undefined
-            }
-            onKeep={() => handleReviewTile(tag, reviewed ? 'unkeep' : 'keep')}
-            onRemove={() => handleRemoveTile(metadata.index, tag)}
-          />
-        );
-      },
       isUnreviewed: (metadata: StoredMetadata) => {
         const tag = generationTagOf(metadata);
         if (!tag) return false;
         return !reviewedSet.has(tag);
       },
       isBusy: (metadata: StoredMetadata) => regenTargets.includes(metadata.index),
+      isCurrent: (metadata: StoredMetadata) => metadata.index === currentDraftTileId,
     };
   }, [
     aiDraft,
@@ -1488,13 +1499,7 @@ const EditorApp: React.FC = () => {
     reviewedTags,
     generationTagOf,
     regenTargets,
-    lastRegenTargets,
-    regeneratePending,
-    regenerateState.error,
-    handleRegenerateTile,
-    handleRegenerateSection,
-    handleReviewTile,
-    handleRemoveTile,
+    currentDraftTileId,
   ]);
 
   const [aiFilterDescriptions, setAiFilterDescriptions] = useState<string[]>([]);
@@ -2089,8 +2094,9 @@ const EditorApp: React.FC = () => {
   return (
     <>
     <InspectorProviders control={inspectorControl}>
-    {/* Per-tile review of an AI draft. Null on every other dashboard, so the
-        chrome renders exactly what it did before. */}
+    {/* How the chrome marks the tiles of an AI draft (reviewed, busy, the one
+        under review). Null on every other dashboard, so the chrome renders
+        exactly what it did before. */}
     <DraftReviewProvider value={draftReviewControl}>
     <SaveGroupContext.Provider value={saveGroupApi}>
     {/* Same scoping as the viewer, so an editor sees the override they are
@@ -2310,8 +2316,19 @@ const EditorApp: React.FC = () => {
               {aiDraft && (
                 <AIDraftBanner
                   info={aiDraft}
-                  total={draftTags.length}
-                  reviewed={reviewedCount}
+                  tiles={draftTiles}
+                  currentIndex={reviewIndex}
+                  onSelect={setPickedReviewIndex}
+                  onKeep={(tile) => handleReviewTile(tile.tag, tile.reviewed ? 'unkeep' : 'keep')}
+                  onRemove={(tile) => handleRemoveTile(tile.componentId, tile.tag)}
+                  onRegenerate={(tile, instruction) =>
+                    handleRegenerateTile(tile.componentId, instruction)
+                  }
+                  onRegenerateSection={(tile, instruction) =>
+                    tile.section ? handleRegenerateSection(tile.section, instruction) : undefined
+                  }
+                  reviewBusy={regeneratePending}
+                  reviewError={draftReviewError}
                   onPromote={handlePromoteDraft}
                   onDiscard={handleDiscardDraft}
                 />

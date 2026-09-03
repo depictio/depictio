@@ -16,26 +16,27 @@ import { useGroupingColorVar } from '../../selectionGroups';
 import './chrome.css';
 
 /**
- * Lets a host hang a per-tile review strip off every component's chrome
+ * Lets a host mark up the tiles of an AI draft from outside the chrome,
  * without threading a prop through the grid, the renderer dispatch and
  * `wrapWithChrome`'s ten call sites — the same reasoning (and the same
  * shape) as `InspectorContext` next door.
  *
- * Mounted only by the editor, and only on a dashboard the AI generated and
- * nobody has reviewed yet. A null context — the default — is the off state:
- * the chrome finds nothing, renders no strip and paints no outline, which is
- * every other host and every promoted dashboard.
+ * Only marks: the decisions themselves are taken in the draft banner's
+ * review bar, so a tile never grows a control of its own. Mounted only by
+ * the editor, and only on a dashboard the AI generated and nobody has
+ * reviewed yet. A null context — the default — is the off state: the chrome
+ * paints no outline, which is every other host and every promoted dashboard.
  */
 export interface DraftReviewControl {
-  /** The strip for one tile. Return null for tiles the run did not produce
-   *  (a component the owner added by hand on top of the draft). */
-  renderActions: (metadata: StoredMetadata) => React.ReactNode;
   /** Tile still awaiting a Keep / Remove decision — painted with a subtle
    *  outline so what is left to review is legible at a glance. */
   isUnreviewed?: (metadata: StoredMetadata) => boolean;
   /** Tile whose regeneration is streaming: the chrome scrims it, so the
    *  stale render is visibly not the answer yet. */
   isBusy?: (metadata: StoredMetadata) => boolean;
+  /** The one tile the review bar is currently talking about. Outlined
+   *  harder than the rest, so "3 / 12" has an answer on the canvas. */
+  isCurrent?: (metadata: StoredMetadata) => boolean;
 }
 
 export const DraftReviewContext = createContext<DraftReviewControl | null>(null);
@@ -108,17 +109,6 @@ export interface ComponentChromeProps {
    * action is its own component with its own hard-coded `size`.
    */
   compact?: boolean;
-  /**
-   * Review strip for one tile of an AI-generated draft, rendered in the
-   * action row right after the provenance badges it belongs with. Takes
-   * precedence over whatever `DraftReviewContext` would produce for this
-   * component, so a host that CAN thread a prop does not need the provider.
-   *
-   * Unlike the rest of the row it is not hover-only: a draft asks the owner
-   * to go through every tile, and an affordance nobody can see until they
-   * hover it does not ask anything.
-   */
-  draftActions?: React.ReactNode;
   /** Tile of a draft that has not been reviewed yet: paints a subtle dashed
    *  outline (see `unreviewedOutline`). Falls back to the context. */
   unreviewed?: boolean;
@@ -195,7 +185,6 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
   showDragHandle = false,
   sourceFilterActive = false,
   compact = false,
-  draftActions,
   unreviewed,
   draftBusy,
 }) => {
@@ -269,9 +258,9 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
   // Draft review. The prop wins where a host can pass one; otherwise the
   // provider answers per component, and with neither this is all inert.
   const draftReview = useDraftReview();
-  const draftStrip = draftActions ?? draftReview?.renderActions(metadata) ?? null;
   const isUnreviewed = unreviewed ?? draftReview?.isUnreviewed?.(metadata) ?? false;
   const isRegenerating = draftBusy ?? draftReview?.isBusy?.(metadata) ?? false;
+  const isCurrentReview = draftReview?.isCurrent?.(metadata) ?? false;
   // Outline rather than border: the renderers already draw their own Paper,
   // and an outline is painted outside the box model, so a tile sized to the
   // pixel by the grid does not move. Dashed and inset for the same reason the
@@ -284,6 +273,14 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
     // at yet" across a whole dashboard without shouting on any one tile.
     outline: '1px dashed var(--mantine-color-cyan-3)',
     outlineOffset: '-1px',
+    borderRadius: 'var(--mantine-radius-md)',
+  };
+  // The tile the review bar names. Solid and twice as thick, because exactly
+  // one tile carries it at a time and it has to be findable on a canvas where
+  // every other generated tile is already dashed.
+  const currentReviewOutline: React.CSSProperties = {
+    outline: '2px solid var(--mantine-color-cyan-6)',
+    outlineOffset: '-2px',
     borderRadius: 'var(--mantine-radius-md)',
   };
 
@@ -452,7 +449,11 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
         ...(selectionCapable
           ? ({ '--depictio-grouping-color': groupingColorVar } as React.CSSProperties)
           : {}),
-        ...(isUnreviewed ? unreviewedOutline : {}),
+        ...(isCurrentReview
+          ? currentReviewOutline
+          : isUnreviewed
+            ? unreviewedOutline
+            : {}),
       }}
     >
       <Group
@@ -464,11 +465,8 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
           // icon, so the row moves to the quiet bottom edge. Still horizontal.
           (componentType === 'card' ? ' depictio-actions-bottom' : '') +
           // Any icon that stays on screen without hover needs the backdrop to
-          // stay with it: the active-reset icon, the analysis marker, and the
-          // draft review strip.
-          (persistentReset || selectionCapable || draftStrip
-            ? ' has-persistent-action'
-            : '') +
+          // stay with it: the active-reset icon and the analysis marker.
+          (persistentReset || selectionCapable ? ' has-persistent-action' : '') +
           (compact ? ' is-compact' : '')
         }
         wrap="nowrap"
@@ -531,29 +529,6 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
             </span>
           );
         })}
-        {/* Draft review sits right after the provenance badges: both answer
-         *  "where did this tile come from", and this one adds "and what do
-         *  you want done about it". Opacity and pointer-events are set
-         *  inline because the hover-only default is a plain CSS rule on
-         *  `.depictio-component-actions > *`, which an inline style beats
-         *  without needing a new class in chrome.css. */}
-        {draftStrip && (
-          <span
-            key="draft-review"
-            className="dgl-no-drag"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              opacity: 1,
-              pointerEvents: 'auto',
-            }}
-            onMouseDown={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            {draftStrip}
-          </span>
-        )}
         {/* Per-child wrap so each extra action becomes its own flex item in
          *  the chrome row (= one cell in the vertical column for figure /
          *  map / multiqc / advanced_viz). Wrapping all extras in a single
@@ -563,7 +538,7 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
       </Group>
       {/* The tile is being rewritten server-side: what is on screen is the
        *  previous answer, so it is scrimmed rather than left to look current.
-       *  Sits under the action row's z-index so the strip stays reachable. */}
+       *  Sits under the action row's z-index so the chrome stays reachable. */}
       <LoadingOverlay
         visible={isRegenerating}
         zIndex={1050}
