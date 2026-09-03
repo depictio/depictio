@@ -12,11 +12,10 @@ components:
   order: 1
   alignment: left
   body: >
-    Threshold-sweep curves, one per caller, on synthetic data. Use the tab bar at
-    the top of the panel to switch between **PR curve** (precision vs recall),
-    **ROC** (true-positive vs false-positive rate, with the random-classifier
-    diagonal) and **vs threshold** (precision & recall vs quality). AUC is shown
-    per curve.
+    Threshold-sweep curves, one per caller, on synthetic data. The panel's tab
+    bar switches between **PR curve** (precision vs recall), **ROC** (true- vs
+    false-positive rate with the random-classifier diagonal) and **vs
+    threshold** (precision and recall vs quality). AUC is shown per curve.
   workflow_tag: advanced_viz_demo
   data_collection_tag: roc_curve_demo
   layout: {x: 0, y: 0, w: 8, h: 1}

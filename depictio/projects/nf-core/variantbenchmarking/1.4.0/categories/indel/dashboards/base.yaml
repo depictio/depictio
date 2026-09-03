@@ -7,22 +7,98 @@ main_dashboard:
   tab_icon: mdi:target-arrow
   tab_icon_color: pink
   workflow_system: none
+  # Left panel. `Callers` drives every som.py panel and, through the template's
+  # `links`, the allele-fraction strata and the rtg-tools cross-check as well.
+  # Kept local to this tab: the MultiQC tab reads a different data collection.
+  filter_sections:
+  - name: Callers
+    icon: mdi:filter-variant
+    color: pink
+    description: Which somatic callers and variant types to compare
+  - name: Score ranges
+    icon: mdi:tune
+    color: pink
+    description: Keep only the callers inside an accuracy band
+    collapsed: true
+  - name: Allele fraction
+    icon: mdi:chart-bell-curve
+    color: grape
+    description: Strata of the som.py regions table
+    collapsed: true
+  # Right panel, in reading order: run-level cards, the precision-recall view,
+  # the error breakdown, the allele-fraction strata, som.py's confidence
+  # intervals, then the rtg-tools cross-check. `Reference tables` is persistent
+  # and pinned to the bottom so the raw rows trail the MultiQC tab as well.
+  grid_sections:
+  - name: Benchmark at a glance
+    icon: mdi:counter
+    color: pink
+    description: How the somatic callers score against the SEQC2 truth set
+  - name: Precision vs recall
+    icon: mdi:chart-scatter-plot
+    color: pink
+    description: The signature benchmark view, top-right is best
+  - name: Error profile
+    icon: mdi:alert-outline
+    color: orange
+    description: Where the calls go wrong, over-calling and misses per caller
+  - name: Allele-fraction strata
+    icon: mdi:chart-bell-curve
+    color: grape
+    description: Accuracy per allele-fraction bin, where low-AF variants are the hardest
+  - name: Confidence intervals
+    icon: mdi:scale-balance
+    color: pink
+    description: som.py's binomial 95% intervals around precision and recall
+  - name: rtg-tools cross-check
+    icon: mdi:check-decagram
+    color: teal
+    description: The same callers scored by rtg-tools vcfeval
+    collapsed: true
+  - name: Reference tables
+    icon: mdi:table
+    color: gray
+    description: The som.py and rtg-tools rows behind every tile, on every tab
+    collapsed: true
+    persistent: true
+    pin: bottom
   components:
+  # ---------------------------------------------------------------- at a glance
   - component_type: text
     tag: indel-bench-intro
+    section: Benchmark at a glance
     title: Somatic indel benchmarking
-    order: 1
+    title_size: sm
+    title_align: left
+    order: 2
     alignment: left
     body: >
       How well does each somatic caller recover the SEQC2 truth set? Somatic
-      indels are hard — recall is low, so callsets sit to the left of the
-      precision–recall benchmark. The confusion matrix exposes over-calling and
-      the precision / recall ± 95% CI forest plots surface som.py's intervals.
+      indels are hard: recall stays low, so the callers sit to the left of the
+      precision-recall plane. The confusion matrix exposes over-calling and the
+      forest plots carry som.py's confidence intervals.
     workflow_tag: variantbenchmarking
     data_collection_tag: sompy_summary
-    layout: {x: 0, y: 0, w: 8, h: 2}
-
+    layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: card
+    tag: indel-card-callers
+    section: Benchmark at a glance
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sompy_summary
+    aggregation: nunique
+    column_name: caller
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: variant_type
+    top_n_count: 3
+    display: {icon_name: 'mdi:tools', icon_color: '#E91E63', title_color: '#E91E63', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Callers
+    layout: {x: 0, y: 1, w: 2, h: 2}
+  - component_type: card
+    tag: indel-card-f1
+    section: Benchmark at a glance
     workflow_tag: variantbenchmarking
     data_collection_tag: sompy_summary
     aggregation: median
@@ -30,127 +106,374 @@ main_dashboard:
     secondary_layout: box_plot
     column_name: f1
     column_type: float64
-    display: {icon_name: 'mdi:trophy', icon_color: '#E91E63', title_color: '#E91E63'}
-    tag: indel-card-f1
+    display: {icon_name: 'mdi:trophy', icon_color: '#E91E63', title_color: '#E91E63', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
     title: F1
-    layout: {x: 0, y: 2, w: 2, h: 2}
+    layout: {x: 2, y: 1, w: 2, h: 2}
   - component_type: card
+    tag: indel-card-recall
+    section: Benchmark at a glance
     workflow_tag: variantbenchmarking
     data_collection_tag: sompy_summary
-    aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: precision
-    column_type: float64
-    display: {icon_name: 'mdi:bullseye-arrow', icon_color: '#00897B', title_color: '#00897B'}
-    tag: indel-card-prec
-    title: Precision
-    layout: {x: 2, y: 2, w: 2, h: 2}
-  - component_type: card
-    workflow_tag: variantbenchmarking
-    data_collection_tag: sompy_summary
-    aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
+    aggregation: average
     column_name: recall
     column_type: float64
-    display: {icon_name: 'mdi:magnet', icon_color: '#F2A93B', title_color: '#F2A93B'}
-    tag: indel-card-recall
+    secondary_layout: gauge
+    coverage_max: 1
+    display: {icon_name: 'mdi:magnet', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
     title: Recall
-    layout: {x: 4, y: 2, w: 2, h: 2}
+    layout: {x: 4, y: 1, w: 2, h: 2}
   - component_type: card
+    tag: indel-card-prec
+    section: Benchmark at a glance
     workflow_tag: variantbenchmarking
     data_collection_tag: sompy_summary
     aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: tp
-    column_type: int64
-    display: {icon_name: 'mdi:check-decagram', icon_color: '#7E57C2', title_color: '#7E57C2'}
-    tag: indel-card-tp
-    title: True positives
-    layout: {x: 6, y: 2, w: 2, h: 2}
+    column_name: precision
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 0.5
+    threshold_direction: min
+    threshold_warn: 0.25
+    display: {icon_name: 'mdi:bullseye-arrow', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Precision
+    layout: {x: 6, y: 1, w: 2, h: 2}
 
+  # ---------------------------------------------------------- precision vs recall
+  - component_type: text
+    tag: indel-pr-intro
+    section: Precision vs recall
+    title: Every caller on one precision-recall plane
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Each point is a caller: size is the number of true positives, colour is F1
+      and the dotted lines are equal-F1 contours. The ranked strip on the right
+      zooms the F1 axis to the data so the gaps between callers stay readable.
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sompy_summary
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: indel-av-pr
+    section: Precision vs recall
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sompy_summary
+    use: sompy/pr_scatter
+    config: {support_col: tp}
+    title: Precision-recall benchmark
+    description: Each point is a caller; size = true positives, colour = F1, dotted lines = equal-F1 contours.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 5, h: 7}
+  - component_type: figure
+    tag: indel-fig-f1
+    section: Precision vs recall
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sompy_summary
+    visu_type: scatter
+    dict_kwargs: {x: f1, y: caller, color: f1, size: f1, size_max: 26, color_continuous_scale: Sunsetdark}
+    title: F1 by caller
+    description: Ranked accuracy per caller (x-axis zoomed to the data).
+    title_size: h3
+    layout: {x: 5, y: 1, w: 3, h: 7}
+
+  # ------------------------------------------------------------- error profile
+  - component_type: text
+    tag: indel-errors-intro
+    section: Error profile
+    title: Where the calls go wrong
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The confusion matrix shades each cell by its share of the caller's calls
+      and labels it with the raw count. False positives are on a log axis: an
+      over-calling caller can emit thousands of them against a handful from the
+      others.
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sompy_summary
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: indel-av-confusion
+    section: Error profile
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sompy_summary
+    use: sompy/confusion
+    title: Confusion matrix
+    description: TP / FP / FN per caller; over-calling callers dominate the FP row.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 8, h: 4}
+  - component_type: figure
+    tag: indel-fig-fp
+    section: Error profile
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sompy_summary
+    visu_type: bar
+    dict_kwargs: {x: caller, y: fp, color: caller, log_y: true}
+    title: False positives per caller (log scale)
+    description: Calls made by the caller that are not in the truth set.
+    title_size: h3
+    layout: {x: 0, y: 5, w: 4, h: 4}
+  - component_type: figure
+    tag: indel-fig-fn
+    section: Error profile
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sompy_summary
+    visu_type: bar
+    dict_kwargs: {x: caller, y: fn, color: caller}
+    title: False negatives per caller
+    description: Truth-set variants the caller missed.
+    title_size: h3
+    layout: {x: 4, y: 5, w: 4, h: 4}
+
+  # ---------------------------------------------------- allele-fraction strata
+  - component_type: text
+    tag: indel-af-intro
+    section: Allele-fraction strata
+    title: Accuracy across allele-fraction bins
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      som.py re-scores each caller inside allele-fraction bins. Low-AF somatic
+      variants are the hardest to recover, so recall usually climbs from left to
+      right; a caller that stays flat is missing the subclonal fraction.
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sompy_regions
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: figure
+    tag: indel-fig-afbars-f1
+    section: Allele-fraction strata
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sompy_regions
+    visu_type: bar
+    dict_kwargs: {x: af_bin, y: f1, color: caller, barmode: group}
+    title: F1 across allele-fraction bins
+    description: F1 per bin, one bar per caller.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 4, h: 5}
+  - component_type: figure
+    tag: indel-fig-afbars
+    section: Allele-fraction strata
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sompy_regions
+    visu_type: bar
+    dict_kwargs: {x: af_bin, y: recall, color: caller, barmode: group}
+    title: Recall across allele-fraction bins
+    description: Recall per bin, one bar per caller.
+    title_size: h3
+    layout: {x: 4, y: 1, w: 4, h: 5}
+
+  # ------------------------------------------------------ confidence intervals
+  - component_type: text
+    tag: indel-ci-intro
+    section: Confidence intervals
+    title: How certain are the precision and recall estimates
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      som.py reports a binomial 95% interval around every precision and recall
+      value. Whiskers that overlap mean two callers cannot be told apart on this
+      truth set; a wide whisker means the estimate rests on few variants.
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sompy_summary
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: indel-av-precision-ci
+    section: Confidence intervals
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sompy_summary
+    use: sompy/precision_ci
+    config: {metric_name: Precision}
+    title: Precision ± 95% CI
+    description: Point estimate + binomial confidence interval per caller (som.py).
+    title_size: h3
+    layout: {x: 0, y: 1, w: 4, h: 5}
+  - component_type: advanced_viz
+    tag: indel-av-recall-ci
+    section: Confidence intervals
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sompy_summary
+    use: sompy/recall_ci
+    config: {metric_name: Recall}
+    title: Recall ± 95% CI
+    description: Point estimate + binomial confidence interval per caller (som.py).
+    title_size: h3
+    layout: {x: 4, y: 1, w: 4, h: 5}
+
+  # ------------------------------------------------------ rtg-tools cross-check
+  - component_type: text
+    tag: indel-vcfeval-intro
+    section: rtg-tools cross-check
+    title: The same callers, scored by rtg-tools vcfeval
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The pipeline benchmarks the somatic callers with two tools. rtg-tools
+      vcfeval matches haplotypes rather than sites, so its precision and recall
+      differ slightly from som.py's; a caller that moves rank between the two
+      views deserves a closer look.
+    workflow_tag: variantbenchmarking
+    data_collection_tag: vcfeval_summary
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: indel-av-vcfeval-pr
+    section: rtg-tools cross-check
+    workflow_tag: variantbenchmarking
+    data_collection_tag: vcfeval_summary
+    use: rtgtools/pr_scatter
+    config: {support_col: tp_comp}
+    title: Precision-recall benchmark (rtg-tools vcfeval)
+    description: Each point is a caller; size = true positives, colour = F1.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 4, h: 6}
+  - component_type: table
+    tag: indel-table-vcfeval
+    section: rtg-tools cross-check
+    workflow_tag: variantbenchmarking
+    data_collection_tag: vcfeval_summary
+    row_selection_enabled: false
+    title: rtg-tools vcfeval summary
+    description: Per-caller TP / FP / FN and precision / recall / F1.
+    title_size: h3
+    title_align: left
+    layout: {x: 4, y: 1, w: 4, h: 6}
+
+  # ---------------------------------------------------------- reference tables
+  - component_type: text
+    tag: indel-tables-intro
+    section: Reference tables
+    title: The rows behind every tile
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The som.py summary and allele-fraction rows every panel above is computed
+      from. Filters picked in the left panel narrow these tables too.
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sompy_summary
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: table
+    tag: indel-table-sompy
+    section: Reference tables
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sompy_summary
+    row_selection_enabled: false
+    title: som.py summary
+    description: Per-caller TP / FP / FN, precision / recall / F1 with 95% confidence intervals.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 1, w: 8, h: 4}
+  - component_type: table
+    tag: indel-table-regions
+    section: Reference tables
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sompy_regions
+    row_selection_enabled: false
+    title: som.py allele-fraction strata
+    description: Caller × allele-fraction bin, with TP / FP / FN per bin.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 5, w: 8, h: 4}
+
+  # -------------------------------------------------------------- left panel
   - component_type: interactive
+    tag: indel-filter-caller
+    index: indel-caller-filter
+    section: Callers
+    group: Caller scope
     workflow_tag: variantbenchmarking
     data_collection_tag: sompy_summary
     interactive_component_type: MultiSelect
     column_name: caller
     column_type: object
     display: {title_size: md, custom_color: '#E91E63', icon_name: 'mdi:tools'}
-    tag: indel-filter-caller
-    index: indel-caller-filter
+    placement: left
     title: Caller
-    layout: {x: 0, y: 4, w: 1, h: 2}
-
-  - component_type: advanced_viz
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: indel-filter-vartype
+    index: indel-vartype-filter
+    section: Callers
+    group: Caller scope
     workflow_tag: variantbenchmarking
     data_collection_tag: sompy_summary
-    use: sompy/pr_scatter
-    config: {support_col: tp}
-    tag: indel-av-pr
-    title: Precision–recall benchmark
-    description: Each point is a caller; size = true positives, colour = F1, dotted lines = equal-F1 contours.
-    layout: {x: 0, y: 4, w: 5, h: 7}
-  - component_type: figure
+    interactive_component_type: MultiSelect
+    column_name: variant_type
+    column_type: object
+    display: {title_size: md, custom_color: '#E91E63', icon_name: 'mdi:dna'}
+    placement: left
+    title: Variant type
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: indel-filter-f1
+    index: indel-f1-range
+    section: Score ranges
+    group: Accuracy
     workflow_tag: variantbenchmarking
     data_collection_tag: sompy_summary
-    visu_type: scatter
-    dict_kwargs: {x: f1, y: caller, color: f1, size: f1, size_max: 26, color_continuous_scale: Sunsetdark}
-    tag: indel-fig-f1
-    title: F1 by caller
-    description: Ranked accuracy per caller (x-axis zoomed to the data).
-    title_size: h3
-    layout: {x: 5, y: 4, w: 3, h: 7}
-
-  - component_type: advanced_viz
+    interactive_component_type: RangeSlider
+    column_name: f1
+    column_type: float64
+    display: {title_size: md, custom_color: '#E91E63', icon_name: 'mdi:trophy'}
+    placement: left
+    title: F1
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: indel-filter-precision
+    index: indel-precision-range
+    section: Score ranges
+    group: Accuracy
     workflow_tag: variantbenchmarking
     data_collection_tag: sompy_summary
-    use: sompy/confusion
-    tag: indel-av-confusion
-    title: Confusion matrix
-    description: TP / FP / FN per caller — over-calling callers (e.g. freebayes) dominate the FP row.
-    layout: {x: 0, y: 11, w: 8, h: 4}
-
-  - component_type: figure
+    interactive_component_type: RangeSlider
+    column_name: precision
+    column_type: float64
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:bullseye-arrow'}
+    placement: left
+    title: Precision
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: indel-filter-recall
+    index: indel-recall-range
+    section: Score ranges
+    group: Accuracy
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sompy_summary
+    interactive_component_type: RangeSlider
+    column_name: recall
+    column_type: float64
+    display: {title_size: md, custom_color: '#F2A93B', icon_name: 'mdi:magnet'}
+    placement: left
+    title: Recall
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: interactive
+    tag: indel-filter-afbin
+    index: indel-afbin-filter
+    section: Allele fraction
+    group: Strata
     workflow_tag: variantbenchmarking
     data_collection_tag: sompy_regions
-    visu_type: heatmap
-    dict_kwargs: {x: af_bin, y: caller, z: f1, histfunc: avg, color_continuous_scale: Sunsetdark}
-    tag: indel-fig-afheatmap
-    title: F1 by caller × allele-fraction bin
-    description: Where each caller's accuracy concentrates across allele-fraction strata.
-    title_size: h3
-    layout: {x: 0, y: 15, w: 8, h: 4}
-
-  - component_type: advanced_viz
-    workflow_tag: variantbenchmarking
-    data_collection_tag: sompy_summary
-    use: sompy/precision_ci
-    config: {metric_name: Precision}
-    tag: indel-av-precision-ci
-    title: Precision ± 95% CI
-    description: Point estimate + binomial confidence interval per caller (som.py).
-    layout: {x: 0, y: 19, w: 4, h: 5}
-  - component_type: advanced_viz
-    workflow_tag: variantbenchmarking
-    data_collection_tag: sompy_summary
-    use: sompy/recall_ci
-    config: {metric_name: Recall}
-    tag: indel-av-recall-ci
-    title: Recall ± 95% CI
-    description: Point estimate + binomial confidence interval per caller (som.py).
-    layout: {x: 4, y: 19, w: 4, h: 5}
-
-  - component_type: table
-    workflow_tag: variantbenchmarking
-    data_collection_tag: sompy_summary
-    row_selection_enabled: false
-    tag: indel-table-sompy
-    title: som.py summary
-    description: Per-caller TP / FP / FN, precision / recall / F1 with 95% confidence intervals.
-    title_size: h3
-    layout: {x: 0, y: 24, w: 8, h: 5}
+    interactive_component_type: MultiSelect
+    column_name: af_bin
+    column_type: object
+    display: {title_size: md, custom_color: '#7E57C2', icon_name: 'mdi:chart-bell-curve'}
+    placement: left
+    title: Allele-fraction bin
+    layout: {x: 0, y: 0, w: 1, h: 3}
 
 tabs:
 - title: MultiQC
@@ -159,72 +482,155 @@ tabs:
   tab_icon: /assets/images/logos/multiqc_icon_color.svg
   tab_icon_color: orange
   workflow_system: none
+  filter_sections:
+  - name: Report samples
+    icon: mdi:filter-variant
+    color: orange
+    description: Narrow the MultiQC panels to selected callsets
+  grid_sections:
+  - name: Report at a glance
+    icon: mdi:chart-box-outline
+    color: orange
+    description: bcftools and som.py general statistics per callset
+  - name: som.py panels
+    icon: mdi:chart-bar
+    color: pink
+    description: Combined, indel and SNV accuracy as MultiQC reports it
+  - name: Variant statistics
+    icon: mdi:chart-bar
+    color: orange
+    description: Substitution types and variant depths from bcftools stats
+    collapsed: true
   components:
   - component_type: text
     tag: indel-qc-intro
-    title: MultiQC — somatic indel run
-    order: 1
+    section: Report at a glance
+    title: MultiQC report for the somatic indel run
+    title_size: sm
+    title_align: left
+    order: 2
     alignment: left
     body: >
-      The pipeline's MultiQC report for the somatic indel run: bcftools general
-      statistics per callset, som.py combined / indel / SNV panels, and variant
-      substitution distributions.
+      The pipeline's own MultiQC report: bcftools general statistics per callset,
+      som.py combined / indel / SNV panels, and the variant substitution and
+      depth distributions.
     workflow_tag: variantbenchmarking
     data_collection_tag: multiqc_data
-    layout: {x: 0, y: 0, w: 8, h: 2}
-
-  - component_type: interactive
-    workflow_tag: variantbenchmarking
-    data_collection_tag: multiqc_data
-    interactive_component_type: MultiSelect
-    column_name: sample
-    display: {title_size: md, custom_color: '#26A69A', icon_name: 'mdi:tools'}
-    tag: indel-qc-filter-sample
-    index: indel-qc-sample-filter
-    title: Sample
-    layout: {x: 0, y: 2, w: 1, h: 2}
-
+    layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: multiqc
+    tag: indel-qc-general-stats
+    section: Report at a glance
     workflow_tag: variantbenchmarking
     data_collection_tag: multiqc_data
     selected_module: general_stats
     selected_plot: general_stats
-    tag: indel-qc-general-stats
     title: General statistics
-    layout: {x: 0, y: 2, w: 8, h: 4}
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 1, w: 8, h: 4}
 
+  - component_type: text
+    tag: indel-qc-sompy-intro
+    section: som.py panels
+    title: som.py as MultiQC reports it
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The per-caller panels MultiQC builds from the som.py statistics: all
+      variants combined, indels only, and SNVs only. The Benchmark tab recomputes
+      the same numbers from the summary table.
+    workflow_tag: variantbenchmarking
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: multiqc
+    tag: indel-qc-sompy-combined
+    section: som.py panels
     workflow_tag: variantbenchmarking
     data_collection_tag: multiqc_data
     selected_module: sompy
     selected_plot: Combined
-    tag: indel-qc-sompy-combined
-    title: som.py — combined
-    layout: {x: 0, y: 6, w: 4, h: 5}
-
+    use: multiqc/sompy
+    title: som.py combined
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 1, w: 4, h: 5}
   - component_type: multiqc
+    tag: indel-qc-sompy-indel
+    section: som.py panels
     workflow_tag: variantbenchmarking
     data_collection_tag: multiqc_data
     selected_module: sompy
     selected_plot: Indel
-    tag: indel-qc-sompy-indel
-    title: som.py — indel
-    layout: {x: 4, y: 6, w: 4, h: 5}
-
+    use: multiqc/sompy
+    title: som.py indel
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 1, w: 4, h: 5}
   - component_type: multiqc
+    tag: indel-qc-sompy-snv
+    section: som.py panels
     workflow_tag: variantbenchmarking
     data_collection_tag: multiqc_data
     selected_module: sompy
     selected_plot: SNV
-    tag: indel-qc-sompy-snv
-    title: som.py — SNV
-    layout: {x: 0, y: 11, w: 8, h: 5}
+    use: multiqc/sompy
+    title: som.py SNV
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 6, w: 8, h: 5}
 
+  - component_type: text
+    tag: indel-qc-bcftools-intro
+    section: Variant statistics
+    title: bcftools stats on the callsets
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Substitution-type spectrum and variant-depth distribution per callset, the
+      two bcftools stats panels the pipeline forwards to MultiQC.
+    workflow_tag: variantbenchmarking
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: multiqc
+    tag: indel-qc-bcftools-subtypes
+    section: Variant statistics
     workflow_tag: variantbenchmarking
     data_collection_tag: multiqc_data
     selected_module: bcftools
     selected_plot: Variant Substitution Types
-    tag: indel-qc-bcftools-subtypes
-    title: bcftools — variant substitution types
-    layout: {x: 0, y: 16, w: 8, h: 5}
+    use: multiqc/bcftools
+    title: Variant substitution types
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 1, w: 8, h: 5}
+  - component_type: multiqc
+    tag: indel-qc-bcftools-depths
+    section: Variant statistics
+    workflow_tag: variantbenchmarking
+    data_collection_tag: multiqc_data
+    selected_module: bcftools
+    selected_plot: Variant depths
+    use: multiqc/bcftools
+    title: Variant depths
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 6, w: 8, h: 5}
+
+  - component_type: interactive
+    tag: indel-qc-filter-sample
+    index: indel-qc-sample-filter
+    section: Report samples
+    group: Sample scope
+    workflow_tag: variantbenchmarking
+    data_collection_tag: multiqc_data
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display: {title_size: md, custom_color: '#FB8C00', icon_name: 'mdi:tools'}
+    placement: left
+    title: Sample
+    layout: {x: 0, y: 0, w: 1, h: 3}
