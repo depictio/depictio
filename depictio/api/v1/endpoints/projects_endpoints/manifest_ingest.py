@@ -18,6 +18,7 @@ Fan-out is sequential for now; Celery parallelism is a phase-4 concern
 import copy
 import os
 import tempfile
+from urllib.parse import urlparse
 
 from bson import ObjectId
 from fastapi import HTTPException
@@ -34,6 +35,68 @@ from depictio.models.models.manifest import DataManifest
 
 # Manifests are indexes, not data — cap them well below the data-file cap.
 MANIFEST_MAX_BYTES = 50 * 1024 * 1024
+
+# Rejected entries listed in a 400 body (the summary string names at most 5).
+MAX_REJECTED_ENTRIES_LISTED = 20
+
+
+class ManifestEntriesRejected(RemoteURLRejected):
+    """One or more manifest entry URLs failed the fetch gateway's checks.
+
+    ``str(exc)`` is a short client-safe summary (used as the per-DC message on
+    refresh); ``detail()`` is the structured HTTP 400 body listing the
+    offending entries. Nothing is registered or fetched when this is raised.
+    """
+
+    def __init__(self, rejected: list[dict[str, str]]):
+        self.rejected = rejected
+        count = len(rejected)
+        shown = "; ".join(f"{r['type']}/{r['id']} ({r['reason']})" for r in rejected[:5])
+        more = f"; and {count - 5} more" if count > 5 else ""
+        noun = "entry" if count == 1 else "entries"
+        super().__init__(
+            f"{count} manifest {noun} rejected by the fetch gateway, nothing was ingested: "
+            f"{shown}{more}"
+        )
+
+    def detail(self) -> dict:
+        return {
+            "message": str(self),
+            "rejected_count": len(self.rejected),
+            "rejected_entries": self.rejected[:MAX_REJECTED_ENTRIES_LISTED],
+        }
+
+
+def _reject_unsafe_entry_urls(manifest: DataManifest) -> None:
+    """Run every entry URL through the fetch gateway before anything is registered.
+
+    Parsing only checks entry URLs syntactically; the scan then registers each
+    one as a File and the worker downloads it server-side. Without this gate a
+    public manifest could point an entry at an internal service or the cloud
+    metadata endpoint and have the response land in a readable Delta table.
+
+    The gateway's verdict depends on scheme and host only (allow/deny lists,
+    DNS, address ranges), so each distinct host is checked once: a manifest
+    with thousands of entries on one host costs one resolution, not thousands.
+    """
+    verdicts: dict[tuple[str, str], str | None] = {}
+    rejected: list[dict[str, str]] = []
+    for entry in manifest.entries:
+        parsed = urlparse(entry.url)
+        key = (parsed.scheme.lower(), parsed.netloc.lower())
+        if key not in verdicts:
+            try:
+                validate_remote_url(entry.url)
+                verdicts[key] = None
+            except RemoteURLRejected as exc:
+                verdicts[key] = str(exc)
+        reason = verdicts[key]
+        if reason is not None:
+            rejected.append(
+                {"id": entry.id, "type": entry.type, "url": entry.url, "reason": reason}
+            )
+    if rejected:
+        raise ManifestEntriesRejected(rejected)
 
 
 class IngestManifestRequest(BaseModel):
@@ -100,6 +163,10 @@ def _fetch_and_parse_manifest(manifest_url: str, field_map: dict[str, str]) -> D
     Server context only accepts remote manifests (https; s3 is tracked in the
     RFC) — local paths are a CLI affordance. Format is decided by extension
     then content sniffing, same as the CLI's ``fetch_manifest``.
+
+    Every entry URL is gateway-validated before the manifest is returned
+    (raises ``ManifestEntriesRejected``, a ``RemoteURLRejected``), so no
+    caller can register an entry the worker must not fetch.
     """
     tmp = tempfile.NamedTemporaryFile(prefix="depictio_manifest_", delete=False)
     tmp.close()
@@ -116,8 +183,11 @@ def _fetch_and_parse_manifest(manifest_url: str, field_map: dict[str, str]) -> D
     stripped = text.lstrip()
     looks_json = manifest_url.split("?", 1)[0].endswith(".json") or stripped.startswith(("{", "["))
     if looks_json:
-        return DataManifest.from_json(text, source=manifest_url, field_map=field_map)
-    return DataManifest.from_csv(text, source=manifest_url, field_map=field_map)
+        manifest = DataManifest.from_json(text, source=manifest_url, field_map=field_map)
+    else:
+        manifest = DataManifest.from_csv(text, source=manifest_url, field_map=field_map)
+    _reject_unsafe_entry_urls(manifest)
+    return manifest
 
 
 def _live_dc_index(project_dict: dict) -> dict[str, tuple[int, int]]:
@@ -239,6 +309,8 @@ def _ingest_manifest_into_project(
         field_map["run"] = run_field
     try:
         manifest = _fetch_and_parse_manifest(manifest_url, field_map)
+    except ManifestEntriesRejected as exc:
+        raise HTTPException(status_code=400, detail=exc.detail())
     except RemoteURLRejected as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except ValueError as exc:
@@ -307,15 +379,19 @@ def _ingest_manifest_into_project(
         report.success = True
         return report
 
-    # Persist the manifest scan configs first — the helpers' API callbacks
-    # read the DC config from the project document.
-    projects_collection.update_one({"_id": project_oid}, {"$set": {"workflows": workflows}})
-
+    # Resolve the project's storage credentials before touching the project
+    # document: an unusable config (unreadable secret, endpoint no longer
+    # allowed) must fail before any scan config is written, so there is
+    # nothing to revert.
     from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
         storage_options_for_project,
     )
 
     remote_options = storage_options_for_project(project_oid)
+
+    # Persist the manifest scan configs first — the helpers' API callbacks
+    # read the DC config from the project document.
+    projects_collection.update_one({"_id": project_oid}, {"$set": {"workflows": workflows}})
 
     all_ok = True
     for tag in matched_tags:
@@ -385,6 +461,11 @@ def _refresh_manifest_in_project(
     any row of a DC's type marks that DC failed *without* running the scan, so
     a refresh never silently empties a data collection.
 
+    In ``async_run`` mode those pre-flight failures are also seeded into the
+    ingestion-run document as failed steps, so a caller that only polls
+    ``GET /projects/refresh_manifest/{run_id}`` sees them and the run can
+    never close as "success" around a DC that was skipped.
+
     Synchronous on purpose (sync httpx callbacks in the CLI helpers) — callers
     must dispatch via ``asyncio.to_thread``.
     """
@@ -443,7 +524,24 @@ def _refresh_manifest_in_project(
     # must not block refreshing DCs backed by a different one.
     manifests: dict[tuple, DataManifest | str] = {}  # key -> manifest or error text
     to_dispatch: list[tuple[str, str, int, int]] = []  # (tag, dc_id, wf_i, entries)
+    preflight_failed: list[tuple[str, str, str]] = []  # (tag, dc_id, message), async only
     all_ok = True
+
+    def _fail_preflight(tag: str, dc_id: str, message: str) -> None:
+        nonlocal all_ok
+        all_ok = False
+        report.refreshed.append(
+            ManifestIngestDCResult(
+                data_collection_tag=tag,
+                data_collection_id=dc_id,
+                entries=0,
+                status="failed",
+                message=message,
+            )
+        )
+        if async_run and not dry_run:
+            preflight_failed.append((tag, dc_id, message))
+
     for tag, (wf_i, dc_i, scan_params) in manifest_index.items():
         dc_dict = workflows[wf_i]["data_collections"][dc_i]
         dc_id = str(dc_dict.get("_id") or dc_dict.get("id") or "")
@@ -470,38 +568,26 @@ def _refresh_manifest_in_project(
                         "serve the manifest over https."
                     )
                 manifests[key] = _fetch_and_parse_manifest(manifest_url, field_map)
+            except ManifestEntriesRejected as exc:
+                # Fetched fine, but an entry points somewhere the worker must
+                # not read: a per-DC failure like any other, before dispatch.
+                manifests[key] = str(exc)
             except (RemoteURLRejected, ValueError) as exc:
                 manifests[key] = f"Could not fetch manifest: {exc}"
 
         manifest = manifests[key]
         if isinstance(manifest, str):
-            all_ok = False
-            report.refreshed.append(
-                ManifestIngestDCResult(
-                    data_collection_tag=tag,
-                    data_collection_id=dc_id,
-                    entries=0,
-                    status="failed",
-                    message=manifest,
-                )
-            )
+            _fail_preflight(tag, dc_id, manifest)
             continue
 
         manifest_type = str(scan_params.get("manifest_type") or tag)
         entry_count = len(manifest.entries_for_type(manifest_type))
         if entry_count == 0:
-            all_ok = False
-            report.refreshed.append(
-                ManifestIngestDCResult(
-                    data_collection_tag=tag,
-                    data_collection_id=dc_id,
-                    entries=0,
-                    status="failed",
-                    message=(
-                        f"Manifest has no entries of type '{manifest_type}' — "
-                        "refresh skipped to avoid emptying the data collection."
-                    ),
-                )
+            _fail_preflight(
+                tag,
+                dc_id,
+                f"Manifest has no entries of type '{manifest_type}': "
+                "refresh skipped to avoid emptying the data collection.",
             )
             continue
 
@@ -545,12 +631,16 @@ def _refresh_manifest_in_project(
             )
         )
 
-    if to_dispatch:
+    # Both lists are only ever filled in async (non-dry) mode. A run document
+    # is created even when every DC failed pre-flight, so the caller always
+    # gets a run_id and the poll endpoint shows the failures.
+    if to_dispatch or preflight_failed:
         dispatch_ok = _dispatch_refresh_tasks(
             project_dict=project_dict,
             to_dispatch=to_dispatch,
             current_user=current_user,
             report=report,
+            preflight_failed=preflight_failed,
         )
         all_ok = all_ok and dispatch_ok
 
@@ -564,6 +654,7 @@ def _dispatch_refresh_tasks(
     to_dispatch: list[tuple[str, str, int, int]],
     current_user,
     report: ManifestRefreshReport,
+    preflight_failed: list[tuple[str, str, str]] | None = None,
 ) -> bool:
     """Fan the per-DC refreshes out to Celery, backed by an ingestion run.
 
@@ -571,6 +662,12 @@ def _dispatch_refresh_tasks(
     ``set_ingestion_step`` positional updates are atomic under concurrency.
     Poll ``GET /projects/refresh_manifest/{run_id}`` for the aggregate report —
     Mongo is the durable status of record; Celery is only the transport.
+
+    ``preflight_failed`` DCs (manifest unfetchable, entry rejected, type
+    dropped from the manifest) never reach a worker but are seeded as
+    already-failed steps with ``file_count=0``: the finalizer computes the run
+    status from the seeded steps, so leaving them out would let the run close
+    as "success" with the skipped DC silently absent from the poll report.
     """
     from uuid import uuid4
 
@@ -581,6 +678,7 @@ def _dispatch_refresh_tasks(
         IngestionStep,
     )
 
+    preflight_failed = preflight_failed or []
     run_id = uuid4().hex
     store.create_ingestion_run(
         IngestionRun(
@@ -593,11 +691,19 @@ def _dispatch_refresh_tasks(
             project_name=project_dict.get("name"),
             command="refresh_manifest",
             data_collections=[
+                IngestionDataCollection(tag=tag, scan_mode="manifest", file_count=0)
+                for tag, _dc_id, _message in preflight_failed
+            ]
+            + [
                 IngestionDataCollection(tag=tag, scan_mode="manifest", file_count=entries)
                 for tag, _dc_id, _wf_i, entries in to_dispatch
             ],
             status="running",
             steps=[
+                IngestionStep(name=tag, status="failed", detail=message)
+                for tag, _dc_id, message in preflight_failed
+            ]
+            + [
                 IngestionStep(name=tag, status="pending")
                 for tag, _dc_id, _wf_i, _entries in to_dispatch
             ],
@@ -646,9 +752,10 @@ def _dispatch_refresh_tasks(
                 message=message,
             )
         )
-    if not all_dispatched:
-        # If nothing was dispatched no worker will ever finalize the run —
-        # close it now (no-op while any step is still pending/running).
+    if not all_dispatched or not to_dispatch:
+        # With nothing dispatched (every DC failed pre-flight, or the broker
+        # refused them all) no worker will ever finalize the run: close it
+        # now (no-op while any step is still pending/running).
         from depictio.api.v1.celery_tasks import _finalize_manifest_refresh_run
 
         _finalize_manifest_refresh_run(run_id)

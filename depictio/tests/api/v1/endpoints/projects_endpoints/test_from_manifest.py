@@ -20,6 +20,7 @@ from bson import ObjectId
 from fastapi import HTTPException
 
 from depictio.api.v1.endpoints.projects_endpoints import from_manifest, manifest_ingest
+from depictio.api.v1.remote_fetch import RemoteURLRejected
 from depictio.models.models.users import UserBase
 
 TEMPLATE_ID = "generic/manifest-tables/1"
@@ -204,3 +205,86 @@ def test_duplicate_project_name_409(mock_db):
     with _served(), pytest.raises(HTTPException) as exc:
         _call(project_name="run42")
     assert exc.value.status_code == 409
+
+
+# One entry on a host the gateway rejects (the other host passes).
+MANIFEST_WITH_INTERNAL_ENTRY = """
+[
+  {"id": "s1", "type": "samples", "url": "https://example.org/s1.csv"},
+  {"id": "s2", "type": "samples", "url": "https://internal.example/s2.csv"}
+]
+"""
+
+
+def test_rejected_entry_url_400_and_nothing_created(mock_db):
+    def _gate(url):
+        if "internal.example" in url:
+            raise RemoteURLRejected(
+                "Host 'internal.example' resolves to a non-public address and was rejected."
+            )
+
+    with (
+        _served(MANIFEST_WITH_INTERNAL_ENTRY),
+        patch.object(manifest_ingest, "validate_remote_url", side_effect=_gate),
+        patch.object(from_manifest, "_run_dc_ingest") as ingest,
+        pytest.raises(HTTPException) as exc,
+    ):
+        _call(project_name="run44")
+
+    assert exc.value.status_code == 400
+    detail = exc.value.detail
+    assert detail["rejected_count"] == 1
+    assert detail["rejected_entries"][0]["id"] == "s2"
+    assert detail["rejected_entries"][0]["type"] == "samples"
+    assert "samples/s2" in detail["message"]
+    ingest.assert_not_called()
+    assert mock_db["projects"].count_documents({}) == 0
+
+
+@pytest.mark.parametrize(
+    "template_id", ["../x", "/etc/passwd", "generic/../../x", "~/x", ".hidden/x", ""]
+)
+def test_request_rejects_path_like_template_ids(template_id):
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="slash-separated"):
+        from_manifest.FromManifestRequest(
+            manifest_url="https://example.org/m.json", template_id=template_id
+        )
+
+
+@pytest.mark.parametrize(
+    "template_id",
+    ["generic/manifest-tables/1", "nf-core/ampliseq/latest", "nf-core/ampliseq", "lab/tool/1.0.0"],
+)
+def test_request_accepts_catalogue_ids(template_id):
+    request = from_manifest.FromManifestRequest(
+        manifest_url="https://example.org/m.json", template_id=template_id
+    )
+    assert request.template_id == template_id
+
+
+def test_path_like_template_id_422_before_any_lookup(mock_db):
+    # Direct callers bypass the request model; the flow re-checks the id itself.
+    with _served(), pytest.raises(HTTPException) as exc:
+        _call(template_id="../../etc/passwd")
+    assert exc.value.status_code == 422
+    assert "slash-separated" in exc.value.detail
+    assert mock_db["projects"].count_documents({}) == 0
+
+
+def test_unknown_template_404_hides_server_paths(mock_db):
+    from pathlib import Path
+
+    from depictio.cli.cli.utils import templates as templates_module
+
+    with _served(), pytest.raises(HTTPException) as exc:
+        _call(template_id="generic/does-not-exist/1")
+
+    assert exc.value.status_code == 404
+    detail = exc.value.detail
+    assert detail.startswith("Template 'generic/does-not-exist/1' not found.")
+    projects_dir = Path(templates_module.__file__).resolve().parents[4] / "depictio" / "projects"
+    assert str(projects_dir) not in detail
+    # The catalogue of usable ids still rides along.
+    assert TEMPLATE_ID in detail

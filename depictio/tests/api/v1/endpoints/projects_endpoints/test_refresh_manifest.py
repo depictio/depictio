@@ -17,6 +17,7 @@ from fastapi import HTTPException
 
 from depictio.api.v1.endpoints.datacollections_endpoints import utils as dc_utils
 from depictio.api.v1.endpoints.projects_endpoints import manifest_ingest, storage_config
+from depictio.api.v1.remote_fetch import RemoteURLRejected
 from depictio.models.models.users import UserBase
 
 MANIFEST_JSON = """
@@ -423,3 +424,135 @@ def test_run_dc_ingest_threads_sync_files(mock_db):
     assert ok is True and message is None
     scan_call = next(c for c in helper.call_args_list if c.kwargs.get("mode") == "scan")
     assert scan_call.kwargs.get("command_parameters") == {"sync_files": True}
+
+
+# One entry on a host the gateway rejects (the other host passes).
+MANIFEST_WITH_INTERNAL_ENTRY = """
+[
+  {"id": "s1", "type": "counts", "url": "https://example.org/s1.csv"},
+  {"id": "a1", "type": "annotations", "url": "https://internal.example/a1.csv"}
+]
+"""
+
+
+def _serve(content: str):
+    def _download(url, dest_path, max_bytes=None, timeout_s=30.0):
+        with open(dest_path, "w") as fh:
+            fh.write(content)
+        return len(content)
+
+    return patch.object(manifest_ingest, "bounded_download", side_effect=_download)
+
+
+def test_rejected_entry_url_fails_every_dc_on_that_manifest(mock_db):
+    # Entry URLs are gateway-checked at fetch time: a rejected entry fails the
+    # manifest before any scan could register it, for every DC it backs.
+    user = _user()
+    doc = _project_doc(user.id, tags=["counts", "annotations"])
+    mock_db["projects"].insert_one(doc)
+
+    def _gate(url):
+        if "internal.example" in url:
+            raise RemoteURLRejected(
+                "Host 'internal.example' is not in the administrator allowlist."
+            )
+
+    with (
+        _serve(MANIFEST_WITH_INTERNAL_ENTRY),
+        patch.object(manifest_ingest, "validate_remote_url", side_effect=_gate),
+        patch.object(manifest_ingest, "_run_dc_ingest", return_value=(True, None)) as ingest,
+    ):
+        report = _call(project_id=str(doc["_id"]), user=user)
+
+    assert report.success is False
+    assert [r.status for r in report.refreshed] == ["failed", "failed"]
+    assert all("annotations/a1" in (r.message or "") for r in report.refreshed)
+    ingest.assert_not_called()
+
+
+def test_async_run_seeds_preflight_failures_into_run(mock_db):
+    # A DC skipped before dispatch (its type vanished from the manifest) must
+    # be visible to a caller that only polls the run, and must keep the run
+    # from closing as "success".
+    from depictio.api.v1.celery_tasks import _finalize_manifest_refresh_run
+    from depictio.api.v1.monitoring import store as monitoring_store
+
+    user = _user()
+    doc = _project_doc(user.id, tags=["counts", "annotations"])
+    mock_db["projects"].insert_one(doc)
+
+    with (
+        _serve(MANIFEST_COUNTS_ONLY),
+        patch.object(monitoring_store, "ingestion_runs_collection", mock_db["ingestion_runs"]),
+        patch("depictio.api.v1.celery_tasks.manifest_refresh_dc_task") as task,
+    ):
+        report = manifest_ingest._refresh_manifest_in_project(
+            project_id=str(doc["_id"]), current_user=user, async_run=True
+        )
+        assert report.success is False
+        assert report.run_id is not None
+        by_tag = {r.data_collection_tag: r for r in report.refreshed}
+        assert by_tag["counts"].status == "dispatched"
+        assert by_tag["annotations"].status == "failed"
+        assert task.apply_async.call_count == 1  # the skipped DC never reaches a worker
+
+        run_doc = mock_db["ingestion_runs"].find_one({"run_id": report.run_id})
+        assert run_doc["status"] == "running"  # counts is still pending
+        steps = {s["name"]: s for s in run_doc["steps"]}
+        assert steps["counts"]["status"] == "pending"
+        assert steps["annotations"]["status"] == "failed"
+        assert "annotations" in (steps["annotations"]["detail"] or "")
+        assert {d["tag"]: d["file_count"] for d in run_doc["data_collections"]} == {
+            "counts": 1,
+            "annotations": 0,
+        }
+
+        polled = manifest_ingest._get_refresh_run_report(report.run_id, user)
+        assert polled.success is False
+        polled_by_tag = {r.data_collection_tag: r for r in polled.refreshed}
+        assert polled_by_tag["counts"].status == "dispatched"
+        assert polled_by_tag["annotations"].status == "failed"
+        assert polled_by_tag["annotations"].entries == 0
+        assert "annotations" in (polled_by_tag["annotations"].message or "")
+
+        # The worker finishes the dispatched DC: one green + one pre-flight
+        # red closes the run as partial, never success.
+        monitoring_store.set_ingestion_step(
+            report.run_id,
+            step={"name": "counts", "status": "success", "detail": None},
+            current_step=None,
+        )
+        _finalize_manifest_refresh_run(report.run_id)
+        run_doc = mock_db["ingestion_runs"].find_one({"run_id": report.run_id})
+        assert run_doc["status"] == "partial"
+        assert manifest_ingest._get_refresh_run_report(report.run_id, user).success is False
+
+
+def test_async_run_all_preflight_failures_still_returns_run_id(mock_db):
+    from depictio.api.v1.monitoring import store as monitoring_store
+
+    user = _user()
+    doc = _project_doc(user.id, tags=["counts"], manifest_url="https://127.0.0.1/manifest.json")
+    mock_db["projects"].insert_one(doc)
+
+    with (
+        patch.object(monitoring_store, "ingestion_runs_collection", mock_db["ingestion_runs"]),
+        patch("depictio.api.v1.celery_tasks.manifest_refresh_dc_task") as task,
+    ):
+        report = manifest_ingest._refresh_manifest_in_project(
+            project_id=str(doc["_id"]), current_user=user, async_run=True
+        )
+        task.apply_async.assert_not_called()
+        assert report.success is False
+        assert report.run_id is not None
+        assert [r.status for r in report.refreshed] == ["failed"]
+
+        # Nothing was dispatched, so the run is closed right away as failed
+        # and the poll endpoint reports the same failure.
+        run_doc = mock_db["ingestion_runs"].find_one({"run_id": report.run_id})
+        assert run_doc["status"] == "failed"
+        assert "Could not fetch manifest" in (run_doc["error"] or "")
+        polled = manifest_ingest._get_refresh_run_report(report.run_id, user)
+        assert polled.success is False
+        assert [r.status for r in polled.refreshed] == ["failed"]
+        assert "Could not fetch manifest" in (polled.refreshed[0].message or "")

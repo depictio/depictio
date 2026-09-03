@@ -88,34 +88,33 @@ def _load_yaml(path: str) -> dict:
     return data
 
 
-def locate_template(template_id: str) -> Path:
-    """Find template YAML by template_id (e.g., 'nf-core/ampliseq/2.16.0') or by path.
+class TemplateNotFoundError(FileNotFoundError):
+    """No template YAML for ``template_id``.
 
-    Searches in the depictio/projects/ directory relative to the package installation.
-    Looks for template.yaml first (dedicated template file), then falls back to
-    project.yaml (for backwards compatibility).
-
-    The version segment may be ``latest`` or omitted entirely
-    (``nf-core/ampliseq/latest`` / ``nf-core/ampliseq``): both resolve to the
-    highest version directory shipping a template, so callers never need to
-    hardcode a pinned version.
-    A local directory or YAML file is also accepted. That is what makes an
-    exported bundle usable by whoever receives it: ``depictio template export``
-    produces a directory, and without this the recipient would have to copy it
-    into their own site-packages before it could be run.
-
-    Args:
-        template_id: Template identifier (e.g., 'nf-core/ampliseq/2.16.0'), or a
-            path to a template directory / YAML file.
-
-    Returns:
-        Path to the template YAML file.
-
-    Raises:
-        FileNotFoundError: If no template YAML exists.
+    Carries the catalogue separately from the message so API callers can be
+    told what exists without being shown the server's filesystem layout.
     """
-    # Path form first: an existing directory or YAML file wins over id lookup, so
-    # a local bundle is never shadowed by an installed template of the same name.
+
+    def __init__(self, message: str, template_id: str, available_templates: list[str]):
+        super().__init__(message)
+        self.template_id = template_id
+        self.available_templates = available_templates
+
+
+def _is_cli_context() -> bool:
+    """True inside the depictio CLI process (it sets ``DEPICTIO_CONTEXT=CLI``)."""
+    from depictio.models.utils import get_depictio_context
+
+    return get_depictio_context().lower() == "cli"
+
+
+def _locate_template_path(template_id: str) -> Path | None:
+    """The path form: ``template_id`` names an existing directory or YAML file.
+
+    Returns None when it names neither (the id form is tried next). A
+    directory that exists but holds no template YAML is an error rather than
+    a fall-through, since falling back to the catalogue would only confuse.
+    """
     candidate_path = Path(template_id).expanduser()
     if candidate_path.is_file() and candidate_path.suffix in (".yaml", ".yml"):
         return candidate_path.resolve()
@@ -128,32 +127,88 @@ def locate_template(template_id: str) -> Path:
             f"Directory '{template_id}' holds no template.yaml or project.yaml. "
             "Point --template at the directory produced by `depictio template export`."
         )
+    return None
 
-    # Resolve relative to depictio package root
+
+def _template_dir_within(projects_dir: Path, template_id: str) -> Path | None:
+    """``projects_dir/<resolved id>``, or None when the id would leave ``projects_dir``.
+
+    Ids reach here from API callers (``POST /projects/from_manifest``) as well
+    as the CLI, so the candidate is resolved (symlinks included) and checked
+    for containment instead of being trusted as a plain relative id. Dot
+    segments are refused up front so nothing outside the directory is even
+    stat'ed while resolving ``latest``.
+    """
+    parts = [p for p in template_id.split("/") if p]
+    if not parts or any(p in (".", "..") for p in parts):
+        return None
+    root = projects_dir.resolve()
+    candidate = (root / _resolve_template_id_in(root, template_id)).resolve()
+    if not candidate.is_relative_to(root):
+        return None
+    return candidate
+
+
+def locate_template(template_id: str) -> Path:
+    """Find template YAML by template_id (e.g., 'nf-core/ampliseq/2.16.0') or by path.
+
+    Searches in the depictio/projects/ directory relative to the package installation.
+    Looks for template.yaml first (dedicated template file), then falls back to
+    project.yaml (for backwards compatibility).
+
+    The version segment may be ``latest`` or omitted entirely
+    (``nf-core/ampliseq/latest`` / ``nf-core/ampliseq``): both resolve to the
+    highest version directory shipping a template, so callers never need to
+    hardcode a pinned version.
+
+    In the CLI a local directory or YAML file is also accepted. That is what
+    makes an exported bundle usable by whoever receives it: ``depictio template
+    export`` produces a directory, and without this the recipient would have to
+    copy it into their own site-packages before it could be run. The server
+    never accepts the path form: it resolves ids on behalf of remote callers,
+    and a path there would let any request read an arbitrary YAML on the host.
+    Ids are confined to the templates directory in both contexts.
+
+    Args:
+        template_id: Template identifier (e.g., 'nf-core/ampliseq/2.16.0'), or,
+            on the CLI, a path to a template directory / YAML file.
+
+    Returns:
+        Path to the template YAML file.
+
+    Raises:
+        FileNotFoundError: If no template YAML exists (``TemplateNotFoundError``
+            for an unknown or out-of-tree id).
+    """
+    # Path form first: an existing directory or YAML file wins over id lookup, so
+    # a local bundle is never shadowed by an installed template of the same name.
+    if _is_cli_context():
+        located = _locate_template_path(template_id)
+        if located is not None:
+            return located
+
+    # Resolve relative to depictio package root, then without the package
+    # nesting (installed packages). template.yaml (dedicated template file)
+    # is preferred over project.yaml (fixture) in each.
     package_root = Path(__file__).resolve().parents[4]  # cli/cli/utils/ -> depictio/
     projects_dir = package_root / "depictio" / "projects"
-    template_dir = projects_dir / _resolve_template_id_in(projects_dir, template_id)
-
-    # Prefer template.yaml (dedicated template file) over project.yaml (fixture)
-    for filename in ("template.yaml", "project.yaml"):
-        candidate = template_dir / filename
-        if candidate.is_file():
-            return candidate
-
-    # Also try without the package nesting (for installed packages)
-    alt_root = Path(__file__).resolve().parents[3]  # cli/cli/utils/ -> cli/
-    alt_projects_dir = alt_root / "projects"
-    alt_dir = alt_projects_dir / _resolve_template_id_in(alt_projects_dir, template_id)
-    for filename in ("template.yaml", "project.yaml"):
-        candidate = alt_dir / filename
-        if candidate.is_file():
-            return candidate
+    alt_projects_dir = Path(__file__).resolve().parents[3] / "projects"  # cli/cli/utils/ -> cli/
+    for root in (projects_dir, alt_projects_dir):
+        template_dir = _template_dir_within(root, template_id)
+        if template_dir is None:
+            continue
+        for filename in ("template.yaml", "project.yaml"):
+            candidate = template_dir / filename
+            if candidate.is_file():
+                return candidate
 
     available = _list_available_templates(package_root)
     available_str = ", ".join(available) if available else "none found"
-    raise FileNotFoundError(
-        f"Template '{template_id}' not found at {template_dir}. "
-        f"Available templates: {available_str}"
+    raise TemplateNotFoundError(
+        f"Template '{template_id}' not found under {projects_dir}. "
+        f"Available templates: {available_str}",
+        template_id=template_id,
+        available_templates=available,
     )
 
 
