@@ -684,6 +684,11 @@ def review(client, tag: str, action: str = "keep"):
     )
 
 
+def review_all(client, action: str):
+    """The bulk actions carry no tag: the server reads the draft's tiles."""
+    return client.post(f"/ai/generated-dashboards/{DASHBOARD_ID}/review", json={"action": action})
+
+
 class TestReview:
     def test_keep_then_unkeep(self, client, draft):
         r = review(client, "sepal_scatter")
@@ -699,6 +704,24 @@ class TestReview:
 
         assert review(client, "sepal_scatter", "unkeep").json() == {"reviewed": 1, "total": 6}
         assert draft.doc["ai_generation"]["reviewed"] == ["petal_box"]
+
+    def test_keep_all_then_unkeep_all(self, client, draft):
+        assert review(client, "sepal_scatter").json() == {"reviewed": 1, "total": 6}
+
+        r = review_all(client, "keep-all")
+        assert r.status_code == 200
+        assert r.json() == {"reviewed": 6, "total": 6}
+        # Every tile of the draft, read off the document rather than taken
+        # from the caller, and each of them once.
+        kept = draft.doc["ai_generation"]["reviewed"]
+        assert len(kept) == len(set(kept)) == 6
+
+        assert review_all(client, "unkeep-all").json() == {"reviewed": 0, "total": 6}
+        assert draft.doc["ai_generation"]["reviewed"] == []
+
+    def test_a_single_action_still_needs_its_tag(self, client, draft):
+        r = client.post(f"/ai/generated-dashboards/{DASHBOARD_ID}/review", json={"action": "keep"})
+        assert r.status_code == 422
 
     def test_a_tag_that_is_no_longer_stored_is_dropped(self, client, draft):
         draft.doc["ai_generation"]["reviewed"] = ["sepal_scatter", "deleted_tile"]

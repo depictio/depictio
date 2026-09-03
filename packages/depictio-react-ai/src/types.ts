@@ -474,8 +474,9 @@ export interface RegenerateRequest {
  *  generation handle of one tile (`ai_source.tag` on its stored metadata),
  *  not its runtime `index`. */
 export interface ReviewComponentRequest {
+  /** Empty for the `-all` actions, which read the draft's tiles server-side. */
   tag: string;
-  action: 'keep' | 'unkeep';
+  action: 'keep' | 'unkeep' | 'keep-all' | 'unkeep-all';
 }
 
 /** Answer of the review route: the draft's progress after the write. */

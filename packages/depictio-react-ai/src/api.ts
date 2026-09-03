@@ -259,12 +259,15 @@ export function streamRegenerateSection(
   return streamPost(path, body, llmKey, handlers);
 }
 
-/** Mark one generated tile reviewed (`keep`) or take the mark back
- *  (`unkeep`). The review block lives on the dashboard's `ai_generation`
- *  and this route is its only writer — autosave strips it. Answers the
- *  draft's progress after the write. */
+/** Mark a generated tile reviewed (`keep`) or take the mark back (`unkeep`),
+ *  or settle the whole draft at once (`keep-all` / `unkeep-all`). The review
+ *  block lives on the dashboard's `ai_generation` and this route is its only
+ *  writer — autosave strips it. Answers the draft's progress after the write. */
 export async function reviewComponent(
   dashboardId: string,
+  /** Empty string with `keep-all` / `unkeep-all`: the server settles every
+   *  tile of the draft, so the caller does not send a list that could already
+   *  be out of date. */
   tag: string,
   action: ReviewComponentRequest['action'],
 ): Promise<ReviewComponentResponse> {

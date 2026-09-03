@@ -742,24 +742,25 @@ const EditorApp: React.FC = () => {
     [scheduleSave, ownLayoutOnly],
   );
 
-  /** Delete: strip from stored_metadata + both layouts, save, then refetch. */
-  const handleDeleteComponent = useCallback(
-    async (componentId: string) => {
-      if (!dashboardId) return;
+  /** Delete: strip from stored_metadata + both layouts, save, then refetch.
+   *  Takes a set so removing twenty tiles is one save and one refetch rather
+   *  than twenty of each. */
+  const handleDeleteComponents = useCallback(
+    async (componentIds: string[]) => {
+      if (!dashboardId || componentIds.length === 0) return;
       const cur = dashboardRef.current;
       if (!cur) return;
+      const doomed = new Set(componentIds);
       const next: DashboardData = {
         ...cur,
-        stored_metadata: (cur.stored_metadata || []).filter(
-          (m) => m.index !== componentId,
-        ),
-        left_panel_layout_data: stripFromLayout(
+        stored_metadata: (cur.stored_metadata || []).filter((m) => !doomed.has(m.index)),
+        left_panel_layout_data: componentIds.reduce(
+          (layout, id) => stripFromLayout(layout, id),
           cur.left_panel_layout_data,
-          componentId,
         ),
-        right_panel_layout_data: stripFromLayout(
+        right_panel_layout_data: componentIds.reduce(
+          (layout, id) => stripFromLayout(layout, id),
           cur.right_panel_layout_data,
-          componentId,
         ),
       };
       // Cancel any pending debounced save — we're saving NOW.
@@ -780,6 +781,11 @@ const EditorApp: React.FC = () => {
       }
     },
     [dashboardId, applyDashboard],
+  );
+
+  const handleDeleteComponent = useCallback(
+    (componentId: string) => handleDeleteComponents([componentId]),
+    [handleDeleteComponents],
   );
 
   /**
@@ -1570,6 +1576,40 @@ const EditorApp: React.FC = () => {
     },
     [handleDeleteComponent],
   );
+
+  /** Settle the whole draft in one call. The server reads the draft's tiles
+   *  off the document rather than taking a list from here, so the two cannot
+   *  disagree about what "all" is; the optimistic update mirrors it. */
+  const handleReviewAll = useCallback(
+    async (action: 'keep-all' | 'unkeep-all') => {
+      if (!dashboardId) return;
+      const previous = reviewedTags;
+      setReviewedTags(action === 'keep-all' ? draftTiles.map((t) => t.tag) : []);
+      try {
+        await reviewComponent(dashboardId, '', action);
+      } catch (err) {
+        console.error('[EditorApp] review failed:', err);
+        setReviewedTags(previous);
+        notifications.show({
+          color: 'red',
+          title: 'Review not saved',
+          message: err instanceof Error ? err.message : String(err),
+          autoClose: 4000,
+        });
+      }
+    },
+    [dashboardId, draftTiles, reviewedTags],
+  );
+
+  /** Drop every generated tile at once, in one save. The dashboard survives
+   *  (empty, or holding whatever was added by hand); deleting the draft
+   *  itself is Discard on the banner. */
+  const handleRemoveAllTiles = useCallback(async () => {
+    const ids = draftTiles.map((t) => t.componentId);
+    if (ids.length === 0) return;
+    setReviewedTags([]);
+    await handleDeleteComponents(ids);
+  }, [draftTiles, handleDeleteComponents]);
 
   /** A regeneration reports its failure on the tile it was about, so the panel
    *  only carries the message while its cursor is on one of those tiles. */
@@ -2593,6 +2633,8 @@ const EditorApp: React.FC = () => {
               onClose={() => setReviewPanelOpen(false)}
               onKeep={(tile) => handleReviewTile(tile.tag, tile.reviewed ? 'unkeep' : 'keep')}
               onRemove={(tile) => handleRemoveTile(tile.componentId, tile.tag)}
+              onKeepAll={(keep) => handleReviewAll(keep ? 'keep-all' : 'unkeep-all')}
+              onRemoveAll={handleRemoveAllTiles}
               onRegenerate={(tile, instruction) =>
                 handleRegenerateTile(tile.componentId, instruction)
               }
