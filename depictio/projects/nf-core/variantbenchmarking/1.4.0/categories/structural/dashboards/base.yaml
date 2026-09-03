@@ -1,0 +1,154 @@
+version: 1
+main_dashboard:
+  title: Variant Benchmarking — Structural variants
+  subtitle: "variant_type=structural — truvari precision · recall · F1 + SURVIVOR (HG002 SVs Tier1)"
+  project_tag: Variant Benchmarking — Structural variants
+  main_tab_name: MultiQC
+  tab_icon: /assets/images/logos/multiqc_icon_color.svg
+  tab_icon_color: orange
+  workflow_system: none
+  # Structural variants have no separate summary table in the pipeline: the
+  # benchmark numbers only exist inside the MultiQC report, so this project is a
+  # single MultiQC tab. Cards and native benchmark panels would need a
+  # general-statistics recipe for truvari; until then the MultiQC tiles carry
+  # the catalog provenance (`use: multiqc/truvari`).
+  filter_sections:
+  - name: Report samples
+    icon: mdi:filter-variant
+    color: orange
+    description: Narrow the MultiQC panels to selected callsets
+  grid_sections:
+  - name: Benchmark at a glance
+    icon: mdi:counter
+    color: orange
+    description: truvari precision, recall, F1 and genotype concordance per callset
+  - name: truvari benchmark
+    icon: mdi:chart-scatter-plot
+    color: orange
+    description: The precision-recall view and the TP / FP / FN classifications
+  - name: SV callset
+    icon: mdi:dna
+    color: gray
+    description: The merged SV callset SURVIVOR summarises, and the pipeline's variant-calling summary
+    collapsed: true
+  components:
+  - component_type: text
+    tag: sv-intro
+    section: Benchmark at a glance
+    title: Structural-variant benchmarking through MultiQC
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      General statistics carry truvari precision, recall, F1 and genotype
+      concordance per callset. The precision-recall scatter is the signature
+      view and the classifications panel breaks down TP / FP / FN; SURVIVOR
+      summarises the merged SV callset.
+    workflow_tag: variantbenchmarking
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    tag: sv-general-stats
+    section: Benchmark at a glance
+    workflow_tag: variantbenchmarking
+    data_collection_tag: multiqc_data
+    selected_module: general_stats
+    selected_plot: general_stats
+    title: Benchmark statistics (truvari precision · recall · F1 · GT concordance)
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 1, w: 8, h: 4}
+
+  - component_type: text
+    tag: sv-truvari-intro
+    section: truvari benchmark
+    title: truvari against the HG002 Tier1 SV truth set
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Each point on the left is a callset, top-right is best. The
+      classifications on the right count true positives, false positives and
+      false negatives per callset, so a high-recall caller that over-calls shows
+      up immediately.
+    workflow_tag: variantbenchmarking
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    tag: sv-truvari-pr
+    section: truvari benchmark
+    workflow_tag: variantbenchmarking
+    data_collection_tag: multiqc_data
+    selected_module: truvari
+    selected_plot: Precision vs. Recall
+    use: multiqc/truvari
+    title: truvari precision vs recall
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 1, w: 4, h: 6}
+  - component_type: multiqc
+    tag: sv-truvari-classifications
+    section: truvari benchmark
+    workflow_tag: variantbenchmarking
+    data_collection_tag: multiqc_data
+    selected_module: truvari
+    selected_plot: Classifications
+    use: multiqc/truvari
+    title: truvari classifications (TP / FP / FN)
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 1, w: 4, h: 6}
+
+  - component_type: text
+    tag: sv-callset-intro
+    section: SV callset
+    title: What the merged callset looks like
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      SURVIVOR summarises the merged structural-variant callset by type and size;
+      the variant-calling summary is the pipeline's own per-callset overview.
+    workflow_tag: variantbenchmarking
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    tag: sv-survivor
+    section: SV callset
+    workflow_tag: variantbenchmarking
+    data_collection_tag: multiqc_data
+    selected_module: survivor
+    selected_plot: survivor-section
+    title: SURVIVOR merged SV summary
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 1, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sv-vcsummary
+    section: SV callset
+    workflow_tag: variantbenchmarking
+    data_collection_tag: multiqc_data
+    selected_module: variant_calling_summary
+    selected_plot: variant_calling_summary-section
+    title: Variant-calling summary
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 1, w: 4, h: 5}
+
+  - component_type: interactive
+    tag: sv-filter-sample
+    index: sv-sample-filter
+    section: Report samples
+    group: Sample scope
+    workflow_tag: variantbenchmarking
+    data_collection_tag: multiqc_data
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display: {title_size: md, custom_color: '#FB8C00', icon_name: 'mdi:tools'}
+    placement: left
+    title: Sample
+    layout: {x: 0, y: 0, w: 1, h: 3}

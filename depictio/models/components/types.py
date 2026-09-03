@@ -44,6 +44,11 @@ AdvancedVizKind = Literal[
     "oncoplot",
     "coverage_track",
     "sankey",
+    # Variant-benchmarking kinds (precision/recall/F1 against truth sets).
+    "pr_benchmark",
+    "roc_pr_curve",
+    "confusion_matrix",
+    "metric_ci_bars",
 ]
 
 # Map visualization types

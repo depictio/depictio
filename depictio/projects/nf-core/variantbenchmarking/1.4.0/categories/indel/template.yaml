@@ -1,0 +1,139 @@
+# nf-core/variantbenchmarking 1.4.0 — Somatic indels (analysis=somatic, variant_type=indel)
+# One of three per-variant-type projects. See categories/small/template.yaml.
+#   depictio run --template nf-core/variantbenchmarking/1.4.0/categories/indel \
+#     --data-root <root with indel/ + multiqc/multiqc_data/multiqc.parquet>
+
+template:
+  template_id: "nf-core/variantbenchmarking/1.4.0/categories/indel"
+  description: "nf-core/variantbenchmarking — somatic indel benchmarking: som.py precision/recall/F1 per caller, allele-fraction stratification + the indel MultiQC report."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root containing indel/ (somatic benchmark tables) and multiqc/multiqc_data/multiqc.parquet."
+      required: true
+  dashboards:
+    - "dashboards/base.yaml"
+
+name: "Variant Benchmarking — Somatic indels"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "variantbenchmarking"
+    version: "1.4.0"
+    engine:
+      name: "nextflow"
+      version: "24.10.4"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/variantbenchmarking"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      - data_collection_tag: "sompy_summary"
+        description: "Somatic som.py benchmark summary (precision/recall/F1 per caller, with CIs)"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "sompy/summary.py"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "caller": "Variant caller (mutect2 / strelka / freebayes …)"
+              "variant_type": "Variant type (indels / SNVs)"
+              "tp": "True positives"
+              "fp": "False positives"
+              "fn": "False negatives"
+              "recall": "Recall (0-1)"
+              "precision": "Precision (0-1)"
+              "f1": "F1 score (0-1)"
+              "recall_lower": "Recall 95% CI lower bound"
+              "recall_upper": "Recall 95% CI upper bound"
+              "precision_lower": "Precision 95% CI lower bound"
+              "precision_upper": "Precision 95% CI upper bound"
+
+      - data_collection_tag: "sompy_regions"
+        optional: true
+        description: "Somatic som.py metrics stratified by allele-fraction bin (caller × AF-bin)"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "sompy/regions.py"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "caller": "Variant caller"
+              "af_bin": "Allele-fraction stratum (e.g. 0.200000-0.400000)"
+              "recall": "Recall within AF bin (0-1)"
+              "precision": "Precision within AF bin (0-1)"
+              "f1": "F1 score within AF bin (0-1)"
+              "tp": "True positives in bin"
+              "fp": "False positives in bin"
+              "fn": "False negatives in bin"
+
+      - data_collection_tag: "vcfeval_summary"
+        optional: true
+        description: "Somatic rtg-tools vcfeval benchmark summary (precision/recall/F1 per caller)"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "rtgtools/vcfeval_summary.py"
+            source_overrides:
+              rtgtools_summary:
+                path: "indel/summary/tables/rtgtools/rtgtools.summary.csv"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "label": "Variant caller"
+              "caller": "Variant caller"
+              "tp_base": "True positives (baseline)"
+              "tp_comp": "True positives (comparison)"
+              "fp": "False positives"
+              "fn": "False negatives"
+              "precision": "Precision (0-1)"
+              "recall": "Recall / sensitivity (0-1)"
+              "f1": "F1 score (0-1)"
+
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report for the somatic indel run — bcftools stats + som.py."
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "multiqc/multiqc_data/multiqc.parquet"
+          dc_specific_properties:
+            s3_location: null
+            modules:
+              - "general_stats"
+              - "bcftools"
+              - "sompy"
+              - "variant_calling_summary"
+            plots:
+              bcftools:
+                - "Variant Substitution Types"
+                - "Variant depths"
+              sompy:
+                - "Combined"
+                - "Indel"
+                - "SNV"
+
+links:
+  - source_dc_tag: "sompy_summary"
+    source_column: "caller"
+    target_dc_tag: "sompy_regions"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "caller"
+    description: "Filter the AF-stratified regions by the selected caller"
+    enabled: true

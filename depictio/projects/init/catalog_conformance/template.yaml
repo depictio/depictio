@@ -39,6 +39,32 @@ workflows:
     locations:
     - '{DATA_ROOT}'
   data_collections:
+  - id: 7dfb6a2a8decc2592e83e7e9
+    data_collection_tag: happy_roc
+    description: hap.py threshold sweep — recipe output (happy/roc.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: happy/roc.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 8f15e6d58e41b27de15e8772
+    data_collection_tag: happy_summary
+    description: hap.py pooled summary — recipe output (happy/summary.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: happy/summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: f7cf57984ff91bc0a9c56aa2
     data_collection_tag: ivar_variants_long
     description: Variant calls — recipe output (ivar/variants_long.py), seeded from the catalog fixture
@@ -331,6 +357,88 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: 66c445ba5533899d4a79f912
+    data_collection_tag: rtgtools_vcfeval_summary
+    description: vcfeval benchmark summary — recipe output (rtgtools/vcfeval_summary.py), seeded from
+      the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: rtgtools/vcfeval_summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: b6cadfd2d7681afe6f2a40df
+    data_collection_tag: sompy_regions
+    description: som.py allele-fraction strata — recipe output (sompy/regions.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: sompy/regions.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 18c6df01271b54827815a327
+    data_collection_tag: sompy_summary
+    description: som.py benchmark summary — recipe output (sompy/summary.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: sompy/summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 5e879bae6dfa087c7a8a0804
+    data_collection_tag: svanalyzer_svbenchmark
+    description: svbenchmark SV summary — recipe output (svanalyzer/svbenchmark.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: svanalyzer/svbenchmark.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 6badabd9545cadd3f6250bdf
+    data_collection_tag: truvari_summary
+    description: Truvari SV summary — recipe output (truvari/summary.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: truvari/summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 38b53c76db4df0bb7c781007
+    data_collection_tag: wittyer_summary
+    description: Wittyer CNV summary — recipe output (wittyer/summary.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: wittyer/summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: 1a4e0ceb9acb74eb0809fde7
     data_collection_tag: metaphlan_profile
     description: Taxonomic profile — raw MetaPhlAn output, recognised by find
@@ -391,6 +499,7 @@ workflows:
         - cutadapt
         - fastp
         - fastqc
+        - happy
         - iVar
         - kraken
         - mosdepth
@@ -398,5 +507,49 @@ workflows:
         - quast
         - samtools
         - snpeff
+        - sompy
         - summary_conformance_metrics
-        plots: {}
+        - truvari
+        plots:
+          bcftools:
+          - Indel Distribution
+          bowtie2:
+          - Paired-end alignments
+          cutadapt:
+          - Filtered Reads
+          - Trimmed Sequence Lengths (3')
+          fastp:
+          - Filtered Reads
+          fastqc:
+          - Sequence Counts
+          - Sequence Quality Histograms
+          - Per Sequence Quality Scores
+          - Status Checks
+          happy:
+          - INDEL
+          - SNP
+          kraken:
+          - Top taxa
+          mosdepth:
+          - Cumulative coverage distribution
+          - Average coverage per contig
+          quast:
+          - Assembly Statistics
+          - Number of Contigs
+          samtools:
+          - Percent mapped
+          - Alignment stats
+          snpeff:
+          - Variants by Genomic Region
+          - Variant Effects by Impact
+          - Variants by Effect Types
+          - Variants by Functional Class
+          sompy:
+          - Combined
+          - Indel
+          - SNV
+          summary_conformance_metrics:
+          - summary_conformance_metrics-section
+          truvari:
+          - Classifications
+          - Precision vs. Recall

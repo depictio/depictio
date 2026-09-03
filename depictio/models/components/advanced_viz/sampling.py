@@ -59,6 +59,13 @@ KIND_SAMPLING_POLICY: dict[AdvancedVizKind, SamplingPolicy] = {
     "complex_heatmap": "none",
     "sankey": "none",
     "phylogenetic": "none",
+    # Benchmark summaries — small per-tool aggregate tables; the renderer reads
+    # specific rows (precision/recall/F1, TP/FP/FN, CIs, threshold sweeps), so a
+    # sample is a wrong answer rather than a lower-resolution one.
+    "pr_benchmark": "none",
+    "roc_pr_curve": "none",
+    "confusion_matrix": "none",
+    "metric_ci_bars": "none",
 }
 
 #: The role whose tail a ``tail`` kind must keep, and whether the interesting

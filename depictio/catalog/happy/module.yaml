@@ -1,0 +1,5 @@
+# hap.py — GA4GH small-variant (SNP/INDEL) benchmarking toolkit.
+id: happy
+name: hap.py
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/happy/happy
+biotools_url: https://bio.tools/hap.py

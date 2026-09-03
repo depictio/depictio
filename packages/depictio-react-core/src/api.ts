@@ -972,7 +972,11 @@ export type AdvancedVizKind =
   | 'sunburst'
   | 'oncoplot'
   | 'coverage_track'
-  | 'sankey';
+  | 'sankey'
+  | 'pr_benchmark'
+  | 'roc_pr_curve'
+  | 'confusion_matrix'
+  | 'metric_ci_bars';
 
 /** Accepted dtypes for one role, plus whether the role is required. Sourced
  *  from the backend canonical schema so the builder never duplicates the
