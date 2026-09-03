@@ -14,7 +14,8 @@ export type { ApplyActionsPayload } from './components/ActionsPreview';
 export { default as AiFillModal } from './components/AiFillModal';
 export { default as AIAnalysisModal } from './components/AIAnalysisModal';
 export { default as AIDraftBanner, formatGeneratedAt } from './components/AIDraftBanner';
-export type { DraftTile } from './components/AIDraftBanner';
+export { default as DraftReviewPanel } from './components/DraftReviewPanel';
+export type { DraftReviewPanelProps, DraftTile } from './components/DraftReviewPanel';
 export { default as ExecutionTrace } from './components/ExecutionTrace';
 export { default as GenerationHistory } from './components/GenerationHistory';
 export type { GenerationHistoryProps } from './components/GenerationHistory';
@@ -81,6 +82,7 @@ export type {
 
 export type {
   AIGenerationInfo,
+  AISectionRationale,
   AIStreamEvent,
   AIStreamEventType,
   AnalysesResponse,

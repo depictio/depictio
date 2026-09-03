@@ -169,7 +169,8 @@ is refused in public mode, since a generation is a dashboard import.
 6. The editor opens with a **draft banner** above the dashboard: the model
    that produced it, the date, a *Why this layout* fold with the planner's
    reason for each section, the warnings behind a fold of their own, a
-   *reviewed n of m* counter, the review bar that walks the generated tiles
+   *reviewed n of m* counter, a *Review n components* button that opens
+   the review panel
    (see [Reviewing a draft](#reviewing-a-draft)) and two actions. *Promote* flips the status to
    `promoted`: the banner and the badges go away and the provenance
    (model, prompt, run id) stays on the document. *Discard* asks for
@@ -181,57 +182,62 @@ is refused in public mode, since a generation is a dashboard import.
 
 ### Reviewing a draft
 
-A draft is reviewed tile by tile, not as one block, and the review lives
-in the banner rather than on the tiles. Nothing is added to a generated
-component: the banner carries a cursor over the draft's tiles in plan
-order, *3 of 12*, naming the one under review, and the canvas answers with
-two cues. A tile nobody has been through yet keeps a hairline dashed
-outline; the tile the cursor names is outlined solid, and it is scrolled
-into view when the cursor moves.
+A draft is reviewed tile by tile, not as one block, and the review lives in a
+panel of its own on the right of the editor. Nothing is added to a generated
+component: the panel takes the same slot and the same width as the inspector,
+so the canvas narrows instead of being covered and the tiles stay whole while
+you judge them. It opens by itself the first time an unreviewed draft is
+opened, closes from its header, and comes back from the *Review n components*
+button on the banner.
 
-The banner is at the top of the page and the tile under review is often
-far down it, so the bar follows: once the banner has scrolled out of
-sight a compact version of it floats at the bottom of the viewport, and
-it goes away again as soon as the banner is back on screen. Only one of
-the two is ever on the page.
+The panel lists every generated tile grouped by section, in plan order with the
+filter panel first, under a *n of m reviewed* progress bar. A row names the
+tile, its type and whether it has been through; the selected row is the cursor,
+and the canvas answers with two cues. A tile nobody has been through yet keeps
+a hairline dashed outline; the tile the cursor names is outlined solid, and it
+is scrolled into view when the cursor moves.
 
-Under the cursor the banner quotes the planner: the brief it wrote for
-that tile, and the reason it gave for the tile's section. Both were
-written before anything was filled, so they say why the component was
-asked for rather than what it ended up showing. Then the three decisions:
+Under the list, pinned so it stays reachable however long the list gets, sits
+the tile under review: the brief the planner wrote for it, and the reason it
+gave for the tile's section. Both were written before anything was filled, so
+they say why the component was asked for rather than what it ended up showing.
+Then the three decisions, one full-width labelled button each:
 
-- *Regenerate* re-runs that one tile, with an optional instruction ("use a
-  box plot", "group by cohort"). It goes through the same fill and the same
+- *Keep* marks the tile reviewed without changing it and steps to the next tile
+  that has not been through, so twelve tiles are twelve clicks. On a tile
+  already reviewed it reads *Reviewed, undo*.
+- *Regenerate* opens an instruction field ("use a box plot", "group by cohort")
+  and re-runs that one tile. It goes through the same fill and the same
   validation as the original run, repair round included, and the result
-  replaces the component in place: its position, its size and its section
-  stay as they were and the rest of the dashboard is untouched. A
-  regeneration that fails validation leaves the tile as it was and reports
-  the error in the bar, with the cursor still on it.
-- *Keep* marks the tile reviewed without changing it and steps to the next
-  tile that has not been through, so twelve tiles are twelve clicks. On a
-  tile already reviewed it reads *Reviewed, undo*.
+  replaces the component in place: its position, its size and its section stay
+  as they were and the rest of the dashboard is untouched. A regeneration that
+  fails validation leaves the tile as it was and reports the error in the
+  panel, with the cursor still on it.
 - *Remove* takes the tile out of the draft and steps on as well.
 
-Keeping the actions off the tiles is deliberate. They have to be visible
-for as long as the draft is one, and icons sitting permanently on every
-component crowd the very thing they are asking you to judge.
+Keeping the actions out of the tiles is deliberate, and so is keeping them off
+the canvas entirely. They have to be visible for as long as the draft is one:
+icons sitting permanently on every component crowd the very thing they ask you
+to judge, a bar at the top of the page scrolls away from the tile it is talking
+about, and anything floating over the canvas hides tiles in order to review
+tiles.
 
-A whole grid section can also be regenerated at once, from *Whole section*
-inside the bar's regenerate popover, offered when the tile under review
-sits in a grid section: the components of that section are filled again
-and the layout pass re-runs for that section only, so the other sections
-keep the boxes they had.
+A whole grid section can also be regenerated at once, from *Regenerate the
+whole section* under the same instruction field, offered when the tile under
+review sits in a grid section: the components of that section are filled again
+and the layout pass re-runs for that section only, so the other sections keep
+the boxes they had.
 
-The banner counts the progress, *reviewed n of m*, and gates the promotion
-on it. Once every tile is either reviewed or removed, *Promote* applies
-outright; before that it asks for a confirmation first, since promoting is
-what turns the draft into an ordinary dashboard.
+The banner counts the progress, *reviewed n of m*, and gates the promotion on
+it. Once every tile is either reviewed or removed, *Promote* applies outright;
+before that it asks for a confirmation first, since promoting is what turns the
+draft into an ordinary dashboard.
 
-The review state lives on the dashboard document next to the draft flag, in
-the same `ai_generation` field, so it survives a reload or a change of
-browser. Like the draft flag it is stripped from autosave payloads: the
-editor can neither mark a tile reviewed nor unmark one, only the review
-route writes it.
+The review state lives on the dashboard document next to the draft flag, in the
+same `ai_generation` field, so it survives a reload or a change of browser. Like
+the draft flag it is stripped from autosave payloads: the editor can neither mark
+a tile reviewed nor unmark one, only the review route writes it.
+
 
 ### Grounding and validation
 

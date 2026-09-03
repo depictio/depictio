@@ -27,6 +27,7 @@ import React, {
   useRef,
   useMemo,
 } from 'react';
+import type { AppShellAsideConfiguration } from '@mantine/core';
 import {
   ActionIcon,
   AppShell,
@@ -102,12 +103,15 @@ import {
   applyAIPlanToFilters,
   revertAIPlanFilters,
   DraftReviewProvider,
+  INSPECTOR_TOGGLE_EVENT,
+  dispatchPanelToggle,
 } from 'depictio-react-core';
 import {
   AI_COLOR,
   AIAnalyzePanel,
   AIDraftBanner,
   AIKeySection,
+  DraftReviewPanel,
   promoteGeneratedDashboard,
   reviewComponent,
   useAIHealth,
@@ -145,6 +149,27 @@ import { usePageTitle } from './branding';
 
 const API_BASE = '/depictio/api/v1';
 const SAVE_DEBOUNCE_MS = 500;
+
+/**
+ * The draft review's `AppShell.Aside`, deliberately the inspector's own shape
+ * and width (see `INSPECTOR_WIDTH`).
+ *
+ * The aside is one slot, so the two panels take turns in it rather than
+ * stacking: while a draft is being reviewed the review holds it, and the
+ * inspector gets it back on close. Both narrow `AppShell.Main` instead of
+ * floating over it, which is the whole point here — the reviewer is judging
+ * the tiles, so nothing may sit on top of them.
+ */
+const DRAFT_REVIEW_WIDTH = 340;
+const DRAFT_REVIEW_ASIDE: AppShellAsideConfiguration = {
+  width: DRAFT_REVIEW_WIDTH,
+  breakpoint: 'md',
+  // Same as the inspector: below the breakpoint the canvas has no width to
+  // give away, so the panel stays collapsed and the banner's button is inert.
+  collapsed: { desktop: false, mobile: true },
+};
+/** Matches `AppShell transitionDuration={300}` below. */
+const ASIDE_TRANSITION_MS = 300;
 
 /**
  * Dash app base — the component add/edit pages live in the Dash editor on a
@@ -269,8 +294,11 @@ const EditorApp: React.FC = () => {
   const { user: currentUser, loading: userLoading, inspectorEnabled } = useCurrentUser();
   // `control` is null while the flag is off, so no provider value reaches the
   // component chrome and no inspect action is rendered anywhere.
-  const { control: inspectorControl, aside: inspectorAside } =
-    useInspectorChrome(inspectorEnabled);
+  const {
+    open: inspectorOpen,
+    control: inspectorControl,
+    aside: inspectorAside,
+  } = useInspectorChrome(inspectorEnabled);
   // Tab modal state — `mode` decides between create vs edit. `target` is the
   // tab being edited (or null for create). `submitting` blocks Save while a
   // request is in flight.
@@ -1260,7 +1288,7 @@ const EditorApp: React.FC = () => {
 
   /** The generated tiles still on the dashboard, in the order the document
    *  keeps them (the plan's own: filter panel first, then each grid
-   *  section), which is what the banner's review bar walks. Removing a tile
+   *  section), which is what the review panel lists. Removing a tile
    *  takes it out of the list, so a draft whose leftovers were all deleted
    *  counts as fully reviewed. */
   const draftTiles = useMemo<DraftTile[]>(() => {
@@ -1291,7 +1319,7 @@ const EditorApp: React.FC = () => {
     return tiles;
   }, [aiDraft, dashboard?.stored_metadata, generationTagOf, reviewedTags]);
 
-  // Which tile the review bar is on, owned here so the bar and the outline on
+  // Which tile the review panel is on, owned here so the panel and the outline on
   // the canvas cannot disagree about it. Null until the reviewer moves it
   // themselves, so the cursor can be derived rather than seeded by an effect:
   // an effect would first render (and scroll to) the wrong tile.
@@ -1310,8 +1338,8 @@ const EditorApp: React.FC = () => {
   }, [draftTiles, pickedReviewIndex]);
 
   const currentDraftTileId = draftTiles[reviewIndex]?.componentId ?? null;
-  /** Bring the tile the bar names into view, and only when it changes: the
-   *  bar says "3 / 12" and the canvas has to be showing that third tile.
+  /** Bring the tile the panel names into view, and only when it changes: the
+   *  panel selects one row and the canvas has to be showing that tile.
    *  Silent when it finds nothing, since a tile can be on another tab. */
   useEffect(() => {
     if (!currentDraftTileId) return;
@@ -1321,11 +1349,51 @@ const EditorApp: React.FC = () => {
     const el =
       (inner?.closest('.react-grid-item') as HTMLElement | null) ??
       (inner as HTMLElement | null);
-    // Centred rather than 'nearest': the review controls float at the bottom
-    // of the viewport once the banner has scrolled away, and a tile brought
-    // to the nearest edge lands under them.
+    // Centred rather than 'nearest': the panel names one tile and the canvas
+    // has to answer with it, and a tile brought only to the nearest edge sits
+    // half under the banner or the fold.
     el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }, [currentDraftTileId]);
+
+  // Is the review panel holding the aside? Opened for the reviewer the first
+  // time an unreviewed draft is loaded, closable from the panel and reopened
+  // from the banner's button.
+  const [reviewPanelOpen, setReviewPanelOpen] = useState(false);
+  const reviewAutoOpenedRef = useRef(false);
+  useEffect(() => {
+    // Once per editor mount: a reviewer who closed the panel keeps it closed,
+    // and a keep that finishes the draft must not re-open it.
+    if (reviewAutoOpenedRef.current) return;
+    if (!aiDraft || draftTiles.length === 0) return;
+    if (draftTiles.every((t) => t.reviewed)) return;
+    reviewAutoOpenedRef.current = true;
+    setReviewPanelOpen(true);
+  }, [aiDraft, draftTiles]);
+  const draftReviewOpen = Boolean(aiDraft) && draftTiles.length > 0 && reviewPanelOpen;
+
+  // Plotly and AG Grid only reflow on a window resize, so the canvas losing
+  // 340px has to be announced the way the inspector announces its own
+  // transitions (see useInspectorChrome). Both panels are the same width, so
+  // swapping one for the other moves nothing and is not announced.
+  const asideOpen = draftReviewOpen || inspectorOpen;
+  const asidePrevRef = useRef({ asideOpen, inspectorOpen });
+  useEffect(() => {
+    const prev = asidePrevRef.current;
+    asidePrevRef.current = { asideOpen, inspectorOpen };
+    if (prev.inspectorOpen !== inspectorOpen) return; // the hook already said so
+    if (prev.asideOpen === asideOpen) return;
+    document.body.classList.add('panel-transitioning');
+    const timer = setTimeout(
+      () => document.body.classList.remove('panel-transitioning'),
+      ASIDE_TRANSITION_MS + 20,
+    );
+    dispatchPanelToggle(INSPECTOR_TOGGLE_EVENT, {
+      willBeOpen: asideOpen,
+      swingPx: DRAFT_REVIEW_WIDTH,
+      durationMs: ASIDE_TRANSITION_MS,
+    });
+    return () => clearTimeout(timer);
+  }, [asideOpen, inspectorOpen]);
 
   const {
     run: runRegenerate,
@@ -1469,7 +1537,7 @@ const EditorApp: React.FC = () => {
     [handleDeleteComponent],
   );
 
-  /** A regeneration reports its failure on the tile it was about, so the bar
+  /** A regeneration reports its failure on the tile it was about, so the panel
    *  only carries the message while its cursor is on one of those tiles. */
   const draftReviewError =
     currentDraftTileId && lastRegenTargets.includes(currentDraftTileId)
@@ -2111,7 +2179,9 @@ const EditorApp: React.FC = () => {
       }}
       padding={0}
       transitionDuration={300}
-      aside={inspectorAside}
+      // The review takes the aside for as long as it is open; the inspector
+      // has it the rest of the time.
+      aside={draftReviewOpen ? DRAFT_REVIEW_ASIDE : inspectorAside}
       transitionTimingFunction="ease"
     >
       <AppShell.Header data-tour-id="header-title">
@@ -2317,18 +2387,10 @@ const EditorApp: React.FC = () => {
                 <AIDraftBanner
                   info={aiDraft}
                   tiles={draftTiles}
-                  currentIndex={reviewIndex}
-                  onSelect={setPickedReviewIndex}
-                  onKeep={(tile) => handleReviewTile(tile.tag, tile.reviewed ? 'unkeep' : 'keep')}
-                  onRemove={(tile) => handleRemoveTile(tile.componentId, tile.tag)}
-                  onRegenerate={(tile, instruction) =>
-                    handleRegenerateTile(tile.componentId, instruction)
+                  onOpenReview={
+                    draftTiles.length > 0 ? () => setReviewPanelOpen(true) : undefined
                   }
-                  onRegenerateSection={(tile, instruction) =>
-                    tile.section ? handleRegenerateSection(tile.section, instruction) : undefined
-                  }
-                  reviewBusy={regeneratePending}
-                  reviewError={draftReviewError}
+                  reviewOpen={draftReviewOpen}
                   onPromote={handlePromoteDraft}
                   onDiscard={handleDiscardDraft}
                 />
@@ -2486,9 +2548,29 @@ const EditorApp: React.FC = () => {
         )}
       </AppShell.Main>
 
-      {inspectorEnabled && (
+      {(draftReviewOpen || inspectorEnabled) && (
         <AppShell.Aside p={0}>
-          <Inspector dashboard={dashboard} dashboardId={dashboardId} />
+          {draftReviewOpen ? (
+            <DraftReviewPanel
+              tiles={draftTiles}
+              currentIndex={reviewIndex}
+              sections={aiDraft?.sections}
+              onSelect={setPickedReviewIndex}
+              onClose={() => setReviewPanelOpen(false)}
+              onKeep={(tile) => handleReviewTile(tile.tag, tile.reviewed ? 'unkeep' : 'keep')}
+              onRemove={(tile) => handleRemoveTile(tile.componentId, tile.tag)}
+              onRegenerate={(tile, instruction) =>
+                handleRegenerateTile(tile.componentId, instruction)
+              }
+              onRegenerateSection={(tile, instruction) =>
+                tile.section ? handleRegenerateSection(tile.section, instruction) : undefined
+              }
+              busy={regeneratePending}
+              error={draftReviewError}
+            />
+          ) : (
+            <Inspector dashboard={dashboard} dashboardId={dashboardId} />
+          )}
         </AppShell.Aside>
       )}
 
