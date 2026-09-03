@@ -99,6 +99,7 @@ from depictio.api.v1.endpoints.ai_endpoints import (
     prompts,
     routing,
 )
+from depictio.api.v1.endpoints.ai_endpoints.component_style import sanitize_style
 from depictio.api.v1.endpoints.ai_endpoints.context import (
     DataContext,
     ProjectDataContext,
@@ -669,7 +670,9 @@ def bind_to_collection(
     collection would pass the offline validator and fail at render time. A
     card or filter without `column_type` gets it from the collection's
     columns so the lite compatibility check fires (as the suggestion flow
-    does); an advanced_viz gets `config.viz_kind` mirrored from `viz_kind`.
+    does); an advanced_viz gets `config.viz_kind` mirrored from `viz_kind`;
+    a filter takes the plan's `group`, which is a layout decision the plan
+    made across the whole section and the fill call cannot see.
 
     Raises `ValueError` (through `_require_planned_type`) when the answer is
     not a component block of the planned type.
@@ -687,10 +690,18 @@ def bind_to_collection(
         column_type = column_type_for(dtype)
         if column_type:
             component["column_type"] = column_type
+    if planned.component_type == "interactive":
+        # Absent from the plan, whatever the model grouped it with stands: it
+        # saw the section's other filters in its dashboard context.
+        if planned.group:
+            component["group"] = planned.group
     if planned.component_type == "advanced_viz":
         config = component.get("config")
         if isinstance(config, dict) and component.get("viz_kind"):
             component["config"] = {"viz_kind": component["viz_kind"], **config}
+    # An icon the bundled subset does not carry renders as a blank box, so the
+    # decorations are held to the pickers' own lists (see component_style).
+    sanitize_style(component)
     return component
 
 

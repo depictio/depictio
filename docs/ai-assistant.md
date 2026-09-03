@@ -313,7 +313,18 @@ The layout pass is deterministic and writes explicit boxes on the
 
 - Sections follow the funnel: cohort filters, then metrics, then
   analysis, then reference.
-- Interactive components go to the left filter panel, stacked.
+- Interactive components go to the left filter panel, stacked. The filters
+  that answer one question are given a shared group by the plan and render
+  inside a single collapsible card, at most six per group; an ungrouped
+  control costs a card of its own, which is why a section holding more than
+  two filters is grouped.
+- Cards and filters are generated styled. Each carries an icon and a colour
+  chosen from the builder's own pickers, not from the whole of Iconify: the
+  viewer ships a scanned icon subset and its CSP blocks the network
+  fallback, so an id nobody wrote down renders as a blank box and blanks
+  itself on the first save. Anything outside those lists is dropped
+  server-side before the component is saved, and a colour given as a palette
+  name is translated to the hex the picker writes.
 - Each grid section starts with a one-row text header taken from the
   plan's section description.
 - Cards are 2 columns wide in rows of four, and rows are always full:

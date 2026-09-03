@@ -58,6 +58,7 @@ from pydantic import ValidationError
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.ai_endpoints import (
     analyses,
+    component_style,
     component_yaml,
     dashboard_gen,
     llm_client,
@@ -335,6 +336,10 @@ async def component_from_prompt(
             ]
             continue
 
+        # Same gate the generator applies: an icon outside the builder's own
+        # picker renders as a blank box under the CSP and blanks itself on the
+        # first save, so it never reaches the builder.
+        component_style.sanitize_style(parsed)
         title = parsed.get("title")
         return ComponentFromPromptResponse(
             component_type=parsed.get("component_type", component_type),
