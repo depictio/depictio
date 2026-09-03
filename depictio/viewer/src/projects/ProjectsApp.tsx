@@ -28,6 +28,7 @@ import {
 import type {
   CreateProjectInput,
   EditProjectInput,
+  FromManifestReport,
   FromManifestRequest,
   ProjectListEntry,
 } from 'depictio-react-core';
@@ -36,7 +37,10 @@ import { useCurrentUser } from '../hooks/useCurrentUser';
 import { useAuthMode } from '../auth/hooks/useAuthMode';
 import { AppSidebar } from '../chrome';
 import ProjectsList from './ProjectsList';
-import CreateProjectModal from './CreateProjectModal';
+import CreateProjectModal, {
+  ManifestCreatedModal,
+  manifestReportNeedsReview,
+} from './CreateProjectModal';
 import EditProjectModal from './EditProjectModal';
 import DeleteProjectModal from './DeleteProjectModal';
 import { usePageTitle } from '../branding';
@@ -80,6 +84,9 @@ const ProjectsApp: React.FC = () => {
   const [createOpened, { open: openCreate, close: closeCreate }] = useDisclosure(false);
   const [editTarget, setEditTarget] = useState<ProjectListEntry | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProjectListEntry | null>(null);
+  /** Real from-manifest report held back for review (unmatched types, pruned
+   *  or failed collections) instead of redirecting past it. */
+  const [createdReport, setCreatedReport] = useState<FromManifestReport | null>(null);
 
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [desktopOpened, toggleDesktop] = useProjectsSidebar();
@@ -146,7 +153,14 @@ const ProjectsApp: React.FC = () => {
     async (input: FromManifestRequest) => {
       const report = await createProjectFromManifest(input);
       const dashboardId = report.dashboards[0]?.dashboard_id;
-      if (report.success && dashboardId) {
+      if (manifestReportNeedsReview(report)) {
+        // Something was skipped, unmatched or failed: the project exists, so
+        // refresh the list, but keep the user here with the full report
+        // rather than redirecting to a dashboard that hides it.
+        closeCreate();
+        refresh();
+        setCreatedReport(report);
+      } else if (dashboardId) {
         notifications.show({
           color: 'teal',
           title: 'Project created from manifest',
@@ -155,27 +169,12 @@ const ProjectsApp: React.FC = () => {
         });
         closeCreate();
         window.location.assign(`/dashboard/${dashboardId}`);
-      } else if (report.success) {
+      } else {
         notifications.show({
           color: 'teal',
           title: 'Project created from manifest',
           message: `"${report.project_name}" is ready.`,
           autoClose: 2500,
-        });
-        closeCreate();
-        refresh();
-      } else {
-        // Project exists but some collections/dashboards failed — surface the
-        // first per-row message so the user knows where to look.
-        const firstFailure =
-          report.ingestion.find((dc) => dc.status === 'failed')?.message ||
-          report.dashboards.find((d) => !d.success)?.error ||
-          'Some manifest entries could not be ingested.';
-        notifications.show({
-          color: 'orange',
-          title: 'Project created with issues',
-          message: firstFailure,
-          autoClose: 6000,
         });
         closeCreate();
         refresh();
@@ -336,6 +335,7 @@ const ProjectsApp: React.FC = () => {
         onImport={handleImport}
         onCreateFromManifest={handleCreateFromManifest}
       />
+      <ManifestCreatedModal report={createdReport} onClose={() => setCreatedReport(null)} />
       <EditProjectModal
         opened={Boolean(editTarget)}
         project={editTarget}
