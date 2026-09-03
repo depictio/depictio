@@ -78,11 +78,20 @@ four user-facing flows:
    so a wrong guess costs one change and a regenerate. On Design a *Refine
    with AI* button iterates on the current component (it reads *AI fill*
    while the config is still empty).
-   For figures, once a collection is resolvable (pinned, or the dashboard
-   uses exactly one), the Describe step also offers a **Suggestions**
-   mode: the LLM proposes a few plots grounded in the collection's actual
-   columns (title, rationale, display-only Python) and *Use this* takes the
-   same hand-off into Component Design, no prompt required.
+   Next to the prompt, for every type, the Describe step also offers a
+   **Suggestions** mode that asks the other question: what would fit this
+   dashboard? With type and collection on Auto the assistant proposes a mix
+   of components across the dashboard's collections; it knows what is
+   already on the dashboard and does not repeat it. Pinning a type or a
+   collection narrows the list to it. Each suggestion is a validated lite
+   component with a title, a one-line rationale and a summary of what it
+   is made of (figures also get a live preview). Advanced visualizations
+   and tables are ranked from the data without an LLM call and are marked
+   *ranked from the data*. Catalog offers for the same collections appear
+   under **From the catalog**: known tool outputs matched to the project,
+   deterministic and free of any model call. *Use this* takes the same
+   hand-off into Component Design as *Generate*, with the suggestion's
+   rationale in the routing notice, no prompt required.
    `advanced_viz` proposals are grounded on the kinds the chosen data
    collection supports, so the model cannot pick a visualization the data
    cannot feed.
@@ -134,8 +143,22 @@ All under `/depictio/api/v1/ai`, feature-gated, authenticated like every
 other read (`get_user_or_anonymous` + project-viewer permission checks):
 
 - `GET /ai/health` — configured model + key posture (no key material).
-- `POST /ai/suggest-figures` — data-grounded figure suggestions (the
-  *Suggestions* mode of the Describe step, figures only).
+- `POST /ai/suggest-components`: typed suggestions for a dashboard (the
+  *Suggestions* mode of the Describe step). Request: `dashboard_id`
+  (required; the dashboard context and the project inventory come from
+  it), `component_type` and `data_collection_id` (both optional, `null`
+  means Auto) and `n` (default 4, 1 to 8). Response: `suggestions`, each
+  with `component_type`, `data_collection_id`, `data_collection_tag`,
+  `workflow_id` (all three `null` for `text`), `title`, `rationale`,
+  `component` (the validated lite dict, same grammar as the import),
+  `code` (figures only) and `origin` (`llm`, or `ranked` for the
+  deterministic advanced_viz and table candidates), plus `warnings` (for
+  instance when the LLM call failed and only ranked candidates are shown).
+  Errors: 404 for an unknown dashboard or a pinned collection outside the
+  project, 422 when a pinned type has no fitting collection, 502 when
+  nothing usable came back.
+- `POST /ai/suggest-figures`: deprecated, kept for one release. Superseded
+  by `/ai/suggest-components`; the viewer no longer calls it.
 - `POST /ai/component-from-prompt` — YAML component generation +
   validation (2 attempts), behind *Generate*, *Use this* and *Refine with
   AI*. `component_type` and `data_collection_id` are optional: a `null`

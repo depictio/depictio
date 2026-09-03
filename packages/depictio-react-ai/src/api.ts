@@ -23,8 +23,8 @@ import type {
   ComponentFromPromptResponse,
   ResolveFiltersRequest,
   ResolveFiltersResponse,
-  SuggestFiguresRequest,
-  SuggestFiguresResponse,
+  SuggestComponentsRequest,
+  SuggestComponentsResponse,
   SummariesResponse,
   SummarizeSectionRequest,
   SummarizeSectionResponse,
@@ -62,11 +62,11 @@ export function componentFromPrompt(
   );
 }
 
-export function suggestFigures(
-  body: SuggestFiguresRequest,
+export function suggestComponents(
+  body: SuggestComponentsRequest,
   llmKey: string | null | undefined,
-): Promise<SuggestFiguresResponse> {
-  return postJson<SuggestFiguresResponse>('/ai/suggest-figures', body, llmKey);
+): Promise<SuggestComponentsResponse> {
+  return postJson<SuggestComponentsResponse>('/ai/suggest-components', body, llmKey);
 }
 
 export function resolveFilters(
