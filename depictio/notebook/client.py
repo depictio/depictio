@@ -133,8 +133,37 @@ class DepictioClient:
         ready: str = "ready",
         interval: float = 1.0,
         max_wait: float = 300.0,
+        retries: int = 1,
     ) -> dict[str, Any]:
-        """Dispatch a server job and wait for its result."""
+        """Dispatch a server job and wait for its result.
+
+        A job that comes back *failed* is dispatched once more. These jobs run a
+        real browser on the server, and one that drops its connection while
+        closing is a flake rather than an answer — a notebook that asks for
+        fifty figures in a row otherwise stops on the first unlucky one. A job
+        the server calls ``unsupported`` is an answer, and is not retried.
+        """
+        for attempt in range(retries + 1):
+            failure = self._poll_once(
+                dispatch_path, body, poll_path, ready=ready, interval=interval, max_wait=max_wait
+            )
+            if not isinstance(failure, DepictioClientError):
+                return failure
+            if attempt == retries or getattr(failure, "final", False):
+                raise failure
+        raise AssertionError("unreachable")  # pragma: no cover
+
+    def _poll_once(
+        self,
+        dispatch_path: str,
+        body: dict[str, Any],
+        poll_path: str,
+        *,
+        ready: str,
+        interval: float,
+        max_wait: float,
+    ) -> dict[str, Any] | DepictioClientError:
+        """One dispatch-and-wait: the result, or the error to raise for it."""
         first = self.post(dispatch_path, body)
         if first.get("status") in (ready, "completed", "SUCCESS") or first.get("job_id") is None:
             return first
@@ -147,8 +176,10 @@ class DepictioClient:
             if status in (ready, "completed", "SUCCESS"):
                 return result
             if status in ("error", "failed", "FAILURE", "unsupported"):
-                raise DepictioClientError(500, str(result.get("reason") or result))
-        raise DepictioClientError(504, f"job {job_id} did not finish within {max_wait:.0f}s")
+                err = DepictioClientError(500, str(result.get("reason") or result))
+                err.final = status == "unsupported"  # type: ignore[attr-defined]
+                return err
+        return DepictioClientError(504, f"job {job_id} did not finish within {max_wait:.0f}s")
 
     # ------------------------------------------------------------------ data
     def data(self, dc_id: str, columns: list[str] | None = None) -> pl.DataFrame:

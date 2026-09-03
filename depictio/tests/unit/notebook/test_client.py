@@ -17,6 +17,7 @@ from depictio.notebook.components import (
     FigureComponent,
     TableComponent,
     TextComponent,
+    _figure_from_dict,
     filters_to_metadata,
 )
 
@@ -48,6 +49,8 @@ DASHBOARD = {
             "column_name": "species",
             "secondary_layout": "donut",
             "breakdown_col": "species",
+            "icon_name": "mdi:chart-donut",
+            "icon_color": "#8bc34a",
             "dc_id": DC,
         },
         {
@@ -112,8 +115,9 @@ class FakeApi:
             rows = TABLE.to_dicts()[start : start + 2]
             return httpx.Response(200, json={"columns": [], "rows": rows, "total": TABLE.height})
         if "/bulk_compute_cards/" in path:
+            assert body.get("include_icons") is True
             wanted = body["component_ids"]
-            values, secondary, aggs = {}, {}, {}
+            values, secondary, aggs, icons = {}, {}, {}, {}
             if "card-1" in wanted:
                 values["card-1"], aggs["card-1"] = 3, ["count"]
             if "card-2" in wanted:
@@ -132,9 +136,11 @@ class FakeApi:
                         "evenness": 0.92,
                     }
                 }
+                icons["mdi:chart-donut"] = '<svg viewBox="0 0 24 24"><path d="M0 0"/></svg>'
             return httpx.Response(
                 200,
                 json={
+                    "icons": icons,
                     "values": values,
                     "secondary_values": secondary,
                     "aggregations": aggs,
@@ -267,6 +273,44 @@ def test_figure_component_renders_through_the_api(client, api):
     assert client.figure(DASH, "fig-1") is not None
 
 
+def test_figure_from_dict_accepts_8digit_hex_alpha_colours():
+    # A figure extracted from the React renderer (component_figure) is
+    # Plotly.js's own JSON, and Plotly.js accepts #RRGGBBAA; the Python
+    # plotly package's colour validator rejects it and used to blow up
+    # reconstructing the figure (real crash: a coverage-track area fill).
+    fig_dict = {
+        "data": [
+            {
+                "type": "scatter",
+                "x": [1, 2, 3],
+                "y": [1, 2, 3],
+                "fill": "tozeroy",
+                "fillcolor": "#339af033",
+                "line": {"color": "#339af0"},
+            }
+        ],
+        "layout": {"plot_bgcolor": "#ffffffff"},
+    }
+    fig = _figure_from_dict(fig_dict)
+    assert fig.data[0].fillcolor == "rgba(51, 154, 240, 0.200)"
+    assert fig.data[0].line.color == "#339af0"  # a plain 6-digit hex is untouched
+    assert fig.layout.plot_bgcolor == "rgba(255, 255, 255, 1.000)"
+
+
+def test_figure_from_dict_drops_properties_python_plotly_does_not_know():
+    # The JS Plotly.js schema (the live React renderer) can be a step ahead
+    # of the Python plotly package pinned here. A property Python doesn't
+    # recognise (real crash: `legend.arrangement`) should be dropped, not
+    # lose the whole figure.
+    fig_dict = {
+        "data": [{"type": "scatter", "x": [1, 2], "y": [1, 2]}],
+        "layout": {"title": {"text": "Coverage"}, "legend": {"arrangement": "grouped"}},
+    }
+    fig = _figure_from_dict(fig_dict)
+    assert fig.layout.title.text == "Coverage"
+    assert fig.data[0].y == (1, 2)
+
+
 def test_table_component_pages_through_all_rows(client):
     comp = client.component(DASH, "Raw data")
     assert isinstance(comp, TableComponent)
@@ -294,6 +338,10 @@ def test_multi_metric_card_shows_the_real_breakdown(client):
     assert "Species mix" in html and ">2<" in html
     assert "Adelie" in html and "Gentoo" in html
     assert "67%" in html  # 2/3, the top breakdown entry's share
+    # The icon (resolved from Iconify, baked into the bulk_compute_cards
+    # response) and the card's own colour are both in the rendered HTML.
+    assert '<path d="M0 0"/>' in html
+    assert "#8bc34a" in html
 
 
 def test_text_component_is_markdown(client):
@@ -349,3 +397,45 @@ def test_every_component_class_displays_in_all_three_environments():
         assert callable(getattr(cls, "_repr_mimebundle_"))
         assert callable(getattr(cls, "_mime_"))
         assert cls.default_display in ("figure", "data", "html", "markdown")
+
+
+def _job_api(statuses):
+    """A dispatch-and-poll API whose job ends with each of ``statuses`` in turn."""
+    state = {"dispatches": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "/jobs/" in request.url.path:
+            status = statuses[min(state["dispatches"] - 1, len(statuses) - 1)]
+            if status == "ready":
+                return httpx.Response(200, json={"status": "ready", "figure": {}})
+            return httpx.Response(200, json={"status": status, "reason": f"job went {status}"})
+        state["dispatches"] += 1
+        return httpx.Response(200, json={"status": "pending", "job_id": "j1"})
+
+    return handler, state
+
+
+def test_poll_retries_a_failed_job_once():
+    handler, state = _job_api(["error", "ready"])
+    client = DepictioClient("https://depictio.test", "tok", transport=httpx.MockTransport(handler))
+    result = client.poll("/dispatch", {}, "/jobs/{job_id}", interval=0)
+    assert result["status"] == "ready"
+    assert state["dispatches"] == 2
+
+
+def test_poll_gives_up_after_the_retry():
+    handler, state = _job_api(["error"])
+    client = DepictioClient("https://depictio.test", "tok", transport=httpx.MockTransport(handler))
+    with pytest.raises(DepictioClientError) as exc:
+        client.poll("/dispatch", {}, "/jobs/{job_id}", interval=0)
+    assert "job went error" in exc.value.detail
+    assert state["dispatches"] == 2
+
+
+def test_poll_does_not_retry_an_unsupported_job():
+    """``unsupported`` is an answer about the component, not a flake."""
+    handler, state = _job_api(["unsupported"])
+    client = DepictioClient("https://depictio.test", "tok", transport=httpx.MockTransport(handler))
+    with pytest.raises(DepictioClientError):
+        client.poll("/dispatch", {}, "/jobs/{job_id}", interval=0)
+    assert state["dispatches"] == 1
