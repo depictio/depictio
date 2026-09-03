@@ -168,3 +168,53 @@ class TestConfigCommands:
             ):
                 result = command.run("sync", cli_config=cli_config_path)
                 assert result.exit_code == 0
+
+        @pytest.fixture
+        def validated(self):
+            """Patch validation so only the sync verdict decides the outcome."""
+            return patch(
+                "depictio.cli.cli.commands.config.validate_project_config_and_check_S3_storage",
+                return_value=(
+                    MagicMock(),
+                    {"success": True, "project_config": {"name": "Existing project"}},
+                ),
+            )
+
+        def test_existing_project_without_update_is_reported(
+            self, runner, cli_config_path, validated
+        ):
+            """The sync returns a verdict rather than raising, so a caller that
+            ignored it made refusing to touch an existing project look like
+            success."""
+            with (
+                validated,
+                patch(
+                    "depictio.cli.cli.commands.config.convert_model_to_dict",
+                    return_value={"name": "Existing project"},
+                ),
+                patch(
+                    "depictio.cli.cli.commands.config.api_sync_project_config_to_server",
+                    return_value={"action": "exists"},
+                ),
+            ):
+                result = runner.invoke(app, ["sync", "--CLI-config-path", cli_config_path])
+            assert result.exit_code == 2
+            normalized = " ".join(result.output.split())
+            assert "already exists on this server" in normalized
+            assert "--update" in normalized
+
+        def test_created_project_succeeds_quietly(self, runner, cli_config_path, validated):
+            with (
+                validated,
+                patch(
+                    "depictio.cli.cli.commands.config.convert_model_to_dict",
+                    return_value={"name": "New project"},
+                ),
+                patch(
+                    "depictio.cli.cli.commands.config.api_sync_project_config_to_server",
+                    return_value={"action": "created"},
+                ),
+            ):
+                result = runner.invoke(app, ["sync", "--CLI-config-path", cli_config_path])
+            assert result.exit_code == 0
+            assert "already exists" not in result.output

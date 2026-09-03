@@ -155,6 +155,63 @@ def _write_provisioned_cli_config(base_raw_config: dict, provision: dict) -> str
     return path
 
 
+def attach_run_to_project(project_config, remote_project: dict) -> dict:
+    """Fold this run into an existing project, in place, and report what changed.
+
+    ``data_location.locations`` is a list and the scan treats each entry as its own
+    run (``structure: flat``) or walks it for run subdirectories
+    (``sequencing-runs``), so appending this run's directory is all it takes to add
+    a run. The scan is incremental, so the runs already registered are skipped.
+
+    Two things are deliberately preserved from the server:
+
+    * the existing locations, so attaching never drops a run already ingested;
+    * the ``scan.mode: single`` bindings. Such a collection points at ONE absolute
+      path, substituted from whichever ``DATA_ROOT`` the template was resolved
+      against, which here is the *new* run. Pushing that as-is would re-point the
+      collection, and the next scan deletes files whose location no longer matches
+      the config (the stale-file cleanup in ``scan_files_for_data_collection``), so
+      the original run's samplesheet/metadata/tree would be dropped.
+
+    Returns ``{"added": {workflow_tag: [locations]}, "kept_single": [dc_tags]}``.
+    """
+    remote_locations: dict[str, list[str]] = {}
+    remote_single: dict[tuple[str, str], str] = {}
+    for wf_doc in remote_project.get("workflows", []) or []:
+        wf_tag = wf_doc.get("workflow_tag")
+        if not wf_tag:
+            continue
+        remote_locations[wf_tag] = list((wf_doc.get("data_location") or {}).get("locations") or [])
+        for dc_doc in wf_doc.get("data_collections", []) or []:
+            scan_doc = (dc_doc.get("config") or {}).get("scan") or {}
+            if str(scan_doc.get("mode", "")).lower() != "single":
+                continue
+            filename = (scan_doc.get("scan_parameters") or {}).get("filename")
+            dc_tag = dc_doc.get("data_collection_tag")
+            if filename and dc_tag:
+                remote_single[(wf_tag, dc_tag)] = filename
+
+    added: dict[str, list[str]] = {}
+    for wf in project_config.workflows:
+        known = remote_locations.get(wf.workflow_tag, [])
+        new_locations = [loc for loc in wf.data_location.locations if loc not in known]
+        # A fresh list, so the remote entry is never aliased into the model.
+        wf.data_location.locations = known + new_locations
+        added[wf.workflow_tag] = new_locations
+
+    kept_single: list[str] = []
+    for wf in project_config.workflows:
+        for dc in wf.data_collections:
+            if not (dc.config.scan and dc.config.scan.mode.lower() == "single"):
+                continue
+            previous = remote_single.get((wf.workflow_tag, dc.data_collection_tag))
+            if previous and previous != dc.config.scan.scan_parameters.filename:
+                dc.config.scan.scan_parameters.filename = previous
+                kept_single.append(dc.data_collection_tag)
+
+    return {"added": added, "kept_single": kept_single}
+
+
 def register_run_command(app: typer.Typer):
     @app.command("run")
     def run(
@@ -175,6 +232,18 @@ def register_run_command(app: typer.Typer):
                 "Mutually exclusive with --project-config-path.",
             ),
         ] = None,
+        nextflow_manifest: Annotated[
+            str | None,
+            typer.Option(
+                "--nextflow-manifest",
+                help=(
+                    "Nextflow manifest as '<name>/<version>' (e.g. 'nf-core/ampliseq/2.16.0'). "
+                    "When neither --template nor --project-config-path is given, the CLI "
+                    "auto-resolves a bundled template matching this manifest. Intended for "
+                    "automated triggering from a Nextflow pipeline's workflow.onComplete."
+                ),
+            ),
+        ] = None,
         data_root: Annotated[
             str | None,
             typer.Option(
@@ -189,6 +258,16 @@ def register_run_command(app: typer.Typer):
                 help="Custom project name (auto-generated from template if omitted).",
             ),
         ] = None,
+        attach_run: bool = typer.Option(
+            False,
+            "--attach-run",
+            help=(
+                "Add --data-root to an EXISTING project as an additional run instead of "
+                "creating a new project. The project must already exist (resolved by "
+                "--project-name, else by the template's own name). Implies --update-config, "
+                "rebuilds the delta tables from all runs, and skips dashboard import."
+            ),
+        ),
         dashboard_name: Annotated[
             str | None,
             typer.Option(
@@ -345,6 +424,28 @@ def register_run_command(app: typer.Typer):
         """
         rich_print_command_usage("run")
 
+        # Step 0-: resolve a bundled template from the Nextflow manifest. The
+        # trigger forwards `workflow.manifest` verbatim and lets the CLI decide
+        # the mode; an explicit --template / --project-config-path always wins.
+        if nextflow_manifest and not template and not project_config_path:
+            from depictio.cli.cli.utils.templates import locate_template
+
+            try:
+                locate_template(nextflow_manifest)
+            except FileNotFoundError:
+                rich_print_checked_statement(
+                    f"No bundled depictio template matches Nextflow manifest "
+                    f"'{nextflow_manifest}'. Provide --project-config-path with a depictio "
+                    f"project YAML for this pipeline (or --template for a known one).",
+                    "error",
+                )
+                raise typer.Exit(code=1)
+            template = nextflow_manifest
+            rich_print_checked_statement(
+                f"Resolved Nextflow manifest '{nextflow_manifest}' to bundled template.",
+                "success",
+            )
+
         # Validate template/project-config-path mutual exclusivity
         if template and project_config_path:
             rich_print_checked_statement(
@@ -363,7 +464,23 @@ def register_run_command(app: typer.Typer):
                 "DRY RUN MODE - No actual operations will be performed", "info"
             )
 
-        if sync_files or overwrite:
+        # `--overwrite` normally implies a full re-scan. In attach mode that would be
+        # wrong: the point is to add ONE run, and the scan is already incremental
+        # (a known run_tag is skipped). We still need overwrite for the *process*
+        # step, because write_delta_table refuses to rewrite an existing table
+        # without it, and the rebuild must include the runs already ingested.
+        if attach_run:
+            update_config = True
+            overwrite = True
+            if not skip_dashboard_import:
+                # The dashboards already exist for this project; re-importing would
+                # either 409 or overwrite edits the user made since the first run.
+                skip_dashboard_import = True
+                rich_print_checked_statement(
+                    "--attach-run: skipping dashboard import (dashboards already exist).",
+                    "info",
+                )
+        if sync_files or (overwrite and not attach_run):
             rescan_folders = True
 
         if user and not provisioning_key:
@@ -384,6 +501,9 @@ def register_run_command(app: typer.Typer):
 
         success_count = 0
         total_steps = 8 if is_template_mode else 7
+        # --attach-run adds step 3b (folding the run into the existing project).
+        if attach_run and not dry_run:
+            total_steps += 1
 
         # Server-side monitoring record for this ingestion run (best-effort).
         ingestion_run_id: str | None = None
@@ -595,6 +715,58 @@ def register_run_command(app: typer.Typer):
             if not continue_on_error:
                 raise typer.Exit(code=1)
 
+        # Step 3b (--attach-run): fold the run into an EXISTING project instead of
+        # creating a new one. `data_location.locations` is a list and the scan treats
+        # each entry as its own run (structure: flat) or walks it for run subdirs
+        # (sequencing-runs), so appending this run's directory is all it takes. The
+        # validation above already ran merge_existing_ids(), which copies the server's
+        # workflow / data-collection ids onto this config by tag, so the runs and files
+        # already ingested stay attached to the same collections.
+        if attach_run and not dry_run:
+            rich_print_section_separator("Step 3b: Attaching run to existing project")
+            try:
+                remote = api_get_project_from_name(str(project_config.name), CLI_config)
+                if remote.status_code != 200:
+                    rich_print_checked_statement(
+                        f"--attach-run: no project named '{project_config.name}' on this "
+                        f"server (HTTP {remote.status_code}). Run once without --attach-run "
+                        f"to create it, or pass --project-name to target another project.",
+                        "error",
+                    )
+                    _rec("attach_run", "failed", "target project not found")
+                    raise typer.Exit(code=2)
+
+                report = attach_run_to_project(project_config, remote.json())
+                added_locations = {tag: locs for tag, locs in report["added"].items() if locs}
+                for wf_tag, new_locations in added_locations.items():
+                    rich_print_checked_statement(
+                        f"Workflow '{wf_tag}': +{len(new_locations)} run location(s) -> "
+                        f"{', '.join(new_locations)}",
+                        "success",
+                    )
+                if not added_locations:
+                    rich_print_checked_statement(
+                        "--attach-run: no new location to add; this run is already "
+                        "registered on the project. Re-scanning it only.",
+                        "info",
+                    )
+                if report["kept_single"]:
+                    rich_print_checked_statement(
+                        f"{len(report['kept_single'])} single-file data collection(s) keep "
+                        f"the file they were first ingested from, and do not pick up this "
+                        f"run's copy: {', '.join(report['kept_single'])}",
+                        "warning",
+                    )
+
+                success_count += 1
+                _rec("attach_run", "success", f"{len(project_config.workflows)} workflow(s)")
+            except typer.Exit:
+                raise
+            except Exception as e:
+                rich_print_checked_statement(f"--attach-run failed: {e}", "error")
+                _rec("attach_run", "failed", str(e))
+                raise typer.Exit(code=1)
+
         # Open the monitoring ingestion record now that CLI_config is validated.
         # Best-effort: a monitoring outage must never affect the ingestion.
         if not dry_run:
@@ -627,11 +799,24 @@ def register_run_command(app: typer.Typer):
                     # instance — defeating the per-user separation --user is for.
                     if user:
                         project_config_dict["is_public"] = False
-                    api_sync_project_config_to_server(
+                    sync_verdict = api_sync_project_config_to_server(
                         CLI_config=CLI_config,
                         ProjectConfig=project_config_dict,
                         update=update_config,
                     )
+                    # The project is already on the server and no update was asked
+                    # for: nothing can be ingested, so say so plainly and stop with
+                    # a distinct exit code instead of pretending the run succeeded.
+                    if sync_verdict.get("action") == "exists":
+                        rich_print_checked_statement(
+                            f"Project '{project_config.name}' already exists on this server. "
+                            f"Re-run with --update-config to refresh its configuration, or "
+                            f"with --attach-run to add {data_root or project_config_path} as "
+                            f"an additional run of that project.",
+                            "error",
+                        )
+                        _rec("sync_project", "failed", "project exists, no --update-config")
+                        raise typer.Exit(code=2)
                 rich_print_checked_statement("Project configuration sync completed", "success")
 
                 # Resolve tag-based link IDs now that the server has assigned real DC IDs
@@ -693,6 +878,11 @@ def register_run_command(app: typer.Typer):
 
                 success_count += 1
                 _rec("sync_project", "success", "project synced")
+            except typer.Exit:
+                # Deliberate, already-reported exit (e.g. the "exists" verdict
+                # above). `typer.Exit` subclasses RuntimeError, so without this
+                # it would be caught below and re-reported as an empty failure.
+                raise
             except Exception as e:
                 rich_print_checked_statement(f"Project configuration sync failed: {e}", "error")
                 _rec("sync_project", "failed", str(e))
