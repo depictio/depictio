@@ -1,0 +1,40 @@
+# Depictio project configuration for the example pipeline.
+#
+# {DEPICTIO_DATA_ROOT} is expanded by the CLI from the environment variable the
+# onComplete trigger exports, so the same YAML works for every run without
+# hardcoding an output directory.
+name: "Nextflow trigger example"
+
+workflows:
+  - name: "nextflow-trigger-example"
+    description: "Minimal pipeline demonstrating the Depictio onComplete trigger"
+    engine:
+      name: "nextflow"
+
+    data_location:
+      # "flat": the data root itself is the run directory. Use
+      # "sequencing-runs" (plus runs_regex) when the root holds one
+      # subdirectory per run.
+      structure: "flat"
+      locations:
+        - "{DEPICTIO_DATA_ROOT}"
+
+    data_collections:
+      - data_collection_tag: "measurements"
+        description: "Per-sample measurements produced by the pipeline"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "measurements\\.tsv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              has_header: true
+            columns_description:
+              sample: "Sample identifier"
+              value: "Measured value"
