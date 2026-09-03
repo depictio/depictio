@@ -105,8 +105,10 @@ five user-facing flows:
    (cohort filters, KPI cards, figures, a reference table), fills and
    validates every component the way the Describe step does, lays it out
    deterministically and lands it as a new dashboard flagged as an **AI
-   draft**, to promote or discard from the editor. Details in
-   [Generate a dashboard](#generate-a-dashboard).
+   draft**. In the editor every generated tile then carries a review strip
+   (*Regenerate*, *Keep*, *Remove*) and the banner tracks how much of the
+   draft you have been through, before you promote or discard it. Details
+   in [Generate a dashboard](#generate-a-dashboard).
 
 ## Generate a dashboard
 
@@ -148,15 +150,47 @@ is refused in public mode, since a generation is a dashboard import.
    title) and an *Open in editor* button, and navigates to the editor on
    its own after a moment.
 5. The editor opens with a **draft banner** above the dashboard: the model
-   that produced it, the date, the warnings behind a fold, and two
-   actions. *Promote* flips the status to `promoted`: the banner and the
-   badges go away and the provenance (model, prompt, run id) stays on the
-   document. *Discard* asks for confirmation, deletes the dashboard and
-   returns to `/dashboards`. Until you decide, the dashboard card in the
-   list and the dashboard info panel carry an **AI draft** badge. A draft
-   is otherwise a normal dashboard: you can edit it in the editor first,
-   and autosave keeps the draft flag as it is (it can neither clear nor
-   set it; only *Promote* changes it).
+   that produced it, the date, the warnings behind a fold, a *reviewed n
+   of m* counter and two actions, with every generated tile carrying its
+   own review strip below the banner (see
+   [Reviewing a draft](#reviewing-a-draft)). *Promote* flips the status to
+   `promoted`: the banner and the badges go away and the provenance
+   (model, prompt, run id) stays on the document. *Discard* asks for
+   confirmation, deletes the dashboard and returns to `/dashboards`. Until
+   you decide, the dashboard card in the list and the dashboard info panel
+   carry an **AI draft** badge. A draft is otherwise a normal dashboard:
+   you can edit it in the editor first, and autosave keeps the draft flag
+   as it is (it can neither clear nor set it; only *Promote* changes it).
+
+### Reviewing a draft
+
+A draft is reviewed tile by tile, not as one block. In the editor every
+generated component carries a small review strip:
+
+- *Regenerate* re-runs that one tile, with an optional instruction ("use a
+  box plot", "group by cohort"). It goes through the same fill and the same
+  validation as the original run, repair round included, and the result
+  replaces the component in place: its position, its size and its section
+  stay as they were and the rest of the dashboard is untouched. A
+  regeneration that fails validation leaves the tile as it was and reports
+  the error on the strip.
+- *Keep* marks the tile reviewed without changing it.
+- *Remove* takes the tile out of the draft.
+
+A whole grid section can also be regenerated at once from its header: the
+components of that section are filled again and the layout pass re-runs for
+that section only, so the other sections keep the boxes they had.
+
+The banner counts the progress, *reviewed n of m*, and gates the promotion
+on it. Once every tile is either reviewed or removed, *Promote* applies
+outright; before that it asks for a confirmation first, since promoting is
+what turns the draft into an ordinary dashboard.
+
+The review state lives on the dashboard document next to the draft flag, in
+the same `ai_generation` field, so it survives a reload or a change of
+browser. Like the draft flag it is stripped from autosave payloads: the
+editor can neither mark a tile reviewed nor unmark one, only the review
+route writes it.
 
 ### Grounding and validation
 
@@ -218,6 +252,18 @@ The layout pass is deterministic and writes explicit boxes on the
   nothing but tables starts collapsed, the way the reference dashboards
   fold their raw data.
 
+### Previous runs
+
+A draft is not the only trace a run leaves. The *Generate with AI* tab
+lists what the selected project has generated before, newest first: the
+prompt, the model, the status (`running`, `complete`, `failed` or
+`cancelled`), the date, how many components came out *ok*, *repaired* or
+*dropped*, and the warnings the run collected. A run that saved a dashboard
+links to it, so a draft left half-reviewed is one click away. The rows are
+the `ai_generations` records, which are written at the start, after the
+plan, after every component and at the end, so a cancelled or failed run
+shows up in the list too.
+
 ### Limits of the MVP
 
 - **Single tab.** The draft is one dashboard tab; multi-tab plans are not
@@ -225,10 +271,10 @@ The layout pass is deterministic and writes explicit boxes on the
 - **Table collections only.** MultiQC, image and map collections are not
   inventoried and never planned; add them by hand once the draft is
   promoted.
-- **All-or-nothing review.** The banner offers *Promote* or *Discard* for
-  the whole draft; regenerating a single component in place comes next
-  (editing one component is already covered by the Describe step's
-  *Refine with AI*).
+- **Review is per tile, generation is not.** Each tile can be regenerated,
+  kept or removed on its own, and a section can be regenerated as a whole,
+  but what a run may produce is still bounded by the two limits above: one
+  tab, table collections only.
 - **Nothing lands without data.** A run whose data-bound components were
   all dropped fails instead of saving an empty shell.
 
@@ -282,8 +328,8 @@ every AI affordance when the feature is off; the last flag gates the
 
 All under `/depictio/api/v1/ai`, feature-gated, authenticated like every
 other read (`get_user_or_anonymous` + project-viewer permission checks):
-the two dashboard-generation routes are the exception, they are writes and
-require a signed-in user with editor permission.
+the dashboard-generation and draft-review routes are the exception, they
+are writes and require a signed-in user with editor permission.
 
 - `GET /ai/health` — configured model + key posture (no key material).
 - `POST /ai/suggest-components`: typed suggestions for a dashboard (the
@@ -357,6 +403,27 @@ require a signed-in user with editor permission.
   `{dashboard_id, status: "promoted"}`; editor permission on the
   dashboard, 404 when it carries no `ai_generation`. Discarding a draft is
   the regular `DELETE /dashboards/delete/{dashboard_id}`.
+- `POST /ai/generated-dashboards/{dashboard_id}/components/{index}/regenerate`:
+  streaming, the same SSE-over-chunked-POST envelope, for one tile of a
+  draft. Body: an optional `instruction` refining what the tile should
+  show. The component at `index` is filled and validated the way the run
+  filled it (schema checks and repair round included) and replaces the old
+  one in place, keeping its layout box; nothing else on the dashboard
+  changes, and a failure leaves the tile as it was. Editor permission on
+  the dashboard, 404 when it carries no `ai_generation` or the index does
+  not exist.
+- `POST /ai/generated-dashboards/{dashboard_id}/sections/{section}/regenerate`:
+  the same for a whole grid section, refilling its components and re-running
+  the layout pass for that section alone.
+- `POST /ai/generated-dashboards/{dashboard_id}/review`: records which
+  tiles have been reviewed and which were removed. The review block sits
+  next to the draft flag in `ai_generation` and, like the flag, is stripped
+  from autosave payloads, so this route is the only writer.
+- `GET /ai/generations/{project_id}`: the project's recent generation runs
+  from the `ai_generations` collection, newest first, behind the same
+  project-viewer permission as the other reads: prompt, model, status,
+  date, the per-component outcomes (`ok` / `repaired` / `dropped`), the
+  warnings and the `dashboard_id` when the run saved one.
 
 ## Safety posture
 

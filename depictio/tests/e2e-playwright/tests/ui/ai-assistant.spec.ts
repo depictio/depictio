@@ -36,6 +36,14 @@
  *     banner: Promote posts once and clears it; Discard confirms, DELETEs
  *     and lands on /dashboards. The "draft" is a seeded dashboard whose GET
  *     is proxied and stamped, so nothing is generated or deleted for real.
+ *  7. Reviewing that draft tile by tile: every generated tile carries the
+ *     review strip, Keep posts once and moves the banner's counter, a
+ *     mocked regenerate stream replaces exactly one tile (the replacement
+ *     comes back under a new generation tag, which is what the assertion
+ *     reads) and Promote asks for a confirmation while tiles are still
+ *     unreviewed. The Generate tab's "Previous generations" column lists a
+ *     project's mocked runs, with the counts, the warnings and a link into
+ *     the draft a run saved.
  *
  * The seeded dashboard's collection ids are never hard-coded: the project
  * payload is sniffed as the SPA loads it and the collection the mock
@@ -54,6 +62,10 @@ const PROJECT_FROM_DASHBOARD_GLOB = "**/depictio/api/v1/projects/get/from_dashbo
 const GENERATE_DASHBOARD_GLOB = "**/depictio/api/v1/ai/generate-dashboard";
 const PROMOTE_GENERATED_GLOB = "**/depictio/api/v1/ai/generated-dashboards/*/promote";
 const DASHBOARD_GET_GLOB = "**/depictio/api/v1/dashboards/get/*";
+const REVIEW_GLOB = "**/depictio/api/v1/ai/generated-dashboards/*/review";
+const REGENERATE_COMPONENT_GLOB =
+  "**/depictio/api/v1/ai/generated-dashboards/*/components/*/regenerate";
+const GENERATIONS_GLOB = "**/depictio/api/v1/ai/generations/*";
 const DASHBOARD_DELETE_GLOB = "**/depictio/api/v1/dashboards/delete/*";
 
 /** One data collection of the dashboard's project, as the Describe step's
@@ -525,6 +537,178 @@ async function openSuggestions(page: Page): Promise<void> {
   await expect(page.locator("[data-testid='ai-suggest-scope']")).toBeVisible();
   await expect(page.locator("[data-testid='ai-describe-prompt']")).toHaveCount(0);
   await expect(page.locator("[data-testid='ai-suggest-run']")).toBeVisible();
+}
+
+/** Everything a draft-review test needs to observe, filled in as the mocked
+ *  routes are hit. `tags` is what the GET proxy stamped on the dashboard, so
+ *  a test can name the banner's denominator without hard-coding a seed. */
+interface DraftReviewState {
+  /** Generation tags stamped on the tiles, in stored_metadata order. */
+  tags: string[];
+  /** Component index → the tag its tile currently carries. */
+  tagByIndex: Record<string, string>;
+  /** The stored_metadata the proxy last stamped, so the regenerate mock can
+   *  echo a real component back as the replacement. */
+  components: Record<string, unknown>[];
+  /** Tags the review route has been told to keep. */
+  reviewed: string[];
+  reviews: { tag: string; action: string }[];
+  regenerated: { index: string; instruction?: string }[];
+  /** index → the tag its regeneration gave it. The GET proxy applies these
+   *  too, so the optimistic swap and the refetch that follows it agree. */
+  retagged: Record<string, string>;
+  promoted: boolean;
+  promoteCalls: number;
+}
+
+const DRAFT_PROMPT = "compare body mass across species";
+
+/** The review flow's counterpart to `mockDraftDashboard`: the same proxy over
+ *  GET /dashboards/get/{id} (so a seeded dashboard plays a fresh AI draft),
+ *  plus the per-tile generation tags the review and regenerate routes address
+ *  a tile by, and canned answers for review / regenerate / promote.
+ *
+ *  A regeneration answers with the SAME component under a NEW tag. The real
+ *  route keeps the tile's tag (it re-fills the same planned component), but
+ *  a canned change to it is the one signal a test can assert on without
+ *  knowing what the seeded tiles render — and it holds whether the assertion
+ *  catches the optimistic swap or the refetch behind it, because the GET
+ *  proxy stamps the new tag too. What it proves is what it has to: the
+ *  client applied the component the terminal event carried. */
+async function mockDraftReview(page: Page): Promise<DraftReviewState> {
+  const state: DraftReviewState = {
+    tags: [],
+    tagByIndex: {},
+    components: [],
+    reviewed: [],
+    reviews: [],
+    regenerated: [],
+    retagged: {},
+    promoted: false,
+    promoteCalls: 0,
+  };
+
+  await page.route(DASHBOARD_GET_GLOB, async (route) => {
+    const res = await route.fetch();
+    const json = (await res.json()) as Record<string, unknown> & {
+      stored_metadata?: Record<string, unknown>[];
+    };
+    const components = json.stored_metadata ?? [];
+    state.tags = [];
+    state.tagByIndex = {};
+    components.forEach((m, i) => {
+      const index = String(m.index ?? i);
+      const tag = state.retagged[index] ?? `gen_${i}`;
+      m.ai_source = { flow: "generate", prompt: DRAFT_PROMPT, tag };
+      state.tags.push(tag);
+      state.tagByIndex[index] = tag;
+    });
+    state.components = components;
+    const info: AIGeneration & { reviewed: string[] } = {
+      status: state.promoted ? "promoted" : "draft",
+      model: "test/canned-model",
+      prompt: DRAFT_PROMPT,
+      generated_at: "2026-09-03T10:00:00+00:00",
+      run_id: "run-canned",
+      warnings: [],
+      reviewed: [...state.reviewed],
+    };
+    json.ai_generation = info;
+    await route.fulfill({ json });
+  });
+
+  await page.route(REVIEW_GLOB, (route) => {
+    const body = route.request().postDataJSON() as {
+      tag: string;
+      action: "keep" | "unkeep";
+    };
+    state.reviews.push(body);
+    if (body.action === "keep") {
+      if (!state.reviewed.includes(body.tag)) state.reviewed.push(body.tag);
+    } else {
+      state.reviewed = state.reviewed.filter((t) => t !== body.tag);
+    }
+    return route.fulfill({
+      json: { reviewed: state.reviewed.length, total: state.tags.length },
+    });
+  });
+
+  await page.route(REGENERATE_COMPONENT_GLOB, (route) => {
+    const index = route.request().url().match(/components\/([^/]+)\/regenerate/)?.[1] ?? "";
+    const body = (route.request().postDataJSON() ?? {}) as { instruction?: string };
+    state.regenerated.push({ index, instruction: body.instruction });
+    const oldTag = state.tagByIndex[index] ?? "";
+    const newTag = `${oldTag}_v2`;
+    state.retagged[index] = newTag;
+    const source: Record<string, unknown> =
+      state.components.find((c) => String(c.index) === index) ?? { index };
+    const replacement = {
+      ...source,
+      ai_source: { flow: "generate", prompt: DRAFT_PROMPT, tag: newTag },
+    };
+    const sse = [
+      'event: status\ndata: {"message":"refilling the component"}',
+      'event: budget\ndata: {"steps_used":1,"tokens_used":800,"seconds":2,"max_steps":20,"max_tokens":150000,"max_seconds":180}',
+      `event: component\ndata: {"tag":"${newTag}","section":"Metrics","component_type":"${String(
+        source.component_type ?? "card",
+      )}","status":"ok","attempts":1}`,
+      // Terminal event (RegeneratedEvent): `components` lists every tile
+      // written back, and the single-tile route repeats its one tile.
+      `event: regenerated\ndata: ${JSON.stringify({
+        dashboard_id: "mocked",
+        tag: newTag,
+        component: replacement,
+        components: [replacement],
+        warnings: [],
+      })}`,
+      "event: done\ndata: {}",
+    ].join("\n\n");
+    return route.fulfill({ contentType: "text/event-stream", body: `${sse}\n\n` });
+  });
+
+  await page.route(PROMOTE_GENERATED_GLOB, (route) => {
+    state.promoted = true;
+    state.promoteCalls += 1;
+    const id = route.request().url().match(/generated-dashboards\/([^/]+)\/promote/)?.[1] ?? "";
+    return route.fulfill({ json: { dashboard_id: id, status: "promoted" } });
+  });
+
+  return state;
+}
+
+/** Opens the editor on the mocked draft and waits for the banner and the
+ *  first review strip, which is where every review test starts. */
+async function openDraftEditor(page: Page, dashboardId: string): Promise<void> {
+  await page.goto(`/dashboard-edit/${dashboardId}`);
+  await expect(page.locator("[data-testid='ai-draft-banner']")).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(page.locator("[data-testid='draft-tile-actions']").first()).toBeVisible({
+    timeout: 30_000,
+  });
+}
+
+/** Mirrors one row of GET /ai/generations/{project_id} (GenerationSummary):
+ *  the per-outcome tally is spelled out flat on the row. */
+interface GenerationRow {
+  id: string;
+  dashboard_id: string | null;
+  title: string | null;
+  prompt: string;
+  model: string;
+  status: "running" | "complete" | "failed" | "cancelled";
+  created_at: string;
+  ok: number;
+  repaired: number;
+  dropped: number;
+  warnings: string[];
+}
+
+/** Canned "Previous generations" list for whichever project is picked. */
+async function mockGenerations(page: Page, rows: GenerationRow[]): Promise<void> {
+  await page.route(GENERATIONS_GLOB, (route) =>
+    route.fulfill({ json: { generations: rows } }),
+  );
 }
 
 /** Post-Generate hand-off: same create URL, Design step active, and the AI
@@ -1214,5 +1398,192 @@ test.describe("AI assistant", () => {
     await deleteRequest;
     await expect(page).toHaveURL(/\/dashboards\/?([?#].*)?$/, { timeout: 20_000 });
     expect(deleted).toEqual([dashboardId]);
+  });
+
+  test("AI draft: every generated tile carries a review strip, Keep moves the banner counter", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await mockFeatures(page, true, true);
+    await mockAIHealth(page);
+
+    await loginAsAdmin();
+    const dashboardId = await openFirstDashboard(page);
+    const draft = await mockDraftReview(page);
+    await openDraftEditor(page, dashboardId);
+
+    // The denominator is what the proxy stamped, so this holds on any seed.
+    const total = draft.tags.length;
+    expect(total).toBeGreaterThan(0);
+    const counter = page.locator("[data-testid='ai-draft-review-count']");
+    await expect(counter).toHaveText(`Reviewed 0 of ${total}`);
+
+    const strips = page.locator("[data-testid='draft-tile-actions']");
+    const first = strips.first();
+    await expect(first).toHaveAttribute("data-reviewed", "false");
+    const tag = await first.getAttribute("data-tag");
+    expect(tag).toBeTruthy();
+
+    // Keep posts once, flips the strip and moves the counter with the click.
+    const reviewRequest = page.waitForRequest(
+      (req) => req.method() === "POST" && req.url().includes("/generated-dashboards/"),
+      { timeout: 15_000 },
+    );
+    await first.locator("[data-testid='draft-tile-keep']").click();
+    await reviewRequest;
+    await expect(first).toHaveAttribute("data-reviewed", "true");
+    await expect(counter).toHaveText(`Reviewed 1 of ${total}`);
+    expect(draft.reviews).toEqual([{ tag, action: "keep" }]);
+  });
+
+  test("AI draft: a mocked regenerate replaces one tile and leaves the others alone", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await mockFeatures(page, true, true);
+    await mockAIHealth(page);
+
+    await loginAsAdmin();
+    const dashboardId = await openFirstDashboard(page);
+    const draft = await mockDraftReview(page);
+    await openDraftEditor(page, dashboardId);
+
+    const strips = page.locator("[data-testid='draft-tile-actions']");
+    const before = await strips.evaluateAll((els) =>
+      els.map((el) => el.getAttribute("data-tag")),
+    );
+    const target = before[0];
+    expect(target).toBeTruthy();
+
+    // The instruction is optional, but it is what the popover exists for.
+    await strips.first().locator("[data-testid='draft-tile-regenerate']").click();
+    const instruction = page.locator("[data-testid='draft-tile-instruction']");
+    await expect(instruction).toBeVisible();
+    await instruction.fill("use a box plot");
+
+    const regenerateRequest = page.waitForRequest(
+      (req) => req.method() === "POST" && req.url().includes("/regenerate"),
+      { timeout: 15_000 },
+    );
+    await page.locator("[data-testid='draft-tile-regenerate-run']").click();
+    const request = await regenerateRequest;
+    expect(request.url()).toContain("/components/");
+    expect((request.postDataJSON() as { instruction?: string }).instruction).toBe(
+      "use a box plot",
+    );
+
+    // The replacement carries a new tag: the tile it landed on is the one that
+    // changed, and every other tile kept the tag it had.
+    await expect(
+      page.locator(`[data-testid='draft-tile-actions'][data-tag='${target}_v2']`),
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(
+      page.locator(`[data-testid='draft-tile-actions'][data-tag='${target}']`),
+    ).toHaveCount(0);
+    const after = await strips.evaluateAll((els) =>
+      els.map((el) => el.getAttribute("data-tag")),
+    );
+    expect(after).toEqual(before.map((t) => (t === target ? `${target}_v2` : t)));
+    expect(draft.regenerated).toHaveLength(1);
+    expect(draft.regenerated[0].instruction).toBe("use a box plot");
+  });
+
+  test("AI draft: Promote is gated on the review and goes through a confirm", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await mockFeatures(page, true, true);
+    await mockAIHealth(page);
+
+    await loginAsAdmin();
+    const dashboardId = await openFirstDashboard(page);
+    const draft = await mockDraftReview(page);
+    await openDraftEditor(page, dashboardId);
+
+    // Nothing reviewed yet: Promote asks first and posts nothing.
+    await page.locator("[data-testid='ai-draft-promote']").click();
+    const confirm = page.locator("[data-testid='ai-draft-promote-confirm']");
+    await expect(confirm).toBeVisible();
+    expect(draft.promoteCalls).toBe(0);
+
+    const promoteRequest = page.waitForRequest(
+      (req) => req.method() === "POST" && req.url().includes("/promote"),
+      { timeout: 15_000 },
+    );
+    await confirm.click();
+    await promoteRequest;
+    await expect(page.locator("[data-testid='ai-draft-banner']")).toHaveCount(0);
+    expect(draft.promoteCalls).toBe(1);
+  });
+
+  test("Generate tab: Previous generations lists the project's runs", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await mockFeatures(page, true, true);
+    await mockAIHealth(page);
+    await mockGenerations(page, [
+      {
+        id: "run-1",
+        dashboard_id: "dash-1",
+        title: "Penguin morphology",
+        prompt: "compare body mass across species",
+        model: "test/canned-model",
+        status: "complete",
+        created_at: "2026-09-03T10:00:00",
+        ok: 5,
+        repaired: 1,
+        dropped: 0,
+        warnings: ["mass_card needed one repair"],
+      },
+      {
+        id: "run-2",
+        dashboard_id: null,
+        title: "Island overview",
+        prompt: "an overview per island",
+        model: "test/canned-model",
+        status: "failed",
+        created_at: "2026-09-02T09:00:00",
+        ok: 0,
+        repaired: 0,
+        dropped: 3,
+        warnings: ["every data-bound component was dropped"],
+      },
+    ]);
+
+    await loginAsAdmin();
+    await openGenerateTab(page);
+
+    // Nothing is fetched until a project is picked.
+    const history = page.locator("[data-testid='generation-history']");
+    await expect(history).toBeVisible();
+    await expect(history).toContainText("Select a project");
+    await expect(page.locator("[data-testid='generation-history-item']")).toHaveCount(0);
+
+    await page.locator("[data-testid='generate-dashboard-project']").click();
+    const options = page.getByRole("option");
+    await options.first().waitFor({ state: "visible", timeout: 15_000 }).catch(() => undefined);
+    test.skip((await options.count()) === 0, "No projects visible to the admin in this stack.");
+    await options.first().click();
+
+    const items = page.locator("[data-testid='generation-history-item']");
+    await expect(items).toHaveCount(2, { timeout: 15_000 });
+    const complete = items.first();
+    await expect(complete).toContainText("Penguin morphology");
+    await expect(complete).toContainText("complete");
+    await expect(complete).toContainText("test/canned-model");
+    await expect(complete.locator("[data-testid='generation-history-count-ok']")).toHaveText(
+      "5 ok",
+    );
+    await expect(complete).toContainText("mass_card needed one repair");
+    // A run that saved a draft links to it; the failed one has nothing to open.
+    await expect(complete.locator("[data-testid='generation-history-open']")).toBeVisible();
+    const failed = items.nth(1);
+    await expect(failed).toContainText("failed");
+    await expect(failed.locator("[data-testid='generation-history-open']")).toHaveCount(0);
   });
 });
