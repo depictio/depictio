@@ -2,6 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Button, Group, Paper, Progress, SimpleGrid, Stack, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
+import { componentTypeVisual } from 'depictio-react-core';
+
+import { sectionIconId } from '../componentVisuals';
 import type { GenerateDashboardRunState } from '../hooks';
 import { AI_COLOR } from '../icons';
 import type {
@@ -27,25 +30,6 @@ const STAGES: { status: string; label: string }[] = [
   { status: 'saving', label: 'Saving' },
 ];
 
-/** Iconify ids per component type, mirroring COMPONENT_TYPE_VISUALS in
- *  depictio-react-core so a card here shows the same icon the builder's
- *  type grid does. Written as literals on purpose: the viewer's
- *  generate-icon-subset.mjs scans package sources for `prefix:name`, so an
- *  id assembled at runtime would ship as a blank box under the CSP. */
-const TYPE_ICON: Record<string, string> = {
-  figure: 'mdi:graph-box',
-  card: 'formkit:number',
-  interactive: 'bx:slider-alt',
-  table: 'octicon:table-24',
-  text: 'mdi:text-box-edit',
-  map: 'mdi:map-marker-multiple',
-  image: 'mdi:image-area',
-  multiqc: 'mdi:chart-line',
-  advanced_viz: 'mdi:chart-scatter-plot-hexbin',
-};
-
-const UNKNOWN_TYPE_ICON = 'mdi:puzzle';
-
 /** Singular and plural of each type, for the plan's "4 cards · 3 figures"
  *  tally. Types that read the same either way repeat themselves. */
 const TYPE_LABEL: Record<string, [string, string]> = {
@@ -59,53 +43,6 @@ const TYPE_LABEL: Record<string, [string, string]> = {
   multiqc: ['MultiQC', 'MultiQC'],
   advanced_viz: ['advanced viz', 'advanced viz'],
 };
-
-/** The section icons the planner may choose, as literals, mirroring
- *  SECTION_ICONS in depictio/api/v1/endpoints/ai_endpoints/dashboard_plan.py
- *  (itself a copy of the viewer's sectionIcons.ts). The plan carries its icon
- *  as data, and only ids written out in a scanned source are bundled, so an
- *  id outside this set falls back rather than rendering as a blank box. */
-const PLAN_SECTION_ICONS = new Set<string>([
-  'mdi:counter',
-  'mdi:view-dashboard-outline',
-  'mdi:information-outline',
-  'mdi:star-outline',
-  'mdi:chart-bell-curve',
-  'mdi:chart-bar',
-  'mdi:chart-line',
-  'mdi:chart-scatter-plot',
-  'mdi:chart-donut',
-  'mdi:chart-box-outline',
-  'mdi:chart-timeline-variant',
-  'mdi:table',
-  'mdi:table-account',
-  'mdi:database-outline',
-  'mdi:set-merge',
-  'mdi:relation-many-to-many',
-  'mdi:file-document-outline',
-  'mdi:folder-outline',
-  'mdi:check-decagram',
-  'mdi:shield-check-outline',
-  'mdi:alert-outline',
-  'mdi:filter-variant',
-  'mdi:tune',
-  'mdi:test-tube',
-  'mdi:dna',
-  'mdi:bacteria-outline',
-  'mdi:virus',
-  'mdi:family-tree',
-  'mdi:stethoscope',
-  'mdi:scale-balance',
-  'mdi:waves',
-  'mdi:microscope',
-  'mdi:ruler',
-  'mdi:shape-outline',
-  'mdi:map-marker-outline',
-  'mdi:calendar-outline',
-  'mdi:account-group-outline',
-]);
-
-const FALLBACK_SECTION_ICON = 'mdi:view-dashboard-outline';
 
 /** Components a section lists before the rest fold away: enough to judge the
  *  shape of the section without burying the sections after it. */
@@ -231,9 +168,18 @@ function membersOfGroup<T extends { section: string }>(
   return members.filter((m) => m.section === group.name);
 }
 
-function sectionIcon(section: PlannedSection | null): string {
-  const icon = section?.icon ?? '';
-  return PLAN_SECTION_ICONS.has(icon) ? icon : FALLBACK_SECTION_ICON;
+/** A section keeps the icon and the colour the planner gave it, so the plan
+ *  reads like the dashboard it is about to become. */
+function sectionVisual(section: PlannedSection | null, kind: string): {
+  icon: string;
+  color: string;
+} {
+  return {
+    icon: sectionIconId(section?.icon, kind),
+    color: section?.color
+      ? `var(--mantine-color-${section.color}-6)`
+      : 'var(--mantine-color-gray-6)',
+  };
 }
 
 /** Wall clock per stage, read from the `status` events alone: a status change
@@ -362,15 +308,16 @@ const PlanSectionBlock: React.FC<{ group: SectionGroup; components: PlannedCompo
   const hidden = Math.max(components.length - SECTION_INLINE_MAX, 0);
   const shown = open ? components : components.slice(0, SECTION_INLINE_MAX);
   const kind = group.kind === 'filter' ? 'filter panel' : group.kind === 'grid' ? 'section' : '';
+  const visual = sectionVisual(group.section, group.kind);
 
   return (
     <Paper withBorder radius="sm" p="xs" data-testid="generate-plan-section">
       <Stack gap={4}>
         <Group gap={6} wrap="nowrap" align="center">
           <Icon
-            icon={sectionIcon(group.section)}
+            icon={visual.icon}
             width={16}
-            color="var(--mantine-color-gray-6)"
+            color={visual.color}
             style={{ flexShrink: 0 }}
           />
           <Text size="xs" fw={600} truncate>
@@ -389,9 +336,9 @@ const PlanSectionBlock: React.FC<{ group: SectionGroup; components: PlannedCompo
         {shown.map((c) => (
           <Group key={c.tag} gap={6} wrap="nowrap" align="flex-start">
             <Icon
-              icon={TYPE_ICON[c.component_type] ?? UNKNOWN_TYPE_ICON}
+              icon={componentTypeVisual(c.component_type).icon}
               width={14}
-              color="var(--mantine-color-gray-6)"
+              color={componentTypeVisual(c.component_type).color}
               style={{ marginTop: 3, flexShrink: 0 }}
             />
             <Stack gap={0} style={{ minWidth: 0, flex: 1 }}>
@@ -639,9 +586,9 @@ const GenerationProgress: React.FC<GenerationProgressProps> = ({
                       <Stack gap={2}>
                         <Group gap="xs" wrap="nowrap" align="flex-start">
                           <Icon
-                            icon={TYPE_ICON[row.component_type] ?? UNKNOWN_TYPE_ICON}
+                            icon={componentTypeVisual(row.component_type).icon}
                             width={18}
-                            color="var(--mantine-color-gray-6)"
+                            color={componentTypeVisual(row.component_type).color}
                             style={{ marginTop: 2, flexShrink: 0 }}
                           />
                           <Stack gap={0} style={{ minWidth: 0, flex: 1 }}>
