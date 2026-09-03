@@ -11,7 +11,7 @@ human-readable.
 When adding a visualization:
 1. Drop the name from `_DISABLED_VISUALIZATIONS` if present (parameter_discovery.py).
 2. Ensure an icon is mapped in `_VISUALIZATION_ICONS` (parameter_discovery.py).
-3. Add it to `ALLOWED_VISUALIZATIONS` here.
+3. Add it to `ALLOWED_VISUALIZATIONS` in `depictio/models/components/constants.py`.
 4. Add a `(label, description)` row to `VIZ_LABELS_DESCRIPTIONS` here.
 """
 
@@ -20,27 +20,17 @@ from typing import Dict, List
 from depictio.api.v1.services.figure.models import VisualizationDefinition
 from depictio.api.v1.services.figure.parameter_discovery import discover_all_visualizations
 
-# Curated set of visualization types exposed to the figure builder.
-#
-# `heatmap` and `scatter_matrix` were excluded on purpose: the first is not a
-# Plotly Express constructor of its own (heatmap rendering goes through the
-# complex-heatmap path in core.py), and scatter_matrix has a per-viz parameter
-# shape that doesn't match the rest of the builder cleanly. Add them back only
-# alongside dedicated builder support.
-ALLOWED_VISUALIZATIONS = {
-    "scatter",
-    "line",
-    "bar",
-    "box",
-    "histogram",
-    "violin",
-    "ecdf",
-    "density_heatmap",
-    "density_contour",
-    "area",
-    "funnel",
-    "strip",
-}
+# Curated set of visualization types exposed to the figure builder. Owned by
+# the models package so the lite model's ``visu_type`` check and the AI
+# prompts read the same list; re-exported here for the registry below and
+# for the existing importers of this module.
+from depictio.models.components.constants import ALLOWED_VISUALIZATIONS
+
+__all__ = [
+    "ALLOWED_VISUALIZATIONS",
+    "VIZ_LABELS_DESCRIPTIONS",
+    "get_visualization_registry",
+]
 
 # Hand-authored display metadata. Override Plotly's auto-generated labels and
 # docstring-derived descriptions with concise, user-facing copy. Keys MUST be

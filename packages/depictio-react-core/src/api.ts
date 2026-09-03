@@ -270,6 +270,10 @@ export interface StoredMetadata {
    *  "from catalog" flag on the tile and the catalog section in the metadata
    *  inspector. Preserved through edits via buildMetadata's `...existing` spread. */
   catalog_source?: CatalogSource;
+  /** Set when the component's config was produced by the AI assistant
+   *  ("Describe with AI" in the builder). Drives the "Authored with AI"
+   *  badge in the component chrome; `prompt` is the user's own wording. */
+  ai_source?: { flow: string; prompt?: string } | null;
   // Card
   title?: string;
   value?: unknown;

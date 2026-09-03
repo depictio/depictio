@@ -18,6 +18,7 @@ import './chrome.css';
 export type ChromeAction =
   | 'inspect'
   | 'catalog'
+  | 'ai'
   | 'description'
   | 'metadata'
   | 'fullscreen'
@@ -162,6 +163,12 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
   // Same reasoning as `inspect`: whether this action exists is a property of
   // the component's provenance, not of its type.
   if (metadata.catalog_source) actions.push('catalog');
+  // AI provenance sits next to catalog provenance: both say where the
+  // component's config came from, neither depends on the component type.
+  const aiPrompt =
+    typeof metadata.ai_source?.prompt === 'string' ? metadata.ai_source.prompt.trim() : '';
+  const aiLabel = aiPrompt ? `Authored with AI: "${aiPrompt}"` : 'Authored with AI';
+  if (metadata.ai_source) actions.push('ai');
   /**
    * The author's own prose about this component, from `description` in the
    * dashboard YAML. Every renderer but advanced_viz drops it on the floor, so
@@ -216,6 +223,31 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
       case 'catalog':
         if (!metadata.catalog_source) return null;
         return <CatalogButton key="catalog" source={metadata.catalog_source} />;
+      case 'ai':
+        if (!metadata.ai_source) return null;
+        return (
+          // A badge, not a button: nothing to open, so like `description` the
+          // tooltip is the whole payload and hover, focus and touch all reveal
+          // it. The label doubles as the aria-label because Mantine's Tooltip
+          // wires no aria-describedby. The icon id is a literal on purpose:
+          // the icon-subset scanner reads string literals, not imports. The
+          // colour repeats depictio-react-ai's AI_COLOR, which this package
+          // cannot import (react-ai depends on react-core, not the reverse).
+          <Tooltip
+            key="ai"
+            label={aiLabel}
+            withArrow
+            multiline
+            w={260}
+            openDelay={200}
+            position="bottom-end"
+            events={{ hover: true, focus: true, touch: true }}
+          >
+            <ActionIcon variant="subtle" color="cyan" size="sm" aria-label={aiLabel}>
+              <Icon icon="material-symbols:auto-awesome-outline" width={16} height={16} />
+            </ActionIcon>
+          </Tooltip>
+        );
       case 'description':
         if (!hasDescription) return null;
         return (

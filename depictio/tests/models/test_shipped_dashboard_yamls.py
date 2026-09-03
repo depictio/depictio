@@ -11,10 +11,9 @@ blank because the layout and the config that feeds it were never paired.
 The three checks below are deliberately of different kinds:
 
 * **model validation** — the same thing the importer does, applied to every
-  tab. ``DashboardDataLite._COMPONENT_TYPE_MAP`` has no entry for ``text`` or
-  ``advanced_viz``, so those two fall through the union to ``dict`` and are
-  never domain-checked; ``advanced_viz`` is re-validated explicitly here,
-  which is what catches a bad ``use:``.
+  tab. ``advanced_viz`` is also re-validated on its own, so a bad ``use:``
+  is reported against the component that declares it rather than folded
+  into the dashboard-level error.
 * **secondary-strip config** — every layout draws from a different field, and
   choosing the layout without the field it reads produces an empty strip and
   no error anywhere. The pairing table is copied from the ``secondary_layout``
@@ -154,11 +153,11 @@ def test_every_tab_validates(path: Path):
 @pytest.mark.no_db
 @pytest.mark.parametrize("path", _shipped_yamls(), ids=_rel)
 def test_advanced_viz_components_validate(path: Path):
-    """`advanced_viz` falls through the union to `dict` — check it explicitly.
+    """Re-validate every `advanced_viz` on its own so the failing one is named.
 
-    This is the check that catches a `use:` naming a catalog render id or
-    output that does not exist, which otherwise surfaces only as a tile that
-    fails to render on a deployed instance.
+    A `use:` naming a catalog render id or output that does not exist is
+    reported here per component; on a deployed instance it would otherwise
+    surface only as a tile that fails to render.
     """
     doc = yaml.safe_load(path.read_text())
     errors: list[str] = []

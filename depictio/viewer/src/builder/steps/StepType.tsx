@@ -19,7 +19,7 @@ import {
   Title,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { useBuilderStore } from '../store/useBuilderStore';
+import { stepAfterType, useBuilderStore } from '../store/useBuilderStore';
 import { COMPONENT_TYPES } from '../componentTypes';
 import type { ComponentTypeMeta } from '../componentTypes';
 import type { ComponentType } from '../store/useBuilderStore';
@@ -44,11 +44,11 @@ const StepType: React.FC = () => {
 
   const onPick = (t: ComponentType) => {
     setComponentType(t);
-    // Mirror Dash: card click immediately advances to the next step.
-    // Text components skip Step 1 (Data Source — hidden for text) and land
-    // directly on Step 2 (Design), matching the Next-button + stepper-click
-    // handlers in CreateComponentPage.
-    setStep(t === 'text' ? 2 : 1);
+    // Mirror Dash: card click immediately advances to the next step. Text
+    // components skip Data Source (hidden for text) and land on the step
+    // after it (Describe in AI mode, Design otherwise), matching the
+    // Next-button + stepper-click handlers in CreateComponentPage.
+    setStep(stepAfterType(t));
   };
 
   return (
@@ -90,26 +90,44 @@ const StepType: React.FC = () => {
   );
 };
 
-interface TypeCardProps {
-  meta: ComponentTypeMeta;
+/** What a TypeCard needs: the builder's meta, or a synthetic entry such as
+ *  the Describe step's "Auto" tile (hence `type: string`). */
+export type TypeCardMeta = Omit<ComponentTypeMeta, 'type'> & { type: string };
+
+export interface TypeCardProps {
+  meta: TypeCardMeta;
   selected: boolean;
-  disabled: boolean;
+  /** Dimmed and inert. Surfaces that offer every type (the AI Describe step)
+   *  simply leave it out. */
+  disabled?: boolean;
   onClick: () => void;
   style?: React.CSSProperties;
+  /** Dense variant (icon tile + label, no description) for surfaces that
+   *  show the whole type set next to other controls, like the AI Describe
+   *  step. Same meta, same selection treatment, same test id. */
+  compact?: boolean;
+  /** Overrides the default `component-type-<type>` test id. */
+  testId?: string;
+  /** Accent colour of the selected border; the manual grid keeps blue. */
+  accent?: string;
 }
 
-const TypeCard: React.FC<TypeCardProps> = ({
+export const TypeCard: React.FC<TypeCardProps> = ({
   meta,
   selected,
-  disabled,
+  disabled = false,
   onClick,
   style,
+  compact = false,
+  testId,
+  accent = 'blue',
 }) => {
+  const tile = compact ? 36 : 48;
   return (
     <Card
       withBorder
       radius="md"
-      p="lg"
+      p={compact ? 'xs' : 'lg'}
       shadow={selected ? 'md' : 'sm'}
       onClick={onClick}
       className="component-selection-card"
@@ -117,27 +135,27 @@ const TypeCard: React.FC<TypeCardProps> = ({
       // their description ("Interactive data visualizations" on Figure,
       // "Interactive image grid" on Image), so a text filter over
       // .component-selection-card cannot address one card unambiguously.
-      data-testid={`component-type-${meta.type}`}
+      data-testid={testId ?? `component-type-${meta.type}`}
       style={{
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.5 : 1,
         textAlign: 'center',
         transition: 'transform 0.2s ease, box-shadow 0.2s ease',
         transform: selected ? 'translateY(-2px)' : undefined,
-        borderColor: selected ? 'var(--mantine-color-blue-5)' : undefined,
+        borderColor: selected ? `var(--mantine-color-${accent}-5)` : undefined,
         borderWidth: selected ? 2 : 1,
         height: '100%',
         ...style,
       }}
     >
-      <Stack gap="sm" align="center">
+      <Stack gap={compact ? 4 : 'sm'} align="center">
         <Center
           style={{
-            width: 48,
-            height: 48,
-            borderRadius: 12,
+            width: tile,
+            height: tile,
+            borderRadius: compact ? 10 : 12,
             background: meta.iconBg,
-            margin: '0 auto 1rem auto',
+            margin: compact ? '0 auto' : '0 auto 1rem auto',
           }}
         >
           {meta.type === 'multiqc' ? (
@@ -145,18 +163,20 @@ const TypeCard: React.FC<TypeCardProps> = ({
               src="/dashboard/logos/multiqc_icon_dark.svg"
               alt="MultiQC"
               className="multiqc-icon-themed"
-              style={{ width: 44, height: 44, objectFit: 'contain' }}
+              style={{ width: tile - 4, height: tile - 4, objectFit: 'contain' }}
             />
           ) : (
-            <Icon icon={meta.icon} width={24} color="white" />
+            <Icon icon={meta.icon} width={compact ? 20 : 24} color="white" />
           )}
         </Center>
-        <Text fw={700} size="lg" ta="center">
+        <Text fw={compact ? 600 : 700} size={compact ? 'sm' : 'lg'} ta="center">
           {meta.label}
         </Text>
-        <Text size="sm" c="gray" ta="center" mt="xs">
-          {meta.description}
-        </Text>
+        {!compact && (
+          <Text size="sm" c="gray" ta="center" mt="xs">
+            {meta.description}
+          </Text>
+        )}
       </Stack>
     </Card>
   );

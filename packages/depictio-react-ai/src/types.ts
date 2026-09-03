@@ -4,23 +4,59 @@
  * in sync when adding fields.
  */
 
+/** Same members and order as the viewer builder store's `ComponentType`
+ *  (`depictio/viewer/src/builder/store/useBuilderStore.ts`), so the
+ *  "Describe with AI" source mode covers every type the builder offers. */
 export type ComponentType =
   | 'figure'
   | 'card'
   | 'interactive'
   | 'table'
-  | 'image'
   | 'multiqc'
-  | 'map';
+  | 'image'
+  | 'map'
+  | 'text'
+  | 'advanced_viz';
 
+/** Body of POST /ai/component-from-prompt.
+ *
+ *  `data_collection_id` is null only for `text`: a text component reads no
+ *  data collection, so it gets the dashboard as context through
+ *  `dashboard_id` instead (titles, sections, the other components). Every
+ *  other type sends the DC it will render from. `useComponentFromPrompt`
+ *  fills `dashboard_id` from its hook argument when a caller omits it. */
 export interface ComponentFromPromptRequest {
-  data_collection_id: string;
+  /** Component type to author. `null` asks the server to choose one from
+   *  the prompt (routing); the response says which it picked. */
+  component_type: ComponentType | null;
+  /** Data collection to author against. `null` asks the server to choose
+   *  among the dashboard's project collections, preferring those already
+   *  on the dashboard. Always `null` for `text`, which needs no data. */
+  data_collection_id: string | null;
+  /** Owning dashboard. Required whenever type or collection is left to the
+   *  server; filled in by `useComponentFromPrompt` when omitted. */
+  dashboard_id?: string | null;
   prompt: string;
-  component_type: ComponentType;
   /** Set in edit-mode to ask the LLM to revise an existing component
    *  rather than build one from scratch. Pass the current
    *  `StoredMetadata` dict. */
   current?: Record<string, unknown> | null;
+}
+
+/** A data collection the router considered. */
+export interface RoutedCollection {
+  data_collection_id: string;
+  data_collection_tag: string;
+  workflow_id: string;
+  workflow_tag?: string | null;
+}
+
+/** How the type and collection of an answer were decided: pinned by the
+ *  user, the only candidate, or chosen by the model from the prompt. */
+export interface RoutingInfo {
+  source: 'user' | 'single' | 'auto';
+  reason?: string | null;
+  alternatives: RoutedCollection[];
 }
 
 export interface ComponentFromPromptResponse {
@@ -34,6 +70,10 @@ export interface ComponentFromPromptResponse {
   parsed: Record<string, unknown>;
   explanation: string;
   validation_attempts: number;
+  /** Collection the component was authored against (null for text). */
+  data_collection_id?: string | null;
+  workflow_id?: string | null;
+  routing?: RoutingInfo | null;
 }
 
 export interface SuggestFiguresRequest {

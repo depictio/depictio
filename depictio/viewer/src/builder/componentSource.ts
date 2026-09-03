@@ -1,11 +1,11 @@
 /**
- * The two ways to start a component: build one, or take one the catalog offers.
+ * The three ways to start a component: build one, take one the catalog
+ * offers, or describe it and let the AI draft it.
  *
  * Both surfaces of the Add-component flow name these paths at the same time on
- * the same screen, the two-tile chooser and the header band above it, and they
- * had drifted onto separate glyphs for the same concept. The tiles are what a
- * user meets first, so their vocabulary is the reference and this is where it
- * lives.
+ * the same screen, the tile chooser and the header band above it, and they had
+ * drifted onto separate glyphs for the same concept. The tiles are what a user
+ * meets first, so their vocabulary is the reference and this is where it lives.
  *
  * The catalog carries an `image` as well as an icon: the pinwheel-with-a-hammer
  * mark is the catalog's own branding, and no glyph stands in for it as well as
@@ -25,7 +25,9 @@ export interface ComponentSourceVisual {
   accent: string;
 }
 
-export const COMPONENT_SOURCE: Record<'manual' | 'catalog', ComponentSourceVisual> = {
+export type ComponentSourceKind = 'manual' | 'catalog' | 'ai';
+
+export const COMPONENT_SOURCE: Record<ComponentSourceKind, ComponentSourceVisual> = {
   manual: { label: 'New component', icon: 'mdi:puzzle-plus', accent: 'blue' },
   catalog: {
     label: 'Pick from catalog',
@@ -33,4 +35,7 @@ export const COMPONENT_SOURCE: Record<'manual' | 'catalog', ComponentSourceVisua
     image: TOOLS_CATALOG_LOGO,
     accent: 'violet',
   },
+  // Same glyph and colour as the assistant's cue (AI_ICON and AI_COLOR in
+  // depictio-react-ai), spelled out so the bundled icon subset picks it up.
+  ai: { label: 'Describe with AI', icon: 'material-symbols:auto-awesome-outline', accent: 'cyan' },
 };
