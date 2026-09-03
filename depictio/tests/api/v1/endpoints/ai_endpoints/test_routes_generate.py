@@ -960,7 +960,9 @@ class TestPlanOnly:
         assert iris.probed == []
 
         run = iris.last_run
-        assert run.status == "complete"
+        # Not `complete`: the run stopped at the plan on purpose and saved no
+        # dashboard, and the history has to be able to say so.
+        assert run.status == "planned"
         assert run.dashboard_id is None
         assert run.yaml == ""
         assert run.plan["title"] == "Iris overview"

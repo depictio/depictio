@@ -187,31 +187,19 @@ class TestCleanDashboard:
     def test_text_is_never_checked(self, contexts):
         assert _findings(contexts, _comp("text", title="Hello")) == []
 
-    def test_multiqc_and_advanced_viz_are_skipped(self, contexts):
-        comps = [
-            _comp(
-                "multiqc",
-                tag="mq",
-                data_collection_tag="multiqc_reports",
-                selected_module="fastqc",
-                selected_plot="x",
-            ),
-            # Columns and collection deliberately unknown: the catalog schema
-            # owns advanced_viz bindings, so the column checks must not run.
-            _comp(
-                "advanced_viz",
-                tag="volcano",
-                data_collection_tag="other",
-                viz_kind="volcano",
-                config={
-                    "viz_kind": "volcano",
-                    "feature_id_col": "gene",
-                    "effect_size_col": "lfc",
-                    "significance_col": "padj",
-                },
-            ),
-        ]
-        assert _findings(contexts, *comps) == []
+    def test_multiqc_is_skipped(self, contexts):
+        # Collection and fields deliberately unknown: a MultiQC tile names a
+        # module and a plot of its report, not columns of a table, so none of
+        # the column checks apply to it. advanced_viz is *not* skipped with it
+        # any more, and has its own bindings suite below.
+        comp = _comp(
+            "multiqc",
+            tag="mq",
+            data_collection_tag="multiqc_reports",
+            selected_module="fastqc",
+            selected_plot="x",
+        )
+        assert _findings(contexts, comp) == []
 
 
 class TestUnknownColumns:
@@ -541,6 +529,23 @@ class TestAdvancedVizBindings:
             ),
         )
         assert findings == []
+
+    def test_a_collection_the_dashboard_does_not_have(self):
+        # advanced_viz used to skip the binding checks entirely, so a viz on a
+        # collection nobody had passed and failed at render time instead.
+        findings = _findings(
+            self._contexts(),
+            self._viz(
+                "rarefaction",
+                {
+                    "sample_id_col": "individual_id",
+                    "depth_col": "bill_depth_mm",
+                    "metric_col": "bill_length_mm",
+                },
+                data_collection_tag="other",
+            ),
+        )
+        assert _fields(findings) == [("c", "data_collection_tag")]
 
     def test_a_role_bound_to_a_column_that_is_not_there(self):
         findings = _findings(
