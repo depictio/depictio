@@ -199,7 +199,12 @@ export function streamAnalyze(
  *  events, then the terminal `dashboard` event naming the persisted draft.
  *  The route answers 404 (feature off), 403 (public mode, or not an editor
  *  of the project) or 400 (a collection outside the project) before
- *  streaming; those surface as throws. */
+ *  streaming; those surface as throws.
+ *
+ *  The same call serves both phases of the reviewed flow: `plan_only` stops
+ *  the stream right after the `plan` event (nothing filled, nothing saved),
+ *  and `plan` hands an approved plan back to be re-normalised, re-emitted and
+ *  filled. Neither field set is the one-call flow. */
 export function streamGenerateDashboard(
   body: GenerateDashboardRequest,
   llmKey: string | null | undefined,

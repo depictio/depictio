@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Button,
+  Checkbox,
   Group,
   Loader,
   MultiSelect,
@@ -16,7 +17,8 @@ import { Icon } from '@iconify/react';
 
 import { GENERATE_DASHBOARD_SESSION_ID, useGenerateDashboard } from '../hooks';
 import { AI_COLOR, AI_ICON, aiColorVar } from '../icons';
-import { useAISession } from '../store';
+import { useAISession, useAIStore } from '../store';
+import type { GenerateDashboardRequest } from '../types';
 import AIKeySection from './AIKeySection';
 import GenerationProgress from './GenerationProgress';
 
@@ -52,8 +54,8 @@ interface Props {
   /** Resolve the collections of a project. Called once per project change;
    *  memoise it in the host so the effect does not refire on every render. */
   loadProject: (projectId: string) => Promise<{ dataCollections: GenerateDataCollection[] }>;
-  /** Called with the new draft's id: on "Open in editor" and, 1.5 s after
-   *  the `dashboard` event, automatically. Memoise it in the host. */
+  /** Called with the new draft's id when the user clicks "Open in editor".
+   *  The panel never navigates on its own. Memoise it in the host. */
   onOpen: (dashboardId: string) => void;
   /** True when the server holds a fallback LLM key, so the panel works
    *  without a user-supplied key. */
@@ -63,14 +65,20 @@ interface Props {
   onClose?: () => void;
 }
 
-const AUTO_OPEN_DELAY_MS = 1500;
-
 /**
  * Whole-dashboard generation, as a tab of the New Dashboard dialog. Pick a
  * project (and optionally which of its table collections), say what the
  * dashboard should show, and watch the plan, then each component, land.
- * The result is saved server-side as an AI draft; the panel hands off to
- * the editor, where the draft banner takes over.
+ *
+ * By default the run is two calls: the first plans and stops, and nothing is
+ * saved until the plan is approved; the second fills the approved plan. The
+ * result is saved server-side as an AI draft, which the user opens in the
+ * editor where the draft banner takes over.
+ *
+ * A run takes minutes and belongs to the page, not to this component: it
+ * lives in the AI store, so closing the dialog leaves it streaming and
+ * reopening it lands back on the run as it stands, including a plan still
+ * waiting for its verdict. Only "Stop generating" ends a run early.
  */
 const GenerateDashboardPanel: React.FC<Props> = ({
   projects,
@@ -80,21 +88,40 @@ const GenerateDashboardPanel: React.FC<Props> = ({
   onClose,
 }) => {
   const session = useAISession(GENERATE_DASHBOARD_SESSION_ID);
-  const { run, cancel, pending, state } = useGenerateDashboard();
+  const { run, cancel, pending, state, awaitingPlan, sessionSpend } = useGenerateDashboard();
 
+  // A run that outlived the dialog is re-entered here: the form comes back as
+  // the run was started, so "Build this plan" sends the request the plan was
+  // made for. Read at mount only — from then on the fields are the user's.
+  const [restored] = useState(() => useAIStore.getState().generation?.request ?? null);
   const [projectId, setProjectId] = useState<string | null>(
-    projects.length === 1 ? projects[0].id : null,
+    () => restored?.project_id ?? (projects.length === 1 ? projects[0].id : null),
   );
   const [collections, setCollections] = useState<GenerateDataCollection[]>([]);
   const [collectionsLoading, setCollectionsLoading] = useState(false);
   const [collectionsError, setCollectionsError] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [prompt, setPrompt] = useState('');
-  const [title, setTitle] = useState('');
+  const [selectedIds, setSelectedIds] = useState<string[]>(
+    () => restored?.data_collection_ids ?? [],
+  );
+  const [prompt, setPrompt] = useState(() => restored?.prompt ?? '');
+  const [title, setTitle] = useState(() => restored?.title ?? '');
+  const [reviewPlan, setReviewPlan] = useState(() =>
+    restored ? Boolean(restored.plan_only) : true,
+  );
+
+  /** The project whose collection selection came back from a restored run.
+   *  The effect below wipes the selection when the project changes, and a
+   *  restore looks exactly like a change to it. */
+  const restoredProject = useRef<string | null>(restored?.project_id ?? null);
 
   // The chosen project's table collections; the selection resets with it.
   useEffect(() => {
-    setSelectedIds([]);
+    if (restoredProject.current === projectId) {
+      // Only the first pass after a restore keeps the selection.
+      restoredProject.current = null;
+    } else {
+      setSelectedIds([]);
+    }
     setCollections([]);
     setCollectionsError(null);
     if (!projectId) return;
@@ -116,8 +143,8 @@ const GenerateDashboardPanel: React.FC<Props> = ({
     };
   }, [projectId, loadProject]);
 
-  // One navigation per draft: a click on "Open in editor" ahead of the timer
-  // is the same hand-off, not a second one.
+  // One navigation per draft: a second click on "Open in editor" is the same
+  // hand-off, not a second one.
   const openedRef = useRef<string | null>(null);
   const openEditor = useCallback(
     (id: string) => {
@@ -127,24 +154,40 @@ const GenerateDashboardPanel: React.FC<Props> = ({
     },
     [onOpen],
   );
-  const draftId = state.dashboard?.dashboard_id ?? null;
-  useEffect(() => {
-    if (!draftId) return;
-    const timer = window.setTimeout(() => openEditor(draftId), AUTO_OPEN_DELAY_MS);
-    return () => window.clearTimeout(timer);
-  }, [draftId, openEditor]);
 
   const hasCreds = Boolean(session.llmKey) || serverKeyAvailable;
   const canRun = Boolean(projectId) && hasCreds && !pending;
 
-  const submit = () => {
-    if (!canRun || !projectId) return;
-    void run({
-      project_id: projectId,
-      prompt: prompt.trim(),
-      title: title.trim() || null,
-      data_collection_ids: selectedIds,
+  const requestBody = (): GenerateDashboardRequest | null =>
+    projectId
+      ? {
+          project_id: projectId,
+          prompt: prompt.trim(),
+          title: title.trim() || null,
+          data_collection_ids: selectedIds,
+        }
+      : null;
+
+  /** Start a call of the run. The store banks the ending call's spend and
+   *  remembers which phase this one is, so both survive the dialog closing. */
+  const startRun = (body: GenerateDashboardRequest, planPhase: boolean) => {
+    void run(body, {
+      planPhase,
+      projectName: projects.find((p) => p.id === body.project_id)?.name ?? '',
     });
+  };
+
+  const submit = () => {
+    const body = requestBody();
+    if (!canRun || !body) return;
+    startRun(reviewPlan ? { ...body, plan_only: true } : body, reviewPlan);
+  };
+
+  const buildPlan = () => {
+    const body = requestBody();
+    const approved = state.plan;
+    if (pending || !body || !approved) return;
+    startRun({ ...body, plan: approved }, false);
   };
 
   const draft = state.dashboard;
@@ -206,7 +249,9 @@ const GenerateDashboardPanel: React.FC<Props> = ({
         onChange={setProjectId}
         required
         searchable
-        disabled={pending}
+        // The plan waiting for a verdict was planned against this project and
+        // these collections; changing them under it would build something else.
+        disabled={pending || awaitingPlan}
         comboboxProps={{ withinPortal: false }}
         leftSection={<Icon icon="mdi:folder-outline" width={16} />}
         data-testid="generate-dashboard-project"
@@ -221,7 +266,7 @@ const GenerateDashboardPanel: React.FC<Props> = ({
         onChange={setSelectedIds}
         searchable
         clearable
-        disabled={pending || !projectId || collections.length === 0}
+        disabled={pending || awaitingPlan || !projectId || collections.length === 0}
         rightSection={collectionsLoading ? <Loader size="xs" /> : undefined}
         comboboxProps={{ withinPortal: false }}
         error={collectionsError}
@@ -259,22 +304,36 @@ const GenerateDashboardPanel: React.FC<Props> = ({
         data-testid="generate-dashboard-title"
       />
 
+      <Checkbox
+        label="Review the plan before building"
+        description="The first call plans and stops. Nothing is saved until you build it."
+        color={AI_COLOR}
+        checked={reviewPlan}
+        onChange={(e) => setReviewPlan(e.currentTarget.checked)}
+        disabled={pending}
+        data-testid="generate-review-plan"
+      />
+
       {!serverKeyAvailable && <AIKeySection dashboardId={GENERATE_DASHBOARD_SESSION_ID} />}
 
       {/* Same footer as the Create and Import tabs of this dialog: centred,
           Cancel then the primary. Stopping a run replaces the primary in
-          place so the row never shifts under the pointer. */}
+          place so the row never shifts under the pointer; a plan waiting for
+          a verdict hands the decision to the buttons beside it instead. */}
       <Group justify="center" gap="md" mt="md">
         {onClose && (
-          <Button variant="outline" color="gray" radius="md" onClick={onClose} disabled={pending}>
+          // Live during a run: leaving the dialog leaves the run alone, and
+          // "Stop generating" beside it is the one thing that ends it.
+          <Button variant="outline" color="gray" radius="md" onClick={onClose}>
             Cancel
           </Button>
         )}
-        {pending ? (
+        {pending && (
           <Button color="red" variant="outline" radius="md" onClick={cancel}>
             Stop generating
           </Button>
-        ) : (
+        )}
+        {!pending && !awaitingPlan && (
           <Button
             color={AI_COLOR}
             radius="md"
@@ -286,12 +345,56 @@ const GenerateDashboardPanel: React.FC<Props> = ({
             Generate
           </Button>
         )}
+        {awaitingPlan && (
+          <Text size="xs" c="dimmed">
+            Review the plan below, then build it.
+          </Text>
+        )}
       </Group>
 
       {started && (
         <Paper withBorder radius="md" p="md" style={{ borderColor: aiColorVar(3) }}>
           <Stack gap="md">
-            <GenerationProgress state={state} pending={pending} />
+            <GenerationProgress state={state} pending={pending} sessionSpend={sessionSpend} />
+
+            {awaitingPlan && (
+              <Alert
+                variant="light"
+                color={AI_COLOR}
+                icon={<Icon icon="mdi:clipboard-check-outline" width={16} />}
+                title="Plan ready for review"
+              >
+                <Stack gap="xs">
+                  <Text size="sm">
+                    Nothing has been built or saved yet. Build the plan as it stands, or plan
+                    again, on a revised prompt if you want a different shape.
+                  </Text>
+                  <Group gap="sm">
+                    <Button
+                      size="xs"
+                      color={AI_COLOR}
+                      radius="md"
+                      leftSection={<Icon icon="mdi:hammer-wrench" width={14} />}
+                      onClick={buildPlan}
+                      data-testid="generate-build-plan"
+                    >
+                      Build this plan
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      color={AI_COLOR}
+                      radius="md"
+                      leftSection={<Icon icon="mdi:refresh" width={14} />}
+                      onClick={submit}
+                      data-testid="generate-replan"
+                    >
+                      Re-plan
+                    </Button>
+                  </Group>
+                </Stack>
+              </Alert>
+            )}
 
             {state.error && (
               <Alert
@@ -313,7 +416,7 @@ const GenerateDashboardPanel: React.FC<Props> = ({
                 data-testid="generate-dashboard-ready"
               >
                 <Stack gap="xs">
-                  <Text size="sm">Saved as an AI draft. Opening the editor...</Text>
+                  <Text size="sm">Saved as an AI draft.</Text>
                   {draft.dropped.length > 0 && (
                     <Text size="xs" c="dimmed">
                       Dropped: {draft.dropped.join(', ')}

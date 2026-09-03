@@ -14,8 +14,7 @@ export type { ApplyActionsPayload } from './components/ActionsPreview';
 export { default as AiFillModal } from './components/AiFillModal';
 export { default as AIAnalysisModal } from './components/AIAnalysisModal';
 export { default as AIDraftBanner, formatGeneratedAt } from './components/AIDraftBanner';
-export { default as DraftTileActions } from './components/DraftTileActions';
-export type { DraftTileActionsProps } from './components/DraftTileActions';
+export type { DraftTile } from './components/AIDraftBanner';
 export { default as ExecutionTrace } from './components/ExecutionTrace';
 export { default as GenerationHistory } from './components/GenerationHistory';
 export type { GenerationHistoryProps } from './components/GenerationHistory';
@@ -64,6 +63,7 @@ export {
   useAnalyze,
   useComponentFromPrompt,
   useGenerateDashboard,
+  useGenerationRun,
   useRegenerateComponent,
   useResolveFilters,
   useSuggestComponents,
@@ -71,8 +71,12 @@ export {
 } from './hooks';
 export type {
   AnalysisRunState,
+  GenerateDashboardRunOptions,
   GenerateDashboardRunState,
+  GenerationRun,
+  GenerationRunSummary,
   RegenerateRunState,
+  RunSpend,
 } from './hooks';
 
 export type {

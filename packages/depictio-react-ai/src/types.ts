@@ -280,6 +280,10 @@ export interface BudgetTick {
   max_steps: number;
   max_tokens: number;
   max_seconds: number;
+  /** Dollars the tokens spent so far are estimated to cost, from the model's
+   *  public pricing. Null or absent when the model has no price the server
+   *  knows, in which case no cost is shown at all rather than a zero. */
+  cost_usd?: number | null;
 }
 
 export interface ResolveFiltersRequest {
@@ -346,6 +350,15 @@ export interface GenerateDashboardRequest {
   title?: string | null;
   data_collection_ids?: string[];
   overwrite?: boolean;
+  /** Phase one of the reviewed flow: plan, emit the `plan` event and stop.
+   *  Nothing is filled and nothing is saved, so the same request can be
+   *  replayed until the plan is worth building. */
+  plan_only?: boolean;
+  /** Phase two: the plan the user approved, sent back as the server emitted
+   *  it. The server re-normalises it, re-emits it as a `plan` event and fills
+   *  it, so no planning call is paid for twice. Omit it (with `plan_only`
+   *  unset) for the single-call flow. */
+  plan?: DashboardPlan | null;
 }
 
 /** One section of a generated plan: the presentation fields of
@@ -513,7 +526,7 @@ export interface GenerationSummary {
   title: string | null;
   prompt: string;
   model: string;
-  status: 'running' | 'complete' | 'failed' | 'cancelled';
+  status: 'running' | 'planned' | 'complete' | 'failed' | 'cancelled';
   /** Naive UTC ISO timestamp, the API's wire convention (no offset). */
   created_at: string;
   ok: number;
