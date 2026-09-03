@@ -167,9 +167,7 @@ class TestApplyBindings:
     def test_s3_glob_binding_carries_a_join_key(self):
         config = _config()
         apply_bindings(config, ["samples=s3://b/run42/*.samples.csv"])
-        params = config["workflows"][0]["data_collections"][0]["config"]["scan"][
-            "scan_parameters"
-        ]
+        params = config["workflows"][0]["data_collections"][0]["config"]["scan"]["scan_parameters"]
         assert params["id_regex"]
 
     def test_unknown_tag_is_rejected_and_lists_the_real_ones(self):
