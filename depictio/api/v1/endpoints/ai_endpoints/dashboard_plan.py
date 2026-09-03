@@ -612,7 +612,13 @@ def normalize_plan(
             (section_rank(s.name, types_by_section.get((panel, s.name), set())), s)
             for s in sections
         ]
-        return sorted(pairs, key=lambda pair: pair[0])
+        # Within one stage, a section whose name says what it is comes before
+        # one whose stage was only inferred from the types it holds, so an
+        # explicit "Cohort" leads the filter panel whatever the plan order.
+        return sorted(
+            pairs,
+            key=lambda pair: (pair[0], 0 if keyword_rank(pair[1].name) is not None else 1),
+        )
 
     # Allowlists.
     def styled(spec: SectionSpec, rank: int, defaults: dict[int, str]) -> SectionSpec:
