@@ -3172,6 +3172,86 @@ export async function createProjectFromManifest(
   return (await res.json()) as FromManifestReport;
 }
 
+/** Per-DC status of a manifest refresh. A synchronous refresh reports
+ *  `ingested` / `failed` (or `planned` under `dry_run`); a polled async run
+ *  additionally passes through `dispatched` (queued for a worker) and
+ *  `running`. Mirrors `_REFRESH_STEP_TO_DC_STATUS` server-side. */
+export type ManifestRefreshStatus =
+  | 'ingested'
+  | 'failed'
+  | 'planned'
+  | 'dispatched'
+  | 'running';
+
+/** One data collection of a manifest refresh (`ManifestIngestDCResult`
+ *  server-side). `data_collection_id` is empty for a polled run whose project
+ *  has since been deleted. `message` explains a `failed` row, including the
+ *  pre-flight skips (manifest unreachable, type dropped from the manifest)
+ *  that never reach a worker. */
+export interface ManifestRefreshEntry {
+  data_collection_tag: string;
+  data_collection_id: string | null;
+  entries: number;
+  status: ManifestRefreshStatus;
+  message: string | null;
+}
+
+/** Report of POST /projects/refresh_manifest and of the poll endpoint
+ *  GET /projects/refresh_manifest/{run_id}. `run_id` is set when the refresh
+ *  was fanned out to workers (`async_run`); `success` flips once every row is
+ *  `ingested`. */
+export interface ManifestRefreshReport {
+  project_id: string;
+  refreshed: ManifestRefreshEntry[];
+  run_id: string | null;
+  dry_run: boolean;
+  success: boolean;
+}
+
+/** Inputs for POST /projects/refresh_manifest. `dataCollectionTag` restricts
+ *  the refresh to one manifest-backed collection (all of them otherwise);
+ *  `dryRun` only reports per-DC entry counts; `asyncRun` dispatches the
+ *  per-DC re-ingestion to workers and returns a `run_id` to poll with
+ *  `getManifestRefreshRun`. */
+export interface RefreshManifestInput {
+  projectId: string;
+  dataCollectionTag?: string | null;
+  dryRun?: boolean;
+  asyncRun?: boolean;
+}
+
+/** Re-fetch and re-ingest a project's manifest-backed data collections
+ *  (owners and editors; admins only in public mode). Backend errors carry
+ *  actionable `{detail}` strings (no manifest DC, unknown tag, no edit
+ *  permission) and are surfaced verbatim. */
+export async function refreshManifest(
+  input: RefreshManifestInput,
+): Promise<ManifestRefreshReport> {
+  const res = await authFetch(`${API_BASE}/projects/refresh_manifest`, {
+    method: 'POST',
+    body: JSON.stringify({
+      project_id: input.projectId,
+      data_collection_tag: input.dataCollectionTag ?? null,
+      dry_run: Boolean(input.dryRun),
+      async_run: Boolean(input.asyncRun),
+    }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to refresh from manifest');
+  return (await res.json()) as ManifestRefreshReport;
+}
+
+/** Poll an async manifest refresh by the `run_id` that `refreshManifest`
+ *  returned. Only the user who started the run (or an admin) may read it. */
+export async function getManifestRefreshRun(
+  runId: string,
+): Promise<ManifestRefreshReport> {
+  const res = await authFetch(
+    `${API_BASE}/projects/refresh_manifest/${encodeURIComponent(runId)}`,
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load manifest refresh status');
+  return (await res.json()) as ManifestRefreshReport;
+}
+
 /** A variable a project template accepts. `MANIFEST_URL` is special-cased by
  *  the from-manifest endpoint and must not be collected from the user. */
 export interface TemplateVariable {

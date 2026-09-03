@@ -65,6 +65,7 @@ import { AppSidebar } from '../../chrome';
 import JoinsGraph from './JoinsGraph';
 import IngestionReportPanel from './IngestionReportPanel';
 import StoragePanel from './StoragePanel';
+import ManifestRefreshPanel from './ManifestRefreshPanel';
 import ExportTemplateModal from './ExportTemplateModal';
 import { parseTemplate, TemplateChip, templateDocsUrl } from '../template';
 import {
@@ -577,6 +578,14 @@ const ProjectDetailApp: React.FC = () => {
                   )}
                   {projectId && (
                     <StoragePanel projectId={projectId} canManage={isOwner} />
+                  )}
+                  {projectId && (
+                    <ManifestRefreshPanel
+                      projectId={projectId}
+                      canMutate={canMutate}
+                      dataCollections={allDataCollections}
+                      onReloadProject={refresh}
+                    />
                   )}
                   <Box ref={dcViewerRef}>
                     {selectedDc && (
