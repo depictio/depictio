@@ -255,6 +255,14 @@ DE_COLUMNS = {
     "symbol": "String",
 }
 IRIS_COLUMNS = {"sepal_length": "Float64", "variety": "String"}
+# The penguins `physical_features` collection, the schema that produced a
+# `rarefaction` advanced viz nobody could render (see `viz_suggestions_for`).
+PENGUIN_COLUMNS = {
+    "individual_id": "String",
+    "bill_length_mm": "Float64",
+    "bill_depth_mm": "Float64",
+    "body_mass_g": "Float64",
+}
 
 
 def _columns(spec: dict[str, str]) -> list[ColumnSummary]:
@@ -298,6 +306,29 @@ class TestVizSuggestionsFor:
 
     def test_limit_is_honoured(self):
         assert len(viz_suggestions_for(_columns(DE_COLUMNS), limit=1)) == 1
+
+    def test_refuses_a_kind_whose_required_role_is_a_dtype_match_only(self):
+        # The ranker ranks rarefaction first on penguins and puts it over the
+        # RECOMMENDED_SCORE bar, but only via the optional-role nudge: `metric`
+        # has no name signal at all and lands on the same float column as
+        # `depth`, which is what the generator would then have bound and saved.
+        from depictio.models.components.advanced_viz.schemas import suggest_viz_kinds
+
+        top = suggest_viz_kinds(PENGUIN_COLUMNS, dc_type="table")[0]
+        assert top.viz_kind == "rarefaction"
+        assert top.score >= 0.8
+        assert top.unmet_roles == []
+        assert top.weak_roles == ["metric"]
+
+        assert viz_suggestions_for(_columns(PENGUIN_COLUMNS)) == []
+
+    def test_a_fully_named_kind_survives_while_a_thin_one_does_not(self):
+        kinds = {s["viz_kind"] for s in viz_suggestions_for(_columns(DE_COLUMNS))}
+        # Every required role of volcano matches a column by name.
+        assert "volcano" in kinds
+        # `ma` scores 0.88 on the same schema, but `avg_log_intensity` is
+        # satisfied by dtype alone, so it is no longer offered to the planner.
+        assert "ma" not in kinds
 
 
 class TestPromptLines:
