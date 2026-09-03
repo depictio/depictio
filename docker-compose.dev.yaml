@@ -131,6 +131,8 @@ services:
         # X-LLM-API-Key, never persisted or logged server-side.
         DEPICTIO_AI_API_KEY: "${DEPICTIO_AI_API_KEY:-}"
         DEPICTIO_AI_ALLOW_USER_KEYS: "${DEPICTIO_AI_ALLOW_USER_KEYS:-true}"
+        # Whole-dashboard generation, opt-in on top of the flag above.
+        DEPICTIO_AI_GENERATE_DASHBOARD_ENABLED: "${DEPICTIO_AI_GENERATE_DASHBOARD_ENABLED:-false}"
         # Belt-and-suspenders: the editable plotly-upset / plotly-complexheatmap
         # packages are installed into the venv at image build (uv sync). If the
         # build re-used a cached layer (pre-dating the package addition), the
