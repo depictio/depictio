@@ -101,14 +101,18 @@ import {
   clearFiltersBySource,
   applyAIPlanToFilters,
   revertAIPlanFilters,
+  DraftReviewProvider,
 } from 'depictio-react-core';
 import {
   AI_COLOR,
   AIAnalyzePanel,
   AIDraftBanner,
   AIKeySection,
+  DraftTileActions,
   promoteGeneratedDashboard,
+  reviewComponent,
   useAIHealth,
+  useRegenerateComponent,
 } from 'depictio-react-ai';
 import type { ApplyActionsPayload, ResolvedFilter } from 'depictio-react-ai';
 import type {
@@ -124,6 +128,7 @@ import type {
   ActiveHighlight,
   RealtimeJournalEntry,
   GroupRenderState,
+  DraftReviewControl,
 } from 'depictio-react-core';
 
 import GridItemEditOverlay from './components/GridItemEditOverlay';
@@ -333,6 +338,9 @@ const EditorApp: React.FC = () => {
 
   const bulkCtrl = useRef<AbortController | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // True while a regenerate stream owns the document (see `scheduleSave` and
+  // `drainRegeneration`): autosave defers rather than writing stale tiles.
+  const regeneratingRef = useRef(false);
   // Latest dashboard ref so the debounced save uses fresh state. We update
   // it synchronously alongside setDashboard via `applyDashboard` — relying on
   // a post-render useEffect lets react-grid-layout's onLayoutChange fire with
@@ -530,14 +538,25 @@ const EditorApp: React.FC = () => {
     onFilterChange: handleFilterChange,
   });
 
-  /** Debounced save: schedule a POST 500ms after the last layout mutation. */
+  /** Debounced save: schedule a POST 500ms after the last layout mutation.
+   *
+   *  A save that comes due while a regeneration is streaming waits instead of
+   *  posting: the server rewrites the draft's tiles itself at the end of that
+   *  stream, and this payload predates them, so landing after it would put the
+   *  old tiles straight back. The armed callback re-arms itself until the run
+   *  is done and the reconciling refetch has landed, so the edit is delayed
+   *  rather than dropped. */
   const scheduleSave = useCallback(
     (next: DashboardData) => {
       if (!dashboardId) return;
       applyDashboard(next);
       setSaveStatus('saving');
       if (saveTimer.current) clearTimeout(saveTimer.current);
-      saveTimer.current = setTimeout(() => {
+      saveTimer.current = setTimeout(function armed() {
+        if (regeneratingRef.current) {
+          saveTimer.current = setTimeout(armed, SAVE_DEBOUNCE_MS);
+          return;
+        }
         const payload = dashboardRef.current;
         if (!payload) return;
         saveDashboard(dashboardId, payload)
@@ -1221,6 +1240,243 @@ const EditorApp: React.FC = () => {
     window.location.assign('/dashboards');
   }, [dashboardId]);
 
+  // ---- Per-tile review of an AI draft ---------------------------------------
+  /** The generator stamps the plan's handle on every tile it produced; the
+   *  review and regenerate routes address a tile by that handle, not by its
+   *  runtime `index`. A tile without one was added by hand on top of the
+   *  draft and carries no review strip. */
+  const generationTagOf = useCallback((m: StoredMetadata): string | null => {
+    const stamped = m.ai_source?.tag;
+    if (typeof stamped === 'string' && stamped) return stamped;
+    return typeof m.tag === 'string' && m.tag ? m.tag : null;
+  }, []);
+
+  /** Handles of the generated tiles still on the dashboard. Removing a tile
+   *  takes it out of the denominator, so a draft whose leftovers were all
+   *  deleted counts as fully reviewed. */
+  const draftTags = useMemo(() => {
+    if (!aiDraft) return [] as string[];
+    const tags: string[] = [];
+    for (const m of dashboard?.stored_metadata ?? []) {
+      const tag = generationTagOf(m);
+      if (tag) tags.push(tag);
+    }
+    return tags;
+  }, [aiDraft, dashboard?.stored_metadata, generationTagOf]);
+
+  // The review list lives on the document (only the review route writes it);
+  // this mirror is what lets the counter move with the click instead of with
+  // the round trip. Re-synced whenever the document is (re)read.
+  const [reviewedTags, setReviewedTags] = useState<string[]>([]);
+  useEffect(() => {
+    setReviewedTags(dashboard?.ai_generation?.reviewed ?? []);
+  }, [dashboard?.ai_generation]);
+  const reviewedCount = useMemo(() => {
+    const present = new Set(draftTags);
+    return reviewedTags.filter((t) => present.has(t)).length;
+  }, [draftTags, reviewedTags]);
+
+  const {
+    run: runRegenerate,
+    runSection: runRegenerateSection,
+    pending: regeneratePending,
+    state: regenerateState,
+  } = useRegenerateComponent(dashboardId ?? '');
+  // Component indices the running regeneration covers: one for a tile, the
+  // whole section for a section run. Drives the per-tile scrim and keeps the
+  // other tiles' actions inert, so two runs can never overlap on one draft.
+  const [regenTargets, setRegenTargets] = useState<string[]>([]);
+  // The tiles the LAST run covered, so its failure is reported on the tiles
+  // it was about rather than on the whole dashboard.
+  const [lastRegenTargets, setLastRegenTargets] = useState<string[]>([]);
+
+  /** Swap the components a regeneration returned into the local dashboard,
+   *  then re-read the document the server just wrote.
+   *
+   *  Nothing here saves: the route persisted the draft itself, so a POST from
+   *  the editor would only race it. Autosave is held off separately, for the
+   *  length of the run (`regeneratingRef`). */
+  const applyRegeneration = useCallback(
+    async (replaced: Record<string, unknown>[]) => {
+      const cur = dashboardRef.current;
+      if (cur && replaced.length) {
+        const byIndex = new Map<string, StoredMetadata>();
+        for (const comp of replaced) {
+          const index = comp.index;
+          if (typeof index === 'string' && index) {
+            byIndex.set(index, comp as unknown as StoredMetadata);
+          }
+        }
+        applyDashboard({
+          ...cur,
+          stored_metadata: (cur.stored_metadata ?? []).map((m) => byIndex.get(m.index) ?? m),
+        });
+      }
+      if (!dashboardId) return;
+      // The server owns the document now (it may have moved the tile's box or
+      // rewritten its section), so the refetch is the reconciliation.
+      try {
+        applyDashboard(await fetchDashboard(dashboardId));
+      } catch (err) {
+        console.error('[EditorApp] refetch after regenerate failed:', err);
+      }
+    },
+    [dashboardId, applyDashboard],
+  );
+
+  /** Shared tail of both regenerate entry points: mark the targets busy, run,
+   *  apply, and say what happened. */
+  const drainRegeneration = useCallback(
+    async (targets: string[], run: () => Promise<Record<string, unknown>[]>) => {
+      setRegenTargets(targets);
+      setLastRegenTargets(targets);
+      // Nothing may write the document while the server is rewriting it: the
+      // pending save is dropped, and any armed after this one defers until the
+      // flag clears (see `scheduleSave`).
+      regeneratingRef.current = true;
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+      }
+      try {
+        const replaced = await run();
+        if (replaced.length) {
+          await applyRegeneration(replaced);
+          notifications.show({
+            color: 'teal',
+            title: 'Regenerated',
+            message: `${replaced.length} component${replaced.length === 1 ? '' : 's'} replaced.`,
+            autoClose: 2500,
+          });
+        } else {
+          notifications.show({
+            color: 'yellow',
+            title: 'Nothing was replaced',
+            message: 'The components were left exactly as they were.',
+            autoClose: 4000,
+          });
+        }
+      } finally {
+        // Cleared only here, after the refetch: a save that deferred during the
+        // run now posts the reconciled document, not the pre-run one.
+        regeneratingRef.current = false;
+        setRegenTargets([]);
+      }
+    },
+    [applyRegeneration],
+  );
+
+  const handleRegenerateTile = useCallback(
+    (componentId: string, instruction: string) =>
+      drainRegeneration([componentId], () =>
+        runRegenerate({ index: componentId, instruction }),
+      ),
+    [drainRegeneration, runRegenerate],
+  );
+
+  const handleRegenerateSection = useCallback(
+    (section: string, instruction: string) => {
+      const targets = (dashboardRef.current?.stored_metadata ?? [])
+        .filter((m) => m.section === section)
+        .map((m) => m.index);
+      return drainRegeneration(targets, () => runRegenerateSection({ section, instruction }));
+    },
+    [drainRegeneration, runRegenerateSection],
+  );
+
+  /** Keep / unkeep one tile. Optimistic, because the counter has to move with
+   *  the click; a rejection puts it back and says so. */
+  const handleReviewTile = useCallback(
+    async (tag: string, action: 'keep' | 'unkeep') => {
+      if (!dashboardId) return;
+      const add = (list: string[]) => (list.includes(tag) ? list : [...list, tag]);
+      const drop = (list: string[]) => list.filter((t) => t !== tag);
+      setReviewedTags((prev) => (action === 'keep' ? add(prev) : drop(prev)));
+      try {
+        await reviewComponent(dashboardId, tag, action);
+      } catch (err) {
+        console.error('[EditorApp] review failed:', err);
+        setReviewedTags((prev) => (action === 'keep' ? drop(prev) : add(prev)));
+        notifications.show({
+          color: 'red',
+          title: 'Review not saved',
+          message: err instanceof Error ? err.message : String(err),
+          autoClose: 4000,
+        });
+      }
+    },
+    [dashboardId],
+  );
+
+  /** Remove is the editor's ordinary component delete; the tag goes with it,
+   *  so a removed tile stops counting towards the review. */
+  const handleRemoveTile = useCallback(
+    async (componentId: string, tag: string) => {
+      setReviewedTags((prev) => prev.filter((t) => t !== tag));
+      await handleDeleteComponent(componentId);
+    },
+    [handleDeleteComponent],
+  );
+
+  /** What every generated tile's chrome renders, threaded through
+   *  `DraftReviewProvider` rather than as a prop: the strip has to reach
+   *  ComponentChrome through the grid and the renderer dispatch, neither of
+   *  which knows anything about drafts. Null on any dashboard that is not an
+   *  unreviewed draft, which is the provider's off state. */
+  const draftReviewControl = useMemo<DraftReviewControl | null>(() => {
+    if (!aiDraft || !dashboardId) return null;
+    const reviewedSet = new Set(reviewedTags);
+    return {
+      renderActions: (metadata: StoredMetadata) => {
+        const tag = generationTagOf(metadata);
+        if (!tag) return null;
+        const reviewed = reviewedSet.has(tag);
+        const busy = regenTargets.includes(metadata.index);
+        // Grid sections only: the section regenerate re-runs the grid layout
+        // pass for the section it is given, and a filter-panel control's
+        // section is a fold of the left panel, not a row of boxes.
+        const section =
+          metadata.component_type === 'interactive' ? null : (metadata.section ?? null);
+        const failed = lastRegenTargets.includes(metadata.index);
+        return (
+          <DraftTileActions
+            tag={tag}
+            reviewed={reviewed}
+            busy={busy}
+            disabled={regeneratePending && !busy}
+            section={section}
+            error={failed ? regenerateState.error : null}
+            onRegenerate={(instruction) => handleRegenerateTile(metadata.index, instruction)}
+            onRegenerateSection={
+              section ? (instruction) => handleRegenerateSection(section, instruction) : undefined
+            }
+            onKeep={() => handleReviewTile(tag, reviewed ? 'unkeep' : 'keep')}
+            onRemove={() => handleRemoveTile(metadata.index, tag)}
+          />
+        );
+      },
+      isUnreviewed: (metadata: StoredMetadata) => {
+        const tag = generationTagOf(metadata);
+        if (!tag) return false;
+        return !reviewedSet.has(tag);
+      },
+      isBusy: (metadata: StoredMetadata) => regenTargets.includes(metadata.index),
+    };
+  }, [
+    aiDraft,
+    dashboardId,
+    reviewedTags,
+    generationTagOf,
+    regenTargets,
+    lastRegenTargets,
+    regeneratePending,
+    regenerateState.error,
+    handleRegenerateTile,
+    handleRegenerateSection,
+    handleReviewTile,
+    handleRemoveTile,
+  ]);
+
   const [aiFilterDescriptions, setAiFilterDescriptions] = useState<string[]>([]);
   // Transient per-figure dict_kwargs overrides from applied AI plans, keyed by
   // component index. Threaded into the render request; never persisted.
@@ -1813,6 +2069,9 @@ const EditorApp: React.FC = () => {
   return (
     <>
     <InspectorProviders control={inspectorControl}>
+    {/* Per-tile review of an AI draft. Null on every other dashboard, so the
+        chrome renders exactly what it did before. */}
+    <DraftReviewProvider value={draftReviewControl}>
     <SaveGroupContext.Provider value={saveGroupApi}>
     {/* Same scoping as the viewer, so an editor sees the override they are
         editing without it escaping into the rest of the app. */}
@@ -2031,6 +2290,8 @@ const EditorApp: React.FC = () => {
               {aiDraft && (
                 <AIDraftBanner
                   info={aiDraft}
+                  total={draftTags.length}
+                  reviewed={reviewedCount}
                   onPromote={handlePromoteDraft}
                   onDiscard={handleDiscardDraft}
                 />
@@ -2239,6 +2500,7 @@ const EditorApp: React.FC = () => {
     </AppShell>
     </BrandScope>
     </SaveGroupContext.Provider>
+    </DraftReviewProvider>
     </InspectorProviders>
     </>
   );

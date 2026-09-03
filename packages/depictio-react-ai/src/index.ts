@@ -13,8 +13,12 @@ export { default as ActionsPreview } from './components/ActionsPreview';
 export type { ApplyActionsPayload } from './components/ActionsPreview';
 export { default as AiFillModal } from './components/AiFillModal';
 export { default as AIAnalysisModal } from './components/AIAnalysisModal';
-export { default as AIDraftBanner } from './components/AIDraftBanner';
+export { default as AIDraftBanner, formatGeneratedAt } from './components/AIDraftBanner';
+export { default as DraftTileActions } from './components/DraftTileActions';
+export type { DraftTileActionsProps } from './components/DraftTileActions';
 export { default as ExecutionTrace } from './components/ExecutionTrace';
+export { default as GenerationHistory } from './components/GenerationHistory';
+export type { GenerationHistoryProps } from './components/GenerationHistory';
 export { default as GenerateDashboardPanel } from './components/GenerateDashboardPanel';
 export type {
   GenerateDataCollection,
@@ -30,13 +34,18 @@ export type { SectionSummaryState } from './components/SectionSummary';
 
 export {
   componentFromPrompt,
+  fetchGenerations,
   getAIHealth,
   getAnalyses,
   getSummaries,
   promoteGeneratedDashboard,
   resolveFilters,
+  reviewComponent,
   streamAnalyze,
   streamGenerateDashboard,
+  streamPost,
+  streamRegenerateComponent,
+  streamRegenerateSection,
   suggestComponents,
   summarizeSection,
 } from './api';
@@ -52,11 +61,16 @@ export {
   useAnalyze,
   useComponentFromPrompt,
   useGenerateDashboard,
+  useRegenerateComponent,
   useResolveFilters,
   useSuggestComponents,
   useSummarizeSection,
 } from './hooks';
-export type { AnalysisRunState, GenerateDashboardRunState } from './hooks';
+export type {
+  AnalysisRunState,
+  GenerateDashboardRunState,
+  RegenerateRunState,
+} from './hooks';
 
 export type {
   AIGenerationInfo,
@@ -83,12 +97,18 @@ export type {
   GenerateDashboardRequest,
   GeneratedComponentEvent,
   GeneratedDashboardEvent,
+  GenerationCounts,
+  GenerationSummary,
   PlannedComponent,
   PlannedSection,
   PromoteGeneratedDashboardResponse,
+  RegenerateRequest,
+  RegeneratedComponentsEvent,
   ResolveFiltersRequest,
   ResolveFiltersResponse,
   ResolvedFilter,
+  ReviewComponentRequest,
+  ReviewComponentResponse,
   RoutedCollection,
   RoutingInfo,
   SuggestComponentsRequest,

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActionIcon,
   Alert,
@@ -26,7 +26,7 @@ import type {
   ImportDashboardOptions,
   ProjectListEntry,
 } from 'depictio-react-core';
-import { AI_ICON, GenerateDashboardPanel } from 'depictio-react-ai';
+import { AI_ICON, GenerateDashboardPanel, GenerationHistory } from 'depictio-react-ai';
 import type { GenerateDataCollection } from 'depictio-react-ai';
 
 import { UnstyledDropZone } from '../components/UnstyledDropZone';
@@ -109,6 +109,26 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
 }) => {
   const accent = useBrandAccents();
   const [tab, setTab] = useState<CreateTab>('create');
+
+  // Which project the Generate tab is pointed at, so "Previous generations"
+  // beside it lists that project's runs. The panel owns the picker, and the
+  // one thing it tells the host about a selection is the collection fetch —
+  // so that is where the id is read off.
+  const [generateProjectId, setGenerateProjectId] = useState<string | null>(null);
+  const [historyTick, setHistoryTick] = useState(0);
+  const loadProjectForGenerate = useCallback(
+    (projectId: string) => {
+      setGenerateProjectId(projectId);
+      if (!generate) return Promise.resolve({ dataCollections: [] });
+      return generate.loadProject(projectId);
+    },
+    [generate],
+  );
+  // Re-read the runs each time the tab is opened: one may have finished (or
+  // been started from another window) since it was last on screen.
+  useEffect(() => {
+    if (tab === 'generate') setHistoryTick((t) => t + 1);
+  }, [tab]);
 
   const [title, setTitle] = useState('');
   const [subtitle, setSubtitle] = useState('');
@@ -585,12 +605,23 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
         {generate && (
           // keepMounted: a run in flight survives a look at the other tabs.
           <Tabs.Panel value="generate" pt="lg" keepMounted>
-            <GenerateDashboardPanel
-              projects={projectOptions(projects).map((o) => ({ id: o.value, name: o.label }))}
-              loadProject={generate.loadProject}
-              onOpen={generate.onOpen}
-              serverKeyAvailable={generate.serverKeyAvailable}
-            />
+            <Grid gutter="lg">
+              <Grid.Col span={{ base: 12, md: 8 }}>
+                <GenerateDashboardPanel
+                  projects={projectOptions(projects).map((o) => ({ id: o.value, name: o.label }))}
+                  loadProject={loadProjectForGenerate}
+                  onOpen={generate.onOpen}
+                  serverKeyAvailable={generate.serverKeyAvailable}
+                />
+              </Grid.Col>
+              <Grid.Col span={{ base: 12, md: 4 }}>
+                <GenerationHistory
+                  projectId={generateProjectId}
+                  onOpen={generate.onOpen}
+                  refreshKey={historyTick}
+                />
+              </Grid.Col>
+            </Grid>
           </Tabs.Panel>
         )}
       </Tabs>

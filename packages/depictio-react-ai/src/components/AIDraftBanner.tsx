@@ -1,5 +1,15 @@
 import React, { useState } from 'react';
-import { Alert, Button, Collapse, Group, List, Modal, Stack, Text } from '@mantine/core';
+import {
+  Alert,
+  Button,
+  Collapse,
+  Group,
+  List,
+  Modal,
+  Progress,
+  Stack,
+  Text,
+} from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import { AI_COLOR, AI_ICON } from '../icons';
@@ -7,6 +17,13 @@ import type { AIGenerationInfo } from '../types';
 
 interface Props {
   info: AIGenerationInfo;
+  /** Generated tiles still on the dashboard. Zero means the host tracks no
+   *  per-tile review (an older draft whose tiles carry no generation tag),
+   *  and the banner then behaves exactly as it did before the review flow:
+   *  no counter, Promote enabled outright. */
+  total?: number;
+  /** How many of those the owner has been through. */
+  reviewed?: number;
   /** Flip the draft into a regular dashboard. A rejection is shown inline;
    *  on success the host updates its own dashboard state, which unmounts
    *  this banner. */
@@ -17,8 +34,9 @@ interface Props {
 }
 
 /** API timestamps arrive as naive UTC (no offset). `Date` would read such a
- *  string as local time, so pin it to UTC before formatting. */
-function formatGeneratedAt(raw: string): string {
+ *  string as local time, so pin it to UTC before formatting. Exported for
+ *  `GenerationHistory`, which reads the same timestamps off the run records. */
+export function formatGeneratedAt(raw: string): string {
   if (!raw) return '';
   const pinned = /(Z|[+-]\d{2}:?\d{2})$/.test(raw) ? raw : `${raw}Z`;
   const d = new Date(pinned);
@@ -32,15 +50,28 @@ function formatGeneratedAt(raw: string): string {
  * already editable underneath; the banner only carries the provenance and
  * the decision.
  */
-const AIDraftBanner: React.FC<Props> = ({ info, onPromote, onDiscard }) => {
+const AIDraftBanner: React.FC<Props> = ({
+  info,
+  total = 0,
+  reviewed = 0,
+  onPromote,
+  onDiscard,
+}) => {
   const [promoting, setPromoting] = useState(false);
   const [discarding, setDiscarding] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [promoteConfirmOpen, setPromoteConfirmOpen] = useState(false);
   const [warningsOpen, setWarningsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const busy = promoting || discarding;
   const when = formatGeneratedAt(info.generated_at);
   const warnings = info.warnings ?? [];
+  // Removing a tile is a decision too, so a draft whose leftovers were all
+  // deleted counts as fully reviewed: `total` only ever counts the tiles
+  // still there.
+  const pendingReview = Math.max(0, total - reviewed);
+  const allReviewed = total === 0 || pendingReview === 0;
+  const reviewedPct = total > 0 ? Math.min(100, (reviewed / total) * 100) : 0;
 
   const promote = async () => {
     setPromoting(true);
@@ -51,7 +82,18 @@ const AIDraftBanner: React.FC<Props> = ({ info, onPromote, onDiscard }) => {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setPromoting(false);
+      setPromoteConfirmOpen(false);
     }
+  };
+
+  /** Promoting with tiles left unreviewed is allowed but never accidental:
+   *  it is the click that turns the draft into an ordinary dashboard. */
+  const requestPromote = () => {
+    if (allReviewed) {
+      void promote();
+      return;
+    }
+    setPromoteConfirmOpen(true);
   };
 
   const discard = async () => {
@@ -91,6 +133,26 @@ const AIDraftBanner: React.FC<Props> = ({ info, onPromote, onDiscard }) => {
               Prompt: {info.prompt}
             </Text>
           )}
+          {total > 0 && (
+            <Stack gap={4}>
+              <Group gap="xs">
+                <Text size="xs" c="dimmed" data-testid="ai-draft-review-count">
+                  Reviewed {reviewed} of {total}
+                </Text>
+                {!allReviewed && (
+                  <Text size="xs" c="dimmed">
+                    · {pendingReview} left to keep, regenerate or remove
+                  </Text>
+                )}
+              </Group>
+              <Progress
+                value={reviewedPct}
+                size="xs"
+                color={AI_COLOR}
+                aria-label={`Reviewed ${reviewed} of ${total} components`}
+              />
+            </Stack>
+          )}
           {warnings.length > 0 && (
             <Stack gap={2} align="flex-start">
               <Button
@@ -126,7 +188,7 @@ const AIDraftBanner: React.FC<Props> = ({ info, onPromote, onDiscard }) => {
               leftSection={<Icon icon="mdi:check" width={14} />}
               loading={promoting}
               disabled={busy}
-              onClick={() => void promote()}
+              onClick={requestPromote}
               data-testid="ai-draft-promote"
             >
               Promote
@@ -145,6 +207,42 @@ const AIDraftBanner: React.FC<Props> = ({ info, onPromote, onDiscard }) => {
           </Group>
         </Stack>
       </Alert>
+
+      <Modal
+        opened={promoteConfirmOpen}
+        onClose={() => {
+          if (!promoting) setPromoteConfirmOpen(false);
+        }}
+        title="Promote without finishing the review?"
+        centered
+      >
+        <Stack gap="md">
+          <Text size="sm">
+            {pendingReview} of {total} generated component
+            {total === 1 ? '' : 's'} {pendingReview === 1 ? 'has' : 'have'} not been
+            reviewed. Promoting keeps the dashboard as it is; the components stay
+            editable afterwards, but the draft banner and its per-tile actions go
+            away.
+          </Text>
+          <Group justify="flex-end" gap="xs">
+            <Button
+              variant="default"
+              onClick={() => setPromoteConfirmOpen(false)}
+              disabled={promoting}
+            >
+              Keep reviewing
+            </Button>
+            <Button
+              color={AI_COLOR}
+              loading={promoting}
+              onClick={() => void promote()}
+              data-testid="ai-draft-promote-confirm"
+            >
+              Promote anyway
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       <Modal
         opened={confirmOpen}

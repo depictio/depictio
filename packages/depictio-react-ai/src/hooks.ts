@@ -15,9 +15,12 @@ import {
   resolveFilters as apiResolveFilters,
   streamAnalyze as apiStreamAnalyze,
   streamGenerateDashboard as apiStreamGenerateDashboard,
+  streamRegenerateComponent as apiStreamRegenerateComponent,
+  streamRegenerateSection as apiStreamRegenerateSection,
   suggestComponents as apiSuggestComponents,
   summarizeSection as apiSummarizeSection,
   type AIHealth,
+  type AIStreamHandlers,
 } from './api';
 import { useAISession, useAIStore } from './store';
 import type {
@@ -609,6 +612,180 @@ export function useGenerateDashboard() {
   }, [controller]);
 
   return useMemo(() => ({ run, cancel, pending, state }), [run, cancel, pending, state]);
+}
+
+/** Live state of one regeneration run: the status line, the budget
+ *  countdown, the per-tile outcomes and the component dicts that came back
+ *  to replace the tiles on the dashboard. Same shape as
+ *  `GenerateDashboardRunState`, minus the plan a regeneration has no need
+ *  for (the plan is the draft it is editing). */
+export interface RegenerateRunState {
+  status: string;
+  budget: BudgetTick | null;
+  /** One row per reported tag, the latest outcome winning. */
+  rows: GeneratedComponentEvent[];
+  /** Replacing components in `stored_metadata` shape, keyed by their own
+   *  `index`: the host swaps them into its local dashboard. */
+  replaced: Record<string, unknown>[];
+  error: string | null;
+}
+
+const EMPTY_REGENERATION: RegenerateRunState = {
+  status: '',
+  budget: null,
+  rows: [],
+  replaced: [],
+  error: null,
+};
+
+/** Pull the replacing component dict(s) out of a regenerate stream's
+ *  terminal `regenerated` event (RegeneratedEvent server-side).
+ *
+ *  `components` is the complete list of tiles written back and is what the
+ *  section route answers with; the single-tile route repeats its one tile
+ *  in `component`, so that is the fallback rather than the first read. The
+ *  event is matched by its payload rather than by its name so a rename on
+ *  the server surfaces as a no-op, not as a silently stale tile. */
+function normalizeReplacement(data: Record<string, unknown>): Record<string, unknown>[] {
+  const many = data.components ?? data.stored_metadata;
+  if (Array.isArray(many) && many.length) {
+    return many.filter(
+      (c): c is Record<string, unknown> => Boolean(c) && typeof c === 'object',
+    );
+  }
+  const single = data.component;
+  if (single && typeof single === 'object' && !Array.isArray(single)) {
+    return [single as Record<string, unknown>];
+  }
+  return [];
+}
+
+/**
+ * Regenerate one tile of an AI-generated draft, or every tile of one of its
+ * sections.
+ *
+ * Modelled on `useGenerateDashboard`: one run at a time, an imperative
+ * `run` / `runSection`, live state for the status line and the budget, and
+ * `cancel()` for the abort. Both entry points resolve with the components
+ * that came back, so a host can swap them into its own dashboard state
+ * without a refetch; the run itself is persisted server-side, so nothing
+ * here saves the dashboard.
+ */
+export function useRegenerateComponent(dashboardId: string) {
+  const session = useAISession(dashboardId);
+  const [state, setState] = useState<RegenerateRunState>(EMPTY_REGENERATION);
+  const [pending, setPending] = useState(false);
+  const [controller, setController] = useState<AbortController | null>(null);
+
+  /** Both routes stream the same events; only the URL differs, so the whole
+   *  state machine lives here and the two entry points just pick a caller. */
+  const stream = useCallback(
+    async (
+      call: (handlers: AIStreamHandlers) => Promise<void>,
+    ): Promise<Record<string, unknown>[]> => {
+      const abort = new AbortController();
+      setController(abort);
+      setPending(true);
+      setState({ ...EMPTY_REGENERATION, status: 'starting' });
+
+      const rows: GeneratedComponentEvent[] = [];
+      let replaced: Record<string, unknown>[] = [];
+      try {
+        await call({
+          signal: abort.signal,
+          onEvent: (event: AIStreamEvent) => {
+            switch (event.type) {
+              case 'status':
+                setState((s) => ({ ...s, status: String(event.data.message ?? '') }));
+                break;
+              case 'budget':
+                setState((s) => ({ ...s, budget: event.data as unknown as BudgetTick }));
+                break;
+              case 'component': {
+                const c = event.data as unknown as GeneratedComponentEvent;
+                // As in generation, a tag reports again after a repair: the
+                // latest outcome replaces the earlier row.
+                const at = rows.findIndex((x) => x.tag === c.tag);
+                if (at === -1) rows.push(c);
+                else rows[at] = c;
+                setState((s) => ({ ...s, rows: [...rows] }));
+                break;
+              }
+              case 'error':
+                setState((s) => ({
+                  ...s,
+                  error: String(event.data.detail ?? 'unknown error'),
+                }));
+                break;
+              case 'done':
+                break;
+              default: {
+                // Every other event is a candidate terminal one — see
+                // `normalizeReplacement` on why the name is not assumed.
+                const found = normalizeReplacement(event.data);
+                if (found.length) {
+                  replaced = found;
+                  setState((s) => ({ ...s, replaced: found }));
+                }
+                break;
+              }
+            }
+          },
+        });
+      } catch (e) {
+        if (!abort.signal.aborted) {
+          setState((s) => ({ ...s, error: e instanceof Error ? e.message : String(e) }));
+        }
+      } finally {
+        setPending(false);
+        setController(null);
+      }
+      return replaced;
+    },
+    [],
+  );
+
+  /** One tile, addressed by its `stored_metadata.index`. */
+  const run = useCallback(
+    ({ index, instruction }: { index: string; instruction?: string }) =>
+      stream((handlers) =>
+        apiStreamRegenerateComponent(
+          dashboardId,
+          index,
+          { instruction: instruction?.trim() || undefined },
+          session.llmKey || null,
+          handlers,
+        ),
+      ),
+    [dashboardId, session.llmKey, stream],
+  );
+
+  /** Every tile of one grid section, addressed by the section's name. */
+  const runSection = useCallback(
+    ({ section, instruction }: { section: string; instruction?: string }) =>
+      stream((handlers) =>
+        apiStreamRegenerateSection(
+          dashboardId,
+          section,
+          { instruction: instruction?.trim() || undefined },
+          session.llmKey || null,
+          handlers,
+        ),
+      ),
+    [dashboardId, session.llmKey, stream],
+  );
+
+  const cancel = useCallback(() => {
+    controller?.abort();
+    setPending(false);
+  }, [controller]);
+
+  const reset = useCallback(() => setState(EMPTY_REGENERATION), []);
+
+  return useMemo(
+    () => ({ run, runSection, cancel, reset, pending, state }),
+    [run, runSection, cancel, reset, pending, state],
+  );
 }
 
 export type { DashboardActions };

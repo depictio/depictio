@@ -22,9 +22,13 @@ import type {
   ComponentFromPromptRequest,
   ComponentFromPromptResponse,
   GenerateDashboardRequest,
+  GenerationSummary,
   PromoteGeneratedDashboardResponse,
+  RegenerateRequest,
   ResolveFiltersRequest,
   ResolveFiltersResponse,
+  ReviewComponentRequest,
+  ReviewComponentResponse,
   SuggestComponentsRequest,
   SuggestComponentsResponse,
   SummariesResponse,
@@ -132,7 +136,7 @@ export type AnalyzeStreamHandlers = AIStreamHandlers;
  *  aborted via `signal`. Caller is responsible for tracking which events
  *  represent a final result. Shared by every streaming /ai route so the
  *  frame parsing lives in one place. */
-async function streamPost(
+export async function streamPost(
   path: string,
   body: unknown,
   llmKey: string | null | undefined,
@@ -216,6 +220,81 @@ export async function promoteGeneratedDashboard(
     throw new Error(`${path}: ${res.status} ${text || res.statusText}`);
   }
   return (await res.json()) as PromoteGeneratedDashboardResponse;
+}
+
+/** Drive one tile's regeneration on a draft. `index` is the component's
+ *  `stored_metadata.index`, the id every other per-component route uses.
+ *  Same SSE framing as generation: status, budget and one `component`
+ *  outcome, then the terminal event carrying the replacing component. */
+export function streamRegenerateComponent(
+  dashboardId: string,
+  index: string,
+  body: RegenerateRequest,
+  llmKey: string | null | undefined,
+  handlers: AIStreamHandlers,
+): Promise<void> {
+  const path =
+    `/ai/generated-dashboards/${encodeURIComponent(dashboardId)}` +
+    `/components/${encodeURIComponent(index)}/regenerate`;
+  return streamPost(path, body, llmKey, handlers);
+}
+
+/** The same for every tile of one grid section; the layout pass re-runs for
+ *  that section alone, so the rest of the dashboard keeps its boxes. */
+export function streamRegenerateSection(
+  dashboardId: string,
+  section: string,
+  body: RegenerateRequest,
+  llmKey: string | null | undefined,
+  handlers: AIStreamHandlers,
+): Promise<void> {
+  const path =
+    `/ai/generated-dashboards/${encodeURIComponent(dashboardId)}` +
+    `/sections/${encodeURIComponent(section)}/regenerate`;
+  return streamPost(path, body, llmKey, handlers);
+}
+
+/** Mark one generated tile reviewed (`keep`) or take the mark back
+ *  (`unkeep`). The review block lives on the dashboard's `ai_generation`
+ *  and this route is its only writer — autosave strips it. Answers the
+ *  draft's progress after the write. */
+export async function reviewComponent(
+  dashboardId: string,
+  tag: string,
+  action: ReviewComponentRequest['action'],
+): Promise<ReviewComponentResponse> {
+  const path = `/ai/generated-dashboards/${encodeURIComponent(dashboardId)}/review`;
+  const res = await authFetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tag, action } satisfies ReviewComponentRequest),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`${path}: ${res.status} ${text || res.statusText}`);
+  }
+  return (await res.json()) as ReviewComponentResponse;
+}
+
+/** Past whole-dashboard runs of one project, newest first. A run that saved
+ *  nothing (cancelled, or failed before the draft landed) is listed too,
+ *  with a null `dashboard_id`. */
+export async function fetchGenerations(
+  projectId: string,
+  limit = 20,
+): Promise<GenerationSummary[]> {
+  const path = `/ai/generations/${encodeURIComponent(projectId)}?limit=${limit}`;
+  const res = await authFetch(`${API_BASE}${path}`);
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`${path}: ${res.status} ${text || res.statusText}`);
+  }
+  const data = await res.json();
+  // `{generations: [...]}` is the route's own envelope; a bare list is
+  // tolerated so the client does not read "no runs yet" if it is dropped.
+  const wrapped = (data as { generations?: unknown })?.generations;
+  if (Array.isArray(wrapped)) return wrapped as GenerationSummary[];
+  return Array.isArray(data) ? (data as GenerationSummary[]) : [];
 }
 
 function parseFrame(frame: string): AIStreamEvent | null {
