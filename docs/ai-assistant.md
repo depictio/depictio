@@ -300,7 +300,12 @@ The layout pass is deterministic and writes explicit boxes on the
 - Each grid section starts with a one-row text header taken from the
   plan's section description.
 - Cards are 2 columns wide in rows of four, and rows are always full:
-  three leftovers become 3/3/2, two become 4/4, one spans the row.
+  three leftovers become 3/3/2, two become 4/4, one spans the row. They are
+  planned and filled as multi-metric cards: a hero statistic plus the two to
+  five secondary ones that give it context, in the layout that suits them
+  (a grid of four, a box plot for a numeric spread, a top-N breakdown for a
+  count). A tile showing one number alone spends the same space to answer a
+  quarter as many questions, so it is what the prompts steer away from.
 - Figures are half-width in pairs; a lone trailing figure is widened to
   the full row. Advanced visualizations take a full row at double height.
 - The reference table comes last, full width, and a section holding
