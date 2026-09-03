@@ -12,7 +12,7 @@ import {
 import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
 
-import { exportProjectTemplate } from 'depictio-react-core';
+import { exportProjectTemplate, useBrandAccents } from 'depictio-react-core';
 
 /** Mirrors the backend's template_id validation: slash-separated path
  *  segments, each `[A-Za-z0-9][A-Za-z0-9._-]*` (e.g. `my-lab/rnaseq-qc/1`). */
@@ -33,6 +33,7 @@ const ExportTemplateModal: React.FC<ExportTemplateModalProps> = ({
   opened,
   onClose,
 }) => {
+  const accent = useBrandAccents();
   const [templateId, setTemplateId] = useState('');
   const [version, setVersion] = useState('1.0.0');
   const [description, setDescription] = useState('');
@@ -118,7 +119,7 @@ const ExportTemplateModal: React.FC<ExportTemplateModalProps> = ({
           <Icon
             icon="mdi:package-variant-closed"
             width={22}
-            color="var(--mantine-color-teal-6)"
+            color={`var(--mantine-color-${accent.secondary}-6)`}
           />
           <Title order={4}>Export as template</Title>
         </Group>
@@ -173,7 +174,7 @@ const ExportTemplateModal: React.FC<ExportTemplateModalProps> = ({
             Cancel
           </Button>
           <Button
-            color="teal"
+            color={accent.secondary}
             data-testid="export-template-submit"
             leftSection={<Icon icon="mdi:package-down" width={16} />}
             onClick={handleExport}

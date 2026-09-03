@@ -1,6 +1,7 @@
 # RFC — Remote data sources & manifest-driven projects
 
-**Status:** Draft / design only (no code).
+**Status:** Implemented through phase 5 on `feat/remote-data-binding` (PR #965);
+phase 6 (serverless remote bundles) is future work.
 **Audience:** maintainers.
 **Related:** `depictio/models/models/data_collections.py`,
 `depictio/api/v1/endpoints/datacollections_endpoints/utils.py` (`_create_dc_from_upload`,
@@ -8,8 +9,11 @@ the zero-CLI ingestion precedent), `depictio/cli/cli/utils/templates.py`,
 `depictio/models/models/links.py`, `.github/ROADMAP_ISSUES_DRAFT.md` (epic 1.5.0),
 `docs/design/rfc-serverless-deployment.md` on `feat/serverless-deployment` (see §8).
 
-> This RFC is design-only. It captures a direction to validate before any code is
-> written. It is the design counterpart of roadmap epic **1.5.0 — "Template-based
+> This RFC was written design-first and now records the shipped design: phases
+> 0 to 5 of §9 are implemented on this branch (PR #965), phase 6 is not started.
+> Sections marked *Implemented* were updated to what landed; §4.4 covers the
+> `--bind` / `s3_prefix` / `manifest from-table` additions the original phasing
+> did not foresee. It is the design counterpart of roadmap epic **1.5.0 — "Template-based
 > upload (auto-fill dashboard from a run)"** (issues 734 and 383).
 
 ## 1. Context
@@ -247,6 +251,57 @@ template:
 One reference template (`depictio/projects/generic/manifest-tables/`) ships with
 the feature and doubles as the end-to-end test fixture.
 
+### 4.4 Binding a data collection to a location
+
+*Implemented (PR #965), after the sections above were written.* The scan modes
+above let the template author decide where the data has to live: a `manifest`
+DC forces whoever instantiates the template to write and host a manifest, a
+`{DATA_ROOT}` DC forces a local tree. `depictio run --bind TAG=LOCATION`
+(repeatable) moves that decision to the person instantiating it. The user
+names a location and the scan mode is inferred from its shape
+(`depictio/cli/cli/utils/bindings.py`):
+
+| Location shape | Inferred scan mode |
+|---|---|
+| a local directory or glob (`/scratch/run42`, `/scratch/run42/*.csv`) | `recursive` (a bare directory keeps the template's own pattern) |
+| a local file (`./samplesheet.csv`) | `single` |
+| `https://host/data.csv`, or a bare `s3://bucket/key` | `url` |
+| an `s3://` prefix or glob (`s3://bucket/run42/*.csv`) | `s3_prefix` |
+
+![One --bind flag, five location shapes, and the scan mode inferred from each](../images/data_binding_matrix.png)
+
+`--bind` satisfies the same requirement as `--data-root` or `--manifest`, so a
+template can run with neither. Manifests stay explicit (`--manifest`): a local
+`.csv` is data far more often than it is a manifest, and guessing otherwise
+from a filename would fail silently. A template variable the user did not
+supply is stubbed during resolution on the bet that a binding overwrites
+whatever used it; the stub is checked afterwards, so a `{VAR}` that survived
+binding fails with its real name instead of reaching the server as a literal
+path.
+
+`s3_prefix` (`ScanS3Prefix`, `data_collections.py`) is the remote counterpart
+of `recursive`: list the objects under an `s3://` prefix and keep the keys
+matching a glob (`pattern`, relative to the prefix; `max_files` caps the
+listing). It is S3-only by construction, since plain HTTPS exposes no listing
+operation. Its optional `id_regex` captures an entity id from the object key;
+the id lands on the `File` as `manifest_id` and is read back as the
+`depictio_manifest_id` column. `--bind` derives that regex from a glob with a
+single `*` (`*.samples.csv` captures `sample_A` from `sample_A.samples.csv`,
+and never across a `/`), so two DCs bound to two prefixes cross-filter each
+other with no manifest and no join config (§3.3). This removes the manifest
+from the common "many files under one prefix" case:
+
+![Remote data without a manifest: an s3 prefix bound straight to a data collection](../images/data_binding_no_manifest.png)
+
+When a manifest is still the right tool, `depictio manifest from-table`
+(`cli/commands/manifest.py`) writes one from a wide sample table. An nf-core
+samplesheet is one pivot away from a manifest: both map an entity id to its
+files, but a samplesheet holds one column per file role while a manifest holds
+one row per file with the role in `type`. The id column and the file columns
+are auto-detected (or named with `--id-col` / `--file-cols`), `--run-col`
+fills `run`, and `--base-url` prefixes relative paths, which is required when
+the table holds local paths because a manifest entry must be a remote URL.
+
 ## 5. Server-side ingestion
 
 ### 5.1 The path
@@ -310,7 +365,7 @@ allowlist-only mode.
   traps. (The original "encrypted at rest like existing token storage"
   framing was a false premise: tokens are stored in plaintext. This is the
   codebase's first encrypt-at-rest primitive — Fernet, key generated and
-  persisted under `DEPICTIO_KEYS_DIR` next to the JWT keypair.)
+  persisted under `DEPICTIO_AUTH_KEYS_DIR` (the same directory as the JWT keypair).)
 - Owner-only CRUD at `PUT/GET/DELETE /projects/{id}/storage` plus
   `POST /projects/{id}/storage/test` (boto3 probe, sanitized errors). The
   secret is **write-only**: responses carry `has_secret`, omitted secrets
@@ -381,6 +436,14 @@ tags. The round-trip is the contract: an exported template must re-instantiate
 through `resolve_template` unchanged. Auto-compose can be revisited once the
 catalog and a real layout packer exist.
 
+The export is also how a project travels between people and instances.
+`locate_template` accepts a directory or YAML path as well as a registered id,
+so the recipient of an exported bundle runs `depictio run --template ./folder`
+as is and points each data collection at their own data with `--bind` (§4.4):
+no admin on the source instance, no server-side install, no manifest required.
+
+![Sharing a project: export a template bundle, the recipient binds their own data on their own instance](../images/data_binding_sharing.png)
+
 ## 7. Trap №3 — `run` vs `id` semantics
 
 Is one manifest row a "run" or a "sample"? This RFC says: **`id` is a column,
@@ -427,6 +490,10 @@ Each phase independently shippable.
 
 Phase 1 is demoable on its own: "paste a URL, get a table DC" — one model
 change, one endpoint, one security module, no templates or manifests involved.
+
+Phases 0 to 5 shipped in PR #965, together with the §4.4 additions (`--bind`,
+`s3_prefix`, `manifest from-table`) that this table did not foresee. Phase 6 is
+not started.
 
 ## 10. Verification
 

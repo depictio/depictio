@@ -522,7 +522,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               <Stepper
                 active={manifestStep}
                 onStepClick={setManifestStep}
-                color="teal"
+                color={accent.secondary}
                 size="sm"
                 allowNextStepsSelect={false}
               >
@@ -606,7 +606,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                     {previewLoading && (
                       <Center mih={120}>
                         <Group gap="xs">
-                          <Loader size="sm" color="teal" />
+                          <Loader size="sm" color={accent.secondary} />
                           <Text size="sm" c="dimmed">
                             Reading the manifest and planning ingestion…
                           </Text>
@@ -631,7 +631,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                         <Icon
                           icon="mdi:rocket-launch-outline"
                           width={36}
-                          color="var(--mantine-color-teal-6)"
+                          color={`var(--mantine-color-${accent.secondary}-6)`}
                         />
                         <Text fw={500} ta="center">
                           Create “{manifestDisplayName}”
@@ -667,7 +667,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                   Previous
                 </Button>
                 <Button
-                  color="teal"
+                  color={accent.secondary}
                   onClick={handleManifestSubmit}
                   loading={submitting}
                   disabled={manifestSubmitDisabled}
@@ -687,88 +687,91 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
 /** Dry-run plan for the Preview step: per-DC rows plus the manifest types the
  *  template didn't match and the optional collections it pruned. Same shape is
  *  reused untouched when the real report replaces the plan. */
-const ManifestPreviewReport: React.FC<{ report: FromManifestReport }> = ({ report }) => (
-  <Stack gap="sm" data-testid="manifest-preview-report">
-    <Group gap="xs" wrap="wrap">
-      <Badge variant="light" color="teal" radius="sm">
-        {report.project_name}
-      </Badge>
-      <Badge variant="light" color="gray" radius="sm">
-        {report.manifest_entries} manifest entries
-      </Badge>
-      <Badge variant="light" color="gray" radius="sm">
-        {report.dashboards.length} dashboard{report.dashboards.length === 1 ? '' : 's'}
-      </Badge>
-    </Group>
-    <Table verticalSpacing="xs" striped highlightOnHover>
-      <Table.Thead>
-        <Table.Tr>
-          <Table.Th>Data collection</Table.Th>
-          <Table.Th>Entries</Table.Th>
-          <Table.Th>Status</Table.Th>
-        </Table.Tr>
-      </Table.Thead>
-      <Table.Tbody>
-        {report.ingestion.map((dc) => {
-          const meta = MANIFEST_STATUS_META[dc.status] ?? MANIFEST_STATUS_META.planned;
-          return (
-            <Table.Tr key={dc.data_collection_tag}>
-              <Table.Td>
-                <Text size="sm" fw={600}>
-                  {dc.data_collection_tag}
-                </Text>
-              </Table.Td>
-              <Table.Td>
-                <Text size="sm">{dc.entries}</Text>
-              </Table.Td>
-              <Table.Td>
-                <Group gap={6} wrap="nowrap">
-                  <Badge
-                    variant="light"
-                    color={meta.color}
-                    size="sm"
-                    leftSection={<Icon icon={meta.icon} width={12} />}
-                  >
-                    {meta.label}
-                  </Badge>
-                  {dc.message && (
-                    <Text size="xs" c="dimmed">
-                      {dc.message}
-                    </Text>
-                  )}
-                </Group>
-              </Table.Td>
-            </Table.Tr>
-          );
-        })}
-      </Table.Tbody>
-    </Table>
-    {report.unmatched_manifest_types.length > 0 && (
+const ManifestPreviewReport: React.FC<{ report: FromManifestReport }> = ({ report }) => {
+  const accent = useBrandAccents();
+  return (
+    <Stack gap="sm" data-testid="manifest-preview-report">
       <Group gap="xs" wrap="wrap">
-        <Text size="xs" c="dimmed">
-          Unmatched manifest types:
-        </Text>
-        {report.unmatched_manifest_types.map((t) => (
-          <Badge key={t} variant="light" color="gray" size="sm" radius="sm">
-            {t}
-          </Badge>
-        ))}
+        <Badge variant="light" color={accent.secondary} radius="sm">
+          {report.project_name}
+        </Badge>
+        <Badge variant="light" color="gray" radius="sm">
+          {report.manifest_entries} manifest entries
+        </Badge>
+        <Badge variant="light" color="gray" radius="sm">
+          {report.dashboards.length} dashboard{report.dashboards.length === 1 ? '' : 's'}
+        </Badge>
       </Group>
-    )}
-    {report.pruned_optional_dcs.length > 0 && (
-      <Group gap="xs" wrap="wrap">
-        <Text size="xs" c="dimmed">
-          Skipped optional collections:
-        </Text>
-        {report.pruned_optional_dcs.map((t) => (
-          <Badge key={t} variant="light" color="gray" size="sm" radius="sm">
-            {t}
-          </Badge>
-        ))}
-      </Group>
-    )}
-  </Stack>
-);
+      <Table verticalSpacing="xs" striped highlightOnHover>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>Data collection</Table.Th>
+            <Table.Th>Entries</Table.Th>
+            <Table.Th>Status</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {report.ingestion.map((dc) => {
+            const meta = MANIFEST_STATUS_META[dc.status] ?? MANIFEST_STATUS_META.planned;
+            return (
+              <Table.Tr key={dc.data_collection_tag}>
+                <Table.Td>
+                  <Text size="sm" fw={600}>
+                    {dc.data_collection_tag}
+                  </Text>
+                </Table.Td>
+                <Table.Td>
+                  <Text size="sm">{dc.entries}</Text>
+                </Table.Td>
+                <Table.Td>
+                  <Group gap={6} wrap="nowrap">
+                    <Badge
+                      variant="light"
+                      color={meta.color}
+                      size="sm"
+                      leftSection={<Icon icon={meta.icon} width={12} />}
+                    >
+                      {meta.label}
+                    </Badge>
+                    {dc.message && (
+                      <Text size="xs" c="dimmed">
+                        {dc.message}
+                      </Text>
+                    )}
+                  </Group>
+                </Table.Td>
+              </Table.Tr>
+            );
+          })}
+        </Table.Tbody>
+      </Table>
+      {report.unmatched_manifest_types.length > 0 && (
+        <Group gap="xs" wrap="wrap">
+          <Text size="xs" c="dimmed">
+            Unmatched manifest types:
+          </Text>
+          {report.unmatched_manifest_types.map((t) => (
+            <Badge key={t} variant="light" color="gray" size="sm" radius="sm">
+              {t}
+            </Badge>
+          ))}
+        </Group>
+      )}
+      {report.pruned_optional_dcs.length > 0 && (
+        <Group gap="xs" wrap="wrap">
+          <Text size="xs" c="dimmed">
+            Skipped optional collections:
+          </Text>
+          {report.pruned_optional_dcs.map((t) => (
+            <Badge key={t} variant="light" color="gray" size="sm" radius="sm">
+              {t}
+            </Badge>
+          ))}
+        </Group>
+      )}
+    </Stack>
+  );
+};
 
 interface ProjectTypeCardProps {
   active: boolean;

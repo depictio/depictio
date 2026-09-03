@@ -6,7 +6,7 @@
  */
 
 import { Page } from "@playwright/test";
-import { test, expect } from "@fixtures/auth";
+import { test, expect, getAuthMode } from "@fixtures/auth";
 
 const MANIFEST_TEMPLATE_ID = "generic/manifest-tables/1";
 
@@ -18,10 +18,13 @@ async function openManifestTab(page: Page): Promise<void> {
 }
 
 test.describe("Create project from a Data Manifest", () => {
-  test.skip(
-    process.env.UNAUTHENTICATED_MODE === "true",
-    "Project creation requires an authenticated user.",
-  );
+  // Runs for admins in standard AND single-user mode; skipped in public mode
+  // (CI's public-demo leg), where creating a project as admin is not the
+  // path under test. Same probe as project-permissions.spec.ts.
+  test.beforeEach(async () => {
+    const { is_public_mode } = await getAuthMode();
+    test.skip(is_public_mode, "Project creation is not exercised in public mode.");
+  });
 
   test("manifest tab exposes its form and gates the submit", async ({
     loginAsAdmin,

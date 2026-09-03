@@ -229,8 +229,15 @@ async function throwHttpDetailError(
   try {
     const body = await res.json();
     if (body?.detail) {
+      // Structured details (e.g. a rejected-entries report) carry a human
+      // `message`; surface that rather than the raw JSON.
+      const detail = body.detail;
       message =
-        typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail);
+        typeof detail === 'string'
+          ? detail
+          : typeof detail?.message === 'string'
+            ? detail.message
+            : JSON.stringify(detail);
     }
   } catch {
     // ignore non-JSON error bodies
