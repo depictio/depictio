@@ -16,8 +16,10 @@ import {
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
+import { componentTypeVisual } from 'depictio-react-core';
+
+import { sectionIconId } from '../componentVisuals';
 import { AI_COLOR } from '../icons';
-import type { AISectionRationale } from '../types';
 
 /** One generated tile of the draft, as the review addresses it. */
 export interface DraftTile {
@@ -39,6 +41,23 @@ export interface DraftTile {
   reviewed: boolean;
 }
 
+/**
+ * One section of the draft as the panel draws it: the planner's reason for it,
+ * plus the icon and the colour the dashboard itself renders that section with.
+ * The two come from different places (the run record and the section spec on
+ * the document), and the host merges them so the panel matches the canvas.
+ */
+export interface DraftReviewSection {
+  name: string;
+  kind: 'filter' | 'grid';
+  /** One sentence on why the planner asked for the section. */
+  rationale?: string | null;
+  /** Iconify id from the section's own spec. */
+  icon?: string | null;
+  /** Mantine palette name from the section's own spec. */
+  color?: string | null;
+}
+
 export interface DraftReviewPanelProps {
   /** The draft's generated tiles in reading order (filter panel first, then
    *  each grid section), as the host reads them off the dashboard. */
@@ -46,10 +65,10 @@ export interface DraftReviewPanelProps {
   /** Index of the tile under review, owned by the host so the canvas and the
    *  panel cannot disagree about which one it is. */
   currentIndex: number;
-  /** The planner's reason per section. Drives the quoted rationale and the
-   *  filter/grid mark on each group heading; absent on a draft generated
-   *  before the planner was asked to explain itself. */
-  sections?: AISectionRationale[];
+  /** The draft's sections. Drives each group heading (its own icon and
+   *  colour) and the quoted rationale under the cursor. A section missing
+   *  from the list still gets a heading, drawn generically. */
+  sections?: DraftReviewSection[];
   onSelect: (index: number) => void;
   onClose: () => void;
   onKeep: (tile: DraftTile) => void | Promise<void>;
@@ -69,7 +88,10 @@ interface ReviewGroup {
   /** Null on a tile the generator left unsectioned. */
   name: string | null;
   label: string;
-  kind: 'filter' | 'grid' | null;
+  /** The section's own icon, or the generic one for its kind. */
+  icon: string;
+  /** Mantine palette name, or null for a section with no colour of its own. */
+  color: string | null;
   items: { tile: DraftTile; index: number }[];
 }
 
@@ -120,10 +142,10 @@ const DraftReviewPanel: React.FC<DraftReviewPanelProps> = ({
   const allReviewed = tiles.length === 0 || reviewedCount === tiles.length;
   const reviewedPct = tiles.length > 0 ? Math.min(100, (reviewedCount / tiles.length) * 100) : 0;
 
-  const sectionKinds = useMemo(() => {
-    const kinds = new Map<string, 'filter' | 'grid'>();
-    for (const s of sections ?? []) kinds.set(s.name, s.kind);
-    return kinds;
+  const sectionByName = useMemo(() => {
+    const byName = new Map<string, DraftReviewSection>();
+    for (const s of sections ?? []) byName.set(s.name, s);
+    return byName;
   }, [sections]);
 
   /** Grouped by section, sections in first-appearance order. The tile list
@@ -136,10 +158,12 @@ const DraftReviewPanel: React.FC<DraftReviewPanelProps> = ({
       const key = tile.section ?? '';
       let group = byName.get(key);
       if (!group) {
+        const spec = tile.section ? sectionByName.get(tile.section) : undefined;
         group = {
           name: tile.section,
           label: tile.section ?? 'Unsectioned',
-          kind: tile.section ? sectionKinds.get(tile.section) ?? null : null,
+          icon: sectionIconId(spec?.icon, spec?.kind),
+          color: spec?.color || null,
           items: [],
         };
         byName.set(key, group);
@@ -148,12 +172,12 @@ const DraftReviewPanel: React.FC<DraftReviewPanelProps> = ({
       group.items.push({ tile, index: i });
     });
     return ordered;
-  }, [tiles, sectionKinds]);
+  }, [tiles, sectionByName]);
 
   const brief = (current?.intent ?? '').trim();
-  const sectionRationale = current?.section
-    ? ((sections ?? []).find((s) => s.name === current.section)?.rationale ?? '').trim()
-    : '';
+  const currentSection = current?.section ? sectionByName.get(current.section) : undefined;
+  const sectionRationale = (currentSection?.rationale ?? '').trim();
+  const currentType = componentTypeVisual(current?.componentType ?? '');
   // Grid sections only: the section regenerate re-runs the layout pass for a
   // row of boxes, and a filter-panel control's section is a fold of the left
   // panel. Its rationale still shows above, it just has no section to refill.
@@ -254,43 +278,56 @@ const DraftReviewPanel: React.FC<DraftReviewPanelProps> = ({
         <Stack gap="xs" py="xs">
           {groups.map((group) => (
             <Stack key={group.label} gap={0}>
+              {/* The section as the dashboard draws it: its own icon and its
+                  own colour, so the list is recognisably the same dashboard
+                  the reviewer is scrolling. */}
               <Group gap={6} wrap="nowrap" px="sm" pb={4}>
-                {group.kind && (
-                  <Icon
-                    icon={group.kind === 'filter' ? 'mdi:filter-variant' : 'mdi:view-grid-outline'}
-                    width={12}
-                    height={12}
-                  />
-                )}
-                <Text size="xs" c="dimmed" tt="uppercase" fw={700} truncate>
+                <Box c={group.color ?? 'dimmed'} style={{ display: 'inline-flex' }}>
+                  <Icon icon={group.icon} width={13} height={13} />
+                </Box>
+                <Text size="xs" c={group.color ?? 'dimmed'} tt="uppercase" fw={700} truncate>
                   {group.label}
                 </Text>
               </Group>
-              {group.items.map(({ tile, index: tileIndex }) => (
-                <NavLink
-                  key={tile.tag}
-                  active={tileIndex === index}
-                  color={AI_COLOR}
-                  label={tile.title}
-                  description={tile.componentType}
-                  // A blank slot rather than no slot on a pending tile: the
-                  // titles stay on one left edge, so the checks read as a
-                  // column of progress instead of ragged indentation.
-                  leftSection={
-                    tile.reviewed ? (
-                      <Box c="teal" style={{ display: 'inline-flex' }}>
-                        <Icon icon="mdi:check-circle" width={16} height={16} />
-                      </Box>
-                    ) : (
-                      <Box w={16} />
-                    )
-                  }
-                  onClick={() => onSelect(tileIndex)}
-                  data-testid="draft-review-item"
-                  data-tag={tile.tag}
-                  data-reviewed={tile.reviewed ? 'true' : 'false'}
-                />
-              ))}
+              {group.items.map(({ tile, index: tileIndex }) => {
+                const visual = componentTypeVisual(tile.componentType);
+                return (
+                  <NavLink
+                    key={tile.tag}
+                    active={tileIndex === index}
+                    color={AI_COLOR}
+                    label={
+                      <Text size="sm" truncate title={tile.title}>
+                        {tile.title}
+                      </Text>
+                    }
+                    // The type is the icon and the colour the builder's type
+                    // grid and the catalog picker already use for it, which
+                    // says more in one glyph than a second line of label did.
+                    leftSection={
+                      <Tooltip label={visual.label} withArrow position="right" openDelay={400}>
+                        <Box c={visual.color} style={{ display: 'inline-flex' }}>
+                          <Icon icon={visual.icon} width={16} height={16} />
+                        </Box>
+                      </Tooltip>
+                    }
+                    // Reviewed on the trailing edge, where the checks line up
+                    // as a column of progress against a ragged column of
+                    // titles.
+                    rightSection={
+                      tile.reviewed ? (
+                        <Box c="teal" style={{ display: 'inline-flex' }}>
+                          <Icon icon="mdi:check-circle" width={15} height={15} />
+                        </Box>
+                      ) : null
+                    }
+                    onClick={() => onSelect(tileIndex)}
+                    data-testid="draft-review-item"
+                    data-tag={tile.tag}
+                    data-reviewed={tile.reviewed ? 'true' : 'false'}
+                  />
+                );
+              })}
             </Stack>
           ))}
         </Stack>
@@ -304,6 +341,9 @@ const DraftReviewPanel: React.FC<DraftReviewPanelProps> = ({
         {current && (
           <Stack gap={4}>
             <Group gap={6} wrap="nowrap">
+              <Box c={currentType.color} style={{ display: 'inline-flex', flexShrink: 0 }}>
+                <Icon icon={currentType.icon} width={16} height={16} />
+              </Box>
               <Text
                 size="sm"
                 fw={600}
@@ -318,10 +358,31 @@ const DraftReviewPanel: React.FC<DraftReviewPanelProps> = ({
               </Text>
               {busy && <Loader size="xs" color={AI_COLOR} />}
             </Group>
-            <Text size="xs" c="dimmed">
-              {current.section ? `${current.section} · ` : ''}
-              {current.componentType}
-            </Text>
+            <Group gap={4} wrap="nowrap">
+              {current.section && (
+                <>
+                  <Box
+                    c={currentSection?.color ?? 'dimmed'}
+                    style={{ display: 'inline-flex', flexShrink: 0 }}
+                  >
+                    <Icon
+                      icon={sectionIconId(currentSection?.icon, currentSection?.kind)}
+                      width={12}
+                      height={12}
+                    />
+                  </Box>
+                  <Text size="xs" c="dimmed" truncate>
+                    {current.section}
+                  </Text>
+                  <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
+                    ·
+                  </Text>
+                </>
+              )}
+              <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
+                {currentType.label}
+              </Text>
+            </Group>
             {/* The planner's own words, quoted rather than alerted: this is
                 context for the decision, not something that went wrong. The
                 border takes the AI colour off `c` so no colour is spelled out

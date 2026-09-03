@@ -15,7 +15,11 @@ export { default as AiFillModal } from './components/AiFillModal';
 export { default as AIAnalysisModal } from './components/AIAnalysisModal';
 export { default as AIDraftBanner, formatGeneratedAt } from './components/AIDraftBanner';
 export { default as DraftReviewPanel } from './components/DraftReviewPanel';
-export type { DraftReviewPanelProps, DraftTile } from './components/DraftReviewPanel';
+export type {
+  DraftReviewPanelProps,
+  DraftReviewSection,
+  DraftTile,
+} from './components/DraftReviewPanel';
 export { default as ExecutionTrace } from './components/ExecutionTrace';
 export { default as GenerationHistory } from './components/GenerationHistory';
 export type { GenerationHistoryProps } from './components/GenerationHistory';

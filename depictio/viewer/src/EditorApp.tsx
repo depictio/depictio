@@ -117,7 +117,12 @@ import {
   useAIHealth,
   useRegenerateComponent,
 } from 'depictio-react-ai';
-import type { ApplyActionsPayload, DraftTile, ResolvedFilter } from 'depictio-react-ai';
+import type {
+  ApplyActionsPayload,
+  DraftReviewSection,
+  DraftTile,
+  ResolvedFilter,
+} from 'depictio-react-ai';
 import type {
   DashboardData,
   DashboardPermissions,
@@ -1318,6 +1323,35 @@ const EditorApp: React.FC = () => {
     }
     return tiles;
   }, [aiDraft, dashboard?.stored_metadata, generationTagOf, reviewedTags]);
+
+  /** The draft's sections as the review panel draws them. Neither half of a
+   *  heading lives in one place: the planner's reason is on the run record,
+   *  the icon and the colour are on the section specs the canvas renders
+   *  from, so the two are merged by name here rather than in the panel. */
+  const draftReviewSections = useMemo<DraftReviewSection[]>(() => {
+    const rationales = new Map(
+      (aiDraft?.sections ?? []).map((s) => [s.name, s.rationale] as const),
+    );
+    const merged: DraftReviewSection[] = [];
+    const add = (kind: 'filter' | 'grid') => (spec: FilterSectionSpec) => {
+      merged.push({
+        name: spec.name,
+        kind,
+        rationale: rationales.get(spec.name) ?? null,
+        icon: spec.icon,
+        color: spec.color,
+      });
+    };
+    (dashboard?.filter_sections ?? []).forEach(add('filter'));
+    (dashboard?.grid_sections ?? []).forEach(add('grid'));
+    // A section the planner explained and the document no longer lists (it was
+    // renamed, or emptied of its tiles) keeps its rationale, drawn generically.
+    const known = new Set(merged.map((s) => s.name));
+    for (const s of aiDraft?.sections ?? []) {
+      if (!known.has(s.name)) merged.push({ name: s.name, kind: s.kind, rationale: s.rationale });
+    }
+    return merged;
+  }, [aiDraft?.sections, dashboard?.filter_sections, dashboard?.grid_sections]);
 
   // Which tile the review panel is on, owned here so the panel and the outline on
   // the canvas cannot disagree about it. Null until the reviewer moves it
@@ -2554,7 +2588,7 @@ const EditorApp: React.FC = () => {
             <DraftReviewPanel
               tiles={draftTiles}
               currentIndex={reviewIndex}
-              sections={aiDraft?.sections}
+              sections={draftReviewSections}
               onSelect={setPickedReviewIndex}
               onClose={() => setReviewPanelOpen(false)}
               onKeep={(tile) => handleReviewTile(tile.tag, tile.reviewed ? 'unkeep' : 'keep')}
