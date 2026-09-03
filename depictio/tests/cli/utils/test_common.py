@@ -1,12 +1,15 @@
+import copy
 from datetime import datetime
 from unittest.mock import patch
 
 import pytest
+import yaml
 from pydantic import ValidationError
 from typer import Exit
 
 # Remove this line as we already import datetime later
 from depictio.cli.cli.utils.common import (
+    _apply_env_overrides,
     format_timestamp,
     generate_api_headers,
     load_depictio_config,
@@ -212,3 +215,123 @@ class TestCommon:
 
                 with pytest.raises(Exit):
                     load_depictio_config()
+
+    class TestEnvironmentOverrides:
+        """Tests for the DEPICTIO_CLI_* environment overrides.
+
+        These let a ``CLI.yaml`` be committed without secrets and have the token
+        (and optionally the API URL / the config path itself) injected at runtime,
+        which is what makes automated triggering practical: the head job of a
+        pipeline usually has env vars but no writable home directory.
+
+        Every test here works against a throwaway YAML under ``tmp_path`` — the
+        real ``~/.depictio`` is never read or written.
+        """
+
+        _ENV_VARS = (
+            "DEPICTIO_CLI_TOKEN",
+            "DEPICTIO_CLI_API_BASE_URL",
+            "DEPICTIO_CLI_CONFIG_PATH",
+        )
+
+        @pytest.fixture(autouse=True)
+        def isolated_env(self, monkeypatch):
+            """Start from a clean slate so a developer's shell can't taint results."""
+            for var in self._ENV_VARS:
+                monkeypatch.delenv(var, raising=False)
+            with patch("depictio.cli.cli.utils.common.rich_print_checked_statement"):
+                yield
+
+        def _write_config(self, tmp_path, sample_cli_config, filename, api_base_url):
+            """Write a valid CLI config YAML, tagged by its api_base_url.
+
+            The URL doubles as a marker: asserting on it tells us *which* file a
+            given call actually loaded.
+            """
+            config = copy.deepcopy(sample_cli_config)
+            config["api_base_url"] = api_base_url
+            path = tmp_path / filename
+            path.write_text(yaml.safe_dump(config))
+            return path
+
+        @pytest.fixture
+        def config_file(self, tmp_path, sample_cli_config):
+            """A throwaway CLI config file (never ``~/.depictio``)."""
+            return self._write_config(
+                tmp_path, sample_cli_config, "CLI.yaml", "https://from-env-path.example.org"
+            )
+
+        def test_token_env_var_overrides_config(self, monkeypatch, config_file):
+            """DEPICTIO_CLI_TOKEN replaces the access token from the YAML."""
+            monkeypatch.setenv("DEPICTIO_CLI_TOKEN", "env.injected.token")
+
+            config = load_depictio_config(str(config_file))
+
+            assert config.user.token.access_token == "env.injected.token"
+
+        def test_token_env_var_when_user_key_missing(self, monkeypatch):
+            """A secret-free config need not carry a ``user`` key at all."""
+            monkeypatch.setenv("DEPICTIO_CLI_TOKEN", "env.injected.token")
+
+            result = _apply_env_overrides({"api_base_url": "https://api.depictio.dev"})
+
+            assert result["user"]["token"]["access_token"] == "env.injected.token"
+
+        @pytest.mark.parametrize("token_value", [None, "not-a-dict", 42, ["list"]])
+        def test_token_env_var_when_token_is_not_a_dict(self, monkeypatch, token_value):
+            """A non-dict ``user.token`` is replaced, not indexed into."""
+            monkeypatch.setenv("DEPICTIO_CLI_TOKEN", "env.injected.token")
+
+            result = _apply_env_overrides({"user": {"email": "a@b.co", "token": token_value}})
+
+            assert result["user"]["token"] == {"access_token": "env.injected.token"}
+            # Other user fields survive the token replacement.
+            assert result["user"]["email"] == "a@b.co"
+
+        def test_api_base_url_env_var_overrides_config(self, monkeypatch, config_file):
+            """DEPICTIO_CLI_API_BASE_URL replaces the api_base_url from the YAML."""
+            monkeypatch.setenv("DEPICTIO_CLI_API_BASE_URL", "https://depictio.example.org:8058")
+
+            config = load_depictio_config(str(config_file))
+
+            assert config.api_base_url == "https://depictio.example.org:8058"
+
+        def test_no_env_vars_leaves_config_untouched(self, sample_cli_config):
+            """With neither variable set, the dict comes back unchanged."""
+            original = copy.deepcopy(sample_cli_config)
+
+            result = _apply_env_overrides(sample_cli_config)
+
+            assert result == original
+
+        def test_config_path_env_var_used_without_argument(self, monkeypatch, config_file):
+            """DEPICTIO_CLI_CONFIG_PATH selects the file when no path is passed."""
+            monkeypatch.setenv("DEPICTIO_CLI_CONFIG_PATH", str(config_file))
+
+            config = load_depictio_config()
+
+            assert config.api_base_url == "https://from-env-path.example.org"
+
+        @pytest.mark.parametrize("default_path", ["~/.depictio/cli.yaml", "~/.depictio/CLI.yaml"])
+        def test_config_path_env_var_used_for_default_spellings(
+            self, monkeypatch, config_file, default_path
+        ):
+            """Both historic default spellings are still treated as "no choice made"."""
+            monkeypatch.setenv("DEPICTIO_CLI_CONFIG_PATH", str(config_file))
+
+            config = load_depictio_config(default_path)
+
+            assert config.api_base_url == "https://from-env-path.example.org"
+
+        def test_explicit_path_beats_config_path_env_var(
+            self, monkeypatch, tmp_path, sample_cli_config, config_file
+        ):
+            """An explicit --CLI-config-path is never clobbered by the env var."""
+            explicit = self._write_config(
+                tmp_path, sample_cli_config, "explicit.yaml", "https://from-explicit.example.org"
+            )
+            monkeypatch.setenv("DEPICTIO_CLI_CONFIG_PATH", str(config_file))
+
+            config = load_depictio_config(str(explicit))
+
+            assert config.api_base_url == "https://from-explicit.example.org"

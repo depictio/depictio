@@ -104,14 +104,69 @@ def validate_depictio_cli_config(depictio_cli_config: dict) -> CLIConfig:
     return config
 
 
+# CLI config paths considered "default" - only these are overridden by
+# DEPICTIO_CLI_CONFIG_PATH, so an explicit --CLI-config-path is never clobbered.
+_DEFAULT_CLI_CONFIG_PATHS = ("~/.depictio/cli.yaml", "~/.depictio/CLI.yaml")
+
+
+def _apply_env_overrides(config: dict) -> dict:
+    """Apply environment-variable overrides to a loaded CLI config dict.
+
+    Lets a ``CLI.yaml`` be committed **without secrets** and have the token (and
+    optionally the API URL) injected at runtime - the mechanism that makes
+    automated triggering (e.g. from a Nextflow pipeline in CI or on a cluster)
+    practical, since the head job usually has env vars but no writable home.
+
+    Recognised variables:
+      - ``DEPICTIO_CLI_TOKEN``        -> ``user.token.access_token``
+      - ``DEPICTIO_CLI_API_BASE_URL`` -> ``api_base_url``
+
+    (``DEPICTIO_CLI_CONFIG_PATH`` is handled in :func:`load_depictio_config`
+    since it selects which file to load, before this runs.)
+    """
+    token = os.environ.get("DEPICTIO_CLI_TOKEN")
+    if token:
+        user = config.setdefault("user", {})
+        if not isinstance(user.get("token"), dict):
+            user["token"] = {}
+        user["token"]["access_token"] = token
+
+    api_base_url = os.environ.get("DEPICTIO_CLI_API_BASE_URL")
+    if api_base_url:
+        config["api_base_url"] = api_base_url
+
+    return config
+
+
 @validate_call(validate_return=True)
-def load_depictio_config(yaml_config_path: str = "~/.depictio/cli.yaml") -> CLIConfig:
+def load_depictio_config(yaml_config_path: str = "~/.depictio/CLI.yaml") -> CLIConfig:
     """
     Load the Depictio configuration file.
     """
     try:
         rich_print_checked_statement("Loading Depictio configuration...", "loading")
-        config = get_config(os.path.expanduser(yaml_config_path))
+        # DEPICTIO_CLI_CONFIG_PATH overrides the path only when the caller left it
+        # at a default - an explicit --CLI-config-path always wins.
+        env_path = os.environ.get("DEPICTIO_CLI_CONFIG_PATH")
+        from_env = bool(env_path) and yaml_config_path in _DEFAULT_CLI_CONFIG_PATHS
+        if from_env:
+            yaml_config_path = env_path  # type: ignore[assignment]
+        expanded = os.path.expanduser(yaml_config_path)
+        # `get_config` signals a missing/unsuitable file with ValueError, not
+        # FileNotFoundError, so checking here is what turns a typo into a usable
+        # message instead of a traceback. That matters most for an automated
+        # trigger, where the path usually arrives from DEPICTIO_CLI_CONFIG_PATH.
+        if not os.path.isfile(expanded):
+            source = "DEPICTIO_CLI_CONFIG_PATH" if from_env else "--CLI-config-path"
+            logger.error(f"Depictio CLI configuration file not found: {expanded} (from {source})")
+            rich_print_checked_statement(
+                f"Depictio CLI configuration file not found: {expanded} (from {source}). "
+                f"Create it, or point {source} at an existing config.",
+                "error",
+            )
+            raise typer.Exit(code=1)
+        config = get_config(expanded)
+        config = _apply_env_overrides(config)
         config = validate_depictio_cli_config(config)
         return config
     except FileNotFoundError:

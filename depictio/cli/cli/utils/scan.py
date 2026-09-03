@@ -801,28 +801,29 @@ def scan_files_for_workflow(
 
                     progress.update(task_id, description="✅ Scanning completed")
 
-        # Handle missing runs if rescanning
-        if rescan_folders:
-            missing_runs_tag = set(existing_runs_reformated.keys()) - set(
-                [run.run_tag for run in all_workflow_runs if run]
-            )
-            missing_runs = [
-                str(existing_runs_reformated[run_tag].id) for run_tag in missing_runs_tag
-            ]
+    # Handle missing runs if rescanning. Runs ONCE, after every location has been
+    # walked: `all_workflow_runs` accumulates across locations, so doing this inside
+    # the loop made a multi-location workflow delete the runs of the locations not
+    # yet scanned (they were then re-created with fresh ids, losing scan_results).
+    if rescan_folders:
+        missing_runs_tag = set(existing_runs_reformated.keys()) - {
+            run.run_tag for run in all_workflow_runs if run
+        }
+        missing_runs = [str(existing_runs_reformated[run_tag].id) for run_tag in missing_runs_tag]
 
-            if missing_runs:
-                logger.info(f"Runs to remove: {missing_runs}")
-                for run_id in missing_runs:
-                    api_delete_run(run_id=run_id, CLI_config=CLI_config)
-                    # Delete related files
-                    for dc_id, files in all_existing_files.items():
-                        for file in files.values():
-                            if str(file["run_id"]) == run_id:
-                                api_delete_file(file_id=str(file["_id"]), CLI_config=CLI_config)
-                rich_print_checked_statement(
-                    f"Removed {len(missing_runs)} runs and related files from the DB : {missing_runs_tag}",
-                    "info",
-                )
+        if missing_runs:
+            logger.info(f"Runs to remove: {missing_runs}")
+            for run_id in missing_runs:
+                api_delete_run(run_id=run_id, CLI_config=CLI_config)
+                # Delete related files
+                for files in all_existing_files.values():
+                    for file in files.values():
+                        if str(file["run_id"]) == run_id:
+                            api_delete_file(file_id=str(file["_id"]), CLI_config=CLI_config)
+            rich_print_checked_statement(
+                f"Removed {len(missing_runs)} runs and related files from the DB : {missing_runs_tag}",
+                "info",
+            )
 
     # Upsert all runs at once with progress indicator
     if all_workflow_runs:
