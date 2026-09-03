@@ -1,8 +1,10 @@
-"""Whole-dashboard generation: plan, fill, validate, lay out, persist.
+"""Whole-dashboard generation: plan, fill, validate, lay out, persist, review.
 
-Backs ``POST /ai/generate-dashboard`` (see `run_generation`) and the promote
-route (`promote_dashboard`). The stream is one SSE frame per event, in the
-order the React panel consumes them:
+Backs ``POST /ai/generate-dashboard`` (see `run_generation`), the promote
+route (`promote_dashboard`) and the review pass over a draft: the two
+regenerate streams (`run_regeneration`), `review_dashboard` and
+`list_generations`. The stream is one SSE frame per event, in the order the
+React panel consumes them:
 
   status* -> budget -> plan -> status -> (budget*, component)* -> status* -> dashboard -> done
 
@@ -27,6 +29,16 @@ or ``error`` then ``done`` when the run cannot produce a draft. The pipeline:
    an LLM-chosen title that collides gets an ``(AI draft N)`` suffix, a
    client-pinned one is a 409 reported inside the stream.
 
+Reviewing the draft afterwards reuses steps 3 and 4 for one tile or one
+section (`run_regeneration`): the plan entry comes from the run record (or
+is reconstructed from the stored tile when the run is gone), the fill and
+repair path is the same coroutine (`fill_component`), and the result is
+written back into ``stored_metadata`` in place, keeping the tile's id and
+its box. Each generated tile carries an `ai_source` stamp naming its
+generation tag, because `to_full` rebuilds every other key: that stamp is
+what lets a tile be found, regenerated and marked reviewed once the stream
+is gone.
+
 The run record (`generations`) is saved after the plan, after every
 component and in the generator's ``finally``, so a cancelled or crashed run
 stays inspectable. Every collaborator that touches Mongo or another
@@ -47,7 +59,8 @@ import json
 import logging
 import re
 import time
-from collections.abc import AsyncIterator, Callable
+from collections import Counter
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Literal
@@ -72,7 +85,11 @@ from depictio.api.v1.endpoints.ai_endpoints.context import (
     build_project_data_context,
     offer_use_id,
 )
-from depictio.api.v1.endpoints.ai_endpoints.dashboard_layout import layout_dashboard
+from depictio.api.v1.endpoints.ai_endpoints.dashboard_layout import (
+    _layout_filter_section,
+    _layout_grid_section,
+    layout_dashboard,
+)
 from depictio.api.v1.endpoints.ai_endpoints.dashboard_plan import (
     DashboardPlan,
     PlannedComponent,
@@ -89,12 +106,18 @@ from depictio.api.v1.endpoints.ai_endpoints.schemas import (
     GeneratedComponentEvent,
     GeneratedComponentStatus,
     GeneratedDashboardEvent,
+    GenerationsResponse,
+    GenerationSummary,
     PromoteResponse,
+    RegeneratedEvent,
+    ReviewRequest,
+    ReviewResponse,
     StreamEvent,
 )
 from depictio.api.v1.endpoints.ai_endpoints.suggest import column_type_for, viz_kind_label
 from depictio.models.components.advanced_viz.catalog import role_config_key
 from depictio.models.components.advanced_viz.schemas import role_dtype_specs
+from depictio.models.timestamps import utc_now_str
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +168,24 @@ def compose_offers_for_project(project_doc: dict[str, Any]) -> dict[str, Any]:
     )
 
     return compose(project_doc)
+
+
+def resolve_workflow_tags(component: dict[str, Any], project_id: Any) -> None:
+    """`dashboards_endpoints.routes._resolve_workflow_tags`, imported on first use."""
+    from depictio.api.v1.endpoints.dashboards_endpoints.routes import (
+        _resolve_workflow_tags as resolve,
+    )
+
+    resolve(component, project_id=project_id)
+
+
+def regenerate_component_fields(component: dict[str, Any]) -> None:
+    """`dashboards_endpoints.routes._regenerate_component_fields`, imported on first use."""
+    from depictio.api.v1.endpoints.dashboards_endpoints.routes import (
+        _regenerate_component_fields as regenerate,
+    )
+
+    regenerate(component)
 
 
 def _sse(event: StreamEvent) -> bytes:
@@ -277,6 +318,32 @@ def attach_catalog_offers(ctx: ProjectDataContext, compose: dict[str, Any]) -> i
         collection.catalog_offers = offers
         total += len(offers)
     return total
+
+
+def ai_source_stamp(tag: str, prompt: str = "") -> dict[str, str]:
+    """Per-tile provenance, in the shape the builder already writes (`{flow, prompt}`).
+
+    `to_full` copies `catalog_source`, `use` and `ai_source` and rebuilds
+    every other key of a stored component, so `ai_source` is the only place
+    a generation tag survives into ``stored_metadata``. Without it a draft
+    could not be reviewed tile by tile after the stream is gone: the plan
+    speaks tags, the document speaks uuids.
+    """
+    stamp = {"flow": "generate", "tag": tag}
+    if prompt:
+        stamp["prompt"] = prompt
+    return stamp
+
+
+def generation_tag(component: dict[str, Any]) -> str:
+    """The generation tag of one stored (or lite) component; ``""`` when it carries none.
+
+    Reads the `ai_source` stamp first and falls back to a lite component's
+    own `tag`, so the helper works on both sides of `to_full`.
+    """
+    source = component.get("ai_source")
+    tag = source.get("tag") if isinstance(source, dict) else None
+    return str(tag or component.get("tag") or "")
 
 
 def component_event(
@@ -414,6 +481,7 @@ def section_headers(plan: DashboardPlan, components: list[dict[str, Any]]) -> li
                 "title": spec.name,
                 "order": HEADER_ORDER,
                 "body": spec.description or (plan.subtitle if first else None) or "",
+                "ai_source": ai_source_stamp(tag),
             }
         )
         first = False
@@ -433,6 +501,44 @@ def validate_component(component: dict[str, Any]) -> tuple[dict[str, Any] | None
         return None, component_yaml.format_validation_error_for_llm(e)
 
 
+def _require_planned_type(component: dict[str, Any], planned: PlannedComponent) -> None:
+    """Raise `ValueError` unless the answer is a component block of the planned type.
+
+    Any YAML mapping parses, so an answer with no `component_type` is not a
+    component at all; another type than planned is worse than useless (a
+    card's fields relabelled as a figure validate as an empty scatter), and
+    the repair prompt can name the mismatch instead.
+    """
+    emitted = str(component.get("component_type") or "").strip().lower()
+    if not emitted:
+        raise ValueError(
+            f"The answer is not a component block: it has no component_type "
+            f"(expected '{planned.component_type}')"
+        )
+    if emitted != planned.component_type:
+        raise ValueError(
+            f"component_type must be '{planned.component_type}' (the plan's), got '{emitted}'"
+        )
+
+
+def bind_standalone(component: dict[str, Any], planned: PlannedComponent) -> dict[str, Any]:
+    """`bind_to_collection` for a tile that binds no collection (text).
+
+    Same type check and the same pinned tag; the collection tags are cleared
+    instead of pinned, because a text tile that carried one would be exported
+    without it anyway (`DashboardDataLite.from_full` blanks both for text)
+    and re-imported as a component the resolver cannot place.
+    """
+    _require_planned_type(component, planned)
+    component["tag"] = planned.tag
+    component["component_type"] = planned.component_type
+    component["workflow_tag"] = ""
+    component["data_collection_tag"] = ""
+    component.pop("section", None)
+    component.pop("layout", None)
+    return component
+
+
 def bind_to_collection(
     component: dict[str, Any], planned: PlannedComponent, ctx: DataContext
 ) -> dict[str, Any]:
@@ -445,21 +551,10 @@ def bind_to_collection(
     columns so the lite compatibility check fires (as the suggestion flow
     does); an advanced_viz gets `config.viz_kind` mirrored from `viz_kind`.
 
-    Raises `ValueError` when the answer names no `component_type` (any YAML
-    mapping parses; only a component block is worth validating) or another
-    type than planned: a card's fields relabelled as a figure would validate
-    as an empty scatter, and the repair prompt can name the mismatch instead.
+    Raises `ValueError` (through `_require_planned_type`) when the answer is
+    not a component block of the planned type.
     """
-    emitted = str(component.get("component_type") or "").strip().lower()
-    if not emitted:
-        raise ValueError(
-            f"The answer is not a component block: it has no component_type "
-            f"(expected '{planned.component_type}')"
-        )
-    if emitted != planned.component_type:
-        raise ValueError(
-            f"component_type must be '{planned.component_type}' (the plan's), got '{emitted}'"
-        )
+    _require_planned_type(component, planned)
     component["tag"] = planned.tag
     component["component_type"] = planned.component_type
     component["workflow_tag"] = ctx.workflow_tag or ""
@@ -623,6 +718,115 @@ def _now_iso() -> str:
 
 
 # ---------------------------------------------------------------------------
+# One component, filled by the model (shared by the run and the regenerates)
+# ---------------------------------------------------------------------------
+
+
+def validate_answer(
+    raw: str, planned: PlannedComponent, ctx: DataContext | None
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Parse, bind, validate offline, then check against the collection's columns.
+
+    `ctx` is None for a tile that binds no collection (text): the binding
+    clears the collection tags instead of pinning them, and there is no
+    schema to check the answer against.
+    """
+    try:
+        component = component_yaml._parse_component_yaml(raw)
+        if ctx is None:
+            bind_standalone(component, planned)
+        else:
+            bind_to_collection(component, planned, ctx)
+    except ValueError as e:
+        return None, component_yaml.format_validation_error_for_llm(e)
+    validated, error = validate_component(component)
+    if validated is None:
+        return None, error
+    error = substance_error(validated) or (schema_error(validated, ctx) if ctx else None)
+    if error:
+        return None, error
+    return validated, None
+
+
+def fill_intent(planned: PlannedComponent, ctx: DataContext | None, instruction: str | None) -> str:
+    """The brief handed to one fill call: the planned intent plus the reviewer's steer."""
+    intent = planned.intent
+    if not intent:
+        tag = (ctx.data_collection_tag or ctx.data_collection_id) if ctx else ""
+        intent = f"A {planned.component_type} on {tag}." if tag else f"A {planned.component_type}."
+    if instruction and instruction.strip():
+        intent = f"{intent}\n\nThe reviewer asks for this change: {instruction.strip()}"
+    return intent
+
+
+async def fill_component(
+    target: FillTarget,
+    *,
+    complete: Callable[[list[dict[str, Any]]], Awaitable[llm_client.Completion]],
+    budget: Budget,
+    dashboard_title: str,
+    siblings: list[str],
+    instruction: str | None = None,
+    after_call: Callable[[], None] | None = None,
+) -> tuple[dict[str, Any] | None, GeneratedComponentEvent]:
+    """The model fills one component; validated and repaired like `/ai/component-from-prompt`.
+
+    The one fill-and-repair path: the whole-dashboard run drives it through
+    `_Generation.fill_llm` and the regenerate routes through
+    `regenerate_target`. `complete` is the caller's charged LLM call,
+    `after_call` runs after each of them (the run collects a budget frame
+    there) and `instruction` is the reviewer's steer appended to the intent.
+    Returns the validated component (None when it is dropped) and its event.
+    """
+    planned, ctx = target.planned, target.ctx
+    prompt = prompts.component_fill_prompt(
+        fill_intent(planned, ctx, instruction),
+        dashboard_title=dashboard_title,
+        section=planned.section,
+        tag=planned.tag,
+        siblings=list(siblings),
+        use=planned.use,
+        viz_kind=planned.viz_kind,
+    )
+    messages = prompts.component_from_prompt_messages(
+        ctx, prompt, component_type=planned.component_type
+    )
+    max_attempts = 1 + settings.ai.generate_max_repairs_per_component
+    last_error = "(unknown)"
+    attempts = 0
+    for attempt in range(1, max_attempts + 1):
+        if attempt > 1 and budget.exhausted():
+            last_error = f"{last_error} (no budget left to repair)"
+            break
+        attempts = attempt
+        try:
+            completion = await complete(messages)
+        except Exception as e:  # noqa: BLE001, a provider failure drops the tile, not the run
+            last_error = f"LLM error: {e}"
+            logger.warning("generate-dashboard: %s on '%s'", last_error, planned.tag)
+            break
+        if after_call is not None:
+            after_call()
+        raw = completion.content
+        component, error = await asyncio.to_thread(validate_answer, raw, planned, ctx)
+        if component is not None and error is None:
+            status = "ok" if attempt == 1 else "repaired"
+            return component, component_event(planned, status, attempts=attempt)
+        last_error = error or "(unknown)"
+        logger.warning(
+            "generate-dashboard: '%s' attempt %d failed: %s", planned.tag, attempt, last_error
+        )
+        messages = messages + [
+            {"role": "assistant", "content": raw},
+            {
+                "role": "user",
+                "content": f"{last_error}\n\nRe-emit the corrected YAML only: no prose, no fences.",
+            },
+        ]
+    return None, component_event(planned, "dropped", attempts=attempts, error=last_error)
+
+
+# ---------------------------------------------------------------------------
 # Gates (called by the route before the stream starts)
 # ---------------------------------------------------------------------------
 
@@ -642,14 +846,11 @@ def _project_dc_ids(project_doc: dict[str, Any]) -> set[str]:
     return ids
 
 
-def gate_generate_request(body: GenerateDashboardRequest, user: Any) -> dict[str, Any]:
-    """The HTTP-status gates of `/ai/generate-dashboard`; returns the project document.
+def gate_generation_feature(user: Any) -> None:
+    """The gates every generating route shares, before anything is loaded.
 
     404 when the feature flag is off, 403 in public mode, 403 for an
-    anonymous user outside single-user mode (the import route's rule), 400
-    on a malformed project id, 404 for an unknown project, 403 without
-    editor permission, 400 when a requested data collection is not in the
-    project. The document is returned so the stream does not load it again.
+    anonymous user outside single-user mode (the import route's rule).
     """
     if not settings.ai.generate_dashboard_enabled:
         raise HTTPException(status_code=404, detail="Dashboard generation is not enabled.")
@@ -662,6 +863,18 @@ def gate_generate_request(body: GenerateDashboardRequest, user: Any) -> dict[str
             status_code=403,
             detail="Anonymous users cannot generate dashboards. Please login to continue.",
         )
+
+
+def gate_generate_request(body: GenerateDashboardRequest, user: Any) -> dict[str, Any]:
+    """The HTTP-status gates of `/ai/generate-dashboard`; returns the project document.
+
+    `gate_generation_feature` first (404 flag off, 403 public mode, 403
+    anonymous), then 400 on a malformed project id, 404 for an unknown
+    project, 403 without editor permission, 400 when a requested data
+    collection is not in the project. The document is returned so the stream
+    does not load it again.
+    """
+    gate_generation_feature(user)
     try:
         project_oid = ObjectId(body.project_id)
     except Exception as e:  # noqa: BLE001
@@ -718,12 +931,35 @@ def promote_dashboard(dashboard_id: str, user: Any) -> PromoteResponse:
 class _Abort(Exception):
     """A run that cannot go on; its message is the ``error`` event's detail.
 
-    Raised anywhere in `_generate` and turned into ``error`` + ``done`` by
-    `run_generation`, so the terminal frames are written in one place.
+    Raised anywhere in `_generate` (or `_regenerate`) and turned into
+    ``error`` + ``done`` by the runner, so the terminal frames are written in
+    one place.
     """
 
 
-class _Generation:
+class _Stream:
+    """The frames every generating stream writes, in the shape the panel reads."""
+
+    frame: Callable[[StreamEvent], bytes]
+    budget: Budget
+
+    def status(self, message: str) -> bytes:
+        return self.frame(StreamEvent(type="status", data={"message": message}))
+
+    def budget_frame(self) -> bytes:
+        return self.frame(StreamEvent(type="budget", data=self.budget.event()))
+
+    def error(self, detail: str) -> bytes:
+        return self.frame(StreamEvent(type="error", data={"detail": detail}))
+
+    def done(self) -> bytes:
+        return self.frame(StreamEvent(type="done"))
+
+    def component_frame(self, event: GeneratedComponentEvent) -> bytes:
+        return self.frame(StreamEvent(type="component", data=event.model_dump(mode="json")))
+
+
+class _Generation(_Stream):
     """State of one run: the record, the budget, the filled components, the warnings."""
 
     def __init__(
@@ -753,23 +989,6 @@ class _Generation:
         self.components: list[dict[str, Any]] = []
         self.dropped: list[str] = []
         self.filled_tags: list[str] = []
-
-    # -- frames -------------------------------------------------------------
-
-    def status(self, message: str) -> bytes:
-        return self.frame(StreamEvent(type="status", data={"message": message}))
-
-    def budget_frame(self) -> bytes:
-        return self.frame(StreamEvent(type="budget", data=self.budget.event()))
-
-    def error(self, detail: str) -> bytes:
-        return self.frame(StreamEvent(type="error", data={"detail": detail}))
-
-    def done(self) -> bytes:
-        return self.frame(StreamEvent(type="done"))
-
-    def component_frame(self, event: GeneratedComponentEvent) -> bytes:
-        return self.frame(StreamEvent(type="component", data=event.model_dump(mode="json")))
 
     # -- run record ---------------------------------------------------------
 
@@ -812,7 +1031,9 @@ class _Generation:
             self.dropped.append(event.tag)
 
     def accept(self, planned: PlannedComponent, component: dict[str, Any]) -> None:
-        self.components.append(_slim(component))
+        slim = _slim(component)
+        slim["ai_source"] = ai_source_stamp(planned.tag, planned.intent or self.body.prompt)
+        self.components.append(slim)
         self.filled_tags.append(planned.tag)
 
     async def try_plan(
@@ -848,82 +1069,24 @@ class _Generation:
     async def fill_llm(
         self, target: FillTarget
     ) -> tuple[dict[str, Any] | None, GeneratedComponentEvent, list[bytes]]:
-        """The model fills one component; validated and repaired like `/ai/component-from-prompt`.
+        """`fill_component` on this run's budget; adds the budget frames to emit.
 
         Returns the validated component (None when dropped), its event and
-        the budget frames to emit (one per LLM call).
+        one budget frame per LLM call.
         """
-        planned, ctx = target.planned, target.ctx
-        assert ctx is not None and self.plan is not None
+        assert self.plan is not None
         frames: list[bytes] = []
-        tag = ctx.data_collection_tag or ctx.data_collection_id
-        intent = planned.intent or f"A {planned.component_type} on {tag}."
-        prompt = prompts.component_fill_prompt(
-            intent,
+        component, event = await fill_component(
+            target,
+            complete=self.complete,
+            budget=self.budget,
             dashboard_title=self.plan.title,
-            section=planned.section,
-            tag=planned.tag,
             siblings=list(self.filled_tags),
-            use=planned.use,
-            viz_kind=planned.viz_kind,
+            after_call=lambda: frames.append(self.budget_frame()),
         )
-        messages = prompts.component_from_prompt_messages(
-            ctx, prompt, component_type=planned.component_type
-        )
-        max_attempts = 1 + settings.ai.generate_max_repairs_per_component
-        last_error = "(unknown)"
-        attempts = 0
-        for attempt in range(1, max_attempts + 1):
-            if attempt > 1 and self.budget.exhausted():
-                last_error = f"{last_error} (no budget left to repair)"
-                break
-            attempts = attempt
-            try:
-                completion = await self.complete(messages)
-            except Exception as e:  # noqa: BLE001, a provider failure drops the tile, not the run
-                last_error = f"LLM error: {e}"
-                logger.warning("generate-dashboard: %s on '%s'", last_error, planned.tag)
-                break
-            frames.append(self.budget_frame())
-            raw = completion.content
-            component, error = await asyncio.to_thread(self._validate_answer, raw, planned, ctx)
-            if component is not None and error is None:
-                status = "ok" if attempt == 1 else "repaired"
-                return component, component_event(planned, status, attempts=attempt), frames
-            last_error = error or "(unknown)"
-            logger.warning(
-                "generate-dashboard: '%s' attempt %d failed: %s", planned.tag, attempt, last_error
-            )
-            messages = messages + [
-                {"role": "assistant", "content": raw},
-                {
-                    "role": "user",
-                    "content": f"{last_error}\n\nRe-emit the corrected YAML only: no prose, no fences.",
-                },
-            ]
-        return (
-            None,
-            component_event(planned, "dropped", attempts=attempts, error=last_error),
-            frames,
-        )
+        return component, event, frames
 
-    @staticmethod
-    def _validate_answer(
-        raw: str, planned: PlannedComponent, ctx: DataContext
-    ) -> tuple[dict[str, Any] | None, str | None]:
-        """Parse, bind, validate offline, then check against the collection's columns."""
-        try:
-            component = component_yaml._parse_component_yaml(raw)
-            bind_to_collection(component, planned, ctx)
-        except ValueError as e:
-            return None, component_yaml.format_validation_error_for_llm(e)
-        validated, error = validate_component(component)
-        if validated is None:
-            return None, error
-        error = substance_error(validated) or schema_error(validated, ctx)
-        if error:
-            return None, error
-        return validated, None
+    _validate_answer = staticmethod(validate_answer)
 
     def envelope(self, title: str) -> dict[str, Any]:
         assert self.plan is not None
@@ -942,6 +1105,12 @@ class _Generation:
         return any(c.get("component_type") != "text" for c in self.components)
 
     def generation_info(self) -> dict[str, Any]:
+        """The ``ai_generation`` stamp of the draft (`AIGenerationInfo` fields).
+
+        `dropped` carries the tags that never made it, so the review pass can
+        say what is missing without reading the run record; `reviewed` starts
+        empty and is written by the review route.
+        """
         return {
             "status": "draft",
             "model": self.model,
@@ -949,6 +1118,8 @@ class _Generation:
             "generated_at": _now_iso(),
             "run_id": self.run.id,
             "warnings": list(self.warnings),
+            "reviewed": [],
+            "dropped": list(self.dropped),
         }
 
 
@@ -1175,3 +1346,578 @@ async def _generate(gen: _Generation) -> AsyncIterator[bytes]:
     )
     yield gen.frame(StreamEvent(type="dashboard", data=event.model_dump(mode="json")))
     yield gen.done()
+
+
+# ---------------------------------------------------------------------------
+# Reviewing a draft: regenerate one tile or one section, keep or unkeep a tile
+# ---------------------------------------------------------------------------
+
+# Cap of `GET /ai/generations/{project_id}`, whatever `limit` asks for.
+MAX_GENERATION_HISTORY = 50
+
+
+def require_draft_dashboard(dashboard_id: str, user: Any) -> tuple[ObjectId, dict[str, Any]]:
+    """The whole document of an AI-drafted dashboard the caller may edit.
+
+    400 on a malformed id, 404 when the dashboard does not exist or carries
+    no ``ai_generation`` stamp (there is no draft to review), 403 without
+    editor permission. Same rule as the promote route
+    (`check_dashboard_mutation_permission`), so a dashboard owner without a
+    project role can still review their own draft.
+    """
+    try:
+        oid = ObjectId(dashboard_id)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"invalid dashboard_id: {e}") from e
+    doc = dashboards_collection.find_one({"dashboard_id": oid})
+    if not doc or not doc.get("ai_generation"):
+        raise HTTPException(status_code=404, detail="No AI-generated draft with this id.")
+    if not check_dashboard_mutation_permission(doc, user, "editor"):
+        raise HTTPException(
+            status_code=403, detail="You don't have permission to edit this dashboard."
+        )
+    return oid, doc
+
+
+def stored_components(doc: dict[str, Any]) -> list[dict[str, Any]]:
+    """The dashboard's ``stored_metadata``, junk entries left out."""
+    return [c for c in (doc.get("stored_metadata") or []) if isinstance(c, dict)]
+
+
+def locate_component(doc: dict[str, Any], index: str) -> int:
+    """Position in ``stored_metadata`` of the component `index` names.
+
+    `index` is either that position (what a review panel counts) or the
+    component's own ``index`` uuid, so both ways of addressing a tile work;
+    anything else is a 404 rather than a silent regeneration of the wrong
+    tile.
+    """
+    components = stored_components(doc)
+    key = str(index).strip()
+    if key.isdigit():
+        position = int(key)
+        if 0 <= position < len(components):
+            return position
+    else:
+        for position, component in enumerate(components):
+            if str(component.get("index") or "") == key:
+                return position
+    raise HTTPException(status_code=404, detail=f"No component '{index}' in this dashboard.")
+
+
+def locate_section(doc: dict[str, Any], section: str) -> list[int]:
+    """Positions of one section's components, in stored order; 404 when it holds none."""
+    wanted = section.strip()
+    positions = [
+        i
+        for i, component in enumerate(stored_components(doc))
+        if str(component.get("section") or "").strip() == wanted
+    ]
+    if not positions:
+        raise HTTPException(status_code=404, detail=f"No section '{section}' in this dashboard.")
+    return positions
+
+
+def _run_record(run_id: str) -> generations.GenerationRun | None:
+    """The generation run behind a draft, or None when it is gone or unreadable."""
+    if not run_id:
+        return None
+    try:
+        return generations.get(run_id)
+    except Exception:  # noqa: BLE001, a missing record only costs the plan
+        logger.warning("regenerate: could not read run %s", run_id, exc_info=True)
+        return None
+
+
+def plan_of(run: generations.GenerationRun | None) -> DashboardPlan | None:
+    """The run's stored plan as a `DashboardPlan`, or None when there is none to read."""
+    if run is None or not run.plan:
+        return None
+    try:
+        return DashboardPlan.model_validate(run.plan)
+    except ValidationError:  # pragma: no cover, a record written by an older shape
+        logger.warning("regenerate: run %s carries an unreadable plan", run.id)
+        return None
+
+
+def planned_for(
+    component: dict[str, Any], *, tag: str, plan: DashboardPlan | None
+) -> PlannedComponent:
+    """The plan entry of one stored component, or one reconstructed from the tile.
+
+    A draft outlives the run that made it (a restart, a pruned record, a
+    dashboard exported and re-imported), so the entry can be gone while the
+    tile is still there and still reviewable. The stored component is then
+    the source of truth: its title and description become the intent, and
+    its own bindings the collection and the advanced_viz hints.
+    """
+    if plan is not None:
+        entry = next((c for c in plan.components if c.tag == tag), None)
+        if entry is not None:
+            return entry
+    title = str(component.get("title") or "").strip()
+    description = str(component.get("description") or "").strip()
+    component_type = str(component.get("component_type") or "")
+    intent = ". ".join(p for p in (title, description) if p)
+    try:
+        return PlannedComponent(
+            tag=tag or str(component.get("index") or "component"),
+            section=str(component.get("section") or ""),
+            component_type=component_type,  # type: ignore[arg-type]
+            data_collection_tag=str(component.get("data_collection_tag") or "") or None,
+            intent=intent or f"A {component_type} tile.",
+            use=component.get("use") or None,
+            viz_kind=component.get("viz_kind") or None,
+        )
+    except ValidationError as e:
+        raise _Abort(
+            f"'{tag or component.get('index')}' is not a component this flow can regenerate: "
+            f"{component_yaml.format_validation_error_for_llm(e)}"
+        ) from e
+
+
+def target_for(
+    component: dict[str, Any], planned: PlannedComponent, contexts: dict[str, DataContext]
+) -> FillTarget:
+    """Bind one stored component to its collection and pick how it is re-filled.
+
+    The mirror of `plan_to_targets` for a tile that already exists: the
+    plan's collection first, the tile's own as the fallback (they differ
+    once the user has edited it). Text binds nothing, and an advanced_viz
+    that pins a catalog offer or a ranked kind is rebuilt deterministically.
+    """
+    if planned.component_type == "text":
+        return FillTarget(planned, None, "text")
+    ctx = contexts.get(planned.data_collection_tag or "") or contexts.get(
+        str(component.get("data_collection_tag") or "")
+    )
+    deterministic = planned.component_type == "advanced_viz" and bool(
+        planned.use or planned.viz_kind
+    )
+    return FillTarget(planned, ctx, "advanced_viz" if deterministic else "llm")
+
+
+async def regenerate_target(
+    target: FillTarget,
+    *,
+    complete: Callable[[list[dict[str, Any]]], Awaitable[llm_client.Completion]],
+    budget: Budget,
+    dashboard_title: str,
+    siblings: list[str],
+    instruction: str | None = None,
+    plan: DashboardPlan | None = None,
+) -> tuple[dict[str, Any] | None, GeneratedComponentEvent, list[str]]:
+    """One tile, re-filled: (component or None, its event, warnings).
+
+    Deterministic where the run was deterministic and free of charge, unless
+    the reviewer asked for a change: an instruction can only be honoured by
+    the model, so it moves a text or catalog-pinned tile onto the same fill
+    and repair path (`fill_component`) as every other type.
+    """
+    planned = target.planned
+    steered = bool(instruction and instruction.strip())
+    if target.mode == "text" and not steered and plan is not None:
+        return fill_text(planned, plan, first=False), component_event(planned, "ok"), []
+    if target.mode == "advanced_viz" and not steered:
+        assert target.ctx is not None
+        component, warnings, error = await asyncio.to_thread(fill_advanced_viz, planned, target.ctx)
+        if component is None:
+            event = component_event(planned, "dropped", attempts=0, error=error or "(unknown)")
+            return None, event, warnings
+        return component, component_event(planned, "ok"), warnings
+    if target.ctx is None and planned.component_type != "text":
+        error = (
+            f"the data collection '{planned.data_collection_tag}' this component binds is not "
+            "one of the project's table collections any more"
+        )
+        return None, component_event(planned, "dropped", attempts=0, error=error), []
+    component, event = await fill_component(
+        target,
+        complete=complete,
+        budget=budget,
+        dashboard_title=dashboard_title,
+        siblings=siblings,
+        instruction=instruction,
+    )
+    return component, event, []
+
+
+async def regenerate_contexts(
+    project_id: Any,
+    user: Any,
+    dc_ids: list[str],
+    *,
+    project_doc: dict[str, Any] | None = None,
+) -> tuple[dict[str, DataContext], list[str]]:
+    """The `DataContext` of the collections `dc_ids` names, keyed by collection tag.
+
+    The generator's own call (`build_project_data_context`), narrowed to the
+    collections the tiles being regenerated bind, with the project's catalog
+    offers attached so a ``use:`` handle still resolves.
+    """
+    wanted = list(dict.fromkeys(d for d in dc_ids if d))
+    ctx, warnings = await build_project_data_context(
+        str(project_id),
+        user,
+        wanted or None,
+        max_collections=max(1, len(wanted)) if wanted else settings.ai.generate_max_collections,
+    )
+    if project_doc is None:
+        try:
+            project_doc = await asyncio.to_thread(_project_doc, ObjectId(project_id))
+        except Exception as e:  # noqa: BLE001
+            logger.warning("regenerate: project document unavailable: %s", e)
+            project_doc = None
+    if project_doc:
+        try:
+            compose = await asyncio.to_thread(compose_offers_for_project, project_doc)
+            attach_catalog_offers(ctx, compose)
+        except Exception as e:  # noqa: BLE001, offers are an extra, not a requirement
+            logger.warning("regenerate: catalog offers unavailable: %s", e)
+            warnings.append("Catalog offers could not be read; regenerating without them.")
+    return {c.data_collection_tag or c.data_collection_id: c for c in ctx.collections}, warnings
+
+
+def stored_component(
+    component: dict[str, Any], *, project_id: Any, index: str, section: str | None
+) -> dict[str, Any]:
+    """One validated lite component in ``stored_metadata`` shape, keeping its id.
+
+    The import path's own chain: `to_full` for the runtime fields, then the
+    tag resolution and field regeneration `_persist_lite_dashboard` runs, so
+    a regenerated tile is written exactly like an imported one. Only the id
+    (`index`, which the layout item points at) and the `section` are carried
+    over from the tile it replaces.
+    """
+    lite = validate_envelope({"title": "AI", "components": [component]})
+    stored = lite.to_full()["stored_metadata"][0]
+    stored["index"] = index
+    stored["section"] = section
+    resolve_workflow_tags(stored, project_id)
+    regenerate_component_fields(stored)
+    return stored
+
+
+def relayout_section(
+    components: list[dict[str, Any]], positions: list[int], doc: dict[str, Any]
+) -> dict[str, list[dict[str, Any]]]:
+    """Re-run the layout pass over one section; returns the panel arrays to write.
+
+    Boxes are section-relative (the viewer draws one sub-grid per section),
+    so a section can be laid out again without moving anything else. The
+    split is `layout_dashboard`'s: interactive tiles through the filter
+    panel pass, everything else through the grid pass. Only the arrays that
+    actually changed come back.
+    """
+    members = [components[i] for i in positions]
+    filters = [c for c in members if c.get("component_type") == "interactive"]
+    tiles = [c for c in members if c.get("component_type") != "interactive"]
+    boxes: dict[str, dict[str, Any]] = {
+        f"box-{laid.get('index')}": laid["layout"]
+        for laid in _layout_filter_section(filters) + _layout_grid_section(tiles)
+    }
+    out: dict[str, list[dict[str, Any]]] = {}
+    for key in ("left_panel_layout_data", "right_panel_layout_data"):
+        items = [dict(i) for i in (doc.get(key) or []) if isinstance(i, dict)]
+        changed = False
+        for item in items:
+            box = boxes.get(str(item.get("i") or ""))
+            if box:
+                item.update(box)
+                changed = True
+        if changed:
+            out[key] = items
+    return out
+
+
+def write_components(
+    dashboard_oid: ObjectId,
+    replacements: dict[int, dict[str, Any]],
+    layouts: dict[str, list[dict[str, Any]]] | None = None,
+) -> None:
+    """Replace components in place in ``stored_metadata``, the way an edit lands.
+
+    Positional `$set` keys touch only the tiles that changed, so the rest of
+    the document (and a concurrent autosave of it) is left alone, and
+    `last_saved_ts` is bumped exactly as ``/dashboards/save/{id}`` does: the
+    dashboard listing's cache-buster reads it, and it must stay a string.
+    """
+    update: dict[str, Any] = {f"stored_metadata.{i}": c for i, c in replacements.items()}
+    update.update(layouts or {})
+    update["last_saved_ts"] = utc_now_str()
+    dashboards_collection.update_one({"dashboard_id": dashboard_oid}, {"$set": update})
+
+
+def jsonable(component: dict[str, Any]) -> dict[str, Any]:
+    """A stored component with its ObjectIds and datetimes stringified, ready to stream."""
+    return json.loads(json.dumps(component, default=str))
+
+
+# ---------------------------------------------------------------------------
+# The regenerate stream
+# ---------------------------------------------------------------------------
+
+
+class _Regeneration(_Stream):
+    """State of one regenerate call: what it rewrites, its budget, its warnings."""
+
+    def __init__(
+        self,
+        doc: dict[str, Any],
+        user: Any,
+        *,
+        positions: list[int],
+        section: str | None,
+        instruction: str | None,
+        user_api_key: str | None,
+        frame: Callable[[StreamEvent], bytes],
+    ) -> None:
+        self.doc = doc
+        self.user = user
+        self.positions = positions
+        self.section = section
+        self.instruction = instruction
+        self.user_api_key = user_api_key
+        self.frame = frame
+        self.model = llm_client.get_default_model()
+        self.budget = Budget(
+            max_tokens=settings.ai.generate_max_tokens_total,
+            max_seconds=float(settings.ai.generate_max_wall_clock_s),
+            max_steps=_max_steps(len(positions)),
+        )
+        self.warnings: list[str] = []
+
+    async def complete(self, messages: list[dict[str, Any]]) -> llm_client.Completion:
+        completion = await asyncio.to_thread(
+            llm_client.completion_with_usage, messages, user_api_key=self.user_api_key
+        )
+        self.budget.charge(completion)
+        return completion
+
+
+async def run_regeneration(
+    doc: dict[str, Any],
+    current_user: Any,
+    *,
+    positions: list[int],
+    section: str | None = None,
+    instruction: str | None = None,
+    user_api_key: str | None = None,
+    frame: Callable[[StreamEvent], bytes] | None = None,
+) -> AsyncIterator[bytes]:
+    """Re-fill the components at `positions` and yield the SSE frames.
+
+    Backs both regenerate routes (`positions` is one tile, or a whole
+    section when `section` is set). The gates ran before this: `doc` is the
+    draft the route loaded and the caller may edit.
+    """
+    reg = _Regeneration(
+        doc,
+        current_user,
+        positions=positions,
+        section=section,
+        instruction=instruction,
+        user_api_key=user_api_key,
+        frame=frame or _sse,
+    )
+    try:
+        async for chunk in _regenerate(reg):
+            yield chunk
+    except _Abort as e:
+        yield reg.error(str(e))
+        yield reg.done()
+    except Exception:  # noqa: BLE001, never strand the stream, never leak internals
+        logger.exception("regenerate: dashboard %s failed unexpectedly", doc.get("dashboard_id"))
+        yield reg.error("The regeneration failed unexpectedly.")
+        yield reg.done()
+
+
+async def _regenerate(reg: _Regeneration) -> AsyncIterator[bytes]:
+    """The regeneration itself; `_Abort` anywhere here ends the stream with `error`."""
+    doc = reg.doc
+    components = stored_components(doc)
+    project_id = doc.get("project_id")
+    dashboard_oid = doc.get("dashboard_id")
+    info = doc.get("ai_generation") or {}
+
+    # 1. The plan the tiles came from (optional: a draft outlives its run).
+    yield reg.status("reading the draft")
+    run = await asyncio.to_thread(_run_record, str(info.get("run_id") or ""))
+    plan = plan_of(run)
+    title = (plan.title if plan else "") or str(doc.get("title") or "")
+
+    # 2. The collections the tiles bind, as the generator saw them.
+    yield reg.status("reading project")
+    dc_ids = [str(components[i].get("dc_id")) for i in reg.positions if components[i].get("dc_id")]
+    try:
+        contexts, ctx_warnings = await regenerate_contexts(project_id, reg.user, dc_ids)
+    except HTTPException as e:
+        raise _Abort(str(e.detail)) from e
+    reg.warnings.extend(ctx_warnings)
+
+    # 3. Re-fill, tile by tile; a tile that fails leaves the stored one alone.
+    yield reg.status("regenerating")
+    siblings = [t for t in (generation_tag(c) for c in components) if t]
+    replacements: dict[int, dict[str, Any]] = {}
+    for position in reg.positions:
+        stored = components[position]
+        tag = generation_tag(stored)
+        planned = planned_for(stored, tag=tag, plan=plan)
+        component, event, warnings = await regenerate_target(
+            target_for(stored, planned, contexts),
+            complete=reg.complete,
+            budget=reg.budget,
+            dashboard_title=title,
+            siblings=[t for t in siblings if t != tag],
+            instruction=reg.instruction,
+            plan=plan,
+        )
+        reg.warnings.extend(warnings)
+        if component is not None:
+            slim = _slim(component)
+            slim["ai_source"] = ai_source_stamp(
+                planned.tag,
+                (reg.instruction or "").strip() or planned.intent or str(info.get("prompt") or ""),
+            )
+            try:
+                replacements[position] = await asyncio.to_thread(
+                    stored_component,
+                    slim,
+                    project_id=project_id,
+                    index=str(stored.get("index") or ""),
+                    section=stored.get("section"),
+                )
+            except (ValidationError, ValueError) as e:
+                # The tile validated on its own but not as a dashboard: keep
+                # the stored one and say so, rather than writing a tile the
+                # viewer cannot render.
+                event = component_event(
+                    planned,
+                    "dropped",
+                    attempts=event.attempts,
+                    error=component_yaml.format_validation_error_for_llm(e),
+                )
+        yield reg.budget_frame()
+        yield reg.component_frame(event)
+
+    if not replacements:
+        raise _Abort("no component could be regenerated")
+
+    # 4. Write the tiles back, and the section's boxes with them.
+    yield reg.status("saving")
+    merged = list(components)
+    for position, replacement in replacements.items():
+        merged[position] = replacement
+    layouts = relayout_section(merged, reg.positions, doc) if reg.section is not None else {}
+    await asyncio.to_thread(write_components, dashboard_oid, replacements, layouts)
+
+    written = [jsonable(merged[p]) for p in reg.positions]
+    single = reg.section is None and len(reg.positions) == 1
+    event = RegeneratedEvent(
+        dashboard_id=str(dashboard_oid),
+        section=reg.section,
+        index=reg.positions[0] if single else None,
+        tag=generation_tag(merged[reg.positions[0]]) if single else None,
+        component=written[0] if single else None,
+        components=written,
+        warnings=list(reg.warnings),
+    )
+    yield reg.frame(StreamEvent(type="regenerated", data=event.model_dump(mode="json")))
+    yield reg.done()
+
+
+# ---------------------------------------------------------------------------
+# Review bookkeeping and history (sync: pymongo)
+# ---------------------------------------------------------------------------
+
+
+def review_counts(doc: dict[str, Any], reviewed: list[str]) -> tuple[list[str], int]:
+    """(reviewed tags still on the dashboard, number of reviewable tiles).
+
+    Removing a tile is the ordinary component delete, which knows nothing
+    about the draft, so a tag can outlive what it named: the kept list is
+    intersected with what ``stored_metadata`` carries every time the counts
+    are computed, and `total` counts the tiles that carry a generation tag.
+    """
+    present = {t for t in (generation_tag(c) for c in stored_components(doc)) if t}
+    kept = [t for t in dict.fromkeys(reviewed) if t in present]
+    return kept, len(present)
+
+
+def review_dashboard(dashboard_id: str, body: ReviewRequest, user: Any) -> ReviewResponse:
+    """Mark one tile of a draft reviewed (or take the mark back); sync (pymongo).
+
+    404 without an ``ai_generation`` stamp, 403 without editor permission.
+    Returns the counts the review panel shows: how many of the draft's tiles
+    are kept, out of how many.
+    """
+    oid, doc = require_draft_dashboard(dashboard_id, user)
+    info = doc.get("ai_generation") or {}
+    reviewed = [str(t) for t in (info.get("reviewed") or [])]
+    tag = body.tag.strip()
+    if body.action == "keep":
+        if tag not in reviewed:
+            reviewed.append(tag)
+    else:
+        reviewed = [t for t in reviewed if t != tag]
+    kept, total = review_counts(doc, reviewed)
+    dashboards_collection.update_one(
+        {"dashboard_id": oid}, {"$set": {"ai_generation.reviewed": kept}}
+    )
+    return ReviewResponse(reviewed=len(kept), total=total)
+
+
+def _dashboard_titles(dashboard_ids: list[str]) -> dict[str, str]:
+    """dashboard_id -> title for the ids that still exist (one query, best effort)."""
+    oids = []
+    for dashboard_id in dashboard_ids:
+        try:
+            oids.append(ObjectId(dashboard_id))
+        except Exception:  # noqa: BLE001, a record written before the draft was saved
+            continue
+    if not oids:
+        return {}
+    docs = dashboards_collection.find(
+        {"dashboard_id": {"$in": oids}}, {"dashboard_id": 1, "title": 1}
+    )
+    return {str(d.get("dashboard_id")): str(d.get("title") or "") for d in docs}
+
+
+def list_generations(project_id: str, user: Any, limit: int = 20) -> GenerationsResponse:
+    """The project's generation runs, newest first, without their YAML or plan.
+
+    400 on a malformed project id, 404 for an unknown project, 403 without
+    viewer permission on it. `limit` is capped at `MAX_GENERATION_HISTORY`.
+    """
+    try:
+        oid = ObjectId(project_id)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"invalid project_id: {e}") from e
+    if not _project_doc(oid):
+        raise HTTPException(status_code=404, detail="Project not found.")
+    if not check_project_permission(oid, user, "viewer"):
+        raise HTTPException(
+            status_code=403, detail="You don't have permission to read this project."
+        )
+    capped = max(1, min(int(limit), MAX_GENERATION_HISTORY))
+    runs = generations.list_for_project(project_id, capped)
+    titles = _dashboard_titles([r.dashboard_id for r in runs if r.dashboard_id])
+    rows: list[GenerationSummary] = []
+    for run in runs:
+        counts = Counter(str(c.get("status") or "") for c in run.components)
+        rows.append(
+            GenerationSummary(
+                id=run.id,
+                dashboard_id=run.dashboard_id,
+                title=titles.get(str(run.dashboard_id or "")) or None,
+                prompt=run.prompt,
+                model=run.model,
+                status=run.status,
+                created_at=run.created_at,
+                ok=counts["ok"],
+                repaired=counts["repaired"],
+                dropped=counts["dropped"],
+                warnings=list(run.warnings),
+            )
+        )
+    return GenerationsResponse(generations=rows)
