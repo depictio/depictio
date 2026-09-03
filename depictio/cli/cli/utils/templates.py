@@ -37,24 +37,32 @@ _TEMPLATE_VAR_RE = re.compile(r"\{([A-Z0-9_]+)\}")
 _VERSION_DIR_RE = re.compile(r"^\d+(\.\d+)*$")
 
 
-def latest_template_version(pipeline_dir: Path) -> str | None:
-    """Highest numeric version subdirectory of ``pipeline_dir`` holding a template YAML.
+def _version_key(version: str) -> tuple[int, ...]:
+    """Order version strings numerically, so 2.9.0 sorts below 2.16.0."""
+    return tuple(int(part) for part in version.split("."))
 
-    Returns e.g. ``"2.16.0"`` for ``depictio/projects/nf-core/ampliseq/``, or None
-    when the directory has no versioned template subdirectories.
-    """
+
+def _template_versions(pipeline_dir: Path) -> list[str]:
+    """Numeric version subdirectories of ``pipeline_dir`` that ship a template YAML."""
     if not pipeline_dir.is_dir():
-        return None
-    versions = [
+        return []
+    return [
         d.name
         for d in pipeline_dir.iterdir()
         if d.is_dir()
         and _VERSION_DIR_RE.match(d.name)
         and any((d / f).is_file() for f in ("template.yaml", "project.yaml"))
     ]
-    if not versions:
-        return None
-    return max(versions, key=lambda v: tuple(int(p) for p in v.split(".")))
+
+
+def latest_template_version(pipeline_dir: Path) -> str | None:
+    """Highest numeric version subdirectory of ``pipeline_dir`` holding a template YAML.
+
+    Returns e.g. ``"2.16.0"`` for ``depictio/projects/nf-core/ampliseq/``, or None
+    when the directory has no versioned template subdirectories.
+    """
+    versions = _template_versions(pipeline_dir)
+    return max(versions, key=_version_key) if versions else None
 
 
 def _resolve_template_id_in(projects_dir: Path, template_id: str) -> str:
@@ -77,6 +85,21 @@ def _resolve_template_id_in(projects_dir: Path, template_id: str) -> str:
         if version:
             return "/".join([*parts, version])
     return template_id
+
+
+def _projects_roots() -> list[Path]:
+    """Candidate ``projects/`` roots a bundled template may live under.
+
+    The source checkout (``depictio/projects``) first, then the flattened layout
+    an installed package gets (``depictio/cli/projects``). Both template lookup
+    and version discovery go through here so they can never disagree about
+    where templates live.
+    """
+    here = Path(__file__).resolve()
+    return [
+        here.parents[4] / "depictio" / "projects",  # cli/cli/utils/ -> repo root
+        here.parents[3] / "projects",  # cli/cli/utils/ -> cli/
+    ]
 
 
 def _load_yaml(path: str) -> dict:
@@ -109,44 +132,122 @@ def locate_template(template_id: str) -> Path:
     Raises:
         FileNotFoundError: If no template YAML exists.
     """
-    # Resolve relative to depictio package root
-    package_root = Path(__file__).resolve().parents[4]  # cli/cli/utils/ -> depictio/
-    projects_dir = package_root / "depictio" / "projects"
-    template_dir = projects_dir / _resolve_template_id_in(projects_dir, template_id)
+    roots = _projects_roots()
+    searched: list[Path] = []
+    for projects_dir in roots:
+        template_dir = projects_dir / _resolve_template_id_in(projects_dir, template_id)
+        searched.append(template_dir)
+        # Prefer template.yaml (dedicated template file) over project.yaml (fixture)
+        for filename in ("template.yaml", "project.yaml"):
+            candidate = template_dir / filename
+            if candidate.is_file():
+                return candidate
 
-    # Prefer template.yaml (dedicated template file) over project.yaml (fixture)
-    for filename in ("template.yaml", "project.yaml"):
-        candidate = template_dir / filename
-        if candidate.is_file():
-            return candidate
-
-    # Also try without the package nesting (for installed packages)
-    alt_root = Path(__file__).resolve().parents[3]  # cli/cli/utils/ -> cli/
-    alt_projects_dir = alt_root / "projects"
-    alt_dir = alt_projects_dir / _resolve_template_id_in(alt_projects_dir, template_id)
-    for filename in ("template.yaml", "project.yaml"):
-        candidate = alt_dir / filename
-        if candidate.is_file():
-            return candidate
-
-    available = _list_available_templates(package_root)
+    available = _list_available_templates(roots[0])
     available_str = ", ".join(available) if available else "none found"
     raise FileNotFoundError(
-        f"Template '{template_id}' not found at {template_dir}. "
-        f"Available templates: {available_str}"
+        f"Template '{template_id}' not found at {searched[0]}. Available templates: {available_str}"
     )
 
 
-def _list_available_templates(package_root: Path) -> list[str]:
-    """List available template IDs by scanning the projects directory.
+def detect_template_from_run_dir(run_dir: str | Path) -> tuple[str | None, Any]:
+    """Identify the pipeline that produced ``run_dir`` and pick a bundled template.
+
+    Powers ``depictio-cli run --data-root <dir>`` with no ``--template``: the
+    results directory itself says which pipeline and release made it, so the
+    user should not have to.
+
+    Resolution, in order:
+
+    1. Read the run's provenance (engine-agnostic; see
+       ``depictio.models.models.run_info``). No engine recognised the directory,
+       or it named no pipeline → nothing to select against.
+    2. Exact match: each candidate template id the run suggests (normalised
+       version first, then the raw version string) through ``locate_template``.
+    3. Closest shipped version of the *same* pipeline: the highest available
+       version that is **not newer** than the run. Only when the run predates
+       every shipped template does the lowest one win — never the highest. A
+       newer template describes outputs the older run does not have, so
+       defaulting to "latest" produces a project whose data collections point at
+       files that were never written.
+
+    Returns:
+        ``(template_id, run_info)``. ``template_id`` is None when no template
+        can be selected; ``run_info`` is None only when no engine recognised the
+        directory at all, and is returned either way so callers can report what
+        was found.
+    """
+    from depictio.models.models.run_info import read_run_info
+
+    info = read_run_info(run_dir)
+    if info is None:
+        logger.info(f"No workflow run provenance recognised in {run_dir}")
+        return None, None
+    return select_template_for_run(info), info
+
+
+def select_template_for_run(info: Any) -> str | None:
+    """Pick the bundled template that best fits an already-read ``WorkflowRunInfo``.
+
+    Split out from ``detect_template_from_run_dir`` because the two halves are
+    wanted independently: the Nextflow trigger resolves its template from the
+    forwarded manifest, yet still needs the run's provenance, so ``run.py`` reads
+    the info once and calls this only when no template was chosen for it.
+
+    See ``detect_template_from_run_dir`` for the resolution order.
+    """
+    if not info.pipeline_name:
+        logger.info(
+            f"Run recognised as {info.engine or 'unknown engine'} but names no pipeline; "
+            "cannot auto-select a template"
+        )
+        return None
+
+    for template_id in info.template_ids():
+        try:
+            locate_template(template_id)
+        except FileNotFoundError:
+            continue
+        logger.info(f"Detected template '{template_id}' from run provenance")
+        return template_id
+
+    # Fallback: any shipped version of this pipeline, compared as int tuples the
+    # same way ``latest_template_version`` orders them.
+    available: set[str] = set()
+    for projects_dir in _projects_roots():
+        available.update(_template_versions(projects_dir / info.pipeline_name))
+    if not available:
+        logger.warning(f"No bundled template ships for pipeline '{info.pipeline_name}'")
+        return None
+
+    ordered = sorted(available, key=_version_key)
+    run_version = info.pipeline_version
+    if run_version and _VERSION_DIR_RE.match(run_version):
+        run_key = _version_key(run_version)
+        not_newer = [v for v in ordered if _version_key(v) <= run_key]
+        chosen = not_newer[-1] if not_newer else ordered[0]
+    else:
+        # No comparable version at all: latest is the only defensible guess.
+        chosen = ordered[-1]
+        run_version = run_version or "unknown"
+
+    logger.warning(
+        f"No bundled template for {info.pipeline_name} {run_version}; "
+        f"falling back to the closest shipped version {chosen} "
+        f"(available: {', '.join(ordered)})"
+    )
+    return f"{info.pipeline_name}/{chosen}"
+
+
+def _list_available_templates(projects_dir: Path) -> list[str]:
+    """List available template IDs by scanning a projects directory.
 
     Args:
-        package_root: Root of the depictio package.
+        projects_dir: A ``projects/`` root (see ``_projects_roots``).
 
     Returns:
         List of template ID strings.
     """
-    projects_dir = package_root / "depictio" / "projects"
     templates: list[str] = []
 
     if not projects_dir.is_dir():

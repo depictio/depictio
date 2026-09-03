@@ -71,6 +71,15 @@ class WorkflowConfig(MongoModel):
     version: str | None = None
     workflow_parameters: dict | None = None
 
+    # Per-run provenance, filled from `depictio.models.models.run_info` when the
+    # ingested directory identifies the engine that produced it. All optional and
+    # defaulted: configs written before provenance existed still validate, and a
+    # run whose engine left no breadcrumbs simply leaves them unset.
+    engine_name: str | None = None
+    pipeline_version: str | None = None
+    nextflow_version: str | None = None
+    tools_executed: list[str] | None = None
+
 
 class WorkflowRunScan(BaseModel):
     stats: dict[str, int]
