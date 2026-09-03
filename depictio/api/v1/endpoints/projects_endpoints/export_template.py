@@ -17,6 +17,7 @@ their own collection and never belong in a shareable file.
 """
 
 import copy
+import html
 import io
 import re
 import zipfile
@@ -46,18 +47,19 @@ class ExportTemplateRequest(BaseModel):
     data_root: str | None = None
 
 
-# Keys that are runtime state at any nesting level.
-_RUNTIME_KEYS = {"_id", "id", "hash", "registration_time"}
-# Keys that are runtime state on the project root only.
-_ROOT_RUNTIME_KEYS = (
-    "permissions",
-    "last_modified",
-    "yaml_config_path",
-    "template_origin",
-    "flexible_metadata",
+# Keys that are runtime state at any nesting level. flexible_metadata carries
+# per-DC ingest bookkeeping (deltatable_size_bytes / deltatable_size_updated),
+# which must not leak into a shareable bundle.
+_RUNTIME_KEYS = {
+    "_id",
+    "id",
     "hash",
     "registration_time",
-)
+    "last_modified",
+    "flexible_metadata",
+}
+# Keys that are runtime state on the project root only (on top of _RUNTIME_KEYS).
+_ROOT_RUNTIME_KEYS = ("permissions", "yaml_config_path", "template_origin")
 # Preferred top-level key order for the emitted template.yaml.
 _ROOT_KEY_ORDER = (
     "name",
@@ -73,12 +75,19 @@ _ROOT_KEY_ORDER = (
 
 
 def _strip_runtime(node: Any) -> Any:
-    """Recursively drop runtime keys and empty values from a config tree."""
+    """Recursively drop runtime keys and empty values from a config tree.
+
+    ``description`` values are decoded back to plain text: MongoModel stores
+    them HTML-escaped (``'`` as ``&#x27;``), and a bundle is authored YAML, so
+    it carries the text the user wrote. Re-instantiation escapes it once again.
+    """
     if isinstance(node, dict):
         cleaned: dict = {}
         for key, value in node.items():
             if key in _RUNTIME_KEYS:
                 continue
+            if key == "description" and isinstance(value, str):
+                value = html.unescape(value)
             stripped = _strip_runtime(value)
             if stripped is None or stripped == {} or stripped == []:
                 continue
