@@ -24,7 +24,7 @@ import type {
   ProjectListEntry,
 } from 'depictio-react-core';
 import { useAIHealth } from 'depictio-react-ai';
-import type { GenerateDataCollection } from 'depictio-react-ai';
+import type { GenerateDataCollection, GenerateJoinInfo } from 'depictio-react-ai';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { useServerStatus } from '../hooks/useServerStatus';
@@ -63,6 +63,17 @@ function useDashboardsSidebar(): [boolean, () => void] {
     });
   }, []);
   return [opened, toggle];
+}
+
+/** The fields of a project-level `joins[]` entry the Generate picker needs.
+ *  Same subset the builder reads in `builder/steps/StepData.tsx`; the
+ *  endpoint returns more plumbing around them. */
+interface ProjectJoin {
+  result_dc_id?: string;
+  left_dc: string;
+  right_dc: string;
+  on_columns: string[];
+  how: string;
 }
 
 const DashboardsApp: React.FC = () => {
@@ -208,12 +219,28 @@ const DashboardsApp: React.FC = () => {
   /** Collections of one project for the Generate tab: every DC of every
    *  workflow, typed so the panel can keep the tables. DC tags are unique per
    *  workflow only, so they carry the workflow tag when the project has
-   *  several. Enrichment (delta locations) is skipped: only names are needed. */
+   *  several. Enrichment (delta locations) is skipped: only names are needed.
+   *  Join results are marked as such so the picker can tell a joined
+   *  collection from a native one, the way the builder's data step does. */
   const loadProjectCollections = useCallback(
     async (projectId: string): Promise<{ dataCollections: GenerateDataCollection[] }> => {
       const { project } = await fetchProject(projectId, { skipEnrichment: true });
       const workflows = project.workflows ?? [];
       const qualify = workflows.length > 1;
+      // Keyed by `result_dc_id`, which is the joined collection's own `_id`.
+      const joinsRaw = (project as { joins?: unknown }).joins;
+      const joinByDcId = new Map<string, GenerateJoinInfo>();
+      if (Array.isArray(joinsRaw)) {
+        for (const j of joinsRaw as ProjectJoin[]) {
+          if (!j?.result_dc_id) continue;
+          joinByDcId.set(j.result_dc_id, {
+            leftDc: j.left_dc,
+            rightDc: j.right_dc,
+            onColumns: Array.isArray(j.on_columns) ? j.on_columns : [],
+            how: j.how || 'inner',
+          });
+        }
+      }
       const dataCollections: GenerateDataCollection[] = [];
       for (const wf of workflows) {
         for (const dc of wf.data_collections ?? []) {
@@ -221,10 +248,12 @@ const DashboardsApp: React.FC = () => {
           const id = String(dc._id ?? dc.id ?? '');
           if (!id) continue;
           const tag = dc.data_collection_tag ?? id;
+          const join = joinByDcId.get(id);
           dataCollections.push({
             id,
             tag: qualify && wf.workflow_tag ? `${wf.workflow_tag}/${tag}` : tag,
             type: String(dc.config?.type ?? ''),
+            ...(join ? { join } : {}),
           });
         }
       }

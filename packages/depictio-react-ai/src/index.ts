@@ -22,8 +22,11 @@ export type { GenerationHistoryProps } from './components/GenerationHistory';
 export { default as GenerateDashboardPanel } from './components/GenerateDashboardPanel';
 export type {
   GenerateDataCollection,
+  GenerateJoinInfo,
   GenerateProjectOption,
 } from './components/GenerateDashboardPanel';
+export { default as GenerationProgress } from './components/GenerationProgress';
+export type { GenerationProgressProps } from './components/GenerationProgress';
 export {
   SectionSummaryPanel,
   SummarizeSectionButton,
