@@ -471,19 +471,23 @@ const ProjectDetailApp: React.FC = () => {
             </Title>
           </Group>
           <Group gap="xs">
-            {canMutate && (
-              <Button
-                variant="light"
-                color="teal"
-                data-testid="export-template-button"
-                leftSection={
-                  <Icon icon="mdi:package-variant-closed" width={16} />
-                }
-                onClick={() => setExportTemplateOpened(true)}
-              >
-                Export as template
-              </Button>
-            )}
+            {/* Disabled rather than hidden for viewers, like create-dc-btn:
+                the affordance stays discoverable and the title says why. */}
+            <Button
+              variant="light"
+              color={accent.secondary}
+              data-testid="export-template-button"
+              leftSection={<Icon icon="mdi:package-variant-closed" width={16} />}
+              disabled={!canMutate}
+              onClick={() => setExportTemplateOpened(true)}
+              title={
+                canMutate
+                  ? 'Export this project and its dashboards as a template bundle'
+                  : 'Owner permission required'
+              }
+            >
+              Export as template
+            </Button>
             <Button
               component="a"
               href={`/projects/${projectId}/permissions`}
@@ -1433,7 +1437,12 @@ const CreateDataCollectionModal: React.FC<{
           return;
         }
         if (!/^(https:\/\/|s3:\/\/|http:\/\/)/i.test(url)) {
-          setError('The URL must start with https:// or s3://.');
+          // http:// passes here; whether the server accepts it depends on
+          // DEPICTIO_REMOTE_ALLOW_HTTP.
+          setError(
+            'The URL must start with https://, s3:// or http:// ' +
+              '(plain http:// is only accepted when the server allows it).',
+          );
           setSubmitting(false);
           return;
         }

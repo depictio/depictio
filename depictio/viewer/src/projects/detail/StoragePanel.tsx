@@ -22,6 +22,7 @@ import {
   getProjectStorage,
   setProjectStorage,
   testProjectStorage,
+  useBrandAccents,
 } from 'depictio-react-core';
 import type { ProjectStorageConfig } from 'depictio-react-core';
 
@@ -177,8 +178,11 @@ const StorageForm: React.FC<{
  *  end to end — the backend stores it encrypted and only ever reports
  *  `has_secret`, so this panel never displays or re-populates it. */
 const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => {
+  const accent = useBrandAccents();
   const [config, setConfig] = useState<ProjectStorageConfig | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Nothing to load for non-owners (see the effect below), so don't flash the
+  // loading row at them.
+  const [loading, setLoading] = useState(canManage);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -186,6 +190,16 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
   const [confirmRemoveOpened, setConfirmRemoveOpened] = useState(false);
 
   useEffect(() => {
+    // GET /projects/{id}/storage is owner-gated (403 otherwise). Skip the
+    // request we know will be refused and show the empty state directly;
+    // `canManage` flips once the project and user have loaded, which re-runs
+    // this effect for owners.
+    if (!canManage) {
+      setConfig(null);
+      setLoadError(null);
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     setLoadError(null);
@@ -195,7 +209,7 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
         if (!cancelled) setConfig(c);
       })
       .catch((err: Error) => {
-        // 401/403 (non-owner) or transport errors land here — render the
+        // Transport errors (or a stale owner check) land here: render the
         // panel read-only with the message instead of toasting.
         if (!cancelled) setLoadError(err.message || 'Failed to load storage configuration.');
       })
@@ -205,7 +219,7 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [projectId, canManage]);
 
   const handleTest = async () => {
     setTesting(true);
@@ -259,7 +273,7 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
           <Icon
             icon="mdi:cloud-key-outline"
             width={20}
-            color="var(--mantine-color-teal-6)"
+            color={`var(--mantine-color-${accent.secondary}-6)`}
           />
           <Title order={4}>Storage</Title>
           {config && (
@@ -278,7 +292,10 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
             </Badge>
           )}
         </Group>
-        {!loading && !editing && canManage && (
+        {/* Non-owners get the actions disabled, not hidden (same rule as
+            create-dc-btn): the affordance stays discoverable and the title
+            explains what is missing. */}
+        {!loading && !editing && (
           <Group gap="xs" wrap="nowrap">
             {config && (
               <>
@@ -289,6 +306,8 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
                   leftSection={<Icon icon="mdi:connection" width={14} />}
                   onClick={handleTest}
                   loading={testing}
+                  disabled={!canManage}
+                  title={canManage ? undefined : 'Owner permission required'}
                 >
                   Test connection
                 </Button>
@@ -297,6 +316,8 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
                   variant="light"
                   leftSection={<Icon icon="mdi:pencil" width={14} />}
                   onClick={() => setEditing(true)}
+                  disabled={!canManage}
+                  title={canManage ? undefined : 'Owner permission required'}
                 >
                   Edit
                 </Button>
@@ -306,6 +327,8 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
                   color="red"
                   leftSection={<Icon icon="mdi:delete-outline" width={14} />}
                   onClick={() => setConfirmRemoveOpened(true)}
+                  disabled={!canManage}
+                  title={canManage ? undefined : 'Owner permission required'}
                 >
                   Remove
                 </Button>
@@ -314,8 +337,11 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
             {!config && !loadError && (
               <Button
                 size="xs"
+                data-testid="storage-configure-button"
                 leftSection={<Icon icon="mdi:plus" width={14} />}
                 onClick={() => setEditing(true)}
+                disabled={!canManage}
+                title={canManage ? undefined : 'Owner permission required'}
               >
                 Configure storage
               </Button>
@@ -342,20 +368,14 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
           onCancel={() => setEditing(false)}
         />
       ) : loadError ? (
-        canManage ? (
-          <Alert
-            mt="sm"
-            color="red"
-            variant="light"
-            icon={<Icon icon="mdi:alert-circle" width={16} />}
-          >
-            {loadError}
-          </Alert>
-        ) : (
-          <Text size="sm" c="dimmed" pt="xs">
-            Storage settings are managed by the project owners.
-          </Text>
-        )
+        <Alert
+          mt="sm"
+          color="red"
+          variant="light"
+          icon={<Icon icon="mdi:alert-circle" width={16} />}
+        >
+          {loadError}
+        </Alert>
       ) : config ? (
         <Stack gap={4} pt="xs">
           <ConfigRow label="Endpoint" value={config.endpoint_url} />
