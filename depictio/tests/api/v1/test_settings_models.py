@@ -13,6 +13,7 @@ from depictio.api.v1.configs.settings_models import (
     # JBrowseConfig,
     MongoDBConfig,
     S3CacheConfig,
+    RemoteConfig,
     S3DepictioCLIConfig,
     Settings,
     ViewerConfig,
@@ -701,3 +702,64 @@ class TestS3ConfigLegacyEnv:
         assert config.s3_storage.bucket == "yaml-bucket"
         assert config.s3_storage.service_name == "storage"
         assert config.s3_storage.aws_secret_access_key == "yaml-secret"
+
+
+class TestRemoteConfig:
+    """DEPICTIO_REMOTE_* is the SSRF gateway policy (depictio.api.v1.remote_fetch)."""
+
+    def test_default_values(self):
+        with env_vars(
+            {
+                "DEPICTIO_REMOTE_ALLOW_HTTP": None,
+                "DEPICTIO_REMOTE_URL_ALLOWLIST": None,
+                "DEPICTIO_REMOTE_URL_DENYLIST": None,
+                "DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES": None,
+                "DEPICTIO_REMOTE_TIMEOUT_S": None,
+                "DEPICTIO_REMOTE_MAX_REDIRECTS": None,
+            }
+        ):
+            remote = RemoteConfig()
+        assert remote.allow_http is False
+        assert remote.url_allowlist == ""
+        assert remote.url_denylist == ""
+        assert remote.max_download_bytes == 500 * 1024 * 1024
+        assert remote.timeout_s == 30.0
+        assert remote.max_redirects == 3
+
+    def test_env_variables(self):
+        with env_vars(
+            {
+                "DEPICTIO_REMOTE_ALLOW_HTTP": "true",
+                "DEPICTIO_REMOTE_URL_ALLOWLIST": "data.example, mirror.example",
+                "DEPICTIO_REMOTE_URL_DENYLIST": "evil.example",
+                "DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES": "1048576",
+                "DEPICTIO_REMOTE_TIMEOUT_S": "12.5",
+                "DEPICTIO_REMOTE_MAX_REDIRECTS": "1",
+            }
+        ):
+            remote = RemoteConfig()
+        assert remote.allow_http is True
+        assert remote.url_allowlist == "data.example, mirror.example"
+        assert remote.url_denylist == "evil.example"
+        assert remote.max_download_bytes == 1048576
+        assert remote.timeout_s == 12.5
+        assert remote.max_redirects == 1
+
+    def test_invalid_values_fail_loudly(self):
+        from pydantic import ValidationError
+
+        with env_vars({"DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES": "lots"}):
+            with pytest.raises(ValidationError, match="max_download_bytes"):
+                RemoteConfig()
+        with env_vars({"DEPICTIO_REMOTE_MAX_REDIRECTS": "-1"}):
+            with pytest.raises(ValidationError, match="max_redirects"):
+                RemoteConfig()
+        with env_vars({"DEPICTIO_REMOTE_TIMEOUT_S": "0"}):
+            with pytest.raises(ValidationError, match="timeout_s"):
+                RemoteConfig()
+
+    def test_settings_composes_remote_section(self):
+        with env_vars({"DEPICTIO_REMOTE_MAX_REDIRECTS": "2"}):
+            settings = Settings()
+        assert isinstance(settings.remote, RemoteConfig)
+        assert settings.remote.max_redirects == 2
