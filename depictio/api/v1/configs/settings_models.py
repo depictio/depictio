@@ -766,6 +766,73 @@ class MultiQCPrerenderConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_MULTIQC_")
 
 
+class RemoteConfig(BaseSettings):
+    """Policy for fetching user-supplied remote URLs (scan modes url/manifest).
+
+    Source of truth for the SSRF gateway in ``depictio.api.v1.remote_fetch``.
+    The gateway instantiates this section on every call instead of reading the
+    ``settings`` singleton, so the CLI and the Celery worker apply the very same
+    policy without importing the full API configuration.
+
+    Environment variables: ``DEPICTIO_REMOTE_<FIELD>`` (upper-cased field name).
+    A malformed value fails validation at the first fetch instead of silently
+    falling back to a default.
+    """
+
+    allow_http: bool = Field(
+        default=False,
+        description=(
+            "Accept plain http:// URLs in addition to https:// and s3://. Off by "
+            "default: the gateway and the models reject http:// locations. Turn on "
+            "for local or airgapped deployments that serve data without TLS."
+        ),
+    )
+    url_allowlist: str = Field(
+        default="",
+        description=(
+            "Comma-separated host names the gateway may fetch from. Exclusive while "
+            "set: any host not listed is rejected, and a listed host skips the "
+            "private/loopback address rejection (this is how internal deployments "
+            "and tests opt a 127.0.0.1 or intranet host in). Empty accepts every "
+            "public host."
+        ),
+    )
+    url_denylist: str = Field(
+        default="",
+        description=(
+            "Comma-separated host names the gateway always rejects. Checked before "
+            "the allowlist, so a host present in both lists is denied."
+        ),
+    )
+    max_download_bytes: int = Field(
+        default=500 * 1024 * 1024,
+        ge=1,
+        description=(
+            "Size cap in bytes for a single remote download (data file or manifest). "
+            "Downloads stream and abort, removing the partial file, once the cap is "
+            "exceeded."
+        ),
+    )
+    timeout_s: float = Field(
+        default=30.0,
+        gt=0,
+        description=(
+            "httpx timeout in seconds applied to each connect/read/write operation "
+            "of a remote fetch (not a total download time)."
+        ),
+    )
+    max_redirects: int = Field(
+        default=3,
+        ge=0,
+        description=(
+            "Maximum redirect hops followed for a remote URL. The gateway re-validates "
+            "every Location against this policy before following it."
+        ),
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_REMOTE_")
+
+
 # ── Optional Features ─────────────────────────────────────────────────────────
 
 
@@ -1641,6 +1708,7 @@ class Settings(BaseSettings):
     celery: CeleryConfig = Field(default_factory=CeleryConfig)
     s3_cache: S3CacheConfig = Field(default_factory=S3CacheConfig)
     multiqc_prerender: MultiQCPrerenderConfig = Field(default_factory=MultiQCPrerenderConfig)
+    remote: RemoteConfig = Field(default_factory=RemoteConfig)
 
     # Optional features
     jbrowse: JBrowseConfig = Field(default_factory=JBrowseConfig)

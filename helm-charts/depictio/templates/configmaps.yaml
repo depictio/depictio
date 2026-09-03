@@ -116,6 +116,16 @@ data:
   DEPICTIO_DASHBOARD_YAML_WATCHER_AUTO_START: {{ .Values.backend.env.DEPICTIO_DASHBOARD_YAML_WATCHER_AUTO_START | default "false" | quote }}
   DEPICTIO_DASHBOARD_YAML_WATCH_LOCAL_DIR: {{ .Values.backend.env.DEPICTIO_DASHBOARD_YAML_WATCH_LOCAL_DIR | default "false" | quote }}
   DEPICTIO_DASHBOARD_YAML_AUTO_EXPORT_ON_SAVE: {{ .Values.backend.env.DEPICTIO_DASHBOARD_YAML_AUTO_EXPORT_ON_SAVE | default "false" | quote }}
+  # Remote data sources (URL / manifest scan modes): policy for the SSRF
+  # gateway in api/v1/remote_fetch.py. Explicit keys with the safe defaults
+  # (this ConfigMap is an allowlist, an unlisted key is silently dropped).
+  # Mirrored into the celery ConfigMap below; the two must agree.
+  DEPICTIO_REMOTE_ALLOW_HTTP: {{ .Values.backend.env.DEPICTIO_REMOTE_ALLOW_HTTP | default "false" | quote }}
+  DEPICTIO_REMOTE_URL_ALLOWLIST: {{ .Values.backend.env.DEPICTIO_REMOTE_URL_ALLOWLIST | default "" | quote }}
+  DEPICTIO_REMOTE_URL_DENYLIST: {{ .Values.backend.env.DEPICTIO_REMOTE_URL_DENYLIST | default "" | quote }}
+  DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES: {{ .Values.backend.env.DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES | default "524288000" | quote }}
+  DEPICTIO_REMOTE_TIMEOUT_S: {{ .Values.backend.env.DEPICTIO_REMOTE_TIMEOUT_S | default "30" | quote }}
+  DEPICTIO_REMOTE_MAX_REDIRECTS: {{ .Values.backend.env.DEPICTIO_REMOTE_MAX_REDIRECTS | default "3" | quote }}
   # MinIO/S3 configuration.
   # NOTE: DEPICTIO_MINIO_ROOT_USER and DEPICTIO_MINIO_ROOT_PASSWORD are
   # intentionally NOT in this ConfigMap. ConfigMaps are world-readable to
@@ -173,6 +183,16 @@ data:
   {{ $key }}: {{ $value | quote }}
   {{- end }}
   {{- end }}
+
+  # Remote data source policy: must mirror the backend ConfigMap above (same
+  # backend.env keys). The worker performs the remote reads the API enqueues,
+  # so a mismatch would let one process accept a URL the other rejects.
+  DEPICTIO_REMOTE_ALLOW_HTTP: {{ .Values.backend.env.DEPICTIO_REMOTE_ALLOW_HTTP | default "false" | quote }}
+  DEPICTIO_REMOTE_URL_ALLOWLIST: {{ .Values.backend.env.DEPICTIO_REMOTE_URL_ALLOWLIST | default "" | quote }}
+  DEPICTIO_REMOTE_URL_DENYLIST: {{ .Values.backend.env.DEPICTIO_REMOTE_URL_DENYLIST | default "" | quote }}
+  DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES: {{ .Values.backend.env.DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES | default "524288000" | quote }}
+  DEPICTIO_REMOTE_TIMEOUT_S: {{ .Values.backend.env.DEPICTIO_REMOTE_TIMEOUT_S | default "30" | quote }}
+  DEPICTIO_REMOTE_MAX_REDIRECTS: {{ .Values.backend.env.DEPICTIO_REMOTE_MAX_REDIRECTS | default "3" | quote }}
 
   # Redis/Celery broker settings
   {{- if .Values.redis.enabled }}

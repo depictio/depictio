@@ -79,6 +79,16 @@ services:
       DEPICTIO_BOOTSTRAP_SEED_TEST_USER: "${DEPICTIO_BOOTSTRAP_SEED_TEST_USER:-false}"
       DEPICTIO_BOOTSTRAP_TEST_USER_EMAIL: "${DEPICTIO_BOOTSTRAP_TEST_USER_EMAIL:-test_user@example.com}"
       DEPICTIO_BOOTSTRAP_TEST_USER_PASSWORD: "${DEPICTIO_BOOTSTRAP_TEST_USER_PASSWORD:-test_pwd}"
+      # Remote data sources (URL / manifest scan modes) go through an SSRF
+      # gateway; see .env.example. Defaults are the safe ones (https only, no
+      # host lists, 500 MiB cap) and a value in .env wins. The worker reads the
+      # same six below and must agree. The allowlist is EXCLUSIVE while set.
+      DEPICTIO_REMOTE_ALLOW_HTTP: "${DEPICTIO_REMOTE_ALLOW_HTTP:-false}"
+      DEPICTIO_REMOTE_URL_ALLOWLIST: "${DEPICTIO_REMOTE_URL_ALLOWLIST:-}"
+      DEPICTIO_REMOTE_URL_DENYLIST: "${DEPICTIO_REMOTE_URL_DENYLIST:-}"
+      DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES: "${DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES:-524288000}"
+      DEPICTIO_REMOTE_TIMEOUT_S: "${DEPICTIO_REMOTE_TIMEOUT_S:-30}"
+      DEPICTIO_REMOTE_MAX_REDIRECTS: "${DEPICTIO_REMOTE_MAX_REDIRECTS:-3}"
       # Anonymous installation telemetry — see .env.example and docs/telemetry.md.
       # Set DEPICTIO_TELEMETRY_ENABLED=false (or DO_NOT_TRACK=1) in .env to opt out.
       # The kind is stated rather than guessed: a Compose container and a Helm pod
@@ -143,6 +153,13 @@ services:
       DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-true}"
       DEPICTIO_MINIO_ROOT_USER: "${DEPICTIO_MINIO_ROOT_USER:-minio}"
       DEPICTIO_MINIO_ROOT_PASSWORD: "${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}"
+      # Remote data source policy: must match the backend block above.
+      DEPICTIO_REMOTE_ALLOW_HTTP: "${DEPICTIO_REMOTE_ALLOW_HTTP:-false}"
+      DEPICTIO_REMOTE_URL_ALLOWLIST: "${DEPICTIO_REMOTE_URL_ALLOWLIST:-}"
+      DEPICTIO_REMOTE_URL_DENYLIST: "${DEPICTIO_REMOTE_URL_DENYLIST:-}"
+      DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES: "${DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES:-524288000}"
+      DEPICTIO_REMOTE_TIMEOUT_S: "${DEPICTIO_REMOTE_TIMEOUT_S:-30}"
+      DEPICTIO_REMOTE_MAX_REDIRECTS: "${DEPICTIO_REMOTE_MAX_REDIRECTS:-3}"
     command: ["/app/run_celery_worker.sh"]
     healthcheck:
       test: ["CMD-SHELL", "celery -A depictio.api.celery_worker:celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]
