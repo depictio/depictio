@@ -4,16 +4,14 @@ from collections.abc import Iterable
 from datetime import datetime
 from urllib.parse import urlparse
 
-import httpx
 import polars as pl
 from deltalake.exceptions import TableNotFoundError
 from pydantic import validate_call
 
 from depictio.api.v1.remote_fetch import (
     bounded_download,
+    direct_download,
     is_server_context,
-    remote_policy,
-    stream_to_file,
 )
 from depictio.cli.cli.utils.api_calls import (
     api_get_files_by_dc_id,
@@ -199,15 +197,7 @@ def _download_remote_to_temp(url: str) -> str:
         if is_server_context():
             bounded_download(url, temp_path)
         else:
-            policy = remote_policy()
-            with httpx.Client(
-                timeout=policy.timeout_s,
-                follow_redirects=True,
-                max_redirects=policy.max_redirects,
-            ) as client:
-                with client.stream("GET", url) as response:
-                    response.raise_for_status()
-                    stream_to_file(response, temp_path, policy.max_download_bytes)
+            direct_download(url, temp_path)
     except Exception:
         try:
             os.unlink(temp_path)

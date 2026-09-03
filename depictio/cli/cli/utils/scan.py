@@ -4,17 +4,16 @@ import re
 from datetime import datetime
 from urllib.parse import urlparse
 
-import httpx
 from bson import ObjectId
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 
 from depictio.api.v1.remote_fetch import (
     RemoteFetchFailed,
+    direct_fetch_text,
+    direct_probe,
     fetch_validated_text,
     is_server_context,
     probe_remote_url,
-    remote_policy,
-    stream_to_text,
     validate_remote_url,
 )
 from depictio.cli.cli.utils.api_calls import (
@@ -884,28 +883,22 @@ def _probe_url_metadata(url: str) -> dict:
 
     if is_server_context():
         validate_remote_url(url)  # policy violations propagate
+        # Narrow on purpose: a redirect hop the policy rejects must abort the
+        # scan too, so only reachability failures degrade.
         try:
             metadata = probe_remote_url(url, timeout_s=_PROBE_TIMEOUT_S)
         except RemoteFetchFailed as exc:
             logger.warning(f"Could not probe remote URL {url}: {exc}")
             return {"size": -1, "etag": None}
-        size = metadata["size"]
-        return {"size": size if size > 0 else -1, "etag": metadata["etag"]}
+    else:
+        try:
+            metadata = direct_probe(url, timeout_s=_PROBE_TIMEOUT_S)
+        except Exception as exc:
+            logger.warning(f"Could not probe remote URL {url}: {exc}")
+            return {"size": -1, "etag": None}
 
-    policy = remote_policy()
-    try:
-        with httpx.Client(
-            timeout=_PROBE_TIMEOUT_S,
-            follow_redirects=True,
-            max_redirects=policy.max_redirects,
-        ) as client:
-            response = client.head(url)
-            size_header = response.headers.get("content-length")
-            size = int(size_header) if size_header and size_header.isdigit() else -1
-            return {"size": size if size > 0 else -1, "etag": response.headers.get("etag", "")}
-    except Exception as exc:
-        logger.warning(f"Could not probe remote URL {url}: {exc}")
-        return {"size": -1, "etag": None}
+    size = metadata["size"]
+    return {"size": size if size > 0 else -1, "etag": metadata["etag"]}
 
 
 def _url_identity_hash(url: str, metadata: dict) -> str:
@@ -1320,15 +1313,7 @@ def fetch_manifest(manifest_url: str, field_map: dict | None = None):
         if is_server_context():
             text = fetch_validated_text(manifest_url)
         else:
-            policy = remote_policy()
-            with httpx.Client(
-                timeout=policy.timeout_s,
-                follow_redirects=True,
-                max_redirects=policy.max_redirects,
-            ) as client:
-                with client.stream("GET", manifest_url) as response:
-                    response.raise_for_status()
-                    text = stream_to_text(response, policy.max_download_bytes)
+            text = direct_fetch_text(manifest_url)
     else:
         if not os.path.exists(manifest_url):
             raise ValueError(f"Manifest '{manifest_url}' does not exist.")
