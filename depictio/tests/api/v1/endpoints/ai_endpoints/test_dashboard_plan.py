@@ -486,6 +486,27 @@ class TestNormalizeStyle:
         assert norm.title == "Iris overview"
         assert norm.grid_sections[0].description == "two words"
 
+    def test_rationale_is_collapsed_dropped_when_empty_and_cut_to_length(self):
+        plan = _plan(components=[_pc("c", "A"), _pc("d", "B")]).model_copy(
+            update={
+                "grid_sections": [
+                    SectionSpec(name="A", rationale="  the   cohort needs a headline "),
+                    SectionSpec(name="B", rationale="   "),
+                ]
+            }
+        )
+        norm, _ = _norm(plan)
+        rationales = {s.name: s.rationale for s in norm.grid_sections}
+        assert rationales["A"] == "the cohort needs a headline"
+        assert rationales["B"] is None
+
+        long_plan = _plan(components=[_pc("c", "A")]).model_copy(
+            update={"grid_sections": [SectionSpec(name="A", rationale="w " * 400)]}
+        )
+        cut = _norm(long_plan)[0].grid_sections[0].rationale
+        assert cut is not None
+        assert len(cut) <= dp.MAX_SECTION_RATIONALE
+
     def test_blank_title_gets_a_fallback(self):
         plan = _plan(components=[_pc("c", "A")], grid_sections=["A"], title="   ")
         norm, warnings = _norm(plan)

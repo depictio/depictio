@@ -474,6 +474,10 @@ class GenerationSummary(BaseModel):
     repaired: int = 0
     dropped: int = 0
     warnings: list[str] = Field(default_factory=list)
+    dashboard_deleted: bool = Field(
+        default=False,
+        description="the run saved a draft that has since been deleted",
+    )
 
 
 class GenerationsResponse(BaseModel):

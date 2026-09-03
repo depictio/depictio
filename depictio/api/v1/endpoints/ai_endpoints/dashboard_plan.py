@@ -104,6 +104,11 @@ DATA_BOUND_TYPES: frozenset[str] = frozenset(
     {"figure", "card", "interactive", "table", "image", "multiqc", "map", "advanced_viz"}
 )
 
+# A section rationale is one sentence a reviewer reads at a glance, so a model
+# that answers with a paragraph is cut here rather than dropped: a truncated
+# reason still says more than no reason at all.
+MAX_SECTION_RATIONALE = 240
+
 # ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
@@ -118,6 +123,11 @@ class SectionSpec(BaseModel):
     icon: str | None = None
     color: str | None = None
     description: str | None = None
+    # The planner's one sentence on why this section exists and what it holds.
+    # Unlike `description`, which the server turns into the section header's
+    # body text, this is never rendered into the dashboard: it is shown to
+    # whoever reviews the draft, so the choice can be read back.
+    rationale: str | None = None
 
 
 class PlannedComponent(BaseModel):
@@ -312,7 +322,7 @@ def _section_entry(raw: Any) -> dict[str, Any] | None:
         if not isinstance(name, str) or not name.strip():
             return None
         out: dict[str, Any] = {"name": name.strip()}
-        for key in ("icon", "color", "description"):
+        for key in ("icon", "color", "description", "rationale"):
             value = raw.get(key)
             if isinstance(value, str) and value.strip():
                 out[key] = value.strip()
@@ -487,7 +497,9 @@ def normalize_plan(
     cleaned and made unique with `-2`, `-3` suffixes; sections are stably
     sorted into the funnel order; icons and colours outside the allowlists
     are replaced (fallback icon, no colour) and blank icons get a stage
-    default.
+    default; section descriptions and rationales are whitespace-collapsed,
+    dropped when they say nothing, and a rationale longer than
+    `MAX_SECTION_RATIONALE` is cut to it.
     """
     warnings: list[str] = []
 
@@ -637,8 +649,14 @@ def normalize_plan(
             )
             color = None
         description = " ".join(spec.description.split()) if spec.description else None
+        rationale = " ".join(spec.rationale.split()) if spec.rationale else ""
         return spec.model_copy(
-            update={"icon": icon, "color": color, "description": description or None}
+            update={
+                "icon": icon,
+                "color": color,
+                "description": description or None,
+                "rationale": rationale[:MAX_SECTION_RATIONALE].rstrip() or None,
+            }
         )
 
     filter_sections = [
