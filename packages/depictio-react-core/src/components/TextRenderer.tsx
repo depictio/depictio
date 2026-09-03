@@ -21,9 +21,10 @@ interface TextRendererProps {
  * We deliberately do NOT pull in react-markdown / remark / rehype — the body
  * is a single paragraph, and a regex pass is ~30 lines vs ~30 KB of deps.
  * Anything more complex (links, lists, images) should use a proper image /
- * table / link component instead.
+ * table / link component instead. Exported so the AI package can render
+ * model output (summaries, answers) with the same three formats.
  */
-const renderInlineMarkdown = (input: string): React.ReactNode[] => {
+export const renderInlineMarkdown = (input: string): React.ReactNode[] => {
   // Pattern order matters: `code` first (greedy backticks), then `**bold**`
   // (two-asterisk), then `*italic*` (single-asterisk). The capture groups
   // come back in lockstep with the split() chunks.

@@ -136,11 +136,14 @@ const ActiveFilterSummary: React.FC<ActiveFilterSummaryProps> = ({
             // useful thing to show, and it is what tells you which map or table
             // to go back to in order to change it. It still takes that
             // component's accent.
-            const icon = fromSelection
-              ? (meta && SELECTION_ICONS[meta.component_type || '']) || SELECTION_ICON_FALLBACK
-              : meta
-                ? interactiveIcon(meta)
-                : 'mdi:filter-variant';
+            const icon =
+              f.source === 'ai_prompt'
+                ? 'material-symbols:auto-awesome-outline'
+                : fromSelection
+                  ? (meta && SELECTION_ICONS[meta.component_type || '']) || SELECTION_ICON_FALLBACK
+                  : meta
+                    ? interactiveIcon(meta)
+                    : 'mdi:filter-variant';
             const accent = meta ? interactiveAccent(meta) : undefined;
             return (
               <Group

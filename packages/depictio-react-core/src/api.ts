@@ -11,7 +11,7 @@ import type { BrandTheme } from './brandTheme';
 import { enqueueFetch } from './fetchQueue';
 import type { GroupingDisplay, GroupRenderDef } from './selectionGroups';
 
-const API_BASE = '/depictio/api/v1';
+export const API_BASE = '/depictio/api/v1';
 
 /** localStorage key shared with the Dash app — same payload shape. */
 const SESSION_KEY = 'local-store';
@@ -774,7 +774,10 @@ export type InteractiveFilterSource =
   /** Derived projection of saved selection groups (see `selectionGroups.ts`).
    *  Never merged into the user's filter list — composed at the fetch
    *  boundary only. */
-  | 'group_filter';
+  | 'group_filter'
+  /** Filter injected by the AI assistant (prompt-driven). Carries only a
+   *  `filter_expr` (no widget value); cleared as a group via the AI chip. */
+  | 'ai_prompt';
 
 /** Per-component computed data (current value under the given filter state).
  *  `metadata.dc_id` is required for cross-DC link resolution server-side; any
@@ -910,6 +913,9 @@ export interface RenderFigureOptions {
   display?: GroupingDisplay;
   /** Groups mode only: false drops ungrouped ("Other") rows from figures. */
   showOther?: boolean;
+  /** Transient Plotly kwargs override merged server-side over the stored
+   *  dict_kwargs (UI-mode figures only). Never persisted. */
+  dictKwargsPatch?: Record<string, unknown>;
 }
 
 export async function renderFigure(
@@ -942,7 +948,15 @@ export async function renderFigure(
     `${API_BASE}/dashboards/render_figure/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters, theme, full_load: fullLoad, ...groupBody }),
+      body: JSON.stringify({
+        filters,
+        theme,
+        full_load: fullLoad,
+        ...groupBody,
+        ...(options?.dictKwargsPatch && Object.keys(options.dictKwargsPatch).length > 0
+          ? { dict_kwargs_patch: options.dictKwargsPatch }
+          : {}),
+      }),
       signal,
     },
   );

@@ -2,6 +2,7 @@ import React from 'react';
 import { ActionIcon, Badge, Box, Button, Group, Loader, Menu, Title, Tooltip, useMantineColorScheme } from '@mantine/core';
 import { BRAND_PALETTES, useBrandAccent, useBranding } from 'depictio-react-core';
 import { Icon } from '@iconify/react';
+import { AI_ICON } from 'depictio-react-ai';
 
 import type { BrandTheme, DashboardData, DashboardSummary } from 'depictio-react-core';
 import PoweredBy from './PoweredBy';
@@ -64,6 +65,9 @@ interface HeaderProps {
   mode?: 'view' | 'edit';
   /** Edit-mode only: opens the component builder. */
   onAddComponent?: () => void;
+  /** Edit-mode only: when set, the "Component" entry becomes a submenu with a
+   *  "With AI…" entry invoking this. Omitted ⇒ plain entry (AI off). */
+  onAddWithAI?: () => void;
   /** Edit-mode only: opens the add-section dialog. The "Add" menu is add-only —
    *  editing sections happens from the "…" on each section header. */
   onAddSection?: () => void;
@@ -109,6 +113,7 @@ const Header: React.FC<HeaderProps> = ({
   cardsLoading = false,
   mode = 'view',
   onAddComponent,
+  onAddWithAI,
   onAddSection,
   onSave,
   isOwner = true,
@@ -294,13 +299,53 @@ const Header: React.FC<HeaderProps> = ({
               </Tooltip>
             </Menu.Target>
             <Menu.Dropdown>
-              <Menu.Item
-                leftSection={<Icon icon="mdi:view-grid-plus-outline" width={14} />}
-                onClick={onAddComponent}
-                data-testid="add-component"
-              >
-                Component
-              </Menu.Item>
+              {onAddWithAI ? (
+                /* Mantine 7 has no public Menu.Sub — a nested hover Menu
+                   anchored on a Menu.Item is the supported way to get a
+                   second level ("Component ▸ Manually / With AI…"). */
+                <Menu
+                  trigger="click-hover"
+                  position="right-start"
+                  offset={4}
+                  shadow="md"
+                  withinPortal
+                >
+                  <Menu.Target>
+                    <Menu.Item
+                      closeMenuOnClick={false}
+                      leftSection={<Icon icon="mdi:view-grid-plus-outline" width={14} />}
+                      rightSection={<Icon icon="mdi:chevron-right" width={14} />}
+                      data-testid="add-component-submenu"
+                    >
+                      Component
+                    </Menu.Item>
+                  </Menu.Target>
+                  <Menu.Dropdown>
+                    <Menu.Item
+                      leftSection={<Icon icon="mdi:pencil-outline" width={14} />}
+                      onClick={onAddComponent}
+                      data-testid="add-component"
+                    >
+                      Manually
+                    </Menu.Item>
+                    <Menu.Item
+                      leftSection={<Icon icon={AI_ICON} width={14} />}
+                      onClick={onAddWithAI}
+                      data-testid="add-with-ai"
+                    >
+                      With AI…
+                    </Menu.Item>
+                  </Menu.Dropdown>
+                </Menu>
+              ) : (
+                <Menu.Item
+                  leftSection={<Icon icon="mdi:view-grid-plus-outline" width={14} />}
+                  onClick={onAddComponent}
+                  data-testid="add-component"
+                >
+                  Component
+                </Menu.Item>
+              )}
               {onAddSection && (
                 <Menu.Item
                   leftSection={<Icon icon="mdi:format-list-group" width={14} />}

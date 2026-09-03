@@ -54,7 +54,27 @@ import {
   SelectionGroupsPanel,
   SaveGroupContext,
   BrandScope,
+  clearFiltersBySource,
+  applyAIPlanToFilters,
+  revertAIPlanFilters,
+  renderFigure,
+  renderTable,
 } from 'depictio-react-core';
+import {
+  AI_ICON,
+  AIAnalyzePanel,
+  AIKeySection,
+  SectionSummaryPanel,
+  SummarizeSectionButton,
+  trimDigest,
+  useAIHealth,
+  useSectionSummaries,
+} from 'depictio-react-ai';
+import type {
+  ApplyActionsPayload,
+  ResolvedFilter,
+  SummaryComponentPayload,
+} from 'depictio-react-ai';
 import type {
   DashboardData,
   DashboardPermissions,
@@ -81,6 +101,7 @@ const ingestionBannerKey = (projectId: string) =>
 const FILTER_DEBOUNCE_MS = 250;
 import { notifications } from '@mantine/notifications';
 import { Header, Sidebar, SettingsDrawer, TabIntro } from './chrome';
+import { useServerStatus } from './hooks/useServerStatus';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useContentScaleStyle } from './hooks/useUiScalePref';
 import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
@@ -522,6 +543,134 @@ const App: React.FC = () => {
     groupsApi.deactivateAllGroupFilters();
   }, [groupsApi.deactivateAllGroupFilters]);
 
+  // ---- AI assistant -------------------------------------------------------
+  // Everything AI is gated on the server's feature flag: when off, no AI UI
+  // mounts anywhere and no /ai request is ever made.
+  const { features: serverFeatures } = useServerStatus();
+  const aiEnabled = serverFeatures.ai;
+  const aiHealth = useAIHealth(aiEnabled);
+  const aiServerKeyAvailable = aiHealth?.server_key_configured === true;
+  // Human-readable provenance for the currently-applied AI filters, shown in
+  // the "AI filters" chip tooltip.
+  const [aiFilterDescriptions, setAiFilterDescriptions] = useState<string[]>([]);
+  // Transient per-figure dict_kwargs overrides from applied AI plans, keyed by
+  // component index. Threaded into the render request; never persisted.
+  const [aiFigureOverrides, setAiFigureOverrides] = useState<
+    Record<string, Record<string, unknown>>
+  >({});
+
+  // Widget index → the entry it had before the currently-applied AI plan
+  // touched it (null = it was unset). What lets the next apply (or the
+  // chip clear) restore ground state instead of stacking plans.
+  const aiTouchedWidgetsRef = useRef<Map<string, InteractiveFilter | null> | null>(null);
+
+  const handleApplyAIActions = useCallback(
+    ({ actions, resolved }: ApplyActionsPayload) => {
+      const exprFilters: InteractiveFilter[] = [];
+      const widgetUpdates: InteractiveFilter[] = [];
+      const descriptions: string[] = [];
+
+      resolved.forEach((f: ResolvedFilter, i: number) => {
+        if (f.kind === 'set_widget' && f.component_id) {
+          const meta = (dashboard?.stored_metadata as Record<string, unknown>[] | undefined)?.find(
+            (m) => m?.index === f.component_id,
+          );
+          widgetUpdates.push(
+            enrichFilterWithDcId(
+              {
+                index: f.component_id,
+                value: f.value,
+                column_name: meta?.column_name as string | undefined,
+                interactive_component_type: meta?.interactive_component_type as
+                  | string
+                  | undefined,
+              },
+              dashboard?.stored_metadata,
+            ),
+          );
+          if (f.description) descriptions.push(f.description);
+        } else if (f.kind === 'filter_expr' && f.filter_expr) {
+          exprFilters.push({
+            // Unique per apply so successive plans don't collide; the whole
+            // 'ai_prompt' group is replaced below anyway.
+            index: `ai-${Date.now().toString(36)}-${i}`,
+            // Sentinel truthy value: expr-only filters carry no widget value,
+            // but a null value reads as "cleared" to merge/active-count logic.
+            value: true,
+            source: 'ai_prompt',
+            filter_expr: f.filter_expr,
+            metadata: {
+              dc_id: f.dc_id ?? undefined,
+              filter_expr: f.filter_expr,
+            },
+          });
+          descriptions.push(f.description || f.filter_expr);
+        }
+      });
+
+      setFilters((prev) => {
+        // A new AI plan replaces the previous one wholesale: its expression
+        // filters are dropped AND every widget it moved is restored to its
+        // pre-plan value before this plan's updates land.
+        const { next, touched } = applyAIPlanToFilters(
+          prev,
+          widgetUpdates,
+          exprFilters,
+          aiTouchedWidgetsRef.current,
+        );
+        aiTouchedWidgetsRef.current = touched;
+        return next;
+      });
+      setAiFilterDescriptions(descriptions);
+
+      // Figure mutations: transient dict_kwargs overrides, applied only to
+      // components that exist on this dashboard as figures. A new plan
+      // replaces the previous overrides wholesale (same semantics as the
+      // 'ai_prompt' filter group above).
+      const overrides: Record<string, Record<string, unknown>> = {};
+      let skippedMutations = 0;
+      for (const m of actions?.figure_mutations ?? []) {
+        const target = (
+          dashboard?.stored_metadata as Record<string, unknown>[] | undefined
+        )?.find((c) => c?.index === m.component_id && c?.component_type === 'figure');
+        if (
+          target &&
+          m.dict_kwargs_patch &&
+          typeof m.dict_kwargs_patch === 'object' &&
+          Object.keys(m.dict_kwargs_patch).length > 0
+        ) {
+          overrides[m.component_id] = m.dict_kwargs_patch;
+        } else {
+          skippedMutations += 1;
+        }
+      }
+      setAiFigureOverrides(overrides);
+      if (skippedMutations > 0) {
+        notifications.show({
+          color: 'yellow',
+          title: 'AI figure changes partially applied',
+          message: `${skippedMutations} proposed figure change(s) referenced components that are not figures on this dashboard and were skipped.`,
+        });
+      }
+    },
+    [dashboard],
+  );
+
+  const aiFilterCount = useMemo(
+    () => filters.filter((f) => f.source === 'ai_prompt').length,
+    [filters],
+  );
+  const handleClearAIFilters = useCallback(() => {
+    setFilters((prev) => {
+      const next = revertAIPlanFilters(prev, aiTouchedWidgetsRef.current);
+      aiTouchedWidgetsRef.current = null;
+      return next;
+    });
+    setAiFilterDescriptions([]);
+  }, []);
+  const aiFigureOverrideCount = Object.keys(aiFigureOverrides).length;
+  const handleClearAIFigureOverrides = useCallback(() => setAiFigureOverrides({}), []);
+
   // The dashboard-wide map panel: the tab family's floating maps, its own
   // hidden/floating/docked state, shared by the header control and the panel
   // itself.
@@ -869,6 +1018,176 @@ const App: React.FC = () => {
     ],
   );
 
+  // ---- AI section summaries -------------------------------------------------
+  // Digests are assembled at summarize time: card values come from local
+  // state, figure/table payloads are refetched with the current filters (the
+  // render endpoints are what the tiles themselves use, so the digest matches
+  // what's on screen). Everything is client-trimmed before upload; the server
+  // trims again.
+  const buildAIContext = useCallback(
+    async (section: string | null) => {
+      if (!dashboard || !dashboardId) return { filters: [], components: [] };
+      const inSection = rightComponents.filter(
+        (m) => ((m.section as string | undefined) ?? null) === section,
+      );
+      const components: SummaryComponentPayload[] = [];
+      for (const m of inSection) {
+        const id = m.index;
+        const title = (m.title as string) || '';
+        const type = String(m.component_type);
+        if (type === 'card') {
+          components.push({
+            id,
+            type,
+            title,
+            digest: trimDigest({
+              column: m.column_name,
+              aggregation: m.aggregation,
+              value: cardValues[id],
+              secondary: cardSecondaryValues[id],
+            }),
+          });
+        } else if (type === 'figure') {
+          try {
+            const res = await renderFigure(dashboardId, id, deferredFilters);
+            components.push({
+              id,
+              type,
+              title,
+              digest: trimDigest(
+                {
+                  visu_type: res.metadata?.visu_type ?? m.visu_type,
+                  dict_kwargs: m.dict_kwargs,
+                  total_rows: res.metadata?.total_data_count,
+                  data: res.figure?.data,
+                },
+                40,
+                200,
+              ),
+            });
+          } catch {
+            components.push({
+              id,
+              type,
+              title,
+              digest: { visu_type: m.visu_type, dict_kwargs: m.dict_kwargs },
+            });
+          }
+        } else if (type === 'table') {
+          try {
+            const res = await renderTable(dashboardId, id, deferredFilters, 0, 15);
+            components.push({
+              id,
+              type,
+              title,
+              digest: trimDigest({ total_rows: res.total, rows: res.rows }),
+            });
+          } catch {
+            components.push({ id, type, title, digest: { columns: m.columns } });
+          }
+        } else {
+          // multiqc / map / image / jbrowse / advanced_viz: configuration-level
+          // digest only — their payloads are either binary or too large to be
+          // meaningful as text.
+          components.push({ id, type, title, digest: { component_type: type } });
+        }
+      }
+      return { filters: deferredFilters as unknown[], components };
+    },
+    [dashboard, dashboardId, rightComponents, cardValues, cardSecondaryValues, deferredFilters],
+  );
+
+  const sectionSummaries = useSectionSummaries(
+    dashboardId ?? '',
+    aiEnabled && Boolean(dashboardId),
+    buildAIContext,
+  );
+  // Client-local staleness: filters changed since this session generated the
+  // summary. (Server-side hash comparison would need the digests recomputed on
+  // every render — this heuristic is free and errs on the safe side.)
+  const [aiSummaryFilterKeys, setAiSummaryFilterKeys] = useState<Record<string, string>>({});
+  const handleGenerateSummary = useCallback(
+    async (section: string | null, force = false) => {
+      const res = await sectionSummaries.generate(section, force);
+      if (res) {
+        setAiSummaryFilterKeys((prev) => ({ ...prev, [section ?? '']: deferredFilterKey }));
+      }
+    },
+    [sectionSummaries, deferredFilterKey],
+  );
+
+  // Every section present on this dashboard (null = the unsectioned grid),
+  // in encounter order — drives the "Summarize all" sweep.
+  const aiSummarySections = useMemo(() => {
+    const names: (string | null)[] = [];
+    const seen = new Set<string | null>();
+    for (const m of rightComponents) {
+      const s = (m.section as string | undefined) ?? null;
+      if (!seen.has(s)) {
+        seen.add(s);
+        names.push(s);
+      }
+    }
+    return names;
+  }, [rightComponents]);
+  const [aiSummarizingAll, setAiSummarizingAll] = useState(false);
+  // Sequential on purpose: one LLM call at a time keeps the load sane, and
+  // the server's hash cache short-circuits sections whose on-screen context
+  // hasn't changed since their last summary.
+  const handleSummarizeAll = useCallback(async () => {
+    setAiSummarizingAll(true);
+    try {
+      for (const section of aiSummarySections) {
+        await handleGenerateSummary(section, false);
+      }
+    } finally {
+      setAiSummarizingAll(false);
+    }
+  }, [aiSummarySections, handleGenerateSummary]);
+
+  const renderSectionExtras = useCallback(
+    (section: string | null) => {
+      if (!aiEnabled) return null;
+      const key = section ?? '';
+      const entry = sectionSummaries.entries[key];
+      const pending = sectionSummaries.pendingSection === key;
+      const generatedKey = aiSummaryFilterKeys[key];
+      const stale = Boolean(entry && generatedKey !== undefined && generatedKey !== deferredFilterKey);
+      return {
+        trailing: (
+          <SummarizeSectionButton
+            section={section}
+            hasSummary={Boolean(entry)}
+            pending={pending}
+            onGenerate={(s, force) => void handleGenerateSummary(s, force)}
+          />
+        ),
+        panelTop: entry ? (
+          <SectionSummaryPanel
+            entry={entry}
+            stale={stale}
+            pending={pending}
+            error={pending ? null : sectionSummaries.error}
+            onRegenerate={(s, force) => void handleGenerateSummary(s, force)}
+            onDismiss={sectionSummaries.dismiss}
+          />
+        ) : section === null ? (
+          // The unsectioned grid has no header to host the sparkle button, so
+          // it gets a discreet right-aligned one above the grid instead.
+          <Group justify="flex-end" mb={4}>
+            <SummarizeSectionButton
+              section={null}
+              hasSummary={false}
+              pending={pending}
+              onGenerate={(s, force) => void handleGenerateSummary(s, force)}
+            />
+          </Group>
+        ) : undefined,
+      };
+    },
+    [aiEnabled, sectionSummaries, aiSummaryFilterKeys, deferredFilterKey, handleGenerateSummary],
+  );
+
   return (
     <AvailableFilterValuesProvider
       dashboardMetadata={summaryMetadata}
@@ -1163,6 +1482,66 @@ const App: React.FC = () => {
                   holds — including a foreign `pin: top` section, which would
                   otherwise introduce another tab before this one is named. */}
               <TabIntro dashboard={dashboard} activeTab={activeTab} />
+              {aiEnabled && dashboardId && (
+                <>
+                  <AIAnalyzePanel
+                    dashboardId={dashboardId}
+                    activeFilters={deferredFilters}
+                    serverKeyAvailable={aiServerKeyAvailable}
+                    onApplyActions={handleApplyAIActions}
+                  />
+                  {(aiFilterCount > 0 || aiFigureOverrideCount > 0) && (
+                    <Group gap={6} mb={6}>
+                      {aiFilterCount > 0 && (
+                        <Button
+                          data-testid="ai-filters-chip"
+                          size="compact-xs"
+                          variant="light"
+                          color="violet"
+                          leftSection={<Icon icon="mdi:filter-outline" width={12} />}
+                          rightSection={<Icon icon="mdi:close" width={12} />}
+                          onClick={handleClearAIFilters}
+                          title={aiFilterDescriptions.join('\n')}
+                        >
+                          AI filters ({aiFilterCount})
+                        </Button>
+                      )}
+                      {aiFigureOverrideCount > 0 && (
+                        <Button
+                          data-testid="ai-figure-overrides-chip"
+                          size="compact-xs"
+                          variant="light"
+                          color="violet"
+                          leftSection={<Icon icon="mdi:chart-scatter-plot" width={12} />}
+                          rightSection={<Icon icon="mdi:close" width={12} />}
+                          onClick={handleClearAIFigureOverrides}
+                          title="Temporary AI changes to figure settings — click to revert"
+                        >
+                          AI figure tweaks ({aiFigureOverrideCount})
+                        </Button>
+                      )}
+                    </Group>
+                  )}
+                  {aiSummarySections.length > 1 && (
+                    // With a single section the sparkle button in its header
+                    // (or above the unsectioned grid) already covers it.
+                    <Group justify="flex-end" mb={4}>
+                      <Button
+                        data-testid="ai-summarize-all"
+                        size="compact-xs"
+                        variant="subtle"
+                        color="violet"
+                        leftSection={<Icon icon={AI_ICON} width={12} />}
+                        loading={aiSummarizingAll}
+                        onClick={() => void handleSummarizeAll()}
+                        title="Generate AI summaries for every section (cached sections are reused)"
+                      >
+                        Summarize all
+                      </Button>
+                    </Group>
+                  )}
+                </>
+              )}
               {/* Only claims the leftover height when nothing follows it —
                   otherwise a short grid would push the bottom-pinned sections
                   to the fold with a gap above them. */}
@@ -1226,6 +1605,8 @@ const App: React.FC = () => {
                     isDraggable={false}
                     isResizable={false}
                     editMode={false}
+                    renderSectionExtras={aiEnabled ? renderSectionExtras : undefined}
+                    figureOverrides={aiFigureOverrideCount > 0 ? aiFigureOverrides : undefined}
                   />
                 )}
               </Box>
@@ -1338,6 +1719,11 @@ const App: React.FC = () => {
         opened={settingsOpened}
         onClose={closeSettings}
         dashboard={dashboard}
+        extraSection={
+          aiEnabled && serverFeatures.ai_user_keys && dashboardId ? (
+            <AIKeySection dashboardId={dashboardId} />
+          ) : undefined
+        }
       />
     </AppShell>
       </BrandScope>

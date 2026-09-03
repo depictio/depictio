@@ -97,7 +97,19 @@ import {
   SelectionGroupsPanel,
   SaveGroupContext,
   BrandScope,
+  clearFiltersBySource,
+  applyAIPlanToFilters,
+  revertAIPlanFilters,
+  fetchProjectFromDashboard,
 } from 'depictio-react-core';
+import { AddWithAIModal, AIAnalyzePanel, AIKeySection, useAIHealth } from 'depictio-react-ai';
+import AISuggestionPreview from './components/ai/AISuggestionPreview';
+import type {
+  ApplyActionsPayload,
+  AvailableDataCollection,
+  ComponentType as AIComponentType,
+  ResolvedFilter,
+} from 'depictio-react-ai';
 import type {
   DashboardData,
   DashboardPermissions,
@@ -121,6 +133,7 @@ import { applySectionOp, groupWith, sectionsFor } from './components/sections/se
 import type { SectionKind, SectionOp } from './components/sections/sectionMutations';
 import { Header, Sidebar, SettingsDrawer, TabIntro, TabModal } from './chrome';
 import type { TabModalSubmitPayload } from './chrome';
+import { useServerStatus } from './hooks/useServerStatus';
 import NotesFooter from './components/NotesFooter';
 import './chrome/chrome.css';
 import { usePageTitle } from './branding';
@@ -1168,6 +1181,198 @@ const EditorApp: React.FC = () => {
     />
   );
 
+  // ---- AI assistant (mirrors App.tsx) ---------------------------------------
+  const { features: serverFeatures } = useServerStatus();
+  const aiEnabled = serverFeatures.ai;
+  const aiHealth = useAIHealth(aiEnabled);
+  const aiServerKeyAvailable = aiHealth?.server_key_configured === true;
+  const [aiFilterDescriptions, setAiFilterDescriptions] = useState<string[]>([]);
+  // Transient per-figure dict_kwargs overrides from applied AI plans, keyed by
+  // component index. Threaded into the render request; never persisted.
+  const [aiFigureOverrides, setAiFigureOverrides] = useState<
+    Record<string, Record<string, unknown>>
+  >({});
+
+  // Widget index → the entry it had before the currently-applied AI plan
+  // touched it (null = it was unset). What lets the next apply (or the
+  // chip clear) restore ground state instead of stacking plans.
+  const aiTouchedWidgetsRef = useRef<Map<string, InteractiveFilter | null> | null>(null);
+
+  const handleApplyAIActions = useCallback(
+    ({ actions, resolved }: ApplyActionsPayload) => {
+      const exprFilters: InteractiveFilter[] = [];
+      const widgetUpdates: InteractiveFilter[] = [];
+      const descriptions: string[] = [];
+
+      resolved.forEach((f: ResolvedFilter, i: number) => {
+        if (f.kind === 'set_widget' && f.component_id) {
+          const meta = (dashboard?.stored_metadata as Record<string, unknown>[] | undefined)?.find(
+            (m) => m?.index === f.component_id,
+          );
+          widgetUpdates.push(
+            enrichFilterWithDcId(
+              {
+                index: f.component_id,
+                value: f.value,
+                column_name: meta?.column_name as string | undefined,
+                interactive_component_type: meta?.interactive_component_type as
+                  | string
+                  | undefined,
+              },
+              dashboard?.stored_metadata,
+            ),
+          );
+          if (f.description) descriptions.push(f.description);
+        } else if (f.kind === 'filter_expr' && f.filter_expr) {
+          exprFilters.push({
+            index: `ai-${Date.now().toString(36)}-${i}`,
+            // Sentinel truthy value: expr-only filters carry no widget value,
+            // but a null value reads as "cleared" to merge/active-count logic.
+            value: true,
+            source: 'ai_prompt',
+            filter_expr: f.filter_expr,
+            metadata: {
+              dc_id: f.dc_id ?? undefined,
+              filter_expr: f.filter_expr,
+            },
+          });
+          descriptions.push(f.description || f.filter_expr);
+        }
+      });
+
+      setFilters((prev) => {
+        // A new AI plan replaces the previous one wholesale: its expression
+        // filters are dropped AND every widget it moved is restored to its
+        // pre-plan value before this plan's updates land.
+        const { next, touched } = applyAIPlanToFilters(
+          prev,
+          widgetUpdates,
+          exprFilters,
+          aiTouchedWidgetsRef.current,
+        );
+        aiTouchedWidgetsRef.current = touched;
+        return next;
+      });
+      setAiFilterDescriptions(descriptions);
+
+      // Figure mutations: transient dict_kwargs overrides, applied only to
+      // components that exist on this dashboard as figures. A new plan
+      // replaces the previous overrides wholesale.
+      const overrides: Record<string, Record<string, unknown>> = {};
+      let skippedMutations = 0;
+      for (const m of actions?.figure_mutations ?? []) {
+        const target = (
+          dashboard?.stored_metadata as Record<string, unknown>[] | undefined
+        )?.find((c) => c?.index === m.component_id && c?.component_type === 'figure');
+        if (
+          target &&
+          m.dict_kwargs_patch &&
+          typeof m.dict_kwargs_patch === 'object' &&
+          Object.keys(m.dict_kwargs_patch).length > 0
+        ) {
+          overrides[m.component_id] = m.dict_kwargs_patch;
+        } else {
+          skippedMutations += 1;
+        }
+      }
+      setAiFigureOverrides(overrides);
+      if (skippedMutations > 0) {
+        notifications.show({
+          color: 'yellow',
+          title: 'AI figure changes partially applied',
+          message: `${skippedMutations} proposed figure change(s) referenced components that are not figures on this dashboard and were skipped.`,
+        });
+      }
+    },
+    [dashboard],
+  );
+
+  const aiFilterCount = useMemo(
+    () => filters.filter((f) => f.source === 'ai_prompt').length,
+    [filters],
+  );
+  const handleClearAIFilters = useCallback(() => {
+    setFilters((prev) => {
+      const next = revertAIPlanFilters(prev, aiTouchedWidgetsRef.current);
+      aiTouchedWidgetsRef.current = null;
+      return next;
+    });
+    setAiFilterDescriptions([]);
+  }, []);
+  const aiFigureOverrideCount = Object.keys(aiFigureOverrides).length;
+  const handleClearAIFigureOverrides = useCallback(() => setAiFigureOverrides({}), []);
+
+  // ---- "Add component → With AI…" flow --------------------------------------
+  const [aiModalOpened, setAiModalOpened] = useState(false);
+  const [aiDataCollections, setAiDataCollections] = useState<AvailableDataCollection[]>([]);
+  const aiProjectIdRef = useRef<string | null>(null);
+
+  // The project (workflows + DCs with tags) loads once the AI feature is on;
+  // it's the same payload the manual stepper's Data step fetches.
+  useEffect(() => {
+    if (!aiEnabled || !dashboardId) return;
+    let cancelled = false;
+    fetchProjectFromDashboard(dashboardId)
+      .then(({ project }) => {
+        if (cancelled) return;
+        aiProjectIdRef.current = project._id ?? null;
+        const list: AvailableDataCollection[] = [];
+        for (const wf of project.workflows ?? []) {
+          for (const dc of wf.data_collections ?? []) {
+            list.push({
+              dcId: dc._id,
+              dcTag: dc.data_collection_tag || dc._id,
+              wfId: wf._id,
+              wfTag: wf.workflow_tag || wf.name,
+            });
+          }
+        }
+        setAiDataCollections(list);
+      })
+      .catch(() => {
+        if (!cancelled) setAiDataCollections([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [aiEnabled, dashboardId]);
+
+  const handleAddWithAI = useCallback(() => setAiModalOpened(true), []);
+
+  /** Stash the validated component and land the user on the create page's
+   *  Design step, pre-filled. The stash is consumed (and cleared) by
+   *  CreateComponentPage on mount. */
+  const handleAIComponentReady = useCallback(
+    (
+      parsed: Record<string, unknown>,
+      componentType: AIComponentType,
+      dc: AvailableDataCollection,
+    ) => {
+      if (!dashboardId) return;
+      const newId =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : fallbackUuid();
+      try {
+        sessionStorage.setItem(
+          `depictio.ai.pending-fill.${newId}`,
+          JSON.stringify({
+            componentType,
+            config: parsed,
+            dcId: dc.dcId,
+            wfId: dc.wfId ?? null,
+            projectId: aiProjectIdRef.current,
+          }),
+        );
+      } catch {
+        return; // sessionStorage unavailable — nothing sane to do
+      }
+      setAiModalOpened(false);
+      window.location.assign(`/dashboard-edit/${dashboardId}/component/add/${newId}`);
+    },
+    [dashboardId],
+  );
+
   // ---- Realtime: WebSocket subscription mirrors App.tsx ---------------------
   const [realtimeMode, setRealtimeMode] = useState<RealtimeMode>(() => {
     try {
@@ -1677,6 +1882,7 @@ const EditorApp: React.FC = () => {
           mode="edit"
           onAddComponent={handleAddComponent}
           onAddSection={handleAddSection}
+          onAddWithAI={aiEnabled ? handleAddWithAI : undefined}
           onSave={handleForceSave}
           isOwner={isOwner}
           // Undefined rather than an empty fragment when realtime is off:
@@ -1860,6 +2066,48 @@ const EditorApp: React.FC = () => {
               {/* Same placement as the viewer: the tab's description leads
                   the canvas, ahead of any foreign pinned section. */}
               <TabIntro dashboard={dashboard} activeTab={activeTab} />
+              {aiEnabled && dashboardId && (
+                <>
+                  <AIAnalyzePanel
+                    dashboardId={dashboardId}
+                    activeFilters={filters}
+                    serverKeyAvailable={aiServerKeyAvailable}
+                    onApplyActions={handleApplyAIActions}
+                  />
+                  {(aiFilterCount > 0 || aiFigureOverrideCount > 0) && (
+                    <Group gap={6} mb={6}>
+                      {aiFilterCount > 0 && (
+                        <Button
+                          data-testid="ai-filters-chip"
+                          size="compact-xs"
+                          variant="light"
+                          color="violet"
+                          leftSection={<Icon icon="mdi:filter-outline" width={12} />}
+                          rightSection={<Icon icon="mdi:close" width={12} />}
+                          onClick={handleClearAIFilters}
+                          title={aiFilterDescriptions.join('\n')}
+                        >
+                          AI filters ({aiFilterCount})
+                        </Button>
+                      )}
+                      {aiFigureOverrideCount > 0 && (
+                        <Button
+                          data-testid="ai-figure-overrides-chip"
+                          size="compact-xs"
+                          variant="light"
+                          color="violet"
+                          leftSection={<Icon icon="mdi:chart-scatter-plot" width={12} />}
+                          rightSection={<Icon icon="mdi:close" width={12} />}
+                          onClick={handleClearAIFigureOverrides}
+                          title="Temporary AI changes to figure settings — click to revert"
+                        >
+                          AI figure tweaks ({aiFigureOverrideCount})
+                        </Button>
+                      )}
+                    </Group>
+                  )}
+                </>
+              )}
               <RightComponentGrid
                 beforeSections={topSectionsHost}
                 dashboardId={dashboardId!}
@@ -1882,6 +2130,7 @@ const EditorApp: React.FC = () => {
                 renderSectionActions={renderGridSectionAction}
                 onComponentFontScale={handleComponentFontScale}
                 refreshTick={plotThemeTick}
+                figureOverrides={aiFigureOverrideCount > 0 ? aiFigureOverrides : undefined}
               />
               {bottomGridSections.length > 0 && (
                 <PersistentSectionsHost
@@ -1980,7 +2229,26 @@ const EditorApp: React.FC = () => {
         onToggleFunnelFiltering={handleToggleFunnelFiltering}
         onChangeBrandTheme={handleBrandThemeChange}
         onUploadLogo={handleUploadLogo}
+        extraSection={
+          aiEnabled && serverFeatures.ai_user_keys && dashboardId ? (
+            <AIKeySection dashboardId={dashboardId} />
+          ) : undefined
+        }
       />
+
+      {aiEnabled && dashboardId && (
+        <AddWithAIModal
+          opened={aiModalOpened}
+          onClose={() => setAiModalOpened(false)}
+          dashboardId={dashboardId}
+          availableDataCollections={aiDataCollections}
+          onApply={handleAIComponentReady}
+          serverKeyAvailable={aiServerKeyAvailable}
+          renderSuggestionPreview={(s, dc) => (
+            <AISuggestionPreview suggestion={s} dc={dc} />
+          )}
+        />
+      )}
 
       <TabModal
         opened={tabModalState.open}
@@ -2009,6 +2277,7 @@ const EditorApp: React.FC = () => {
         onClose={handleCloseSectionModal}
         onManageAll={handleManageAllSections}
       />
+
     </AppShell>
     </BrandScope>
     </SaveGroupContext.Provider>
@@ -2053,6 +2322,8 @@ interface RightComponentGridProps {
   onComponentFontScale: (componentId: string, scale: number) => void;
   /** Bumped when the dashboard plot theme changes, so figures refetch. */
   refreshTick?: number;
+  /** Transient AI figure mutations (component index → dict_kwargs patch). */
+  figureOverrides?: Record<string, Record<string, unknown>>;
 }
 
 /**
@@ -2085,6 +2356,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   renderSectionActions,
   onComponentFontScale,
   refreshTick,
+  figureOverrides,
 }) => {
   const allComponents = useMemo(
     () => [...cardComponents, ...otherComponents],
@@ -2150,6 +2422,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
       isResizable={true}
       editMode={true}
       renderSectionActions={renderSectionActions}
+      figureOverrides={figureOverrides}
       onLayoutChange={onLayoutChange}
       renderItemOverlay={(componentId, metadata) => (
         <GridItemEditOverlay

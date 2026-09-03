@@ -28,7 +28,7 @@ import {
 import { Icon } from '@iconify/react';
 import { fetchDashboard } from 'depictio-react-core';
 import { useBuilderStore } from './store/useBuilderStore';
-import type { SourceMode } from './store/useBuilderStore';
+import type { ComponentType, SourceMode } from './store/useBuilderStore';
 import StepType from './steps/StepType';
 import StepData from './steps/StepData';
 import StepDesign from './steps/StepDesign';
@@ -42,12 +42,45 @@ export interface CreateComponentPageProps {
   newComponentId: string;
 }
 
+/** Shape written by EditorApp's "Add component → With AI…" flow. */
+interface AIPendingFill {
+  componentType: ComponentType;
+  config: Record<string, unknown>;
+  dcId: string;
+  wfId: string | null;
+  projectId: string | null;
+}
+
+/** Pop (read + clear) the AI pre-fill stash for this component id, if any.
+ *  Cleared on consumption so a refresh restarts the manual stepper instead
+ *  of silently re-applying a stale AI fill. */
+function popAIPendingFill(newComponentId: string): AIPendingFill | null {
+  const key = `depictio.ai.pending-fill.${newComponentId}`;
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return null;
+    sessionStorage.removeItem(key);
+    const parsed = JSON.parse(raw) as Partial<AIPendingFill>;
+    if (!parsed.componentType || !parsed.config || !parsed.dcId) return null;
+    return {
+      componentType: parsed.componentType,
+      config: parsed.config,
+      dcId: parsed.dcId,
+      wfId: parsed.wfId ?? null,
+      projectId: parsed.projectId ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
   dashboardId,
   newComponentId,
 }) => {
   const init = useBuilderStore((s) => s.init);
   const reset = useBuilderStore((s) => s.reset);
+  const initFromPrompt = useBuilderStore((s) => s.initFromPrompt);
   const step = useBuilderStore((s) => s.step);
   const setStep = useBuilderStore((s) => s.setStep);
   const wfId = useBuilderStore((s) => s.wfId);
@@ -62,13 +95,34 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
   // loading, `null` = resolved but the dashboard carries no project id.
   const [projectId, setProjectId] = useState<string | null | undefined>(undefined);
 
+  // The stash is cleared on first read, but under React.StrictMode this
+  // effect runs twice (mount → cleanup+reset → remount): the second pass
+  // would find sessionStorage empty and dump the user on the bare type
+  // grid. Keep the popped value in a ref so every re-run of the effect
+  // can re-hydrate from it.
+  const pendingRef = useRef<AIPendingFill | null>(null);
+
   useEffect(() => {
     init({ mode: 'create', dashboardId, componentId: newComponentId });
     fetchDashboard(dashboardId)
       .then((dash) => setProjectId(dash.project_id ?? null))
       .catch(() => setProjectId(null));
+    // AI hand-off: hydrate AFTER init() so the reset doesn't clobber the
+    // pre-fill. Lands the user directly on the Design step with the live
+    // preview rendering the AI-authored component.
+    const pending = popAIPendingFill(newComponentId) ?? pendingRef.current;
+    pendingRef.current = pending;
+    if (pending && pending.wfId) {
+      initFromPrompt({
+        componentType: pending.componentType,
+        wfId: pending.wfId,
+        dcId: pending.dcId,
+        projectId: pending.projectId,
+        config: pending.config,
+      });
+    }
     return () => reset();
-  }, [dashboardId, newComponentId, init, reset]);
+  }, [dashboardId, newComponentId, init, initFromPrompt, reset]);
 
   // Text components don't bind to a workflow/DC — the Data Source step is
   // hidden entirely. The global `step` state still uses 0,1,2; for text the

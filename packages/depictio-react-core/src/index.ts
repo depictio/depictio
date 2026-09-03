@@ -47,6 +47,7 @@ export { default as TableRenderer } from './components/TableRenderer';
 export { default as ImageRenderer } from './components/ImageRenderer';
 export { default as MapRenderer } from './components/MapRenderer';
 export { default as TextRenderer } from './components/TextRenderer';
+export { renderInlineMarkdown } from './components/TextRenderer';
 export { default as JBrowseRenderer } from './components/JBrowseRenderer';
 export { default as MultiQCRenderer } from './components/MultiQCRenderer';
 
@@ -230,6 +231,7 @@ export {
   clearSession,
   validateSession,
   authFetch,
+  API_BASE,
   refreshAccessToken,
   startSessionKeepAlive,
   stopSessionKeepAlive,
@@ -363,6 +365,8 @@ export {
   clearFiltersBySource,
   hasSelectionFilters,
   enrichFilterWithDcId,
+  applyAIPlanToFilters,
+  revertAIPlanFilters,
 } from './selection';
 
 // Map panel: a map lifted out of the grid, available from every tab as a
