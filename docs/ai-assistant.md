@@ -253,7 +253,15 @@ and not merely on its dtype: a kind that fits the table's shape by
 accident is worse than no suggestion, because the planner reads the list
 as a recommendation.
 
-- **Plan**: one model call. The plan is validated against a strict schema,
+- **Plan**: one model call, steered before it is checked. The catalog comes
+  first: a render the catalog already recognises on a collection is planned
+  as itself, by its `tool/render` id, rather than reinvented, and the fill
+  pass reproduces it. The specialised tiles are not defaults either. An
+  advanced visualization is planned only with a kind the ranking offered for
+  that collection, whose roles bind to real columns there; a MultiQC tile
+  only on a MultiQC report. Whenever the data is not the shape a specialised
+  plot needs, the answer is a plain figure, since a forced one is a tile that
+  gets dropped. The plan is validated against a strict schema,
   clamped to `DEPICTIO_AI_GENERATE_MAX_COMPONENTS` and
   `DEPICTIO_AI_GENERATE_MAX_SECTIONS`, its tags deduplicated, its section
   icons and colours restricted to the sets the sections manager offers,

@@ -529,6 +529,12 @@ RULES:
   another one (it names columns or a subject only another collection has).
 - text never needs a collection: set data_collection_tag to null.
 - The collection's type must fit the component type (see the type lines).
+- multiqc and advanced_viz are specialised, not general-purpose: pick multiqc
+  only for a MultiQC report collection and a request about its report metrics,
+  and advanced_viz only when the collection's columns carry what that plot
+  needs (a volcano needs a fold change and a p-value, an embedding needs its
+  coordinates, a tree needs a phylogeny). Otherwise a figure, a card or a table
+  is the answer.
 - alternatives lists other collections that could also serve the request
   (tags from INVENTORY only, none of them the chosen one). Empty when none.
 - reason is one short sentence the user will read.
@@ -688,6 +694,10 @@ RULES:
 - Use only column names listed under the collection you pick. For card and
   interactive, take column_type and aggregation / interactive_component_type
   from that collection's LEGAL SPACES.
+- multiqc and advanced_viz are specialised, not defaults: advanced_viz only
+  with a kind from that collection's LEGAL SPACES whose roles bind to real
+  columns there, multiqc only on a MultiQC report collection. When the data is
+  not the shape the specialised tile needs, propose a figure or a card.
 - data_collection_tag is copied verbatim from the collection heading; null for text.
 - text describes what the dashboard shows; it never uses a collection and never
   invents numbers.
@@ -1158,6 +1168,17 @@ ADVANCED VIZ CANDIDATES (viz_kind on collection: role -> best columns):
 {viz_block}
 
 LIMITS:
+- The catalog comes first. Every render under CATALOG OFFERS was written for
+  this kind of output by the people who produce it, so plan the offers that
+  serve the intent before inventing anything of your own on the same
+  collection: copy the offer's id into `use` and let the fill pass reproduce
+  it. Invent a component only for what no offer covers.
+- advanced_viz is a specialised plot, not a default. Use one only when its
+  viz_kind is listed under ADVANCED VIZ CANDIDATES for that collection and the
+  candidate's roles bind to real columns there (a volcano needs a fold change
+  and a p-value, an embedding needs its coordinates). When the data is not that
+  shape, a figure is the right answer and a forced advanced_viz is a dropped
+  tile.
 - At most {max_components} components and at most {max_sections} grid sections.
 - At least one interactive filter, in a filter section.
 - Card rows come in multiples of 4 per section: plan 4 or 8 cards in a section,
@@ -1169,9 +1190,7 @@ LIMITS:
 - At most one table, last, in the reference section.
 - MultiSelect only on columns with at most {MAX_MULTISELECT_DISTINCT} distinct
   values (see distinct= in the schema); numbers get a Slider or RangeSlider.
-- advanced_viz only with a viz_kind listed under ADVANCED VIZ CANDIDATES for
-  that collection; map only when the collection has latitude and longitude
-  columns.
+- map only when the collection has latitude and longitude columns.
 - Reference only columns listed under the collection you pick; text needs no
   collection (data_collection_tag null).
 - A component's section names a section you declared: interactive components
