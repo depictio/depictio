@@ -26,7 +26,7 @@ import type {
   ImportDashboardOptions,
   ProjectListEntry,
 } from 'depictio-react-core';
-import { AI_ICON, GenerateDashboardPanel, GenerationHistory } from 'depictio-react-ai';
+import { AI_COLOR, AI_ICON, GenerateDashboardPanel, GenerationHistory } from 'depictio-react-ai';
 import type { GenerateDataCollection } from 'depictio-react-ai';
 
 import { UnstyledDropZone } from '../components/UnstyledDropZone';
@@ -298,6 +298,9 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
             {generate && (
               <Tabs.Tab
                 value="generate"
+                // Overrides the list's brand colour: every AI affordance in
+                // the app wears AI_COLOR, and this pill is one of them.
+                color={AI_COLOR}
                 leftSection={<Icon icon={AI_ICON} width={18} />}
                 disabled={generate.disabled}
                 title={
@@ -473,7 +476,7 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
               </Grid.Col>
             </Grid>
 
-            <Group justify="flex-end" gap="md" mt="md">
+            <Group justify="center" gap="md" mt="md">
               <Button
                 variant="outline"
                 color="gray"
@@ -578,7 +581,7 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
               </Grid.Col>
             </Grid>
 
-            <Group justify="flex-end" gap="md" mt="md">
+            <Group justify="center" gap="md" mt="md">
               <Button
                 variant="outline"
                 color="gray"
@@ -612,6 +615,9 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
                   loadProject={loadProjectForGenerate}
                   onOpen={generate.onOpen}
                   serverKeyAvailable={generate.serverKeyAvailable}
+                  // The panel draws this tab's footer, so its Cancel closes
+                  // the modal like the one under Create and Import.
+                  onClose={onClose}
                 />
               </Grid.Col>
               <Grid.Col span={{ base: 12, md: 4 }}>

@@ -1,30 +1,37 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
-  Badge,
   Button,
   Group,
   Loader,
   MultiSelect,
-  Progress,
+  Paper,
   Select,
   Stack,
   Text,
   Textarea,
   TextInput,
-  Title,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import { GENERATE_DASHBOARD_SESSION_ID, useGenerateDashboard } from '../hooks';
-import { AI_COLOR, AI_ICON } from '../icons';
+import { AI_COLOR, AI_ICON, aiColorVar } from '../icons';
 import { useAISession } from '../store';
-import type { BudgetTick, GeneratedComponentEvent, PlannedComponent } from '../types';
 import AIKeySection from './AIKeySection';
+import GenerationProgress from './GenerationProgress';
 
 export interface GenerateProjectOption {
   id: string;
   name: string;
+}
+
+/** The subset of a project `joins[]` entry the picker shows. Mirrors
+ *  `JoinDetails` in depictio/viewer/src/builder/data/DataCollectionInfoCard.tsx. */
+export interface GenerateJoinInfo {
+  leftDc: string;
+  rightDc: string;
+  onColumns: string[];
+  how: string;
 }
 
 export interface GenerateDataCollection {
@@ -34,6 +41,10 @@ export interface GenerateDataCollection {
   /** Collection type as the project declares it ('table', 'multiqc', ...);
    *  the panel offers tables only, the one kind generation reads. */
   type: string;
+  /** Set when this collection is the result of a project-level join; the
+   *  picker then marks it the way the builder's Data Collection dropdown
+   *  does. */
+  join?: GenerateJoinInfo | null;
 }
 
 interface Props {
@@ -47,62 +58,12 @@ interface Props {
   /** True when the server holds a fallback LLM key, so the panel works
    *  without a user-supplied key. */
   serverKeyAvailable?: boolean;
+  /** Called by the footer's Cancel button, which closes the dialog.
+   *  Omitted, no Cancel is drawn. */
+  onClose?: () => void;
 }
 
 const AUTO_OPEN_DELAY_MS = 1500;
-
-type RowStatus = GeneratedComponentEvent['status'] | 'pending';
-
-const ROW_BADGE: Record<RowStatus, { color: string; label: string }> = {
-  pending: { color: 'gray', label: 'planned' },
-  ok: { color: 'teal', label: 'ok' },
-  repaired: { color: 'yellow', label: 'repaired' },
-  dropped: { color: 'red', label: 'dropped' },
-};
-
-interface Row {
-  tag: string;
-  section: string;
-  component_type: string;
-  status: RowStatus;
-  attempts?: number;
-  error?: string | null;
-}
-
-/** Plan rows first, in plan order, each carrying its latest outcome; then
- *  any reported tag the plan did not name, so a row never goes missing. */
-function mergeRows(planned: PlannedComponent[], events: GeneratedComponentEvent[]): Row[] {
-  const byTag = new Map(events.map((e) => [e.tag, e]));
-  const rows: Row[] = planned.map((p) => {
-    const e = byTag.get(p.tag);
-    return {
-      tag: p.tag,
-      section: p.section,
-      component_type: p.component_type,
-      status: e?.status ?? 'pending',
-      attempts: e?.attempts,
-      error: e?.error,
-    };
-  });
-  const known = new Set(planned.map((p) => p.tag));
-  for (const e of events) {
-    if (!known.has(e.tag)) rows.push({ ...e });
-  }
-  return rows;
-}
-
-/** Tokens and wall clock both cap a run; the bar tracks whichever is closer
- *  to its limit. Null when no budget tick has arrived yet. */
-function budgetPercent(budget: BudgetTick | null): number | null {
-  if (!budget) return null;
-  const tokenPct = budget.max_tokens > 0 ? (budget.tokens_used / budget.max_tokens) * 100 : 0;
-  const secondsPct = budget.max_seconds > 0 ? (budget.seconds / budget.max_seconds) * 100 : 0;
-  return Math.min(100, Math.max(tokenPct, secondsPct));
-}
-
-function sectionNames(sections: { name: string }[]): string {
-  return sections.map((s) => s.name).join(', ');
-}
 
 /**
  * Whole-dashboard generation, as a tab of the New Dashboard dialog. Pick a
@@ -116,6 +77,7 @@ const GenerateDashboardPanel: React.FC<Props> = ({
   loadProject,
   onOpen,
   serverKeyAvailable = false,
+  onClose,
 }) => {
   const session = useAISession(GENERATE_DASHBOARD_SESSION_ID);
   const { run, cancel, pending, state } = useGenerateDashboard();
@@ -185,9 +147,10 @@ const GenerateDashboardPanel: React.FC<Props> = ({
     });
   };
 
-  const budgetPct = budgetPercent(state.budget);
-  const rows = mergeRows(state.plan?.components ?? [], state.components);
   const draft = state.dashboard;
+  // The run has a container of its own, which appears with the first sign of
+  // a run and stays after it, holding the outcome.
+  const started = pending || Boolean(state.status || state.plan || state.error || draft);
 
   function collectionsPlaceholder(): string {
     if (!projectId) return 'Select a project first';
@@ -195,6 +158,35 @@ const GenerateDashboardPanel: React.FC<Props> = ({
     if (collections.length === 0) return 'No table collections in this project';
     return 'All table collections';
   }
+
+  // Same visual language as the builder's Data Collection dropdown, so a
+  // joined collection is recognisable wherever it is picked.
+  const joinById = new Map(collections.map((dc) => [dc.id, dc.join ?? null]));
+  const renderDcOption = ({ option }: { option: { value: string; label: string } }) => {
+    const join = joinById.get(option.value);
+    const isJoined = Boolean(join);
+    return (
+      <Group gap={8} wrap="nowrap" align="flex-start">
+        <Icon
+          icon={isJoined ? 'mdi:link-variant' : 'mdi:database'}
+          width={16}
+          color={isJoined ? 'var(--mantine-color-grape-6)' : 'var(--mantine-color-gray-6)'}
+          style={{ marginTop: 2, flexShrink: 0 }}
+        />
+        <Stack gap={2} style={{ minWidth: 0 }}>
+          <Text size="sm" fw={isJoined ? 600 : 400} truncate>
+            {option.label}
+          </Text>
+          {join && (
+            <Text size="xs" c="dimmed" truncate>
+              {join.leftDc} ⋈ {join.rightDc}
+              {join.onColumns.length > 0 ? ` · on ${join.onColumns.join(', ')}` : ''}
+            </Text>
+          )}
+        </Stack>
+      </Group>
+    );
+  };
 
   return (
     <Stack gap="md" data-testid="generate-dashboard-panel">
@@ -233,6 +225,8 @@ const GenerateDashboardPanel: React.FC<Props> = ({
         rightSection={collectionsLoading ? <Loader size="xs" /> : undefined}
         comboboxProps={{ withinPortal: false }}
         error={collectionsError}
+        leftSection={<Icon icon="mdi:database" width={16} />}
+        renderOption={renderDcOption}
         data-testid="generate-dashboard-collections"
       />
 
@@ -267,14 +261,23 @@ const GenerateDashboardPanel: React.FC<Props> = ({
 
       {!serverKeyAvailable && <AIKeySection dashboardId={GENERATE_DASHBOARD_SESSION_ID} />}
 
-      <Group justify="flex-end" gap="md">
-        {pending ? (
-          <Button color="red" variant="light" onClick={cancel}>
+      {/* Same footer as the Create and Import tabs of this dialog: centred,
+          Cancel then the primary. Stopping a run replaces the primary in
+          place so the row never shifts under the pointer. */}
+      <Group justify="center" gap="md" mt="md">
+        {onClose && (
+          <Button variant="outline" color="gray" radius="md" onClick={onClose} disabled={pending}>
             Cancel
+          </Button>
+        )}
+        {pending ? (
+          <Button color="red" variant="outline" radius="md" onClick={cancel}>
+            Stop generating
           </Button>
         ) : (
           <Button
             color={AI_COLOR}
+            radius="md"
             leftSection={<Icon icon={AI_ICON} width={16} />}
             disabled={!canRun}
             onClick={submit}
@@ -285,118 +288,59 @@ const GenerateDashboardPanel: React.FC<Props> = ({
         )}
       </Group>
 
-      {pending && (
-        <Group gap="xs">
-          <Loader size="xs" />
-          <Text size="sm" c="dimmed">
-            {state.status || 'working'}
-          </Text>
-          {state.budget && (
-            <Text size="xs" c="dimmed" ml="auto">
-              {state.budget.tokens_used.toLocaleString()} tokens ·{' '}
-              {Math.round(state.budget.seconds)}s
-            </Text>
-          )}
-        </Group>
-      )}
-      {budgetPct !== null && pending && <Progress value={budgetPct} size="xs" color={AI_COLOR} />}
+      {started && (
+        <Paper withBorder radius="md" p="md" style={{ borderColor: aiColorVar(3) }}>
+          <Stack gap="md">
+            <GenerationProgress state={state} pending={pending} />
 
-      {state.plan && (
-        <Alert
-          variant="light"
-          color={AI_COLOR}
-          icon={<Icon icon="material-symbols:route" width={16} />}
-          title={state.plan.title || 'Plan'}
-          data-testid="generate-plan"
-        >
-          <Stack gap={4}>
-            {state.plan.subtitle && <Text size="sm">{state.plan.subtitle}</Text>}
-            <Text size="xs" c="dimmed">
-              {state.plan.components.length} components
-              {state.plan.filter_sections.length > 0 &&
-                ` · filters: ${sectionNames(state.plan.filter_sections)}`}
-              {state.plan.grid_sections.length > 0 &&
-                ` · sections: ${sectionNames(state.plan.grid_sections)}`}
-            </Text>
-          </Stack>
-        </Alert>
-      )}
-
-      {rows.length > 0 && (
-        <Stack gap={4}>
-          <Title order={6}>Components</Title>
-          {rows.map((row) => (
-            <Group
-              key={row.tag}
-              gap="xs"
-              wrap="nowrap"
-              data-testid="generate-progress-component"
-              data-tag={row.tag}
-              data-status={row.status}
-            >
-              <Badge size="sm" variant="light" color={ROW_BADGE[row.status].color} miw={76}>
-                {ROW_BADGE[row.status].label}
-              </Badge>
-              <Text size="sm" fw={500}>
-                {row.tag}
-              </Text>
-              <Text size="xs" c="dimmed">
-                {row.component_type} · {row.section}
-              </Text>
-              {row.attempts !== undefined && row.attempts > 1 && (
-                <Text size="xs" c="dimmed">
-                  {row.attempts} attempts
-                </Text>
-              )}
-              {row.error && (
-                <Text size="xs" c="red" lineClamp={1} title={row.error} style={{ minWidth: 0 }}>
-                  {row.error}
-                </Text>
-              )}
-            </Group>
-          ))}
-        </Stack>
-      )}
-
-      {state.error && (
-        <Alert variant="light" color="red" title="Generation failed" data-testid="generate-error">
-          {state.error}
-        </Alert>
-      )}
-
-      {draft && (
-        <Alert
-          variant="light"
-          color="teal"
-          icon={<Icon icon="mdi:check" width={16} />}
-          title={`Draft ready: ${draft.title}`}
-          data-testid="generate-dashboard-ready"
-        >
-          <Stack gap="xs">
-            <Text size="sm">Saved as an AI draft. Opening the editor...</Text>
-            {draft.dropped.length > 0 && (
-              <Text size="xs" c="dimmed">
-                Dropped: {draft.dropped.join(', ')}
-              </Text>
-            )}
-            {draft.warnings.map((w, i) => (
-              <Text key={i} size="xs" c="dimmed">
-                {w}
-              </Text>
-            ))}
-            <Group>
-              <Button
-                size="xs"
-                color={AI_COLOR}
-                leftSection={<Icon icon="mdi:open-in-new" width={14} />}
-                onClick={() => openEditor(draft.dashboard_id)}
-                data-testid="generate-open-editor"
+            {state.error && (
+              <Alert
+                variant="light"
+                color="red"
+                title="Generation failed"
+                data-testid="generate-error"
               >
-                Open in editor
-              </Button>
-            </Group>
+                {state.error}
+              </Alert>
+            )}
+
+            {draft && (
+              <Alert
+                variant="light"
+                color="teal"
+                icon={<Icon icon="mdi:check" width={16} />}
+                title={`Draft ready: ${draft.title}`}
+                data-testid="generate-dashboard-ready"
+              >
+                <Stack gap="xs">
+                  <Text size="sm">Saved as an AI draft. Opening the editor...</Text>
+                  {draft.dropped.length > 0 && (
+                    <Text size="xs" c="dimmed">
+                      Dropped: {draft.dropped.join(', ')}
+                    </Text>
+                  )}
+                  {draft.warnings.map((w, i) => (
+                    <Text key={i} size="xs" c="dimmed">
+                      {w}
+                    </Text>
+                  ))}
+                  <Group>
+                    <Button
+                      size="xs"
+                      color={AI_COLOR}
+                      radius="md"
+                      leftSection={<Icon icon="mdi:open-in-new" width={14} />}
+                      onClick={() => openEditor(draft.dashboard_id)}
+                      data-testid="generate-open-editor"
+                    >
+                      Open in editor
+                    </Button>
+                  </Group>
+                </Stack>
+              </Alert>
+            )}
           </Stack>
-        </Alert>
+        </Paper>
       )}
     </Stack>
   );

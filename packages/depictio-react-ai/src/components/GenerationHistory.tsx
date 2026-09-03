@@ -58,6 +58,31 @@ function countsOf(run: GenerationSummary): GenerationCounts {
   };
 }
 
+/** Long enough to recognise a prompt by, short enough to stay on one line
+ *  beside the status badges. */
+const PROMPT_TITLE_MAX = 60;
+
+/** The prompt's opening line, as a name. Multi-line prompts front-load what
+ *  they want, so the rest is dropped rather than clamped mid-sentence. */
+function promptTitle(prompt: string | undefined): string {
+  const first = (prompt ?? '').split('\n')[0].trim();
+  if (!first) return '';
+  return first.length > PROMPT_TITLE_MAX
+    ? `${first.slice(0, PROMPT_TITLE_MAX).trimEnd()}...`
+    : first;
+}
+
+/** What to call a run. A row is worth reading even when nothing named it:
+ *  the saved title first, then the state it is in, then what was asked for,
+ *  and only failing all of those the date it ran. */
+function runLabel(run: GenerationSummary): { text: string; fromPrompt: boolean } {
+  if (run.title) return { text: run.title, fromPrompt: false };
+  if (run.status === 'running') return { text: 'Generating...', fromPrompt: false };
+  const fromPrompt = promptTitle(run.prompt);
+  if (fromPrompt) return { text: fromPrompt, fromPrompt: true };
+  return { text: `Run of ${formatGeneratedAt(run.created_at)}`, fromPrompt: false };
+}
+
 /**
  * "Previous generations" for one project: what has been run before, newest
  * first, beside the panel that runs the next one.
@@ -67,7 +92,7 @@ function countsOf(run: GenerationSummary): GenerationCounts {
  * to generation: how many components came out ok, repaired or dropped, the
  * warnings the run collected, and a way back into the draft it saved. A run
  * that saved nothing (cancelled, or failed before the draft landed) is
- * listed too, without the link.
+ * listed too, without the link, as is one whose draft has since been deleted.
  */
 const GenerationHistory: React.FC<GenerationHistoryProps> = ({
   projectId,
@@ -133,9 +158,11 @@ const GenerationHistory: React.FC<GenerationHistoryProps> = ({
         <Stack gap="xs">
           {runs.map((run) => {
             // Pulled out of the JSX so the link's callback closes over a
-            // narrowed id rather than re-reading a nullable property.
-            const draftId = run.dashboard_id;
+            // narrowed id rather than re-reading a nullable property. A draft
+            // that has since been deleted gets no link: it would 404.
+            const draftId = run.dashboard_deleted ? null : run.dashboard_id;
             const counts = countsOf(run);
+            const label = runLabel(run);
             return (
               <Card
                 key={run.id}
@@ -147,10 +174,12 @@ const GenerationHistory: React.FC<GenerationHistoryProps> = ({
                 data-status={run.status}
               >
                 <Stack gap={4}>
-                  <Text size="sm" fw={500} lineClamp={1}>
-                    {run.title || 'Untitled run'}
+                  <Text size="sm" fw={500} lineClamp={1} title={run.prompt || undefined}>
+                    {label.text}
                   </Text>
-                  {run.prompt && (
+                  {/* The prompt is already the name here, so printing it
+                      again below would say the same thing twice. */}
+                  {run.prompt && !label.fromPrompt && (
                     <Text size="xs" c="dimmed" lineClamp={2} title={run.prompt}>
                       {run.prompt}
                     </Text>
@@ -163,6 +192,11 @@ const GenerationHistory: React.FC<GenerationHistoryProps> = ({
                     >
                       {run.status}
                     </Badge>
+                    {run.dashboard_deleted && (
+                      <Badge size="xs" variant="light" color="gray">
+                        dashboard deleted
+                      </Badge>
+                    )}
                     <Text size="xs" c="dimmed">
                       {run.model}
                     </Text>
