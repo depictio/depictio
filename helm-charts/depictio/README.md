@@ -82,6 +82,7 @@ helm uninstall depictio
 |-----------|-------------|---------|
 | `secrets.minioRootUser` | MinIO root username | `"minio"` |
 | `secrets.minioRootPassword` | MinIO root password | `"minio123"` |
+| `secrets.aiApiKey` | Server-side model provider key for the AI assistant, injected into the backend as `DEPICTIO_AI_API_KEY`. Optional: leave empty and users bring their own key when `backend.env.DEPICTIO_AI_ALLOW_USER_KEYS` is `"true"` | `""` |
 
 These credentials are also stored in the Kubernetes Secret named `<release-name>-depictio-secrets`. Override them only if custom values are required.
 

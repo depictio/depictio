@@ -83,6 +83,17 @@ secrets:
   # in etcd by default. Everyone who enters it still gets their own throwaway
   # user, so it is a door code, not an account.
   publicAccessCode: ""
+  # Server-side model provider key for the AI assistant (DEPICTIO_AI_API_KEY).
+  # Optional. Only read when backend.env.DEPICTIO_AI_ENABLED is "true". When
+  # unset the Secret carries no key, the backend env var stays absent and users
+  # bring their own key from the UI (backend.env.DEPICTIO_AI_ALLOW_USER_KEYS).
+  # It lives under secrets, not backend.env, because the other DEPICTIO_AI_*
+  # settings go to the ConfigMap and this one must not. The chart has no
+  # existingSecret switch: the key reaches <release>-depictio-secrets through
+  # this value, so supply it out of band like the bootstrap admin password
+  # (`--set-file secrets.aiApiKey=./ai.key`, a secrets-only values file kept
+  # out of the repo, or External Secrets / SealedSecrets).
+  aiApiKey: ""
 
 local_development: false # Set to true for local development
 
@@ -333,6 +344,33 @@ backend:
     DEPICTIO_DASHBOARD_YAML_AUTO_EXPORT_ON_SAVE: "false"
     DEPICTIO_DASHBOARD_YAML_WATCHER_AUTO_START: "false"
     DEPICTIO_DASHBOARD_YAML_WATCH_LOCAL_DIR: "false"
+
+    # AI assistant (LLM-backed analysis, filters and component generation).
+    # Off by default. Set DEPICTIO_AI_ENABLED="true" and either provide the
+    # server-side key as secrets.aiApiKey (injected into the backend pod as
+    # DEPICTIO_AI_API_KEY from the Secret, never from the ConfigMap) or leave
+    # it unset and let users bring their own key (DEPICTIO_AI_ALLOW_USER_KEYS).
+    # Keep the values quoted: the template's `default` treats an unquoted 0 or
+    # false as unset and falls back to the chart default.
+    DEPICTIO_AI_ENABLED: "false"
+    DEPICTIO_AI_DEFAULT_MODEL: "openrouter/anthropic/claude-sonnet-4-6"
+    DEPICTIO_AI_ALLOW_USER_KEYS: "true"
+    DEPICTIO_AI_MAX_SAMPLE_ROWS: "8"
+    DEPICTIO_AI_MAX_CONTEXT_CHARS: "60000"
+    DEPICTIO_AI_MAX_TOKENS: "4096"
+    DEPICTIO_AI_ANALYZE_MAX_STEPS: "20"
+    DEPICTIO_AI_ANALYZE_MAX_TOKENS_TOTAL: "200000"
+    DEPICTIO_AI_ANALYZE_MAX_WALL_CLOCK_S: "300"
+    # Whole-dashboard generation: opt-in on top of DEPICTIO_AI_ENABLED. One
+    # planning call, then one fill call per component, bounded by tokens and
+    # wall clock; components over the limits are dropped from the draft.
+    DEPICTIO_AI_GENERATE_DASHBOARD_ENABLED: "false"
+    DEPICTIO_AI_GENERATE_MAX_COMPONENTS: "16"
+    DEPICTIO_AI_GENERATE_MAX_SECTIONS: "4"
+    DEPICTIO_AI_GENERATE_MAX_TOKENS_TOTAL: "150000"
+    DEPICTIO_AI_GENERATE_MAX_WALL_CLOCK_S: "180"
+    DEPICTIO_AI_GENERATE_MAX_REPAIRS_PER_COMPONENT: "1"
+    DEPICTIO_AI_GENERATE_MAX_COLLECTIONS: "6"
 
     # Realtime Events (WebSocket / SSE / MongoDB change streams) — disabled
     # by default. Set DEPICTIO_EVENTS_ENABLED=true to expose the WebSocket /

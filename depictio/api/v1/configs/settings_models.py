@@ -208,6 +208,7 @@ class MongoDBConfig(ServiceConfig):
         ingestion_runs_collection: str = Field(default="ingestion_runs")
         ai_summaries_collection: str = Field(default="ai_summaries")
         ai_analyses_collection: str = Field(default="ai_analyses")
+        ai_generations_collection: str = Field(default="ai_generations")
         app_logs_collection: str = Field(default="app_logs")
         # Instance branding: the singleton overrides document and the uploaded
         # logo bytes. Named here so backup/restore can reach them like any other
@@ -848,6 +849,51 @@ class AIConfig(BaseSettings):
         default=300,
         ge=10,
         description="Wall-clock seconds an analysis run may take before it must conclude",
+    )
+    # Whole-dashboard generation: opt-in on top of `enabled`. One planning
+    # call, then one fill call per planned component, bounded by tokens and
+    # wall clock like the analysis run. Components are the hard ceiling, the
+    # rest keeps a runaway plan from spending the deployment's key.
+    generate_dashboard_enabled: bool = Field(
+        default=False,
+        description=(
+            "Enable the /ai/generate-dashboard flow (whole-dashboard drafts from a "
+            "prompt). Requires enabled; off by default."
+        ),
+    )
+    generate_max_components: int = Field(
+        default=16,
+        ge=1,
+        le=40,
+        description="Hard ceiling on components a generated dashboard plan may contain",
+    )
+    generate_max_sections: int = Field(
+        default=4,
+        ge=1,
+        le=8,
+        description="Hard ceiling on grid sections a generated dashboard plan may contain",
+    )
+    generate_max_tokens_total: int = Field(
+        default=150_000,
+        ge=1_000,
+        description="Total LLM tokens (prompt + completion) a dashboard generation may spend",
+    )
+    generate_max_wall_clock_s: int = Field(
+        default=180,
+        ge=10,
+        description="Wall-clock seconds a dashboard generation may take before remaining components are dropped",
+    )
+    generate_max_repairs_per_component: int = Field(
+        default=1,
+        ge=0,
+        le=3,
+        description="Repair round-trips per generated component before it is dropped from the draft",
+    )
+    generate_max_collections: int = Field(
+        default=6,
+        ge=1,
+        le=12,
+        description="Data collections described to the planner (the rest are left out with a warning)",
     )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_AI_")
