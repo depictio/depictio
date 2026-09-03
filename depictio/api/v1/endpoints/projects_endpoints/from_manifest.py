@@ -14,20 +14,38 @@ FastAPI process) — the route dispatches via ``asyncio.to_thread``.
 """
 
 import copy
+import re
 from typing import Any
 
 from bson import ObjectId
 from fastapi import HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from depictio.api.v1.db import projects_collection
 from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
+    ManifestEntriesRejected,
     ManifestIngestDCResult,
     _fetch_and_parse_manifest,
     _run_dc_ingest,
 )
 from depictio.api.v1.remote_fetch import RemoteURLRejected, validate_remote_url
 from depictio.models.logging import logger
+
+# Same rule as export_template's build_template_bundle: slash-separated
+# segments that start alphanumeric. Rules out "..", a leading "/" or "~", so
+# an id handed to resolve_template can never spell a path outside the
+# server's templates directory.
+TEMPLATE_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*")
+TEMPLATE_ID_RULE = (
+    "template_id must be slash-separated path segments, e.g. 'generic/manifest-tables/1'."
+)
+
+
+def validate_template_id(template_id: str) -> str:
+    """Return ``template_id`` when well-formed, else raise ``ValueError``."""
+    if not TEMPLATE_ID_PATTERN.fullmatch(template_id):
+        raise ValueError(TEMPLATE_ID_RULE)
+    return template_id
 
 
 class FromManifestRequest(BaseModel):
@@ -40,6 +58,11 @@ class FromManifestRequest(BaseModel):
     variables: dict[str, str] = Field(default_factory=dict)
     # Plan-only: resolve + coverage-check without creating anything.
     dry_run: bool = False
+
+    @field_validator("template_id")
+    @classmethod
+    def _well_formed_template_id(cls, value: str) -> str:
+        return validate_template_id(value)
 
 
 class DashboardImportResult(BaseModel):
@@ -93,6 +116,20 @@ def _prune_dcs(config: dict[str, Any], tags: set[str]) -> None:
         ]
 
 
+def _template_not_found_detail(template_id: str, exc: FileNotFoundError) -> str:
+    """Client-facing 404 detail: the id and the catalogue, never a server path.
+
+    ``locate_template``'s own message names the server's templates directory
+    (useful on the CLI, not something an API caller should learn); the
+    catalogue rides along on the exception when available.
+    """
+    available = getattr(exc, "available_templates", None)
+    hint = ""
+    if available is not None:
+        hint = f" Available templates: {', '.join(available) or 'none found'}."
+    return f"Template '{template_id}' not found.{hint}"
+
+
 def _create_project_from_manifest(
     *,
     manifest_url: str,
@@ -113,6 +150,12 @@ def _create_project_from_manifest(
             status_code=400,
             detail="s3:// manifest locations are not supported yet — serve the manifest over https.",
         )
+    # The request model already enforces this; re-checked here so direct
+    # callers can't hand resolve_template a path either.
+    try:
+        validate_template_id(template_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
     # Resolve the template server-side. resolve_template is import-light CLI
     # code (yaml + models); data_root=None skips every filesystem-local step.
@@ -127,7 +170,7 @@ def _create_project_from_manifest(
             extra_vars=extra_vars,
         )
     except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
+        raise HTTPException(status_code=404, detail=_template_not_found_detail(template_id, exc))
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=f"Template resolution failed: {exc}")
 
@@ -143,6 +186,8 @@ def _create_project_from_manifest(
         manifest = _fetch_and_parse_manifest(
             manifest_url, field_map={"id": "id", "type": "type", "url": "url", "run": "run"}
         )
+    except ManifestEntriesRejected as exc:
+        raise HTTPException(status_code=400, detail=exc.detail())
     except RemoteURLRejected as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except ValueError as exc:

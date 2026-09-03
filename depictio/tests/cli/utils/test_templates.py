@@ -530,6 +530,11 @@ class TestLocateTemplateByPath:
     `--template` could see it, which is exactly what blocks sharing.
     """
 
+    @pytest.fixture(autouse=True)
+    def _cli_context(self, monkeypatch):
+        # The path form is a CLI affordance; the suite's default context is "server".
+        monkeypatch.setenv("DEPICTIO_CONTEXT", "CLI")
+
     def test_directory_containing_template_yaml(self, tmp_path):
         bundle = tmp_path / "recu"
         bundle.mkdir()
@@ -556,3 +561,42 @@ class TestLocateTemplateByPath:
     def test_installed_ids_still_resolve(self):
         """Path support must not shadow the shipped catalogue."""
         assert locate_template("generic/manifest-tables/1").is_file()
+
+
+class TestLocateTemplateConfinement:
+    """Ids are confined to the templates directory; the path form is CLI-only.
+
+    The API resolves ids for remote callers (``POST /projects/from_manifest``),
+    so a path form there, or an id that walks out of the directory, would let
+    any request read an arbitrary YAML on the server.
+    """
+
+    def test_path_form_refused_outside_the_cli(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
+        bundle = tmp_path / "recu"
+        bundle.mkdir()
+        (bundle / "template.yaml").write_text("name: x\n")
+        with pytest.raises(FileNotFoundError, match="not found"):
+            locate_template(str(bundle))
+        with pytest.raises(FileNotFoundError, match="not found"):
+            locate_template(str(bundle / "template.yaml"))
+
+    @pytest.mark.parametrize("context", ["server", "CLI"])
+    @pytest.mark.parametrize(
+        "escaping",
+        ["../../../nope-does-not-exist/x", "generic/../../nope/x", "./generic/manifest-tables/1"],
+    )
+    def test_id_leaving_the_templates_dir_is_refused(self, context, escaping, monkeypatch):
+        # On the CLI the path form is tried first, so none of these may exist
+        # relative to the working directory either.
+        monkeypatch.setenv("DEPICTIO_CONTEXT", context)
+        with pytest.raises(FileNotFoundError, match="not found"):
+            locate_template(escaping)
+
+    def test_installed_ids_resolve_in_server_context(self, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
+        assert locate_template("generic/manifest-tables/1").is_file()
+        with pytest.raises(FileNotFoundError) as exc:
+            locate_template("generic/does-not-exist/1")
+        # The catalogue is carried separately so the API can omit the path.
+        assert "generic/manifest-tables/1" in exc.value.available_templates

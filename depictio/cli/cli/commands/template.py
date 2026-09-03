@@ -8,6 +8,7 @@ a ``<template_id>/`` directory ready to drop into ``depictio/projects/``.
 """
 
 import io
+import re
 import zipfile
 from pathlib import Path
 from typing import Annotated, Optional
@@ -18,6 +19,31 @@ from rich.console import Console
 
 app = typer.Typer()
 console = Console()
+
+_DRIVE_PREFIX_RE = re.compile(r"^[A-Za-z]:[\\/]")
+
+
+def _members_within(archive: zipfile.ZipFile, target: Path) -> list[str]:
+    """Names in ``archive`` once every one is confirmed to land inside ``target``.
+
+    Raises ``ValueError`` naming the first member that would not: an absolute
+    name, a ``..`` segment, or a resolved path that leaves the directory
+    (zip-slip). Checked before any byte is written, so a hostile bundle
+    leaves nothing behind.
+    """
+    root = target.resolve()
+    names = archive.namelist()
+    for name in names:
+        parts = [p for p in re.split(r"[\\/]+", name) if p]
+        if (
+            not parts
+            or name.startswith(("/", "\\"))
+            or _DRIVE_PREFIX_RE.match(name)
+            or ".." in parts
+            or not (root / Path(*parts)).resolve().is_relative_to(root)
+        ):
+            raise ValueError(f"member '{name}' would be written outside {target}")
+    return names
 
 
 @app.command()
@@ -84,10 +110,19 @@ def export(
         raise typer.Exit(1)
 
     target = output_dir / template_id
-    target.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
-        archive.extractall(target)
-        names = archive.namelist()
+    try:
+        with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+            # Validate every member before creating anything: a bundle that
+            # tries to escape the target directory must leave no trace.
+            names = _members_within(archive, target)
+            target.mkdir(parents=True, exist_ok=True)
+            archive.extractall(target)
+    except zipfile.BadZipFile:
+        console.print("[red]Error: the server response is not a valid zip bundle[/red]")
+        raise typer.Exit(1)
+    except ValueError as e:
+        console.print(f"[red]Refusing to unpack the bundle: {e}[/red]")
+        raise typer.Exit(1)
     console.print(f"[green]✓ Template bundle written to: {target}[/green]")
     for name in sorted(names):
         console.print(f"  - {name}")

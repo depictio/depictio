@@ -16,6 +16,7 @@ from fastapi import HTTPException
 
 from depictio.api.v1.endpoints.datacollections_endpoints import utils as dc_utils
 from depictio.api.v1.endpoints.projects_endpoints import manifest_ingest, storage_config
+from depictio.api.v1.remote_fetch import RemoteURLRejected
 from depictio.models.models.users import UserBase
 
 MANIFEST_JSON = """
@@ -255,3 +256,99 @@ def test_failed_ingest_reverts_scan_config(mock_db, served_manifest):
     stored = mock_db["projects"].find_one({"_id": doc["_id"]})
     scan = stored["workflows"][0]["data_collections"][0]["config"]["scan"]
     assert scan["mode"] == "url"
+
+
+# One entry on a host the gateway rejects (the other host passes).
+MANIFEST_WITH_INTERNAL_ENTRY = """
+[
+  {"id": "s1", "type": "counts", "url": "https://example.org/s1.csv"},
+  {"id": "s2", "type": "counts", "url": "https://internal.example/s2.csv"}
+]
+"""
+
+INTERNAL_HOST_REASON = "Host 'internal.example' resolves to a non-public address and was rejected."
+
+
+def _gate_rejecting_internal(url):
+    """validate_remote_url stand-in: rejects internal.example, passes the rest."""
+    if "internal.example" in url:
+        raise RemoteURLRejected(INTERNAL_HOST_REASON)
+
+
+def _serve(content: str):
+    def _download(url, dest_path, max_bytes=None, timeout_s=30.0):
+        with open(dest_path, "w") as fh:
+            fh.write(content)
+        return len(content)
+
+    return patch.object(manifest_ingest, "bounded_download", side_effect=_download)
+
+
+def test_rejected_entry_url_400_and_nothing_ingested(mock_db):
+    # Entry URLs are gateway-checked after parsing, before any File is
+    # registered: a public manifest must not be able to point the worker at an
+    # internal service. The 400 lists the offending entries, and the project is
+    # left exactly as it was (no scan ran, scan config untouched).
+    user = _user()
+    doc = _project_doc(user.id, tags=["counts"])
+    mock_db["projects"].insert_one(doc)
+    mock_db["tokens"].insert_one({"user_id": user.id, "access_token": "x"})
+
+    with (
+        _serve(MANIFEST_WITH_INTERNAL_ENTRY),
+        patch.object(manifest_ingest, "validate_remote_url", side_effect=_gate_rejecting_internal),
+        patch("depictio.cli.cli.utils.helpers.process_data_collection_helper") as helper,
+        pytest.raises(HTTPException) as exc,
+    ):
+        _call(project_id=str(doc["_id"]), user=user)
+
+    assert exc.value.status_code == 400
+    detail = exc.value.detail
+    assert detail["rejected_count"] == 1
+    assert detail["rejected_entries"] == [
+        {
+            "id": "s2",
+            "type": "counts",
+            "url": "https://internal.example/s2.csv",
+            "reason": INTERNAL_HOST_REASON,
+        }
+    ]
+    assert "counts/s2" in detail["message"]
+    assert INTERNAL_HOST_REASON in detail["message"]
+    helper.assert_not_called()
+    stored = mock_db["projects"].find_one({"_id": doc["_id"]})
+    assert stored["workflows"][0]["data_collections"][0]["config"]["scan"]["mode"] == "url"
+
+
+def test_entry_gate_checks_each_host_once_and_lists_every_entry(mock_db):
+    # The verdict is per host, so a large manifest costs one check per host;
+    # every entry on a rejected host is still listed individually.
+    user = _user()
+    doc = _project_doc(user.id, tags=["counts"])
+    mock_db["projects"].insert_one(doc)
+    manifest = """
+    [
+      {"id": "s1", "type": "counts", "url": "https://internal.example/s1.csv"},
+      {"id": "s2", "type": "counts", "url": "https://internal.example/s2.csv"},
+      {"id": "s3", "type": "counts", "url": "https://example.org/s3.csv"}
+    ]
+    """
+
+    with (
+        _serve(manifest),
+        patch.object(
+            manifest_ingest, "validate_remote_url", side_effect=_gate_rejecting_internal
+        ) as gate,
+        pytest.raises(HTTPException) as exc,
+    ):
+        _call(project_id=str(doc["_id"]), user=user, dry_run=True)
+
+    assert exc.value.status_code == 400
+    assert [e["id"] for e in exc.value.detail["rejected_entries"]] == ["s1", "s2"]
+    # manifest URL + one call per distinct entry host
+    checked = [c.args[0] for c in gate.call_args_list]
+    assert checked == [
+        "https://example.org/manifest.json",
+        "https://internal.example/s1.csv",
+        "https://example.org/s3.csv",
+    ]
