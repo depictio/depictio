@@ -322,6 +322,14 @@ class BudgetSpent(BaseModel):
     steps: int = 0
     tokens: int = 0
     seconds: float = 0.0
+    cost_usd: float | None = Field(
+        default=None,
+        description=(
+            "What the provider billed, in USD, for the calls of this run that reported a "
+            "cost. None when none of them did; when only some did it is the sum of those, "
+            "not a guaranteed total for the run. Never a price computed from a token count."
+        ),
+    )
 
 
 class AnalysisReport(BaseModel):
@@ -356,6 +364,12 @@ class GenerateDashboardRequest(BaseModel):
     id must belong to the project. `title` pins the dashboard title, and a
     title collision is then a 409 unless `overwrite`; left None, the planner
     chooses one and a collision gets a suffix instead.
+
+    `plan_only` and `plan` are the two halves of the two-phase flow, and are
+    mutually exclusive (both together is a 422 from `_one_plan_phase`): the
+    first run stops at the plan and pays only for the planning call, the
+    second is handed the plan the user approved and pays only for the fill.
+    Either field left at its default is the one-shot run, unchanged.
     """
 
     project_id: str
@@ -363,6 +377,31 @@ class GenerateDashboardRequest(BaseModel):
     title: str | None = None
     data_collection_ids: list[str] = Field(default_factory=list)
     overwrite: bool = False
+    plan_only: bool = Field(
+        default=False,
+        description=(
+            "Stop after the plan: emit the plan, a final budget and done. No dashboard is "
+            "saved and no component is filled, so the run costs one planning call."
+        ),
+    )
+    plan: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "A plan the user already approved, as the `plan` event carried it. The planning "
+            "LLM call is skipped and this plan is filled instead. Client input like any "
+            "other: it is parsed, normalised and re-checked against the project's "
+            "collections before a single component is filled."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _one_plan_phase(self) -> "GenerateDashboardRequest":
+        if self.plan_only and self.plan is not None:
+            raise ValueError(
+                "plan_only and plan are the two phases of one flow: ask for a plan, or send "
+                "back the plan you approved, never both in the same request"
+            )
+        return self
 
 
 GeneratedComponentStatus = Literal["ok", "repaired", "dropped"]

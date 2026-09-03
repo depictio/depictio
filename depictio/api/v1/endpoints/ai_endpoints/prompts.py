@@ -1165,6 +1165,10 @@ LIMITS:
   go in filter_sections, everything else in grid_sections.
 - Tags are unique snake_case handles; intents are concrete (columns,
   aggregation, chart kind) so the fill pass needs no guessing.
+- Section colours follow the intent whenever it names one (a colour, a palette,
+  a brand: "in green", "our brand is teal"): pick the nearest palette name and
+  give it to every section. With no such steer, colour the sections so the
+  funnel's stages still read apart.
 
 Respond with valid JSON of the form:
 {PLAN_ANSWER_SHAPE}
