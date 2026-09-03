@@ -1,10 +1,22 @@
+import hashlib
 import os
 import re
 from datetime import datetime
+from urllib.parse import urlparse
 
+import httpx
 from bson import ObjectId
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 
+from depictio.api.v1.remote_fetch import (
+    RemoteFetchFailed,
+    fetch_validated_text,
+    is_server_context,
+    probe_remote_url,
+    remote_policy,
+    stream_to_text,
+    validate_remote_url,
+)
 from depictio.cli.cli.utils.api_calls import (
     api_create_files,
     api_delete_file,
@@ -849,29 +861,69 @@ def scan_files_for_workflow(
     return {"result": "success", "runs_scanned": len(all_workflow_runs)}
 
 
+# HEAD probes are quick metadata lookups, so they get a shorter timeout than
+# the policy's download timeout regardless of context.
+_PROBE_TIMEOUT_S = 10.0
+
+
 def _probe_url_metadata(url: str) -> dict:
-    """Best-effort HEAD for size/etag on an https URL; s3 URLs return unknowns.
+    """HEAD an http(s) URL for size/etag; s3 URLs return unknowns.
 
-    No SSRF concern at this layer: in server context the URL was validated by
-    the API fetch gateway (depictio.api.v1.remote_fetch) before reaching the
-    ingestion pipeline; in CLI context the URL is the user's own input on the
-    user's own machine.
+    Server context (API process, Celery worker) goes through the SSRF gateway:
+    a URL the policy rejects raises ``RemoteURLRejected`` and aborts the scan,
+    so a rejected location is never registered. CLI context probes directly,
+    since the URL is the user's own input on the user's own machine, with the
+    same redirect cap.
+
+    A probe that fails for reachability reasons returns ``etag=None`` (and a
+    logged warning) so the caller can see it: the identity hash then falls
+    back to URL + size instead of silently becoming content-blind.
     """
-    from urllib.parse import urlparse
-
-    if urlparse(url).scheme == "s3":
+    if urlparse(url).scheme.lower() == "s3":
         return {"size": -1, "etag": ""}
-    try:
-        import httpx
 
-        with httpx.Client(timeout=10.0, follow_redirects=True) as client:
+    if is_server_context():
+        validate_remote_url(url)  # policy violations propagate
+        try:
+            metadata = probe_remote_url(url, timeout_s=_PROBE_TIMEOUT_S)
+        except RemoteFetchFailed as exc:
+            logger.warning(f"Could not probe remote URL {url}: {exc}")
+            return {"size": -1, "etag": None}
+        size = metadata["size"]
+        return {"size": size if size > 0 else -1, "etag": metadata["etag"]}
+
+    policy = remote_policy()
+    try:
+        with httpx.Client(
+            timeout=_PROBE_TIMEOUT_S,
+            follow_redirects=True,
+            max_redirects=policy.max_redirects,
+        ) as client:
             response = client.head(url)
             size_header = response.headers.get("content-length")
             size = int(size_header) if size_header and size_header.isdigit() else -1
             return {"size": size if size > 0 else -1, "etag": response.headers.get("etag", "")}
-    except Exception as e:
-        logger.warning(f"Could not probe remote URL {url}: {e}")
-        return {"size": -1, "etag": ""}
+    except Exception as exc:
+        logger.warning(f"Could not probe remote URL {url}: {exc}")
+        return {"size": -1, "etag": None}
+
+
+def _url_identity_hash(url: str, metadata: dict) -> str:
+    """Identity (not integrity) hash of a url-mode File, see the RFC.
+
+    A successful probe hashes URL + ETag (the ETag may be empty when the server
+    sends none). A failed probe (``etag`` is ``None``) hashes URL + size and
+    logs it, so the weaker hash is visible and a later successful probe shows
+    up as "updated" rather than hiding behind a URL-only hash for good.
+    """
+    etag = metadata.get("etag")
+    if etag is None:
+        logger.warning(
+            f"No ETag for {url} (probe failed): identity hash falls back to URL + size, "
+            "so content changes are not detected until a probe succeeds."
+        )
+        return hashlib.sha256(f"{url}|size={metadata.get('size', -1)}".encode()).hexdigest()
+    return hashlib.sha256(f"{url}|{etag}".encode()).hexdigest()
 
 
 def scan_url_for_data_collection(
@@ -888,9 +940,7 @@ def scan_url_for_data_collection(
     registration time; file_hash is sha256(url + etag), an identity hash (not
     content integrity — documented in the RFC).
     """
-    import hashlib
     import time
-    from urllib.parse import urlparse
 
     scan_params = data_collection.config.scan.scan_parameters  # type: ignore[union-attr]
     url = scan_params.url  # type: ignore[union-attr]
@@ -916,7 +966,7 @@ def scan_url_for_data_collection(
 
     metadata = _probe_url_metadata(url)
     now_iso = format_timestamp(time.time())
-    file_hash = hashlib.sha256(f"{url}|{metadata['etag']}".encode()).hexdigest()
+    file_hash = _url_identity_hash(url, metadata)
 
     url_basename = os.path.basename(urlparse(url).path)
     filename = url_basename or "remote-file"
@@ -995,7 +1045,9 @@ def _s3_read_client(CLI_config: CLIConfig):
     endpoint = remote.get("aws_endpoint_url") or remote.get("endpoint_url")
     key = remote.get("aws_access_key_id")
     secret = remote.get("aws_secret_access_key")
-    region = remote.get("aws_region") or remote.get("region_name")
+    # ``region`` is what storage_options_for_project (per-project storage
+    # config) emits; the other two are the polars/boto3 spellings.
+    region = remote.get("aws_region") or remote.get("region_name") or remote.get("region")
 
     if not key and CLI_config.s3_storage:
         key = CLI_config.s3_storage.aws_access_key_id
@@ -1012,12 +1064,24 @@ def _s3_read_client(CLI_config: CLIConfig):
     )
 
 
+# Keys examined per unit of ``max_files`` before a prefix listing stops asking
+# for more pages. Listing is paged lazily, so this bounds the number of list
+# calls an API thread can spend on a bucket full of non-matching keys.
+S3_PREFIX_KEY_BUDGET_FACTOR = 10
+
+
 def list_s3_prefix(prefix: str, pattern: str, max_files: int, CLI_config: CLIConfig) -> list[dict]:
     """List objects under an ``s3://`` prefix whose relative key matches ``pattern``.
 
     ``pattern`` is fnmatch, whose ``*`` also spans ``/`` — that is deliberate:
     it makes ``*.csv`` recurse into sub-prefixes, matching the semantics of the
     local ``recursive`` mode rather than a single directory listing.
+
+    Two bounds, both reported as warnings: matches stop at ``max_files``, and
+    no further page is requested once ``max_files * S3_PREFIX_KEY_BUDGET_FACTOR``
+    keys have been examined, so a prefix with millions of non-matching keys
+    cannot pin the calling thread. A page already fetched is always scanned in
+    full, which is why the budget is checked between pages.
 
     Returns dicts of {url, key, size, etag, last_modified}; raises ValueError on
     a malformed prefix so the caller can surface it as a scan failure.
@@ -1035,10 +1099,14 @@ def list_s3_prefix(prefix: str, pattern: str, max_files: int, CLI_config: CLICon
     client = _s3_read_client(CLI_config)
     paginator = client.get_paginator("list_objects_v2")
 
+    key_budget = max_files * S3_PREFIX_KEY_BUDGET_FACTOR
+    examined = 0
+    budget_exhausted = False
     matches: list[dict] = []
     truncated = False
     for page in paginator.paginate(Bucket=bucket, Prefix=key_prefix):
         for obj in page.get("Contents", []):
+            examined += 1
             key = obj["Key"]
             # Console-created "folders" are zero-byte keys ending in / — never data.
             if key.endswith("/"):
@@ -1063,6 +1131,11 @@ def list_s3_prefix(prefix: str, pattern: str, max_files: int, CLI_config: CLICon
             )
         if truncated:
             break
+        # ``IsTruncated`` is set on every list_objects_v2 page; a listing that
+        # ends exactly at the budget is complete and must not warn.
+        if examined >= key_budget and page.get("IsTruncated", True):
+            budget_exhausted = True
+            break
 
     if truncated:
         # Never let a cap silently look like "that's all there is".
@@ -1071,6 +1144,16 @@ def list_s3_prefix(prefix: str, pattern: str, max_files: int, CLI_config: CLICon
             "results are truncated. Narrow `pattern` or raise `max_files`.",
             "warning",
         )
+    if budget_exhausted:
+        message = (
+            f"s3_prefix scan examined {examined} keys under {prefix} and stopped at the "
+            f"budget of {key_budget} keys (max_files {max_files} x "
+            f"{S3_PREFIX_KEY_BUDGET_FACTOR}) before the end of the listing; results are "
+            f"partial ({len(matches)} matched). Narrow `prefix` or `pattern`, or raise "
+            "`max_files`."
+        )
+        logger.warning(message)
+        rich_print_checked_statement(message, "warning")
     return matches
 
 
@@ -1087,7 +1170,6 @@ def scan_s3_prefix_for_data_collection(
     listing carries real sizes and ETags, so the identity hash is content-aware:
     a re-uploaded object changes its ETag and is picked up as "updated".
     """
-    import hashlib
     import time
 
     scan_params = data_collection.config.scan.scan_parameters  # type: ignore[union-attr]
@@ -1221,21 +1303,32 @@ def fetch_manifest(manifest_url: str, field_map: dict | None = None):
     Format is decided by extension (.json vs anything else = CSV), falling
     back to content sniffing. s3:// manifests are not supported yet (phase 2
     covers file paths and https; the RFC tracks s3 manifests).
+
+    Remote manifests are re-fetched on every scan, including scans the API
+    runs in-process, so server context goes through the SSRF gateway
+    (``RemoteURLRejected`` propagates). CLI context fetches directly with the
+    same redirect and size caps.
     """
     from depictio.models.models.manifest import DataManifest, is_remote_url
 
     if is_remote_url(manifest_url):
-        if manifest_url.startswith("s3://"):
+        if manifest_url.lower().startswith("s3://"):
             raise ValueError(
                 "s3:// manifest locations are not supported yet — "
                 "serve the manifest over https or use a local path."
             )
-        import httpx
-
-        with httpx.Client(timeout=30.0, follow_redirects=True) as client:
-            response = client.get(manifest_url)
-            response.raise_for_status()
-            text = response.text
+        if is_server_context():
+            text = fetch_validated_text(manifest_url)
+        else:
+            policy = remote_policy()
+            with httpx.Client(
+                timeout=policy.timeout_s,
+                follow_redirects=True,
+                max_redirects=policy.max_redirects,
+            ) as client:
+                with client.stream("GET", manifest_url) as response:
+                    response.raise_for_status()
+                    text = stream_to_text(response, policy.max_download_bytes)
     else:
         if not os.path.exists(manifest_url):
             raise ValueError(f"Manifest '{manifest_url}' does not exist.")
@@ -1262,7 +1355,6 @@ def scan_manifest_for_data_collection(
     entry's run (or "remote"), manifest_id = the entry's canonical ID — read
     back as the `depictio_manifest_id` column at aggregation time.
     """
-    import hashlib
     import time
 
     scan_params = data_collection.config.scan.scan_parameters  # type: ignore[union-attr]
@@ -1300,6 +1392,10 @@ def scan_manifest_for_data_collection(
                     api_delete_file(str(stale_id), CLI_config)
             else:
                 existing_files[location] = existing_file
+    else:
+        logger.warning(
+            f"Failed to retrieve existing files for data collection {data_collection.id}."
+        )
 
     now_iso = format_timestamp(time.time())
     workflow_config_id = (

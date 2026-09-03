@@ -1,11 +1,20 @@
 import os
+import tempfile
 from collections.abc import Iterable
 from datetime import datetime
+from urllib.parse import urlparse
 
+import httpx
 import polars as pl
 from deltalake.exceptions import TableNotFoundError
 from pydantic import validate_call
 
+from depictio.api.v1.remote_fetch import (
+    bounded_download,
+    is_server_context,
+    remote_policy,
+    stream_to_file,
+)
 from depictio.cli.cli.utils.api_calls import (
     api_get_files_by_dc_id,
     api_upsert_deltatable,
@@ -170,44 +179,35 @@ def _lazy_scan_path(file_path: str, file_format: str, polars_kwargs: dict) -> pl
     raise ValueError(error_msg)
 
 
-def _remote_download_cap_bytes() -> int:
-    raw = os.environ.get("DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES", "")
-    try:
-        return int(raw) if raw else 500 * 1024 * 1024
-    except ValueError:
-        return 500 * 1024 * 1024
-
-
 def _download_remote_to_temp(url: str) -> str:
     """Bounded streaming download of an http(s) URL to a temp file.
 
     The temp file keeps the URL's extension so the csv/tsv separator
-    inference in _lazy_scan_path still applies. SSRF validation is the API
-    gateway's job at the endpoint boundary (depictio.api.v1.remote_fetch) —
-    by the time the ingestion pipeline runs, the URL has been vetted (server
-    context) or is the user's own input (CLI context).
+    inference in _lazy_scan_path still applies.
+
+    The URLs read here (a url-mode location, every manifest entry) are never
+    vetted anywhere else, so server context (API process, Celery worker)
+    downloads through the SSRF gateway: validation, redirect re-validation and
+    the size cap from ``RemoteConfig``. CLI context reads directly, since
+    loopback and intranet hosts are the user's own, with the same redirect and
+    size caps. A partial file never survives a failure in either path.
     """
-    import tempfile
-    from urllib.parse import urlparse
-
-    import httpx
-
     suffix = os.path.splitext(urlparse(url).path)[1]
-    cap = _remote_download_cap_bytes()
     fd, temp_path = tempfile.mkstemp(prefix="depictio_remote_", suffix=suffix)
-    written = 0
+    os.close(fd)
     try:
-        with os.fdopen(fd, "wb") as fh:
-            with httpx.Client(timeout=60.0, follow_redirects=True) as client:
+        if is_server_context():
+            bounded_download(url, temp_path)
+        else:
+            policy = remote_policy()
+            with httpx.Client(
+                timeout=policy.timeout_s,
+                follow_redirects=True,
+                max_redirects=policy.max_redirects,
+            ) as client:
                 with client.stream("GET", url) as response:
                     response.raise_for_status()
-                    for chunk in response.iter_bytes(chunk_size=1024 * 1024):
-                        written += len(chunk)
-                        if written > cap:
-                            raise ValueError(
-                                f"Remote file exceeds the download cap ({cap} bytes): {url}"
-                            )
-                        fh.write(chunk)
+                    stream_to_file(response, temp_path, policy.max_download_bytes)
     except Exception:
         try:
             os.unlink(temp_path)
