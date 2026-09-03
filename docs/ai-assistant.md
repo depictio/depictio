@@ -191,9 +191,12 @@ opened, closes from its header, and comes back from the *Review n components*
 button on the banner.
 
 The panel lists every generated tile grouped by section, in plan order with the
-filter panel first, under a *n of m reviewed* progress bar. A row names the
-tile, its type and whether it has been through; the selected row is the cursor,
-and the canvas answers with two cues. A tile nobody has been through yet keeps
+filter panel first, under a *n of m reviewed* progress bar. Each section is a
+fold carrying its own count, so a long draft can be walked one section at a
+time, and the fold holding the cursor stays open however it was left. A draft
+that spans a tab family folds by tab above that. A row names the tile and
+carries its type as the icon and the colour the builder's type grid uses for
+it; the selected row is the cursor, and the canvas answers with two cues. A tile nobody has been through yet keeps
 a hairline dashed outline; the tile the cursor names is outlined solid, and it
 is scrolled into view when the cursor moves.
 
