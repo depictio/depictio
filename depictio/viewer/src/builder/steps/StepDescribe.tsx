@@ -632,7 +632,12 @@ const StepDescribe: React.FC = () => {
   const dcSummary = ((): string => {
     if (isText) return 'Not needed for text';
     if (effectiveDcSel !== AUTO_COLLECTION) {
-      return byId.get(effectiveDcSel)?.tag ?? effectiveDcSel;
+      // Back from Design pins the collection before the project has loaded:
+      // say so rather than showing the raw id meanwhile.
+      return (
+        byId.get(effectiveDcSel)?.tag ??
+        (collections === null ? 'Loading the project collections…' : effectiveDcSel)
+      );
     }
     if (dashboardCollections.length === 1) {
       return `Auto: ${dashboardCollections[0].tag} (the dashboard's only collection)`;
