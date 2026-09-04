@@ -204,6 +204,73 @@ def test_a_local_dc_the_server_can_see_is_offered(mock_db, tmp_path):
     assert exc.value.status_code != 422
 
 
+def _transformed_project_doc(owner_id: ObjectId, tag: str, location: str) -> dict:
+    """A minimal project with one scan-less (``source: transformed``) recipe DC.
+
+    A recipe collection has no scan block at all: its inputs are read from
+    the workflow's data root at process time, not from a per-DC location,
+    so this omits ``scan`` entirely rather than reusing ``_project_doc``.
+    """
+    from depictio.models.models.data_collections import DataCollection, DataCollectionConfig
+    from depictio.models.models.data_collections_types.table import DCTableConfig
+    from depictio.models.models.transforms import TransformConfig
+    from depictio.models.models.workflows import (
+        Workflow,
+        WorkflowConfig,
+        WorkflowDataLocation,
+        WorkflowEngine,
+    )
+
+    data_collection = DataCollection(
+        data_collection_tag=tag,
+        config=DataCollectionConfig(
+            type="table",
+            metatype="metadata",
+            source="transformed",
+            transform=TransformConfig(recipe="qiime2/taxonomy_composition.py"),
+            dc_specific_properties=DCTableConfig(format="csv"),
+        ),
+    )
+    workflow = Workflow(
+        name="wf",
+        workflow_tag="wf",
+        engine=WorkflowEngine(name="python", version="3.12"),
+        config=WorkflowConfig(),
+        data_location=WorkflowDataLocation(structure="flat", locations=[location]),
+        data_collections=[data_collection],
+    )
+    return {
+        "_id": ObjectId(),
+        "name": "transformed-project",
+        "permissions": {"owners": [{"_id": owner_id}]},
+        "workflows": [workflow.mongo()],
+    }
+
+
+def test_a_scanless_transformed_dc_under_a_remote_root_is_offered(mock_db):
+    """The recipe layer reads a remote data root over the network regardless
+    of what this container can see on disk, so a remote root always
+    qualifies, same as a `url` or `s3_prefix` scan collection."""
+    user = _user()
+    doc = _transformed_project_doc(user.id, tag="taxonomy_composition", location="s3://bucket/run1")
+    mock_db["projects"].insert_one(doc)
+    with pytest.raises(HTTPException) as exc:
+        _call(project_id=str(doc["_id"]), user=user)
+    assert exc.value.status_code != 422
+
+
+def test_a_scanless_transformed_dc_under_an_invisible_local_root_is_not_offered(mock_db):
+    user = _user()
+    doc = _transformed_project_doc(
+        user.id, tag="taxonomy_composition", location="/nowhere/the-server/can-see"
+    )
+    mock_db["projects"].insert_one(doc)
+    with pytest.raises(HTTPException) as exc:
+        _call(project_id=str(doc["_id"]), user=user)
+    assert exc.value.status_code == 422
+    assert "re-read" in exc.value.detail
+
+
 def test_unknown_tag_422(mock_db):
     user = _user()
     doc = _project_doc(user.id, tags=["counts"])
@@ -399,6 +466,176 @@ def test_async_task_body_updates_steps_and_finalizes(mock_db):
     # One green + one red worker → the run closes as partial.
     assert run_doc["status"] == "partial"
     assert "boom" in (run_doc["error"] or "")
+
+
+# ── recipe dependency waits (Fix 1) ─────────────────────────────────────────
+
+
+def test_unfinished_dependencies_ignores_terminal_and_unseeded_names():
+    from depictio.api.v1.celery_tasks import _unfinished_dependencies
+
+    steps = [
+        {"name": "a", "status": "success"},
+        {"name": "b", "status": "failed"},
+        {"name": "c", "status": "skipped"},
+        {"name": "d", "status": "pending"},
+        {"name": "e", "status": "running"},
+    ]
+    # "a"/"b"/"c" are terminal; "z" has no step in this run at all: neither
+    # kind is waited for.
+    assert _unfinished_dependencies(steps, ["a", "b", "c", "d", "e", "z"]) == ["d", "e"]
+
+
+def _dependency_run_doc(project_id: str) -> dict:
+    return {
+        "run_id": "run_dep",
+        "command": "from_run",
+        "user_id": "someone",
+        "project_id": project_id,
+        "status": "running",
+        "steps": [
+            {"name": "counts", "status": "pending", "detail": None},
+            {"name": "annotations", "status": "pending", "detail": None},
+        ],
+        "data_collections": [
+            {"tag": "counts", "file_count": 2},
+            {"tag": "annotations", "file_count": 1},
+        ],
+    }
+
+
+def _dependency_payload(doc: dict, user, run_id: str = "run_dep") -> dict:
+    dc = doc["workflows"][0]["data_collections"][1]
+    return {
+        "run_id": run_id,
+        "project_id": str(doc["_id"]),
+        "wf_index": 0,
+        "dc_id": str(dc["_id"]),
+        "dc_tag": "annotations",
+        "sync_files": True,
+        "user": {"id": str(user.id), "email": user.email, "is_admin": False},
+        "depends_on": ["counts"],
+    }
+
+
+def test_task_waits_and_reschedules_while_a_dependency_is_unfinished(mock_db):
+    from celery.exceptions import Retry
+
+    from depictio.api.v1 import celery_tasks
+    from depictio.api.v1.monitoring import store as monitoring_store
+
+    user = _user()
+    doc = _project_doc(user.id, tags=["counts", "annotations"])
+    mock_db["projects"].insert_one(doc)
+    mock_db["ingestion_runs"].insert_one(_dependency_run_doc(str(doc["_id"])))
+    payload = _dependency_payload(doc, user)
+
+    with (
+        patch.object(monitoring_store, "ingestion_runs_collection", mock_db["ingestion_runs"]),
+        patch.object(manifest_ingest, "_run_dc_ingest") as ingest,
+        pytest.raises(Retry),
+    ):
+        celery_tasks.manifest_refresh_dc_task(payload)
+
+    ingest.assert_not_called()  # never marked "running", never actually ingested
+    run_doc = mock_db["ingestion_runs"].find_one({"run_id": "run_dep"})
+    steps = {s["name"]: s for s in run_doc["steps"]}
+    assert steps["annotations"]["status"] == "pending"  # still queued, not failed
+    assert "counts" in (steps["annotations"]["detail"] or "")
+
+
+def test_task_gives_up_after_the_wait_budget_and_fails_the_step(mock_db):
+    from depictio.api.v1 import celery_tasks
+    from depictio.api.v1.monitoring import store as monitoring_store
+
+    user = _user()
+    doc = _project_doc(user.id, tags=["counts", "annotations"])
+    mock_db["projects"].insert_one(doc)
+    mock_db["ingestion_runs"].insert_one(_dependency_run_doc(str(doc["_id"])))
+    payload = _dependency_payload(doc, user)
+
+    celery_tasks.manifest_refresh_dc_task.push_request(retries=celery_tasks._DEPENDENCY_MAX_WAITS)
+    try:
+        with (
+            patch.object(monitoring_store, "ingestion_runs_collection", mock_db["ingestion_runs"]),
+            patch.object(manifest_ingest, "_run_dc_ingest") as ingest,
+        ):
+            result = celery_tasks.manifest_refresh_dc_task(payload)
+    finally:
+        celery_tasks.manifest_refresh_dc_task.pop_request()
+
+    ingest.assert_not_called()
+    assert result["ok"] is False
+    assert "Gave up waiting for counts" in result["message"]
+    run_doc = mock_db["ingestion_runs"].find_one({"run_id": "run_dep"})
+    steps = {s["name"]: s for s in run_doc["steps"]}
+    assert steps["annotations"]["status"] == "failed"
+    assert "Gave up waiting for counts" in (steps["annotations"]["detail"] or "")
+    # "counts" itself never finished, so the run cannot close yet.
+    assert run_doc["status"] == "running"
+
+
+def test_task_proceeds_immediately_once_its_dependency_is_terminal(mock_db):
+    from depictio.api.v1 import celery_tasks
+    from depictio.api.v1.monitoring import store as monitoring_store
+
+    user = _user()
+    doc = _project_doc(user.id, tags=["counts", "annotations"])
+    mock_db["projects"].insert_one(doc)
+    run_doc = _dependency_run_doc(str(doc["_id"]))
+    run_doc["steps"][0]["status"] = "success"  # counts already finished
+    mock_db["ingestion_runs"].insert_one(run_doc)
+    payload = _dependency_payload(doc, user)
+
+    with (
+        patch.object(monitoring_store, "ingestion_runs_collection", mock_db["ingestion_runs"]),
+        patch("depictio.api.v1.db.projects_collection", mock_db["projects"]),
+        patch.object(manifest_ingest, "_run_dc_ingest", return_value=(True, None)) as ingest,
+    ):
+        result = celery_tasks.manifest_refresh_dc_task(payload)
+
+    ingest.assert_called_once()
+    assert result["ok"] is True
+    stored = mock_db["ingestion_runs"].find_one({"run_id": "run_dep"})
+    steps = {s["name"]: s for s in stored["steps"]}
+    assert steps["annotations"]["status"] == "success"
+    assert stored["status"] == "success"
+
+
+# ── optional-missing collections close the run clean (Fix 3) ───────────────
+
+
+def test_finalizer_closes_a_run_with_only_skipped_non_success_steps_as_success(mock_db):
+    """An optional collection seeded "skipped" is a nominal absence, not a
+    failure: a run whose only non-success steps are skipped must still close
+    "success", never "partial"."""
+    from depictio.api.v1.celery_tasks import _finalize_manifest_refresh_run
+    from depictio.api.v1.monitoring import store as monitoring_store
+
+    mock_db["ingestion_runs"].insert_one(
+        {
+            "run_id": "run_skip_only",
+            "command": "from_run",
+            "user_id": "someone",
+            "project_id": str(ObjectId()),
+            "status": "running",
+            "steps": [
+                {"name": "counts", "status": "success", "detail": None},
+                {
+                    "name": "seed_only_canonical",
+                    "status": "skipped",
+                    "detail": "Skipped optional collection: not present under the data root.",
+                },
+            ],
+            "data_collections": [],
+        }
+    )
+
+    with patch.object(monitoring_store, "ingestion_runs_collection", mock_db["ingestion_runs"]):
+        _finalize_manifest_refresh_run("run_skip_only")
+
+    run_doc = mock_db["ingestion_runs"].find_one({"run_id": "run_skip_only"})
+    assert run_doc["status"] == "success"
 
 
 def test_poll_endpoint_maps_run_to_report(mock_db):

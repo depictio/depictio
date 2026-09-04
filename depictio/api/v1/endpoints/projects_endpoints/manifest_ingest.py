@@ -117,7 +117,7 @@ class ManifestIngestDCResult(BaseModel):
     data_collection_tag: str
     data_collection_id: str
     entries: int
-    status: str  # "ingested" | "failed" | "planned" (dry_run)
+    status: str  # "ingested" | "failed" | "skipped" | "planned" (dry_run)
     message: str | None = None
 
 
@@ -454,6 +454,13 @@ def _server_can_reread(workflow: dict, mode: str, scan_params: dict) -> bool:
     from *this* container: a CLI-created project normally points at the user's
     own filesystem, which the API has never seen, and offering a refresh button
     for it would only produce a scan failure with an unhelpful message.
+
+    ``mode == ""`` is a ``source: transformed`` recipe collection: it has no
+    scan block of its own, so there is no per-DC location to check. Its
+    inputs are read from the *workflow's* data root at process time (see
+    ``_run_dc_ingest``). The same visibility test as ``recursive`` applies,
+    plus a remote location, since the recipe layer reads that over the
+    network regardless of what this container can see on disk.
     """
     if mode in _REMOTE_SCAN_MODES:
         return True
@@ -462,6 +469,9 @@ def _server_can_reread(workflow: dict, mode: str, scan_params: dict) -> bool:
     if mode == "recursive":
         locations = (workflow.get("data_location") or {}).get("locations") or []
         return any(os.path.isdir(str(location)) for location in locations)
+    if mode == "":
+        locations = (workflow.get("data_location") or {}).get("locations") or []
+        return any("://" in str(location) or os.path.isdir(str(location)) for location in locations)
     return False
 
 
@@ -710,11 +720,19 @@ def _refresh_manifest_in_project(
     # is created even when every DC failed pre-flight, so the caller always
     # gets a run_id and the poll endpoint shows the failures.
     if to_dispatch or preflight_failed:
+        # The run's own record of each DC's mode: "recipe" for the one
+        # scan-less mode ("") the dispatcher would otherwise default to
+        # "manifest" for, same label from_run.py already uses.
+        scan_modes = {
+            tag: mode or "recipe"
+            for tag, (_wf_i, _dc_i, _params, mode) in refreshable_index.items()
+        }
         run_id, dispatch_ok, dispatched = _dispatch_refresh_tasks(
             project_dict=project_dict,
             to_dispatch=to_dispatch,
             current_user=current_user,
             preflight_failed=preflight_failed,
+            scan_modes=scan_modes,
         )
         report.run_id = run_id
         report.refreshed.extend(dispatched)
@@ -724,12 +742,56 @@ def _refresh_manifest_in_project(
     return report
 
 
+def _recipe_dependencies(project_dict: dict) -> dict[str, list[str]]:
+    """{dc_tag: [dc_ref, ...]} for every recipe-backed (``source: transformed``) DC.
+
+    A recipe's ``SOURCES`` may read another collection's Delta table by tag
+    (``RecipeSource.dc_ref``, see ``deltatables.py``'s recipe path): a required
+    ref that isn't written yet fails the step, an optional one silently runs
+    without it. ``_dispatch_refresh_tasks`` uses this to make a dependent DC's
+    task wait for its dc_ref's step to go terminal first: see
+    ``manifest_refresh_dc_task``.
+
+    A recipe that fails to load is not this function's problem to raise on:
+    the DC's own ingestion hits the same failure and reports it as *its*
+    error, so a load failure here just means "no known dependencies", not
+    "block dispatch".
+    """
+    from depictio.recipes import load_recipe
+
+    dependencies: dict[str, list[str]] = {}
+    for workflow in project_dict.get("workflows", []) or []:
+        for dc in workflow.get("data_collections", []) or []:
+            tag = dc.get("data_collection_tag")
+            if not tag:
+                continue
+            config = dc.get("config") or {}
+            if str(config.get("source") or "") != "transformed":
+                continue
+            recipe = (config.get("transform") or {}).get("recipe")
+            if not recipe:
+                continue
+            try:
+                module = load_recipe(recipe)
+            except Exception as exc:
+                logger.warning(f"Could not load recipe '{recipe}' for DC '{tag}': {exc}")
+                continue
+            refs: list[str] = []
+            for source in getattr(module, "SOURCES", []):
+                ref = getattr(source, "dc_ref", None)
+                if ref and ref not in refs:
+                    refs.append(ref)
+            dependencies[tag] = refs
+    return dependencies
+
+
 def _dispatch_refresh_tasks(
     *,
     project_dict: dict,
     to_dispatch: list[tuple[str, str, int, int]],
     current_user,
     preflight_failed: list[tuple[str, str, str]],
+    preflight_skipped: list[tuple[str, str, str]] | None = None,
     command: str = "refresh_manifest",
     scan_modes: dict[str, str] | None = None,
     data_root: str | None = None,
@@ -746,7 +808,24 @@ def _dispatch_refresh_tasks(
     a worker but are seeded as already-failed steps with ``file_count=0``: the
     finalizer computes the run status from the seeded steps, so leaving them
     out would let the run close as "success" with the skipped DC silently
-    absent from the poll report.
+    absent from the poll report. ``preflight_skipped`` is the same idea for a
+    collection whose absence is nominal (an optional template collection this
+    run folder never produces), seeded "skipped" rather than "failed" so the
+    run can still close "success" around it (see
+    ``_finalize_manifest_refresh_run``). Both default to empty, so the
+    manifest refresh flow, which never has one, is unaffected.
+
+    A recipe DC's payload carries ``depends_on`` (see ``_recipe_dependencies``)
+    for every dc_ref that still has a step *in this run* (``seeded_tags``
+    below), and ``manifest_refresh_dc_task`` waits for those steps to go
+    terminal before it actually ingests. Waiting on direct dependencies only
+    is enough:
+    a dependency's own dependencies already had to go terminal before it could,
+    so by the time a step stops being pending/running, everything upstream of
+    it has already settled. A dependency cycle (there are none in the catalog
+    today) would simply hold every step in it pending until each one's wait
+    budget in ``manifest_refresh_dc_task`` runs out, and each would then fail
+    naming what it was still waiting for.
 
     Shared with ``POST /projects/from_run``, which needs exactly this: a
     durable run whose steps a worker updates and a caller polls. The two flows
@@ -768,20 +847,41 @@ def _dispatch_refresh_tasks(
         IngestionStep,
     )
 
+    skipped = preflight_skipped or []
     modes = scan_modes or {}
     run_id = uuid4().hex
-    # Pre-flight failures first, then the DCs a worker will actually run.
-    data_collections = [
-        IngestionDataCollection(tag=tag, scan_mode=modes.get(tag, "manifest"), file_count=0)
-        for tag, _dc_id, _message in preflight_failed
-    ] + [
-        IngestionDataCollection(tag=tag, scan_mode=modes.get(tag, "manifest"), file_count=entries)
-        for tag, _dc_id, _wf_i, entries in to_dispatch
-    ]
-    steps = [
-        IngestionStep(name=tag, status="failed", detail=message)
-        for tag, _dc_id, message in preflight_failed
-    ] + [IngestionStep(name=tag, status="pending") for tag, _dc_id, _wf_i, _entries in to_dispatch]
+    # Pre-flight failures first, then pre-flight skips, then the DCs a worker
+    # will actually run.
+    data_collections = (
+        [
+            IngestionDataCollection(tag=tag, scan_mode=modes.get(tag, "manifest"), file_count=0)
+            for tag, _dc_id, _message in preflight_failed
+        ]
+        + [
+            IngestionDataCollection(tag=tag, scan_mode=modes.get(tag, "manifest"), file_count=0)
+            for tag, _dc_id, _message in skipped
+        ]
+        + [
+            IngestionDataCollection(
+                tag=tag, scan_mode=modes.get(tag, "manifest"), file_count=entries
+            )
+            for tag, _dc_id, _wf_i, entries in to_dispatch
+        ]
+    )
+    steps = (
+        [
+            IngestionStep(name=tag, status="failed", detail=message)
+            for tag, _dc_id, message in preflight_failed
+        ]
+        + [
+            IngestionStep(name=tag, status="skipped", detail=message)
+            for tag, _dc_id, message in skipped
+        ]
+        + [
+            IngestionStep(name=tag, status="pending")
+            for tag, _dc_id, _wf_i, _entries in to_dispatch
+        ]
+    )
     store.create_ingestion_run(
         IngestionRun(
             run_id=run_id,
@@ -803,12 +903,30 @@ def _dispatch_refresh_tasks(
     # patch the dispatch without a broker.
     from depictio.api.v1.celery_tasks import manifest_refresh_dc_task
 
+    # Every tag that has a step in this run: a dependency pruned at
+    # resolution, or simply not part of this run, is not waited for.
+    seeded_tags = (
+        {tag for tag, _dc_id, _message in preflight_failed}
+        | {tag for tag, _dc_id, _message in skipped}
+        | {tag for tag, _dc_id, _wf_i, _entries in to_dispatch}
+    )
+    dependencies = _recipe_dependencies(project_dict)
+
     user_ctx = {
         "id": str(current_user.id),
         "email": getattr(current_user, "email", None),
         "is_admin": bool(getattr(current_user, "is_admin", False)),
     }
-    results: list[ManifestIngestDCResult] = []
+    results: list[ManifestIngestDCResult] = [
+        ManifestIngestDCResult(
+            data_collection_tag=tag,
+            data_collection_id=dc_id,
+            entries=0,
+            status="skipped",
+            message=message,
+        )
+        for tag, dc_id, message in skipped
+    ]
     all_dispatched = True
     for tag, dc_id, wf_i, entries in to_dispatch:
         payload = {
@@ -820,6 +938,9 @@ def _dispatch_refresh_tasks(
             "sync_files": True,
             "user": user_ctx,
         }
+        deps = [dep for dep in dependencies.get(tag, []) if dep in seeded_tags]
+        if deps:
+            payload["depends_on"] = deps
         try:
             manifest_refresh_dc_task.apply_async(args=[payload])
             status, message = "dispatched", None
@@ -862,6 +983,7 @@ _REFRESH_STEP_TO_DC_STATUS = {
     "running": "running",
     "success": "ingested",
     "failed": "failed",
+    "skipped": "skipped",
 }
 
 
