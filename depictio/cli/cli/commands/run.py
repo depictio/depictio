@@ -12,7 +12,11 @@ from depictio.cli.cli.utils.api_calls import (
     api_provision_user,
     api_sync_project_config_to_server,
 )
-from depictio.cli.cli.utils.common import generate_api_headers, load_depictio_config
+from depictio.cli.cli.utils.common import (
+    describe_api_target,
+    generate_api_headers,
+    load_depictio_config,
+)
 from depictio.cli.cli.utils.config import validate_project_config_and_check_S3_storage
 from depictio.cli.cli.utils.helpers import process_project_helper
 from depictio.cli.cli.utils.rich_utils import (
@@ -743,22 +747,12 @@ def register_run_command(app: typer.Typer):
                 success_count += 1
                 _rec("server_check", "success", "server reachable")
             except Exception as e:
-                # Name the endpoint and the file it came from. "Connection
-                # refused" on its own sent people restarting a server that was
-                # already up: the real cause was a CLI.yaml aimed at a different
-                # instance. That is the default failure of a pipeline-triggered
-                # run, where nobody chose the config path and it silently fell
-                # back to ~/.depictio/CLI.yaml.
-                try:
-                    target = load_depictio_config(
-                        yaml_config_path=CLI_config_path, quiet=True
-                    ).api_base_url
-                except Exception as cfg_exc:
-                    logger.debug(f"Could not resolve the API base URL to report it: {cfg_exc}")
-                    target = "an unreadable configuration"
+                # Name the endpoint and the file it came from; see
+                # describe_api_target for why that matters here in particular.
+                target = describe_api_target(CLI_config_path)
                 rich_print_checked_statement(f"Server accessibility check failed: {e}", "error")
-                rich_print_checked_statement(f"Tried {target}, read from {CLI_config_path}", "info")
-                _rec("server_check", "failed", f"{e} (tried {target} from {CLI_config_path})")
+                rich_print_checked_statement(f"Tried {target}", "info")
+                _rec("server_check", "failed", f"{e} (tried {target})")
                 if not continue_on_error:
                     raise typer.Exit(code=1)
         else:
