@@ -83,12 +83,17 @@ WORKDIR /app
 #     so PYTHONPATH and the COPY above are what make them reachable. From an
 #     installed-only layout `--template nf-core/ampliseq/latest` silently
 #     resolves to nothing.
+#   * `config nextflow` is how a head job with no CLI of its own gets the
+#     onComplete snippet, by running this image. The docs hand users that exact
+#     command, so an image that cannot answer it breaks the documented path for
+#     every container-only deployment.
 #
 # Cheap, and it runs on release builds too, unlike the PR-only CI job.
 RUN python -c "import multiqc; print('multiqc', multiqc.__version__)" \
     && python -c "\
 from depictio.cli.cli.utils.templates import locate_template; \
-print('templates', locate_template('nf-core/ampliseq/latest'))"
+print('templates', locate_template('nf-core/ampliseq/latest'))" \
+    && python -m depictio.cli config nextflow
 
 USER depictio
 
