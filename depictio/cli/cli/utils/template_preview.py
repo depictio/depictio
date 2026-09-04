@@ -215,8 +215,16 @@ def _preview_recipe_dc(
     """
     transform = dc_config.get("transform") or {}
     recipe_name = transform.get("recipe") or ""
+    # "empty" until proven otherwise: a recipe that names no module, or whose
+    # module fails to load, has found nothing and must not settle a dc_ref.
     row = DataCollectionPreview(
-        tag=tag, kind="recipe", mode=None, location=root.url(""), matched=0, optional=optional
+        tag=tag,
+        kind="recipe",
+        mode=None,
+        location=root.url(""),
+        matched=0,
+        optional=optional,
+        status="empty",
     )
     if not recipe_name:
         return row
