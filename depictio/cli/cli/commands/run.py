@@ -439,6 +439,20 @@ def register_run_command(app: typer.Typer):
         """
         rich_print_command_usage("run")
 
+        # A data root that is not there is an argument mistake, and it is worth
+        # saying so before anything else happens. This used to live inside the
+        # template branch, so the identical mistake made with
+        # --project-config-path instead surfaced three steps later as a raw
+        # pydantic validation error naming a file, a line and a function: it
+        # read like an internal crash rather than a typo. Same cause, same
+        # message, whichever way the project was described.
+        if data_root and not Path(data_root).is_dir():
+            rich_print_checked_statement(
+                f"--data-root does not exist or is not a directory: {data_root}",
+                "error",
+            )
+            raise typer.Exit(code=1)
+
         # Step 0-: resolve a bundled template from the pipeline identity. The
         # trigger forwards what its engine reported and lets the CLI decide the
         # mode; an explicit --template / --project-config-path always wins.
@@ -600,14 +614,6 @@ def register_run_command(app: typer.Typer):
             rich_print_section_separator("Step 0: Resolving project template")
             try:
                 from depictio.cli.cli.utils.templates import resolve_template
-
-                # Check data root exists before doing anything
-                if not Path(data_root).is_dir():  # type: ignore[arg-type]
-                    rich_print_checked_statement(
-                        f"--data-root does not exist or is not a directory: {data_root}",
-                        "error",
-                    )
-                    raise typer.Exit(code=1)
 
                 # Parse --var KEY=VALUE pairs into extra_vars dict
                 extra_vars: dict[str, str] = {}
@@ -1257,6 +1263,31 @@ def register_run_command(app: typer.Typer):
 
         # Final summary
         rich_print_section_separator("Depictio-CLI Run Summary")
+
+        # Where to go and look at what just happened. The ingestion is otherwise
+        # a wall of green ticks that never says where the result landed, which
+        # matters most for the pipeline trigger: nobody is watching that
+        # terminal, they read it afterwards and need a link to click.
+        viewer_url = None
+        try:
+            import httpx as _httpx
+
+            # Re-read rather than reuse: CLI_config is only bound inside the
+            # step that loaded it, and the summary runs even when that step was
+            # skipped or failed.
+            _base = load_depictio_config(yaml_config_path=CLI_config_path).api_base_url
+            _status = _httpx.get(f"{_base}/depictio/api/v1/utils/status", timeout=5)
+            if _status.status_code == 200:
+                viewer_url = (_status.json().get("viewer_url") or "").rstrip("/") or None
+        except Exception as e:
+            # Best effort by design: a missing link must never fail a run that
+            # otherwise worked, and an older server simply does not report it.
+            logger.debug(f"Could not resolve the viewer URL: {e}")
+        if viewer_url and resolved_project_id:
+            rich_print_checked_statement(
+                f"Project: {viewer_url}/projects/{resolved_project_id}", "info"
+            )
+
         if is_template_mode:
             # Resolved id, not the raw --template arg — "nf-core/ampliseq/latest"
             # would otherwise print unresolved, hiding which version actually ran.

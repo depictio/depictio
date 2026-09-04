@@ -109,8 +109,18 @@ async def status():
     """
     Check if the server is online.
     This endpoint is public and does not require authentication.
+
+    Also reports where the viewer lives. Clients that ingest data have no other
+    way to build a link to what they just created: the CLI knows `api_base_url`
+    and nothing else, and the two are routinely different hosts and ports. This
+    is the deployment's public front door, the address people type into a
+    browser, so publishing it here adds no exposure that browsing to it does not.
     """
-    return {"status": "online", "version": get_version()}
+    return {
+        "status": "online",
+        "version": get_version(),
+        "viewer_url": settings.viewer.external_url,
+    }
 
 
 @utils_endpoint_router.get("/public-config")
