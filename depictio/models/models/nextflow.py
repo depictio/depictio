@@ -224,7 +224,20 @@ class NextflowRunInfoReader:
         if not run_dir.is_dir():
             return None
 
+        # Where pipeline_info sits depends on the project layout, not on the
+        # engine. A "flat" project ingests one run and has it at the top; a
+        # "sequencing-runs" project (viralrecon) points DATA_ROOT at the PARENT
+        # of several run_*/ directories, each with its own pipeline_info. Looking
+        # only at the top level meant every sequencing-runs project came back
+        # unidentified, so it got no engine, no pipeline version, no Nextflow
+        # version and no tool list, whether the template was auto-detected or
+        # given explicitly. The CLI's other two readers of the same directory
+        # already fall through to `*/pipeline_info`; this one did not.
+        subdirs: list[Path] = []
         pipeline_info = run_dir / "pipeline_info"
+        if not pipeline_info.is_dir():
+            subdirs = sorted(d for d in run_dir.glob("*/pipeline_info") if d.is_dir())
+
         versions_path: Path | None = None
         params_path: Path | None = None
         report_path: Path | None = None
@@ -241,6 +254,31 @@ class NextflowRunInfoReader:
             dag_path = _newest(pipeline_info, _DAG_GLOB)
             if versions_path is not None:
                 workflow, tools = _parse_versions_yaml(versions_path)
+        elif subdirs:
+            # Identity from the first run that carries one, deterministically:
+            # the runs aggregated under one DATA_ROOT are the same pipeline, and
+            # the artefact paths have to come from that same run to stay
+            # coherent with each other. Tools are the exception and are unioned,
+            # because "which tools produced this project" is genuinely the union
+            # over the runs it holds: a nanopore run and an illumina run under
+            # one project ran different tools, and reporting either alone would
+            # be wrong.
+            for candidate in subdirs:
+                candidate_versions = _newest_matching(candidate, _VERSIONS_GLOBS)
+                candidate_workflow: dict[str, Any] = {}
+                candidate_tools: set[str] = set()
+                if candidate_versions is not None:
+                    candidate_workflow, candidate_tools = _parse_versions_yaml(candidate_versions)
+                tools.update(candidate_tools)
+                if versions_path is not None or not candidate_workflow:
+                    continue
+                workflow = candidate_workflow
+                versions_path = candidate_versions
+                pipeline_info = candidate
+                params_path = _newest_matching(candidate, PARAMS_GLOBS)
+                report_path = _newest(candidate, _REPORT_GLOB)
+                trace_path = _newest(candidate, _TRACE_GLOB)
+                dag_path = _newest(candidate, _DAG_GLOB)
 
         pipeline_name, raw_version, engine_version = _identity_from_workflow_section(workflow)
         homepage: str | None = None
@@ -268,6 +306,13 @@ class NextflowRunInfoReader:
         extra: dict[str, Any] = {}
         if raw_version:
             extra["pipeline_version_raw"] = raw_version
+        if subdirs:
+            # Which run the identity came from, and how many contributed tools.
+            # Without this a sequencing-runs project looks identical to a flat
+            # one, and there is no way to tell that the version shown describes
+            # one run out of several.
+            extra["run_subdirs_scanned"] = len(subdirs)
+            extra["identity_from_run"] = pipeline_info.parent.name
 
         run_name = params.get("run_name")
         return WorkflowRunInfo(
