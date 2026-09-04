@@ -111,9 +111,11 @@ You get the exact command the handler will run, and then a clean stop:
 ```
 
 That single output proves the executable was found, the CLI config loaded, the
-server answered and the template resolved. Point `--outdir` at a directory that
-does not exist yet, as above: with a real output directory the preview would go
-on and genuinely ingest it, creating a project.
+server answered and the template resolved. Point the preview at a data root that
+does not exist yet, as above: the preview runs no process, but the handler is
+real, so if the directory it would ingest already holds results the CLI carries
+on and genuinely creates the project. That is `--outdir` here, or
+`params.depictio_data_root` when you set it explicitly.
 
 Note that `nextflow config` is not an alternative here. It has no `-c` option, so
 it cannot see a snippet passed with `-c`; it shows the `depictio_*` parameters
