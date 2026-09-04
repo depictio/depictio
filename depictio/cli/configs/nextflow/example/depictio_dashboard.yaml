@@ -1,0 +1,165 @@
+# Dashboard for the example pipeline, imported by the onComplete trigger
+# through `params.depictio_dashboard`.
+#
+# nf-core pipelines do not need this file: Depictio ships a template for them,
+# and the template brings its own dashboards. It exists because this pipeline is
+# not one of those, and without it the trigger produces an ingested project with
+# nothing to look at.
+#
+# `project_tag` must match the project name in depictio_project.yaml, and the
+# workflow / data collection tags must match the ones it declares.
+version: 1
+
+title: "Nextflow trigger example"
+subtitle: "Measurements ingested automatically when the pipeline finished"
+project_tag: "Nextflow trigger example"
+main_tab_name: "Overview"
+tab_icon: "mdi:flask-outline"
+tab_icon_color: "teal"
+
+filter_sections:
+  - name: "Samples"
+    icon: "mdi:filter-variant"
+    color: "teal"
+    description: "Narrow every figure below to a subset of samples"
+
+grid_sections:
+  - name: "Summary"
+    icon: "mdi:counter"
+    color: "teal"
+    description: "What arrived from the pipeline, and from how many runs"
+  - name: "Measurements"
+    icon: "mdi:chart-bar"
+    color: "violet"
+    description: "The value recorded for each sample"
+  - name: "Raw data"
+    icon: "mdi:table"
+    color: "gray"
+    description: "The rows behind the figures"
+    collapsed: true
+
+components:
+  - tag: sample-filter
+    component_type: interactive
+    section: "Samples"
+    workflow_tag: nextflow-trigger-example
+    data_collection_tag: measurements
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    icon_name: mdi:filter-variant
+    title: "Sample"
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: intro
+    component_type: text
+    section: "Summary"
+    title: "Ingested from Nextflow"
+    order: 1
+    alignment: left
+    body: >
+      Everything below arrived without anyone running the CLI by hand: the
+      pipeline's `workflow.onComplete` handler called `depictio run` on its
+      output directory. Re-running the pipeline adds another run to the same
+      project, which is why the run count is worth a card of its own.
+    layout: { x: 0, y: 0, w: 8, h: 1 }
+
+  # One row of four, w=2 each, so the row is filled rather than ragged.
+  - tag: card-samples
+    component_type: card
+    section: "Summary"
+    workflow_tag: nextflow-trigger-example
+    data_collection_tag: measurements
+    aggregation: count
+    column_name: sample
+    column_type: object
+    icon_name: mdi:counter
+    icon_color: "#12B886"
+    title_color: "#12B886"
+    title_font_size: md
+    value_font_size: xl
+    title: "Measurements"
+    layout: { x: 0, y: 1, w: 2, h: 2 }
+
+  - tag: card-runs
+    component_type: card
+    section: "Summary"
+    workflow_tag: nextflow-trigger-example
+    data_collection_tag: measurements
+    aggregation: nunique
+    column_name: depictio_run_id
+    column_type: object
+    icon_name: mdi:play-circle-outline
+    icon_color: "#7950F2"
+    title_color: "#7950F2"
+    title_font_size: md
+    value_font_size: xl
+    title: "Pipeline runs"
+    layout: { x: 2, y: 1, w: 2, h: 2 }
+
+  - tag: card-mean
+    component_type: card
+    section: "Summary"
+    workflow_tag: nextflow-trigger-example
+    data_collection_tag: measurements
+    aggregation: average
+    column_name: value
+    column_type: float64
+    icon_name: mdi:chart-line
+    icon_color: "#1C7ED6"
+    title_color: "#1C7ED6"
+    title_font_size: md
+    value_font_size: xl
+    title: "Mean value"
+    layout: { x: 4, y: 1, w: 2, h: 2 }
+
+  - tag: card-max
+    component_type: card
+    section: "Summary"
+    workflow_tag: nextflow-trigger-example
+    data_collection_tag: measurements
+    aggregation: max
+    column_name: value
+    column_type: float64
+    icon_name: mdi:arrow-up-bold
+    icon_color: "#F76707"
+    title_color: "#F76707"
+    title_font_size: md
+    value_font_size: xl
+    title: "Highest value"
+    layout: { x: 6, y: 1, w: 2, h: 2 }
+
+  - tag: value-per-sample
+    component_type: figure
+    section: "Measurements"
+    workflow_tag: nextflow-trigger-example
+    data_collection_tag: measurements
+    visu_type: bar
+    mode: code
+    title: "Value per sample"
+    description: "One bar per sample, coloured by the run it came from, so a second pipeline run is visible rather than silently averaged in."
+    title_size: h3
+    code_content: |
+      df_pd = df.to_pandas()
+      fig = px.bar(
+          df_pd,
+          x='sample',
+          y='value',
+          color='depictio_run_id',
+          barmode='group',
+          labels={'sample': 'Sample', 'value': 'Measured value'},
+      )
+      fig.update_layout(template='plotly_white', legend_title_text='Run')
+    layout: { x: 0, y: 3, w: 8, h: 6 }
+
+  - tag: measurements-table
+    component_type: table
+    section: "Raw data"
+    workflow_tag: nextflow-trigger-example
+    data_collection_tag: measurements
+    title: "Measurements"
+    description: "Every row ingested, across all runs of the pipeline."
+    title_size: h3
+    title_align: left
+    page_size: 50
+    layout: { x: 0, y: 9, w: 8, h: 5 }
