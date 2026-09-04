@@ -161,7 +161,7 @@ provisioning key. See `docs/pipeline-provisioning-magic-link.md`.
 | `depictio_attach` | `false` | `--attach-run` |
 | `depictio_update` | `false` | `--update-config --overwrite` (ignored with `--attach-run`, which implies both) |
 | `depictio_user` | none | `--user` |
-| `depictio_cli_executable` | `depictio-cli` | the executable itself, or a list (a container invocation) |
+| `depictio_cli_executable` | `depictio-cli` | the executable itself, or a list (a container invocation); `{DATA_ROOT}` is substituted |
 
 Every default is written to keep a value that is already set, so the snippet can
 be included before or after the parameters it defaults, and `--depictio_*` on
