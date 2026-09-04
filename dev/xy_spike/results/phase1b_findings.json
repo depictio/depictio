@@ -1,0 +1,91 @@
+{
+  "direct_50k": {
+    "mount_error": null,
+    "topology": {
+      "canvases": [
+        {
+          "w": 900,
+          "h": 420,
+          "kind": "2d"
+        },
+        {
+          "w": 824,
+          "h": 368,
+          "kind": "2d"
+        },
+        {
+          "w": 900,
+          "h": 420,
+          "kind": "2d"
+        }
+      ],
+      "viewHasGl": true,
+      "glCanvasInDom": false,
+      "glCanvasSize": {
+        "w": 824,
+        "h": 368
+      },
+      "glIsOffscreen": false,
+      "sharedFlag": null,
+      "tiers": [
+        {
+          "kind": "scatter",
+          "tier": "direct",
+          "n": 50000,
+          "hasCpu": true,
+          "hasDrill": false
+        }
+      ]
+    },
+    "selects": [
+      {
+        "total": 49406,
+        "keys": [
+          "total",
+          "range",
+          "view"
+        ]
+      }
+    ]
+  },
+  "density_1m": {
+    "mount_error": null,
+    "topology": {
+      "canvases": [
+        {
+          "w": 900,
+          "h": 420,
+          "kind": "2d"
+        },
+        {
+          "w": 824,
+          "h": 368,
+          "kind": "2d"
+        },
+        {
+          "w": 900,
+          "h": 420,
+          "kind": "2d"
+        }
+      ],
+      "viewHasGl": true,
+      "glCanvasInDom": false,
+      "glCanvasSize": {
+        "w": 824,
+        "h": 368
+      },
+      "glIsOffscreen": false,
+      "sharedFlag": null,
+      "tiers": [
+        {
+          "kind": "scatter",
+          "tier": "density",
+          "n": null,
+          "hasCpu": false,
+          "hasDrill": false
+        }
+      ]
+    },
+    "selects": []
+  }
+}

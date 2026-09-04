@@ -1,0 +1,14 @@
+{
+  "filters_emitted": 1,
+  "filter_shape": {
+    "index": "poc-xy-scatter",
+    "value": "[12638 ids, first=['IND_00000018', 'IND_00000030', 'IND_00000032']]",
+    "source": "scatter_selection",
+    "column_name": "individual_id",
+    "interactive_component_type": "MultiSelect"
+  },
+  "dark_body_bg": "rgb(26, 27, 30)",
+  "chart_text_token": "#e9ecef",
+  "page_errors": [],
+  "react_strictmode": true
+}

@@ -1,0 +1,59 @@
+{
+  "light": {
+    "tickColor": "rgb(0, 0, 0)",
+    "rootColor": "rgb(0, 0, 0)",
+    "chartViewAlive": true
+  },
+  "light_canvas_mean": [
+    [
+      0,
+      0,
+      0
+    ],
+    [
+      56,
+      135,
+      229
+    ],
+    null
+  ],
+  "dark_auto": {
+    "tickColor": "rgb(0, 0, 0)",
+    "rootColor": "rgb(0, 0, 0)",
+    "chartViewAlive": true
+  },
+  "dark_auto_canvas_mean": [
+    [
+      0,
+      0,
+      0
+    ],
+    [
+      56,
+      135,
+      229
+    ],
+    null
+  ],
+  "dark_mantine_tokens": {
+    "tickColor": "rgb(233, 236, 239)",
+    "rootColor": "rgb(0, 0, 0)",
+    "chartViewAlive": true
+  },
+  "dark_tokens_canvas_mean": [
+    [
+      255,
+      255,
+      255
+    ],
+    [
+      56,
+      135,
+      229
+    ],
+    null
+  ],
+  "same_chartview_instance": true,
+  "to_png_native_s": 0.167,
+  "to_png_bytes": 864574
+}
