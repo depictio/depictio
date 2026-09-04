@@ -291,3 +291,42 @@ class TestProvenanceStamping:
         assert config["pipeline_version"] == "2.16.0"
         assert config["nextflow_version"] == "25.10.2"
         assert config["tools_executed"] == ["cutadapt", "fastqc"]
+
+
+class TestTriggeredByStamp:
+    """`--triggered-by` records what invoked the ingestion, on every mode.
+
+    The value reaches the server through the synced project dict, so it has to
+    survive `convert_model_to_dict`. It is stamped at the single sync funnel
+    rather than per mode, and these tests pin that: an attach and an update are
+    exactly the paths a pipeline re-run takes, and a tag that only worked on
+    first creation would be missing from every project that ever ran twice.
+    """
+
+    def test_defaults_to_manual(self, app, runner, data_root):
+        harness = _Harness(data_root, remote_locations=[])
+        result = _invoke(app, runner, harness, {"data_root": data_root, "flags": []})
+        assert result.exit_code == 0, result.output
+        assert harness.sync.call_args.kwargs["ProjectConfig"]["triggered_by"] == "manual"
+
+    def test_the_trigger_value_reaches_the_server(self, app, runner, data_root):
+        harness = _Harness(data_root, remote_locations=[])
+        result = _invoke(
+            app,
+            runner,
+            harness,
+            {"data_root": data_root, "flags": ["--triggered-by", "nextflow"]},
+        )
+        assert result.exit_code == 0, result.output
+        assert harness.sync.call_args.kwargs["ProjectConfig"]["triggered_by"] == "nextflow"
+
+    def test_it_survives_an_attach(self, app, runner, data_root):
+        harness = _Harness(data_root, remote_locations=["/data/run_a"])
+        result = _invoke(
+            app,
+            runner,
+            harness,
+            {"data_root": data_root, "flags": ["--attach-run", "--triggered-by", "nextflow"]},
+        )
+        assert result.exit_code == 0, result.output
+        assert harness.sync.call_args.kwargs["ProjectConfig"]["triggered_by"] == "nextflow"
