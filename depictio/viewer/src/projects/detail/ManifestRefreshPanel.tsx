@@ -61,12 +61,19 @@ const STATUS_META: Record<
   failed: { color: 'red', icon: 'mdi:alert-circle', label: 'Failed' },
 };
 
-/** Tags of the collections whose scan reads a manifest. */
-function manifestTagsOf(dcs: ReadonlyArray<ManifestRefreshDc>): string[] {
+/** Scan modes whose source the server reads over the network, so it can always
+ *  read it again. A local source depends on whether the data root is mounted in
+ *  the API container, which only the server can know, so those are left out
+ *  here: a server that does have the mount still accepts them on the API. */
+const REMOTE_SCAN_MODES = new Set(['manifest', 'url', 's3_prefix']);
+
+/** Tags of the collections the server can re-read, and so re-ingest. */
+function refreshableTagsOf(dcs: ReadonlyArray<ManifestRefreshDc>): string[] {
   const tags: string[] = [];
   for (const dc of dcs) {
     const scan = dc.config?.scan as { mode?: unknown } | undefined;
-    if (scan?.mode === 'manifest' && dc.data_collection_tag) {
+    const mode = typeof scan?.mode === 'string' ? scan.mode.toLowerCase() : '';
+    if (REMOTE_SCAN_MODES.has(mode) && dc.data_collection_tag) {
       tags.push(dc.data_collection_tag);
     }
   }
@@ -117,7 +124,7 @@ const ManifestRefreshPanel: React.FC<ManifestRefreshPanelProps> = ({
   const accent = useBrandAccents();
   const { user, isPublicMode } = useCurrentUser();
 
-  const manifestTags = useMemo(() => manifestTagsOf(dataCollections), [dataCollections]);
+  const refreshableTags = useMemo(() => refreshableTagsOf(dataCollections), [dataCollections]);
 
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -190,11 +197,11 @@ const ManifestRefreshPanel: React.FC<ManifestRefreshPanelProps> = ({
     return () => window.clearInterval(id);
   }, [runId]);
 
-  // Drop a selection that no longer matches a manifest collection (the DC
+  // Drop a selection that no longer matches a refreshable collection (the DC
   // may have been renamed or deleted since it was picked).
   useEffect(() => {
-    if (selectedTag && !manifestTags.includes(selectedTag)) setSelectedTag(null);
-  }, [manifestTags, selectedTag]);
+    if (selectedTag && !refreshableTags.includes(selectedTag)) setSelectedTag(null);
+  }, [refreshableTags, selectedTag]);
 
   const handleRefresh = async () => {
     const started = Date.now();
@@ -233,10 +240,10 @@ const ManifestRefreshPanel: React.FC<ManifestRefreshPanelProps> = ({
   const publicGate = isPublicMode && !user?.is_admin;
   const disabledReason = !canMutate
     ? 'Owner permission required'
-    : manifestTags.length === 0
-      ? 'No data collection reads from a manifest'
+    : refreshableTags.length === 0
+      ? 'No data collection has a source this server can re-read'
       : publicGate
-        ? 'Manifest refresh is disabled in public/demo mode for non-admin users'
+        ? 'Refresh is disabled in public/demo mode for non-admin users'
         : null;
 
   const inFlight = submitting || Boolean(runId);
@@ -262,19 +269,20 @@ const ManifestRefreshPanel: React.FC<ManifestRefreshPanelProps> = ({
             width={20}
             color={`var(--mantine-color-${accent.secondary}-6)`}
           />
-          <Title order={4}>Manifest</Title>
+          <Title order={4}>Refresh data</Title>
           <Badge variant="light" size="sm" color="gray">
-            {manifestTags.length} manifest collection{manifestTags.length === 1 ? '' : 's'}
+            {refreshableTags.length} refreshable collection
+            {refreshableTags.length === 1 ? '' : 's'}
           </Badge>
         </Group>
         <Group gap="xs" wrap="nowrap">
-          {manifestTags.length > 1 && (
+          {refreshableTags.length > 1 && (
             <Select
               size="xs"
               w={220}
-              placeholder="All manifest collections"
+              placeholder="All refreshable collections"
               aria-label="Collection to refresh"
-              data={manifestTags}
+              data={refreshableTags}
               value={selectedTag}
               onChange={setSelectedTag}
               clearable

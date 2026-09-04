@@ -52,7 +52,9 @@ class _StubClient:
 @pytest.fixture
 def stub_s3(monkeypatch):
     def _install(keys):
-        monkeypatch.setattr(scan_module, "_s3_read_client", lambda _cfg: _StubClient(keys))
+        monkeypatch.setattr(
+            scan_module, "_s3_read_client", lambda _cfg, url=None: _StubClient(keys)
+        )
 
     return _install
 
@@ -193,6 +195,60 @@ class TestS3ReadClientRegion:
         assert captured_boto3[0]["region_name"] == "us-west-2"
 
 
+class TestS3ReadClientPublicBuckets:
+    """A location on the administrator's allowlist is listed unsigned.
+
+    Signing with credentials that have no relationship to someone else's open
+    bucket only earns a rejection, and the allowlist is configuration, so the
+    choice is made before the client makes any call.
+    """
+
+    @pytest.fixture
+    def captured_boto3(self, monkeypatch):
+        import boto3
+
+        calls: list[dict] = []
+
+        def fake_client(service, **kwargs):
+            calls.append({"service": service, **kwargs})
+            return object()
+
+        monkeypatch.setattr(boto3, "client", fake_client)
+        return calls
+
+    @staticmethod
+    def _cfg():
+        return SimpleNamespace(
+            remote_storage_options={"aws_access_key_id": "k", "aws_secret_access_key": "s"},
+            s3_storage=None,
+        )
+
+    def test_an_allowlisted_bucket_drops_the_signature(self, captured_boto3, monkeypatch):
+        from botocore import UNSIGNED
+
+        monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "open-data")
+
+        scan_module._s3_read_client(self._cfg(), url="s3://open-data/run42/x.csv")
+
+        assert captured_boto3[0]["config"].signature_version is UNSIGNED
+        assert "aws_access_key_id" not in captured_boto3[0]
+
+    def test_an_unlisted_bucket_keeps_its_credentials(self, captured_boto3, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "open-data")
+
+        scan_module._s3_read_client(self._cfg(), url="s3://private-data/run42/x.csv")
+
+        assert captured_boto3[0]["aws_access_key_id"] == "k"
+        assert "config" not in captured_boto3[0]
+
+    def test_nothing_is_unsigned_without_an_allowlist(self, captured_boto3, monkeypatch):
+        monkeypatch.delenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", raising=False)
+
+        scan_module._s3_read_client(self._cfg(), url="s3://open-data/run42/x.csv")
+
+        assert captured_boto3[0]["aws_access_key_id"] == "k"
+
+
 class TestListS3PrefixKeyBudget:
     """A prefix full of non-matching keys must not pin the calling thread."""
 
@@ -224,7 +280,7 @@ class TestListS3PrefixKeyBudget:
         # max_files=1 -> budget of 10 keys; the only match sits past it.
         keys = [f"run42/noise_{i}.txt" for i in range(40)] + ["run42/late.csv"]
         client = self._CountingClient(keys, page_size=5)
-        monkeypatch.setattr(scan_module, "_s3_read_client", lambda _cfg: client)
+        monkeypatch.setattr(scan_module, "_s3_read_client", lambda _cfg, url=None: client)
         messages = []
         monkeypatch.setattr(
             scan_module,
@@ -247,7 +303,7 @@ class TestListS3PrefixKeyBudget:
         client = self._CountingClient(keys, page_size=5)
         for page in client._pages:
             page["IsTruncated"] = False
-        monkeypatch.setattr(scan_module, "_s3_read_client", lambda _cfg: client)
+        monkeypatch.setattr(scan_module, "_s3_read_client", lambda _cfg, url=None: client)
         messages = []
         monkeypatch.setattr(
             scan_module,
@@ -261,7 +317,7 @@ class TestListS3PrefixKeyBudget:
     def test_budget_scales_with_max_files(self, monkeypatch):
         keys = [f"run42/noise_{i}.txt" for i in range(40)] + ["run42/late.csv"]
         client = self._CountingClient(keys, page_size=5)
-        monkeypatch.setattr(scan_module, "_s3_read_client", lambda _cfg: client)
+        monkeypatch.setattr(scan_module, "_s3_read_client", lambda _cfg, url=None: client)
         messages = []
         monkeypatch.setattr(
             scan_module,
@@ -392,7 +448,7 @@ class TestScanS3PrefixForDataCollection:
         assert api.created == []
 
     def test_listing_failure_is_reported_as_a_scan_error(self, monkeypatch, api):
-        def _no_client(_cfg):
+        def _no_client(_cfg, url=None):
             raise RuntimeError("no credentials")
 
         monkeypatch.setattr(scan_module, "_s3_read_client", _no_client)

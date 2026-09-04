@@ -91,6 +91,68 @@ def _split_hosts(raw: str) -> set[str]:
     return {h.strip().lower() for h in raw.split(",") if h.strip()}
 
 
+# Public buckets are read against the default AWS endpoint. The region only has
+# to be a valid one for the client to start; object-store follows the redirect
+# S3 returns for a bucket that lives elsewhere.
+AWS_DEFAULT_REGION = "us-east-1"
+
+
+def _split_public_buckets(raw: str) -> list[tuple[str, str]]:
+    """Parse ``public_s3_buckets`` into ``(bucket, prefix)`` pairs.
+
+    An entry is either ``bucket`` (the whole bucket, prefix ``""``) or
+    ``bucket/prefix`` (that subtree only). Bucket names are case sensitive, so
+    unlike the host lists these are not lowercased.
+    """
+    entries: list[tuple[str, str]] = []
+    for raw_entry in raw.split(","):
+        entry = raw_entry.strip().strip("/")
+        if not entry:
+            continue
+        bucket, _, prefix = entry.partition("/")
+        entries.append((bucket, prefix))
+    return entries
+
+
+def is_public_s3_location(url: str, policy: RemoteConfig | None = None) -> bool:
+    """Whether ``url`` names an s3 location the administrator marked public.
+
+    Decided from configuration alone, never by probing: an unsigned read
+    attempted against an arbitrary user-supplied bucket would leak whether that
+    bucket exists and in which region, through the error it returns. So the
+    answer has to be known before any request goes out.
+
+    A ``bucket/prefix`` entry matches that prefix and everything under it, and
+    only on a path boundary, so ``data`` does not match ``database/``.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme.lower() != "s3":
+        return False
+
+    policy = policy if policy is not None else remote_policy()
+    key = parsed.path.lstrip("/")
+    for bucket, prefix in _split_public_buckets(policy.public_s3_buckets):
+        if bucket != parsed.netloc:
+            continue
+        if not prefix or key == prefix or key.startswith(f"{prefix}/"):
+            return True
+    return False
+
+
+def public_s3_storage_options(url: str, policy: RemoteConfig | None = None) -> dict | None:
+    """Polars/object-store options for reading ``url`` unsigned, or ``None``.
+
+    ``None`` means "not an allowlisted public location", and the caller keeps
+    whatever credentials it already had. ``PolarsStorageOptions`` cannot express
+    this shape (it requires a non-empty ``endpoint_url``), so this is a plain
+    dict: a public bucket is read against the default AWS endpoint with the
+    signature switched off.
+    """
+    if not is_public_s3_location(url, policy):
+        return None
+    return {"aws_skip_signature": "true", "aws_region": AWS_DEFAULT_REGION}
+
+
 def _resolve_addresses(host: str) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
     try:
         infos = socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)
