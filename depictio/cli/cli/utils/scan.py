@@ -12,10 +12,8 @@ from depictio.api.v1.remote_fetch import (
     direct_fetch_text,
     direct_probe,
     fetch_validated_text,
-    is_public_s3_location,
     is_server_context,
     probe_remote_url,
-    public_s3_region,
     validate_remote_url,
 )
 from depictio.cli.cli.utils.api_calls import (
@@ -27,6 +25,7 @@ from depictio.cli.cli.utils.api_calls import (
     api_upsert_runs_batch,
 )
 from depictio.cli.cli.utils.common import format_timestamp
+from depictio.cli.cli.utils.data_root import list_s3_objects
 from depictio.cli.cli.utils.rich_utils import (
     rich_print_checked_statement,
     rich_print_data_collection_light,
@@ -1024,68 +1023,57 @@ def scan_url_for_data_collection(
     return {"result": "success"}
 
 
-def _s3_read_client(CLI_config: CLIConfig, url: str | None = None):
-    """boto3 client for *reading* user data buckets (scan mode ``s3_prefix``).
-
-    A location on the administrator's public bucket allowlist gets an unsigned
-    client: signing with credentials that have no relationship to someone else's
-    open bucket only earns a rejection. The allowlist is configuration, so this
-    is decided before the client makes any call.
-
-    Otherwise credential precedence mirrors the read/write split in CLIConfig:
-    the per-project ``remote_storage_options`` win, then the instance's own
-    ``s3_storage``. Anything still missing is left to boto3's default chain
-    (env vars, ~/.aws, IAM role) so real AWS deployments work without ever
-    putting keys in a config file.
-    """
-    import boto3
-
-    if url and is_public_s3_location(url):
-        from botocore import UNSIGNED
-        from botocore.config import Config
-
-        return boto3.client(
-            "s3",
-            config=Config(signature_version=UNSIGNED),
-            region_name=public_s3_region(urlparse(url).netloc),
-        )
-
-    remote = CLI_config.remote_storage_options or {}
-    # polars storage_options spells the endpoint either way depending on version
-    endpoint = remote.get("aws_endpoint_url") or remote.get("endpoint_url")
-    key = remote.get("aws_access_key_id")
-    secret = remote.get("aws_secret_access_key")
-    # ``region`` is what storage_options_for_project (per-project storage
-    # config) emits; the other two are the polars/boto3 spellings.
-    region = remote.get("aws_region") or remote.get("region_name") or remote.get("region")
-
-    if not key and CLI_config.s3_storage:
-        key = CLI_config.s3_storage.aws_access_key_id
-        secret = CLI_config.s3_storage.aws_secret_access_key
-        endpoint = endpoint or CLI_config.s3_storage.url
-
-    # Passing None lets botocore fall through to its own resolution chain.
-    return boto3.client(
-        "s3",
-        aws_access_key_id=key or None,
-        aws_secret_access_key=secret or None,
-        endpoint_url=endpoint or None,
-        region_name=region or None,
-    )
-
-
 # Keys examined per unit of ``max_files`` before a prefix listing stops asking
 # for more pages. Listing is paged lazily, so this bounds the number of list
 # calls an API thread can spend on a bucket full of non-matching keys.
 S3_PREFIX_KEY_BUDGET_FACTOR = 10
 
 
-def list_s3_prefix(prefix: str, pattern: str, max_files: int, CLI_config: CLIConfig) -> list[dict]:
+def _key_matches(path: str, basename: str, pattern: str, pattern_syntax: str) -> bool:
+    """Whether an object matches ``pattern`` under ``pattern_syntax``.
+
+    ``path`` is the key as the pattern is written against it (relative to the
+    prefix, or to the run directory for a sequencing-runs scan) and ``basename``
+    is its file name. Both syntaxes are two-shot, so a pattern naming a file
+    reaches nested keys and a pattern spelling a path still works.
+
+    The regex branch calls the same ``regex_match`` the local recursive walk
+    uses, in the same order it uses it (basename first, the path only when the
+    pattern spells one), so a data collection means the same thing local and
+    remote. ``regex_match`` is ``re.match``: anchored at the start and not at
+    the end, deliberately.
+    """
+    import fnmatch
+
+    if pattern_syntax == "regex":
+        hit, _ = regex_match(basename, pattern)
+        if not hit and "/" in pattern:
+            hit, _ = regex_match(path, pattern)
+        return bool(hit)
+    return fnmatch.fnmatch(path, pattern) or fnmatch.fnmatch(basename, pattern)
+
+
+def list_s3_prefix(
+    prefix: str,
+    pattern: str,
+    max_files: int,
+    CLI_config: CLIConfig,
+    pattern_syntax: str = "glob",
+    match_path=None,
+) -> list[dict]:
     """List objects under an ``s3://`` prefix whose relative key matches ``pattern``.
 
-    ``pattern`` is fnmatch, whose ``*`` also spans ``/`` — that is deliberate:
-    it makes ``*.csv`` recurse into sub-prefixes, matching the semantics of the
-    local ``recursive`` mode rather than a single directory listing.
+    ``pattern`` is fnmatch by default, whose ``*`` also spans ``/``. That is
+    deliberate: it makes ``*.csv`` recurse into sub-prefixes, matching the
+    semantics of the local ``recursive`` mode rather than a single directory
+    listing. ``pattern_syntax="regex"`` reads it as a regex instead, matched the
+    way the local recursive walk matches its own ``regex_config`` pattern.
+
+    ``match_path`` optionally remaps what the pattern is matched against: it
+    takes the prefix-relative key and returns the path to match, or ``None`` to
+    drop the object from the scan entirely. The sequencing-runs caller uses it
+    to strip the run segment, so a data collection pattern written relative to a
+    run directory means remotely what it means locally.
 
     Two bounds, both reported as warnings: matches stop at ``max_files``, and
     no further page is requested once ``max_files * S3_PREFIX_KEY_BUDGET_FACTOR``
@@ -1096,59 +1084,38 @@ def list_s3_prefix(prefix: str, pattern: str, max_files: int, CLI_config: CLICon
     Returns dicts of {url, key, size, etag, last_modified}; raises ValueError on
     a malformed prefix so the caller can surface it as a scan failure.
     """
-    import fnmatch
-
-    if not prefix.lower().startswith("s3://"):
-        raise ValueError(f"s3_prefix scan needs an s3:// prefix, got '{prefix}'")
-
-    without_scheme = prefix[len("s3://") :]
-    bucket, _, key_prefix = without_scheme.partition("/")
-    if not bucket:
-        raise ValueError(f"s3_prefix '{prefix}' has no bucket")
-
-    client = _s3_read_client(CLI_config, url=prefix)
-    paginator = client.get_paginator("list_objects_v2")
-
     key_budget = max_files * S3_PREFIX_KEY_BUDGET_FACTOR
-    examined = 0
-    budget_exhausted = False
+    # The listing itself lives in data_root, which is what a DataRoot is built
+    # on too; matching and the two bounds stay here because they are the scan
+    # mode's own contract.
+    objects, budget_exhausted = list_s3_objects(prefix, CLI_config, max_keys=key_budget)
+
     matches: list[dict] = []
     truncated = False
-    for page in paginator.paginate(Bucket=bucket, Prefix=key_prefix):
-        for obj in page.get("Contents", []):
-            examined += 1
-            key = obj["Key"]
-            # Console-created "folders" are zero-byte keys ending in / — never data.
-            if key.endswith("/"):
-                continue
-            relative = key[len(key_prefix) :].lstrip("/") if key_prefix else key
-            if not fnmatch.fnmatch(relative, pattern) and not fnmatch.fnmatch(
-                os.path.basename(key), pattern
-            ):
-                continue
-            if len(matches) >= max_files:
-                truncated = True
-                break
-            matches.append(
-                {
-                    "url": f"s3://{bucket}/{key}",
-                    "key": key,
-                    "relative": relative,
-                    "size": obj.get("Size", -1),
-                    "etag": (obj.get("ETag") or "").strip('"'),
-                    "last_modified": obj.get("LastModified"),
-                }
-            )
-        if truncated:
+    for obj in objects:
+        candidate = obj.relative if match_path is None else match_path(obj.relative)
+        if candidate is None:
+            continue
+        if not _key_matches(candidate, os.path.basename(obj.key), pattern, pattern_syntax):
+            continue
+        if len(matches) >= max_files:
+            truncated = True
             break
-        # ``IsTruncated`` is set on every list_objects_v2 page; a listing that
-        # ends exactly at the budget is complete and must not warn.
-        if examined >= key_budget and page.get("IsTruncated", True):
-            budget_exhausted = True
-            break
+        matches.append(
+            {
+                "url": obj.url,
+                "key": obj.key,
+                "relative": obj.relative,
+                "size": obj.size,
+                "etag": obj.etag,
+                "last_modified": obj.last_modified,
+            }
+        )
 
     if truncated:
-        # Never let a cap silently look like "that's all there is".
+        # Never let a cap silently look like "that's all there is". The cap is
+        # the tighter of the two bounds, so it is reported on its own.
+        budget_exhausted = False
         rich_print_checked_statement(
             f"s3_prefix scan hit the max_files cap ({max_files}) under {prefix} — "
             "results are truncated. Narrow `pattern` or raise `max_files`.",
@@ -1156,7 +1123,7 @@ def list_s3_prefix(prefix: str, pattern: str, max_files: int, CLI_config: CLICon
         )
     if budget_exhausted:
         message = (
-            f"s3_prefix scan examined {examined} keys under {prefix} and stopped at the "
+            f"s3_prefix scan examined {len(objects)} keys under {prefix} and stopped at the "
             f"budget of {key_budget} keys (max_files {max_files} x "
             f"{S3_PREFIX_KEY_BUDGET_FACTOR}) before the end of the listing; results are "
             f"partial ({len(matches)} matched). Narrow `prefix` or `pattern`, or raise "
@@ -1179,13 +1146,53 @@ def scan_s3_prefix_for_data_collection(
     The remote counterpart of the recursive scan. Unlike manifest mode the
     listing carries real sizes and ETags, so the identity hash is content-aware:
     a re-uploaded object changes its ETag and is picked up as "updated".
+
+    The workflow's own ``data_location.structure`` decides how the objects are
+    grouped. A ``flat`` prefix is one run, as it has always been. A
+    ``sequencing-runs`` prefix has one run per first-level "directory" matching
+    ``runs_regex``, exactly like the local walk: the run segment becomes the
+    File's ``run_tag`` (and so the ``depictio_run_id`` column), and the DC's
+    pattern is matched against what is left of the key once that segment is
+    stripped, because a template's patterns are written relative to a run
+    directory and not to the data root.
     """
     import time
 
     scan_params = data_collection.config.scan.scan_parameters  # type: ignore[union-attr]
     prefix = scan_params.prefix  # type: ignore[union-attr]
     pattern = scan_params.pattern  # type: ignore[union-attr]
+    pattern_syntax = getattr(scan_params, "pattern_syntax", "glob")
     id_regex = scan_params.id_regex  # type: ignore[union-attr]
+
+    runs_regex = workflow.data_location.runs_regex
+    per_run = workflow.data_location.structure == "sequencing-runs" and bool(runs_regex)
+
+    # Filled by the matcher below, so the caller can say what it actually saw
+    # when ``runs_regex`` turns out to match nothing.
+    seen_segments: set[str] = set()
+    run_segments: set[str] = set()
+    match_path = None
+    if per_run:
+        run_pattern = str(runs_regex)
+
+        def _strip_run_segment(relative: str) -> str | None:
+            """The key with its run segment stripped, or None to skip the object.
+
+            An object sitting directly under the prefix belongs to no run, and a
+            first segment that ``runs_regex`` rejects is a directory the local
+            walk would never have descended into. Both are skipped rather than
+            being folded into some other run.
+            """
+            segment, _, remainder = relative.partition("/")
+            if not remainder:
+                return None
+            seen_segments.add(segment)
+            if not re.match(run_pattern, segment):
+                return None
+            run_segments.add(segment)
+            return remainder
+
+        match_path = _strip_run_segment
 
     try:
         objects = list_s3_prefix(
@@ -1193,11 +1200,23 @@ def scan_s3_prefix_for_data_collection(
             pattern=pattern,
             max_files=scan_params.max_files,  # type: ignore[union-attr]
             CLI_config=CLI_config,
+            pattern_syntax=pattern_syntax,
+            match_path=match_path,
         )
     except Exception as exc:
         message = f"S3 prefix listing failed for {prefix}: {exc}"
         logger.error(message)
         return {"result": "error", "message": message}
+
+    if per_run and not run_segments:
+        # Say what was actually found: "no object matched the pattern" would
+        # send the reader after the DC's pattern when the run regex is what
+        # rejected every key.
+        rich_print_checked_statement(
+            f"runs_regex '{runs_regex}' matched no run directory under {prefix}. "
+            f"Directories seen: {sorted(seen_segments) or 'none'}. No run was scanned.",
+            "warning",
+        )
 
     if not objects:
         return {
@@ -1233,17 +1252,52 @@ def scan_s3_prefix_for_data_collection(
     workflow_config_id = (
         PyObjectId(workflow.config.id) if workflow.config and workflow.config.id else PyObjectId()
     )
-    workflow_run = WorkflowRun(
-        workflow_id=PyObjectId(workflow.id),
-        run_tag=f"{data_collection.data_collection_tag}-s3-prefix-scan",
-        files_id=[],
-        workflow_config_id=workflow_config_id,
-        run_location=prefix,
-        creation_time=now_iso,
-        last_modification_time=now_iso,
-        run_hash="",
-        permissions=permissions,
-    )
+    if per_run:
+        # One run per matched run directory, keyed by its segment. Re-using the
+        # id of a run already registered under this workflow matters: the upsert
+        # endpoint matches on ``_id``, so a fresh id for a known run_tag would
+        # leave the files pointing at a run document that is never written.
+        existing_run_ids: dict[str, str] = {}
+        runs_response = api_get_runs_by_wf_id(wf_id=str(workflow.id), CLI_config=CLI_config)
+        if runs_response.status_code == 200:
+            for known_run in runs_response.json() or []:
+                known_id = known_run.get("_id") or known_run.get("id")
+                if known_id:
+                    existing_run_ids[known_run["run_tag"]] = str(known_id)
+        else:
+            logger.warning(f"Failed to retrieve existing runs for workflow {workflow.id}.")
+
+        runs_by_tag = {
+            tag: WorkflowRun(
+                id=PyObjectId(existing_run_ids[tag]) if tag in existing_run_ids else PyObjectId(),
+                workflow_id=PyObjectId(workflow.id),
+                run_tag=tag,
+                files_id=[],
+                workflow_config_id=workflow_config_id,
+                run_location=f"{prefix.rstrip('/')}/{tag}",
+                creation_time=now_iso,
+                last_modification_time=now_iso,
+                run_hash="",
+                permissions=permissions,
+            )
+            for tag in sorted({obj["relative"].partition("/")[0] for obj in objects})
+        }
+    else:
+        # A flat prefix has no run dimension: one synthetic run, keyed by "" so
+        # the loop below can look it up the same way it looks up a real one.
+        runs_by_tag = {
+            "": WorkflowRun(
+                workflow_id=PyObjectId(workflow.id),
+                run_tag=f"{data_collection.data_collection_tag}-s3-prefix-scan",
+                files_id=[],
+                workflow_config_id=workflow_config_id,
+                run_location=prefix,
+                creation_time=now_iso,
+                last_modification_time=now_iso,
+                run_hash="",
+                permissions=permissions,
+            )
+        }
 
     to_add: list[File] = []
     to_update: list[File] = []
@@ -1270,6 +1324,11 @@ def scan_s3_prefix_for_data_collection(
         modified = obj.get("last_modified")
         modified_iso = format_timestamp(modified.timestamp()) if modified else now_iso
 
+        run = runs_by_tag[obj["relative"].partition("/")[0] if per_run else ""]
+        # ``run_tag`` becomes the depictio_run_id column. A per-run scan records
+        # the run it came from; a flat one keeps the constant it always used.
+        file_run_tag = run.run_tag if per_run else "remote"
+
         file_instance = File(
             id=PyObjectId(existing["_id"]) if existing else PyObjectId(),
             filename=os.path.basename(obj["key"]) or "remote-file",
@@ -1279,8 +1338,8 @@ def scan_s3_prefix_for_data_collection(
             file_hash=file_hash,
             filesize=obj.get("size", -1),
             data_collection_id=data_collection.id,
-            run_id=workflow_run.id,
-            run_tag="remote",
+            run_id=run.id,
+            run_tag=file_run_tag,
             permissions=permissions,
             manifest_id=entity_id,
         )
@@ -1291,6 +1350,11 @@ def scan_s3_prefix_for_data_collection(
     if to_update:
         api_create_files(files=to_update, CLI_config=CLI_config, update=True)
 
+    if per_run:
+        # The files reference these runs, so they have to exist server-side.
+        # Same upsert the local walk ends on in scan_files_for_workflow.
+        api_upsert_runs_batch(list(runs_by_tag.values()), CLI_config, update_files)
+
     if unmatched_id:
         # Silent None ids would break cross-DC joins at render time, not here.
         rich_print_checked_statement(
@@ -1299,9 +1363,12 @@ def scan_s3_prefix_for_data_collection(
             "warning",
         )
 
+    # Name the runs that were detected: with a per-run prefix the run set is
+    # the part of the scan a reader cannot infer from the file counts.
+    runs_summary = f" across runs {', '.join(sorted(runs_by_tag))}" if per_run else ""
     rich_print_checked_statement(
         f"S3 prefix scan for {data_collection.data_collection_tag}: "
-        f"{len(to_add)} added, {len(to_update)} updated, {skipped} unchanged",
+        f"{len(to_add)} added, {len(to_update)} updated, {skipped} unchanged{runs_summary}",
         "info",
     )
     return {"result": "success", "added": len(to_add), "updated": len(to_update)}

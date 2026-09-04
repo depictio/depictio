@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 from bson import ObjectId
 
+from depictio.cli.cli.utils import data_root as data_root_module
 from depictio.cli.cli.utils import scan as scan_module
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.data_collections import (
@@ -53,7 +54,7 @@ class _StubClient:
 def stub_s3(monkeypatch):
     def _install(keys):
         monkeypatch.setattr(
-            scan_module, "_s3_read_client", lambda _cfg, url=None: _StubClient(keys)
+            data_root_module, "s3_read_client", lambda _url, _cfg: _StubClient(keys)
         )
 
     return _install
@@ -99,6 +100,39 @@ class TestScanS3PrefixModel:
 
     def test_defaults_match_everything_under_the_prefix(self):
         assert ScanS3Prefix(prefix="s3://b/x").pattern == "*"
+
+    def test_pattern_syntax_defaults_to_glob(self):
+        """Every configuration written before the field keeps its exact meaning."""
+        assert ScanS3Prefix(prefix="s3://b/x", pattern="*.csv").pattern_syntax == "glob"
+
+    def test_regex_syntax_is_accepted(self):
+        scan = Scan(
+            mode="s3_prefix",
+            scan_parameters={
+                "prefix": "s3://b/run42/",
+                "pattern": r".*\.samples\.csv",
+                "pattern_syntax": "regex",
+            },
+        )
+        assert scan.scan_parameters.pattern_syntax == "regex"
+
+    def test_an_uncompilable_regex_pattern_is_rejected(self):
+        with pytest.raises(ValueError, match="Invalid regex pattern"):
+            ScanS3Prefix(prefix="s3://b/x", pattern="sample_(", pattern_syntax="regex")
+
+    def test_a_glob_pattern_is_not_a_valid_regex(self):
+        """The two syntaxes are not interchangeable: "*.csv" is a leading
+        repeat with nothing to repeat, so it has to fail at config time rather
+        than mid-listing."""
+        with pytest.raises(ValueError, match="Invalid regex pattern"):
+            ScanS3Prefix(prefix="s3://b/x", pattern="*.samples.csv", pattern_syntax="regex")
+
+    def test_an_unknown_pattern_syntax_is_rejected(self):
+        with pytest.raises(ValueError):
+            ScanS3Prefix(prefix="s3://b/x", pattern="*", pattern_syntax="fnmatch")
+
+    def test_a_glob_pattern_stays_valid_under_the_default_syntax(self):
+        assert ScanS3Prefix(prefix="s3://b/x", pattern="*.samples.csv").pattern == "*.samples.csv"
 
 
 class TestListS3Prefix:
@@ -152,6 +186,58 @@ class TestListS3Prefix:
         assert found[0]["url"] == "s3://b/run42/sample_A.measurements.csv"
 
 
+class TestListS3PrefixPatternSyntax:
+    """``pattern_syntax="regex"`` matches the way the local recursive walk does."""
+
+    def test_regex_matches_on_the_relative_path(self, stub_s3):
+        stub_s3(KEYS)
+        found = scan_module.list_s3_prefix(
+            "s3://b/run42/", r"nested/.*\.csv", 10_000, None, pattern_syntax="regex"
+        )
+        assert [o["relative"] for o in found] == ["nested/sample_D.samples.csv"]
+
+    def test_regex_matches_on_the_basename_alone(self, stub_s3):
+        """A pattern with no "/" is only ever tried against the file name, so it
+        reaches nested keys the way the local walk does."""
+        stub_s3(KEYS)
+        found = scan_module.list_s3_prefix(
+            "s3://b/run42/", r"sample_[AB]\.samples\.csv", 10_000, None, pattern_syntax="regex"
+        )
+        assert [o["relative"] for o in found] == [
+            "sample_A.samples.csv",
+            "sample_B.samples.csv",
+        ]
+
+    def test_regex_stays_unanchored_at_the_end(self, stub_s3):
+        """``regex_match`` is ``re.match``: anchored at the start, not the end.
+        The local walk relies on that, so the remote one must not tighten it."""
+        stub_s3(KEYS)
+        found = scan_module.list_s3_prefix(
+            "s3://b/run42/", r"sample_A", 10_000, None, pattern_syntax="regex"
+        )
+        assert [o["relative"] for o in found] == [
+            "sample_A.samples.csv",
+            "sample_A.measurements.csv",
+        ]
+
+    def test_a_regex_pattern_is_not_a_glob(self, stub_s3):
+        """Same string, two syntaxes, two answers - which is why translating a
+        template's regex into a glob would be lossy."""
+        stub_s3(KEYS)
+        pattern = r"sample_[AB]\.samples\.csv"
+        as_glob = scan_module.list_s3_prefix("s3://b/run42/", pattern, 10_000, None)
+        as_regex = scan_module.list_s3_prefix(
+            "s3://b/run42/", pattern, 10_000, None, pattern_syntax="regex"
+        )
+        assert as_glob == []
+        assert len(as_regex) == 2
+
+    def test_glob_is_still_the_default(self, stub_s3):
+        stub_s3(KEYS)
+        found = scan_module.list_s3_prefix("s3://b/run42/", "*.samples.csv", 10_000, None)
+        assert len(found) == 3
+
+
 class TestS3ReadClientRegion:
     """Per-project storage options spell the region as ``region``."""
 
@@ -180,7 +266,7 @@ class TestS3ReadClientRegion:
             },
             s3_storage=None,
         )
-        scan_module._s3_read_client(cfg)
+        data_root_module.s3_read_client("", cfg)
         assert captured_boto3[0]["region_name"] == "eu-central-1"
         assert captured_boto3[0]["endpoint_url"] == "https://s3.example"
 
@@ -191,7 +277,7 @@ class TestS3ReadClientRegion:
             remote_storage_options={"aws_region": "us-west-2", "region": "eu-central-1"},
             s3_storage=None,
         )
-        scan_module._s3_read_client(cfg)
+        data_root_module.s3_read_client("", cfg)
         assert captured_boto3[0]["region_name"] == "us-west-2"
 
 
@@ -227,9 +313,9 @@ class TestS3ReadClientPublicBuckets:
         from botocore import UNSIGNED
 
         monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "open-data")
-        monkeypatch.setattr(scan_module, "public_s3_region", lambda bucket: "eu-west-1")
+        monkeypatch.setattr(data_root_module, "public_s3_region", lambda bucket: "eu-west-1")
 
-        scan_module._s3_read_client(self._cfg(), url="s3://open-data/run42/x.csv")
+        data_root_module.s3_read_client("s3://open-data/run42/x.csv", self._cfg())
 
         assert captured_boto3[0]["config"].signature_version is UNSIGNED
         assert "aws_access_key_id" not in captured_boto3[0]
@@ -238,16 +324,18 @@ class TestS3ReadClientPublicBuckets:
         """object-store fails on S3's cross-region redirect rather than
         following it, so the client has to be built in the bucket's own region."""
         monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "open-data")
-        monkeypatch.setattr(scan_module, "public_s3_region", lambda bucket: f"region-of-{bucket}")
+        monkeypatch.setattr(
+            data_root_module, "public_s3_region", lambda bucket: f"region-of-{bucket}"
+        )
 
-        scan_module._s3_read_client(self._cfg(), url="s3://open-data/run42/x.csv")
+        data_root_module.s3_read_client("s3://open-data/run42/x.csv", self._cfg())
 
         assert captured_boto3[0]["region_name"] == "region-of-open-data"
 
     def test_an_unlisted_bucket_keeps_its_credentials(self, captured_boto3, monkeypatch):
         monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "open-data")
 
-        scan_module._s3_read_client(self._cfg(), url="s3://private-data/run42/x.csv")
+        data_root_module.s3_read_client("s3://private-data/run42/x.csv", self._cfg())
 
         assert captured_boto3[0]["aws_access_key_id"] == "k"
         assert "config" not in captured_boto3[0]
@@ -255,7 +343,7 @@ class TestS3ReadClientPublicBuckets:
     def test_nothing_is_unsigned_without_an_allowlist(self, captured_boto3, monkeypatch):
         monkeypatch.delenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", raising=False)
 
-        scan_module._s3_read_client(self._cfg(), url="s3://open-data/run42/x.csv")
+        data_root_module.s3_read_client("s3://open-data/run42/x.csv", self._cfg())
 
         assert captured_boto3[0]["aws_access_key_id"] == "k"
 
@@ -291,7 +379,7 @@ class TestListS3PrefixKeyBudget:
         # max_files=1 -> budget of 10 keys; the only match sits past it.
         keys = [f"run42/noise_{i}.txt" for i in range(40)] + ["run42/late.csv"]
         client = self._CountingClient(keys, page_size=5)
-        monkeypatch.setattr(scan_module, "_s3_read_client", lambda _cfg, url=None: client)
+        monkeypatch.setattr(data_root_module, "s3_read_client", lambda _url, _cfg: client)
         messages = []
         monkeypatch.setattr(
             scan_module,
@@ -314,7 +402,7 @@ class TestListS3PrefixKeyBudget:
         client = self._CountingClient(keys, page_size=5)
         for page in client._pages:
             page["IsTruncated"] = False
-        monkeypatch.setattr(scan_module, "_s3_read_client", lambda _cfg, url=None: client)
+        monkeypatch.setattr(data_root_module, "s3_read_client", lambda _url, _cfg: client)
         messages = []
         monkeypatch.setattr(
             scan_module,
@@ -328,7 +416,7 @@ class TestListS3PrefixKeyBudget:
     def test_budget_scales_with_max_files(self, monkeypatch):
         keys = [f"run42/noise_{i}.txt" for i in range(40)] + ["run42/late.csv"]
         client = self._CountingClient(keys, page_size=5)
-        monkeypatch.setattr(scan_module, "_s3_read_client", lambda _cfg, url=None: client)
+        monkeypatch.setattr(data_root_module, "s3_read_client", lambda _url, _cfg: client)
         messages = []
         monkeypatch.setattr(
             scan_module,
@@ -346,7 +434,12 @@ PREFIX = "s3://b/run42/"
 SAMPLE_ID_REGEX = r"(sample_[A-Z])\.samples\.csv"
 
 
-def _s3_prefix_dc(pattern: str = "*.samples.csv", id_regex: str | None = SAMPLE_ID_REGEX):
+def _s3_prefix_dc(
+    pattern: str = "*.samples.csv",
+    id_regex: str | None = SAMPLE_ID_REGEX,
+    pattern_syntax: str = "glob",
+    prefix: str = PREFIX,
+):
     return DataCollection(
         data_collection_tag="samples",
         config=DataCollectionConfig(
@@ -354,20 +447,32 @@ def _s3_prefix_dc(pattern: str = "*.samples.csv", id_regex: str | None = SAMPLE_
             metatype="aggregate",
             scan=Scan(
                 mode="s3_prefix",
-                scan_parameters=ScanS3Prefix(prefix=PREFIX, pattern=pattern, id_regex=id_regex),
+                scan_parameters=ScanS3Prefix(
+                    prefix=prefix,
+                    pattern=pattern,
+                    pattern_syntax=pattern_syntax,
+                    id_regex=id_regex,
+                ),
             ),
             dc_specific_properties={"format": "csv"},
         ),
     )
 
 
-def _workflow(dc: DataCollection) -> Workflow:
+def _workflow(
+    dc: DataCollection,
+    structure: str = "flat",
+    runs_regex: str | None = None,
+    location: str = PREFIX,
+) -> Workflow:
     return Workflow(
         name="wf",
         workflow_tag="wf",
         engine=WorkflowEngine(name="python"),
         config=WorkflowConfig(),
-        data_location=WorkflowDataLocation(structure="flat", locations=[PREFIX]),
+        data_location=WorkflowDataLocation(
+            structure=structure, locations=[location], runs_regex=runs_regex
+        ),
         data_collections=[dc],
     )
 
@@ -385,14 +490,28 @@ def _existing(key: str, file_hash: str) -> dict:
 def api(monkeypatch):
     """Stub the API round-trips the scan makes; see TestUrlScan in
     tests/cli/test_remote_read.py for the same shape."""
-    recorder = SimpleNamespace(existing=[], status=200, created=[], deleted=[])
+    recorder = SimpleNamespace(
+        existing=[],
+        status=200,
+        created=[],
+        deleted=[],
+        existing_runs=[],
+        runs_status=200,
+        upserted=[],
+    )
 
     def _lookup(**_):
         response = MagicMock(status_code=recorder.status)
         response.json.return_value = recorder.existing
         return response
 
+    def _runs_lookup(**_):
+        response = MagicMock(status_code=recorder.runs_status)
+        response.json.return_value = recorder.existing_runs
+        return response
+
     monkeypatch.setattr(scan_module, "api_get_files_by_dc_id", _lookup)
+    monkeypatch.setattr(scan_module, "api_get_runs_by_wf_id", _runs_lookup)
     monkeypatch.setattr(
         scan_module,
         "api_create_files",
@@ -400,6 +519,11 @@ def api(monkeypatch):
     )
     monkeypatch.setattr(
         scan_module, "api_delete_file", lambda file_id, CLI_config: recorder.deleted.append(file_id)
+    )
+    monkeypatch.setattr(
+        scan_module,
+        "api_upsert_runs_batch",
+        lambda runs, CLI_config, update: recorder.upserted.append((list(runs), update)),
     )
     return recorder
 
@@ -459,10 +583,10 @@ class TestScanS3PrefixForDataCollection:
         assert api.created == []
 
     def test_listing_failure_is_reported_as_a_scan_error(self, monkeypatch, api):
-        def _no_client(_cfg, url=None):
+        def _no_client(_url, _cfg):
             raise RuntimeError("no credentials")
 
-        monkeypatch.setattr(scan_module, "_s3_read_client", _no_client)
+        monkeypatch.setattr(data_root_module, "s3_read_client", _no_client)
 
         result = self._scan(_s3_prefix_dc())
 
@@ -533,3 +657,192 @@ class TestScanS3PrefixForDataCollection:
         ((files, _),) = api.created
         assert [f.manifest_id for f in files] == [None, None, None]
         assert [level for level, _ in messages] == ["info"]
+
+
+# ── sequencing-runs: one run per matched run directory ──────────────────────
+
+RUN_PREFIX = "s3://b/data/"
+RUN_KEYS = [
+    "data/run_1/multiqc/multiqc_data/multiqc.parquet",
+    "data/run_2/multiqc/multiqc_data/multiqc.parquet",
+    "data/run_3/multiqc/multiqc_data/multiqc.parquet",
+    # A sibling directory the runs_regex rejects: the local walk never descends
+    # into it, so neither does the remote one.
+    "data/scratch/multiqc/multiqc_data/multiqc.parquet",
+    "data/run_1/variants/bowtie2/depth.tsv",
+    # An object directly under the prefix belongs to no run at all.
+    "data/top_level.parquet",
+]
+
+# What a template's recursive DC declares: a path relative to a run directory,
+# not to the data root. See depictio/projects/nf-core/viralrecon/3.0.0.
+RUN_RELATIVE_PATTERN = "multiqc/multiqc_data/multiqc.parquet"
+
+
+class TestScanS3PrefixSequencingRuns:
+    @staticmethod
+    def _scan(
+        dc: DataCollection,
+        runs_regex: str | None = "run_.*",
+        update_files: bool = False,
+    ) -> dict:
+        owner = UserBase(id=PyObjectId(), email="o@example.com", is_admin=False)
+        return scan_module.scan_s3_prefix_for_data_collection(
+            workflow=_workflow(
+                dc,
+                structure="sequencing-runs",
+                runs_regex=runs_regex,
+                location=RUN_PREFIX,
+            ),
+            data_collection=dc,
+            CLI_config=MagicMock(),
+            permissions=Permission(owners=[owner]),
+            update_files=update_files,
+        )
+
+    @staticmethod
+    def _dc(pattern: str = RUN_RELATIVE_PATTERN, pattern_syntax: str = "glob"):
+        return _s3_prefix_dc(
+            pattern=pattern,
+            id_regex=None,
+            pattern_syntax=pattern_syntax,
+            prefix=RUN_PREFIX,
+        )
+
+    def test_one_run_per_matching_directory(self, stub_s3, api):
+        """Three runs, one rejected sibling, one root-level object."""
+        stub_s3(RUN_KEYS)
+
+        assert self._scan(self._dc()) == {"result": "success", "added": 3, "updated": 0}
+
+        ((files, _),) = api.created
+        assert sorted(f.run_tag for f in files) == ["run_1", "run_2", "run_3"]
+        # The rejected directory contributed nothing, pattern match or not.
+        assert all("scratch" not in f.file_location for f in files)
+
+        ((runs, update),) = api.upserted
+        assert update is False
+        assert sorted(r.run_tag for r in runs) == ["run_1", "run_2", "run_3"]
+        assert sorted(r.run_location for r in runs) == [
+            "s3://b/data/run_1",
+            "s3://b/data/run_2",
+            "s3://b/data/run_3",
+        ]
+        # Every file points at the run document that carries its own tag.
+        by_tag = {r.run_tag: r.id for r in runs}
+        assert all(f.run_id == by_tag[f.run_tag] for f in files)
+
+    def test_pattern_is_matched_relative_to_the_run_directory(self, stub_s3, api):
+        """The template's pattern is written relative to a run, so matching it
+        against the root-relative key would find nothing at all."""
+        stub_s3(RUN_KEYS)
+
+        assert self._scan(self._dc())["added"] == 3
+        ((files, _),) = api.created
+        assert all(f.file_location.endswith("/" + RUN_RELATIVE_PATTERN) for f in files)
+
+        # Same pattern with the run segment left in front matches nothing.
+        api.created.clear()
+        api.upserted.clear()
+        result = self._scan(self._dc(pattern="run_1/" + RUN_RELATIVE_PATTERN))
+        assert result["result"] == "error"
+
+    def test_regex_syntax_also_matches_run_relative(self, stub_s3, api):
+        stub_s3(RUN_KEYS)
+
+        result = self._scan(self._dc(pattern=r"variants/.*\.tsv", pattern_syntax="regex"))
+
+        assert result == {"result": "success", "added": 1, "updated": 0}
+        ((files, _),) = api.created
+        assert files[0].run_tag == "run_1"
+        assert files[0].file_location == "s3://b/data/run_1/variants/bowtie2/depth.tsv"
+
+    def test_a_known_run_keeps_its_server_side_id(self, stub_s3, api):
+        """The upsert endpoint matches on ``_id``: minting a fresh one for a
+        run_tag the server already knows would leave the files pointing at a run
+        document that is never written."""
+        stub_s3(RUN_KEYS)
+        known_id = str(ObjectId())
+        api.existing_runs = [{"_id": known_id, "run_tag": "run_2"}]
+
+        self._scan(self._dc())
+
+        ((runs, _),) = api.upserted
+        reused = next(r for r in runs if r.run_tag == "run_2")
+        assert str(reused.id) == known_id
+
+    def test_runs_regex_matching_nothing_warns_with_what_was_seen(self, stub_s3, api, messages):
+        stub_s3(RUN_KEYS)
+
+        result = self._scan(self._dc(), runs_regex="sequencing_.*")
+
+        # Loud, but not an exception: the scan reports the empty result the way
+        # it always has, with a warning that says why it is empty.
+        assert result["result"] == "error"
+        warning = next(msg for level, msg in messages if level == "warning")
+        assert "sequencing_.*" in warning
+        for seen in ("run_1", "run_2", "run_3", "scratch"):
+            assert seen in warning
+        assert api.created == []
+        assert api.upserted == []
+
+    def test_detected_runs_are_named_in_the_summary(self, stub_s3, api, messages):
+        stub_s3(RUN_KEYS)
+
+        self._scan(self._dc())
+
+        summary = next(msg for level, msg in messages if level == "info")
+        assert "run_1, run_2, run_3" in summary
+
+    def test_the_model_forbids_a_run_structure_without_a_regex(self):
+        """Why the scan's "sequencing-runs *and* a regex" guard is only a
+        backstop: the workflow model already rejects the half-declared case."""
+        with pytest.raises(ValueError, match="runs_regex is required"):
+            _workflow(self._dc(), structure="sequencing-runs", runs_regex=None)
+
+
+class TestScanS3PrefixFlatIsUnchanged:
+    """The flat prefix keeps exactly the behaviour it had before runs existed."""
+
+    @staticmethod
+    def _scan(dc: DataCollection) -> dict:
+        owner = UserBase(id=PyObjectId(), email="o@example.com", is_admin=False)
+        return scan_module.scan_s3_prefix_for_data_collection(
+            workflow=_workflow(dc),
+            data_collection=dc,
+            CLI_config=MagicMock(),
+            permissions=Permission(owners=[owner]),
+            update_files=False,
+        )
+
+    def test_one_synthetic_run_and_the_constant_run_tag(self, stub_s3, api):
+        stub_s3(KEYS)
+
+        assert self._scan(_s3_prefix_dc()) == {"result": "success", "added": 3, "updated": 0}
+
+        ((files, _),) = api.created
+        assert {f.run_tag for f in files} == {"remote"}
+        assert len({f.run_id for f in files}) == 1
+        # Flat prefixes never persisted a run and still do not.
+        assert api.upserted == []
+
+    def test_a_regex_pattern_threads_from_the_model_to_the_matcher(self, stub_s3, api):
+        stub_s3(KEYS)
+        dc = _s3_prefix_dc(
+            pattern=r"sample_[AB]\.samples\.csv", id_regex=None, pattern_syntax="regex"
+        )
+
+        assert self._scan(dc) == {"result": "success", "added": 2, "updated": 0}
+
+        ((files, _),) = api.created
+        assert sorted(f.filename for f in files) == [
+            "sample_A.samples.csv",
+            "sample_B.samples.csv",
+        ]
+
+    def test_the_same_pattern_as_a_glob_matches_nothing(self, stub_s3, api):
+        """Proof the syntax is honoured end to end and not quietly ignored."""
+        stub_s3(KEYS)
+        dc = _s3_prefix_dc(pattern=r"sample_[AB]\.samples\.csv", id_regex=None)
+
+        assert self._scan(dc)["result"] == "error"

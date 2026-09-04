@@ -1,6 +1,7 @@
 import re
 from enum import Enum
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -147,6 +148,15 @@ class ScanS3Prefix(BaseModel):
     # Glob (fnmatch) applied to the key *relative to* the prefix, so callers can
     # write "*.csv" rather than repeating the prefix path.
     pattern: str = "*"
+    pattern_syntax: Literal["glob", "regex"] = "glob"
+    """How ``pattern`` is read: an fnmatch glob (the default) or a regex.
+
+    An ``s3_prefix`` scan synthesised from a template's ``recursive`` data
+    collection has to keep that template's regex verbatim: translating a regex
+    into a glob is lossy, so the synthesised scan would silently mean something
+    other than the local one it was derived from. The default stays ``"glob"``
+    so every configuration written before this field keeps its exact meaning.
+    """
     id_regex: str | None = None
     # Backstop against pointing a DC at a bucket root holding millions of keys.
     # The ceiling matches what one list_s3_prefix pass is expected to page through.
@@ -188,6 +198,21 @@ class ScanS3Prefix(BaseModel):
                 "it captures the entity id used as the cross-DC join key"
             )
         return v
+
+    @model_validator(mode="after")
+    def validate_regex_pattern(self):
+        """A ``pattern_syntax="regex"`` pattern has to compile, like ``id_regex``.
+
+        Checked here rather than in the ``pattern`` field validator because it
+        depends on another field. A pattern that is only ever a glob ("*(" for
+        instance) has to fail at configuration time rather than mid-listing.
+        """
+        if self.pattern_syntax == "regex":
+            try:
+                re.compile(self.pattern)
+            except re.error as exc:
+                raise ValueError(f"Invalid regex pattern '{self.pattern}': {exc}")
+        return self
 
 
 class ScanManifest(BaseModel):
