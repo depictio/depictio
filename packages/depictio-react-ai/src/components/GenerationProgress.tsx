@@ -4,11 +4,13 @@ import { Icon } from '@iconify/react';
 
 import { componentTypeVisual } from 'depictio-react-core';
 
+import CheckStrip from './CheckStrip';
 import { sectionIconId } from '../componentVisuals';
 import type { GenerateDashboardRunState } from '../hooks';
 import { AI_COLOR } from '../icons';
 import type {
   BudgetTick,
+  ComponentCheck,
   DashboardPlan,
   GeneratedComponentEvent,
   PlannedComponent,
@@ -57,6 +59,9 @@ interface Row {
   status: RowStatus;
   attempts?: number;
   error?: string | null;
+  /** Undefined while the component is still pending, and on a run whose
+   *  server did not report the gates. */
+  checks?: ComponentCheck[];
 }
 
 /** Plan rows first, in plan order, each carrying its latest outcome; then
@@ -72,6 +77,7 @@ export function mergeRows(planned: PlannedComponent[], events: GeneratedComponen
       status: e?.status ?? 'pending',
       attempts: e?.attempts,
       error: e?.error,
+      checks: e?.checks,
     };
   });
   const known = new Set(planned.map((p) => p.tag));
@@ -601,6 +607,14 @@ const GenerationProgress: React.FC<GenerationProgressProps> = ({
                           </Stack>
                           <Outcome row={row} />
                         </Group>
+                        {/* The gates, once the tile has been through any: a row
+                            of marks says how it got here, which the single
+                            outcome icon on its own cannot. A pending row, and a
+                            run whose server reported no gates, stay silent
+                            rather than saying they were not recorded. */}
+                        {row.checks && row.checks.length > 0 && (
+                          <CheckStrip checks={row.checks} testId="generate-progress-checks" />
+                        )}
                         {row.error && (
                           <Text
                             size="xs"

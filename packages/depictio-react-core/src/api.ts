@@ -376,6 +376,25 @@ export interface DashboardAISection {
   rationale: string;
 }
 
+/** One validation gate's verdict on one generated tile. Mirrors
+ *  AIComponentCheck in depictio/models/models/dashboards.py. `layer` and
+ *  `status` are open strings for the same reason the model keeps them open:
+ *  a gate a newer server records is something to show, not to choke on. */
+export interface DashboardAICheck {
+  layer: string;
+  status: string;
+  /** The finding when failed, the reason when skipped. */
+  detail: string;
+}
+
+/** The gates one generated tile went through. */
+export interface DashboardAIComponentChecks {
+  tag: string;
+  attempts: number;
+  repair: string;
+  checks: DashboardAICheck[];
+}
+
 export interface DashboardAIGeneration {
   status: 'draft' | 'promoted';
   model: string;
@@ -393,6 +412,11 @@ export interface DashboardAIGeneration {
    *  then the grid, in plan order. Absent on drafts saved before the planner
    *  was asked to explain itself. */
   sections?: DashboardAISection[];
+  /** Generation tags the run planned but could not deliver. */
+  dropped?: string[];
+  /** Which validation gates each tile passed, keyed by generation tag.
+   *  Absent on drafts saved before the gates were recorded. */
+  checks?: DashboardAIComponentChecks[];
 }
 
 export interface DashboardData {

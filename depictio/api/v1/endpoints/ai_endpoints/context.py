@@ -79,6 +79,52 @@ def redact_pii(value: Any) -> Any:
     return out
 
 
+# Stored-spec dtype vocabulary (and the polars names, lowercased) -> the
+# COLUMN_TYPES entry the lite validators key their compatibility tables on.
+_COLUMN_TYPE_BY_DTYPE: dict[str, str] = {
+    "object": "object",
+    "string": "object",
+    "str": "object",
+    "utf8": "object",
+    "large_string": "object",
+    "int64": "int64",
+    "int32": "int64",
+    "int16": "int64",
+    "int8": "int64",
+    "int": "int64",
+    "uint64": "int64",
+    "uint32": "int64",
+    "uint16": "int64",
+    "uint8": "int64",
+    "float64": "float64",
+    "float32": "float64",
+    "float": "float64",
+    "double": "float64",
+    "bool": "bool",
+    "boolean": "bool",
+    "datetime": "datetime",
+    "datetime64": "datetime",
+    "date": "datetime",
+    "timestamp": "datetime",
+    "timedelta": "timedelta",
+    "timedelta64": "timedelta",
+    "time": "timedelta",
+    "duration": "timedelta",
+    "category": "category",
+    "categorical": "category",
+}
+# "Datetime(time_unit='us')", "datetime64[ns]", "list<int64>": drop the parameters.
+_DTYPE_PARAMS_RE = re.compile(r"[\[(<].*$")
+
+
+def column_type_for(dtype: str | None) -> str | None:
+    """The COLUMN_TYPES entry for a stored-spec (or polars) dtype name, None if none fits."""
+    if not dtype:
+        return None
+    key = _DTYPE_PARAMS_RE.sub("", dtype.strip().lower())
+    return _COLUMN_TYPE_BY_DTYPE.get(key)
+
+
 @dataclass
 class ColumnSummary:
     name: str

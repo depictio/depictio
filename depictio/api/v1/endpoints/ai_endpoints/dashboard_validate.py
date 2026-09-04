@@ -14,6 +14,11 @@ fields a card's `secondary_layout` needs, a MultiSelect on a column with too
 many distinct values, and an advanced_viz's role bindings against the viz's
 canonical schema. Each finding is `{component_id, field, message}`, worded so
 `format_validation_error_for_llm`-style repair prompts can quote it.
+
+`substance_error` and `schema_error` are the one-component wrappers the three
+generating routes share: they answer the repair-prompt text, or None. They live
+here rather than in `dashboard_gen` because `suggest` needs them too and cannot
+import `dashboard_gen`, which imports `suggest`.
 """
 
 from __future__ import annotations
@@ -23,8 +28,7 @@ from typing import Any
 
 import yaml
 
-from depictio.api.v1.endpoints.ai_endpoints.context import DataContext
-from depictio.api.v1.endpoints.ai_endpoints.suggest import column_type_for
+from depictio.api.v1.endpoints.ai_endpoints.context import DataContext, column_type_for
 from depictio.models.components.constants import (
     AGGREGATION_COMPATIBILITY,
     INTERACTIVE_COMPATIBILITY,
@@ -465,3 +469,29 @@ def check_against_schema(
             _check_advanced_viz(cid, comp, schema, findings)
 
     return findings
+
+
+def substance_error(component: dict[str, Any]) -> str | None:
+    """Reject a validated component that would render nothing.
+
+    The lite figure defaults to a scatter with no bindings, so a UI-mode
+    figure without a single `dict_kwargs` column passes the validator and
+    draws an empty plot; the repair prompt asks for the bindings instead.
+    """
+    if component.get("component_type") == "figure" and component.get("mode", "ui") != "code":
+        if not (component.get("dict_kwargs") or component.get("figure_params")):
+            return (
+                "figure: dict_kwargs is empty; bind at least one column (x, y, color, ...) "
+                "from DATASET SCHEMA"
+            )
+    return None
+
+
+def schema_error(component: dict[str, Any], ctx: DataContext) -> str | None:
+    """`check_against_schema` on one validated component, as repair-prompt text or None."""
+    lite = validate_envelope({"title": "AI", "components": [component]})
+    tag = ctx.data_collection_tag or ctx.data_collection_id
+    findings = check_against_schema(lite, {tag: ctx})
+    if not findings:
+        return None
+    return "Schema check failed:\n" + "\n".join(f"- {f['field']}: {f['message']}" for f in findings)

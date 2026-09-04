@@ -26,6 +26,7 @@ from depictio.api.v1.endpoints.ai_endpoints.dashboard_probe import (
     NO_PROBE_TYPES,
     PROBE_ROW_LIMIT,
     probe_component,
+    probe_verdict,
 )
 
 WF_ID = "7" * 24
@@ -289,6 +290,97 @@ class TestNothingToProbe:
 
     def test_no_context_means_nothing_to_probe_against(self):
         assert probe_component(_comp("figure", visu_type="box"), None, USER) is None
+
+
+class TestTheVerdictTellsTheSkipsApart:
+    """`probe_component` collapses three different answers into None.
+
+    That is right for the repair prompt, which only wants a reason or
+    nothing, and wrong for the reviewer, who has to know whether a tile was
+    checked at all. `probe_verdict` is the same run, said precisely.
+    """
+
+    @pytest.mark.parametrize("component_type", sorted(NO_PROBE_TYPES))
+    def test_a_type_with_no_cheap_probe_is_skipped(self, ctx, component_type):
+        verdict = probe_verdict(_comp(component_type), ctx, USER)
+        assert verdict.status == "skipped"
+        assert component_type in verdict.detail
+        assert verdict.finding is None
+
+    def test_an_unknown_type_is_skipped(self, ctx):
+        assert probe_verdict(_comp("hologram"), ctx, USER).status == "skipped"
+        assert "hologram" in probe_verdict(_comp("hologram"), ctx, USER).detail
+
+    def test_no_collection_to_render_against_is_skipped(self):
+        verdict = probe_verdict(_comp("figure", visu_type="box"), None, USER)
+        assert verdict.status == "skipped"
+        assert verdict.detail == "no data collection to render against"
+
+    def test_a_component_that_renders_passes(self, monkeypatch, ctx):
+        _install(
+            monkeypatch,
+            "depictio.api.v1.celery_tasks",
+            build_figure_preview=lambda payload: {"figure": {}, "metadata": {}},
+        )
+        verdict = probe_verdict(_comp("figure", dict_kwargs={"x": "a"}), ctx, USER)
+        assert verdict.status == "passed"
+        assert verdict.detail == ""
+
+    def test_a_component_that_will_not_render_fails(self, monkeypatch, ctx):
+        def boom(payload):
+            raise ValueError("nope")
+
+        _install(monkeypatch, "depictio.api.v1.celery_tasks", build_figure_preview=boom)
+        verdict = probe_verdict(_comp("figure", dict_kwargs={"x": "a"}), ctx, USER)
+        assert verdict.status == "failed"
+        assert verdict.finding == verdict.detail
+        assert "nope" in verdict.detail
+
+
+class TestCodeModeIsGated:
+    """A code-mode figure whose code raises still returns a figure.
+
+    `build_figure_preview` catches it and hands back an error figure so the
+    builder's Code-mode alert can go red, putting the message on
+    ``metadata.error``. The probe reads that field: it is the only gate that
+    sees a code figure's bindings at all, since it declares no `dict_kwargs`
+    for the column check to read.
+    """
+
+    def test_the_error_the_preview_reports_fails_the_probe(self, monkeypatch, ctx):
+        _install(
+            monkeypatch,
+            "depictio.api.v1.celery_tasks",
+            build_figure_preview=lambda payload: {
+                "figure": {},
+                "metadata": {"error": "name 'pd' is not defined"},
+            },
+        )
+        component = _comp("figure", mode="code", code_content="fig = pd.DataFrame()")
+        assert probe_component(component, ctx, USER) == "name 'pd' is not defined"
+
+    def test_code_that_runs_still_passes(self, monkeypatch, ctx):
+        _install(
+            monkeypatch,
+            "depictio.api.v1.celery_tasks",
+            build_figure_preview=lambda payload: {"figure": {}, "metadata": {}},
+        )
+        component = _comp("figure", mode="code", code_content="fig = px.scatter(df)")
+        assert probe_component(component, ctx, USER) is None
+
+    def test_the_mode_and_the_code_reach_the_preview(self, monkeypatch, ctx):
+        seen: list[dict] = []
+
+        def capture(payload):
+            seen.append(payload["metadata"])
+            return {"figure": {}, "metadata": {}}
+
+        _install(monkeypatch, "depictio.api.v1.celery_tasks", build_figure_preview=capture)
+        probe_component(
+            _comp("figure", mode="code", code_content="fig = px.scatter(df)"), ctx, USER
+        )
+        assert seen[0]["mode"] == "code"
+        assert seen[0]["code_content"] == "fig = px.scatter(df)"
 
 
 class TestFailuresAreReturnedNotRaised:

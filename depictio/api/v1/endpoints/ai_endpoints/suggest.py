@@ -36,7 +36,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -60,8 +59,10 @@ from depictio.api.v1.endpoints.ai_endpoints.context import (
     DataContext,
     InventoryEntry,
     ProjectInventory,
+    column_type_for,
     dc_has_coordinates,
 )
+from depictio.api.v1.endpoints.ai_endpoints.dashboard_validate import schema_error
 from depictio.api.v1.endpoints.ai_endpoints.schemas import (
     ComponentSuggestion,
     ComponentType,
@@ -115,51 +116,6 @@ DataContextBuilder = Callable[..., Awaitable[DataContext]]
 # ---------------------------------------------------------------------------
 # Column types and legal spaces
 # ---------------------------------------------------------------------------
-
-# Stored-spec dtype vocabulary (and the polars names, lowercased) -> the
-# COLUMN_TYPES entry the lite validators key their compatibility tables on.
-_COLUMN_TYPE_BY_DTYPE: dict[str, str] = {
-    "object": "object",
-    "string": "object",
-    "str": "object",
-    "utf8": "object",
-    "large_string": "object",
-    "int64": "int64",
-    "int32": "int64",
-    "int16": "int64",
-    "int8": "int64",
-    "int": "int64",
-    "uint64": "int64",
-    "uint32": "int64",
-    "uint16": "int64",
-    "uint8": "int64",
-    "float64": "float64",
-    "float32": "float64",
-    "float": "float64",
-    "double": "float64",
-    "bool": "bool",
-    "boolean": "bool",
-    "datetime": "datetime",
-    "datetime64": "datetime",
-    "date": "datetime",
-    "timestamp": "datetime",
-    "timedelta": "timedelta",
-    "timedelta64": "timedelta",
-    "time": "timedelta",
-    "duration": "timedelta",
-    "category": "category",
-    "categorical": "category",
-}
-# "Datetime(time_unit='us')", "datetime64[ns]", "list<int64>": drop the parameters.
-_DTYPE_PARAMS_RE = re.compile(r"[\[(<].*$")
-
-
-def column_type_for(dtype: str | None) -> str | None:
-    """The COLUMN_TYPES entry for a stored-spec (or polars) dtype name, None if none fits."""
-    if not dtype:
-        return None
-    key = _DTYPE_PARAMS_RE.sub("", dtype.strip().lower())
-    return _COLUMN_TYPE_BY_DTYPE.get(key)
 
 
 def columns_by_type(entry: InventoryEntry) -> dict[str, list[str]]:
@@ -369,23 +325,47 @@ def advanced_viz_components(entry: InventoryEntry, schema: dict[str, str]) -> li
     return out
 
 
-def validate_candidate(component: dict[str, Any]) -> dict[str, Any] | None:
+def _log_dropped(component: dict[str, Any], finding: str) -> None:
+    """Say which candidate was dropped and why: it has no repair round to fix it."""
+    logger.warning(
+        "suggest-components: dropped %s candidate %r: %s",
+        component.get("component_type"),
+        component.get("title"),
+        finding,
+    )
+
+
+def validate_candidate(
+    component: dict[str, Any], ctx: DataContext | None = None
+) -> dict[str, Any] | None:
     """Run one candidate through the CLI validator; None (logged) when it fails.
 
     The dict is dumped to YAML first so every candidate, LLM or ranked,
     takes exactly the path `depictio-cli dashboard import` takes.
+
+    With a `ctx`, the candidate is also checked against the collection's real
+    columns (`schema_error`), the check the generator runs and this route used
+    to skip: an `average` on a String column parses perfectly and is still not
+    a card anyone can render. A suggestion has no repair round, so a candidate
+    that fails is dropped like one that fails the grammar; the caller keeps
+    whatever survives.
     """
     try:
         text = yaml.safe_dump(component, sort_keys=False)
-        return component_yaml.validate_single(text)
+        parsed = component_yaml.validate_single(text)
     except (ValidationError, ValueError, yaml.YAMLError) as e:
-        logger.warning(
-            "suggest-components: dropped %s candidate %r: %s",
-            component.get("component_type"),
-            component.get("title"),
-            component_yaml.format_validation_error_for_llm(e),
-        )
+        _log_dropped(component, component_yaml.format_validation_error_for_llm(e))
         return None
+    if ctx is None:
+        return parsed
+    try:
+        finding = schema_error(parsed, ctx)
+    except (ValidationError, ValueError) as e:  # pragma: no cover, defensive
+        finding = component_yaml.format_validation_error_for_llm(e)
+    if finding:
+        _log_dropped(component, finding)
+        return None
+    return parsed
 
 
 # ---------------------------------------------------------------------------
@@ -455,6 +435,7 @@ def llm_suggestions(
     inventory: ProjectInventory,
     llm_types: list[ComponentType],
     targets: list[InventoryEntry],
+    contexts: dict[str, DataContext] | None = None,
 ) -> tuple[list[ComponentSuggestion], int]:
     """Turn the model's JSON into validated suggestions. Returns (kept, dropped).
 
@@ -462,7 +443,8 @@ def llm_suggestions(
     `llm_types`; the tags are filled from the inventory entry the item
     names, which must be one of the `targets` the prompt described (an
     unknown or out-of-scope tag drops the item, except for text, which has
-    no collection); the component is validated like any other candidate.
+    no collection); the component is validated like any other candidate,
+    against `contexts[<dc id>]` when the run sampled that collection.
     """
     items = parsed.get("suggestions") if isinstance(parsed, dict) else None
     if not isinstance(items, list):
@@ -528,7 +510,11 @@ def llm_suggestions(
                 if isinstance(config, dict) and component.get("viz_kind"):
                     component["config"] = {"viz_kind": component["viz_kind"], **config}
 
-        validated = validate_candidate(component)
+        # None for text, and for a collection this run never sampled: the
+        # column check has nothing to read and the candidate stands on the
+        # grammar alone.
+        ctx = (contexts or {}).get(entry.data_collection_id) if entry is not None else None
+        validated = validate_candidate(component, ctx)
         if validated is None:
             dropped += 1
             continue
@@ -651,7 +637,9 @@ async def _ranked(
             for candidate in candidates:
                 if kept >= MAX_RANKED_PER_DC:
                     break
-                validated = await asyncio.to_thread(validate_candidate, candidate)
+                validated = await asyncio.to_thread(
+                    validate_candidate, candidate, contexts.get(entry.data_collection_id)
+                )
                 if validated is None:
                     continue
                 kept += 1
@@ -674,7 +662,9 @@ async def _ranked(
                 or not entry.columns
             ):
                 continue
-            validated = await asyncio.to_thread(validate_candidate, table_component(entry))
+            validated = await asyncio.to_thread(
+                validate_candidate, table_component(entry), contexts.get(entry.data_collection_id)
+            )
             if validated is not None:
                 ranked.append(
                     _suggestion(
@@ -855,7 +845,7 @@ async def suggest_components(
         parsed, llm_error = await _completion_json(messages, user_api_key)
         if llm_error is None:
             llm_items, dropped = await asyncio.to_thread(
-                llm_suggestions, parsed, inventory, llm_types, targets
+                llm_suggestions, parsed, inventory, llm_types, targets, contexts
             )
             if dropped and not llm_items:
                 llm_error = "none of the assistant's suggestions passed validation"
