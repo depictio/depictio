@@ -33,22 +33,46 @@ replace a `workflow.onComplete` the pipeline defines for itself.
   the shell or scheduler job running `nextflow run`. The handler executes there,
   never on a compute node. On an HPC cluster this usually means the submit node
   or the job that launches Nextflow, and it is the machine that must have network
-  access to the Depictio API.
+  access to the Depictio API. Install it with `pip install depictio-cli`, or run
+  it from the published container (see
+  [Running the CLI from the published container](#running-the-cli-from-the-published-container)).
 - Credentials reachable from that job, either a CLI config file or environment
   variables (see [Authentication](#authentication)).
 
 ## Enabling it
 
-For a single run:
+For an nf-core pipeline, the whole setup is two steps.
+
+**Once**, on the head job:
 
 ```bash
-nextflow run <pipeline> -c /path/to/depictio/cli/configs/nextflow/depictio.config
+pip install depictio-cli
+export DEPICTIO_CLI_TOKEN=<your token>
+export DEPICTIO_CLI_API_BASE_URL=https://depictio.example.org
+```
+
+**Then** add one `-c` to the command you already run:
+
+```bash
+nextflow run nf-core/ampliseq -profile test,docker --outdir results \
+  -c $(depictio-cli config nextflow)
+```
+
+That is all. `depictio-cli config nextflow` prints the path of the snippet
+bundled with the CLI, so there is no file to download, copy or keep in sync, and
+nothing to configure: the snippet reads the pipeline's own manifest and passes it
+to the CLI as `--pipeline-id`, which resolves the matching bundled template.
+
+To read the snippet, or to keep an editable copy of it:
+
+```bash
+depictio-cli config nextflow --print > depictio.config
 ```
 
 Permanently, from your own `nextflow.config`:
 
 ```groovy
-includeConfig '/path/to/depictio/cli/configs/nextflow/depictio.config'
+includeConfig '/path/to/depictio.config'
 ```
 
 Include order does not matter, and neither does where your own settings sit

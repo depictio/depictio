@@ -52,6 +52,58 @@ def show(
 
 
 @app.command()
+def nextflow(
+    print_: Annotated[
+        bool,
+        typer.Option(
+            "--print",
+            help="Write the snippet's contents to stdout instead of its path.",
+        ),
+    ] = False,
+):
+    """
+    Print the path of the bundled Nextflow onComplete snippet.
+
+    Meant to be substituted straight into a Nextflow command, which is the whole
+    reason it exists: the snippet lives inside the installed package, and that is
+    not a path anyone should have to type or keep in sync.
+
+        nextflow run nf-core/ampliseq --outdir results -c $(depictio-cli config nextflow)
+
+    For an nf-core pipeline that is the entire setup. The snippet reads the
+    pipeline's own manifest and hands it to the CLI as --pipeline-id, which
+    resolves the bundled template, so there is nothing else to configure.
+
+    Use --print to read the snippet, or to copy it somewhere you can edit:
+
+        depictio-cli config nextflow --print > depictio.config
+    """
+    # Deliberately no rich_print_command_usage and no decoration: the only
+    # useful form of this output is a bare path on stdout, inside $(...).
+    # Anything else printed here ends up in the Nextflow command line.
+    from pathlib import Path
+
+    import depictio.cli
+
+    snippet = Path(depictio.cli.__file__).parent / "configs" / "nextflow" / "depictio.config"
+    if not snippet.is_file():
+        # Shipped as package data. An install predating that, or one assembled by
+        # hand, simply will not have it, and a bare traceback would not say so.
+        rich_print_checked_statement(
+            f"The bundled Nextflow snippet is missing from this installation "
+            f"(expected at {snippet}). Upgrade depictio-cli, or take the file "
+            f"from depictio/cli/configs/nextflow/depictio.config in the repository.",
+            "error",
+        )
+        raise typer.Exit(code=1)
+
+    if print_:
+        print(snippet.read_text(), end="")
+    else:
+        print(snippet)
+
+
+@app.command()
 def check(
     CLI_config_path: Annotated[
         str, typer.Option("--CLI-config-path", help="Path to the configuration file")
