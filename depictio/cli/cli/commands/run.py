@@ -716,7 +716,20 @@ def register_run_command(app: typer.Typer):
             rich_print_section_separator(f"Step 1/{total_steps}: Checking server accessibility")
             try:
                 if not dry_run:
-                    api_login(CLI_config_path)
+                    # api_login reports a rejected configuration by RETURNING
+                    # {"success": False}, not by raising, so the except below
+                    # cannot see it. Unchecked, an expired token printed its own
+                    # error and was immediately followed by "check passed"; the
+                    # run then died at step 3 on a validation error that named
+                    # nothing about authentication. For a pipeline-triggered run
+                    # that is the difference between a log saying "your token
+                    # expired" and one nobody can act on.
+                    if not api_login(CLI_config_path).get("success"):
+                        raise RuntimeError(
+                            "the server rejected this CLI configuration (see the error "
+                            "above). The token is most likely expired, or was minted "
+                            "for a different Depictio instance."
+                        )
                 rich_print_checked_statement("Server accessibility check passed", "success")
                 success_count += 1
                 _rec("server_check", "success", "server reachable")

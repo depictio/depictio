@@ -330,3 +330,76 @@ class TestTriggeredByStamp:
         )
         assert result.exit_code == 0, result.output
         assert harness.sync.call_args.kwargs["ProjectConfig"]["triggered_by"] == "nextflow"
+
+
+class TestServerCheckHonoursTheVerdict:
+    """A rejected CLI configuration must stop the run at step 1.
+
+    `api_login` reports rejection by returning {"success": False} rather than
+    raising, so the step's try/except is blind to it. Unchecked, an expired
+    token printed its own error and was immediately followed by "check passed",
+    and the run failed three steps later on a validation error that mentioned
+    nothing about authentication.
+    """
+
+    def test_a_rejected_config_fails_the_run(self, app, runner, data_root):
+        harness = _Harness(data_root, remote_locations=[])
+        patches = harness.patches()
+        patches.append(
+            patch(
+                "depictio.cli.cli.commands.run.api_login",
+                MagicMock(return_value={"success": False}),
+            )
+        )
+        for p in patches:
+            p.start()
+        try:
+            result = runner.invoke(
+                app,
+                [
+                    "--template",
+                    "nf-core/ampliseq/2.16.0",
+                    "--data-root",
+                    str(data_root),
+                    "--skip-s3-check",
+                ],
+            )
+        finally:
+            for p in patches:
+                p.stop()
+
+        assert result.exit_code == 1, result.output
+        assert "Server accessibility check failed" in result.output
+        assert "expired" in result.output
+        # It stopped at step 1: nothing was synced, scanned or processed.
+        harness.sync.assert_not_called()
+        harness.scan.assert_not_called()
+
+    def test_an_accepted_config_proceeds(self, app, runner, data_root):
+        harness = _Harness(data_root, remote_locations=[])
+        patches = harness.patches()
+        patches.append(
+            patch(
+                "depictio.cli.cli.commands.run.api_login",
+                MagicMock(return_value={"success": True}),
+            )
+        )
+        for p in patches:
+            p.start()
+        try:
+            result = runner.invoke(
+                app,
+                [
+                    "--template",
+                    "nf-core/ampliseq/2.16.0",
+                    "--data-root",
+                    str(data_root),
+                    "--skip-s3-check",
+                ],
+            )
+        finally:
+            for p in patches:
+                p.stop()
+
+        assert result.exit_code == 0, result.output
+        harness.sync.assert_called_once()
