@@ -19,6 +19,7 @@ import httpx
 import yaml
 
 from depictio.cli.cli_logging import logger
+from depictio.models.models.nextflow import PARAMS_GLOBS
 from depictio.models.models.templates import (
     DCOverride,
     ExpectedDataCollection,
@@ -834,14 +835,19 @@ def _log_removal_report(report: list[dict[str, str]]) -> None:
 # Fallback when a template declares no `provenance:` block: nf-core pipelines
 # all write pipeline_info/params*.json, so at minimum the run's parameters are
 # captured, ungrouped. Templates refine this with their own sources/groups.
+# The three shapes the Nextflow connector already recognises (PARAMS_GLOBS).
+# Listing only `params*.json` here meant a pipeline writing `nf-params.json`
+# got a correct identity and template from the connector, then an ingestion
+# report with an empty Parameters section, with nothing saying why.
 _DEFAULT_PROVENANCE_SPEC = ProvenanceSpec(
     sources=[
         ProvenanceSource(
             name="params",
-            glob="pipeline_info/params*.json",
+            glob=f"pipeline_info/{pattern}",
             format="json",
             pick="latest",
-        ),
+        )
+        for pattern in PARAMS_GLOBS
     ],
     groups=[ProvenanceGroupRule(group="Parameters", key_patterns=["*"])],
 )
@@ -948,8 +954,17 @@ def collect_run_provenance(
     for source in spec.sources:
         matches = sorted(root.glob(source.glob))
         if not matches:
-            # sequencing-runs layouts keep pipeline_info one level down
-            matches = sorted(root.glob(f"*/{source.glob}"))
+            # sequencing-runs layouts keep pipeline_info one level down. Keep to
+            # ONE run directory: globbing across all of them sorts the run name
+            # before the timestamp, so `pick: latest` returned the last run
+            # alphabetically while the run-info reader reads its identity from
+            # the FIRST. The report then married one run's pipeline version to
+            # another run's parameters. Same run for both, and the reader
+            # records which one in extra["identity_from_run"].
+            nested = sorted(root.glob(f"*/{source.glob}"))
+            if nested:
+                first_run = nested[0].relative_to(root).parts[0]
+                matches = [m for m in nested if m.relative_to(root).parts[0] == first_run]
         if not matches:
             logger.info(f"Provenance source '{source.name}': no file matches {source.glob!r}")
             continue
@@ -1042,16 +1057,26 @@ def _introspect_pipeline_params(data_root: str, variables: dict[str, str]) -> No
     # symlink-parent validation convention) it sits one level down in a run subdir;
     # all runs of a project share a platform/protocol, so the first run's params is
     # representative for these route flags.
-    candidates = sorted(Path(data_root).glob("pipeline_info/params*.json"))
+    #
+    # Newest first, and shared with the run-info connector rather than re-globbed
+    # here: a resumed run leaves one params file per attempt, and only the last
+    # describes the run that produced the outputs. Reading the first one meant a
+    # pipeline re-run with a different --skip_* flag kept routing on the abandoned
+    # attempt's value.
+    from depictio.models.models.nextflow import params_files_newest_first
+
+    candidates = params_files_newest_first(Path(data_root) / "pipeline_info")
     if not candidates:
-        candidates = sorted(Path(data_root).glob("*/pipeline_info/params*.json"))
-        if candidates:
-            logger.warning(
-                f"params.json not found at DATA_ROOT; using a run subdir's params "
-                f"({candidates[0].parent.parent.name}) for route flags. If this DATA_ROOT "
-                f"mixes platforms (e.g. nanopore + illumina runs), pass the route flag "
-                f"explicitly via --var."
-            )
+        for subdir in sorted(Path(data_root).glob("*/pipeline_info")):
+            candidates = params_files_newest_first(subdir)
+            if candidates:
+                logger.warning(
+                    f"params.json not found at DATA_ROOT; using a run subdir's params "
+                    f"({subdir.parent.name}) for route flags. If this DATA_ROOT "
+                    f"mixes platforms (e.g. nanopore + illumina runs), pass the route flag "
+                    f"explicitly via --var."
+                )
+                break
     params: dict = {}
     for c in candidates:
         try:

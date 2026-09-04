@@ -1,0 +1,103 @@
+# -----------------------------
+# Depictio CLI image
+# -----------------------------
+# Lets a pipeline ingest its own results without installing anything on the
+# machine that runs it. The Nextflow completion trigger
+# (depictio/cli/configs/nextflow/depictio.config) can point `depictio.cli` at
+# a `docker run` of this image instead of a local executable, which matters on
+# an HPC head node where installing a Python environment is the hard part.
+#
+# It ships the bundled project templates under depictio/projects/ (about 55 MB,
+# mostly the nf-core reference datasets). Without them `--template
+# nf-core/ampliseq/2.16.0` and manifest auto-resolution have nothing to resolve
+# against, so they are the point of the image rather than incidental weight.
+#
+# The `multiqc` extra is installed deliberately: every nf-core template ingests
+# multiqc/multiqc_data/multiqc.parquet, and without the module that data
+# collection fails and the dashboard import never runs, leaving a green
+# pipeline and an empty project. The build asserts both it and the templates
+# are present before the image can be tagged (see the bottom of this file).
+# -----------------------------
+
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim@sha256:e5b65587bce7de595f299855d7385fe7fca39b8a74baa261ba1b7147afa78e58 AS base
+
+ARG VERSION=latest
+LABEL org.opencontainers.image.description="Depictio CLI: ingest pipeline results into a Depictio instance."
+LABEL org.opencontainers.image.source="https://github.com/depictio/depictio"
+LABEL org.opencontainers.image.version="${VERSION:-latest}"
+LABEL org.opencontainers.image.authors="Thomas Weber <thomas.weber@embl.de>"
+LABEL org.opencontainers.image.licenses="MIT"
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install --no-install-recommends -y \
+        ca-certificates \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG UID=1000
+ARG GID=1000
+RUN groupadd -g ${GID} depictio && \
+    useradd -m -u ${UID} -g ${GID} -s /bin/bash depictio
+
+# ---- Dependency layer (cached across code + version changes) ----
+# The CLI has its own pyproject/lockfile under depictio/cli/, so the dependency
+# install is keyed on those two files alone. --no-install-project keeps the
+# expensive resolve off the source tree, which is copied in the layer below.
+COPY --chown=depictio:depictio depictio/cli/pyproject.toml depictio/cli/uv.lock* /app/depictio/cli/
+WORKDIR /app/depictio/cli
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-install-project --no-dev --extra multiqc \
+    || uv sync --no-install-project --no-dev --extra multiqc
+
+# ---- Project layer (source last) ----
+# depictio/cli/pyproject.toml maps package-dir to the repo root, so the whole
+# depictio tree has to be present before the project itself installs.
+WORKDIR /app
+COPY --chown=depictio:depictio VERSION ./
+COPY --chown=depictio:depictio depictio ./depictio/
+WORKDIR /app/depictio/cli
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --extra multiqc || uv sync --no-dev --extra multiqc
+
+# PYTHONPATH puts /app ahead of site-packages, so `depictio.cli` resolves from
+# the source tree. That is what makes _projects_roots() find /app/depictio/
+# projects: from an installed-only layout the bundled templates are invisible.
+ENV PATH="/app/depictio/cli/.venv/bin:${PATH}"
+ENV PYTHONPATH="/app"
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# Fail the build rather than publish an image that looks fine and ingests
+# nothing. Both of these are installed above, and both can go missing without
+# any visible error:
+#
+#   * multiqc comes from an optional extra, and the `|| uv sync` fallback above
+#     (the convention shared with the API and worker images) hides a lockfile
+#     drift by re-resolving. Every nf-core template ingests
+#     multiqc/multiqc_data/multiqc.parquet as its first data collection, so
+#     without the module that collection fails, the dashboard import never runs,
+#     and the pipeline still reports success over an empty project.
+#   * the bundled templates are found by walking up from the package directory,
+#     so PYTHONPATH and the COPY above are what make them reachable. From an
+#     installed-only layout `--template nf-core/ampliseq/latest` silently
+#     resolves to nothing.
+#   * `config nextflow` is how a head job with no CLI of its own gets the
+#     onComplete snippet, by running this image. The docs hand users that exact
+#     command, so an image that cannot answer it breaks the documented path for
+#     every container-only deployment.
+#
+# Cheap, and it runs on release builds too, unlike the PR-only CI job.
+RUN python -c "import multiqc; print('multiqc', multiqc.__version__)" \
+    && python -c "\
+from depictio.cli.cli.utils.templates import locate_template; \
+print('templates', locate_template('nf-core/ampliseq/latest'))" \
+    && python -m depictio.cli config nextflow
+
+USER depictio
+
+# Entrypoint is the CLI itself, so a caller appends only the subcommand:
+#   docker run --rm ghcr.io/depictio/depictio-cli:<version> run --data-root ...
+ENTRYPOINT ["depictio-cli"]
+CMD ["--help"]

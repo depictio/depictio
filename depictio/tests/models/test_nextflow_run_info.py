@@ -7,6 +7,7 @@ distinct version strings the same pipeline reports depending on how it was
 checked out.
 """
 
+import logging
 from pathlib import Path
 
 import pytest
@@ -249,3 +250,228 @@ class TestNextflowConfigFallback:
         plain.mkdir()
         (plain / "nextflow.config").write_text("process {\n    cpus = 2\n}\n")
         assert _reader().read(plain) is None
+
+
+# A sequencing-runs project points DATA_ROOT at the PARENT of several run_*/
+# directories, each a complete pipeline output with its own pipeline_info. This
+# is the viralrecon layout (~/Data/viralrecon/validation-runs-3.0.0 holds five).
+# Two runs of the same pipeline that executed different tools, which is the
+# normal case: a nanopore run and an illumina run share a project.
+VIRALRECON_NANOPORE = """\
+ARTIC_MINION:
+  artic: 1.2.4
+NANOPLOT:
+  nanoplot: 1.41.6
+Workflow:
+    nf-core/viralrecon: 3.0.0
+    Nextflow: 25.04.6
+"""
+
+VIRALRECON_ILLUMINA = """\
+FASTP:
+  fastp: 0.23.4
+IVAR_VARIANTS:
+  ivar: 1.4.2
+Workflow:
+    nf-core/viralrecon: 3.0.0
+    Nextflow: 25.04.6
+"""
+
+
+class TestSequencingRunsLayout:
+    """DATA_ROOT is the parent of the run directories, not a run itself.
+
+    Reading only `<root>/pipeline_info` left every such project with no engine,
+    no pipeline version, no Nextflow version and no tools, whatever chose the
+    template. The failure was invisible: the ingestion succeeded and simply
+    recorded nothing about what produced the data.
+    """
+
+    @staticmethod
+    def _project(root: Path) -> Path:
+        for name, versions in (
+            ("run_nanopore", VIRALRECON_NANOPORE),
+            ("run_illumina", VIRALRECON_ILLUMINA),
+        ):
+            (_pipeline_info(root / name) / "software_versions.yml").write_text(versions)
+        return root
+
+    def test_identity_is_found_one_level_down(self, tmp_path):
+        info = _reader().read(self._project(tmp_path))
+        assert info is not None
+        assert info.pipeline_name == "nf-core/viralrecon"
+        assert info.pipeline_version == "3.0.0"
+        assert info.engine_version == "25.04.6"
+
+    def test_tools_are_unioned_across_the_runs(self, tmp_path):
+        """Neither run alone describes the project: report what all of them ran."""
+        info = _reader().read(self._project(tmp_path))
+        assert info is not None
+        assert info.tools_executed == {"artic", "nanoplot", "fastp", "ivar"}
+
+    def test_it_records_which_run_the_identity_came_from(self, tmp_path):
+        """Otherwise a version silently describes one run out of several."""
+        info = _reader().read(self._project(tmp_path))
+        assert info is not None
+        assert info.extra["run_subdirs_scanned"] == 2
+        # Deterministic: sorted, so the first run carrying an identity wins.
+        assert info.extra["identity_from_run"] == "run_illumina"
+
+    def test_a_flat_run_is_unchanged(self, tmp_path):
+        """The top level still wins outright, and gains no sequencing-runs keys."""
+        (_pipeline_info(tmp_path) / "software_versions.yml").write_text(VIRALRECON_NANOPORE)
+        (_pipeline_info(tmp_path / "ignored") / "software_versions.yml").write_text(
+            VIRALRECON_ILLUMINA
+        )
+
+        info = _reader().read(tmp_path)
+
+        assert info is not None
+        assert info.tools_executed == {"artic", "nanoplot"}
+        assert "run_subdirs_scanned" not in info.extra
+
+    def test_artefact_paths_come_from_the_identifying_run(self, tmp_path):
+        """Mixing one run's versions with another's params would be incoherent."""
+        root = self._project(tmp_path)
+        (root / "run_illumina" / "pipeline_info" / "params_2026-01-01_00-00-00.json").write_text(
+            '{"platform": "illumina"}'
+        )
+        (root / "run_nanopore" / "pipeline_info" / "params_2026-01-01_00-00-00.json").write_text(
+            '{"platform": "nanopore"}'
+        )
+
+        info = _reader().read(root)
+
+        assert info is not None
+        assert info.extra["identity_from_run"] == "run_illumina"
+        assert info.params["platform"] == "illumina"
+        assert "run_illumina" in str(info.software_versions_path)
+
+    def test_a_directory_with_neither_is_still_unrecognised(self, tmp_path):
+        """A curated project directory is not a pipeline output; say so."""
+        (tmp_path / "multiqc").mkdir()
+        (tmp_path / "small").mkdir()
+        assert _reader().read(tmp_path) is None
+
+
+class TestAMalformedStrayFileCannotDiscardTheIdentity:
+    """The tool-list fallback walks the whole results tree; it must not be fatal.
+
+    Found by fuzzing a real tree: a run whose `pipeline_info/software_versions.yml`
+    carried a perfectly good `Workflow:` section came back completely
+    unidentified, because an unrelated legacy `results/qc/software_versions.yml`
+    three directories away held a YAML list. The catalog reader raised
+    `'list' object has no attribute 'values'`, the exception escaped to the
+    registry, and the registry dropped this reader. Tools are a nice-to-have;
+    the identity is the point, and by then it is already in hand.
+    """
+
+    @staticmethod
+    def _run(root: Path) -> Path:
+        (_pipeline_info(root) / "software_versions.yml").write_text(
+            "Workflow:\n  nf-core/ampliseq: 2.16.0\n  Nextflow: 25.10.0\n"
+        )
+        return root
+
+    def test_a_stray_yaml_list_does_not_lose_the_identity(self, tmp_path):
+        self._run(tmp_path)
+        stray = tmp_path / "results" / "qc"
+        stray.mkdir(parents=True)
+        (stray / "software_versions.yml").write_text("- pas\n- un\n- dict\n")
+
+        info = _reader().read(tmp_path)
+
+        assert info is not None
+        assert info.pipeline_name == "nf-core/ampliseq"
+        assert info.pipeline_version == "2.16.0"
+        assert info.engine_version == "25.10.0"
+
+    def test_a_stray_unparseable_yaml_does_not_lose_the_identity(self, tmp_path):
+        """Not just the wrong type: invalid YAML is the commoner accident."""
+        self._run(tmp_path)
+        stray = tmp_path / "logs"
+        stray.mkdir()
+        (stray / "software_versions.yml").write_text("a: [1, 2\n  b: :::\n")
+
+        info = _reader().read(tmp_path)
+
+        assert info is not None
+        assert info.pipeline_name == "nf-core/ampliseq"
+
+    def test_the_tool_list_is_still_collected_when_the_tree_is_clean(self, tmp_path):
+        """The guard must not swallow the fallback's normal, useful result."""
+        (_pipeline_info(tmp_path) / "software_versions.yml").write_text(
+            "Workflow:\n  nf-core/ampliseq: 2.16.0\n  Nextflow: 25.10.0\n"
+        )
+        legacy = tmp_path / "results"
+        legacy.mkdir()
+        (legacy / "software_versions.yml").write_text(VERSIONS_YAML_NO_WORKFLOW)
+
+        info = _reader().read(tmp_path)
+
+        assert info is not None
+        assert {"fastqc", "multiqc"} <= {t.lower() for t in info.tools_executed}
+
+
+class TestHeterogeneousSequencingRunsRoot:
+    """One identity is reported for the root; choosing it silently is the bug.
+
+    A DATA_ROOT one level too high, or a directory reused across studies, puts
+    runs of different pipelines (or different versions of one) side by side.
+    The reader keeps its deterministic first-sorted choice, but has to say that
+    a choice was made, because the version it reports then describes one run out
+    of several and the tool list belongs to all of them.
+    """
+
+    def test_two_pipelines_under_one_root_are_reported(self, tmp_path, caplog):
+        (_pipeline_info(tmp_path / "run_a") / "software_versions.yml").write_text(
+            "Workflow:\n  nf-core/ampliseq: 2.16.0\n  Nextflow: 25.10.0\n"
+        )
+        (_pipeline_info(tmp_path / "run_b") / "software_versions.yml").write_text(
+            "Workflow:\n  nf-core/viralrecon: 3.0.0\n  Nextflow: 25.10.0\n"
+        )
+
+        with caplog.at_level(logging.WARNING):
+            info = _reader().read(tmp_path)
+
+        assert info is not None
+        assert info.pipeline_name == "nf-core/ampliseq"
+        assert info.extra["identities_seen"] == [
+            "nf-core/ampliseq 2.16.0",
+            "nf-core/viralrecon 3.0.0",
+        ]
+        assert "more than one pipeline" in caplog.text
+
+    def test_two_versions_of_one_pipeline_are_reported(self, tmp_path, caplog):
+        """The likelier accident: a project directory spanning an upgrade."""
+        (_pipeline_info(tmp_path / "run_old") / "software_versions.yml").write_text(
+            "Workflow:\n  nf-core/ampliseq: 2.14.0\n  Nextflow: 24.04.2\n"
+        )
+        (_pipeline_info(tmp_path / "run_new") / "software_versions.yml").write_text(
+            "Workflow:\n  nf-core/ampliseq: 2.18.0\n  Nextflow: 25.10.0\n"
+        )
+
+        with caplog.at_level(logging.WARNING):
+            info = _reader().read(tmp_path)
+
+        assert info is not None
+        assert info.extra["identities_seen"] == [
+            "nf-core/ampliseq 2.14.0",
+            "nf-core/ampliseq 2.18.0",
+        ]
+        assert "more than one pipeline" in caplog.text
+
+    def test_a_homogeneous_root_stays_silent(self, tmp_path, caplog):
+        """The normal viralrecon case must not start warning."""
+        for name, versions in (
+            ("run_nanopore", VIRALRECON_NANOPORE),
+            ("run_illumina", VIRALRECON_ILLUMINA),
+        ):
+            (_pipeline_info(tmp_path / name) / "software_versions.yml").write_text(versions)
+
+        with caplog.at_level(logging.WARNING):
+            info = _reader().read(tmp_path)
+
+        assert info is not None
+        assert "identities_seen" not in info.extra
+        assert "more than one pipeline" not in caplog.text

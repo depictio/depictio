@@ -1,0 +1,94 @@
+# Depictio project configuration for the example pipeline.
+#
+# {DEPICTIO_DATA_ROOT} is expanded by the CLI from the environment variable the
+# onComplete trigger exports, so the same YAML works for every run without
+# hardcoding an output directory.
+name: "Nextflow trigger example"
+
+workflows:
+  - name: "nextflow-trigger-example"
+    description: "Pipeline demonstrating the Depictio onComplete trigger"
+    engine:
+      name: "nextflow"
+
+    data_location:
+      # "flat": the data root itself is the run directory. Use
+      # "sequencing-runs" (plus runs_regex) when the root holds one
+      # subdirectory per run.
+      structure: "flat"
+      locations:
+        - "{DEPICTIO_DATA_ROOT}"
+
+    data_collections:
+      - data_collection_tag: "measurements"
+        description: "Per-sample QC metrics produced by the pipeline"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "measurements\\.tsv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              has_header: true
+            columns_description:
+              sample: "Sample identifier"
+              group: "Experimental group"
+              reads_total: "Reads produced"
+              reads_mapped: "Reads surviving mapping"
+              reads_dedup: "Reads surviving deduplication"
+              mean_quality: "Mean base quality"
+              value: "Headline measurement (thousands of deduplicated reads)"
+              status: "QC verdict: pass, warn or fail"
+
+      # Named after the tool whose column layout it carries, because the
+      # catalog recipe below addresses it by tag. mosdepth writes exactly these
+      # columns, so a real pipeline points this at its own regions.bed.
+      - data_collection_tag: "mosdepth_genome_coverage"
+        description: "Windowed depth in mosdepth's column layout"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "genome_coverage\\.bed$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              has_header: true
+            columns_description:
+              chrom: "Reference sequence"
+              start: "Window start"
+              end: "Window end"
+              coverage: "Mean depth over the window"
+              sample: "Sample identifier"
+
+      # A catalog recipe, not a file: `source: transformed` builds this
+      # collection from the one above instead of scanning the disk. The recipe
+      # renames mosdepth's columns to the canonical coverage-track roles, which
+      # is what lets the shared `coverage_track` visualisation render data it
+      # knows nothing about. Every recipe under depictio/catalog/ is addressable
+      # this way, from any project YAML, not only from a bundled template.
+      - data_collection_tag: "coverage_track_canonical"
+        description: "Coverage-track-ready depth (chromosome / position / value)"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "mosdepth/coverage_track_canonical.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              chromosome: "Reference sequence (renamed from chrom)"
+              position: "Window start (renamed from start)"
+              value: "Mean depth (renamed from coverage)"
+              end: "Window end"
+              sample: "Sample identifier"

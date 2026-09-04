@@ -344,3 +344,37 @@ class TestCommon:
             config = load_depictio_config(str(explicit))
 
             assert config.api_base_url == "https://from-explicit.example.org"
+
+    class TestQuietSuppressesTheLoadingLine:
+        """``quiet=True`` loads the same config without announcing it.
+
+        Callers that re-read an already-loaded config only to name a field —
+        the API URL in the "server unreachable" error, the viewer URL in the
+        run summary — would otherwise print a second "Loading Depictio
+        configuration..." in the middle of reporting a failure, implying a
+        load that never happened.
+        """
+
+        @pytest.fixture
+        def config_file(self, tmp_path, sample_cli_config):
+            config = copy.deepcopy(sample_cli_config)
+            config["api_base_url"] = "https://quiet.example.org"
+            path = tmp_path / "CLI.yaml"
+            path.write_text(yaml.safe_dump(config))
+            return path
+
+        def test_quiet_prints_nothing(self, config_file):
+            with patch("depictio.cli.cli.utils.common.rich_print_checked_statement") as printer:
+                config = load_depictio_config(str(config_file), quiet=True)
+
+            assert config.api_base_url == "https://quiet.example.org"
+            assert printer.call_args_list == []
+
+        def test_default_still_announces_the_load(self, config_file):
+            """The flag is opt-in: every existing call site is unchanged."""
+            with patch("depictio.cli.cli.utils.common.rich_print_checked_statement") as printer:
+                load_depictio_config(str(config_file))
+
+            assert any(
+                "Loading Depictio configuration" in str(call) for call in printer.call_args_list
+            )

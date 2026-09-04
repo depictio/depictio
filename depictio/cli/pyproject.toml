@@ -69,9 +69,38 @@ packages = [
   # Shared anonymous telemetry. The server-only half lives in
   # depictio.api.v1.telemetry, which is deliberately NOT shipped here.
   "depictio.telemetry",
+  # Bundled templates and the recipes they run. `locate_template` reads these
+  # from disk, so without them a pip-installed CLI resolves no --template and
+  # no --pipeline-id at all: the nf-core flow is unusable. The published 1.9.2
+  # wheel shipped zero of the nine templates. Only the container worked, and
+  # only because its Dockerfile copies the source tree and bypasses packaging.
+  "depictio.catalog",
+  "depictio.projects",
 ]
 
-# Add explicit package data if needed
+# Data files are NOT picked up by `packages` alone: every non-.py file the CLI
+# reads at runtime has to be matched by a pattern here, relative to its package
+# directory. Deliberately narrow: `depictio/projects` also holds 54 MB of
+# reference datasets for server-side seeding, which the CLI never opens.
 [tool.setuptools.package-data]
-"depictio.cli" = ["*.yaml", "*.yml", "*.json"]
+"depictio.cli" = [
+  "*.yaml",
+  "*.yml",
+  "*.json",
+  # The Nextflow onComplete snippet users pass to `nextflow run -c`, and the
+  # worked example beside it.
+  "configs/nextflow/*.config",
+  "configs/nextflow/example/*",
+]
 "depictio.recipes" = ["**/*.py"]
+"depictio.catalog" = ["**/*.py", "**/*.yaml", "**/*.json"]
+"depictio.projects" = [
+  "**/template.yaml",
+  "**/dashboards/*.yaml",
+  "**/recipes/*.py",
+]
+
+# A dashboard export used as a test fixture sits next to the CLI package and
+# would otherwise ride along on the "*.yaml" pattern above.
+[tool.setuptools.exclude-package-data]
+"depictio.cli" = ["6824cb3b89d2b72169309737.yaml"]
