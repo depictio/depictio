@@ -677,7 +677,7 @@ class TestRemoteTemplateResolution:
     def test_a_local_metadata_override_is_still_read_under_a_remote_root(
         self, monkeypatch, tmp_path
     ):
-        """A METADATA_FILE outside the root has to fall back to the filesystem.
+        """In the CLI, a METADATA_FILE outside the root falls back to the filesystem.
 
         `--data-root s3://... --var METADATA_FILE=/local/meta.tsv` is a
         supported combination. Bailing out as soon as the root was remote left
@@ -685,6 +685,7 @@ class TestRemoteTemplateResolution:
         group-aware dashboard rendered ungrouped and the run still reported
         success.
         """
+        monkeypatch.setenv("DEPICTIO_CONTEXT", "CLI")
         local_meta = tmp_path / "outside_the_root.tsv"
         local_meta.write_text("ID\tbiome\tdepth\nS1\tsoil\t10\n")
         _config, _meta, _origin, _dashboards, variables = self._resolve(
@@ -693,6 +694,38 @@ class TestRemoteTemplateResolution:
         assert variables["METADATA_ID_COL"] == "ID"
         assert variables["GROUP_COL"] == "biome"
         assert variables["ANNOTATION_COLS"] == "biome,depth"
+
+    def test_a_server_never_probes_its_own_disk_under_a_remote_root(self, monkeypatch, tmp_path):
+        """Outside the CLI the local fallback is an oracle, so it does not exist.
+
+        `POST /projects/from_run` hands user-supplied variables to this
+        resolver. With the fallback live, `METADATA_FILE=/etc/hostname` read
+        the file's first line, and the optional metadata collection came back
+        pruned or kept depending on whether the path existed in the container:
+        any authenticated caller could probe the server's filesystem one path
+        at a time. Present or absent, a local path must now resolve identically
+        and nothing may be read from it.
+        """
+        monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
+        present = tmp_path / "present.tsv"
+        present.write_text("ID\tbiome\tdepth\nS1\tsoil\t10\n")
+        absent = tmp_path / "absent.tsv"
+
+        outcomes = []
+        for path in (present, absent):
+            config, _meta, _origin, _dashboards, variables = self._resolve(
+                monkeypatch, extra_vars={"METADATA_FILE": str(path)}
+            )
+            tags = sorted(
+                dc["data_collection_tag"] for dc in config["workflows"][0]["data_collections"]
+            )
+            outcomes.append((tags, variables.get("METADATA_ID_COL"), variables.get("GROUP_COL")))
+
+        assert outcomes[0] == outcomes[1]
+        tags, id_col, group_col = outcomes[0]
+        assert "metadata" not in tags
+        assert id_col != "ID"
+        assert group_col != "biome"
 
     def test_scan_modes_become_their_remote_counterparts(self, monkeypatch):
         config, _meta, _origin, _dashboards, _variables = self._resolve(monkeypatch)

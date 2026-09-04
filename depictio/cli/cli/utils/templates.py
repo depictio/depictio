@@ -124,6 +124,20 @@ def _is_cli_context() -> bool:
     return get_depictio_context().lower() == "cli"
 
 
+def _local_fallback_allowed(root: DataRoot | None) -> bool:
+    """Whether a location the data root cannot see may be looked up on this disk.
+
+    With no root, or a local one, the filesystem is the data. Under a remote
+    root only the CLI may fall back: there ``--data-root s3://... --var
+    METADATA_FILE=/local/meta.tsv`` is the user reading their own disk. A server
+    resolving a template for a browser must never probe its own disk on a
+    caller's behalf. Even the bare existence answer is an oracle, since an
+    optional collection pruned or kept says whether a path exists in the
+    container.
+    """
+    return root is None or not root.is_remote or _is_cli_context()
+
+
 def _locate_template_path(template_id: str) -> Path | None:
     """The path form: ``template_id`` names an existing directory or YAML file.
 
@@ -306,6 +320,8 @@ def _single_file_location_exists(location: str, root: DataRoot | None) -> bool:
         # A URL outside the root: we cannot see it from here, so we must not
         # claim it is absent. Only locations we can actually check are pruned.
         return True
+    if not _local_fallback_allowed(root):
+        return False
     return Path(location).is_file()
 
 
@@ -1005,6 +1021,8 @@ def _read_header_line(location: str, root: DataRoot | None) -> str | None:
     if "://" in location:
         # A URL outside the root: we cannot read it from here. Falling through
         # to the filesystem would only mis-report it as absent.
+        return None
+    if not _local_fallback_allowed(root):
         return None
 
     path = Path(location)
