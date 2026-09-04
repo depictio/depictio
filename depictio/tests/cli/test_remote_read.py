@@ -27,6 +27,7 @@ from depictio.cli.cli.utils.deltatables import (
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.files import File
 from depictio.models.models.users import Permission, UserBase
+from depictio.tests.cli.s3_stubs import install_s3_listing
 
 
 @pytest.fixture(autouse=True)
@@ -837,26 +838,8 @@ class TestRecipeSourcesOnS3:
 
     @pytest.fixture
     def stub_listing(self, monkeypatch):
-        """Serve ``TREE`` as an S3 listing, honouring ``Prefix``."""
-        keys = [f"{self.PREFIX}{rel}" for rel in self.TREE]
-
-        class _Client:
-            def get_paginator(self, _name):
-                class _Paginator:
-                    def paginate(self, Bucket=None, Prefix="", **_kwargs):  # noqa: N803
-                        yield {
-                            "Contents": [
-                                {"Key": key, "Size": 10, "ETag": f'"{key}"'}
-                                for key in keys
-                                if key.startswith(Prefix)
-                            ]
-                        }
-
-                return _Paginator()
-
-        from depictio.cli.cli.utils import data_root as data_root_module
-
-        monkeypatch.setattr(data_root_module, "s3_read_client", lambda _url, _cfg: _Client())
+        """Serve ``TREE`` as an S3 listing under this class's prefix."""
+        install_s3_listing(monkeypatch, dict.fromkeys(self.TREE, b"x" * 10), self.PREFIX)
 
     @pytest.fixture
     def public_bucket(self, monkeypatch):
@@ -1075,9 +1058,9 @@ class TestSequencingRunsOnS3:
     """The ``sequencing-runs`` recipe branch, scoped without re-listing.
 
     ``process_recipe_data_collection`` builds its per-run roots as
-    ``[_ScopedDataRoot(base_root, run) for run in base_root.runs(runs_regex)]``;
-    that expression is what is exercised here, since the surrounding function
-    also writes Delta tables and talks to the API.
+    ``[base_root.scoped(run) for run in base_root.runs(runs_regex)]``; that
+    expression is what is exercised here, since the surrounding function also
+    writes Delta tables and talks to the API.
     """
 
     BUCKET = "nf-core-awsmegatests"
@@ -1093,34 +1076,15 @@ class TestSequencingRunsOnS3:
 
     @pytest.fixture
     def base_root(self, monkeypatch):
-        keys = [f"{self.PREFIX}{rel}" for rel in self.TREE]
-
-        class _Client:
-            def get_paginator(self, _name):
-                class _Paginator:
-                    def paginate(self, Bucket=None, Prefix="", **_kwargs):  # noqa: N803
-                        yield {
-                            "Contents": [
-                                {"Key": key, "Size": 10, "ETag": f'"{key}"'}
-                                for key in keys
-                                if key.startswith(Prefix)
-                            ]
-                        }
-
-                return _Paginator()
-
-        from depictio.cli.cli.utils import data_root as data_root_module
         from depictio.cli.cli.utils.data_root import data_root_for
 
         monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", self.BUCKET)
-        monkeypatch.setattr(data_root_module, "s3_read_client", lambda _url, _cfg: _Client())
+        install_s3_listing(monkeypatch, dict.fromkeys(self.TREE, b"x" * 10), self.PREFIX)
         return data_root_for(self.ROOT, None)
 
     @staticmethod
     def _run_roots(base_root, runs_regex):
-        from depictio.cli.cli.utils.deltatables import _ScopedDataRoot
-
-        return [_ScopedDataRoot(base_root, run) for run in base_root.runs(runs_regex)]
+        return [base_root.scoped(run) for run in base_root.runs(runs_regex)]
 
     def test_one_scoped_root_per_matching_run(self, base_root):
         roots = self._run_roots(base_root, "run_")

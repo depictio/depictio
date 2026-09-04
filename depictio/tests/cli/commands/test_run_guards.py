@@ -12,15 +12,15 @@ from typer.testing import CliRunner
 
 from depictio.cli.cli.commands import run as run_module
 from depictio.cli.cli.utils import rich_utils
-from depictio.cli.cli.utils.templates import RunPreview
+from depictio.cli.cli.utils.template_preview import RunPreview
 from depictio.cli.depictio_cli import app
 
-# The S3 listing stub is shared with the templates tests rather than rewritten:
-# one fixture tree, one definition of what a megatest prefix looks like.
-from depictio.tests.cli.utils.test_templates import (
+# One fixture tree, one definition of what a megatest prefix looks like: the
+# same stub the DataRoot and template tests run against.
+from depictio.tests.cli.s3_stubs import (
     MEGATEST_TREE,
     S3_ROOT,
-    install_s3_listing,
+    install_megatest_listing,
     s3_cli_config,
     write_tree,
 )
@@ -210,7 +210,7 @@ def _fake_resolve_template(**kwargs):
 
 def test_remote_data_root_clears_the_preflight_guard(monkeypatch, stub_cli_config, wide_console):
     """An `s3://` root has nothing to stat: the directory check must not run."""
-    install_s3_listing(monkeypatch, MEGATEST_TREE)
+    install_megatest_listing(monkeypatch)
     result = runner.invoke(
         app, ["run", "--template", TEMPLATE, "--data-root", S3_ROOT, "--dry-run"]
     )
@@ -233,6 +233,7 @@ def test_local_data_root_that_does_not_exist_still_fails(stub_cli_config):
 def test_cli_config_reaches_the_resolver_and_the_preview(monkeypatch, tmp_path, stub_cli_config):
     """Without it a remote root can only read an allowlisted public bucket, so
     the config has to be loaded before step 0, not after it."""
+    from depictio.cli.cli.utils import template_preview as preview_module
     from depictio.cli.cli.utils import templates as templates_module
 
     seen: dict[str, object] = {}
@@ -253,7 +254,7 @@ def test_cli_config_reaches_the_resolver_and_the_preview(monkeypatch, tmp_path, 
         )
 
     monkeypatch.setattr(templates_module, "resolve_template", fake_resolve)
-    monkeypatch.setattr(templates_module, "preview_data_root", fake_preview)
+    monkeypatch.setattr(preview_module, "preview_data_root", fake_preview)
 
     result = runner.invoke(
         app, ["run", "--template", "stub/template/1", "--data-root", str(tmp_path), "--dry-run"]
@@ -268,7 +269,7 @@ def test_dry_run_names_the_sources_a_collection_could_not_find(
 ):
     """A count of zero does not tell you your prefix is one level too high; the
     paths it looked for do."""
-    install_s3_listing(monkeypatch, MEGATEST_TREE)
+    install_megatest_listing(monkeypatch)
     result = runner.invoke(
         app, ["run", "--template", TEMPLATE, "--data-root", S3_ROOT, "--dry-run"]
     )
@@ -289,13 +290,14 @@ def test_preview_failure_surfaces_as_a_template_resolution_failure(
     monkeypatch, tmp_path, stub_cli_config
 ):
     """A missing required variable must not be swallowed by the preview."""
+    from depictio.cli.cli.utils import template_preview as preview_module
     from depictio.cli.cli.utils import templates as templates_module
 
     def boom(**_kwargs):
         raise ValueError("Missing required template variable: METADATA_FILE")
 
     monkeypatch.setattr(templates_module, "resolve_template", _fake_resolve_template)
-    monkeypatch.setattr(templates_module, "preview_data_root", boom)
+    monkeypatch.setattr(preview_module, "preview_data_root", boom)
 
     result = runner.invoke(
         app, ["run", "--template", "stub/template/1", "--data-root", str(tmp_path), "--dry-run"]

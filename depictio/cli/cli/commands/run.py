@@ -1,6 +1,7 @@
 import functools
 import os
 import signal
+from collections import Counter
 from collections.abc import Callable
 from contextvars import ContextVar
 from pathlib import Path
@@ -25,6 +26,7 @@ from depictio.cli.cli.utils.common import (
 from depictio.cli.cli.utils.config import validate_project_config_and_check_S3_storage
 from depictio.cli.cli.utils.helpers import process_project_helper
 from depictio.cli.cli.utils.rich_utils import (
+    render_records_table,
     rich_print_checked_statement,
     rich_print_command_usage,
     rich_print_section_separator,
@@ -35,9 +37,9 @@ from depictio.models.models.manifest import is_remote_url
 from depictio.models.s3_utils import S3_storage_checks
 from depictio.models.utils import convert_model_to_dict
 
-# Colour per preview status, so a wrong --data-root is visible at a glance.
-# Same palette ``rich_print_checked_statement`` uses for success / warning /
-# error, so the table reads like the rest of the CLI.
+# Colour per ``template_preview.PreviewStatus``, so a wrong --data-root is
+# visible at a glance. Same palette ``rich_print_checked_statement`` uses for
+# success / warning / error, so the table reads like the rest of the CLI.
 _PREVIEW_STATUS_STYLES = {
     "ok": "green",
     "empty": "orange1",
@@ -305,10 +307,8 @@ def _render_run_preview(preview) -> None:
     looked for, because "0 files" on its own does not tell you that your
     prefix is one level too high.
 
-    Takes a ``templates.RunPreview``.
+    Takes a ``template_preview.RunPreview``.
     """
-    from depictio.cli.cli.utils.rich_utils import render_records_table
-
     rich_print_checked_statement(f"Template: {preview.template_id}", "info")
     rich_print_checked_statement(f"Data root: {preview.data_root}", "info")
     rich_print_checked_statement(f"Project name: {preview.project_name}", "info")
@@ -384,9 +384,7 @@ def _render_run_preview(preview) -> None:
                 sources = [location]
             rich_print_checked_statement(f"{dc.tag}: {', '.join(sources)}", "warning")
 
-    counts = {status: 0 for status in ("ok", "empty", "missing", "pruned")}
-    for dc in preview.data_collections:
-        counts[dc.status] = counts.get(dc.status, 0) + 1
+    counts = Counter(dc.status for dc in preview.data_collections)
     summary = (
         f"{counts['ok']} data collection(s) will ingest, "
         f"{counts['empty']} empty, {counts['missing']} missing sources"
@@ -1091,7 +1089,7 @@ def register_run_command(app: typer.Typer):
                     # The whole point of a dry run: say what this data root
                     # would actually yield, per data collection, rather than
                     # reporting success for steps that were all skipped.
-                    from depictio.cli.cli.utils.templates import preview_data_root
+                    from depictio.cli.cli.utils.template_preview import preview_data_root
 
                     rich_print_section_separator("Dry run: what this data root would ingest")
                     _render_run_preview(

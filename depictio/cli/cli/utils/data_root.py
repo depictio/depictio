@@ -19,9 +19,10 @@ here rather than in ``scan.py`` so the dependency runs one way only:
 
 from __future__ import annotations
 
+import copy
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Protocol
@@ -192,6 +193,14 @@ def _glob_to_regex(pattern: str) -> re.Pattern[str]:
     ``**/`` spans directories, ``*`` and ``?`` stop at ``/``, character classes
     pass through and everything else is escaped. This is what lets an in-memory
     S3 listing answer ``glob`` the way ``Path.glob`` answers it on disk.
+
+    Deliberately *not* the fnmatch dialect ``scan.list_s3_prefix`` matches its
+    own ``pattern`` with, where ``*`` spans ``/`` as well. Both are right for
+    their caller: a recipe's ``glob_pattern`` is written against a directory
+    tree and must mean on S3 what it means on disk, while an ``s3_prefix``
+    scan's pattern is the remote twin of a *recursive* walk, so ``*.csv`` there
+    is meant to reach into sub-prefixes. Merging them would break one of the
+    two, so they stay separate.
     """
     out: list[str] = []
     index = 0
@@ -257,6 +266,9 @@ class DataRoot(Protocol):
 
     is_remote: bool
 
+    truncated: bool
+    """Whether the root's view of the location is partial (a capped listing)."""
+
     def exists(self, rel: str) -> bool:
         """Whether ``rel`` names a file or a directory under the root."""
         ...
@@ -271,6 +283,15 @@ class DataRoot(Protocol):
 
     def runs(self, runs_regex: str) -> list[str]:
         """Sorted first-level directory names matching ``runs_regex``."""
+        ...
+
+    def scoped(self, sub: str) -> DataRoot:
+        """The same root narrowed to the sub-directory ``sub``.
+
+        A ``sequencing-runs`` layout runs the same recipe once per run, so this
+        must never cost a second listing: an implementation answers from what
+        it already holds.
+        """
         ...
 
     def url(self, rel: str) -> str:
@@ -297,6 +318,9 @@ class LocalDataRoot:
     """A data root that is a directory on disk. A thin ``pathlib`` wrapper."""
 
     is_remote = False
+    # A directory is read as it is at the moment of the question, so a local
+    # root never has a partial view of itself.
+    truncated = False
 
     def __init__(self, location: str):
         self.location = location
@@ -340,6 +364,10 @@ class LocalDataRoot:
             for path in self._root.iterdir()
             if path.is_dir() and re.match(runs_regex, path.name)
         )
+
+    def scoped(self, sub: str) -> LocalDataRoot:
+        """A sub-directory is just another directory, so it is another root."""
+        return LocalDataRoot(self.url(sub)) if _normalize_relative(sub) else self
 
     def url(self, rel: str) -> str:
         return os.path.abspath(str(self._child(rel)))
@@ -438,16 +466,23 @@ class S3DataRoot:
                 "credentials for the project or the instance."
             )
 
-        self.objects, self.truncated = list_s3_objects(
+        objects, truncated = list_s3_objects(
             f"s3://{bucket}/{self._prefix}", CLI_config, max_keys=max_keys
         )
-        if self.truncated:
+        if truncated:
             logger.warning(
                 f"Listing of '{location}' stopped at {max_keys} keys; the data root's view "
                 "of it is partial."
             )
+        self._index(objects, truncated)
 
-        self._files = {obj.relative: obj for obj in self.objects}
+        self._client_cache = None
+
+    def _index(self, objects: list[RemoteObject], truncated: bool) -> None:
+        """Adopt a listing as the set of objects every question is answered from."""
+        self.objects = objects
+        self.truncated = truncated
+        self._files = {obj.relative: obj for obj in objects}
         # S3 has no directories. Synthesising them from the key prefixes is what
         # makes ``exists``, ``glob`` and ``runs`` answer the way they do on
         # disk; without it "input/*" would silently miss a sub-prefix that
@@ -457,8 +492,6 @@ class S3DataRoot:
             parts = relative.split("/")[:-1]
             for depth in range(1, len(parts) + 1):
                 self._dirs.add("/".join(parts[:depth]))
-
-        self._client_cache = None
 
     def __repr__(self) -> str:
         return f"S3DataRoot({self.location!r}, {len(self.objects)} objects)"
@@ -505,6 +538,35 @@ class S3DataRoot:
             for segment in self._dirs
             if "/" not in segment and re.match(runs_regex, segment)
         )
+
+    def scoped(self, sub: str) -> S3DataRoot:
+        """A view of ``sub`` over the listing this root already holds.
+
+        The objects are here already, so narrowing is a filter, never a second
+        ``list_objects_v2`` walk: a 40-run prefix costs one listing, not 41.
+
+        A shallow copy, so the view carries the parent's bucket, credentials,
+        truncation flag and whatever read client the parent had already built.
+        It is a full :class:`S3DataRoot`, ``runs()`` included, because it is one:
+        a prefix under a prefix is still a prefix.
+        """
+        sub = _normalize_relative(sub)
+        if not sub:
+            return self
+        scope = f"{sub}/"
+        view = copy.copy(self)
+        view.location = self.url(sub)
+        view.name = sub.rsplit("/", 1)[-1]
+        view._prefix = f"{self._prefix}{scope}"
+        view._index(
+            [
+                replace(obj, relative=obj.relative[len(scope) :])
+                for obj in self.objects
+                if obj.relative.startswith(scope)
+            ],
+            self.truncated,
+        )
+        return view
 
     def url(self, rel: str) -> str:
         rel = _normalize_relative(rel)
@@ -577,3 +639,26 @@ def data_root_for(location: str, CLI_config=None) -> DataRoot:
             )
         return S3DataRoot(location, CLI_config)
     return LocalDataRoot(location)
+
+
+def as_data_root(value: str | Path | DataRoot | None, CLI_config=None) -> DataRoot | None:
+    """A :class:`DataRoot` for a user-supplied location, or an existing root.
+
+    ``None`` stays ``None`` (manifest-driven templates have no data root at
+    all). A local path is made absolute first, so the root's own ``location``
+    is what ``{DATA_ROOT}`` substitutes to; a URL is passed through verbatim,
+    since ``Path("s3://b/k").absolute()`` would silently produce
+    ``<cwd>/s3:/b/k`` and corrupt every path derived from it.
+
+    Accepting an already-built root is what lets a caller that needs the root
+    itself (the data-root preview) hand the same one to ``resolve_template``
+    instead of paying for a second S3 listing.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, (str, Path)):
+        return value
+    location = str(value)
+    if "://" not in location:
+        location = str(Path(location).absolute())
+    return data_root_for(location, CLI_config)

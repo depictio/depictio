@@ -19,14 +19,11 @@ directory works unchanged against an ``s3://`` prefix. The data is still
 synthetic - a stubbed key listing, no network.
 """
 
-import io
 import json
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
-from depictio.cli.cli.utils import data_root as data_root_module
 from depictio.cli.cli.utils.data_root import data_root_for
 from depictio.cli.cli.utils.templates import (
     OPTIONAL_SOURCE_MISSING_REASON,
@@ -43,6 +40,15 @@ from depictio.models.models.templates import (
     TemplateMetadata,
     TemplateOrigin,
     TemplateVariable,
+)
+from depictio.tests.cli.s3_stubs import (
+    MEGATEST_TREE,
+    S3_BUCKET,
+    S3_ROOT,
+    install_megatest_listing,
+    s3_cli_config,
+    s3_data_root,
+    write_tree,
 )
 
 
@@ -620,92 +626,8 @@ class TestLocateTemplateConfinement:
 #
 # A data root that is an ``s3://`` prefix answers the same questions a directory
 # does, so template resolution should not be able to tell them apart. The
-# listing is stubbed at the client factory: no network, and the key list is the
-# whole fixture.
-
-S3_BUCKET = "nf-core-awsmegatests"
-S3_KEY_PREFIX = "ampliseq/results-3d5c7e5b/"
-S3_ROOT = f"s3://{S3_BUCKET}/{S3_KEY_PREFIX.rstrip('/')}"
-
-# Shaped like the nf-core/ampliseq AWS megatest prefix the template documents:
-# the samplesheet and metadata under input/, the run's params under
-# pipeline_info/, the MultiQC parquet, and one QIIME2 output per recipe family.
-MEGATEST_PARAMS = {
-    "metadata": "s3://nf-core-awsmegatests/ampliseq/Metadata_full.tsv",
-    "FW_primer": "GTGYCAGCMGCCGCGGTAA",
-    "ancombc": False,
-}
-
-MEGATEST_TREE: dict[str, bytes] = {
-    "input/samplesheet.csv": b"sampleID,forwardReads\nS1,S1_R1.fastq.gz\n",
-    "input/Metadata_full.tsv": b"sample\thabitat\ttreatment\nS1\tsoil\tcontrol\n",
-    "pipeline_info/params_2026-01-16_12-00-00.json": json.dumps(MEGATEST_PARAMS).encode(),
-    "multiqc/multiqc_data/multiqc.parquet": b"PAR1",
-    "qiime2/barplot/level-2.csv": b"index,Bacteria\nS1,42\n",
-    "qiime2/phylogenetic_tree/tree.nwk": b"(S1);",
-}
-
-
-class StubS3Client:
-    """Serves a fixed key list the way ``list_objects_v2`` does.
-
-    Honours ``Prefix``, because an S3 prefix is a plain string match: a root
-    that forgot its trailing slash would list a sibling prefix as its own.
-    """
-
-    def __init__(self, bodies: dict[str, bytes]):
-        self.bodies = bodies
-        self.get_object_calls: list[str] = []
-
-    def get_paginator(self, _name):
-        client = self
-
-        class _Paginator:
-            def paginate(self, Bucket=None, Prefix="", **_kwargs):  # noqa: N803
-                yield {
-                    "Contents": [
-                        {"Key": key, "Size": len(body), "ETag": f'"{key}"'}
-                        for key, body in client.bodies.items()
-                        if key.startswith(Prefix)
-                    ]
-                }
-
-        return _Paginator()
-
-    def get_object(self, Bucket, Key):  # noqa: N803 - boto3's own spelling
-        self.get_object_calls.append(Key)
-        return {"Body": io.BytesIO(self.bodies[Key])}
-
-
-def s3_cli_config():
-    """A config with per-project credentials, so no allowlist entry is needed."""
-    return SimpleNamespace(
-        remote_storage_options={"aws_access_key_id": "k", "aws_secret_access_key": "s"},
-        s3_storage=None,
-    )
-
-
-def install_s3_listing(
-    monkeypatch, tree: dict[str, bytes], key_prefix: str = S3_KEY_PREFIX
-) -> StubS3Client:
-    """Stub every S3 read with ``tree``, keyed relative to ``key_prefix``."""
-    client = StubS3Client({f"{key_prefix}{rel}": body for rel, body in tree.items()})
-    monkeypatch.setattr(data_root_module, "s3_read_client", lambda _url, _cfg: client)
-    return client
-
-
-def s3_data_root(monkeypatch, tree: dict[str, bytes], location: str = S3_ROOT):
-    install_s3_listing(monkeypatch, tree)
-    return data_root_for(location, s3_cli_config())
-
-
-def write_tree(base: Path, tree: dict[str, bytes]) -> Path:
-    """The same fixture on disk, so local and remote can be compared directly."""
-    for rel, body in tree.items():
-        path = base / rel
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(body)
-    return base
+# listing and the megatest fixture tree come from ``depictio.tests.cli.s3_stubs``:
+# no network, and the key list is the whole fixture.
 
 
 def _scans_by_tag(config: dict) -> dict[str, dict]:
@@ -720,7 +642,7 @@ class TestRemoteTemplateResolution:
     """A real shipped template resolved against an ``s3://`` prefix."""
 
     def _resolve(self, monkeypatch, tree=None, **kwargs):
-        install_s3_listing(monkeypatch, MEGATEST_TREE if tree is None else tree)
+        install_megatest_listing(monkeypatch, tree)
         from depictio.cli.cli.utils.templates import resolve_template
 
         return resolve_template(
@@ -848,7 +770,7 @@ class TestLocalResolutionIsUnchanged:
         """The remote path must not lose or invent a DC: only locations change."""
         base = write_tree(tmp_path / "results-3d5c7e5b", MEGATEST_TREE)
         local = self._resolve(str(base))[0]
-        install_s3_listing(monkeypatch, MEGATEST_TREE)
+        install_megatest_listing(monkeypatch)
         from depictio.cli.cli.utils.templates import resolve_template
 
         remote = resolve_template("nf-core/ampliseq/2.16.0", S3_ROOT, CLI_config=s3_cli_config())[0]
@@ -859,8 +781,8 @@ class TestPreviewDataRoot:
     """What `--data-root` would yield, before anything is created."""
 
     def _preview(self, monkeypatch, tree=None, **kwargs):
-        install_s3_listing(monkeypatch, MEGATEST_TREE if tree is None else tree)
-        from depictio.cli.cli.utils.templates import preview_data_root
+        install_megatest_listing(monkeypatch, tree)
+        from depictio.cli.cli.utils.template_preview import preview_data_root
 
         return preview_data_root(
             "nf-core/ampliseq/2.16.0", S3_ROOT, CLI_config=s3_cli_config(), **kwargs
@@ -923,7 +845,7 @@ class TestPreviewDataRoot:
         assert (row.status, row.optional, row.matched) == ("pruned", True, 0)
 
     def test_a_local_data_root_previews_the_same_way(self, tmp_path):
-        from depictio.cli.cli.utils.templates import preview_data_root
+        from depictio.cli.cli.utils.template_preview import preview_data_root
 
         base = write_tree(tmp_path / "results", MEGATEST_TREE)
         preview = preview_data_root("nf-core/ampliseq/2.16.0", str(base))
@@ -946,7 +868,7 @@ class TestPreviewRunScoping:
     }
 
     def test_matches_are_summed_across_the_detected_runs(self, monkeypatch):
-        from depictio.cli.cli.utils.templates import _preview_scan_dc
+        from depictio.cli.cli.utils.template_preview import _preview_scan_dc
 
         root = s3_data_root(monkeypatch, self.RUNS_TREE)
         assert root.runs("run_.*") == ["run_1", "run_2"]
@@ -964,7 +886,7 @@ class TestPreviewRunScoping:
 
     def test_a_prefix_outside_the_root_is_not_reported_as_empty_data(self, monkeypatch):
         """An s3_prefix on another bucket is invisible to this root's listing."""
-        from depictio.cli.cli.utils.templates import _preview_scan_dc
+        from depictio.cli.cli.utils.template_preview import _preview_scan_dc
 
         root = s3_data_root(monkeypatch, self.RUNS_TREE)
         dc_config = {
@@ -978,7 +900,7 @@ class TestPreviewRunScoping:
 
     def test_a_glob_pattern_is_translated_for_the_matcher(self, monkeypatch):
         """s3_prefix patterns are globs unless they say `pattern_syntax: regex`."""
-        from depictio.cli.cli.utils.templates import _preview_scan_dc
+        from depictio.cli.cli.utils.template_preview import _preview_scan_dc
 
         root = s3_data_root(monkeypatch, self.RUNS_TREE)
         dc_config = {

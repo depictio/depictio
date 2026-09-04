@@ -142,6 +142,12 @@ def _as_data_root(data_dir: str | Path | DataRoot) -> DataRoot:
     (the ingestion layer, which may have built an :class:`S3DataRoot` from one
     paginated listing) hands it straight through, so a recipe with a dozen
     sources costs no extra listings.
+
+    Deliberately not ``data_root.as_data_root``: that one coerces a location a
+    *user* supplied, so it absolutises a path and reads an ``s3://`` string as a
+    prefix. A recipe's ``data_dir`` has always meant a directory on disk and
+    keeps whatever spelling the caller used; a remote root reaches here as an
+    already-built :class:`DataRoot`, never as a string.
     """
     if isinstance(data_dir, str | Path):
         # Imported lazily: ``depictio.recipes`` is pulled in by the API and the
@@ -182,20 +188,21 @@ def _read_source_file(
     if remote and storage_options is not None:
         kwargs["storage_options"] = storage_options
 
-    if source.format == "csv":
-        if remote:
-            return pl.scan_csv(location, **kwargs).collect()
-        return pl.read_csv(location, **kwargs)
-    elif source.format == "tsv":
-        if remote:
-            return pl.scan_csv(location, separator="\t", **kwargs).collect()
-        return pl.read_csv(location, separator="\t", **kwargs)
-    elif source.format == "parquet":
-        if remote:
-            return pl.scan_parquet(location, **kwargs).collect()
-        return pl.read_parquet(location, **kwargs)
-    else:
+    # (lazy reader, eager reader, kwargs the format itself implies). Looked up
+    # per call rather than built once at import, so the readers stay the
+    # attributes of ``pl`` at the time of the read.
+    readers = {
+        "csv": (pl.scan_csv, pl.read_csv, {}),
+        "tsv": (pl.scan_csv, pl.read_csv, {"separator": "\t"}),
+        "parquet": (pl.scan_parquet, pl.read_parquet, {}),
+    }
+    if source.format not in readers:
         raise RecipeError(f"Unsupported format: {source.format}")
+
+    scan, read, format_kwargs = readers[source.format]
+    if remote:
+        return scan(location, **format_kwargs, **kwargs).collect()
+    return read(location, **format_kwargs, **kwargs)
 
 
 def _resolve_glob_source(
