@@ -231,6 +231,39 @@ def test_a_dc_on_another_bucket_is_refused(mock_db, megatest_s3):
     assert other in exc.value.detail
 
 
+# ── variable confinement ─────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "/etc/hostname",
+        "s3://someone-elses-bucket/x",
+        "input/../../x",
+    ],
+)
+def test_a_variable_pointing_outside_the_root_is_refused(mock_db, megatest_s3, value):
+    megatest_s3()
+    with pytest.raises(HTTPException) as exc:
+        _call(project_name="escapee", variables={"METADATA_FILE": value}, dry_run=True)
+    assert exc.value.status_code == 422
+    assert "METADATA_FILE" in exc.value.detail
+    assert mock_db["projects"].count_documents({}) == 0
+
+
+def test_variables_that_stay_under_the_root_are_accepted(mock_db, megatest_s3):
+    megatest_s3()
+    same_root_file = f"{S3_ROOT}/input/Metadata_full.tsv"
+    report = _call(
+        project_name="run42",
+        # An s3:// URL under the same root, and a plain relative key: neither
+        # is refused.
+        variables={"METADATA_FILE": same_root_file, "GROUP_COL": "habitat"},
+        dry_run=True,
+    )
+    assert report.success is True
+
+
 # ── dry run ──────────────────────────────────────────────────────────────────
 
 
@@ -330,8 +363,12 @@ def test_a_real_run_creates_the_project_and_dispatches_one_task_per_collection(
 
     rows = _rows(report)
     ingestable = sorted(tag for tag, row in rows.items() if row.status != "missing")
-    unreachable = sorted(tag for tag, row in rows.items() if row.status == "missing")
-    assert ingestable and unreachable  # the fixture exercises both halves
+    missing = {tag: row for tag, row in rows.items() if row.status == "missing"}
+    # The template marks most of these collections optional (seed-only
+    # canonicals, route-specific outputs); a couple are required.
+    required_missing = sorted(tag for tag, row in missing.items() if not row.optional)
+    optional_missing = sorted(tag for tag, row in missing.items() if row.optional)
+    assert ingestable and required_missing and optional_missing  # exercises all three
 
     payloads = _dispatched_payloads(task)
     assert sorted(p["dc_tag"] for p in payloads) == ingestable
@@ -340,16 +377,38 @@ def test_a_real_run_creates_the_project_and_dispatches_one_task_per_collection(
     assert all(p["dc_id"] and p["sync_files"] is True for p in payloads)
     assert all(p["user"]["id"] == str(user.id) for p in payloads)
 
-    # A collection whose source is absent never reaches a worker: it is seeded
-    # as a failed step saying why, not shown as a task that cannot succeed.
+    # A recipe DC's payload waits on its own recipe's dc_ref sources, only
+    # those that still have a step in this run, never on a DC that has none.
+    payloads_by_tag = {p["dc_tag"]: p for p in payloads}
+    assert payloads_by_tag["taxonomy_heatmap"]["depends_on"] == [
+        "taxonomy_rel_abundance",
+        "metadata",
+    ]
+    assert payloads_by_tag["embedding_pcoa"]["depends_on"] == ["taxonomy_heatmap", "metadata"]
+    # bray_curtis_canonical's only dc_ref (taxonomy_rel_abundance) is a
+    # required-missing collection: seeded failed (terminal) from the start,
+    # still named as a dependency so the worker never has to guess why.
+    assert payloads_by_tag["bray_curtis_canonical"]["depends_on"] == ["taxonomy_rel_abundance"]
+    assert "depends_on" not in payloads_by_tag["multiqc_data"]
+    assert "depends_on" not in payloads_by_tag["samplesheet"]
+    assert "depends_on" not in payloads_by_tag["taxonomy_composition"]
+
+    # A collection whose source is absent never reaches a worker. A required
+    # one is seeded as a failed step saying why; one the template marks
+    # optional is a nominal absence, seeded "skipped" instead.
     run_doc = mock_db["ingestion_runs"].find_one({"run_id": report.run_id})
     assert run_doc["command"] == "from_run"
     assert run_doc["data_root"] == S3_ROOT
     assert run_doc["project_id"] == report.project_id
     steps = {step["name"]: step for step in run_doc["steps"]}
     assert sorted(name for name, s in steps.items() if s["status"] == "pending") == ingestable
-    assert sorted(name for name, s in steps.items() if s["status"] == "failed") == unreachable
-    assert all(steps[name]["detail"] for name in unreachable)
+    assert sorted(name for name, s in steps.items() if s["status"] == "failed") == required_missing
+    assert sorted(name for name, s in steps.items() if s["status"] == "skipped") == optional_missing
+    assert all(steps[name]["detail"] for name in required_missing)
+    assert all(
+        steps[name]["detail"].startswith("Skipped optional collection:")
+        for name in optional_missing
+    )
     # The run records each collection's real scan mode, not "manifest".
     modes = {dc["tag"]: dc["scan_mode"] for dc in run_doc["data_collections"]}
     assert modes["multiqc_data"] == "s3_prefix"
@@ -404,6 +463,9 @@ def test_poll_route_serves_a_from_run_ingestion(mock_db, megatest_s3):
     assert by_tag["multiqc_data"].data_collection_id
     assert by_tag["alpha_rarefaction"].status == "failed"
     assert "alpha_rarefaction" not in [tag for tag, row in rows.items() if row.status != "missing"]
+    # An optional collection the run folder doesn't produce polls "skipped",
+    # not "failed": a nominal absence, not something that went wrong.
+    assert by_tag["sankey_canonical"].status == "skipped"
 
     # A run belonging to somebody else is not readable.
     with (

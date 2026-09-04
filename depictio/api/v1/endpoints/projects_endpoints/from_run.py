@@ -210,8 +210,52 @@ def _build_data_root(data_root: str):
     return root
 
 
+def _assert_variables_confined(variables: dict[str, str], root) -> None:
+    """Refuse a template variable whose value would read from outside the data root.
+
+    ``resolve_template``'s ``{VAR}`` substitution has a local-filesystem
+    fallback for a value that doesn't resolve under the given root: right for
+    the CLI, where the run lives on the operator's own disk and a path
+    elsewhere on it is unremarkable, wrong for a server accepting a variable
+    from a browser, which must never go probing its own filesystem on a
+    user's behalf. Gating that fallback itself on CLI context is the other
+    half of this fix, in ``templates.py``; this is the clear error in front
+    of it, raised before ``resolve_template`` ever runs.
+
+    A value with no leading ``/``, no ``://`` and no ``..`` segment is a plain
+    key relative to the root (``"input/Metadata_full.tsv"``, ``"habitat"``)
+    and passes untouched: that's the overwhelming majority of variables, and
+    they can't name anything outside the root to begin with. A ``..`` segment
+    is refused outright: unlike an absolute path or a URL, a literal ``..`` in
+    an otherwise root-relative value is not something ``root.relative_of``
+    resolves away, so it cannot be trusted to answer for it.
+    """
+    for name, value in variables.items():
+        segments = value.split("/")
+        if ".." in segments:
+            escapes = True
+        elif value.startswith("/") or "://" in value:
+            escapes = root.relative_of(value) is None
+        else:
+            escapes = False
+        if escapes:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Variable '{name}' points outside the data root '{root.location}'. "
+                    "A template used from a run folder must read only from that folder."
+                ),
+            )
+
+
 def _skip_reason(row) -> str:
-    """Why a data collection the preview called ``missing`` is not dispatched."""
+    """Why a data collection the preview called ``missing`` isn't dispatched.
+
+    Used verbatim for a required collection's failed-step detail; prefixed
+    with "Skipped optional collection: " for an optional one's skipped-step
+    detail (see the ``preflight_failed`` / ``preflight_skipped`` split in
+    ``_create_project_from_run``).
+    """
     if row.missing_sources:
         return (
             "Not ingested: source(s) not found under the data root: "
@@ -241,6 +285,7 @@ def _create_project_from_run(
         raise HTTPException(status_code=422, detail=str(exc))
 
     root = _build_data_root(data_root)
+    _assert_variables_confined(variables or {}, root)
 
     # One root, two consumers. resolve_template gives the config the project is
     # built from; preview_data_root gives the per-collection rows the UI shows.
@@ -379,7 +424,8 @@ def _create_project_from_run(
     # the durable status of record.
     stored = projects_collection.find_one({"_id": project_oid}) or {}
     to_dispatch: list[tuple[str, str, int, int]] = []
-    skipped: list[tuple[str, str, str]] = []
+    preflight_failed: list[tuple[str, str, str]] = []
+    preflight_skipped: list[tuple[str, str, str]] = []
     scan_modes: dict[str, str] = {}
     for wf_index, workflow_dict in enumerate(stored.get("workflows") or []):
         for dc_dict in workflow_dict.get("data_collections") or []:
@@ -388,22 +434,31 @@ def _create_project_from_run(
             scan = (dc_dict.get("config") or {}).get("scan") or {}
             scan_modes[tag] = str(scan.get("mode") or "") or "recipe"
             row = rows.get(tag)
-            # A collection whose source is not there will never ingest. Seeding
-            # it as a failed step says why, instead of showing the UI a task
-            # that was never going to succeed. (A ``pruned`` collection is not
-            # in the project at all — resolution dropped it — so it cannot
-            # reach this loop; the report's rows carry its reason.)
+            # A collection whose source is not there will never ingest. A
+            # required one is seeded as a failed step saying why, instead of
+            # showing the UI a task that was never going to succeed; one the
+            # template itself marks optional is a nominal absence (a route the
+            # run didn't take), seeded "skipped" so the run can still close
+            # clean around it. (A ``pruned`` collection is not in the project
+            # at all: resolution dropped it, so it cannot reach this loop;
+            # the report's rows carry its reason.)
             if row is not None and row.status == "missing":
-                skipped.append((tag, dc_id, _skip_reason(row)))
+                if row.optional:
+                    preflight_skipped.append(
+                        (tag, dc_id, f"Skipped optional collection: {_skip_reason(row)}")
+                    )
+                else:
+                    preflight_failed.append((tag, dc_id, _skip_reason(row)))
                 continue
             to_dispatch.append((tag, dc_id, wf_index, row.matched if row else 0))
 
-    if to_dispatch or skipped:
+    if to_dispatch or preflight_failed or preflight_skipped:
         run_id, all_dispatched, _results = _dispatch_refresh_tasks(
             project_dict=stored,
             to_dispatch=to_dispatch,
             current_user=current_user,
-            preflight_failed=skipped,
+            preflight_failed=preflight_failed,
+            preflight_skipped=preflight_skipped,
             command="from_run",
             scan_modes=scan_modes,
             data_root=root.location,
