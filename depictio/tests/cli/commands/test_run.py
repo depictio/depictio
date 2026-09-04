@@ -143,3 +143,45 @@ class TestMutuallyExclusiveOptions:
         assert "--template and --project-config-path are mutually exclusive" in normalize(
             result.output
         )
+
+
+class TestDashboardImportIsNotTemplateOnly:
+    """``--dashboard`` counts as a step whether or not a template is in play.
+
+    It used to be read only inside the template branch, so a pipeline Depictio
+    ships no template for could ask for a dashboard and be ignored without a
+    word: the run reported 7/7 success and left a project with data in it and
+    nothing to look at. The step count is the visible half of that bug.
+    """
+
+    def _run(self, app, runner, tmp_path, *extra):
+        project_config = tmp_path / "project.yaml"
+        project_config.write_text("name: irrelevant-under-dry-run\n")
+        return runner.invoke(
+            app,
+            [
+                "--project-config-path",
+                str(project_config),
+                "--dry-run",
+                "--skip-server-check",
+                "--skip-s3-check",
+                *extra,
+            ],
+        )
+
+    def test_a_project_config_alone_still_runs_seven_steps(self, app, runner, tmp_path):
+        result = self._run(app, runner, tmp_path)
+
+        assert result.exit_code == 0
+        assert "/7" in normalize(result.output)
+
+    def test_a_dashboard_adds_the_import_step(self, app, runner, tmp_path):
+        dashboard = tmp_path / "dashboard.yaml"
+        dashboard.write_text("title: irrelevant-under-dry-run\n")
+
+        result = self._run(app, runner, tmp_path, "--dashboard", str(dashboard))
+
+        assert result.exit_code == 0
+        output = normalize(result.output)
+        assert "/8" in output
+        assert "Importing dashboards" in output

@@ -300,8 +300,32 @@ workflows:
 `structure: "sequencing-runs"` with a `runs_regex` when the root holds one
 subdirectory per run.
 
-A complete runnable example, pipeline plus config plus project YAML, is in
-`depictio/cli/configs/nextflow/example/`.
+### Getting a dashboard too
+
+A project YAML says what to ingest, not what to show. On its own it leaves you
+with a project holding data and no dashboard, which is where people expect one:
+for an nf-core pipeline the bundled template supplies dashboards, and a custom
+pipeline has no template to supply them. Point the trigger at your own instead:
+
+```groovy
+params.depictio_dashboard = "${projectDir}/depictio_dashboard.yaml"
+```
+
+Pass a list to import several. The dashboard's `project_tag` must match the
+`name` in the project YAML, and each component's `workflow_tag` and
+`data_collection_tag` must match the ones that YAML declares, or the import
+fails with a validation error naming the component. Templates already bring
+their own dashboards, so this parameter is only for pipelines without one.
+
+Both URLs are printed in the run summary at the end of the pipeline log:
+
+```
+• 📘 Project: http://localhost:5600/projects/6a9ab9a6a1d2ead141378e27
+• 📘 Dashboard 'Nextflow trigger example': http://localhost:5600/dashboard/6a9acdf3835e12072990459a
+```
+
+A complete runnable example, pipeline plus config plus project YAML plus
+dashboard, is in `depictio/cli/configs/nextflow/example/`.
 
 ## New project or additional run
 
@@ -504,6 +528,7 @@ stayed green, as designed.
 | `depictio_template` | none | `--template` |
 | `depictio_project_config` | none | `--project-config-path` (wins over `--template`) |
 | `depictio_project` | none | `--project-name` |
+| `depictio_dashboard` | none | `--dashboard` (one path or a list; templates bring their own) |
 | `depictio_attach` | `false` | `--attach-run` |
 | `depictio_update` | `false` | `--update-config --overwrite` (ignored with `--attach-run`, which implies both) |
 | `depictio_user` | none | `--user` |

@@ -132,3 +132,35 @@ class TestInstallEnablesTheTriggerGlobally:
         result = self._run(monkeypatch, tmp_path, "--install", "--uninstall")
 
         assert result.exit_code == 1
+
+
+class TestTheHandlerForwardsDashboards:
+    """`params.depictio_dashboard` reaches the CLI as `--dashboard`.
+
+    Without it a pipeline Depictio ships no template for ingests fine and
+    leaves nothing to look at, because only templates carry dashboards.
+    """
+
+    def _snippet(self) -> str:
+        import depictio.cli
+
+        return (
+            Path(depictio.cli.__file__).parent / "configs" / "nextflow" / "depictio.config"
+        ).read_text()
+
+    def test_the_parameter_is_read_and_forwarded(self):
+        snippet = self._snippet()
+        assert "depictio_dashboard" in snippet
+        assert "'--dashboard'" in snippet
+
+    def test_a_list_of_dashboards_is_accepted(self):
+        """Several dashboards per project is the normal case for a template."""
+        assert "dashboards instanceof List" in self._snippet()
+
+    def test_the_example_ships_a_dashboard(self):
+        """The bundled example is the thing people copy; it must demonstrate one."""
+        import depictio.cli
+
+        example = Path(depictio.cli.__file__).parent / "configs" / "nextflow" / "example"
+        assert (example / "depictio_dashboard.yaml").is_file()
+        assert "depictio_dashboard" in (example / "nextflow.config").read_text()

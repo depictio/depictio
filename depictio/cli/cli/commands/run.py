@@ -561,13 +561,28 @@ def register_run_command(app: typer.Typer):
         # Track whether we're in template mode
         is_template_mode = template is not None
         template_resolved_config: dict | None = None
+        # Only the template branch fills these; a --dashboard import outside it
+        # substitutes nothing, since a hand-written dashboard names its data
+        # collections directly instead of going through template variables.
+        template_variables: dict[str, str] = {}
         template_dashboard_paths: list[Path] = []
+        # (title, id) per imported dashboard, for the summary's links. Step 8
+        # already prints them, but that scrolls past; the summary is where
+        # someone reading a finished pipeline log looks for somewhere to click.
+        imported_dashboards: list[tuple[str, str]] = []
+        # --dashboard is honoured whether or not a template is in play. It used
+        # to be read only inside the template branch, so a pipeline Depictio
+        # ships no template for could ask for a dashboard and be silently
+        # ignored: the run reported 7/7 success and produced a project nobody
+        # could look at.
+        if dashboard:
+            template_dashboard_paths = [Path(p).resolve() for p in dashboard]
         # First dashboard imported for the provisioned user — target of the
         # passwordless login link emitted at the end of the run.
         provisioned_dashboard_id: str | None = None
 
         success_count = 0
-        total_steps = 8 if is_template_mode else 7
+        total_steps = 8 if (is_template_mode or template_dashboard_paths) else 7
         # --attach-run adds step 3b (folding the run into the existing project).
         if attach_run and not dry_run:
             total_steps += 1
@@ -678,7 +693,6 @@ def register_run_command(app: typer.Typer):
 
                 # Resolve dashboard paths: CLI --dashboard overrides template defaults
                 if dashboard:
-                    template_dashboard_paths = [Path(p).resolve() for p in dashboard]
                     rich_print_checked_statement(
                         f"Using {len(template_dashboard_paths)} dashboard(s) from --dashboard override",
                         "info",
@@ -1174,11 +1188,9 @@ def register_run_command(app: typer.Typer):
             success_count += 1
             _rec("joins", "skipped")
 
-        # Step 8 (template only): Import dashboards
-        if is_template_mode and not skip_dashboard_import and template_dashboard_paths:
-            rich_print_section_separator(
-                f"Step {total_steps}/{total_steps}: Importing template dashboards"
-            )
+        # Step 8: Import dashboards (from the template, or from --dashboard)
+        if not skip_dashboard_import and template_dashboard_paths:
+            rich_print_section_separator(f"Step {total_steps}/{total_steps}: Importing dashboards")
             try:
                 if not dry_run:
                     from depictio.cli.cli.utils.templates import (
@@ -1214,6 +1226,10 @@ def register_run_command(app: typer.Typer):
                         provisioned_dashboard_id = imported[0].get("dashboard_id")
 
                     for r in imported:
+                        if r.get("dashboard_id"):
+                            imported_dashboards.append(
+                                (str(r.get("title") or "dashboard"), str(r["dashboard_id"]))
+                            )
                         action = "updated" if r.get("updated") else "imported"
                         rich_print_checked_statement(
                             f"Dashboard {action}: {r.get('title', 'unknown')}", "success"
@@ -1295,6 +1311,12 @@ def register_run_command(app: typer.Typer):
             rich_print_checked_statement(
                 f"Project: {viewer_url}/projects/{resolved_project_id}", "info"
             )
+        for dashboard_title, dashboard_id in imported_dashboards:
+            if viewer_url:
+                rich_print_checked_statement(
+                    f"Dashboard '{dashboard_title}': {viewer_url}/dashboard/{dashboard_id}",
+                    "info",
+                )
 
         if is_template_mode:
             # Resolved id, not the raw --template arg — "nf-core/ampliseq/latest"
