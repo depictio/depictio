@@ -3009,6 +3009,19 @@ export interface IngestionReport {
    * not a case to handle.
    */
   triggered_by: string;
+  /**
+   * Identity of the pipeline behind the data, read back from the workflow
+   * config. Independent of `triggered_by`: a manually ingested directory still
+   * carries a pipeline identity, and a triggered run whose engine left no
+   * breadcrumbs carries none. Null when nothing was detected.
+   */
+  pipeline: {
+    engine: string | null;
+    name: string | null;
+    version: string | null;
+    engine_version: string | null;
+    tool_count: number;
+  } | null;
   variables: Array<{ name: string; value: string }>;
   /** Pipeline run provenance (parameters, thresholds, tool versions), grouped
    *  as the template's ProvenanceSpec laid them out. Empty for projects

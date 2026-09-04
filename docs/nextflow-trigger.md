@@ -62,6 +62,64 @@ second `-c` works, but Nextflow lets the last one win outright rather than
 merging, so splitting them across files is a way to lose settings for no
 benefit.
 
+## Checking it will work before you run the pipeline
+
+The handler runs in `workflow.onComplete`, so the first `[depictio]` line appears
+when the pipeline is already over. There is no startup message and there cannot
+be one: Nextflow's strict config parser (25.10 and later) rejects any statement
+at the top level of a config file, only assignments and scope blocks are allowed,
+and `workflow.onStart` is accepted as an assignment but never invoked. So a bad
+token or a missing CLI would otherwise surface after however long the pipeline
+takes. Two checks, both quick, catch that up front.
+
+**Check the connection, on the machine that will run the pipeline.** This is the
+whole point: the CLI usually works on a laptop and fails on the cluster, because
+the head job is a different machine with a different home directory and a
+different environment.
+
+```bash
+depictio-cli config check --CLI-config-path /path/to/CLI.yaml
+```
+
+It validates the configuration file, reaches the server with the token and names
+the user it authenticated as, then checks the S3 storage:
+
+```
+• ✅ Depictio CLI configuration is model-compliant.
+• ✅ Server accessible - User: you@example.org, Admin privileges: No
+• ✅ S3 storage configuration is valid
+```
+
+Run it as the same user, with the same `--CLI-config-path` or the same
+`DEPICTIO_CLI_*` environment variables the trigger will use. In a scheduler,
+that means running it inside a job, not on the login node.
+
+**Check the wiring, without running the pipeline.** `nextflow run -preview`
+executes no process, but the completion handler still fires, so the trigger is
+exercised end to end in a couple of seconds:
+
+```bash
+nextflow run <pipeline> -c depictio.config -preview --outdir ./preflight-does-not-exist
+```
+
+You get the exact command the handler will run, and then a clean stop:
+
+```
+[depictio] <executable> run --CLI-config-path ... --data-root ... --triggered-by nextflow --pipeline-id nf-core/ampliseq/2.16.0
+[depictio] • ✅ Resolved pipeline 'nf-core/ampliseq/2.16.0' to a bundled template.
+[depictio] • ❌ --data-root does not exist or is not a directory: ...
+```
+
+That single output proves the executable was found, the CLI config loaded, the
+server answered and the template resolved. Point `--outdir` at a directory that
+does not exist yet, as above: with a real output directory the preview would go
+on and genuinely ingest it, creating a project.
+
+Note that `nextflow config` is not an alternative here. It has no `-c` option, so
+it cannot see a snippet passed with `-c`; it shows the `depictio_*` parameters
+only when the snippet is pulled in with `includeConfig` from the project's own
+`nextflow.config`.
+
 ## nf-core pipelines
 
 ```bash
@@ -338,7 +396,7 @@ Everything the handler emits is prefixed with `[depictio]`, on the console and i
 
 | Symptom | Cause |
 | --- | --- |
-| No `[depictio]` lines at all | `params.depictio_enabled` is false, or the snippet was never included. Check `nextflow config` for the `depictio_*` parameters |
+| No `[depictio]` lines at all | `params.depictio_enabled` is false, or the snippet was never included. Re-run with `-preview` against a non-existent `--outdir` to see whether the handler fires at all |
 | `Pipeline did not complete successfully, skipping ingestion` | Working as designed. Fix the pipeline first |
 | `No data root to ingest` | Neither `params.depictio_data_root` nor `params.outdir` is set |
 | `Could not start the Depictio CLI, so nothing was ingested` | `depictio-cli` is not on the head job's PATH. Installing it in the pipeline's containers does not help: the handler runs on the head job. Set `params.depictio_cli_executable` to an absolute path, or to a container invocation |
