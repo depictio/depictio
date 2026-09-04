@@ -71,12 +71,14 @@ nextflow run nf-core/ampliseq \
   -c /path/to/depictio.config
 ```
 
-The handler always forwards the pipeline manifest as
-`--nextflow-manifest "<manifest.name>/<manifest.version>"` (falling back to
-`latest` when the manifest declares no version). The CLI resolves it against its
-bundled templates and builds the project and its dashboards from there.
+The handler always forwards the pipeline's identity as
+`--pipeline-id "<manifest.name>/<manifest.version>"` (falling back to `latest`
+when the manifest declares no version). Only the name and the version travel,
+not the manifest: the option is engine-neutral, because the CLI recognises
+Snakemake runs too and a Snakemake trigger would have nothing to call a
+manifest. The CLI resolves it against its bundled templates.
 
-The manifest is forwarded even when a template or project config is given: the
+The pipeline id is forwarded even when a template or project config is given: the
 CLI ignores it in that case, so an explicit choice is never overridden.
 
 To pin a template explicitly instead of relying on manifest resolution:

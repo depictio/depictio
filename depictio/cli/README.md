@@ -90,10 +90,9 @@ nextflow run nf-core/ampliseq \
   -c /path/to/depictio/cli/configs/nextflow/depictio.config
 ```
 
-The snippet forwards the pipeline's manifest as
-`--nextflow-manifest nf-core/ampliseq/2.16.0`. The CLI matches it against its
-bundled templates and builds the project and dashboards from there. Nothing else
-to configure.
+The snippet forwards the pipeline's identity as
+`--pipeline-id nf-core/ampliseq/2.16.0`, taken from `workflow.manifest`. The CLI
+matches it against its bundled templates.
 
 To make it permanent, add `includeConfig` to your own `nextflow.config` instead
 of passing `-c` on every run:

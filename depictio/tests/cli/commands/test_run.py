@@ -1,7 +1,7 @@
 """Tests for the ``run`` command's early option-resolution branch.
 
 Only the guards that execute *before* any server, S3 or filesystem work are
-covered here: the ``--nextflow-manifest`` auto-resolution added for automated
+covered here: the ``--pipeline-id`` auto-resolution added for automated
 triggering, its precedence against ``--template`` / ``--project-config-path``,
 and the mutual-exclusivity check. That branch is pure argument handling, so
 these tests need no network and no mocking of the ingestion pipeline.
@@ -52,11 +52,11 @@ def runner():
 
 
 class TestNextflowManifestResolution:
-    """``--nextflow-manifest`` maps a Nextflow manifest onto a bundled template."""
+    """``--pipeline-id`` maps a pipeline identity onto a bundled template."""
 
     def test_unknown_manifest_exits_with_guidance(self, app, runner):
         """An unmatched manifest fails loudly instead of silently doing nothing."""
-        result = runner.invoke(app, ["--nextflow-manifest", UNKNOWN_MANIFEST])
+        result = runner.invoke(app, ["--pipeline-id", UNKNOWN_MANIFEST])
 
         assert result.exit_code == 1
         output = normalize(result.output)
@@ -70,7 +70,7 @@ class TestNextflowManifestResolution:
     def test_known_manifest_resolves_to_template(self, app, runner, manifest):
         """A shipped manifest becomes template mode and falls through to the
         next guard (``--data-root``), proving resolution succeeded."""
-        result = runner.invoke(app, ["--nextflow-manifest", manifest])
+        result = runner.invoke(app, ["--pipeline-id", manifest])
 
         output = normalize(result.output)
         assert NO_TEMPLATE_MESSAGE not in output
@@ -89,7 +89,7 @@ class TestNextflowManifestResolution:
         result = runner.invoke(
             app,
             [
-                "--nextflow-manifest",
+                "--pipeline-id",
                 UNKNOWN_MANIFEST,
                 "--project-config-path",
                 str(project_config),
@@ -108,7 +108,7 @@ class TestNextflowManifestResolution:
         result = runner.invoke(
             app,
             [
-                "--nextflow-manifest",
+                "--pipeline-id",
                 UNKNOWN_MANIFEST,
                 "--template",
                 SHIPPED_MANIFESTS[0],

@@ -273,9 +273,7 @@ class TestProvenanceStamping:
         "flags",
         [
             pytest.param(["--template", "nf-core/ampliseq/2.16.0"], id="explicit-template"),
-            pytest.param(
-                ["--nextflow-manifest", "nf-core/ampliseq/2.16.0"], id="nextflow-manifest"
-            ),
+            pytest.param(["--pipeline-id", "nf-core/ampliseq/2.16.0"], id="pipeline-id"),
             pytest.param([], id="auto-detected"),
         ],
     )

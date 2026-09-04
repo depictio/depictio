@@ -232,15 +232,18 @@ def register_run_command(app: typer.Typer):
                 "Mutually exclusive with --project-config-path.",
             ),
         ] = None,
-        nextflow_manifest: Annotated[
+        pipeline_id: Annotated[
             str | None,
             typer.Option(
-                "--nextflow-manifest",
+                "--pipeline-id",
                 help=(
-                    "Nextflow manifest as '<name>/<version>' (e.g. 'nf-core/ampliseq/2.16.0'). "
-                    "When neither --template nor --project-config-path is given, the CLI "
-                    "auto-resolves a bundled template matching this manifest. Intended for "
-                    "automated triggering from a Nextflow pipeline's workflow.onComplete."
+                    "Which pipeline produced this data, as '<name>/<version>' (e.g. "
+                    "'nf-core/ampliseq/2.16.0'). When neither --template nor "
+                    "--project-config-path is given, the CLI resolves a bundled template "
+                    "matching it; otherwise it is ignored. Distinct from --template, which "
+                    "names a Depictio template directly even though both take the same shape. "
+                    "Automated triggers fill this from whatever their engine knows: a "
+                    "Nextflow pipeline's workflow.manifest, for instance."
                 ),
             ),
         ] = None,
@@ -436,31 +439,31 @@ def register_run_command(app: typer.Typer):
         """
         rich_print_command_usage("run")
 
-        # Step 0-: resolve a bundled template from the Nextflow manifest. The
-        # trigger forwards `workflow.manifest` verbatim and lets the CLI decide
-        # the mode; an explicit --template / --project-config-path always wins.
-        if nextflow_manifest and not template and not project_config_path:
+        # Step 0-: resolve a bundled template from the pipeline identity. The
+        # trigger forwards what its engine reported and lets the CLI decide the
+        # mode; an explicit --template / --project-config-path always wins.
+        if pipeline_id and not template and not project_config_path:
             from depictio.cli.cli.utils.templates import locate_template
 
             try:
-                locate_template(nextflow_manifest)
+                locate_template(pipeline_id)
             except FileNotFoundError:
                 rich_print_checked_statement(
-                    f"No bundled depictio template matches Nextflow manifest "
-                    f"'{nextflow_manifest}'. Provide --project-config-path with a depictio "
+                    f"No bundled depictio template matches pipeline "
+                    f"'{pipeline_id}'. Provide --project-config-path with a depictio "
                     f"project YAML for this pipeline (or --template for a known one).",
                     "error",
                 )
                 raise typer.Exit(code=1)
-            template = nextflow_manifest
+            template = pipeline_id
             rich_print_checked_statement(
-                f"Resolved Nextflow manifest '{nextflow_manifest}' to bundled template.",
+                f"Resolved pipeline '{pipeline_id}' to a bundled template.",
                 "success",
             )
 
         # Read the run's own provenance whenever there is a directory to look at,
         # deliberately independent of how the template was chosen. The dominant
-        # trigger path forwards --nextflow-manifest, which already resolved a
+        # trigger path forwards --pipeline-id, which already resolved a
         # template above, but the engine version and the tool list exist nowhere
         # except the run directory. Gating this on "no template yet" left every
         # pipeline-triggered project with empty provenance.
