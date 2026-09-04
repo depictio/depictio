@@ -51,10 +51,16 @@ Permanently, from your own `nextflow.config`:
 includeConfig '/path/to/depictio/cli/configs/nextflow/depictio.config'
 ```
 
-Include order does not matter. Every default in the snippet is written as "keep
-what is already set, otherwise use mine", because include order and `-c`
-precedence are not predictable. A `--depictio_*` value on the `nextflow run`
-command line always wins.
+Include order does not matter, and neither does where your own settings sit
+relative to the include: the snippet writes nothing into `params` when it is
+parsed and reads every setting when the pipeline completes, so it has nothing to
+overwrite. A `--depictio_*` value on the `nextflow run` command line always
+wins.
+
+Put your settings in the **same file** that carries the `includeConfig`. A
+second `-c` works, but Nextflow lets the last one win outright rather than
+merging, so splitting them across files is a way to lose settings for no
+benefit.
 
 ## nf-core pipelines
 

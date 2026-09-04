@@ -163,9 +163,9 @@ provisioning key. See `docs/pipeline-provisioning-magic-link.md`.
 | `depictio_user` | none | `--user` |
 | `depictio_cli_executable` | `depictio-cli` | the executable itself, or a list (a container invocation); `{DATA_ROOT}` is substituted |
 
-Every default is written to keep a value that is already set, so the snippet can
-be included before or after the parameters it defaults, and `--depictio_*` on
-the `nextflow run` command line always wins.
+Set these in the same file that carries the `includeConfig`; the snippet writes
+nothing into `params` at parse time, so include order does not matter, and
+`--depictio_*` on the `nextflow run` command line always wins.
 
 Longer version, including both authentication paths and troubleshooting:
 `docs/nextflow-trigger.md`.
