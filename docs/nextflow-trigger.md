@@ -225,12 +225,19 @@ def home = System.getProperty('user.home')
 
 params.depictio_cli_executable = [
     'docker', 'run', '--rm',
-    '-v', "${params.outdir}:${params.outdir}",
+    '-v', '{DATA_ROOT}:{DATA_ROOT}',
     '-v', "${home}/.depictio:${home}/.depictio:ro",
     '--network', 'host',
     'ghcr.io/depictio/depictio-cli:1.9.2',
 ]
 ```
+
+`{DATA_ROOT}` is substituted when the pipeline completes, and it is the only way
+to mount the directory being ingested. The list itself is built when the config
+is *parsed*, and `params.outdir` is not set yet at that point: a
+`"${params.outdir}"` written inside the list expands to the string `null`, and
+docker dutifully mounts a directory called `null`. `System.getProperty` is fine
+there, which is why the home path above is interpolated normally.
 
 The image sets `depictio-cli` as its entrypoint, so the list stops at the image
 name and the handler appends `run` and its options.
@@ -253,7 +260,7 @@ Singularity or Apptainer works the same way, with `--bind` in place of `-v`:
 ```groovy
 params.depictio_cli_executable = [
     'singularity', 'exec',
-    '--bind', "${params.outdir}",
+    '--bind', '{DATA_ROOT}',
     'docker://ghcr.io/depictio/depictio-cli:1.9.2',
     'depictio-cli',
 ]
@@ -275,7 +282,7 @@ names, so the configuration is usually already reachable.
 | `depictio_attach` | `false` | `--attach-run` |
 | `depictio_update` | `false` | `--update-config --overwrite` (ignored with `--attach-run`, which implies both) |
 | `depictio_user` | none | `--user` |
-| `depictio_cli_executable` | `depictio-cli` | the executable that is run, or a list (a container invocation) |
+| `depictio_cli_executable` | `depictio-cli` | the executable that is run, or a list (a container invocation); `{DATA_ROOT}` in a list element is substituted at completion |
 
 Booleans are coerced explicitly, so `--depictio_enabled false` and
 `--depictio_attach false` behave as expected. Groovy treats every non-empty
