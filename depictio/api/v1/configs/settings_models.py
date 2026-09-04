@@ -1616,6 +1616,61 @@ class ProfilingConfig(BaseSettings):
         return Path(self.profile_dir).resolve()
 
 
+class NotebookExportConfig(BaseSettings):
+    """Dashboard → notebook export and the per-component Python import.
+
+    Gates the export endpoints, the component embed/figure-extraction endpoints
+    and the Parquet data endpoint the generated notebooks read from.
+    """
+
+    enabled: bool = Field(
+        default=True,
+        description=(
+            "Expose notebook export (marimo / Jupyter / Quarto), component embeds and the "
+            "Parquet data endpoint used by `depictio.notebook`."
+        ),
+    )
+    max_rows: int = Field(
+        default=5_000_000,
+        description=(
+            "Largest table the Parquet data endpoint will serve in one response; "
+            "bigger collections are refused with 413 so a notebook cannot pull an "
+            "arbitrarily large table through the API."
+        ),
+    )
+    ipynb_timeout_s: int = Field(
+        default=60,
+        description="Seconds allowed for `marimo export ipynb` when deriving a Jupyter notebook.",
+    )
+    extract_timeout_s: int = Field(
+        default=90,
+        description=(
+            "Seconds allowed for the headless render that extracts a Plotly figure from a "
+            "React-rendered component."
+        ),
+    )
+    render_enabled: bool = Field(
+        default=False,
+        description=(
+            "Offer the rendered HTML report as well as the notebook. Off by default: the "
+            "render executes the exported notebook on a worker, which needs Quarto and a "
+            "Jupyter kernel in the worker image and costs a browser pass per rendered tile. "
+            "A dashboard carrying code-mode figures is only rendered for its owners, since "
+            "their Python runs on the worker."
+        ),
+    )
+    render_timeout_s: int = Field(
+        default=900,
+        description="Seconds allowed for one `quarto render` of an exported notebook.",
+    )
+    render_prefix: str = Field(
+        default="notebook_reports",
+        description="S3 key prefix the rendered reports and their staged notebooks are written to.",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_NOTEBOOK_EXPORT_")
+
+
 # ── Root ──────────────────────────────────────────────────────────────────────
 
 
@@ -1655,6 +1710,7 @@ class Settings(BaseSettings):
     google_analytics: GoogleAnalyticsConfig = Field(default_factory=GoogleAnalyticsConfig)
     branding: BrandingConfig = Field(default_factory=BrandingConfig)
     profiling: ProfilingConfig = Field(default_factory=ProfilingConfig)
+    notebook_export: NotebookExportConfig = Field(default_factory=NotebookExportConfig)
 
     disable_example_dashboards: bool = Field(
         default=False,

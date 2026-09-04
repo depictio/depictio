@@ -2111,3 +2111,52 @@ __all__: list[str] = [
     "compute_coverage_track",
     "compute_sankey",
 ]
+
+
+@celery_app.task(name="depictio.embed.extract_figure", soft_time_limit=150, time_limit=200)
+def extract_component_figure_task(payload: dict) -> dict:
+    """Read a component's Plotly figure off the viewer's embed page (headless).
+
+    ``payload``: ``{dashboard_id, component_id, state, theme}``. Returns a
+    ``ComponentFigureResponse``-shaped dict; failures are reported in it rather
+    than raised so the poll endpoint can hand the reason to the notebook.
+    """
+    import asyncio
+
+    from beanie import init_beanie
+    from motor.motor_asyncio import AsyncIOMotorClient
+
+    from depictio.api.v1.configs.config import MONGODB_URL, settings
+    from depictio.api.v1.services.embed.extract import extract_component_figure
+    from depictio.models.models.users import TokenBeanie, UserBeanie
+
+    async def run() -> dict:
+        # get_admin_auth_token() (called inside extract_component_figure, the
+        # same admin-token lookup the screenshot task uses) reads UserBeanie
+        # and TokenBeanie — a bare Celery task has no Beanie context of its
+        # own, so it must init one here, same as generate_dashboard_screenshot_dual.
+        client = AsyncIOMotorClient(MONGODB_URL)
+        try:
+            await init_beanie(
+                database=client[settings.mongodb.db_name],
+                document_models=[TokenBeanie, UserBeanie],
+            )
+            return await extract_component_figure(
+                dashboard_id=str(payload.get("dashboard_id")),
+                component_id=str(payload.get("component_id")),
+                state=dict(payload.get("state") or {}),
+                theme=str(payload.get("theme") or "light"),
+            )
+        finally:
+            client.close()
+
+    try:
+        return asyncio.run(run())
+    except Exception as exc:
+        # str(exc) is empty for several Playwright/asyncio exceptions (bare
+        # TimeoutError, CancelledError); repr always carries the exception
+        # type, so neither the log line nor the reason handed back to the
+        # notebook is silently blank.
+        reason = str(exc) or repr(exc)
+        logger.warning(f"embed extract failed for {payload.get('component_id')}: {reason}")
+        return {"status": "error", "figure": None, "reason": reason}

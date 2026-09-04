@@ -293,6 +293,56 @@ def process_code_mode_figure(
     return True, fig, detected_visu_type
 
 
+# px parameters whose stored value is a JSON string (the builder serialises
+# maps and lists into text fields) and must be parsed before reaching px.
+JSON_PARSEABLE_PX_PARAMS: frozenset[str] = frozenset(
+    {
+        "color_discrete_map",
+        "color_continuous_scale",
+        "category_orders",
+        "labels",
+        "hover_data",
+        "custom_data",
+        "line_dash_map",
+        "symbol_map",
+        "pattern_shape_map",
+        "size_map",
+    }
+)
+
+# px parameters for which an empty string is a meaningful value.
+KEEP_EMPTY_STRING_PX_PARAMS: frozenset[str] = frozenset(
+    {"parents", "names", "ids", "hover_name", "hover_data", "custom_data"}
+)
+
+
+def clean_px_kwargs(dict_kwargs: dict) -> dict:
+    """The builder's ``dict_kwargs`` as the keyword arguments px receives.
+
+    Drops ``None``/empty values, parses the JSON-string parameters, keeps
+    booleans as they are. Shared by :func:`create_figure_from_data` and the
+    notebook export, so a generated ``px.<visu_type>(...)`` call carries
+    exactly what the server passed.
+    """
+    import json
+
+    cleaned: dict = {}
+    for k, v in dict_kwargs.items():
+        if v is None:
+            continue
+        if k in JSON_PARSEABLE_PX_PARAMS and isinstance(v, str) and v.strip():
+            try:
+                v = json.loads(v)
+            except (json.JSONDecodeError, ValueError):
+                logger.warning(f"Failed to parse {k} as JSON: {v}, skipping")
+                continue
+        if isinstance(v, bool):
+            cleaned[k] = v
+        elif v != "" and v != [] or (k in KEEP_EMPTY_STRING_PX_PARAMS and v == ""):
+            cleaned[k] = v
+    return cleaned
+
+
 def create_figure_from_data(
     df: Any,
     visu_type: str,
@@ -322,7 +372,6 @@ def create_figure_from_data(
     Returns:
         Plotly Figure object
     """
-    import json
 
     import polars as pl
 
@@ -350,44 +399,7 @@ def create_figure_from_data(
 
         template = get_theme_template(theme)
 
-        keep_empty_string_params = {
-            "parents",
-            "names",
-            "ids",
-            "hover_name",
-            "hover_data",
-            "custom_data",
-        }
-
-        json_parseable_params = {
-            "color_discrete_map",
-            "color_continuous_scale",
-            "category_orders",
-            "labels",
-            "hover_data",
-            "custom_data",
-            "line_dash_map",
-            "symbol_map",
-            "pattern_shape_map",
-            "size_map",
-        }
-
-        cleaned_kwargs = {}
-        for k, v in dict_kwargs.items():
-            if v is None:
-                continue
-
-            if k in json_parseable_params and isinstance(v, str) and v.strip():
-                try:
-                    v = json.loads(v)
-                except (json.JSONDecodeError, ValueError):
-                    logger.warning(f"Failed to parse {k} as JSON: {v}, skipping")
-                    continue
-
-            if isinstance(v, bool):
-                cleaned_kwargs[k] = v
-            elif v != "" and v != [] or (k in keep_empty_string_params and v == ""):
-                cleaned_kwargs[k] = v
+        cleaned_kwargs = clean_px_kwargs(dict_kwargs)
 
         # An explicit template choice (component picker or dashboard brand theme)
         # wins; otherwise follow the UI theme (see resolve_template_override).

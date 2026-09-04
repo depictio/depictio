@@ -665,6 +665,150 @@ export async function fetchFunnelValues(
   return res.json();
 }
 
+// =============================================================================
+// Notebook export (dashboard → marimo / Jupyter / Quarto)
+// =============================================================================
+
+export type NotebookFormat = 'marimo' | 'ipynb' | 'quarto';
+
+/** How a component reaches the notebook: as explicit code, re-rendered
+ *  through the API with the exported state, or not at all (with a reason). */
+export type NotebookInclusion = 'code' | 'api' | 'omitted';
+
+export interface NotebookPreflightComponent {
+  index: string;
+  title?: string | null;
+  component_type: string;
+  kind?: string | null;
+  status: NotebookInclusion;
+  reason?: string | null;
+  name?: string | null;
+  tab?: string | null;
+  section?: string | null;
+}
+
+export interface NotebookPreflight {
+  components: NotebookPreflightComponent[];
+  dcs: { dc_id: string; tag?: string | null; rows?: number | null }[];
+  stages: { index?: string | null; label?: string | null; rows_by_dc: Record<string, number | null> }[];
+  warnings: string[];
+  ipynb_available: boolean;
+  /** Whether this deployment offers the rendered HTML report as well. */
+  render_available?: boolean;
+  counts: Record<string, number>;
+}
+
+/** A render job: the notebook being executed on a worker, which takes minutes. */
+export interface NotebookRenderStatus {
+  job_id: string;
+  status: 'queued' | 'running' | 'ready' | 'error';
+  phase?: string | null;
+  filename?: string | null;
+  size?: number | null;
+  reason?: string | null;
+}
+
+/** What an export will contain, before anything is generated. `state` is an
+ *  `AnalysisState` (see `analysisState.ts`). */
+export async function fetchNotebookPreflight(
+  dashboardId: string,
+  state: unknown,
+  signal?: AbortSignal,
+): Promise<NotebookPreflight> {
+  const res = await authFetch(`${API_BASE}/dashboards/notebook_export/${dashboardId}/preflight`, {
+    method: 'POST',
+    body: JSON.stringify({ state, format: 'marimo' }),
+    signal,
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to prepare the notebook export');
+  return res.json();
+}
+
+function filenameFromDisposition(header: string | null, fallback: string): string {
+  const m = header?.match(/filename="?([^";]+)"?/);
+  return m ? m[1] : fallback;
+}
+
+/** Download the dashboard as a notebook. The server never executes it:
+ *  `marimo` is generated text, `ipynb`/`quarto` are derived by marimo's
+ *  converter with outputs excluded. */
+export async function exportNotebook(
+  dashboardId: string,
+  state: unknown,
+  format: NotebookFormat = 'marimo',
+): Promise<string> {
+  const res = await authFetch(`${API_BASE}/dashboards/notebook_export/${dashboardId}`, {
+    method: 'POST',
+    body: JSON.stringify({ state, format }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to export the notebook');
+  const blob = await res.blob();
+  const ext = format === 'marimo' ? 'py' : format === 'quarto' ? 'quarto.ipynb' : 'ipynb';
+  const filename = filenameFromDisposition(
+    res.headers.get('Content-Disposition'),
+    `dashboard_${dashboardId}.${ext}`,
+  );
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  return filename;
+}
+
+/** Start rendering the dashboard's notebook into an HTML report.
+ *
+ *  This is the one export path that executes: the notebook runs end to end on
+ *  a worker, with the caller's own rights, and every tile the export renders
+ *  rather than computes costs a browser pass. Minutes, not seconds — hence a
+ *  job id to poll rather than a file. */
+export async function startNotebookRender(
+  dashboardId: string,
+  state: unknown,
+): Promise<NotebookRenderStatus> {
+  const res = await authFetch(`${API_BASE}/dashboards/notebook_export/${dashboardId}/render`, {
+    method: 'POST',
+    body: JSON.stringify({ state, format: 'quarto' }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to start the report render');
+  return res.json();
+}
+
+/** Where a render job is: queued, running, ready to download, or failed. */
+export async function fetchNotebookRenderStatus(
+  jobId: string,
+  signal?: AbortSignal,
+): Promise<NotebookRenderStatus> {
+  const res = await authFetch(`${API_BASE}/dashboards/notebook_export/render/${jobId}`, { signal });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to read the render status');
+  return res.json();
+}
+
+/** Download a finished report. */
+export async function downloadNotebookRender(jobId: string): Promise<string> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/notebook_export/render/${jobId}/download`,
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to download the report');
+  const blob = await res.blob();
+  const filename = filenameFromDisposition(
+    res.headers.get('Content-Disposition'),
+    `report_${jobId}.html`,
+  );
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  return filename;
+}
+
 /** Payload for a card's numeric / QC secondary layout (histogram, threshold,
  *  completeness, attrition), computed server-side by the same dispatcher the
  *  saved card uses.

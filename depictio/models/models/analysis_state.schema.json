@@ -1,0 +1,392 @@
+{
+  "$defs": {
+    "AnalysisContext": {
+      "description": "Where the state was captured.",
+      "properties": {
+        "dashboard_id": {
+          "title": "Dashboard Id",
+          "type": "string"
+        },
+        "family_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Family Id"
+        },
+        "theme": {
+          "default": "light",
+          "enum": [
+            "light",
+            "dark"
+          ],
+          "title": "Theme",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dashboard_id"
+      ],
+      "title": "AnalysisContext",
+      "type": "object"
+    },
+    "AnalysisFilter": {
+      "additionalProperties": true,
+      "description": "One entry of the viewer's ``InteractiveFilter[]`` (``api.ts``).\n\nGroup projections travel here too, exactly as the render endpoints see\nthem: ``source == \"group_filter\"`` and an index prefixed with\n``__depictio_group__:``. Keeping them in the same list means the server\nnever has to re-implement the viewer's ``groupsToFilters``.",
+      "properties": {
+        "column_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Column Name"
+        },
+        "filter_expr": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filter Expr"
+        },
+        "index": {
+          "title": "Index",
+          "type": "string"
+        },
+        "interactive_component_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Interactive Component Type"
+        },
+        "metadata": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AnalysisFilterMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source"
+        },
+        "value": {
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "index"
+      ],
+      "title": "AnalysisFilter",
+      "type": "object"
+    },
+    "AnalysisFilterMetadata": {
+      "additionalProperties": true,
+      "description": "The ``metadata`` block the viewer attaches to a filter.\n\n``dc_id`` is what cross-DC link resolution keys on server-side: a filter\nwithout it is treated as global (applied wherever its column exists).",
+      "properties": {
+        "column_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Column Name"
+        },
+        "dc_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dc Id"
+        },
+        "filter_expr": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filter Expr"
+        },
+        "interactive_component_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Interactive Component Type"
+        },
+        "selection_column": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Selection Column"
+        }
+      },
+      "title": "AnalysisFilterMetadata",
+      "type": "object"
+    },
+    "AnalysisGroup": {
+      "description": "A saved selection group (``SelectionGroup`` in ``selectionGroups.ts``).",
+      "properties": {
+        "color": {
+          "title": "Color",
+          "type": "string"
+        },
+        "column_name": {
+          "title": "Column Name",
+          "type": "string"
+        },
+        "created_at": {
+          "default": 0,
+          "title": "Created At",
+          "type": "integer"
+        },
+        "dc_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dc Id"
+        },
+        "filter_active": {
+          "default": false,
+          "title": "Filter Active",
+          "type": "boolean"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "values": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Values",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "color",
+        "column_name"
+      ],
+      "title": "AnalysisGroup",
+      "type": "object"
+    },
+    "ColorBy": {
+      "description": "The dashboard-global \"Colour by\" override.",
+      "properties": {
+        "column_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Column Name"
+        },
+        "kind": {
+          "default": "none",
+          "enum": [
+            "none",
+            "groups",
+            "column"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "ColorBy",
+      "type": "object"
+    },
+    "FunnelState": {
+      "description": "Funnel filtering: whether it is on, and the user's stage order.\n\n``stage_order`` lists component indexes. An empty list means \"the order\nthe filters appear in ``AnalysisState.filters``\", which is also what the\nfunnel modal shows before the user reorders anything.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "stage_order": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Stage Order",
+          "type": "array"
+        }
+      },
+      "title": "FunnelState",
+      "type": "object"
+    },
+    "SplitPanel": {
+      "description": "One cell of a split view (``PanelSpec`` in ``splitPanels.ts``).\n\n``constraints`` are ordinary filters appended to the dashboard's own for\nthat cell alone, so a panel serialises straight to a ``.filter(...)``.",
+      "properties": {
+        "color": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Color"
+        },
+        "constraints": {
+          "items": {
+            "$ref": "#/$defs/AnalysisFilter"
+          },
+          "title": "Constraints",
+          "type": "array"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "SplitPanel",
+      "type": "object"
+    }
+  },
+  "description": "Everything the viewer knows about *how* the user is looking at the data.",
+  "properties": {
+    "color_by": {
+      "$ref": "#/$defs/ColorBy"
+    },
+    "compare_in_cards": {
+      "default": false,
+      "title": "Compare In Cards",
+      "type": "boolean"
+    },
+    "context": {
+      "$ref": "#/$defs/AnalysisContext"
+    },
+    "display_mode": {
+      "default": "color",
+      "enum": [
+        "color",
+        "facet"
+      ],
+      "title": "Display Mode",
+      "type": "string"
+    },
+    "filters": {
+      "items": {
+        "$ref": "#/$defs/AnalysisFilter"
+      },
+      "title": "Filters",
+      "type": "array"
+    },
+    "funnel": {
+      "$ref": "#/$defs/FunnelState"
+    },
+    "groups": {
+      "items": {
+        "$ref": "#/$defs/AnalysisGroup"
+      },
+      "title": "Groups",
+      "type": "array"
+    },
+    "show_other": {
+      "default": true,
+      "title": "Show Other",
+      "type": "boolean"
+    },
+    "show_overall": {
+      "default": true,
+      "title": "Show Overall",
+      "type": "boolean"
+    },
+    "split_panels": {
+      "items": {
+        "$ref": "#/$defs/SplitPanel"
+      },
+      "title": "Split Panels",
+      "type": "array"
+    },
+    "version": {
+      "const": 1,
+      "default": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "context"
+  ],
+  "title": "AnalysisState",
+  "type": "object"
+}

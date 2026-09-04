@@ -19,6 +19,7 @@ const SPA_ROUTE_PREFIXES = [
   'admin',
   'profile',
   'cli-agents',
+  'embed',
 ];
 const SPA_ROUTE_RE = new RegExp(
   `^/(?:${SPA_ROUTE_PREFIXES.join('|')})(/|$|\\?)`,

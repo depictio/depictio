@@ -222,6 +222,39 @@ def _categorical_predicate(column_name: str, values: list, dtype: pl.DataType | 
     return pl.col(column_name).is_in(typed_values)
 
 
+def parse_iso_datetime(raw: object) -> object:
+    """Parse the React-supplied ISO strings a date-range control emits.
+
+    Passes ``date``/``datetime`` objects (and anything that is not a string)
+    through untouched. Timeline emits richer ISO forms
+    (``yyyy-mm-ddTHH:MM:SS``, possibly with a trailing ``Z``) while
+    DateRangePicker historically used day-precision strings, so a list of
+    formats is tried before falling back to ``fromisoformat``.
+
+    Module-level so the notebook export can render the same literals the
+    server compares against (see ``services/notebook_export/predicates.py``).
+    """
+    from datetime import date as _date
+    from datetime import datetime as _dt
+
+    if isinstance(raw, (_dt, _date)):
+        return raw
+    if not isinstance(raw, str):
+        return raw
+    for fmt in (
+        "%Y-%m-%dT%H:%M:%S.%f",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d",
+    ):
+        try:
+            return _dt.strptime(raw, fmt)
+        except ValueError:
+            continue
+    # Fall back to ISO 8601 parser (handles trailing 'Z' etc).
+    return _dt.fromisoformat(raw.rstrip("Z"))
+
+
 def add_filter(
     filter_list: list,
     interactive_component_type: str,
@@ -279,7 +312,6 @@ def add_filter(
         if value and isinstance(value, list) and len(value) == 2:
             logger.info(f"[DEBUG] {interactive_component_type} validation passed, applying filter")
             try:
-                from datetime import date as _date
                 from datetime import datetime as _dt
 
                 # Parse the React-supplied ISO strings (or pass through if
@@ -287,26 +319,9 @@ def add_filter(
                 # Timeline accepts richer ISO formats (yyyy-mm-ddTHH:MM:SS) so
                 # try a list of formats; DateRangePicker historically used
                 # day-precision strings.
-                def _parse_iso(raw: object) -> object:
-                    if isinstance(raw, (_dt, _date)):
-                        return raw
-                    if not isinstance(raw, str):
-                        return raw
-                    for fmt in (
-                        "%Y-%m-%dT%H:%M:%S.%f",
-                        "%Y-%m-%dT%H:%M:%S",
-                        "%Y-%m-%d %H:%M:%S",
-                        "%Y-%m-%d",
-                    ):
-                        try:
-                            return _dt.strptime(raw, fmt)
-                        except ValueError:
-                            continue
-                    # Fall back to ISO 8601 parser (handles trailing 'Z' etc).
-                    return _dt.fromisoformat(raw.rstrip("Z"))
 
-                start_dt = _parse_iso(value[0])
-                end_dt = _parse_iso(value[1])
+                start_dt = parse_iso_datetime(value[0])
+                end_dt = parse_iso_datetime(value[1])
 
                 # Robust column expression: works for Date, Datetime, AND
                 # Utf8 columns. ``cast(pl.Datetime)`` alone fails at

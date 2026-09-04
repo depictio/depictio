@@ -953,6 +953,99 @@ def prewarm_multiqc_dc_all_plots(self, dc_id: str) -> dict:
             logger.warning(f"prewarm_multiqc_dc_all_plots: failed to clear lock {lock_key}: {exc}")
 
 
+@celery_app.task(
+    bind=True,
+    name="render_notebook_report",
+    soft_time_limit=settings.notebook_export.render_timeout_s + 60,
+    time_limit=settings.notebook_export.render_timeout_s + 120,
+)
+def render_notebook_report(
+    self,
+    job_id: str,
+    user_id: str,
+    notebook_key: str,
+    stem: str,
+    api_url: str,
+    token_id: str,
+) -> dict:
+    """Execute an exported notebook and keep the report Quarto renders from it.
+
+    The notebook itself is staged in S3 by the endpoint rather than sent here:
+    an export runs to ~10 MB, which is not what a broker message is for. The
+    same goes for the token — only the id of a short-lived one minted for the
+    caller travels through Redis, and it is revoked as soon as the render is
+    over, whichever way it ends.
+
+    The render executes the notebook against this deployment's own API, with
+    the caller's rights: every tile that is rendered rather than computed costs
+    a browser pass, which is why this is a worker task and not a request.
+    """
+    import asyncio
+
+    from beanie import init_beanie
+    from motor.motor_asyncio import AsyncIOMotorClient
+
+    from depictio.api.v1.configs.config import MONGODB_URL
+    from depictio.api.v1.configs.logging_init import logger
+    from depictio.api.v1.services.notebook_export import store
+    from depictio.api.v1.services.notebook_export.render import render_quarto_html
+    from depictio.models.models.users import TokenBeanie, UserBeanie
+
+    async def _with_token(action):
+        client = AsyncIOMotorClient(MONGODB_URL)
+        try:
+            await init_beanie(
+                database=client[settings.mongodb.db_name],
+                document_models=[TokenBeanie, UserBeanie],
+            )
+            token = await TokenBeanie.get(token_id)
+            return await action(token)
+        finally:
+            client.close()
+
+    async def _read(token):
+        return token.access_token if token else None
+
+    async def _revoke(token):
+        if token:
+            await token.delete()
+        return None
+
+    html_key = store.job_key(user_id, job_id, f"{stem}.html")
+    try:
+        access_token = asyncio.run(_with_token(_read))
+        if not access_token:
+            raise RuntimeError("the render token expired before the job started")
+        self.update_state(state="PROGRESS", meta={"phase": "rendering", "job_id": job_id})
+        notebook = store.get(notebook_key)
+        html = render_quarto_html(
+            notebook,
+            stem=stem,
+            api_url=api_url,
+            api_token=access_token,
+            timeout_s=settings.notebook_export.render_timeout_s,
+        )
+        self.update_state(state="PROGRESS", meta={"phase": "storing", "job_id": job_id})
+        store.put(html_key, html, store.HTML_MEDIA_TYPE)
+        logger.info(f"📄 Rendered notebook report {html_key} ({len(html) / 1e6:.1f} MB)")
+        return {
+            "status": "success",
+            "job_id": job_id,
+            "user_id": user_id,
+            "key": html_key,
+            "filename": f"{stem}.html",
+            "size": len(html),
+        }
+    finally:
+        # The staged notebook has served its purpose either way, and a token
+        # minted for one render outlives its usefulness the moment it ends.
+        store.delete(notebook_key)
+        try:
+            asyncio.run(_with_token(_revoke))
+        except Exception as exc:  # noqa: BLE001 — never mask the render's own error
+            logger.warning(f"render_notebook_report: failed to revoke token {token_id}: {exc}")
+
+
 # NOTE: Dash apps will import celery_app when they're created in flask_dispatcher.py
 # Background callbacks are registered automatically when apps are initialized
 # No need to import apps here - that would create a circular dependency:

@@ -306,6 +306,13 @@ if _VIEWER_DIST.is_dir() and _VIEWER_ASSETS.is_dir() and _VIEWER_INDEX.is_file()
         so React's client-side router handles the dashboard ID segment."""
         return _spa_index()
 
+    @app.get("/embed/{_rest:path}")
+    async def _serve_embed_spa(_rest: str) -> FileResponse:
+        """Serve the SPA for the single-component embed route
+        (`/embed/{dashboard_id}/{component_index}`), used by headless figure
+        extraction and by `depictio.notebook`."""
+        return _spa_index()
+
     @app.get("/dashboard-edit/{_dashboard_id:path}")
     async def _serve_editor_spa(_dashboard_id: str) -> FileResponse:
         """Serve the React editor SPA. Same bundle as the viewer; the SPA's
