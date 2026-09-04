@@ -268,6 +268,18 @@ def register_run_command(app: typer.Typer):
                 "rebuilds the delta tables from all runs, and skips dashboard import."
             ),
         ),
+        triggered_by: Annotated[
+            str,
+            typer.Option(
+                "--triggered-by",
+                help=(
+                    "What invoked this ingestion, recorded on the project and shown in its "
+                    "ingestion report. Defaults to 'manual'; a pipeline's completion trigger "
+                    "passes its engine (e.g. 'nextflow') so an automated project is "
+                    "distinguishable from one someone ingested by hand."
+                ),
+            ),
+        ] = "manual",
         dashboard_name: Annotated[
             str | None,
             typer.Option(
@@ -846,6 +858,12 @@ def register_run_command(app: typer.Typer):
             try:
                 if not dry_run:
                     project_config_dict = convert_model_to_dict(project_config)
+                    # Stamped here rather than at validation because this is the
+                    # single funnel every mode goes through: new project, update
+                    # and attach alike. Re-ingesting overwrites it on purpose, so
+                    # the report always describes how the data currently on the
+                    # project got there.
+                    project_config_dict["triggered_by"] = triggered_by
                     # Provisioned (per-user) runs must stay private: templates
                     # often ship `is_public: true` for showcase visibility, but
                     # that would expose one user's project to everyone on the

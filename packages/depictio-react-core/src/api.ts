@@ -3002,6 +3002,13 @@ export interface IngestionReport {
    * collections are unknown rather than zero.
    */
   manifest_source: 'template_manifest' | 'live_project';
+  /**
+   * What invoked the project's most recent ingestion. 'manual' when someone ran
+   * the CLI themselves, otherwise the engine whose completion trigger did (e.g.
+   * 'nextflow'). Open vocabulary, so treat an unknown value as a label to show,
+   * not a case to handle.
+   */
+  triggered_by: string;
   variables: Array<{ name: string; value: string }>;
   /** Pipeline run provenance (parameters, thresholds, tool versions), grouped
    *  as the template's ProvenanceSpec laid them out. Empty for projects

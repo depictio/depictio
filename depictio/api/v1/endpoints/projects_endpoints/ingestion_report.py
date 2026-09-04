@@ -182,6 +182,9 @@ class IngestionReport(BaseModel):
     project: IngestionReportProject
     template: IngestionTemplate | None = None
     manifest_source: str = SOURCE_LIVE
+    # What invoked the project's most recent ingestion: "manual" when someone ran
+    # the CLI, otherwise the engine whose completion trigger did (e.g. "nextflow").
+    triggered_by: str = "manual"
     variables: list[IngestionVariable] = Field(default_factory=list)
     # Pipeline run provenance (parameters, filtering thresholds, tool
     # versions), grouped as the template's ProvenanceSpec laid them out.
@@ -470,6 +473,7 @@ def build_ingestion_report(project: dict) -> IngestionReport:
         ),
         template=template,
         manifest_source=manifest_source,
+        triggered_by=str(project.get("triggered_by") or "manual"),
         variables=variables,
         run_provenance=run_provenance,
         run_provenance_files=[str(f) for f in (template_origin.get("run_provenance_files") or [])],

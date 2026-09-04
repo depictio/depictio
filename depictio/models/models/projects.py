@@ -44,6 +44,29 @@ class Project(MongoModel):
     realtime: RealtimeConfig | None = None  # Optional real-time event configuration
     template_origin: TemplateOrigin | None = None  # Tracks if project was created from a template
 
+    # What INVOKED the most recent ingestion, which is a different question from
+    # what produced the data: `WorkflowConfig.engine_name` already reads
+    # "nextflow" for any nf-core output, including output a human ingested by
+    # typing the command. This says whether anyone typed it at all.
+    #
+    # Deliberately a plain string rather than an enum, so a future trigger (a
+    # Snakemake onsuccess hook, a directory watcher, an API call) needs no model
+    # change and no migration. Normalised on the way in, because "Nextflow",
+    # "nextflow " and "nextflow" becoming three distinct values is exactly how an
+    # open vocabulary rots.
+    #
+    # Re-ingesting stamps the current invocation: the field describes the latest
+    # ingestion, not the project's birth. That is why it is not called
+    # `created_via`, which would be a lie after an --attach-run.
+    triggered_by: str = "manual"
+
+    @field_validator("triggered_by", mode="before")
+    @classmethod
+    def normalize_triggered_by(cls, v):
+        if v is None:
+            return "manual"
+        return str(v).strip().lower() or "manual"
+
     @field_validator("name")
     @classmethod
     def validate_name(cls, v):

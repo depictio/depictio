@@ -441,6 +441,12 @@ const IngestionReportPanel: React.FC<IngestionReportPanelProps> = ({
   // A template project predating the manifest is a different story from a
   // project that never had a template: only the former can be re-imported.
   const isLegacyTemplate = isLive && !!template;
+  // Only an automated ingestion earns a badge. "manual" is the default and the
+  // overwhelming majority, so labelling it would be noise on every project.
+  // The vocabulary is open, so whatever the server sends is shown as-is rather
+  // than switched on.
+  const trigger =
+    report.triggered_by && report.triggered_by !== 'manual' ? report.triggered_by : null;
   const provenance = isLive
     ? {
         color: 'blue',
@@ -477,6 +483,26 @@ const IngestionReportPanel: React.FC<IngestionReportPanelProps> = ({
             </div>
           </Group>
           <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
+            {trigger && (
+              <Tooltip
+                label={`Ingested automatically when a ${trigger} pipeline completed, not by a command someone ran.`}
+                withArrow
+                multiline
+                maw={320}
+                withinPortal
+              >
+                <Badge
+                  size="lg"
+                  radius="sm"
+                  variant="light"
+                  color="violet"
+                  tt="none"
+                  leftSection={<Icon icon="mdi:pipe" width={14} />}
+                >
+                  Triggered by {trigger}
+                </Badge>
+              </Tooltip>
+            )}
             <Tooltip label={provenance.tip} withArrow multiline maw={320} withinPortal>
               <Badge
                 size="lg"
