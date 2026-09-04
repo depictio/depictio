@@ -8,6 +8,9 @@ several paragraphs for:
   the project read as data, one planning call, the gate where the run can stop
   before anything is filled, the per-component loop with its single repair, and
   the dashboard the layout pass actually draws.
+* ``model_contract``     — why a generated component is a Depictio component: the
+  Pydantic definitions and the collection's own schema generate the prompt's
+  legal space, and the same definitions reject an answer that leaves it.
 * ``draft_review``       — the editor as the review surface: what the panel puts
   in front of the reviewer, what a decision writes, what comes back, and the
   two exits.
@@ -18,7 +21,7 @@ generator produces is the dashboard the reader sees.
 
 Usage:
     python dev/diagrams/ai_dashboard_generation.py --out docs/images/v1.4/ai/schema
-    # writes <out>_generation_pipeline.svg/.png and <out>_draft_review.svg/.png
+    # writes <out>_<name>.svg/.png for each diagram below
 
 PNG rendering needs Playwright (already a dev dependency) and a local Virgil GS;
 without the font the SVG still renders in whatever the fallback list finds.
@@ -39,6 +42,7 @@ from sketch import (  # noqa: E402
     DIM,
     GREEN,
     GREY,
+    INK,
     ORANGE,
     PINK,
     RED,
@@ -462,6 +466,181 @@ def build_review() -> Sketch:
     return s
 
 
+# --------------------------------------------------------------------------
+# 3. The contract: the same definitions on both sides of the call.
+# --------------------------------------------------------------------------
+
+CONTRACT_W, CONTRACT_H = 1560, 940
+
+# Lifted verbatim from what the sheet builder emits, so the drawing can be
+# checked against a real prompt rather than believed.
+SHEET_LINES: tuple[tuple[str, bool], ...] = (
+    ("CARD   aggregation by column_type", True),
+    ("  int64    -> count, sum, average, median, min, max, range, ...", False),
+    ("  bool     -> count, sum, min, max", False),
+    ("  secondary_layout: vertical, compact, grid, box_plot, top_n, ...", False),
+    ("INTERACTIVE   control by column_type", True),
+    ("  int64    -> Slider, RangeSlider", False),
+    ("  object   -> Select, MultiSelect, SegmentedControl", False),
+    ("ADVANCED_VIZ   ranked against this collection's own dtypes", True),
+    ("  viz_kind: volcano   (fit 0.92)", False),
+    ("    config.x_col: required column (Float64). Candidates: log2FC", False),
+    ("    config.y_col: required column (Float64). Candidates: pvalue", False),
+    ("  config accepts ONLY the keys listed; unknown keys are rejected", False),
+)
+
+
+def build_contract() -> Sketch:
+    """Why a generated component is a Depictio component and not a guess.
+
+    The drawing exists for one claim, so the claim is the composition: a single
+    group on the left with two arrows out of it, one into the prompt and one
+    into the checks. The sheet in the middle is quoted rather than summarised,
+    because "the prompt is generated from the models" is only believable when
+    the reader can see the compatibility tables in it. The bottom row is the
+    same definitions again, this time saying no.
+    """
+    s = Sketch(CONTRACT_W, CONTRACT_H)
+    s.heading(
+        56,
+        60,
+        "The model is the contract",
+        "the same definitions generate the prompt's legal space and reject whatever falls outside it",
+    )
+
+    # -- one source of truth ----------------------------------------------
+    s.rect(Box(56, 104, 330, 430, "none", ""), colour=GREY, dashed=True)
+    s.text(221, 132, "one source of truth", size=15, weight="bold")
+    for i, (label, fill) in enumerate(
+        (
+            ("models/components/constants.py", CARD_FILL),
+            ("models/components/lite.py", GREEN),
+            ("advanced_viz/schemas.py", FIGURE_FILL),
+            ("ai_endpoints/component_style.py", ORANGE),
+        )
+    ):
+        s.chip(221, 176 + i * 36, label, fill=fill, w=290, h=30, size=11)
+    s.text(221, 322, "the definitions the builder and the CLI", size=11, colour=DIM)
+    s.text(221, 340, "already use, read at request time", size=11, colour=DIM)
+    s.cylinder(141, 366, 160, 148, fill=BLUE)
+    s.text(221, 418, "this collection", size=14, weight="bold")
+    s.text(221, 442, "columns, dtypes,", size=11, colour=DIM)
+    s.text(221, 460, "distinct counts", size=11, colour=DIM)
+
+    # -- what the prompt may say ------------------------------------------
+    s.arrow(390, 260, 466, 260)
+    s.text(428, 246, "generates", size=11, colour=DIM)
+    s.document(470, 104, 570, 320, fill=YELLOW)
+    s.text(755, 140, "the constraint sheet", size=18, weight="bold")
+    s.text(755, 162, "what the prompt may say, generated per request", size=12, colour=DIM)
+    for i, (line, heading) in enumerate(SHEET_LINES):
+        s.text(
+            496,
+            192 + i * 18.5,
+            line,
+            size=12,
+            colour=INK if heading else DIM,
+            anchor="start",
+            weight="bold" if heading else "normal",
+        )
+
+    s.arrow(1044, 260, 1086, 260)
+    s.box(
+        Box(
+            1090,
+            190,
+            300,
+            140,
+            VIOLET,
+            "one model call",
+            ("the only step nothing", "constrains from inside"),
+        )
+    )
+
+    s.line(1240, 330, 1240, 440)
+    s.line(1240, 440, 1445, 440)
+    s.arrow(1445, 440, 1445, 496)
+    s.text(1288, 470, "the answer, in the CLI's own YAML grammar", size=12, colour=DIM)
+
+    # -- what the answer has to pass --------------------------------------
+    s.text(880, 470, "what the answer has to pass", size=15, weight="bold")
+    s.document(1350, 500, 190, 130, fill=YELLOW)
+    s.text(1445, 530, "the answer", size=14, weight="bold")
+    scribble(s, 1376, 552, (132, 98, 114, 80), gap=17)
+
+    s.arrow(1346, 564, 1314, 564)
+    s.box(
+        Box(
+            1060,
+            506,
+            250,
+            118,
+            GREEN,
+            "from_yaml",
+            ("DashboardDataLite,", "the loader the CLI uses"),
+        )
+    )
+    s.arrow(1056, 564, 1024, 564)
+    s.box(
+        Box(
+            750,
+            506,
+            270,
+            118,
+            GREEN,
+            "the typed component",
+            ("CardLiteComponent, ...", "extra = forbid"),
+        )
+    )
+    s.arrow(746, 564, 714, 564)
+    s.box(
+        Box(
+            440,
+            494,
+            270,
+            142,
+            GREEN,
+            "check_against_schema",
+            (
+                "every column real,",
+                "aggregation by column type,",
+                "MultiSelect <= 50, role dtypes",
+            ),
+        )
+    )
+    s.arrow(388, 505, 436, 545)
+    s.text(414, 492, "rejects", size=11, colour=DIM)
+
+    s.line(575, 636, 575, 672)
+    s.arrow(575, 672, 575, 700)
+    s.box(
+        Box(
+            455,
+            700,
+            240,
+            118,
+            GREEN,
+            "the render probe",
+            ("the real render path,", "in process, never HTTP"),
+        )
+    )
+    s.arrow(699, 759, 745, 759)
+    s.diamond(830, 759, 152, 104, fill=WHITE)
+    s.text(830, 755, "clean?", size=15, weight="bold")
+    s.text(830, 775, "no findings", size=11, colour=DIM)
+
+    s.arrow(908, 759, 962, 759)
+    s.chip(1044, 759, "kept", fill=GREEN, w=140, h=44, size=14)
+    s.tick(1002, 755, colour=WRITE_INK)
+    s.text(1044, 806, "still failing: dropped, never saved", size=11, colour=DIM)
+
+    s.line(830, 811, 830, 858, colour=RED)
+    s.line(830, 858, 1445, 858, colour=RED)
+    s.arrow(1445, 858, 1445, 638, colour=RED)
+    s.text(1130, 880, "one repair round: the finding, quoted verbatim", size=12, colour=RED)
+    return s
+
+
 @app.command()
 def main(
     out: Path = typer.Option(
@@ -473,6 +652,7 @@ def main(
 ) -> None:
     """Write the generation and review schemas under --out."""
     write(build_pipeline(), out, "generation_pipeline", png=png)
+    write(build_contract(), out, "model_contract", png=png)
     write(build_review(), out, "draft_review", png=png)
 
 
