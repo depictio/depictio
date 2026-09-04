@@ -1,5 +1,4 @@
 import os
-import re
 from datetime import datetime
 
 from bson import ObjectId
@@ -20,7 +19,12 @@ from depictio.cli.cli.utils.rich_utils import (
     rich_print_summary_scan_table_enhanced,
 )
 from depictio.cli.cli.utils.scan_utils import (
+    collect_run_candidates,
     construct_full_regex,
+    data_collection_full_regex,
+    describe_empty_scan_outcome,
+    describe_unmatched_run_scan,
+    file_matches_data_collection,
     generate_file_hash,
     generate_run_hash,
     regex_match,
@@ -379,18 +383,12 @@ def scan_run_for_multiple_data_collections(
         )
 
         # Build regex for this data collection (only for recursive scans)
-        if not dc.config.scan or not hasattr(dc.config.scan.scan_parameters, "regex_config"):
+        full_regex = data_collection_full_regex(dc)
+        if full_regex is None:
             logger.warning(
                 f"Data collection {dc.data_collection_tag} does not have scan config or regex_config (likely single-file scan or MultiQC)"
             )
             continue
-
-        regex_config = dc.config.scan.scan_parameters.regex_config
-        full_regex = (
-            construct_full_regex(regex=regex_config)  # type: ignore[invalid-argument-type]
-            if getattr(regex_config, "wildcards", False)
-            else regex_config.pattern  # type: ignore[unresolved-attribute]
-        )
         logger.debug(f"Regex for DC {dc.data_collection_tag}: {full_regex}")
 
         # A temporary run used only for file association — invariant across
@@ -412,19 +410,10 @@ def scan_run_for_multiple_data_collections(
         # Process files that match this data collection's regex
         dc_file_scan_results = []
         for file_location in all_files_in_run:
+            if not file_matches_data_collection(file_location, run_location, full_regex):
+                continue
+
             file_name = os.path.basename(file_location)
-
-            # Check regex match against basename first
-            match, _ = regex_match(file_name, full_regex)
-            if not match:
-                # If the pattern contains path separators (e.g., "variants/bowtie2/..."),
-                # try matching against the relative path from the run directory
-                if "/" in full_regex:
-                    rel_path = os.path.relpath(file_location, run_location)
-                    match, _ = regex_match(rel_path, full_regex)
-                if not match:
-                    continue
-
             logger.debug(f"File {file_name} matches DC {dc.data_collection_tag}")
 
             # skip_regex=True because we already matched in the loop above
@@ -686,6 +675,9 @@ def scan_files_for_workflow(
 
     # Scan runs once and collect files for all data collections
     all_workflow_runs = []
+    # Runs recognised but already ingested. A scan that skips every run is a
+    # legitimate no-op; only one that recognises nothing has a data-root problem.
+    runs_skipped_as_existing = 0
 
     # Get locations from the workflow config
     locations = workflow.data_location.locations
@@ -709,6 +701,7 @@ def scan_files_for_workflow(
             run_tag = os.path.basename(os.path.normpath(location))
             if run_tag in existing_runs_reformated and not rescan_folders:
                 logger.debug(f"Skipping existing run {run_tag}.")
+                runs_skipped_as_existing += 1
                 continue
 
             if workflow.config is None:
@@ -746,15 +739,25 @@ def scan_files_for_workflow(
                 logger.error("runs_regex is required for sequencing-runs structure but was None")
                 continue
 
-            # Collect all valid runs first to show accurate progress
+            # Collect all valid runs first to show accurate progress. The
+            # candidates carry every subdirectory, matching or not, so matching
+            # nothing can say *why*: a wrong --data-root level reads very
+            # differently from everything matched but already ingested, which is
+            # a legitimate no-op.
+            candidates = collect_run_candidates(location, "sequencing-runs", runs_regex)
+            if not candidates.matched:
+                rich_print_checked_statement(
+                    describe_unmatched_run_scan(location, runs_regex, candidates.subdirectories),
+                    "warning",
+                )
+
             valid_runs = []
-            for run in sorted(os.listdir(location)):
-                run_path = os.path.join(location, run)
-                if os.path.isdir(run_path) and re.match(runs_regex, run):
-                    if run in existing_runs_reformated and not rescan_folders:
-                        logger.debug(f"Skipping existing run {run}.")
-                        continue
-                    valid_runs.append((run_path, run))
+            for run, run_path in candidates.matched:
+                if run in existing_runs_reformated and not rescan_folders:
+                    logger.debug(f"Skipping existing run {run}.")
+                    runs_skipped_as_existing += 1
+                    continue
+                valid_runs.append((run_path, run))
 
             # Process runs with progress bar
             if valid_runs:
@@ -841,12 +844,29 @@ def scan_files_for_workflow(
     else:
         rich_print_data_collection_light(all_workflow_runs, workflow)
 
-    rich_print_checked_statement(
-        f"Scanned {len(all_workflow_runs)} runs in workflow {workflow.workflow_tag}",
-        "success",
+    files_found = sum(len(run.files_id or []) for run in all_workflow_runs if run)
+    empty_outcome = describe_empty_scan_outcome(
+        len(all_workflow_runs), files_found, runs_skipped_as_existing
     )
+    if empty_outcome:
+        # Reported as a warning rather than a failed result: the caller treats
+        # anything but "success" as fatal, and one empty workflow must not
+        # abort the other workflows and single-file data collections that may
+        # well have ingested fine. The user needs to see this now all the same,
+        # instead of debugging an empty dashboard later.
+        rich_print_checked_statement(empty_outcome, "warning")
+    else:
+        rich_print_checked_statement(
+            f"Scanned {len(all_workflow_runs)} runs in workflow {workflow.workflow_tag}",
+            "success",
+        )
 
-    return {"result": "success", "runs_scanned": len(all_workflow_runs)}
+    return {
+        "result": "success",
+        "runs_scanned": len(all_workflow_runs),
+        "files_found": files_found,
+        "warning": empty_outcome,
+    }
 
 
 def scan_files_for_data_collection(
