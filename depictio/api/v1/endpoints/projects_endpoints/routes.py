@@ -36,6 +36,10 @@ from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, ge
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.projects import Project, ProjectPermissionRequest, ProjectResponse
 from depictio.models.models.users import Permission, UserBase
+from depictio.models.project_merge import (
+    merge_project_data_collections,
+    merge_project_workflows,
+)
 from depictio.models.timestamps import preserved_creation_time, utc_now_str
 
 projects_endpoint_router = APIRouter()
@@ -367,6 +371,26 @@ async def update_project(project: Project, current_user=Depends(get_current_user
     # the whole project document, so honoring `is_public` here would flip
     # visibility silently without the cascade.
     update_payload["is_public"] = existing_project_dict.get("is_public", False)
+    # The browser appends workflows straight onto the stored document while the
+    # client round-trips the whole project through here, so a plain `$set` lets
+    # whoever saves last delete the other surface's work. Same reasoning as the
+    # two carve-outs above; this is the one that loses user data.
+    #
+    # Merge against the *raw* document, not `existing_project_dict`: the access
+    # check above goes through `_async_get_project_from_id`, which returns the
+    # project already passed through `convert_objectid_to_str`. Preserving a
+    # sub-document from that copy would write its ids back as strings, and the
+    # queries that matter here are ObjectId-typed: the `$pull` that deletes a
+    # data collection and the `$expr` join that attaches delta locations would
+    # both stop matching, silently.
+    stored_project = projects_collection.find_one({"_id": project.id}) or {}
+    update_payload["workflows"] = merge_project_workflows(
+        stored_project.get("workflows"), update_payload.get("workflows")
+    )
+    update_payload["data_collections"] = merge_project_data_collections(
+        stored_project.get("data_collections"),
+        update_payload.get("data_collections"),
+    )
     update_payload["last_modified"] = utc_now_str()
     projects_collection.update_one({"_id": project.id}, {"$set": update_payload})
 
