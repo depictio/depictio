@@ -886,14 +886,29 @@ class TestPreviewDataRoot:
         row = self._row(self._preview(monkeypatch), "taxonomy_composition")
         assert (row.kind, row.status, row.matched, row.missing_sources) == ("recipe", "ok", 1, [])
 
-    def test_a_recipe_reading_other_collections_counts_them_as_inputs(self, monkeypatch):
+    def test_a_recipe_reading_other_collections_counts_them_once_they_settle(self, monkeypatch):
         """upset_canonical has no file source at all: it reads taxonomy_rel_abundance
-        and, optionally, metadata. Both are in the resolved project, so it is two
-        inputs found, not a collection that found nothing."""
-        row = self._row(self._preview(monkeypatch), "upset_canonical")
+        and, optionally, metadata. With rel-table-2 present the first settles, so
+        upset counts two inputs found; embedding_pcoa then settles through
+        taxonomy_heatmap, one more link down the same chain."""
+        tree = {**MEGATEST_TREE, "qiime2/rel_abundance_tables/rel-table-2.tsv": b"taxon\n"}
+        preview = self._preview(monkeypatch, tree=tree)
+        row = self._row(preview, "upset_canonical")
         assert (row.kind, row.status, row.matched, row.missing_sources) == ("recipe", "ok", 2, [])
+        assert self._row(preview, "embedding_pcoa").status == "ok"
 
-    def test_a_required_dc_ref_to_an_absent_collection_is_missing(self, monkeypatch):
+    def test_a_dc_ref_to_a_collection_that_found_nothing_is_missing(self, monkeypatch):
+        """Presence in the project is not enough: taxonomy_rel_abundance is there but
+        its own table is missing, so nothing reading it can be built either. This
+        is what keeps a prefix at the wrong level from looking partly matched."""
+        row = self._row(self._preview(monkeypatch), "upset_canonical")
+        assert (row.status, row.matched, row.missing_sources) == (
+            "missing",
+            1,
+            ["collection 'taxonomy_rel_abundance'"],
+        )
+
+    def test_a_required_dc_ref_outside_the_settled_set_is_missing(self, monkeypatch):
         from depictio.cli.cli.utils.template_preview import _preview_recipe_dc
 
         root = s3_data_root(monkeypatch, MEGATEST_TREE)
@@ -905,8 +920,8 @@ class TestPreviewDataRoot:
             "missing",
             ["collection 'taxonomy_rel_abundance'"],
         )
-        present = frozenset({"taxonomy_rel_abundance"})
-        row = _preview_recipe_dc("upset_canonical", dc_config, root, False, present)
+        settled = frozenset({"taxonomy_rel_abundance"})
+        row = _preview_recipe_dc("upset_canonical", dc_config, root, False, settled)
         assert (row.matched, row.status, row.missing_sources) == (1, "ok", [])
 
     def test_a_pruned_optional_dc_gets_its_own_row(self, monkeypatch):

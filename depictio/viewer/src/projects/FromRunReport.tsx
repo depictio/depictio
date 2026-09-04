@@ -159,7 +159,7 @@ export const FromRunPreviewReport: React.FC<{ report: FromRunReport }> = ({ repo
             <Table.Th>Kind</Table.Th>
             <Table.Th>Mode</Table.Th>
             <Table.Th>Inputs</Table.Th>
-            <Table.Th style={{ whiteSpace: 'nowrap' }}>Status</Table.Th>
+            <Table.Th style={{ width: 120 }}>Status</Table.Th>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -207,7 +207,7 @@ export const FromRunPreviewReport: React.FC<{ report: FromRunReport }> = ({ repo
                       {dc.matched}
                     </Text>
                   </Table.Td>
-                  <Table.Td style={{ whiteSpace: 'nowrap' }}>
+                  <Table.Td>
                     <Badge
                       variant="light"
                       color={meta.color}
