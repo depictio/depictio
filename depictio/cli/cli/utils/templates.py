@@ -1001,8 +1001,11 @@ def _read_header_line(location: str, root: DataRoot | None) -> str | None:
                 logger.warning(f"Could not read metadata file for column detection: {exc}")
                 return None
             return raw.split(b"\n", 1)[0].decode("utf-8", errors="replace").strip()
-        if root.is_remote:
-            return None
+
+    if "://" in location:
+        # A URL outside the root: we cannot read it from here. Falling through
+        # to the filesystem would only mis-report it as absent.
+        return None
 
     path = Path(location)
     if not path.is_file():

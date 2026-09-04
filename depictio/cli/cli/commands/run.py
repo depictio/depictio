@@ -647,6 +647,14 @@ def register_run_command(app: typer.Typer):
                         manifest = str(manifest_path)
                     extra_vars.setdefault("MANIFEST_URL", manifest)
 
+                # Build the data root once. A remote one costs a full
+                # paginated listing, and the dry-run preview below resolves the
+                # same template again; handing both the same root keeps that to
+                # one listing.
+                from depictio.cli.cli.utils.data_root import as_data_root
+
+                template_root = as_data_root(data_root, CLI_config)
+
                 # Resolve template
                 (
                     resolved_config,
@@ -656,7 +664,7 @@ def register_run_command(app: typer.Typer):
                     template_variables,
                 ) = resolve_template(
                     template_id=template,  # type: ignore[arg-type]
-                    data_root=data_root,  # type: ignore[arg-type]
+                    data_root=template_root,  # type: ignore[arg-type]
                     project_name=project_name,
                     extra_vars=extra_vars or None,
                     provenance_files=provenance_file,
@@ -724,7 +732,7 @@ def register_run_command(app: typer.Typer):
                     _render_run_preview(
                         preview_data_root(
                             template_id=template,  # type: ignore[arg-type]
-                            data_root=data_root,
+                            data_root=template_root,
                             variables=extra_vars or None,
                             CLI_config=CLI_config,
                         )
