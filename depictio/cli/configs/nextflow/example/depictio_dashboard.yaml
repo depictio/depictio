@@ -6,32 +6,37 @@
 # not one of those, and without it the trigger produces an ingested project with
 # nothing to look at.
 #
-# `project_tag` must match the project name in depictio_project.yaml, and the
-# workflow / data collection tags must match the ones it declares.
+# `project_tag` must match the project name in depictio_project.yaml, and every
+# `workflow_tag` / `data_collection_tag` must match the ones it declares.
 version: 1
 
 title: "Nextflow trigger example"
-subtitle: "Measurements ingested automatically when the pipeline finished"
+subtitle: "QC metrics and coverage, ingested automatically when the pipeline finished"
 project_tag: "Nextflow trigger example"
 main_tab_name: "Overview"
 tab_icon: "mdi:flask-outline"
 tab_icon_color: "teal"
 
 filter_sections:
-  - name: "Samples"
+  - name: "Cohort"
     icon: "mdi:filter-variant"
     color: "teal"
     description: "Narrow every figure below to a subset of samples"
+    persistent: true
 
 grid_sections:
-  - name: "Summary"
+  - name: "Cohort"
     icon: "mdi:counter"
     color: "teal"
-    description: "What arrived from the pipeline, and from how many runs"
+    description: "What arrived from the pipeline, and whether it passed QC"
+  - name: "Coverage"
+    icon: "mdi:chart-areaspline"
+    color: "blue"
+    description: "Depth along the reference, reshaped by a catalog recipe"
   - name: "Measurements"
     icon: "mdi:chart-bar"
     color: "violet"
-    description: "The value recorded for each sample"
+    description: "The headline value recorded for each sample"
   - name: "Raw data"
     icon: "mdi:table"
     color: "gray"
@@ -39,9 +44,10 @@ grid_sections:
     collapsed: true
 
 components:
-  - tag: sample-filter
+  # ── Filters ────────────────────────────────────────────────────────
+  - tag: filter-sample
     component_type: interactive
-    section: "Samples"
+    section: "Cohort"
     workflow_tag: nextflow-trigger-example
     data_collection_tag: measurements
     interactive_component_type: MultiSelect
@@ -51,84 +57,233 @@ components:
     title: "Sample"
     layout: { x: 0, y: 0, w: 1, h: 3 }
 
+  - tag: filter-group
+    component_type: interactive
+    section: "Cohort"
+    workflow_tag: nextflow-trigger-example
+    data_collection_tag: measurements
+    interactive_component_type: MultiSelect
+    column_name: group
+    column_type: object
+    icon_name: mdi:account-group
+    title: "Group"
+    layout: { x: 0, y: 3, w: 1, h: 3 }
+
+  - tag: filter-status
+    component_type: interactive
+    section: "Cohort"
+    workflow_tag: nextflow-trigger-example
+    data_collection_tag: measurements
+    interactive_component_type: MultiSelect
+    column_name: status
+    column_type: object
+    icon_name: mdi:check-decagram
+    title: "QC status"
+    layout: { x: 0, y: 6, w: 1, h: 3 }
+
+  # ── Narrative ──────────────────────────────────────────────────────
   - tag: intro
     component_type: text
-    section: "Summary"
+    section: "Cohort"
     title: "Ingested from Nextflow"
     order: 1
     alignment: left
     body: >
       Everything below arrived without anyone running the CLI by hand: the
       pipeline's `workflow.onComplete` handler called `depictio run` on its
-      output directory. Re-running the pipeline adds another run to the same
-      project, which is why the run count is worth a card of its own.
+      output directory. Each card below uses a different secondary layout,
+      because the question each column answers is different: a funnel for the
+      read stages, a QC cut-off for quality, a five-number summary for the
+      headline value, a composition for the groups.
     layout: { x: 0, y: 0, w: 8, h: 1 }
 
-  # One row of four, w=2 each, so the row is filled rather than ragged.
-  - tag: card-samples
+  # ── Row 1: four cards, w=2 each, so the row is filled ──────────────
+  # ``attrition`` walks the read stages in pipeline order. Nothing else here
+  # answers "where did the reads go", because every other layout summarises a
+  # single column.
+  - tag: card-reads
     component_type: card
-    section: "Summary"
+    section: "Cohort"
     workflow_tag: nextflow-trigger-example
     data_collection_tag: measurements
-    aggregation: count
-    column_name: sample
-    column_type: object
-    icon_name: mdi:counter
+    aggregation: sum
+    column_name: reads_total
+    column_type: int64
+    secondary_layout: attrition
+    attrition_cols: [reads_mapped, reads_dedup]
+    icon_name: mdi:filter-outline
     icon_color: "#12B886"
     title_color: "#12B886"
     title_font_size: md
     value_font_size: xl
-    title: "Measurements"
+    title: "Reads"
     layout: { x: 0, y: 1, w: 2, h: 2 }
 
-  - tag: card-runs
+  # ``threshold`` is the only layout that says whether a sample is usable. A
+  # box plot would show the spread and never mention the two failing samples.
+  - tag: card-quality
     component_type: card
-    section: "Summary"
+    section: "Cohort"
     workflow_tag: nextflow-trigger-example
     data_collection_tag: measurements
-    aggregation: nunique
-    column_name: depictio_run_id
-    column_type: object
-    icon_name: mdi:play-circle-outline
+    aggregation: average
+    column_name: mean_quality
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 30
+    threshold_warn: 27
+    threshold_direction: min
+    icon_name: mdi:check-decagram
+    icon_color: "#1C7ED6"
+    title_color: "#1C7ED6"
+    title_font_size: md
+    value_font_size: xl
+    title: "Mean quality"
+    layout: { x: 2, y: 1, w: 2, h: 2 }
+
+  # Tukey five-number summary, the right description for a unimodal column.
+  - tag: card-value-spread
+    component_type: card
+    section: "Cohort"
+    workflow_tag: nextflow-trigger-example
+    data_collection_tag: measurements
+    aggregation: median
+    column_name: value
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    icon_name: mdi:chart-box-outline
     icon_color: "#7950F2"
     title_color: "#7950F2"
     title_font_size: md
     value_font_size: xl
-    title: "Pipeline runs"
-    layout: { x: 2, y: 1, w: 2, h: 2 }
+    title: "Value spread"
+    layout: { x: 4, y: 1, w: 2, h: 2 }
 
-  - tag: card-mean
+  # ``histogram`` is the one view box_plot structurally cannot give: a
+  # five-number summary draws a bimodal column and a flat one identically.
+  - tag: card-value-shape
     component_type: card
-    section: "Summary"
+    section: "Cohort"
     workflow_tag: nextflow-trigger-example
     data_collection_tag: measurements
     aggregation: average
     column_name: value
     column_type: float64
-    icon_name: mdi:chart-line
-    icon_color: "#1C7ED6"
-    title_color: "#1C7ED6"
-    title_font_size: md
-    value_font_size: xl
-    title: "Mean value"
-    layout: { x: 4, y: 1, w: 2, h: 2 }
-
-  - tag: card-max
-    component_type: card
-    section: "Summary"
-    workflow_tag: nextflow-trigger-example
-    data_collection_tag: measurements
-    aggregation: max
-    column_name: value
-    column_type: float64
-    icon_name: mdi:arrow-up-bold
+    secondary_layout: histogram
+    icon_name: mdi:chart-histogram
     icon_color: "#F76707"
     title_color: "#F76707"
     title_font_size: md
     value_font_size: xl
-    title: "Highest value"
+    title: "Value shape"
     layout: { x: 6, y: 1, w: 2, h: 2 }
 
+  # ── Row 2: four more, four more layouts ────────────────────────────
+  - tag: card-status
+    component_type: card
+    section: "Cohort"
+    workflow_tag: nextflow-trigger-example
+    data_collection_tag: measurements
+    aggregation: nunique
+    column_name: status
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: status
+    top_n_count: 3
+    icon_name: mdi:chart-donut
+    icon_color: "#E8590C"
+    title_color: "#E8590C"
+    title_font_size: md
+    value_font_size: xl
+    title: "QC verdicts"
+    layout: { x: 0, y: 3, w: 2, h: 2 }
+
+  - tag: card-groups
+    component_type: card
+    section: "Cohort"
+    workflow_tag: nextflow-trigger-example
+    data_collection_tag: measurements
+    aggregation: count
+    column_name: group
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: group
+    top_n_count: 2
+    icon_name: mdi:account-group
+    icon_color: "#0CA678"
+    title_color: "#0CA678"
+    title_font_size: md
+    value_font_size: xl
+    title: "Groups"
+    layout: { x: 2, y: 3, w: 2, h: 2 }
+
+  # ``count`` skips nulls, so a card can look complete while the column is
+  # half empty. This is the layout that says so.
+  - tag: card-completeness
+    component_type: card
+    section: "Cohort"
+    workflow_tag: nextflow-trigger-example
+    data_collection_tag: measurements
+    aggregation: count
+    column_name: mean_quality
+    column_type: float64
+    secondary_layout: completeness
+    icon_name: mdi:database-check
+    icon_color: "#4C6EF5"
+    title_color: "#4C6EF5"
+    title_font_size: md
+    value_font_size: xl
+    title: "Quality recorded"
+    layout: { x: 4, y: 3, w: 2, h: 2 }
+
+  # Re-running the pipeline adds a run to the same project, which is why the
+  # run count is worth a card: it is how you tell one ingestion from three.
+  - tag: card-runs
+    component_type: card
+    section: "Cohort"
+    workflow_tag: nextflow-trigger-example
+    data_collection_tag: measurements
+    aggregation: nunique
+    column_name: depictio_run_id
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: depictio_run_id
+    top_n_count: 3
+    icon_name: mdi:play-circle-outline
+    icon_color: "#868E96"
+    title_color: "#868E96"
+    title_font_size: md
+    value_font_size: xl
+    title: "Pipeline runs"
+    layout: { x: 6, y: 3, w: 2, h: 2 }
+
+  # ── Catalog component ──────────────────────────────────────────────
+  # Renders `coverage_track_canonical`, which no file on disk contains: the
+  # project YAML builds it from the mosdepth-shaped collection through
+  # depictio/catalog/mosdepth/coverage_track_canonical.py. The visualisation
+  # knows only the canonical roles, which is what lets it serve any tool whose
+  # output a recipe can reshape.
+  - tag: coverage-track
+    component_type: advanced_viz
+    section: "Coverage"
+    workflow_tag: nextflow-trigger-example
+    data_collection_tag: coverage_track_canonical
+    viz_kind: coverage_track
+    title: "Depth along the reference"
+    description: "Windowed depth per sample. The dip near 8.2 kb is written into the fabricated data on purpose, so the track has something to show. Faceting, log scale and smoothing live in the Settings popover."
+    config:
+      viz_kind: coverage_track
+      chromosome_col: chromosome
+      position_col: position
+      value_col: value
+      end_col: end
+      sample_col: sample
+      y_scale: linear
+      smoothing_window: 0
+    layout: { x: 0, y: 0, w: 8, h: 8 }
+
+  # ── Figure ─────────────────────────────────────────────────────────
   - tag: value-per-sample
     component_type: figure
     section: "Measurements"
@@ -137,7 +292,7 @@ components:
     visu_type: bar
     mode: code
     title: "Value per sample"
-    description: "One bar per sample, coloured by the run it came from, so a second pipeline run is visible rather than silently averaged in."
+    description: "One bar per sample, coloured by QC verdict, so a failing sample is visible rather than averaged in."
     title_size: h3
     code_content: |
       df_pd = df.to_pandas()
@@ -145,13 +300,15 @@ components:
           df_pd,
           x='sample',
           y='value',
-          color='depictio_run_id',
-          barmode='group',
-          labels={'sample': 'Sample', 'value': 'Measured value'},
+          color='status',
+          category_orders={'status': ['pass', 'warn', 'fail']},
+          color_discrete_map={'pass': '#12B886', 'warn': '#F59F00', 'fail': '#FA5252'},
+          labels={'sample': 'Sample', 'value': 'Measured value', 'status': 'QC'},
       )
-      fig.update_layout(template='plotly_white', legend_title_text='Run')
-    layout: { x: 0, y: 3, w: 8, h: 6 }
+      fig.update_layout(template='plotly_white', legend_title_text='QC')
+    layout: { x: 0, y: 0, w: 8, h: 6 }
 
+  # ── Table ──────────────────────────────────────────────────────────
   - tag: measurements-table
     component_type: table
     section: "Raw data"
@@ -162,4 +319,4 @@ components:
     title_size: h3
     title_align: left
     page_size: 50
-    layout: { x: 0, y: 9, w: 8, h: 5 }
+    layout: { x: 0, y: 0, w: 8, h: 5 }

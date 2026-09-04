@@ -300,6 +300,28 @@ workflows:
 `structure: "sequencing-runs"` with a `runs_regex` when the root holds one
 subdirectory per run.
 
+### Catalog recipes work here too
+
+Recipes under `depictio/catalog/` are not reserved for bundled templates. A
+project YAML can declare a collection built from another one instead of scanned
+from disk, which is how a tool-specific output reaches a shared visualisation:
+
+```yaml
+      - data_collection_tag: "coverage_track_canonical"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "mosdepth/coverage_track_canonical.py"
+```
+
+`source: "transformed"` is what makes it derived. The recipe names the
+collection it reads by tag (here `mosdepth_genome_coverage`), so that tag has to
+exist in the same workflow. It renames the tool's columns to the canonical roles
+the `coverage_track` visualisation expects, which is why that visualisation can
+render output it knows nothing about.
+
 ### Getting a dashboard too
 
 A project YAML says what to ingest, not what to show. On its own it leaves you
@@ -324,8 +346,13 @@ Both URLs are printed in the run summary at the end of the pipeline log:
 • 📘 Dashboard 'Nextflow trigger example': http://localhost:5600/dashboard/6a9acdf3835e12072990459a
 ```
 
-A complete runnable example, pipeline plus config plus project YAML plus
-dashboard, is in `depictio/cli/configs/nextflow/example/`.
+A complete runnable example is in `depictio/cli/configs/nextflow/example/`:
+pipeline, config, project YAML and dashboard. It fabricates the two output
+shapes a QC pipeline produces (per-sample metrics and windowed depth in
+mosdepth's column layout), so the dashboard can show eight cards each using a
+different secondary layout, and a coverage track built by the catalog recipe
+above. No bioinformatics tool is involved and none of the numbers mean
+anything: the point is the ingestion path.
 
 ## New project or additional run
 
