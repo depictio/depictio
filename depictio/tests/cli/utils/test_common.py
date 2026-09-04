@@ -1,4 +1,6 @@
 import copy
+import os
+import tempfile
 from datetime import datetime
 from unittest.mock import patch
 
@@ -194,7 +196,14 @@ class TestCommon:
                     s3_storage=mock_config["s3_storage"],
                 )
 
-                result = load_depictio_config()
+                # A real file on disk: load_depictio_config checks the path
+                # exists before reading it, and the default ~/.depictio/CLI.yaml
+                # is present on a developer machine but not on CI.
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    config_path = os.path.join(tmp_dir, "CLI.yaml")
+                    with open(config_path, "w") as handle:
+                        handle.write("placeholder: true\n")
+                    result = load_depictio_config(yaml_config_path=config_path)
 
                 # Verify that the functions were called
                 mock_get_config.assert_called_once()
