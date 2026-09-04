@@ -543,6 +543,8 @@ export {
 export type {
   StoredMetadata,
   DashboardData,
+  DashboardAICheck,
+  DashboardAIComponentChecks,
   DashboardAIGeneration,
   FilterSectionSpec,
   DashboardSummary,

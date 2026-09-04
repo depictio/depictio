@@ -75,6 +75,10 @@ from depictio.api.v1.endpoints.ai_endpoints.context import (
     build_data_context,
     build_project_inventory,
 )
+from depictio.api.v1.endpoints.ai_endpoints.dashboard_validate import (
+    schema_error,
+    substance_error,
+)
 from depictio.api.v1.endpoints.ai_endpoints.filter_resolver import resolve_proposals
 from depictio.api.v1.endpoints.ai_endpoints.sandbox import AnalysisSandbox, FrameSpec
 from depictio.api.v1.endpoints.ai_endpoints.schemas import (
@@ -231,6 +235,21 @@ async def suggest_figures(
 MAX_COMPONENT_ATTEMPTS = 2
 
 
+def _repair_turn(messages: list[dict], raw: str, finding: str) -> list[dict]:
+    """`messages` with the rejected answer and the finding to correct appended.
+
+    A new list, not an in-place append: the caller rebinds it for the next
+    attempt and the original stays the conversation the first attempt saw.
+    """
+    return messages + [
+        {"role": "assistant", "content": raw},
+        {
+            "role": "user",
+            "content": f"{finding}\n\nRe-emit the corrected YAML only — no prose, no fences.",
+        },
+    ]
+
+
 @ai_endpoint_router.post("/component-from-prompt", response_model=ComponentFromPromptResponse)
 async def component_from_prompt(
     body: ComponentFromPromptRequest,
@@ -247,9 +266,20 @@ async def component_from_prompt(
 
     Generation is then the same for every path: the LLM emits one YAML
     component block; we run it through the same offline validator the
-    CLI uses for `dashboard import` (`DashboardDataLite.from_yaml`). On
-    validation failure we feed the error back into the conversation and
-    retry once before bailing out.
+    CLI uses for `dashboard import` (`DashboardDataLite.from_yaml`), then
+    the two checks the whole-dashboard generator runs on every tile it
+    fills: `substance_error` (a component that parses and would still draw
+    nothing) and `schema_error` (the columns, aggregations and widget types
+    against what the collection actually stores). On any of those failures
+    we feed the error back into the conversation and retry once before
+    bailing out, so a repair costs one of the two attempts rather than an
+    extra one.
+
+    What this path deliberately does not run is the render probe. The
+    builder draws a real preview of the answer within the second, which is
+    a better check than a one-row probe and one the user can see; the
+    generator needs the probe only because nothing looks at its tiles until
+    the draft is saved.
 
     A `text` component has no data source, so it skips the data context
     and is prompted with a summary of the dashboard it is being added to
@@ -325,21 +355,30 @@ async def component_from_prompt(
         except (ValidationError, ValueError) as e:
             last_error = component_yaml.format_validation_error_for_llm(e)
             logger.warning("component_from_prompt attempt %d failed: %s", attempt + 1, last_error)
-            messages = messages + [
-                {"role": "assistant", "content": raw},
-                {
-                    "role": "user",
-                    "content": (
-                        f"{last_error}\n\nRe-emit the corrected YAML only — no prose, no fences."
-                    ),
-                },
-            ]
+            messages = _repair_turn(messages, raw, last_error)
             continue
 
         # Same gate the generator applies: an icon outside the builder's own
         # picker renders as a blank box under the CSP and blanks itself on the
         # first save, so it never reaches the builder.
         component_style.sanitize_style(parsed)
+
+        # And the same two content checks. `text` has no collection behind it,
+        # so there is nothing to check its columns against.
+        try:
+            finding = substance_error(parsed) or (schema_error(parsed, ctx) if ctx else None)
+        except (ValidationError, ValueError) as e:
+            # `schema_error` re-validates the tile inside a dashboard envelope,
+            # which is stricter than the tile on its own, so it can reject what
+            # `validate_single` accepted. That is a finding to repair like any
+            # other, not a 500 out of the handler.
+            finding = component_yaml.format_validation_error_for_llm(e)
+        if finding:
+            last_error = finding
+            logger.warning("component_from_prompt attempt %d failed: %s", attempt + 1, last_error)
+            messages = _repair_turn(messages, raw, finding)
+            continue
+
         title = parsed.get("title")
         return ComponentFromPromptResponse(
             component_type=parsed.get("component_type", component_type),
