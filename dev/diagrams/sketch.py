@@ -35,6 +35,40 @@ WHITE = "#ffffff"
 FONT = "Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive"
 
 
+def arc_points(
+    cx: float,
+    cy: float,
+    rx: float,
+    ry: float,
+    start: float,
+    end: float,
+    steps: int = 22,
+) -> list[tuple[float, float]]:
+    """Points along an ellipse arc, angles in degrees, y growing downwards.
+
+    Sampling the arc instead of emitting an SVG ``A`` command is what lets the
+    same point list serve as both the fill outline and the wobbling stroke, so
+    the two never drift apart.
+    """
+    span = end - start
+    return [
+        (
+            cx + rx * math.cos(math.radians(start + span * i / steps)),
+            cy + ry * math.sin(math.radians(start + span * i / steps)),
+        )
+        for i in range(steps + 1)
+    ]
+
+
+def wave_points(
+    x: float, y: float, dx: float, amp: float, steps: int = 20
+) -> list[tuple[float, float]]:
+    """One sine period across ``dx``: the torn bottom edge of a sheet."""
+    return [
+        (x + dx * i / steps, y + amp * math.sin(2 * math.pi * i / steps)) for i in range(steps + 1)
+    ]
+
+
 @dataclass(frozen=True)
 class Box:
     x: float
@@ -211,6 +245,127 @@ class Sketch:
         self.text(x, y, title, size=25, anchor="start")
         if subtitle:
             self.text(x, y + 26, subtitle, size=15, colour=DIM, anchor="start")
+
+    def stroke(
+        self,
+        points: list[tuple[float, float]],
+        *,
+        colour: str = INK,
+        width: float = 1.7,
+        amount: float = 1.2,
+        dashed: bool = False,
+        passes: int = 2,
+    ) -> None:
+        """A polyline where every segment gets the pen's wobble."""
+        for (x1, y1), (x2, y2) in zip(points, points[1:]):
+            self.line(
+                x1,
+                y1,
+                x2,
+                y2,
+                width=width,
+                colour=colour,
+                amount=amount,
+                dashed=dashed,
+                passes=passes,
+            )
+
+    def fill(self, points: list[tuple[float, float]], colour: str) -> None:
+        """The flat wash under a shape, closed and unstroked."""
+        d = "M" + " L".join(f"{x:.1f},{y:.1f}" for x, y in points) + " Z"
+        self._parts.append(f'<path d="{d}" fill="{colour}" stroke="none"/>')
+
+    def cylinder(
+        self, x: float, y: float, w: float, h: float, *, fill: str, cap: float = 15
+    ) -> None:
+        """A store: the shape everyone already reads as a database."""
+        rx, cx = w / 2, x + w / 2
+        top, bottom = y + cap, y + h - cap
+        self.fill([(x, top)] + arc_points(cx, bottom, rx, cap, 180, 0) + [(x + w, top)], fill)
+        self._parts.append(
+            f'<ellipse cx="{cx:.1f}" cy="{top:.1f}" rx="{rx:.1f}" ry="{cap:.1f}" fill="{fill}"/>'
+        )
+        self.line(x, top, x, bottom, amount=1.2)
+        self.line(x + w, top, x + w, bottom, amount=1.2)
+        self.stroke(arc_points(cx, bottom, rx, cap, 0, 180), amount=0.8)
+        self.stroke(arc_points(cx, top, rx, cap, 0, 360, 30), amount=0.8)
+
+    def document(
+        self, x: float, y: float, w: float, h: float, *, fill: str, wave: float = 11
+    ) -> None:
+        """A sheet with a torn bottom: something written, not something running."""
+        base = y + h - wave
+        bottom = wave_points(x + w, base, -w, wave)
+        self.fill([(x, y), (x + w, y), (x + w, base)] + bottom, fill)
+        self.line(x, y, x + w, y, amount=1.4)
+        self.line(x + w, y, x + w, base, amount=1.4)
+        self.stroke(bottom, amount=0.6)
+        self.line(x, base, x, y, amount=1.4)
+
+    def diamond(self, cx: float, cy: float, w: float, h: float, *, fill: str) -> None:
+        """A question with two answers."""
+        self.poly(
+            [(cx, cy - h / 2), (cx + w / 2, cy), (cx, cy + h / 2), (cx - w / 2, cy)], fill=fill
+        )
+
+    def chip(
+        self,
+        cx: float,
+        cy: float,
+        label: str,
+        *,
+        fill: str,
+        w: float = 0.0,
+        h: float = 26.0,
+        size: float = 13.0,
+        colour: str = INK,
+    ) -> float:
+        """A control, at the size a control is: label inside, nothing around it."""
+        w = w or max(52.0, 8.2 * len(label) + 24)
+        self.rect(Box(cx - w / 2, cy - h / 2, w, h, fill, ""), colour=colour)
+        self.text(cx, cy + size * 0.36, label, size=size)
+        return w
+
+    def stack(self, box: Box, *, n: int = 3, dx: float = 9.0, dy: float = -9.0) -> None:
+        """``n`` of the same thing: ghosts behind, the readable one in front."""
+        for i in range(n - 1, 0, -1):
+            self.rect(Box(box.x + dx * i, box.y + dy * i, box.w, box.h, box.fill, ""), colour=GREY)
+        self.box(box)
+
+    def tick(self, x: float, y: float, *, size: float = 7.0, colour: str = INK) -> None:
+        """The mark a reviewer leaves."""
+        self.line(
+            x - size,
+            y,
+            x - size * 0.3,
+            y + size * 0.8,
+            colour=colour,
+            width=2.0,
+            amount=0.5,
+            passes=1,
+        )
+        self.line(
+            x - size * 0.3,
+            y + size * 0.8,
+            x + size,
+            y - size * 0.9,
+            colour=colour,
+            width=2.0,
+            amount=0.5,
+            passes=1,
+        )
+
+    def gauge(self, x: float, y: float, w: float, h: float, frac: float, *, fill: str) -> None:
+        """How much of a bound is gone, drawn as the bar the UI actually shows."""
+        self._parts.append(
+            f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}" '
+            f'rx="{h / 2:.1f}" fill="{WHITE}"/>'
+        )
+        self._parts.append(
+            f'<rect x="{x:.1f}" y="{y:.1f}" width="{w * frac:.1f}" height="{h:.1f}" '
+            f'rx="{h / 2:.1f}" fill="{fill}"/>'
+        )
+        self.rect(Box(x, y, w, h, "none", ""), colour=DIM)
 
     def svg(self) -> str:
         body = "\n  ".join(self._parts)
