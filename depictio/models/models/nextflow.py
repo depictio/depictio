@@ -34,7 +34,7 @@ _VERSIONS_GLOBS: tuple[str, ...] = (
 
 # `-params-file` runs write nf-params.json; nf-core's own launcher writes
 # params_<timestamp>.json (one per resume, so the newest name wins).
-_PARAMS_GLOBS: tuple[str, ...] = ("params*.json", "nf-params.json", "nf_params.json")
+PARAMS_GLOBS: tuple[str, ...] = ("params*.json", "nf-params.json", "nf_params.json")
 
 _REPORT_GLOB = "execution_report*.html"
 _TRACE_GLOB = "execution_trace*.txt"
@@ -81,9 +81,14 @@ def normalize_pipeline_version(raw: str | None) -> str | None:
     return version or None
 
 
+def _matching(directory: Path, pattern: str) -> list[Path]:
+    """Files matching ``pattern``, oldest first — nf-core names these by timestamp."""
+    return sorted(p for p in directory.glob(pattern) if p.is_file())
+
+
 def _newest(directory: Path, pattern: str) -> Path | None:
-    """Last match of ``pattern`` in name order — nf-core names these by timestamp."""
-    matches = sorted(p for p in directory.glob(pattern) if p.is_file())
+    """Last match of ``pattern`` in name order."""
+    matches = _matching(directory, pattern)
     return matches[-1] if matches else None
 
 
@@ -94,6 +99,30 @@ def _newest_matching(directory: Path, patterns: tuple[str, ...]) -> Path | None:
         if match is not None:
             return match
     return None
+
+
+def params_files_newest_first(directory: Path) -> list[Path]:
+    """The run's params JSON files in ``directory``, newest first.
+
+    A resumed run writes one params file per attempt, so a results directory
+    routinely holds several and only the last describes the run that produced
+    the outputs. Every reader of these files must therefore agree on "newest",
+    which is why this is public and shared rather than re-globbed per caller:
+    the CLI's template-variable introspection used to take the *first* match and
+    so read the parameters of the first, abandoned attempt.
+
+    A list rather than a single path so a caller can fall through to the next
+    candidate when the newest file is unparseable, which is what a run killed
+    mid-write leaves behind.
+
+    Patterns are tried in order and the first one with any hit wins, so a
+    directory holding both shapes never interleaves them.
+    """
+    for pattern in PARAMS_GLOBS:
+        matches = _matching(directory, pattern)
+        if matches:
+            return list(reversed(matches))
+    return []
 
 
 def _parse_versions_yaml(path: Path) -> tuple[dict[str, Any], set[str]]:
@@ -206,7 +235,7 @@ class NextflowRunInfoReader:
 
         if pipeline_info.is_dir():
             versions_path = _newest_matching(pipeline_info, _VERSIONS_GLOBS)
-            params_path = _newest_matching(pipeline_info, _PARAMS_GLOBS)
+            params_path = _newest_matching(pipeline_info, PARAMS_GLOBS)
             report_path = _newest(pipeline_info, _REPORT_GLOB)
             trace_path = _newest(pipeline_info, _TRACE_GLOB)
             dag_path = _newest(pipeline_info, _DAG_GLOB)

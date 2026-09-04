@@ -1042,16 +1042,26 @@ def _introspect_pipeline_params(data_root: str, variables: dict[str, str]) -> No
     # symlink-parent validation convention) it sits one level down in a run subdir;
     # all runs of a project share a platform/protocol, so the first run's params is
     # representative for these route flags.
-    candidates = sorted(Path(data_root).glob("pipeline_info/params*.json"))
+    #
+    # Newest first, and shared with the run-info connector rather than re-globbed
+    # here: a resumed run leaves one params file per attempt, and only the last
+    # describes the run that produced the outputs. Reading the first one meant a
+    # pipeline re-run with a different --skip_* flag kept routing on the abandoned
+    # attempt's value.
+    from depictio.models.models.nextflow import params_files_newest_first
+
+    candidates = params_files_newest_first(Path(data_root) / "pipeline_info")
     if not candidates:
-        candidates = sorted(Path(data_root).glob("*/pipeline_info/params*.json"))
-        if candidates:
-            logger.warning(
-                f"params.json not found at DATA_ROOT; using a run subdir's params "
-                f"({candidates[0].parent.parent.name}) for route flags. If this DATA_ROOT "
-                f"mixes platforms (e.g. nanopore + illumina runs), pass the route flag "
-                f"explicitly via --var."
-            )
+        for subdir in sorted(Path(data_root).glob("*/pipeline_info")):
+            candidates = params_files_newest_first(subdir)
+            if candidates:
+                logger.warning(
+                    f"params.json not found at DATA_ROOT; using a run subdir's params "
+                    f"({subdir.parent.name}) for route flags. If this DATA_ROOT "
+                    f"mixes platforms (e.g. nanopore + illumina runs), pass the route flag "
+                    f"explicitly via --var."
+                )
+                break
     params: dict = {}
     for c in candidates:
         try:
