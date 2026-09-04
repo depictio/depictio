@@ -743,8 +743,22 @@ def register_run_command(app: typer.Typer):
                 success_count += 1
                 _rec("server_check", "success", "server reachable")
             except Exception as e:
+                # Name the endpoint and the file it came from. "Connection
+                # refused" on its own sent people restarting a server that was
+                # already up: the real cause was a CLI.yaml aimed at a different
+                # instance. That is the default failure of a pipeline-triggered
+                # run, where nobody chose the config path and it silently fell
+                # back to ~/.depictio/CLI.yaml.
+                try:
+                    target = load_depictio_config(
+                        yaml_config_path=CLI_config_path, quiet=True
+                    ).api_base_url
+                except Exception as cfg_exc:
+                    logger.debug(f"Could not resolve the API base URL to report it: {cfg_exc}")
+                    target = "an unreadable configuration"
                 rich_print_checked_statement(f"Server accessibility check failed: {e}", "error")
-                _rec("server_check", "failed", str(e))
+                rich_print_checked_statement(f"Tried {target}, read from {CLI_config_path}", "info")
+                _rec("server_check", "failed", f"{e} (tried {target} from {CLI_config_path})")
                 if not continue_on_error:
                     raise typer.Exit(code=1)
         else:
@@ -1275,7 +1289,7 @@ def register_run_command(app: typer.Typer):
             # Re-read rather than reuse: CLI_config is only bound inside the
             # step that loaded it, and the summary runs even when that step was
             # skipped or failed.
-            _base = load_depictio_config(yaml_config_path=CLI_config_path).api_base_url
+            _base = load_depictio_config(yaml_config_path=CLI_config_path, quiet=True).api_base_url
             _status = _httpx.get(f"{_base}/depictio/api/v1/utils/status", timeout=5)
             if _status.status_code == 200:
                 viewer_url = (_status.json().get("viewer_url") or "").rstrip("/") or None
