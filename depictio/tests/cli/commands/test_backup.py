@@ -336,19 +336,36 @@ class TestBackupCLI:
         assert "New collections found without backup coverage" in result.stdout
         assert "new_collection" in result.stdout
 
+    @patch("depictio.cli.cli.commands.backup.api_login")
     @patch("depictio.cli.cli.utils.backup_validation.check_backup_collections_coverage")
-    def test_check_coverage_error_handling(self, mock_detect, runner):
-        """Test coverage check error handling."""
+    def test_check_coverage_error_handling(
+        self, mock_detect, mock_api_login, runner, mock_cli_config
+    ):
+        """Test coverage check error handling.
+
+        Uses a real config file like its siblings: without one the command now
+        stops at "configuration file not found", so the test would pass on the
+        strength of the missing file rather than the reported coverage error.
+        """
+        mock_api_login.return_value = {"success": True, "is_admin": True}
         mock_detect.return_value = {
             "error": "Could not import settings",
             "valid": False,
             "errors": ["Unable to check collection coverage - settings not available"],
         }
 
-        result = runner.invoke(dev_app, ["backup", "check-coverage"])
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_file = os.path.join(tmp_dir, "config.yaml")
+            with open(config_file, "w") as f:
+                yaml.dump(mock_cli_config, f)
+
+            result = runner.invoke(
+                dev_app, ["backup", "check-coverage", "--CLI-config-path", config_file]
+            )
 
         assert result.exit_code == 1
         assert "Coverage check failed" in result.stdout
+        assert "Could not import settings" in result.stdout
 
 
 class TestRestoreCLI:
