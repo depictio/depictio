@@ -1,7 +1,8 @@
 """Tests for the s3_prefix scan mode (remote counterpart of `recursive`).
 
-Listing is exercised against a stubbed boto3 paginator: the S3 wire protocol is
-not what can break here, the key filtering and pagination handling are.
+Listing is exercised against the shared boto3 stub (``depictio.tests.cli.s3_stubs``):
+the S3 wire protocol is not what can break here, the key filtering and
+pagination handling are.
 """
 
 import hashlib
@@ -27,34 +28,20 @@ from depictio.models.models.workflows import (
     WorkflowDataLocation,
     WorkflowEngine,
 )
+from depictio.tests.cli.s3_stubs import install_s3_listing
 
-
-class _StubPaginator:
-    def __init__(self, pages):
-        self._pages = pages
-
-    def paginate(self, **_kwargs):
-        return self._pages
-
-
-class _StubClient:
-    def __init__(self, keys):
-        # Mimic list_objects_v2 splitting results across pages.
-        self._pages = [
-            {"Contents": [{"Key": k, "Size": 10, "ETag": f'"{k}-etag"'} for k in chunk]}
-            for chunk in (keys[:2], keys[2:])
-            if chunk
-        ]
-
-    def get_paginator(self, _name):
-        return _StubPaginator(self._pages)
+# Every object is ten bytes, so ``Size`` is a constant the File assertions can
+# name; the shared stub derives it from the body.
+_OBJECT_BODY = b"x" * 10
 
 
 @pytest.fixture
 def stub_s3(monkeypatch):
-    def _install(keys):
-        monkeypatch.setattr(
-            data_root_module, "s3_read_client", lambda _url, _cfg: _StubClient(keys)
+    """Serve ``keys`` as a listing, split across pages the way S3 splits one."""
+
+    def _install(keys, page_size: int = 2, **client_kwargs):
+        return install_s3_listing(
+            monkeypatch, dict.fromkeys(keys, _OBJECT_BODY), page_size=page_size, **client_kwargs
         )
 
     return _install
@@ -351,35 +338,10 @@ class TestS3ReadClientPublicBuckets:
 class TestListS3PrefixKeyBudget:
     """A prefix full of non-matching keys must not pin the calling thread."""
 
-    class _CountingClient:
-        def __init__(self, keys, page_size):
-            self.pages_served = 0
-            self._pages = [
-                {
-                    "Contents": [
-                        {"Key": k, "Size": 10, "ETag": f'"{k}-etag"'}
-                        for k in keys[i : i + page_size]
-                    ]
-                }
-                for i in range(0, len(keys), page_size)
-            ]
-
-        def get_paginator(self, _name):
-            client = self
-
-            class _Paginator:
-                def paginate(self, **_kwargs):
-                    for page in client._pages:
-                        client.pages_served += 1
-                        yield page
-
-            return _Paginator()
-
-    def test_budget_stops_the_walk_and_warns(self, monkeypatch):
+    def test_budget_stops_the_walk_and_warns(self, monkeypatch, stub_s3):
         # max_files=1 -> budget of 10 keys; the only match sits past it.
         keys = [f"run42/noise_{i}.txt" for i in range(40)] + ["run42/late.csv"]
-        client = self._CountingClient(keys, page_size=5)
-        monkeypatch.setattr(data_root_module, "s3_read_client", lambda _url, _cfg: client)
+        client = stub_s3(keys, page_size=5)
         messages = []
         monkeypatch.setattr(
             scan_module,
@@ -395,14 +357,11 @@ class TestListS3PrefixKeyBudget:
         assert "budget of 10 keys" in warning
         assert "partial" in warning
 
-    def test_listing_ending_exactly_at_the_budget_is_complete(self, monkeypatch):
+    def test_listing_ending_exactly_at_the_budget_is_complete(self, monkeypatch, stub_s3):
         # Ten keys, budget ten: the last page says IsTruncated=False, so this
         # is the whole listing and no warning is due.
         keys = [f"run42/noise_{i}.txt" for i in range(9)] + ["run42/late.csv"]
-        client = self._CountingClient(keys, page_size=5)
-        for page in client._pages:
-            page["IsTruncated"] = False
-        monkeypatch.setattr(data_root_module, "s3_read_client", lambda _url, _cfg: client)
+        stub_s3(keys, page_size=5, is_truncated=False)
         messages = []
         monkeypatch.setattr(
             scan_module,
@@ -413,10 +372,9 @@ class TestListS3PrefixKeyBudget:
         assert [o["relative"] for o in found] == ["late.csv"]
         assert messages == []
 
-    def test_budget_scales_with_max_files(self, monkeypatch):
+    def test_budget_scales_with_max_files(self, monkeypatch, stub_s3):
         keys = [f"run42/noise_{i}.txt" for i in range(40)] + ["run42/late.csv"]
-        client = self._CountingClient(keys, page_size=5)
-        monkeypatch.setattr(data_root_module, "s3_read_client", lambda _url, _cfg: client)
+        stub_s3(keys, page_size=5)
         messages = []
         monkeypatch.setattr(
             scan_module,

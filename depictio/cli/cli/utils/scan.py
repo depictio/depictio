@@ -1,3 +1,4 @@
+import fnmatch
 import hashlib
 import os
 import re
@@ -1042,9 +1043,12 @@ def _key_matches(path: str, basename: str, pattern: str, pattern_syntax: str) ->
     pattern spells one), so a data collection means the same thing local and
     remote. ``regex_match`` is ``re.match``: anchored at the start and not at
     the end, deliberately.
-    """
-    import fnmatch
 
+    The glob branch is fnmatch, where ``*`` spans ``/`` as well: that is what
+    makes ``*.csv`` reach into sub-prefixes the way the local recursive walk
+    does. It is *not* the ``Path.glob`` dialect ``data_root._glob_to_regex``
+    speaks, and the two are kept apart on purpose.
+    """
     if pattern_syntax == "regex":
         hit, _ = regex_match(basename, pattern)
         if not hit and "/" in pattern:
@@ -1161,7 +1165,7 @@ def scan_s3_prefix_for_data_collection(
     scan_params = data_collection.config.scan.scan_parameters  # type: ignore[union-attr]
     prefix = scan_params.prefix  # type: ignore[union-attr]
     pattern = scan_params.pattern  # type: ignore[union-attr]
-    pattern_syntax = getattr(scan_params, "pattern_syntax", "glob")
+    pattern_syntax = scan_params.pattern_syntax  # type: ignore[union-attr]
     id_regex = scan_params.id_regex  # type: ignore[union-attr]
 
     runs_regex = workflow.data_location.runs_regex

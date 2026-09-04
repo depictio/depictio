@@ -24,7 +24,7 @@ from depictio.models.models.data_collections import Scan
 
 # The stubbed S3 listing lives with the template tests, which is where the
 # fixture it is shaped like (an ampliseq megatest prefix) belongs.
-from depictio.tests.cli.utils.test_templates import S3_ROOT, s3_data_root
+from depictio.tests.cli.s3_stubs import S3_ROOT, s3_data_root
 
 
 def _config():

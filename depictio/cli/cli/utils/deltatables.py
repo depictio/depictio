@@ -1157,62 +1157,6 @@ def _print_recipe_preview(
     console.print()
 
 
-class _ScopedDataRoot:
-    """One sub-directory of a data root, answered through the parent root.
-
-    A ``sequencing-runs`` layout executes the same recipe once per run
-    directory. Building a fresh root per run would re-list the whole S3 prefix
-    every time, so a run is addressed as a prefix on the root that already holds
-    the listing. Only the questions the recipe layer asks are implemented; the
-    clean home for this is a ``scoped()`` method on ``DataRoot`` itself.
-    """
-
-    def __init__(self, parent, sub: str):
-        self._parent = parent
-        self._sub = sub.strip("/")
-        self.location = parent.url(self._sub)
-        self.name = self._sub.rsplit("/", 1)[-1]
-        self.is_remote = parent.is_remote
-
-    def __repr__(self) -> str:
-        return f"_ScopedDataRoot({self.location!r})"
-
-    def _scoped(self, rel: str) -> str:
-        rel = rel.strip("/")
-        return f"{self._sub}/{rel}" if rel else self._sub
-
-    def exists(self, rel: str) -> bool:
-        return self._parent.exists(self._scoped(rel))
-
-    def glob(self, pattern: str) -> list[str]:
-        prefix = f"{self._sub}/"
-        # The parent answers relative to itself, so every hit carries the run
-        # prefix the pattern started with; strip it back off. Sorting survives.
-        return [hit[len(prefix) :] for hit in self._parent.glob(f"{prefix}{pattern}")]
-
-    def match(self, regex: str, within: str = "") -> list[str]:
-        prefix = f"{self._sub}/"
-        return [hit[len(prefix) :] for hit in self._parent.match(regex, self._scoped(within))]
-
-    def url(self, rel: str) -> str:
-        return self._parent.url(self._scoped(rel))
-
-    def relative_of(self, location: str) -> str | None:
-        outer = self._parent.relative_of(location)
-        if outer is None:
-            return None
-        if outer == self._sub:
-            return ""
-        prefix = f"{self._sub}/"
-        return outer[len(prefix) :] if outer.startswith(prefix) else None
-
-    def read_bytes(self, rel: str) -> bytes:
-        return self._parent.read_bytes(self._scoped(rel))
-
-    def storage_options(self) -> dict | None:
-        return self._parent.storage_options()
-
-
 def process_recipe_data_collection(
     data_collection: DataCollection,
     CLI_config: CLIConfig,
@@ -1303,9 +1247,7 @@ def process_recipe_data_collection(
             if structure == "sequencing-runs" and runs_regex:
                 # Same rule the listdir walk applied (``re.match`` on the
                 # directory name), asked of the root so it also answers on S3.
-                run_data_roots = [
-                    _ScopedDataRoot(base_root, run) for run in base_root.runs(runs_regex)
-                ]
+                run_data_roots = [base_root.scoped(run) for run in base_root.runs(runs_regex)]
                 if run_data_roots:
                     data_dir = run_data_roots[0]
                     rich_print_checked_statement(

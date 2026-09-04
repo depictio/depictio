@@ -4,11 +4,10 @@ The point of the module is that a caller cannot tell the two apart, so the bulk
 of this file is a parity suite: the same virtual tree is built twice, once on
 disk and once as a stubbed key listing, and every question is asked of both.
 
-No network. The S3 listing is stubbed the way ``test_s3_prefix_scan.py`` stubs
-it, by replacing the client factory.
+No network: the S3 listing comes from ``depictio.tests.cli.s3_stubs``, which
+replaces the client factory every remote path goes through.
 """
 
-import io
 from types import SimpleNamespace
 
 import pytest
@@ -21,6 +20,7 @@ from depictio.cli.cli.utils.data_root import (
     data_root_for,
     list_s3_objects,
 )
+from depictio.tests.cli.s3_stubs import install_s3_listing, s3_cli_config
 
 # ── the shared virtual tree ──────────────────────────────────────────────────
 
@@ -46,72 +46,10 @@ def _body(rel: str) -> bytes:
     return f"contents of {rel}".encode()
 
 
-class _StubS3Client:
-    """Serves a fixed key list the way ``list_objects_v2`` does.
-
-    Honours ``Prefix`` because that is half of what the S3 side is being asked
-    to get right: an S3 prefix is a string match, so a root that forgot its
-    trailing slash would list a sibling prefix as if it were its own content.
-    """
-
-    def __init__(self, bodies: dict[str, bytes], page_size: int = 100, is_truncated=None):
-        self.bodies = bodies
-        self.page_size = page_size
-        self.is_truncated = is_truncated
-        self.pages_served = 0
-        self.get_object_calls: list[str] = []
-
-    def _pages_for(self, prefix: str):
-        keys = [key for key in self.bodies if key.startswith(prefix)]
-        for start in range(0, len(keys), self.page_size):
-            page: dict = {
-                "Contents": [
-                    {"Key": key, "Size": len(self.bodies[key]), "ETag": f'"{key}-etag"'}
-                    for key in keys[start : start + self.page_size]
-                ]
-            }
-            if self.is_truncated is not None:
-                page["IsTruncated"] = self.is_truncated
-            yield page
-
-    def get_paginator(self, _name):
-        client = self
-
-        class _Paginator:
-            def paginate(self, Bucket=None, Prefix="", **_kwargs):  # noqa: N803
-                for page in client._pages_for(Prefix):
-                    client.pages_served += 1
-                    yield page
-
-        return _Paginator()
-
-    def get_object(self, Bucket, Key):  # noqa: N803 - boto3's own spelling
-        self.get_object_calls.append(Key)
-        return {"Body": io.BytesIO(self.bodies[Key])}
-
-
-def _install_listing(monkeypatch, bodies, **client_kwargs) -> _StubS3Client:
-    client = _StubS3Client(bodies, **client_kwargs)
-    monkeypatch.setattr(data_root_module, "s3_read_client", lambda _url, _cfg: client)
-    return client
-
-
 def _s3_storage():
     from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig
 
     return S3DepictioCLIConfig(root_user="minio", root_password="minio123")
-
-
-def _cli_config():
-    """A config with per-project credentials, so no allowlist entry is needed."""
-    return SimpleNamespace(
-        remote_storage_options={
-            "aws_access_key_id": "k",
-            "aws_secret_access_key": "s",
-            "endpoint_url": "https://s3.example",
-        },
-        s3_storage=None,
-    )
 
 
 @pytest.fixture
@@ -138,8 +76,8 @@ def root(request, tmp_path, monkeypatch):
             path.write_bytes(_body(rel))
         return data_root_for(str(base))
 
-    _install_listing(monkeypatch, {f"{S3_KEY_PREFIX}{rel}": _body(rel) for rel in TREE})
-    return data_root_for(S3_ROOT, _cli_config())
+    install_s3_listing(monkeypatch, {f"{S3_KEY_PREFIX}{rel}": _body(rel) for rel in TREE})
+    return data_root_for(S3_ROOT, s3_cli_config())
 
 
 # ── dispatch ─────────────────────────────────────────────────────────────────
@@ -153,8 +91,8 @@ class TestDataRootFor:
         assert root.location == str(tmp_path)
 
     def test_an_s3_prefix_is_remote(self, monkeypatch):
-        _install_listing(monkeypatch, {})
-        root = data_root_for(S3_ROOT, _cli_config())
+        install_s3_listing(monkeypatch, {})
+        root = data_root_for(S3_ROOT, s3_cli_config())
         assert isinstance(root, S3DataRoot)
         assert root.is_remote is True
         assert root.location == S3_ROOT
@@ -328,64 +266,64 @@ class TestLocalSpecifics:
 
 class TestS3Specifics:
     def test_url_is_an_s3_url(self, monkeypatch):
-        _install_listing(monkeypatch, {})
-        root = data_root_for(S3_ROOT, _cli_config())
+        install_s3_listing(monkeypatch, {})
+        root = data_root_for(S3_ROOT, s3_cli_config())
         assert root.url("input/x.tsv") == f"s3://{S3_BUCKET}/{S3_KEY_PREFIX}input/x.tsv"
         assert root.url("") == S3_ROOT
 
     def test_relative_of_rejects_another_bucket(self, monkeypatch):
-        _install_listing(monkeypatch, {})
-        root = data_root_for(S3_ROOT, _cli_config())
+        install_s3_listing(monkeypatch, {})
+        root = data_root_for(S3_ROOT, s3_cli_config())
         assert root.relative_of(f"s3://other-bucket/{S3_KEY_PREFIX}x.tsv") is None
 
     def test_relative_of_rejects_another_prefix_in_the_same_bucket(self, monkeypatch):
-        _install_listing(monkeypatch, {})
-        root = data_root_for(S3_ROOT, _cli_config())
+        install_s3_listing(monkeypatch, {})
+        root = data_root_for(S3_ROOT, s3_cli_config())
         assert root.relative_of(f"s3://{S3_BUCKET}/other/x.tsv") is None
 
     def test_relative_of_takes_the_root_itself_as_empty(self, monkeypatch):
-        _install_listing(monkeypatch, {})
-        root = data_root_for(S3_ROOT, _cli_config())
+        install_s3_listing(monkeypatch, {})
+        root = data_root_for(S3_ROOT, s3_cli_config())
         assert root.relative_of(S3_ROOT) == ""
 
     def test_a_prefix_without_a_trailing_slash_does_not_swallow_a_sibling(self, monkeypatch):
         """S3 prefixes are string matches, so ``results`` would also list ``results-old``."""
-        _install_listing(
+        install_s3_listing(
             monkeypatch,
             {
                 f"{S3_KEY_PREFIX}kept.csv": b"kept",
                 "projects/results-old/leaked.csv": b"leaked",
             },
         )
-        root = data_root_for(S3_ROOT, _cli_config())
+        root = data_root_for(S3_ROOT, s3_cli_config())
         assert root.glob("**/*.csv") == ["kept.csv"]
 
     def test_the_name_of_a_bare_bucket_is_the_bucket(self, monkeypatch):
-        _install_listing(monkeypatch, {})
-        root = data_root_for(f"s3://{S3_BUCKET}", _cli_config())
+        install_s3_listing(monkeypatch, {})
+        root = data_root_for(f"s3://{S3_BUCKET}", s3_cli_config())
         assert root.name == S3_BUCKET
 
     def test_objects_expose_the_raw_listing(self, monkeypatch):
-        _install_listing(monkeypatch, {f"{S3_KEY_PREFIX}{rel}": _body(rel) for rel in TREE})
-        root = data_root_for(S3_ROOT, _cli_config())
+        install_s3_listing(monkeypatch, {f"{S3_KEY_PREFIX}{rel}": _body(rel) for rel in TREE})
+        root = data_root_for(S3_ROOT, s3_cli_config())
         assert [obj.relative for obj in root.objects] == TREE
         assert root.objects[0].url == f"s3://{S3_BUCKET}/{S3_KEY_PREFIX}{TREE[0]}"
         assert root.objects[0].etag == f"{S3_KEY_PREFIX}{TREE[0]}-etag"
 
     def test_the_client_is_built_once_and_reused(self, monkeypatch):
         bodies = {f"{S3_KEY_PREFIX}{rel}": _body(rel) for rel in TREE}
-        client = _install_listing(monkeypatch, bodies)
-        root = data_root_for(S3_ROOT, _cli_config())
+        client = install_s3_listing(monkeypatch, bodies)
+        root = data_root_for(S3_ROOT, s3_cli_config())
         root.read_bytes(TREE[0])
         root.read_bytes(TREE[1])
         assert client.get_object_calls == [f"{S3_KEY_PREFIX}{TREE[0]}", f"{S3_KEY_PREFIX}{TREE[1]}"]
 
     def test_one_listing_answers_every_question(self, monkeypatch):
         """The whole point: fifty questions, one paginated listing."""
-        client = _install_listing(
+        client = install_s3_listing(
             monkeypatch, {f"{S3_KEY_PREFIX}{rel}": _body(rel) for rel in TREE}
         )
-        root = data_root_for(S3_ROOT, _cli_config())
+        root = data_root_for(S3_ROOT, s3_cli_config())
         pages_after_construction = client.pages_served
 
         root.exists("run_1")
@@ -399,23 +337,23 @@ class TestS3Specifics:
 class TestTruncation:
     def test_truncated_when_the_listing_hits_max_keys(self, monkeypatch):
         bodies = {f"{S3_KEY_PREFIX}f{i}.csv": b"x" for i in range(10)}
-        _install_listing(monkeypatch, bodies, page_size=5)
-        root = S3DataRoot(S3_ROOT, _cli_config(), max_keys=5)
+        install_s3_listing(monkeypatch, bodies, page_size=5)
+        root = S3DataRoot(S3_ROOT, s3_cli_config(), max_keys=5)
         assert root.truncated is True
         assert len(root.objects) == 5
 
     def test_a_listing_ending_on_the_budget_is_complete(self, monkeypatch):
         bodies = {f"{S3_KEY_PREFIX}f{i}.csv": b"x" for i in range(10)}
-        _install_listing(monkeypatch, bodies, page_size=5, is_truncated=False)
-        root = S3DataRoot(S3_ROOT, _cli_config(), max_keys=10)
+        install_s3_listing(monkeypatch, bodies, page_size=5, is_truncated=False)
+        root = S3DataRoot(S3_ROOT, s3_cli_config(), max_keys=10)
         assert root.truncated is False
         assert len(root.objects) == 10
 
     def test_a_truncated_listing_does_not_claim_an_object_is_absent(self, monkeypatch):
         """A partial view is not authoritative, so the read goes to S3 anyway."""
         bodies = {f"{S3_KEY_PREFIX}f{i}.csv": f"body {i}".encode() for i in range(10)}
-        _install_listing(monkeypatch, bodies, page_size=5)
-        root = S3DataRoot(S3_ROOT, _cli_config(), max_keys=5)
+        install_s3_listing(monkeypatch, bodies, page_size=5)
+        root = S3DataRoot(S3_ROOT, s3_cli_config(), max_keys=5)
         assert root.read_bytes("f9.csv") == b"body 9"
 
 
@@ -439,17 +377,17 @@ class TestAllowlistGuard:
         self, monkeypatch, no_ambient_credentials
     ):
         monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "open-data")
-        _install_listing(monkeypatch, {"run42/x.csv": b"x"})
+        install_s3_listing(monkeypatch, {"run42/x.csv": b"x"})
         root = data_root_for("s3://open-data/run42", None)
         assert root.is_remote is True
 
     def test_configured_credentials_are_enough(self, monkeypatch, no_ambient_credentials):
-        _install_listing(monkeypatch, {})
-        assert data_root_for("s3://private-bucket/data", _cli_config()).is_remote is True
+        install_s3_listing(monkeypatch, {})
+        assert data_root_for("s3://private-bucket/data", s3_cli_config()).is_remote is True
 
     def test_an_ambient_aws_key_is_enough(self, monkeypatch, no_ambient_credentials):
         monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIA")
-        _install_listing(monkeypatch, {})
+        install_s3_listing(monkeypatch, {})
         assert data_root_for("s3://private-bucket/data", None).is_remote is True
 
 
@@ -461,17 +399,17 @@ class TestStorageOptions:
 
     def test_an_allowlisted_prefix_is_read_unsigned(self, monkeypatch, no_ambient_credentials):
         monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "open-data")
-        _install_listing(monkeypatch, {})
+        install_s3_listing(monkeypatch, {})
         options = data_root_for("s3://open-data/run42", None).storage_options()
         assert options == {"aws_skip_signature": "true", "aws_region": "region-of-open-data"}
 
     def test_project_credentials_win(self, monkeypatch):
-        _install_listing(monkeypatch, {})
-        options = data_root_for(S3_ROOT, _cli_config()).storage_options()
-        assert options == _cli_config().remote_storage_options
+        install_s3_listing(monkeypatch, {})
+        options = data_root_for(S3_ROOT, s3_cli_config()).storage_options()
+        assert options == s3_cli_config().remote_storage_options
 
     def test_the_instance_config_is_the_fallback(self, monkeypatch, no_ambient_credentials):
-        _install_listing(monkeypatch, {})
+        install_s3_listing(monkeypatch, {})
         s3_storage = _s3_storage()
         cfg = SimpleNamespace(remote_storage_options=None, s3_storage=s3_storage)
         options = data_root_for(S3_ROOT, cfg).storage_options()
@@ -484,7 +422,7 @@ class TestStorageOptions:
     ):
         """Nothing to hand polars: object-store falls back to its own chain."""
         monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIA")
-        _install_listing(monkeypatch, {})
+        install_s3_listing(monkeypatch, {})
         assert data_root_for("s3://private-bucket/run42", None).storage_options() is None
 
 
@@ -493,7 +431,7 @@ class TestStorageOptions:
 
 class TestListS3Objects:
     def test_returns_keys_relative_to_the_prefix(self, monkeypatch):
-        _install_listing(
+        install_s3_listing(
             monkeypatch,
             {"run42/a.csv": b"a", "run42/nested/b.csv": b"b"},
         )
@@ -503,12 +441,12 @@ class TestListS3Objects:
         assert truncated is False
 
     def test_console_folder_placeholders_are_skipped(self, monkeypatch):
-        _install_listing(monkeypatch, {"run42/a.csv": b"a", "run42/notes/": b""})
+        install_s3_listing(monkeypatch, {"run42/a.csv": b"a", "run42/notes/": b""})
         objects, _ = list_s3_objects("s3://b/run42/", None)
         assert [obj.key for obj in objects] == ["run42/a.csv"]
 
     def test_etag_is_unquoted_and_size_carried(self, monkeypatch):
-        _install_listing(monkeypatch, {"run42/a.csv": b"abc"})
+        install_s3_listing(monkeypatch, {"run42/a.csv": b"abc"})
         objects, _ = list_s3_objects("s3://b/run42/", None)
         assert objects[0].etag == "run42/a.csv-etag"
         assert objects[0].size == 3
