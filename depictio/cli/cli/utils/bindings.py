@@ -14,15 +14,31 @@ where the person instantiating it is allowed to keep data.
 Manifests stay explicit (``--manifest``): a local ``.csv`` is data far more
 often than it is a manifest, and guessing that from a filename would be the
 kind of magic that bites silently.
+
+``--data-root s3://...`` is the automatic counterpart of the same idea: it is a
+``--bind`` for *every* data collection, derived from the paths the template
+already declares rather than from anything the user has to type. That is what
+:func:`remote_scan_for_dc` and :func:`apply_remote_data_root` do, using the same
+"the location's shape decides the mode" rule as ``infer_scan``.
 """
+
+from __future__ import annotations
 
 import fnmatch
 import os
 import re
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from depictio.cli.cli.utils.data_root import DataRoot
 
 GLOB_CHARS = ("*", "?", "[")
 REMOTE_SCHEMES = ("s3://", "http://", "https://")
+
+# Scan modes that already name a remote location. A remote data root has
+# nothing to add to them, so they are left exactly as the template wrote them.
+ALREADY_REMOTE_SCAN_MODES = ("url", "s3_prefix", "manifest")
 
 
 class BindingError(ValueError):
@@ -153,6 +169,98 @@ def infer_scan(location: str, existing_scan: dict | None = None) -> tuple[dict, 
             "Pass a glob (e.g. 'dir/*.csv'), an existing file, or a remote URL."
         )
     return {"mode": "single", "scan_parameters": {"filename": str(path.resolve())}}, None
+
+
+def remote_scan_for_dc(dc_config: dict, root: DataRoot) -> dict | None:
+    """The ``scan`` block a data collection needs when its data root is remote.
+
+    Returns the rewritten block, or None when the DC needs no rewrite: it is
+    already remote (``url`` / ``s3_prefix`` / ``manifest``), or it is a recipe DC
+    with no ``scan`` block at all, whose sources are read through the root by the
+    recipe layer instead.
+
+    ``single`` -> ``url`` is required rather than cosmetic. By this point the
+    DC's ``filename`` is a fully substituted ``s3://`` URL, and
+    ``ScanSingle.validate_filename`` calls ``Path(v).exists()`` in CLI context,
+    so leaving the mode alone would fail every remote single-file DC at model
+    validation.
+
+    ``recursive`` -> ``s3_prefix`` keeps the template's own regex verbatim (with
+    its wildcards expanded exactly as the local walk expands them) and points it
+    at the root. The remote listing is the filesystem, so the pattern that
+    selected files on disk is the pattern that selects keys under the prefix.
+
+    Args:
+        dc_config: The data collection's ``config`` block. Not modified.
+        root: The remote data root the DC is being pointed at.
+    """
+    scan = dc_config.get("scan")
+    if not isinstance(scan, dict):
+        # No scan block: a `source: transformed` recipe DC.
+        return None
+
+    mode = str(scan.get("mode") or "").lower()
+    params = scan.get("scan_parameters") or {}
+
+    if mode in ALREADY_REMOTE_SCAN_MODES:
+        return None
+
+    if mode == "single":
+        filename = params.get("filename")
+        if not filename:
+            return None
+        return {"mode": "url", "scan_parameters": {"url": filename}}
+
+    if mode == "recursive":
+        from depictio.cli.cli.utils.scan_utils import construct_full_regex
+        from depictio.models.models.data_collections import Regex
+
+        regex_config = params.get("regex_config") or {}
+        pattern = construct_full_regex(
+            Regex(
+                pattern=regex_config.get("pattern") or ".*", wildcards=regex_config.get("wildcards")
+            )
+        )
+        return {
+            "mode": "s3_prefix",
+            "scan_parameters": {
+                "prefix": f"{root.location.rstrip('/')}/",
+                "pattern": pattern,
+                "pattern_syntax": "regex",
+            },
+        }
+
+    return None
+
+
+def apply_remote_data_root(config: dict, root: DataRoot) -> list[str]:
+    """Repoint every data collection in ``config`` at a remote data root. In place.
+
+    The automatic ``--bind``: one remote root stands in for a per-DC binding of
+    each declared path. An explicit ``--bind`` still runs afterwards and still
+    wins, so a user who wants one DC somewhere else is never blocked by this.
+
+    ``structure`` and ``runs_regex`` are left exactly as the template declared
+    them: a remote ``sequencing-runs`` template keeps its run structure, and the
+    prefix scan honours it the same way the local walk does.
+
+    Returns human-readable notes, one per rewritten DC.
+    """
+    notes: list[str] = []
+    for workflow in config.get("workflows") or []:
+        for dc in workflow.get("data_collections") or []:
+            dc_config = dc.get("config")
+            if not isinstance(dc_config, dict):
+                continue
+            scan = remote_scan_for_dc(dc_config, root)
+            if scan is None:
+                continue
+            dc_config["scan"] = scan
+            notes.append(f"{dc.get('data_collection_tag')} -> {scan['mode']} ({root.location})")
+
+        data_location = workflow.setdefault("data_location", {})
+        data_location["locations"] = [root.location]
+    return notes
 
 
 _SENTINEL_RE = re.compile(r"__DEPICTIO_UNBOUND_([A-Z0-9_]+)__")

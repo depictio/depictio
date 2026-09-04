@@ -11,13 +11,25 @@ Covers:
 - ID stripping
 - TemplateMetadata / TemplateConditional / TemplateOrigin models
 - _apply_conditionals helper (remove DCs, prune links, select dashboards)
+
+The exception to "never depend on a specific pipeline template" is at the
+bottom: resolving against a remote data root has to be proved on a real shipped
+template, because the value of the feature is that a template written for a
+directory works unchanged against an ``s3://`` prefix. The data is still
+synthetic - a stubbed key listing, no network.
 """
 
+import io
+import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from depictio.cli.cli.utils import data_root as data_root_module
+from depictio.cli.cli.utils.data_root import data_root_for
 from depictio.cli.cli.utils.templates import (
+    OPTIONAL_SOURCE_MISSING_REASON,
     _apply_conditionals,
     _resolve_template_id_in,
     _strip_ids,
@@ -600,3 +612,379 @@ class TestLocateTemplateConfinement:
             locate_template("generic/does-not-exist/1")
         # The catalogue is carried separately so the API can omit the path.
         assert "generic/manifest-tables/1" in exc.value.available_templates
+
+
+# ---------------------------------------------------------------------------
+# Remote data roots
+# ---------------------------------------------------------------------------
+#
+# A data root that is an ``s3://`` prefix answers the same questions a directory
+# does, so template resolution should not be able to tell them apart. The
+# listing is stubbed at the client factory: no network, and the key list is the
+# whole fixture.
+
+S3_BUCKET = "nf-core-awsmegatests"
+S3_KEY_PREFIX = "ampliseq/results-3d5c7e5b/"
+S3_ROOT = f"s3://{S3_BUCKET}/{S3_KEY_PREFIX.rstrip('/')}"
+
+# Shaped like the nf-core/ampliseq AWS megatest prefix the template documents:
+# the samplesheet and metadata under input/, the run's params under
+# pipeline_info/, the MultiQC parquet, and one QIIME2 output per recipe family.
+MEGATEST_PARAMS = {
+    "metadata": "s3://nf-core-awsmegatests/ampliseq/Metadata_full.tsv",
+    "FW_primer": "GTGYCAGCMGCCGCGGTAA",
+    "ancombc": False,
+}
+
+MEGATEST_TREE: dict[str, bytes] = {
+    "input/samplesheet.csv": b"sampleID,forwardReads\nS1,S1_R1.fastq.gz\n",
+    "input/Metadata_full.tsv": b"sample\thabitat\ttreatment\nS1\tsoil\tcontrol\n",
+    "pipeline_info/params_2026-01-16_12-00-00.json": json.dumps(MEGATEST_PARAMS).encode(),
+    "multiqc/multiqc_data/multiqc.parquet": b"PAR1",
+    "qiime2/barplot/level-2.csv": b"index,Bacteria\nS1,42\n",
+    "qiime2/phylogenetic_tree/tree.nwk": b"(S1);",
+}
+
+
+class StubS3Client:
+    """Serves a fixed key list the way ``list_objects_v2`` does.
+
+    Honours ``Prefix``, because an S3 prefix is a plain string match: a root
+    that forgot its trailing slash would list a sibling prefix as its own.
+    """
+
+    def __init__(self, bodies: dict[str, bytes]):
+        self.bodies = bodies
+        self.get_object_calls: list[str] = []
+
+    def get_paginator(self, _name):
+        client = self
+
+        class _Paginator:
+            def paginate(self, Bucket=None, Prefix="", **_kwargs):  # noqa: N803
+                yield {
+                    "Contents": [
+                        {"Key": key, "Size": len(body), "ETag": f'"{key}"'}
+                        for key, body in client.bodies.items()
+                        if key.startswith(Prefix)
+                    ]
+                }
+
+        return _Paginator()
+
+    def get_object(self, Bucket, Key):  # noqa: N803 - boto3's own spelling
+        self.get_object_calls.append(Key)
+        return {"Body": io.BytesIO(self.bodies[Key])}
+
+
+def s3_cli_config():
+    """A config with per-project credentials, so no allowlist entry is needed."""
+    return SimpleNamespace(
+        remote_storage_options={"aws_access_key_id": "k", "aws_secret_access_key": "s"},
+        s3_storage=None,
+    )
+
+
+def install_s3_listing(
+    monkeypatch, tree: dict[str, bytes], key_prefix: str = S3_KEY_PREFIX
+) -> StubS3Client:
+    """Stub every S3 read with ``tree``, keyed relative to ``key_prefix``."""
+    client = StubS3Client({f"{key_prefix}{rel}": body for rel, body in tree.items()})
+    monkeypatch.setattr(data_root_module, "s3_read_client", lambda _url, _cfg: client)
+    return client
+
+
+def s3_data_root(monkeypatch, tree: dict[str, bytes], location: str = S3_ROOT):
+    install_s3_listing(monkeypatch, tree)
+    return data_root_for(location, s3_cli_config())
+
+
+def write_tree(base: Path, tree: dict[str, bytes]) -> Path:
+    """The same fixture on disk, so local and remote can be compared directly."""
+    for rel, body in tree.items():
+        path = base / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(body)
+    return base
+
+
+def _scans_by_tag(config: dict) -> dict[str, dict]:
+    return {
+        dc["data_collection_tag"]: (dc.get("config") or {}).get("scan")
+        for workflow in config["workflows"]
+        for dc in workflow["data_collections"]
+    }
+
+
+class TestRemoteTemplateResolution:
+    """A real shipped template resolved against an ``s3://`` prefix."""
+
+    def _resolve(self, monkeypatch, tree=None, **kwargs):
+        install_s3_listing(monkeypatch, MEGATEST_TREE if tree is None else tree)
+        from depictio.cli.cli.utils.templates import resolve_template
+
+        return resolve_template(
+            "nf-core/ampliseq/2.16.0", S3_ROOT, CLI_config=s3_cli_config(), **kwargs
+        )
+
+    def test_data_root_is_the_prefix_verbatim(self, monkeypatch):
+        """`Path("s3://b/k").absolute()` yields `<cwd>/s3:/b/k` — every path
+        derived from DATA_ROOT would be silently corrupted by it."""
+        config, _meta, origin, _dashboards, variables = self._resolve(monkeypatch)
+        assert variables["DATA_ROOT"] == S3_ROOT
+        assert origin.data_root == S3_ROOT
+        assert config["workflows"][0]["data_location"]["locations"] == [S3_ROOT]
+        # `Path.absolute()` collapses the double slash; nothing in the config
+        # may carry that spelling, nor the working directory it prepends.
+        dumped = json.dumps(config)
+        assert f"s3:/{S3_BUCKET}" not in dumped
+        assert str(Path.cwd()) not in dumped
+
+    def test_variables_are_derived_from_the_listing(self, monkeypatch):
+        """Samplesheet, metadata and the params-derived flags, all off one listing."""
+        _config, _meta, _origin, _dashboards, variables = self._resolve(monkeypatch)
+        assert variables["SAMPLESHEET_FILE"] == f"{S3_ROOT}/input/samplesheet.csv"
+        assert variables["METADATA_FILE"] == f"{S3_ROOT}/input/Metadata_full.tsv"
+        # Read out of the object, not off a disk.
+        assert variables["METADATA_ID_COL"] == "sample"
+        assert variables["GROUP_COL"] == "habitat"
+        assert variables["ANNOTATION_COLS"] == "habitat,treatment"
+        # params.json has no `ancombc: true`, so the ANCOM-BC DCs are gated out.
+        assert variables["SKIP_ANCOM"] == "true"
+
+    def test_scan_modes_become_their_remote_counterparts(self, monkeypatch):
+        config, _meta, _origin, _dashboards, _variables = self._resolve(monkeypatch)
+        scans = _scans_by_tag(config)
+        assert scans["samplesheet"] == {
+            "mode": "url",
+            "scan_parameters": {"url": f"{S3_ROOT}/input/samplesheet.csv"},
+        }
+        assert scans["multiqc_data"] == {
+            "mode": "s3_prefix",
+            "scan_parameters": {
+                "prefix": f"{S3_ROOT}/",
+                # The template's own regex, verbatim.
+                "pattern": "multiqc/multiqc_data/multiqc.parquet",
+                "pattern_syntax": "regex",
+            },
+        }
+        # Nothing may survive in a mode that stats the local filesystem.
+        assert all(scan["mode"] != "single" for scan in scans.values() if scan)
+
+    def test_optional_dc_is_pruned_through_its_url_mode(self, monkeypatch):
+        """The prune must see `url`, not a `single` filename it cannot stat."""
+        without_tree = {
+            rel: body
+            for rel, body in MEGATEST_TREE.items()
+            if rel != "qiime2/phylogenetic_tree/tree.nwk"
+        }
+        config, _meta, origin, _dashboards, _variables = self._resolve(
+            monkeypatch, tree=without_tree
+        )
+        assert "phylogenetic_tree_canonical" not in _scans_by_tag(config)
+        pruned = {
+            entry.data_collection_tag: entry.removal_reason
+            for entry in origin.expected_data_collections
+            if not entry.included
+        }
+        assert pruned["phylogenetic_tree_canonical"] == OPTIONAL_SOURCE_MISSING_REASON
+        # And it survives when the object is there.
+        kept, _m, _o, _d, _v = self._resolve(monkeypatch)
+        assert _scans_by_tag(kept)["phylogenetic_tree_canonical"]["mode"] == "url"
+
+    def test_provenance_is_read_out_of_the_prefix(self, monkeypatch):
+        _config, _meta, origin, _dashboards, _variables = self._resolve(monkeypatch)
+        assert origin.run_provenance_files == ["pipeline_info/params_2026-01-16_12-00-00.json"]
+        assert any(entry.key == "FW_primer" for entry in origin.run_provenance)
+
+
+class TestLocalResolutionIsUnchanged:
+    """The regression guard: a local root is still resolved exactly as before."""
+
+    def _resolve(self, data_root):
+        from depictio.cli.cli.utils.templates import resolve_template
+
+        return resolve_template("nf-core/ampliseq/2.16.0", data_root)
+
+    def test_local_paths_stay_local_paths(self, tmp_path):
+        base = write_tree(tmp_path / "results", MEGATEST_TREE)
+        config, _meta, origin, dashboards, variables = self._resolve(str(base))
+
+        assert variables["DATA_ROOT"] == str(base.absolute())
+        assert origin.data_root == str(base.absolute())
+        assert variables["SAMPLESHEET_FILE"] == str(base / "input" / "samplesheet.csv")
+        assert variables["METADATA_FILE"] == str(base / "input" / "Metadata_full.tsv")
+        assert variables["METADATA_ID_COL"] == "sample"
+        assert variables["GROUP_COL"] == "habitat"
+        assert variables["SKIP_ANCOM"] == "true"
+        assert origin.run_provenance_files == ["pipeline_info/params_2026-01-16_12-00-00.json"]
+        assert [p.name for p in dashboards] == ["base.yaml"]
+
+        scans = _scans_by_tag(config)
+        assert scans["samplesheet"] == {
+            "mode": "single",
+            "scan_parameters": {"filename": str(base / "input" / "samplesheet.csv")},
+        }
+        # A local root leaves the walk alone: no prefix, no mode rewriting.
+        assert scans["multiqc_data"] == {
+            "mode": "recursive",
+            "scan_parameters": {
+                "regex_config": {"pattern": "multiqc/multiqc_data/multiqc.parquet"}
+            },
+        }
+        assert config["workflows"][0]["data_location"]["locations"] == [str(base.absolute())]
+
+    def test_a_path_and_a_prebuilt_root_resolve_identically(self, tmp_path):
+        """`str`, `Path` and `DataRoot` are three spellings of one data root."""
+        base = write_tree(tmp_path / "results", MEGATEST_TREE)
+        from_str = self._resolve(str(base))[0]
+        from_path = self._resolve(base)[0]
+        from_root = self._resolve(data_root_for(str(base)))[0]
+        for other in (from_path, from_root):
+            assert _scans_by_tag(other) == _scans_by_tag(from_str)
+            assert other["name"] == from_str["name"]
+
+    def test_local_and_remote_keep_the_same_data_collections(self, tmp_path, monkeypatch):
+        """The remote path must not lose or invent a DC: only locations change."""
+        base = write_tree(tmp_path / "results-3d5c7e5b", MEGATEST_TREE)
+        local = self._resolve(str(base))[0]
+        install_s3_listing(monkeypatch, MEGATEST_TREE)
+        from depictio.cli.cli.utils.templates import resolve_template
+
+        remote = resolve_template("nf-core/ampliseq/2.16.0", S3_ROOT, CLI_config=s3_cli_config())[0]
+        assert sorted(_scans_by_tag(remote)) == sorted(_scans_by_tag(local))
+
+
+class TestPreviewDataRoot:
+    """What `--data-root` would yield, before anything is created."""
+
+    def _preview(self, monkeypatch, tree=None, **kwargs):
+        install_s3_listing(monkeypatch, MEGATEST_TREE if tree is None else tree)
+        from depictio.cli.cli.utils.templates import preview_data_root
+
+        return preview_data_root(
+            "nf-core/ampliseq/2.16.0", S3_ROOT, CLI_config=s3_cli_config(), **kwargs
+        )
+
+    @staticmethod
+    def _row(preview, tag):
+        return next(row for row in preview.data_collections if row.tag == tag)
+
+    def test_header_reports_what_the_run_would_be(self, monkeypatch):
+        preview = self._preview(monkeypatch)
+        assert preview.template_id == "nf-core/ampliseq/2.16.0"
+        assert preview.data_root == S3_ROOT
+        assert preview.project_name
+        assert preview.dashboards == ["base.yaml"]
+        assert preview.detected_runs == []  # ampliseq is a `flat` structure
+        assert preview.truncated is False
+
+    def test_resolved_variables_carry_the_derived_decisions(self, monkeypatch):
+        """The gating flags matter most: they decide which DCs exist at all."""
+        preview = self._preview(monkeypatch)
+        assert preview.resolved_variables["SKIP_ANCOM"] == "true"
+        assert preview.resolved_variables["GROUP_COL"] == "habitat"
+        assert preview.resolved_variables["METADATA_ID_COL"] == "sample"
+        assert preview.resolved_variables["SAMPLESHEET_FILE"].startswith(S3_ROOT)
+        # The root itself is a field of its own, not a "resolved variable".
+        assert "DATA_ROOT" not in preview.resolved_variables
+
+    def test_a_scan_dc_that_matches(self, monkeypatch):
+        row = self._row(self._preview(monkeypatch), "multiqc_data")
+        assert (row.kind, row.mode, row.status, row.matched) == ("scan", "s3_prefix", "ok", 1)
+
+    def test_a_scan_dc_that_matches_nothing(self, monkeypatch):
+        without_multiqc = {
+            rel: body
+            for rel, body in MEGATEST_TREE.items()
+            if rel != "multiqc/multiqc_data/multiqc.parquet"
+        }
+        row = self._row(self._preview(monkeypatch, tree=without_multiqc), "multiqc_data")
+        assert (row.status, row.matched) == ("empty", 0)
+
+    def test_a_recipe_dc_with_a_missing_required_source(self, monkeypatch):
+        row = self._row(self._preview(monkeypatch), "alpha_rarefaction")
+        assert (row.kind, row.mode, row.status) == ("recipe", None, "missing")
+        assert row.missing_sources == ["qiime2/alpha-rarefaction/faith_pd.csv"]
+
+    def test_a_recipe_dc_whose_source_is_present(self, monkeypatch):
+        row = self._row(self._preview(monkeypatch), "taxonomy_composition")
+        assert (row.kind, row.status, row.matched, row.missing_sources) == ("recipe", "ok", 1, [])
+
+    def test_a_pruned_optional_dc_gets_its_own_row(self, monkeypatch):
+        without_tree = {
+            rel: body
+            for rel, body in MEGATEST_TREE.items()
+            if rel != "qiime2/phylogenetic_tree/tree.nwk"
+        }
+        preview = self._preview(monkeypatch, tree=without_tree)
+        assert preview.pruned_optional_dcs == ["phylogenetic_tree_canonical"]
+        row = self._row(preview, "phylogenetic_tree_canonical")
+        assert (row.status, row.optional, row.matched) == ("pruned", True, 0)
+
+    def test_a_local_data_root_previews_the_same_way(self, tmp_path):
+        from depictio.cli.cli.utils.templates import preview_data_root
+
+        base = write_tree(tmp_path / "results", MEGATEST_TREE)
+        preview = preview_data_root("nf-core/ampliseq/2.16.0", str(base))
+        assert preview.data_root == str(base.absolute())
+        by_tag = {row.tag: row for row in preview.data_collections}
+        assert (by_tag["multiqc_data"].mode, by_tag["multiqc_data"].status) == ("recursive", "ok")
+        assert by_tag["samplesheet"].status == "ok"
+        assert by_tag["alpha_rarefaction"].missing_sources == [
+            "qiime2/alpha-rarefaction/faith_pd.csv"
+        ]
+
+
+class TestPreviewRunScoping:
+    """A `sequencing-runs` structure is counted per run, the way the scan walks it."""
+
+    RUNS_TREE = {
+        "run_1/qiime2/barplot/level-2.csv": b"a\n",
+        "run_2/qiime2/barplot/level-2.csv": b"a\n",
+        "logs/nextflow.log": b"noise\n",
+    }
+
+    def test_matches_are_summed_across_the_detected_runs(self, monkeypatch):
+        from depictio.cli.cli.utils.templates import _preview_scan_dc
+
+        root = s3_data_root(monkeypatch, self.RUNS_TREE)
+        assert root.runs("run_.*") == ["run_1", "run_2"]
+        dc_config = {
+            "scan": {
+                "mode": "recursive",
+                "scan_parameters": {"regex_config": {"pattern": "level-2\\.csv"}},
+            }
+        }
+        row = _preview_scan_dc("barplot", dc_config, root, ["run_1", "run_2"], False)
+        assert (row.matched, row.status) == (2, "ok")
+        # Without run scoping the same pattern still sees both, so the scoping is
+        # what keeps a per-run count honest rather than what finds the files.
+        assert _preview_scan_dc("barplot", dc_config, root, [], False).matched == 2
+
+    def test_a_prefix_outside_the_root_is_not_reported_as_empty_data(self, monkeypatch):
+        """An s3_prefix on another bucket is invisible to this root's listing."""
+        from depictio.cli.cli.utils.templates import _preview_scan_dc
+
+        root = s3_data_root(monkeypatch, self.RUNS_TREE)
+        dc_config = {
+            "scan": {
+                "mode": "s3_prefix",
+                "scan_parameters": {"prefix": "s3://elsewhere/run42/", "pattern": "*.csv"},
+            }
+        }
+        row = _preview_scan_dc("foreign", dc_config, root, [], False)
+        assert (row.status, row.matched, row.location) == ("ok", 0, "s3://elsewhere/run42/")
+
+    def test_a_glob_pattern_is_translated_for_the_matcher(self, monkeypatch):
+        """s3_prefix patterns are globs unless they say `pattern_syntax: regex`."""
+        from depictio.cli.cli.utils.templates import _preview_scan_dc
+
+        root = s3_data_root(monkeypatch, self.RUNS_TREE)
+        dc_config = {
+            "scan": {
+                "mode": "s3_prefix",
+                "scan_parameters": {"prefix": f"{S3_ROOT}/", "pattern": "*.csv"},
+            }
+        }
+        assert _preview_scan_dc("globbed", dc_config, root, [], False).matched == 2
