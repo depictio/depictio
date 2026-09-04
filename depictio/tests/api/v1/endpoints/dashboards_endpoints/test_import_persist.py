@@ -63,7 +63,7 @@ AI_STAMP = {
 
 # What a stamp written before the review pass existed looks like once the
 # model has loaded it: `reviewed` and `dropped` default to empty lists.
-AI_STAMP_STORED = {**AI_STAMP, "reviewed": [], "dropped": []}
+AI_STAMP_STORED = {**AI_STAMP, "reviewed": [], "dropped": [], "sections": []}
 
 
 def _project_doc(owner: UserBase) -> dict:
