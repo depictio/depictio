@@ -5,10 +5,14 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 from types import ModuleType
+from typing import TYPE_CHECKING
 
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+
+if TYPE_CHECKING:  # pragma: no cover - import kept out of the runtime path
+    from depictio.cli.cli.utils.data_root import DataRoot
 
 # Recipes live in one of two homes:
 #   1. Module-owned (preferred): co-located in the catalog module folder, referenced
@@ -120,22 +124,82 @@ def load_recipe(recipe_name: str, pipeline_version: str | None = None) -> Module
 # ---------------------------------------------------------------------------
 
 
-def _read_source_file(file_path: Path, source: RecipeSource) -> pl.DataFrame:
-    """Read a single source file into a DataFrame."""
-    kwargs = source.read_kwargs or {}
+def _is_remote_location(location: str | Path) -> bool:
+    """Whether ``location`` is a URL rather than a filesystem path.
+
+    String handling on purpose: ``Path('s3://bucket/x.csv')`` collapses the
+    double slash and has no usable ``suffix``, so anything that sniffs a remote
+    location must never route it through ``pathlib``.
+    """
+    return "://" in str(location)
+
+
+def _as_data_root(data_dir: str | Path | DataRoot) -> DataRoot:
+    """The :class:`DataRoot` for whatever the caller passed.
+
+    A ``str`` or ``Path`` is a directory on disk, so it is wrapped and every
+    existing caller keeps working unchanged. A caller that already holds a root
+    (the ingestion layer, which may have built an :class:`S3DataRoot` from one
+    paginated listing) hands it straight through, so a recipe with a dozen
+    sources costs no extra listings.
+    """
+    if isinstance(data_dir, str | Path):
+        # Imported lazily: ``depictio.recipes`` is pulled in by the API and the
+        # catalog, neither of which should have to import the CLI package.
+        from depictio.cli.cli.utils.data_root import LocalDataRoot
+
+        return LocalDataRoot(str(data_dir))
+    return data_dir
+
+
+def _read_source_file(
+    location: str | Path,
+    source: RecipeSource,
+    storage_options: dict | None = None,
+) -> pl.DataFrame:
+    """Read a single source file into a DataFrame.
+
+    ``location`` is whatever the data root calls the file: an absolute
+    filesystem path, or an ``s3://`` URL.
+
+    A remote location is read through polars' *lazy* readers and collected
+    immediately. This is not an optimisation, it is the only thing that works:
+    ``pl.read_csv`` routes an ``s3://`` path through fsspec/s3fs, which does not
+    understand object_store options and dies on ``aws_skip_signature`` with
+    ``AioSession.__init__() got an unexpected keyword argument``. The scanners
+    use the native Rust object store, which does. ``deltatables``'
+    ``_read_remote_file_lazy`` scans for the same reason. Every ``read_kwargs``
+    the bundled recipes use (``separator``, ``skip_rows``,
+    ``skip_rows_after_header``, ``infer_schema_length``) is accepted by
+    ``scan_csv``; the eager-only ones are ``columns``, ``batch_size``,
+    ``n_threads``, ``sample_size`` and ``use_pyarrow``.
+
+    A local location keeps the eager path unchanged, and is never handed
+    ``storage_options``.
+    """
+    kwargs = dict(source.read_kwargs or {})
+    remote = _is_remote_location(location)
+    if remote and storage_options is not None:
+        kwargs["storage_options"] = storage_options
 
     if source.format == "csv":
-        return pl.read_csv(file_path, **kwargs)
+        if remote:
+            return pl.scan_csv(location, **kwargs).collect()
+        return pl.read_csv(location, **kwargs)
     elif source.format == "tsv":
-        return pl.read_csv(file_path, separator="\t", **kwargs)
+        if remote:
+            return pl.scan_csv(location, separator="\t", **kwargs).collect()
+        return pl.read_csv(location, separator="\t", **kwargs)
     elif source.format == "parquet":
-        return pl.read_parquet(file_path, **kwargs)
+        if remote:
+            return pl.scan_parquet(location, **kwargs).collect()
+        return pl.read_parquet(location, **kwargs)
     else:
         raise RecipeError(f"Unsupported format: {source.format}")
 
 
 def _resolve_glob_source(
-    data_dir: Path, source: RecipeSource, pattern_override: str | None = None
+    root: DataRoot, source: RecipeSource, pattern_override: str | None = None
 ) -> pl.DataFrame:
     """Glob for multiple files and concatenate into a single DataFrame.
 
@@ -147,19 +211,23 @@ def _resolve_glob_source(
     if pattern is None:
         raise RecipeError(f"Source '{source.ref}' has no glob_pattern")
 
-    matched_files = sorted(data_dir.glob(pattern))
+    matched_files = root.glob(pattern)  # root-relative and already sorted
     if not matched_files:
-        raise RecipeError(f"Source '{source.ref}': no files matched glob '{pattern}' in {data_dir}")
+        raise RecipeError(
+            f"Source '{source.ref}': no files matched glob '{pattern}' in {root.location}"
+        )
 
+    storage_options = root.storage_options()
     frames: list[pl.DataFrame] = []
-    for file_path in matched_files:
-        df = _read_source_file(file_path, source)
+    for rel_path in matched_files:
+        df = _read_source_file(root.url(rel_path), source, storage_options)
         if not df.is_empty():
             frames.append(df)
 
     if not frames:
         raise RecipeError(
-            f"Source '{source.ref}': all {len(matched_files)} matched files were empty"
+            f"Source '{source.ref}': all {len(matched_files)} matched files were empty "
+            f"in {root.location}"
         )
 
     return pl.concat(frames, how="diagonal_relaxed")
@@ -167,21 +235,24 @@ def _resolve_glob_source(
 
 def resolve_sources(
     module: ModuleType,
-    data_dir: str | Path,
+    data_dir: str | Path | DataRoot,
     overrides: dict[str, str] | None = None,
 ) -> dict[str, pl.DataFrame]:
     """Resolve all recipe sources by reading files from data_dir.
 
     Args:
         module: Loaded recipe module.
-        data_dir: Root directory containing workflow output files.
+        data_dir: Root holding the workflow output files. A directory path
+            (``str`` or ``Path``) or a :class:`DataRoot`, which is how a recipe
+            gets pointed at an ``s3://`` prefix instead of a local directory.
         overrides: Optional dict mapping source ref -> override path (file sources)
             or glob pattern (glob sources).
 
     Returns:
         Dict mapping source ref names to DataFrames.
     """
-    data_dir = Path(data_dir)
+    root = _as_data_root(data_dir)
+    storage_options = root.storage_options()
     sources: dict[str, pl.DataFrame] = {}
 
     for source in module.SOURCES:
@@ -194,7 +265,7 @@ def resolve_sources(
         # present) repoints the glob pattern for this source.
         if source.glob_pattern is not None:
             pattern_override = overrides.get(source.ref) if overrides else None
-            sources[source.ref] = _resolve_glob_source(data_dir, source, pattern_override)
+            sources[source.ref] = _resolve_glob_source(root, source, pattern_override)
             continue
 
         # Determine file path (apply override if present)
@@ -205,8 +276,10 @@ def resolve_sources(
         if rel_path is None:
             raise RecipeError(f"Source '{source.ref}' has no path and no dc_ref")
 
-        file_path = data_dir / rel_path
-        if not file_path.exists():
+        # The absolute location, so a failure names s3://bucket/prefix/file.csv
+        # rather than the bare fragment the recipe declared.
+        file_location = root.url(rel_path)
+        if not root.exists(rel_path):
             # `optional` has always meant "pass None to transform() when this
             # source cannot be resolved"; until now only dc_ref sources honoured
             # it, so an optional *file* source still hard-failed the whole recipe.
@@ -215,11 +288,11 @@ def resolve_sources(
             if source.optional:
                 sources[source.ref] = None  # type: ignore[assignment]
                 continue
-            raise RecipeError(f"Source '{source.ref}': file not found: {file_path}")
+            raise RecipeError(f"Source '{source.ref}': file not found: {file_location}")
 
-        df = _read_source_file(file_path, source)
+        df = _read_source_file(file_location, source, storage_options)
         if df.is_empty():
-            raise RecipeError(f"Source '{source.ref}' loaded 0 rows from {file_path}")
+            raise RecipeError(f"Source '{source.ref}' loaded 0 rows from {file_location}")
 
         sources[source.ref] = df
 
@@ -270,7 +343,7 @@ def validate_schema(
 
 def execute_recipe(
     recipe_name: str,
-    data_dir: str | Path,
+    data_dir: str | Path | DataRoot,
     overrides: dict[str, str] | None = None,
     extra_sources: dict[str, pl.DataFrame] | None = None,
     pipeline_version: str | None = None,
@@ -279,7 +352,8 @@ def execute_recipe(
 
     Args:
         recipe_name: Pipeline-qualified recipe name (e.g. 'nf-core/ampliseq/alpha_diversity.py').
-        data_dir: Root directory containing workflow output files.
+        data_dir: Root holding the workflow output files: a directory path or a
+            :class:`DataRoot` (which may be an ``s3://`` prefix).
         overrides: Optional source path overrides.
         extra_sources: Optional pre-loaded DataFrames for dc_ref sources.
         pipeline_version: Optional pipeline version for version-specific recipe lookup.

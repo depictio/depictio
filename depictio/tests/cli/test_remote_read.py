@@ -810,3 +810,378 @@ class TestUrlScan:
 
         ((files, _),) = api.created
         assert files[0].filename == "remote-file"
+
+
+class TestRecipeSourcesOnS3:
+    """``resolve_sources`` against an ``s3://`` data root.
+
+    20 of nf-core/ampliseq's 25 data collections are recipe DCs, so a template
+    pointed at an S3 prefix is mostly recipe reads. The listing is stubbed the
+    way ``test_data_root.py`` stubs it and the polars calls are captured, so
+    nothing here touches the network: what is asserted is which object each
+    source resolved to and which storage options the read was handed.
+    """
+
+    BUCKET = "nf-core-awsmegatests"
+    PREFIX = "ampliseq/results/"
+    ROOT = f"s3://{BUCKET}/{PREFIX.rstrip('/')}"
+
+    TREE = [
+        "qiime2/barplot/level-3.csv",
+        "qiime2/barplot/level-4.csv",
+        "qiime2/rel_abundance_tables/rel-table-ASV.tsv",
+        "logs/nextflow.log",
+        "run_1/qiime2/barplot/level-3.csv",
+        "run_2/qiime2/barplot/level-3.csv",
+    ]
+
+    @pytest.fixture
+    def stub_listing(self, monkeypatch):
+        """Serve ``TREE`` as an S3 listing, honouring ``Prefix``."""
+        keys = [f"{self.PREFIX}{rel}" for rel in self.TREE]
+
+        class _Client:
+            def get_paginator(self, _name):
+                class _Paginator:
+                    def paginate(self, Bucket=None, Prefix="", **_kwargs):  # noqa: N803
+                        yield {
+                            "Contents": [
+                                {"Key": key, "Size": 10, "ETag": f'"{key}"'}
+                                for key in keys
+                                if key.startswith(Prefix)
+                            ]
+                        }
+
+                return _Paginator()
+
+        from depictio.cli.cli.utils import data_root as data_root_module
+
+        monkeypatch.setattr(data_root_module, "s3_read_client", lambda _url, _cfg: _Client())
+
+    @pytest.fixture
+    def public_bucket(self, monkeypatch):
+        """Allowlist the bucket, which is how a public results prefix is read."""
+        monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", self.BUCKET)
+
+    @pytest.fixture
+    def root(self, stub_listing, public_bucket):
+        from depictio.cli.cli.utils.data_root import data_root_for
+
+        return data_root_for(self.ROOT, None)
+
+    @pytest.fixture
+    def reads(self, monkeypatch):
+        """Capture which polars reader ran, and answer it with a one-row frame.
+
+        A remote read must use the *lazy* readers. The eager ones route an
+        ``s3://`` path through fsspec/s3fs, which does not understand
+        object_store options: ``pl.read_csv(url, storage_options={
+        'aws_skip_signature': 'true'})`` dies with ``AioSession.__init__() got
+        an unexpected keyword argument``, while ``pl.scan_csv`` on the same
+        arguments reads the object. So the eager readers are stubbed to fail
+        here: asserting that storage options were handed to *something* is
+        weaker than pinning which reader they were handed to.
+
+        The frame carries the location it was asked for, so a test can assert
+        which object a source resolved to without reading anything.
+        """
+        calls: list[dict] = []
+
+        def _scan(reader: str):
+            def _fake(location, **kwargs):
+                calls.append({"reader": reader, "location": location, **kwargs})
+                return pl.DataFrame({"src": [str(location)]}).lazy()
+
+            return _fake
+
+        def _eager_is_a_bug(location, **kwargs):
+            raise AssertionError(
+                f"remote read of {location} used an eager polars reader; "
+                "s3fs cannot take object_store storage options"
+            )
+
+        monkeypatch.setattr(pl, "scan_csv", _scan("scan_csv"))
+        monkeypatch.setattr(pl, "scan_parquet", _scan("scan_parquet"))
+        monkeypatch.setattr(pl, "read_csv", _eager_is_a_bug)
+        monkeypatch.setattr(pl, "read_parquet", _eager_is_a_bug)
+        return calls
+
+    @staticmethod
+    def _module(sources):
+        from types import ModuleType
+        from unittest.mock import MagicMock
+
+        module = MagicMock(spec=ModuleType)
+        module.SOURCES = sources
+        module.EXPECTED_SCHEMA = {}
+        return module
+
+    def test_a_path_source_resolves_to_the_full_object_url(self, root, reads):
+        from depictio.models.models.transforms import RecipeSource
+        from depictio.recipes import resolve_sources
+
+        module = self._module(
+            [RecipeSource(ref="barplot", path="qiime2/barplot/level-3.csv", format="csv")]
+        )
+        sources = resolve_sources(module, root)
+
+        assert sources["barplot"]["src"].to_list() == [f"{self.ROOT}/qiime2/barplot/level-3.csv"]
+
+    def test_a_glob_source_concatenates_every_matching_object(self, root, reads):
+        from depictio.models.models.transforms import RecipeSource
+        from depictio.recipes import resolve_sources
+
+        module = self._module(
+            [RecipeSource(ref="levels", glob_pattern="qiime2/barplot/level-*.csv", format="csv")]
+        )
+        sources = resolve_sources(module, root)
+
+        assert sources["levels"]["src"].to_list() == [
+            f"{self.ROOT}/qiime2/barplot/level-3.csv",
+            f"{self.ROOT}/qiime2/barplot/level-4.csv",
+        ]
+
+    def test_a_source_override_repoints_the_object(self, root, reads):
+        from depictio.models.models.transforms import RecipeSource
+        from depictio.recipes import resolve_sources
+
+        module = self._module(
+            [RecipeSource(ref="barplot", path="qiime2/barplot/level-3.csv", format="csv")]
+        )
+        sources = resolve_sources(module, root, overrides={"barplot": "qiime2/barplot/level-4.csv"})
+
+        assert sources["barplot"]["src"].to_list() == [f"{self.ROOT}/qiime2/barplot/level-4.csv"]
+
+    def test_an_absent_optional_source_passes_none_through(self, root, reads):
+        from depictio.models.models.transforms import RecipeSource
+        from depictio.recipes import resolve_sources
+
+        module = self._module(
+            [RecipeSource(ref="maybe", path="qiime2/absent.csv", format="csv", optional=True)]
+        )
+        sources = resolve_sources(module, root)
+
+        assert sources["maybe"] is None
+        assert reads == []
+
+    def test_a_missing_required_source_names_the_s3_url(self, root, reads):
+        from depictio.models.models.transforms import RecipeSource
+        from depictio.recipes import RecipeError, resolve_sources
+
+        module = self._module([RecipeSource(ref="barplot", path="qiime2/absent.csv", format="csv")])
+        with pytest.raises(RecipeError) as excinfo:
+            resolve_sources(module, root)
+
+        # The bare relative fragment would be useless in a CLI log: the reader
+        # needs to see the bucket and prefix that were actually consulted.
+        assert f"{self.ROOT}/qiime2/absent.csv" in str(excinfo.value)
+
+    def test_a_glob_that_matches_nothing_names_the_root(self, root, reads):
+        from depictio.models.models.transforms import RecipeSource
+        from depictio.recipes import RecipeError, resolve_sources
+
+        module = self._module(
+            [RecipeSource(ref="levels", glob_pattern="qiime2/absent/*.csv", format="csv")]
+        )
+        with pytest.raises(RecipeError, match="no files matched glob"):
+            resolve_sources(module, root)
+
+    def test_every_remote_read_is_handed_the_roots_storage_options(self, root, reads):
+        from depictio.models.models.transforms import RecipeSource
+        from depictio.recipes import resolve_sources
+
+        module = self._module(
+            [
+                RecipeSource(ref="barplot", path="qiime2/barplot/level-3.csv", format="csv"),
+                RecipeSource(ref="levels", glob_pattern="qiime2/barplot/level-*.csv", format="csv"),
+                RecipeSource(
+                    ref="rel", path="qiime2/rel_abundance_tables/rel-table-ASV.tsv", format="tsv"
+                ),
+            ]
+        )
+        resolve_sources(module, root)
+
+        assert reads, "no read was captured"
+        for call in reads:
+            assert call["storage_options"] == root.storage_options()
+            assert call["storage_options"]["aws_skip_signature"] == "true"
+        # The tsv source keeps its separator alongside the storage options.
+        tsv_call = next(c for c in reads if c["location"].endswith(".tsv"))
+        assert tsv_call["separator"] == "\t"
+
+    def test_remote_csv_and_tsv_go_through_the_lazy_reader(self, root, reads):
+        """``aws_skip_signature`` is an object_store option, so scan, not read.
+
+        The eager readers hand an ``s3://`` path to s3fs, which rejects the
+        option outright. Only the native scanners take it, so the reader that
+        runs is the whole behaviour and is asserted by name.
+        """
+        from depictio.models.models.transforms import RecipeSource
+        from depictio.recipes import resolve_sources
+
+        module = self._module(
+            [
+                RecipeSource(ref="barplot", path="qiime2/barplot/level-3.csv", format="csv"),
+                RecipeSource(
+                    ref="rel", path="qiime2/rel_abundance_tables/rel-table-ASV.tsv", format="tsv"
+                ),
+            ]
+        )
+        resolve_sources(module, root)
+
+        assert [call["reader"] for call in reads] == ["scan_csv", "scan_csv"]
+
+    def test_remote_parquet_goes_through_the_lazy_reader(self, root, reads, monkeypatch):
+        from depictio.models.models.transforms import RecipeSource
+        from depictio.recipes import _read_source_file
+
+        _read_source_file(
+            root.url("qiime2/barplot/level-3.csv"),
+            RecipeSource(ref="p", path="qiime2/barplot/level-3.csv", format="parquet"),
+            root.storage_options(),
+        )
+
+        assert [call["reader"] for call in reads] == ["scan_parquet"]
+        assert reads[0]["storage_options"] == root.storage_options()
+
+    def test_read_kwargs_survive_the_move_to_the_scanner(self, root, reads):
+        """A recipe's ``read_kwargs`` still reach polars on the remote path.
+
+        ``skip_rows`` is the one the qiime2 recipes lean on hardest (the
+        barplot exports carry a preamble line), so a scanner that silently
+        dropped it would corrupt every taxonomy DC rather than fail.
+        """
+        from depictio.models.models.transforms import RecipeSource
+        from depictio.recipes import resolve_sources
+
+        module = self._module(
+            [
+                RecipeSource(
+                    ref="barplot",
+                    path="qiime2/barplot/level-3.csv",
+                    format="csv",
+                    read_kwargs={"skip_rows": 1},
+                )
+            ]
+        )
+        resolve_sources(module, root)
+
+        (call,) = reads
+        assert call["reader"] == "scan_csv"
+        assert call["skip_rows"] == 1
+
+
+class TestSequencingRunsOnS3:
+    """The ``sequencing-runs`` recipe branch, scoped without re-listing.
+
+    ``process_recipe_data_collection`` builds its per-run roots as
+    ``[_ScopedDataRoot(base_root, run) for run in base_root.runs(runs_regex)]``;
+    that expression is what is exercised here, since the surrounding function
+    also writes Delta tables and talks to the API.
+    """
+
+    BUCKET = "nf-core-awsmegatests"
+    PREFIX = "ampliseq/results/"
+    ROOT = f"s3://{BUCKET}/{PREFIX.rstrip('/')}"
+
+    TREE = [
+        "logs/nextflow.log",
+        "run_1/qiime2/barplot/level-3.csv",
+        "run_1/qiime2/barplot/level-4.csv",
+        "run_2/qiime2/barplot/level-3.csv",
+    ]
+
+    @pytest.fixture
+    def base_root(self, monkeypatch):
+        keys = [f"{self.PREFIX}{rel}" for rel in self.TREE]
+
+        class _Client:
+            def get_paginator(self, _name):
+                class _Paginator:
+                    def paginate(self, Bucket=None, Prefix="", **_kwargs):  # noqa: N803
+                        yield {
+                            "Contents": [
+                                {"Key": key, "Size": 10, "ETag": f'"{key}"'}
+                                for key in keys
+                                if key.startswith(Prefix)
+                            ]
+                        }
+
+                return _Paginator()
+
+        from depictio.cli.cli.utils import data_root as data_root_module
+        from depictio.cli.cli.utils.data_root import data_root_for
+
+        monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", self.BUCKET)
+        monkeypatch.setattr(data_root_module, "s3_read_client", lambda _url, _cfg: _Client())
+        return data_root_for(self.ROOT, None)
+
+    @staticmethod
+    def _run_roots(base_root, runs_regex):
+        from depictio.cli.cli.utils.deltatables import _ScopedDataRoot
+
+        return [_ScopedDataRoot(base_root, run) for run in base_root.runs(runs_regex)]
+
+    def test_one_scoped_root_per_matching_run(self, base_root):
+        roots = self._run_roots(base_root, "run_")
+
+        # logs/ is a first-level directory too, and must not read as a run.
+        assert [root.name for root in roots] == ["run_1", "run_2"]
+        assert [root.location for root in roots] == [
+            f"{self.ROOT}/run_1",
+            f"{self.ROOT}/run_2",
+        ]
+
+    def test_a_non_matching_directory_yields_no_run(self, base_root):
+        assert self._run_roots(base_root, "sample_") == []
+
+    def test_a_scoped_root_answers_relative_to_its_run(self, base_root):
+        run_1, run_2 = self._run_roots(base_root, "run_")
+
+        assert run_1.exists("qiime2/barplot/level-3.csv") is True
+        assert run_1.url("qiime2/barplot/level-3.csv") == (
+            f"{self.ROOT}/run_1/qiime2/barplot/level-3.csv"
+        )
+        assert run_1.glob("qiime2/barplot/*.csv") == [
+            "qiime2/barplot/level-3.csv",
+            "qiime2/barplot/level-4.csv",
+        ]
+        # run_2 has only level-3: a scoped root must not see its sibling's files.
+        assert run_2.glob("qiime2/barplot/*.csv") == ["qiime2/barplot/level-3.csv"]
+        assert run_2.exists("qiime2/barplot/level-4.csv") is False
+
+    def test_a_scoped_root_inherits_the_parents_storage_options(self, base_root):
+        (run_1, _) = self._run_roots(base_root, "run_")
+        assert run_1.storage_options() == base_root.storage_options()
+        assert run_1.is_remote is True
+
+    def test_a_recipe_reads_each_run_separately(self, base_root, monkeypatch):
+        from depictio.models.models.transforms import RecipeSource
+        from depictio.recipes import resolve_sources
+
+        def _fake_scan(location, **kwargs):
+            return pl.DataFrame({"src": [str(location)]}).lazy()
+
+        def _eager_is_a_bug(location, **kwargs):
+            raise AssertionError(f"remote read of {location} used an eager polars reader")
+
+        monkeypatch.setattr(pl, "scan_csv", _fake_scan)
+        monkeypatch.setattr(pl, "read_csv", _eager_is_a_bug)
+
+        from types import ModuleType
+        from unittest.mock import MagicMock
+
+        module = MagicMock(spec=ModuleType)
+        module.SOURCES = [
+            RecipeSource(ref="barplot", path="qiime2/barplot/level-3.csv", format="csv")
+        ]
+        module.EXPECTED_SCHEMA = {}
+
+        resolved = [
+            resolve_sources(module, run_root)["barplot"]["src"].to_list()[0]
+            for run_root in self._run_roots(base_root, "run_")
+        ]
+        assert resolved == [
+            f"{self.ROOT}/run_1/qiime2/barplot/level-3.csv",
+            f"{self.ROOT}/run_2/qiime2/barplot/level-3.csv",
+        ]
