@@ -446,6 +446,40 @@ def register_run_command(app: typer.Typer):
                 "success",
             )
 
+        # Read the run's own provenance whenever there is a directory to look at,
+        # deliberately independent of how the template was chosen. The dominant
+        # trigger path forwards --nextflow-manifest, which already resolved a
+        # template above, but the engine version and the tool list exist nowhere
+        # except the run directory. Gating this on "no template yet" left every
+        # pipeline-triggered project with empty provenance.
+        detected_info = None
+        if data_root and Path(data_root).is_dir():
+            from depictio.models.models.run_info import read_run_info
+
+            detected_info = read_run_info(data_root)
+            if detected_info is not None:
+                version = (
+                    f" {detected_info.pipeline_version}" if detected_info.pipeline_version else ""
+                )
+                rich_print_checked_statement(
+                    f"Detected {detected_info.pipeline_name or 'an unidentified pipeline'}"
+                    f"{version} ({detected_info.engine or 'unknown engine'}, "
+                    f"{len(detected_info.tools_executed)} tool(s))",
+                    "info",
+                )
+
+        # Step 0-: nothing was specified at all, so let the run directory pick the
+        # template too. This is the fallback for a pipeline whose manifest the
+        # trigger could not forward (an older Nextflow, a hand-run CLI, a
+        # non-Nextflow engine).
+        if detected_info is not None and not template and not project_config_path:
+            from depictio.cli.cli.utils.templates import select_template_for_run
+
+            detected_template = select_template_for_run(detected_info)
+            if detected_template:
+                template = detected_template
+                rich_print_checked_statement(f"Auto-selected template: {template}", "success")
+
         # Validate template/project-config-path mutual exclusivity
         if template and project_config_path:
             rich_print_checked_statement(
@@ -595,6 +629,25 @@ def register_run_command(app: typer.Typer):
                     "success",
                     f"template '{template_metadata.template_id}' loaded",
                 )
+
+                # Stamp the run's own provenance onto each workflow config when we
+                # read it from the run directory. It lives on the run-scoped
+                # WorkflowConfig so one workflow can aggregate runs produced by
+                # different pipeline versions without them conflicting.
+                if detected_info is not None:
+                    provenance = {
+                        "engine_name": detected_info.engine,
+                        "pipeline_version": detected_info.pipeline_version,
+                        "nextflow_version": (
+                            detected_info.engine_version
+                            if detected_info.engine == "nextflow"
+                            else None
+                        ),
+                        "tools_executed": sorted(detected_info.tools_executed),
+                    }
+                    provenance = {k: v for k, v in provenance.items() if v}
+                    for wf in resolved_config.get("workflows", []):
+                        wf.setdefault("config", {}).update(provenance)
 
                 template_resolved_config = resolved_config
 
