@@ -146,6 +146,20 @@ params.depictio_project = 'Ampliseq 16S survey'
 params.depictio_attach  = true
 ```
 
+### Re-running the same pipeline
+
+A second execution finds its project already on the server. The CLI refuses to
+touch it and says so, exiting 2, which is the safe default but stops every re-run.
+Pick the behaviour you want:
+
+- `params.depictio_update = true` refreshes the existing project's configuration
+  and re-ingests the same data root, which is what you want after fixing a
+  pipeline and re-running with `-resume`. It passes `--overwrite` as well,
+  because the delta tables from the first ingestion are already written and
+  rebuilding them is the point.
+- `params.depictio_attach = true` keeps the existing runs and adds this one. It
+  implies the update, so setting both is the same as setting only `depictio_attach`.
+
 ## Authentication
 
 The head job typically has environment variables but no interactive login and
@@ -207,6 +221,7 @@ login](pipeline-provisioning-magic-link.md).
 | `depictio_project_config` | none | `--project-config-path` (wins over `--template`) |
 | `depictio_project` | none | `--project-name` |
 | `depictio_attach` | `false` | `--attach-run` |
+| `depictio_update` | `false` | `--update-config --overwrite` (ignored with `--attach-run`, which implies both) |
 | `depictio_user` | none | `--user` |
 | `depictio_cli_executable` | `depictio-cli` | the executable that is run |
 

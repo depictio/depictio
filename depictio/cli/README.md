@@ -159,6 +159,7 @@ provisioning key. See `docs/pipeline-provisioning-magic-link.md`.
 | `depictio_project_config` | none | `--project-config-path` (wins over `--template`) |
 | `depictio_project` | none | `--project-name` |
 | `depictio_attach` | `false` | `--attach-run` |
+| `depictio_update` | `false` | `--update-config --overwrite` (ignored with `--attach-run`, which implies both) |
 | `depictio_user` | none | `--user` |
 | `depictio_cli_executable` | `depictio-cli` | the executable itself |
 
