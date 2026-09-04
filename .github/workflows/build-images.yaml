@@ -188,12 +188,12 @@ jobs:
           retention-days: 1
 
   cli-image-check:
-    # The CLI image only earns its place if the bundled templates and the
-    # multiqc extra are actually inside it. Both are easy to lose silently:
-    # templates are found by walking up from the package, so an installed-only
-    # layout hides them, and without the multiqc module every nf-core ingestion
-    # loses its first data collection and never imports a dashboard. Runs on
-    # PRs too, since that is when the Dockerfile changes.
+    # Dockerfile.cli already asserts that multiqc imports and that the bundled
+    # templates resolve, so the build fails before an unusable image can be
+    # tagged. That assertion runs as root at build time, though, and the image
+    # runs as the unprivileged `depictio` user: this job re-checks both through
+    # the real entrypoint, as that user, which is the only part the build cannot
+    # cover. Runs on PRs too, since that is when the Dockerfile changes.
     name: CLI image contents
     runs-on: ubuntu-22.04
     permissions:
@@ -216,20 +216,16 @@ jobs:
           cache-from: type=gha,scope=depictio-cli-amd64
           cache-to: type=gha,scope=depictio-cli-amd64,mode=max
 
-      - name: The CLI runs
+      - name: The entrypoint runs as the unprivileged user
         run: docker run --rm depictio-cli:ci version
 
-      - name: The multiqc extra is installed
-        run: |
-          docker run --rm --entrypoint python depictio-cli:ci \
-            -c "import multiqc; print('multiqc', multiqc.__version__)"
-
-      - name: Bundled templates resolve from inside the image
+      - name: multiqc and the bundled templates are readable by that user
         run: |
           docker run --rm --entrypoint python depictio-cli:ci -c "
+          import multiqc
           from depictio.cli.cli.utils.templates import locate_template
-          path = locate_template('nf-core/ampliseq/latest')
-          print('resolved to', path)
+          print('multiqc', multiqc.__version__)
+          print('templates', locate_template('nf-core/ampliseq/latest'))
           "
 
   merge:

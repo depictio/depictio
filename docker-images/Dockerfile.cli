@@ -15,7 +15,8 @@
 # The `multiqc` extra is installed deliberately: every nf-core template ingests
 # multiqc/multiqc_data/multiqc.parquet, and without the module that data
 # collection fails and the dashboard import never runs, leaving a green
-# pipeline and an empty project.
+# pipeline and an empty project. The build asserts both it and the templates
+# are present before the image can be tagged (see the bottom of this file).
 # -----------------------------
 
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim@sha256:e5b65587bce7de595f299855d7385fe7fca39b8a74baa261ba1b7147afa78e58 AS base
@@ -67,6 +68,28 @@ ENV PYTHONPATH="/app"
 ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
+
+# Fail the build rather than publish an image that looks fine and ingests
+# nothing. Both of these are installed above, and both can go missing without
+# any visible error:
+#
+#   * multiqc comes from an optional extra, and the `|| uv sync` fallback above
+#     (the convention shared with the API and worker images) hides a lockfile
+#     drift by re-resolving. Every nf-core template ingests
+#     multiqc/multiqc_data/multiqc.parquet as its first data collection, so
+#     without the module that collection fails, the dashboard import never runs,
+#     and the pipeline still reports success over an empty project.
+#   * the bundled templates are found by walking up from the package directory,
+#     so PYTHONPATH and the COPY above are what make them reachable. From an
+#     installed-only layout `--template nf-core/ampliseq/latest` silently
+#     resolves to nothing.
+#
+# Cheap, and it runs on release builds too, unlike the PR-only CI job.
+RUN python -c "import multiqc; print('multiqc', multiqc.__version__)" \
+    && python -c "\
+from depictio.cli.cli.utils.templates import locate_template; \
+print('templates', locate_template('nf-core/ampliseq/latest'))"
+
 USER depictio
 
 # Entrypoint is the CLI itself, so a caller appends only the subcommand:
