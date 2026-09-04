@@ -613,6 +613,14 @@ async def save_dashboard(
     if existing_dashboard and not save_payload.get("screenshot_ts"):
         save_payload.pop("screenshot_ts", None)
 
+    # `ai_generation` is stamped by the AI generator and flipped only by its
+    # promote route. The client round-trips the whole document (the model
+    # defaults the field to None), so leaving it in the payload would let any
+    # autosave clear a draft flag, or forge one on a hand-made dashboard.
+    # Dropped from the `$set` on update, the stored value survives untouched;
+    # dropped on insert, a client-created dashboard is never born a draft.
+    save_payload.pop("ai_generation", None)
+
     if existing_dashboard:
         project_id = existing_dashboard.get("project_id")
         if not project_id:
@@ -5569,6 +5577,156 @@ def _import_multi_tab_dashboard(
     }
 
 
+def _persist_lite_dashboard(
+    lite: DashboardDataLite,
+    project_id: PyObjectId,
+    current_user: User,
+    *,
+    overwrite: bool = False,
+    extra_fields: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Persist a validated single-tab ``DashboardDataLite`` into ``project_id``.
+
+    The persistence tail shared by the YAML import route and the AI dashboard
+    generator: title collision (409 unless ``overwrite``), ``to_full()``,
+    project-driven visibility, parent-tab wiring, ids and timestamps, version
+    and permissions, tag resolution and self-adapting pruning, model
+    validation (400) and the insert or replace.
+
+    Callers own the gates: auth mode, project resolution and the editor
+    permission check all happen before this is called. Synchronous (pymongo);
+    async callers run it through a thread.
+
+    Args:
+        lite: The parsed dashboard.
+        project_id: Target project, already permission-checked.
+        current_user: Becomes the owner of a new dashboard.
+        overwrite: Replace an existing dashboard with the same title instead
+            of raising 409.
+        extra_fields: Top-level fields merged into the document right before
+            model validation (e.g. ``{"ai_generation": {...}}``). Keys
+            override whatever the pipeline wrote under the same name.
+
+    Returns:
+        The import payload: ``success``, ``updated``, ``message``,
+        ``dashboard_id``, ``title``, ``project_id``, ``dash_url``.
+    """
+    # Check for existing dashboard with same title
+    existing_dashboard = dashboards_collection.find_one(
+        {"title": lite.title, "project_id": ObjectId(project_id)}
+    )
+    if existing_dashboard and not overwrite:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Dashboard '{lite.title}' already exists in this project. "
+            "Use --overwrite to update it.",
+        )
+    if existing_dashboard:
+        logger.info(
+            f"Found existing dashboard '{lite.title}' "
+            f"(ID: {existing_dashboard['dashboard_id']}) - will update"
+        )
+
+    dashboard_dict = lite.to_full()
+    # Visibility is project-driven; `to_full()` defaults to private, which
+    # would also reset an existing public dashboard on --overwrite.
+    dashboard_dict["is_public"] = get_project_visibility(project_id)
+
+    # Handle tab relationships for child tabs
+    if not lite.is_main_tab and lite.parent_dashboard_tag:
+        # Find parent dashboard by title in the same project
+        parent_dashboard = dashboards_collection.find_one(
+            {
+                "title": lite.parent_dashboard_tag,
+                "project_id": ObjectId(project_id),
+                "is_main_tab": {"$ne": False},
+            }
+        )
+        if not parent_dashboard:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Parent dashboard '{lite.parent_dashboard_tag}' not found in this project. "
+                "Import the main dashboard first, then import child tabs.",
+            )
+        dashboard_dict["parent_dashboard_id"] = parent_dashboard["dashboard_id"]
+        dashboard_dict["is_main_tab"] = False
+
+    # Set dashboard ID and project
+    new_dashboard_id = existing_dashboard["dashboard_id"] if existing_dashboard else ObjectId()
+    dashboard_dict["dashboard_id"] = new_dashboard_id
+    dashboard_dict["project_id"] = ObjectId(project_id)
+    dashboard_dict["last_saved_ts"] = utc_now_str()
+    dashboard_dict["creation_time"] = preserved_creation_time(
+        existing_dashboard, new_dashboard_id, dashboard_dict["last_saved_ts"]
+    )
+
+    # Set version and permissions based on create vs update
+    if existing_dashboard:
+        dashboard_dict["version"] = existing_dashboard.get("version", 1) + 1
+        dashboard_dict["permissions"] = existing_dashboard.get(
+            "permissions",
+            {"owners": [{"_id": ObjectId(current_user.id), "email": current_user.email}]},
+        )
+    else:
+        dashboard_dict["version"] = 1
+        dashboard_dict["permissions"] = {
+            "owners": [{"_id": ObjectId(current_user.id), "email": current_user.email}],
+            "editors": [],
+            "viewers": [],
+        }
+
+    # Resolve tags to MongoDB IDs, regenerate fields from DC config, and regenerate component indices
+    for component in dashboard_dict.get("stored_metadata", []):
+        _resolve_workflow_tags(component, project_id=project_id)
+        _regenerate_component_fields(
+            component
+        )  # Regenerate s3_base_folder, etc. after dc_config is populated
+    _filter_unresolved_components(dashboard_dict, project_id=project_id)
+    _regenerate_component_indices(dashboard_dict)
+
+    # Server-side provenance (the AI generator's `ai_generation` stamp) rides
+    # in here. Merged last so it can never be shadowed by anything `to_full()`
+    # or the helper chain wrote, and validated by the model like every other
+    # field.
+    if extra_fields:
+        dashboard_dict.update(extra_fields)
+
+    try:
+        dashboard = DashboardData.from_mongo(dashboard_dict)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Dashboard validation failed: {e}") from e
+
+    # Insert or update in database
+    is_update = existing_dashboard is not None
+    if is_update and existing_dashboard is not None:
+        # Preserve the existing MongoDB _id to avoid immutable field error
+        update_doc = dashboard.mongo()
+        update_doc["_id"] = existing_dashboard["_id"]
+        result = dashboards_collection.replace_one({"_id": existing_dashboard["_id"]}, update_doc)
+        if result.modified_count == 0 and result.matched_count == 0:
+            raise HTTPException(status_code=500, detail="Failed to update dashboard.")
+    else:
+        result = dashboards_collection.insert_one(dashboard.mongo())
+        if not result.inserted_id:
+            raise HTTPException(status_code=500, detail="Failed to import dashboard.")
+
+    action = "Updated" if is_update else "Imported"
+    logger.info(
+        f"{action} dashboard from YAML: {dashboard.title} (ID: {new_dashboard_id}) "
+        f"by user {current_user.email}"
+    )
+
+    return {
+        "success": True,
+        "updated": is_update,
+        "message": f"Dashboard {'updated' if is_update else 'imported'} successfully",
+        "dashboard_id": str(new_dashboard_id),
+        "title": dashboard.title,
+        "project_id": str(project_id),
+        "dash_url": settings.viewer.external_url,
+    }
+
+
 @dashboards_endpoint_router.post("/import/yaml")
 async def import_dashboard_from_yaml(
     yaml_content: str = Body(..., media_type="text/plain"),
@@ -5683,113 +5841,7 @@ async def import_dashboard_from_yaml(
             detail="You don't have permission to create dashboards in this project.",
         )
 
-    # Check for existing dashboard with same title
-    existing_dashboard = dashboards_collection.find_one(
-        {"title": lite.title, "project_id": ObjectId(project_id)}
-    )
-    if existing_dashboard and not overwrite:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Dashboard '{lite.title}' already exists in this project. "
-            "Use --overwrite to update it.",
-        )
-    if existing_dashboard:
-        logger.info(
-            f"Found existing dashboard '{lite.title}' "
-            f"(ID: {existing_dashboard['dashboard_id']}) - will update"
-        )
-
-    dashboard_dict = lite.to_full()
-    # Visibility is project-driven; `to_full()` defaults to private, which
-    # would also reset an existing public dashboard on --overwrite.
-    dashboard_dict["is_public"] = get_project_visibility(project_id)
-
-    # Handle tab relationships for child tabs
-    if not lite.is_main_tab and lite.parent_dashboard_tag:
-        # Find parent dashboard by title in the same project
-        parent_dashboard = dashboards_collection.find_one(
-            {
-                "title": lite.parent_dashboard_tag,
-                "project_id": ObjectId(project_id),
-                "is_main_tab": {"$ne": False},
-            }
-        )
-        if not parent_dashboard:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Parent dashboard '{lite.parent_dashboard_tag}' not found in this project. "
-                "Import the main dashboard first, then import child tabs.",
-            )
-        dashboard_dict["parent_dashboard_id"] = parent_dashboard["dashboard_id"]
-        dashboard_dict["is_main_tab"] = False
-
-    # Set dashboard ID and project
-    new_dashboard_id = existing_dashboard["dashboard_id"] if existing_dashboard else ObjectId()
-    dashboard_dict["dashboard_id"] = new_dashboard_id
-    dashboard_dict["project_id"] = ObjectId(project_id)
-    dashboard_dict["last_saved_ts"] = utc_now_str()
-    dashboard_dict["creation_time"] = preserved_creation_time(
-        existing_dashboard, new_dashboard_id, dashboard_dict["last_saved_ts"]
-    )
-
-    # Set version and permissions based on create vs update
-    if existing_dashboard:
-        dashboard_dict["version"] = existing_dashboard.get("version", 1) + 1
-        dashboard_dict["permissions"] = existing_dashboard.get(
-            "permissions",
-            {"owners": [{"_id": ObjectId(current_user.id), "email": current_user.email}]},
-        )
-    else:
-        dashboard_dict["version"] = 1
-        dashboard_dict["permissions"] = {
-            "owners": [{"_id": ObjectId(current_user.id), "email": current_user.email}],
-            "editors": [],
-            "viewers": [],
-        }
-
-    # Resolve tags to MongoDB IDs, regenerate fields from DC config, and regenerate component indices
-    for component in dashboard_dict.get("stored_metadata", []):
-        _resolve_workflow_tags(component, project_id=project_id)
-        _regenerate_component_fields(
-            component
-        )  # Regenerate s3_base_folder, etc. after dc_config is populated
-    _filter_unresolved_components(dashboard_dict, project_id=project_id)
-    _regenerate_component_indices(dashboard_dict)
-
-    try:
-        dashboard = DashboardData.from_mongo(dashboard_dict)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Dashboard validation failed: {e}") from e
-
-    # Insert or update in database
-    is_update = existing_dashboard is not None
-    if is_update and existing_dashboard is not None:
-        # Preserve the existing MongoDB _id to avoid immutable field error
-        update_doc = dashboard.mongo()
-        update_doc["_id"] = existing_dashboard["_id"]
-        result = dashboards_collection.replace_one({"_id": existing_dashboard["_id"]}, update_doc)
-        if result.modified_count == 0 and result.matched_count == 0:
-            raise HTTPException(status_code=500, detail="Failed to update dashboard.")
-    else:
-        result = dashboards_collection.insert_one(dashboard.mongo())
-        if not result.inserted_id:
-            raise HTTPException(status_code=500, detail="Failed to import dashboard.")
-
-    action = "Updated" if is_update else "Imported"
-    logger.info(
-        f"{action} dashboard from YAML: {dashboard.title} (ID: {new_dashboard_id}) "
-        f"by user {current_user.email}"
-    )
-
-    return {
-        "success": True,
-        "updated": is_update,
-        "message": f"Dashboard {'updated' if is_update else 'imported'} successfully",
-        "dashboard_id": str(new_dashboard_id),
-        "title": dashboard.title,
-        "project_id": str(project_id),
-        "dash_url": settings.viewer.external_url,
-    }
+    return _persist_lite_dashboard(lite, project_id, current_user, overwrite=overwrite)
 
 
 # ============================================================================

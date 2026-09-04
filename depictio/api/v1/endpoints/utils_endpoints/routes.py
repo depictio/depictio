@@ -119,6 +119,7 @@ async def status():
         "features": {
             "ai": settings.ai.enabled,
             "ai_user_keys": settings.ai.enabled and settings.ai.allow_user_keys,
+            "ai_generate_dashboard": settings.ai.enabled and settings.ai.generate_dashboard_enabled,
         },
     }
 

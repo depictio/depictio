@@ -18,7 +18,10 @@ from depictio.api.v1.endpoints.ai_endpoints.context import (
     DashboardDataContext,
     DataContext,
     InventoryEntry,
+    ProjectDataContext,
     ProjectInventory,
+    offer_use_id,
+    role_candidates_line,
 )
 from depictio.api.v1.endpoints.ai_endpoints.executor import grammar_block
 from depictio.api.v1.endpoints.ai_endpoints.schemas import AnalyzeMode, ComponentType
@@ -1017,3 +1020,201 @@ Respond with valid JSON of the form:
         {"role": "system", "content": system},
         {"role": "user", "content": user_prompt},
     ]
+
+
+# ---------------------------------------------------------------------------
+# Whole-dashboard generation: plan prompt + per-component fill tail
+# ---------------------------------------------------------------------------
+
+# Types the planner may use, derived from the component Literal: every type a
+# table collection can back (the generator reads table collections only) plus
+# text, which has no data source. image needs an image collection and multiqc a
+# MultiQC report, so neither is offered.
+PLAN_COMPONENT_TYPES: tuple[ComponentType, ...] = tuple(
+    t
+    for t in get_args(ComponentType)
+    if t == "text" or "table" in COMPONENT_DC_TYPES.get(t, frozenset())
+)
+# Offer lines in the plan prompt: a project recognised by several catalog
+# tools would otherwise list every render of every module.
+MAX_PLAN_OFFERS = 20
+MAX_PLAN_ROLE_CANDIDATES = 3
+# Above this many distinct values a MultiSelect is unusable and the schema
+# check rejects it; the planner is told the same number.
+MAX_MULTISELECT_DISTINCT = 50
+
+PLAN_ANSWER_SHAPE = """{
+  "title": "<dashboard title, a short noun phrase>",
+  "subtitle": "<one sentence on what the dashboard answers>",
+  "filter_sections": [
+    {"name": "<section name>", "icon": "<Iconify id, e.g. mdi:filter-variant>",
+     "color": "<Mantine palette name, e.g. teal>", "description": "<one sentence>"}
+  ],
+  "grid_sections": [
+    {"name": "<section name>", "icon": "<Iconify id>", "color": "<palette name>",
+     "description": "<one sentence; becomes the section header text>"}
+  ],
+  "components": [
+    {"tag": "<unique snake_case handle>",
+     "section": "<a filter_sections name for interactive, a grid_sections name otherwise>",
+     "component_type": "<one of COMPONENT TYPES>",
+     "data_collection_tag": "<tag copied from a dc[...] heading, or null for text>",
+     "intent": "<one or two sentences: what it shows, which columns, which aggregation or chart>",
+     "use": "<tool/render_id copied from CATALOG OFFERS; omit unless reproducing an offer>",
+     "viz_kind": "<kind copied from ADVANCED VIZ CANDIDATES; advanced_viz only, omit otherwise>"}
+  ]
+}"""
+
+
+def _plan_type_lines() -> str:
+    return "\n".join(f"- {t}: {_ROUTING_HINTS[t]}" for t in PLAN_COMPONENT_TYPES)
+
+
+def _plan_offer_lines(ctx: ProjectDataContext) -> list[str]:
+    """`- use: "<tool>/<render_id>" on <dc_tag>: <type>, <title>`, at most MAX_PLAN_OFFERS."""
+    lines: list[str] = []
+    for c in ctx.collections:
+        tag = c.data_collection_tag or c.data_collection_id
+        for offer in c.catalog_offers:
+            if len(lines) >= MAX_PLAN_OFFERS:
+                return lines
+            kind = offer.get("component_type") or "component"
+            title = offer.get("title") or offer.get("render_id") or ""
+            lines.append(f'- use: "{offer_use_id(offer)}" on {tag}: {kind}, {title}')
+    return lines
+
+
+def _plan_viz_lines(ctx: ProjectDataContext) -> list[str]:
+    """`- <viz_kind> on <dc_tag>: <role> -> <best columns>; ...` per candidate."""
+    lines: list[str] = []
+    for c in ctx.collections:
+        tag = c.data_collection_tag or c.data_collection_id
+        for suggestion in c.viz_suggestions:
+            roles = role_candidates_line(suggestion, MAX_PLAN_ROLE_CANDIDATES)
+            lines.append(f"- {suggestion.get('viz_kind')} on {tag}: {roles}")
+    return lines
+
+
+def dashboard_plan_messages(
+    ctx: ProjectDataContext,
+    prompt: str,
+    title: str | None,
+    *,
+    max_components: int,
+    max_sections: int,
+    warnings: list[str] | None = None,
+) -> list[dict]:
+    """System + user messages for the planning call of /ai/generate-dashboard.
+
+    The model lays the dashboard out as a funnel (cohort filters, per-section
+    KPI cards, figures, one reference table) over the project's collections
+    and answers strict JSON: sections plus one entry per component with an
+    intent the fill pass turns into YAML. It never writes component YAML
+    here. The user message is the project block (schemas, samples, ranked
+    advanced_viz candidates, catalog offers) followed by the user's intent
+    and, when pinned, the title. `warnings` collects the context cuts
+    `project_block` had to make.
+    """
+    offer_lines = _plan_offer_lines(ctx)
+    viz_lines = _plan_viz_lines(ctx)
+    offers_block = "\n".join(offer_lines) if offer_lines else "(none recognised)"
+    viz_block = "\n".join(viz_lines) if viz_lines else "(none: do not plan advanced_viz)"
+
+    system = f"""You plan a complete Depictio dashboard for a project's data collections. You do
+not fill the components: you decide which ones exist, on which collection, in
+which section, and describe each one's intent for a second pass that writes
+its YAML.
+
+LAYOUT (a funnel, top to bottom):
+1. Cohort filters: interactive components in the left panel (filter_sections)
+   that narrow every other tile.
+2. Per-section KPI cards: headline numbers for what the section is about.
+3. Figures: charts, and advanced_viz when a candidate below fits the data.
+4. Reference table: one table at the end for the raw rows.
+Each grid section opens with a header the server writes from its description.
+Typical grid sections: an overview of cards, one or two analysis sections of
+figures, a reference section holding the table.
+
+COMPONENT TYPES:
+{_plan_type_lines()}
+
+CATALOG OFFERS (renders recognised on the collections; reproduce one by copying its use id):
+{offers_block}
+
+ADVANCED VIZ CANDIDATES (viz_kind on collection: role -> best columns):
+{viz_block}
+
+LIMITS:
+- At most {max_components} components and at most {max_sections} grid sections.
+- At least one interactive filter, in a filter section.
+- Card rows come in multiples of 4 per section: plan 4 or 8 cards in a section,
+  never 3.
+- At most one table, last, in the reference section.
+- MultiSelect only on columns with at most {MAX_MULTISELECT_DISTINCT} distinct
+  values (see distinct= in the schema); numbers get a Slider or RangeSlider.
+- advanced_viz only with a viz_kind listed under ADVANCED VIZ CANDIDATES for
+  that collection; map only when the collection has latitude and longitude
+  columns.
+- Reference only columns listed under the collection you pick; text needs no
+  collection (data_collection_tag null).
+- A component's section names a section you declared: interactive components
+  go in filter_sections, everything else in grid_sections.
+- Tags are unique snake_case handles; intents are concrete (columns,
+  aggregation, chart kind) so the fill pass needs no guessing.
+
+Respond with valid JSON of the form:
+{PLAN_ANSWER_SHAPE}
+Do not wrap the JSON in markdown fences.
+"""
+    intent = prompt.strip() or "(none given: build the most useful overview of this project)"
+    user = f"{ctx.project_block(warnings)}\n\nUSER INTENT:\n{intent}"
+    if title:
+        user += f"\n\nREQUESTED TITLE: {title}\nUse it as the dashboard title verbatim."
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+
+
+def component_fill_prompt(
+    intent: str,
+    *,
+    dashboard_title: str,
+    section: str,
+    tag: str,
+    siblings: list[str],
+    use: str | None = None,
+    viz_kind: str | None = None,
+    role_bindings: dict | None = None,
+) -> str:
+    """The user prompt of one fill call: the planned intent plus a DASHBOARD CONTEXT tail.
+
+    Appended to the intent handed to `component_from_prompt_messages`, so the
+    single-component prompt (sheets, examples, rules) is reused unchanged and
+    the model still knows which dashboard, section and neighbours the tile
+    belongs to. `siblings` are the tags already filled; `use` pins a catalog
+    render to reproduce; `viz_kind` and `role_bindings` pin an advanced_viz
+    kind and the role -> column bindings the ranker chose.
+    """
+    lines = [
+        "DASHBOARD CONTEXT:",
+        f'- dashboard: "{dashboard_title}"',
+        f'- section: "{section}"',
+        f"- this component's tag: {tag}",
+        f"- already filled in this dashboard: {', '.join(siblings) if siblings else '(none yet)'}",
+    ]
+    if use:
+        lines.append(
+            f'- reproduce the catalog render "{use}": keep its chart kind and column bindings.'
+        )
+    if viz_kind:
+        bindings = ", ".join(f"{role}={column}" for role, column in (role_bindings or {}).items())
+        line = f"- viz_kind: {viz_kind}"
+        if bindings:
+            line += f"; keep these role bindings: {bindings}"
+        lines.append(line)
+    lines.append(
+        "- Show what the intent asks for and nothing the siblings already show; "
+        "give it a short title."
+    )
+    return f"{intent.strip()}\n\n" + "\n".join(lines)

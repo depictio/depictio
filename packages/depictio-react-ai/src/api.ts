@@ -21,6 +21,8 @@ import type {
   AnalyzeRequest,
   ComponentFromPromptRequest,
   ComponentFromPromptResponse,
+  GenerateDashboardRequest,
+  PromoteGeneratedDashboardResponse,
   ResolveFiltersRequest,
   ResolveFiltersResponse,
   SuggestComponentsRequest,
@@ -115,23 +117,28 @@ export async function getAnalyses(dashboardId: string): Promise<AnalysesResponse
   return (await res.json()) as AnalysesResponse;
 }
 
-export interface AnalyzeStreamHandlers {
+export interface AIStreamHandlers {
   onEvent: (event: AIStreamEvent) => void;
   signal?: AbortSignal;
 }
 
-/** Drive `/ai/analyze` and dispatch each SSE event to `onEvent`.
+/** Former name of AIStreamHandlers, kept for hosts that import it. */
+export type AnalyzeStreamHandlers = AIStreamHandlers;
+
+/** POST `body` to an SSE route and dispatch each frame to `onEvent`.
  *
  *  Resolves when the server closes the connection. Throws if the request
  *  itself fails (e.g. 4xx before streaming starts) or if the stream is
  *  aborted via `signal`. Caller is responsible for tracking which events
- *  represent a final result. */
-export async function streamAnalyze(
-  body: AnalyzeRequest,
+ *  represent a final result. Shared by every streaming /ai route so the
+ *  frame parsing lives in one place. */
+async function streamPost(
+  path: string,
+  body: unknown,
   llmKey: string | null | undefined,
-  { onEvent, signal }: AnalyzeStreamHandlers,
+  { onEvent, signal }: AIStreamHandlers,
 ): Promise<void> {
-  const res = await authFetch(`${API_BASE}/ai/analyze`, {
+  const res = await authFetch(`${API_BASE}${path}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -143,10 +150,10 @@ export async function streamAnalyze(
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`/ai/analyze: ${res.status} ${text || res.statusText}`);
+    throw new Error(`${path}: ${res.status} ${text || res.statusText}`);
   }
   if (!res.body) {
-    throw new Error('/ai/analyze: response has no body');
+    throw new Error(`${path}: response has no body`);
   }
 
   const reader = res.body.getReader();
@@ -173,6 +180,42 @@ export async function streamAnalyze(
     const parsed = parseFrame(buffer);
     if (parsed) onEvent(parsed);
   }
+}
+
+/** Drive `/ai/analyze` and dispatch each SSE event to `onEvent`. */
+export function streamAnalyze(
+  body: AnalyzeRequest,
+  llmKey: string | null | undefined,
+  handlers: AIStreamHandlers,
+): Promise<void> {
+  return streamPost('/ai/analyze', body, llmKey, handlers);
+}
+
+/** Drive `/ai/generate-dashboard`: status, plan, budget and component
+ *  events, then the terminal `dashboard` event naming the persisted draft.
+ *  The route answers 404 (feature off), 403 (public mode, or not an editor
+ *  of the project) or 400 (a collection outside the project) before
+ *  streaming; those surface as throws. */
+export function streamGenerateDashboard(
+  body: GenerateDashboardRequest,
+  llmKey: string | null | undefined,
+  handlers: AIStreamHandlers,
+): Promise<void> {
+  return streamPost('/ai/generate-dashboard', body, llmKey, handlers);
+}
+
+/** Flip an AI-generated draft into a regular dashboard. Needs editor
+ *  permission on the dashboard; 404 when it carries no `ai_generation`. */
+export async function promoteGeneratedDashboard(
+  dashboardId: string,
+): Promise<PromoteGeneratedDashboardResponse> {
+  const path = `/ai/generated-dashboards/${dashboardId}/promote`;
+  const res = await authFetch(`${API_BASE}${path}`, { method: 'POST' });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`${path}: ${res.status} ${text || res.statusText}`);
+  }
+  return (await res.json()) as PromoteGeneratedDashboardResponse;
 }
 
 function parseFrame(frame: string): AIStreamEvent | null {

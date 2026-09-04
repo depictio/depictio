@@ -197,10 +197,11 @@ export interface AnalysisResult {
   warnings?: string[];
 }
 
-/** SSE event names emitted by /ai/analyze.
+/** SSE event names emitted by /ai/analyze and /ai/generate-dashboard.
  *  Mutate mode: status* → step* → answer → actions → result → done.
  *  Analyze mode: status* → (plan) → (budget|step)* → answer → report →
  *  result → done.
+ *  Generation: status* → plan → (budget|component)* → dashboard → done.
  *  `error` may interrupt the stream at any point and is followed by `done`. */
 export type AIStreamEventType =
   | 'status'
@@ -211,6 +212,8 @@ export type AIStreamEventType =
   | 'plan'
   | 'budget'
   | 'report'
+  | 'component'
+  | 'dashboard'
   | 'error'
   | 'done';
 
@@ -324,4 +327,97 @@ export interface SummaryEntry {
 
 export interface SummariesResponse {
   summaries: SummaryEntry[];
+}
+
+// ---------- Whole-dashboard generation ----------
+
+/** Body of POST /ai/generate-dashboard. Only `project_id` is required: an
+ *  empty prompt lets the model plan from the data alone, an empty
+ *  `data_collection_ids` means every table collection of the project (up to
+ *  the server's cap), and `title` overrides the model's choice (a title
+ *  collision then fails unless `overwrite`). */
+export interface GenerateDashboardRequest {
+  project_id: string;
+  prompt?: string;
+  title?: string | null;
+  data_collection_ids?: string[];
+  overwrite?: boolean;
+}
+
+/** One section of a generated plan: the presentation fields of
+ *  FilterSectionSpec (icon ids and palette names are allowlisted
+ *  server-side). */
+export interface PlannedSection {
+  name: string;
+  icon?: string | null;
+  color?: string | null;
+  description?: string | null;
+}
+
+/** One component the plan intends to fill. `tag` is the handle every later
+ *  `component` event and the terminal `dropped` list refer to. */
+export interface PlannedComponent {
+  tag: string;
+  section: string;
+  component_type: ComponentType;
+  data_collection_tag: string;
+  intent: string;
+  /** Catalog offer to fill from, when the plan picked one. */
+  use?: string | null;
+  /** Advanced-viz kind to fill from, when the plan picked one. */
+  viz_kind?: string | null;
+}
+
+/** Payload of the `plan` event (under `plan`): what the model intends to
+ *  build, before any component is filled. */
+export interface DashboardPlan {
+  title: string;
+  subtitle?: string | null;
+  filter_sections: PlannedSection[];
+  grid_sections: PlannedSection[];
+  components: PlannedComponent[];
+}
+
+/** Payload of a `component` event, one per planned component. A later event
+ *  for the same tag supersedes the earlier one: a repair turns a failing
+ *  component into `repaired`, an exhausted repair budget into `dropped`. */
+export interface GeneratedComponentEvent {
+  tag: string;
+  section: string;
+  component_type: ComponentType;
+  status: 'ok' | 'repaired' | 'dropped';
+  attempts: number;
+  error?: string | null;
+}
+
+/** Payload of the terminal `dashboard` event: the persisted draft. */
+export interface GeneratedDashboardEvent {
+  dashboard_id: string;
+  title: string;
+  project_id: string;
+  /** The dashboard as YAML, display-only ("show your work"). */
+  yaml: string;
+  warnings: string[];
+  /** Tags of the planned components that did not survive validation. */
+  dropped: string[];
+}
+
+/** `ai_generation` on a dashboard document. Mirrors AIGenerationInfo in
+ *  depictio/models/models/dashboards.py; structurally identical to
+ *  depictio-react-core's DashboardAIGeneration so hosts pass the
+ *  dashboard's field straight through. */
+export interface AIGenerationInfo {
+  status: 'draft' | 'promoted';
+  model: string;
+  prompt: string;
+  /** ISO timestamp of the run. */
+  generated_at: string;
+  run_id: string;
+  warnings: string[];
+}
+
+/** Answer of POST /ai/generated-dashboards/{id}/promote. */
+export interface PromoteGeneratedDashboardResponse {
+  dashboard_id: string;
+  status: 'promoted';
 }

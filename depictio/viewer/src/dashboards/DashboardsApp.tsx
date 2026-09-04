@@ -15,7 +15,7 @@ import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 
-import { createDashboard, deleteDashboard as apiDeleteDashboard, duplicateDashboard as apiDuplicateDashboard, editDashboard as apiEditDashboard, exportDashboardJson, importDashboardJson, listDashboards, listProjects, useBrandAccents } from 'depictio-react-core';
+import { createDashboard, deleteDashboard as apiDeleteDashboard, duplicateDashboard as apiDuplicateDashboard, editDashboard as apiEditDashboard, exportDashboardJson, fetchProject, importDashboardJson, listDashboards, listProjects, useBrandAccents } from 'depictio-react-core';
 import type {
   CreateDashboardInput,
   DashboardListEntry,
@@ -23,8 +23,11 @@ import type {
   ImportDashboardOptions,
   ProjectListEntry,
 } from 'depictio-react-core';
+import { useAIHealth } from 'depictio-react-ai';
+import type { GenerateDataCollection } from 'depictio-react-ai';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import { useServerStatus } from '../hooks/useServerStatus';
 import { AppSidebar } from '../chrome';
 import DashboardsList from './DashboardsList';
 import CreateDashboardModal from './CreateDashboardModal';
@@ -83,6 +86,14 @@ const DashboardsApp: React.FC = () => {
   // Fail closed while auth is loading so the import tab can't be reached on
   // the first frame before `/auth/me/optional` resolves.
   const importDisabled = authLoading || isPublicMode || isDemoMode;
+
+  // "Generate with AI" tab of the New Dashboard dialog. The status flag
+  // already folds `ai` in; the health probe says whether a server-side key
+  // exists (otherwise the tab asks for one).
+  const { features: serverFeatures } = useServerStatus();
+  const aiGenerateEnabled = serverFeatures.ai_generate_dashboard;
+  const aiHealth = useAIHealth(aiGenerateEnabled);
+  const aiServerKeyAvailable = aiHealth?.server_key_configured === true;
 
   usePageTitle('Dashboards');
 
@@ -192,6 +203,42 @@ const DashboardsApp: React.FC = () => {
   const handleView = useCallback((dashboard: DashboardListEntry) => {
     recordDashboardOpen(String(dashboard.dashboard_id));
     window.location.assign(`/dashboard/${dashboard.dashboard_id}`);
+  }, []);
+
+  /** Collections of one project for the Generate tab: every DC of every
+   *  workflow, typed so the panel can keep the tables. DC tags are unique per
+   *  workflow only, so they carry the workflow tag when the project has
+   *  several. Enrichment (delta locations) is skipped: only names are needed. */
+  const loadProjectCollections = useCallback(
+    async (projectId: string): Promise<{ dataCollections: GenerateDataCollection[] }> => {
+      const { project } = await fetchProject(projectId, { skipEnrichment: true });
+      const workflows = project.workflows ?? [];
+      const qualify = workflows.length > 1;
+      const dataCollections: GenerateDataCollection[] = [];
+      for (const wf of workflows) {
+        for (const dc of wf.data_collections ?? []) {
+          // Some response paths stamp `id` instead of `_id`.
+          const id = String(dc._id ?? dc.id ?? '');
+          if (!id) continue;
+          const tag = dc.data_collection_tag ?? id;
+          dataCollections.push({
+            id,
+            tag: qualify && wf.workflow_tag ? `${wf.workflow_tag}/${tag}` : tag,
+            type: String(dc.config?.type ?? ''),
+          });
+        }
+      }
+      return { dataCollections };
+    },
+    [],
+  );
+
+  /** The Generate tab's hand-off: the draft opens in the editor, where the AI
+   *  draft banner carries the promote / discard decision. Same full-page
+   *  navigation as every other editor entry (plain regex routing, no router). */
+  const handleOpenGenerated = useCallback((dashboardId: string) => {
+    recordDashboardOpen(dashboardId);
+    window.location.assign(`/dashboard-edit/${dashboardId}`);
   }, []);
 
   const handleExport = useCallback(async (dashboard: DashboardListEntry) => {
@@ -353,6 +400,18 @@ const DashboardsApp: React.FC = () => {
         onCreate={handleCreate}
         onImport={handleImport}
         disableImport={importDisabled}
+        generate={
+          aiGenerateEnabled
+            ? {
+                loadProject: loadProjectCollections,
+                onOpen: handleOpenGenerated,
+                serverKeyAvailable: aiServerKeyAvailable,
+                // Same gate as Import: generation writes a dashboard into a
+                // shared project, which an anonymous visitor must not do.
+                disabled: importDisabled,
+              }
+            : undefined
+        }
       />
       <EditDashboardModal
         opened={Boolean(editTarget)}

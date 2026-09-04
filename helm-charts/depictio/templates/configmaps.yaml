@@ -79,6 +79,31 @@ data:
   {{- end }}
   {{- end }}
 
+  # AI assistant (AIConfig in api/v1/configs/settings_models.py, env_prefix
+  # DEPICTIO_AI_). Off by default. Every key must be listed here to reach the
+  # pod: an unlisted backend.env key is silently dropped. Defaults mirror the
+  # Python defaults. The server-side LLM key (DEPICTIO_AI_API_KEY) is a secret
+  # and deliberately NOT here: inject it from a Secret through the backend
+  # Deployment env, like the MinIO credentials, or leave it unset and let users
+  # bring their own key (DEPICTIO_AI_ALLOW_USER_KEYS).
+  DEPICTIO_AI_ENABLED: {{ .Values.backend.env.DEPICTIO_AI_ENABLED | default "false" | quote }}
+  DEPICTIO_AI_DEFAULT_MODEL: {{ .Values.backend.env.DEPICTIO_AI_DEFAULT_MODEL | default "openrouter/anthropic/claude-sonnet-4-6" | quote }}
+  DEPICTIO_AI_ALLOW_USER_KEYS: {{ .Values.backend.env.DEPICTIO_AI_ALLOW_USER_KEYS | default "true" | quote }}
+  DEPICTIO_AI_MAX_SAMPLE_ROWS: {{ .Values.backend.env.DEPICTIO_AI_MAX_SAMPLE_ROWS | default "8" | quote }}
+  DEPICTIO_AI_MAX_CONTEXT_CHARS: {{ .Values.backend.env.DEPICTIO_AI_MAX_CONTEXT_CHARS | default "60000" | quote }}
+  DEPICTIO_AI_MAX_TOKENS: {{ .Values.backend.env.DEPICTIO_AI_MAX_TOKENS | default "4096" | quote }}
+  DEPICTIO_AI_ANALYZE_MAX_STEPS: {{ .Values.backend.env.DEPICTIO_AI_ANALYZE_MAX_STEPS | default "20" | quote }}
+  DEPICTIO_AI_ANALYZE_MAX_TOKENS_TOTAL: {{ .Values.backend.env.DEPICTIO_AI_ANALYZE_MAX_TOKENS_TOTAL | default "200000" | quote }}
+  DEPICTIO_AI_ANALYZE_MAX_WALL_CLOCK_S: {{ .Values.backend.env.DEPICTIO_AI_ANALYZE_MAX_WALL_CLOCK_S | default "300" | quote }}
+  # Whole-dashboard generation (opt-in on top of DEPICTIO_AI_ENABLED).
+  DEPICTIO_AI_GENERATE_DASHBOARD_ENABLED: {{ .Values.backend.env.DEPICTIO_AI_GENERATE_DASHBOARD_ENABLED | default "false" | quote }}
+  DEPICTIO_AI_GENERATE_MAX_COMPONENTS: {{ .Values.backend.env.DEPICTIO_AI_GENERATE_MAX_COMPONENTS | default "16" | quote }}
+  DEPICTIO_AI_GENERATE_MAX_SECTIONS: {{ .Values.backend.env.DEPICTIO_AI_GENERATE_MAX_SECTIONS | default "4" | quote }}
+  DEPICTIO_AI_GENERATE_MAX_TOKENS_TOTAL: {{ .Values.backend.env.DEPICTIO_AI_GENERATE_MAX_TOKENS_TOTAL | default "150000" | quote }}
+  DEPICTIO_AI_GENERATE_MAX_WALL_CLOCK_S: {{ .Values.backend.env.DEPICTIO_AI_GENERATE_MAX_WALL_CLOCK_S | default "180" | quote }}
+  DEPICTIO_AI_GENERATE_MAX_REPAIRS_PER_COMPONENT: {{ .Values.backend.env.DEPICTIO_AI_GENERATE_MAX_REPAIRS_PER_COMPONENT | default "1" | quote }}
+  DEPICTIO_AI_GENERATE_MAX_COLLECTIONS: {{ .Values.backend.env.DEPICTIO_AI_GENERATE_MAX_COLLECTIONS | default "6" | quote }}
+
   # Performance
   DEPICTIO_FASTAPI_WORKERS: {{ .Values.backend.env.DEPICTIO_FASTAPI_WORKERS | quote }}
   # Analytics

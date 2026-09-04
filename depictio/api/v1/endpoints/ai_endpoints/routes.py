@@ -24,8 +24,12 @@ The router is only registered when ``settings.ai.enabled`` is true (see
 * ``POST /ai/analyze`` — prompt-driven analysis with execution trace and
   optional dashboard mutations (filter proposals + existing-figure
   patches).
+* ``POST /ai/generate-dashboard``: a whole dashboard draft from a prompt
+  (plan, per-component fill, layout, persist; see ``dashboard_gen``), and
+  ``POST /ai/generated-dashboards/{id}/promote`` to clear its draft flag.
 
-The analyze endpoint streams; the others are single-shot JSON responses.
+The analyze and generate endpoints stream; the others are single-shot JSON
+responses.
 Streaming is HTTP chunked + SSE-formatted events so the realtime WebSocket
 is left alone (different lifecycle, different auth model).
 """
@@ -47,6 +51,7 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.ai_endpoints import (
     analyses,
     component_yaml,
+    dashboard_gen,
     llm_client,
     prompts,
     routing,
@@ -70,7 +75,9 @@ from depictio.api.v1.endpoints.ai_endpoints.schemas import (
     ComponentFromPromptResponse,
     DashboardActions,
     ExecutionStep,
+    GenerateDashboardRequest,
     PlotSuggestion,
+    PromoteResponse,
     ResolvedFilter,
     ResolveFiltersRequest,
     ResolveFiltersResponse,
@@ -84,7 +91,10 @@ from depictio.api.v1.endpoints.ai_endpoints.schemas import (
     SummarizeSectionRequest,
     SummarizeSectionResponse,
 )
-from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
+from depictio.api.v1.endpoints.user_endpoints.routes import (
+    get_current_user,
+    get_user_or_anonymous,
+)
 from depictio.models.models.users import User
 
 logger = logging.getLogger(__name__)
@@ -1017,3 +1027,54 @@ async def list_analyses(
     await build_dashboard_context(dashboard_id, current_user)
     reports = await asyncio.to_thread(analyses.latest_for_dashboard, dashboard_id)
     return {"analyses": [r.model_dump() for r in reports]}
+
+
+# ---------------------------------------------------------------------------
+# generate-dashboard: whole-dashboard drafts
+# ---------------------------------------------------------------------------
+
+
+@ai_endpoint_router.post("/generate-dashboard")
+async def generate_dashboard(
+    body: GenerateDashboardRequest,
+    current_user: User = Depends(get_current_user),
+    user_api_key: str | None = Depends(_llm_key),
+) -> StreamingResponse:
+    """A whole dashboard draft from a prompt. Streams `StreamEvent` chunks as SSE.
+
+    The gates run before the stream opens so they answer with real HTTP
+    codes (`dashboard_gen.gate_generate_request`): 404 when
+    `settings.ai.generate_dashboard_enabled` is off, 403 in public mode or
+    for an anonymous user outside single-user mode (the YAML import rule),
+    403 without editor permission on the project, 400 for a
+    `data_collection_id` outside the project. Everything after that is
+    reported inside the stream (`error` + `done`), the draft included
+    (`dashboard` + `done`).
+    """
+    project_doc = await asyncio.to_thread(dashboard_gen.gate_generate_request, body, current_user)
+    return StreamingResponse(
+        dashboard_gen.run_generation(
+            body, current_user, user_api_key=user_api_key, project_doc=project_doc
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@ai_endpoint_router.post(
+    "/generated-dashboards/{dashboard_id}/promote", response_model=PromoteResponse
+)
+async def promote_generated_dashboard(
+    dashboard_id: str,
+    current_user: User = Depends(get_current_user),
+) -> PromoteResponse:
+    """Clear the draft flag of a generated dashboard (`ai_generation.status` -> promoted).
+
+    404 when the dashboard does not exist or was not generated, 403 without
+    editor permission (dashboard owners included, as for every other
+    mutation). Discarding a draft is the ordinary dashboard delete.
+    """
+    return await asyncio.to_thread(dashboard_gen.promote_dashboard, dashboard_id, current_user)

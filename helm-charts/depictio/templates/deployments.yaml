@@ -537,6 +537,18 @@ spec:
                   name: {{ .Release.Name }}-depictio-secrets
                   key: DEPICTIO_BOOTSTRAP_TEST_USER_PASSWORD
                   optional: true
+            # Server-side model provider key for the AI assistant
+            # (secrets.aiApiKey). Same reasoning as the public access code: a
+            # credential comes from the Secret, never from the ConfigMap that
+            # carries the other DEPICTIO_AI_* settings. optional, so an unset
+            # key leaves the var absent, which AIConfig reads as "no server
+            # key" (users then bring their own via DEPICTIO_AI_ALLOW_USER_KEYS).
+            - name: DEPICTIO_AI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-depictio-secrets
+                  key: DEPICTIO_AI_API_KEY
+                  optional: true
             {{- if .Values.mongo.useOperator }}
             - name: DEPICTIO_MONGODB_USERNAME
               value: {{ .Values.mongo.auth.username | quote }}
