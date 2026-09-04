@@ -2,7 +2,7 @@ import re
 from enum import Enum
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.logging import logger
@@ -16,6 +16,7 @@ from depictio.models.models.data_collections_types.table import DCTableConfig
 from depictio.models.models.data_collections_types.table_coordinates import (
     DCTableCoordinatesConfig,
 )
+from depictio.models.models.manifest import validate_remote_url_syntax
 from depictio.models.models.transforms import TransformConfig
 
 
@@ -111,38 +112,218 @@ class ScanSingle(BaseModel):
         return v
 
 
+class ScanURL(BaseModel):
+    """Remote single-file acquisition: the DC's data lives at an absolute
+    s3:// or https:// URL instead of a scanned local path. Validation is
+    syntactic only — reachability/SSRF checks happen at the API fetch gateway.
+    """
+
+    url: str
+
+    class Config:
+        extra = "forbid"
+
+    @field_validator("url")
+    def validate_url(cls, v):
+        return validate_remote_url_syntax(v)
+
+
+class ScanS3Prefix(BaseModel):
+    """Remote prefix listing: enumerate the objects under an ``s3://`` prefix and
+    keep those whose key matches ``pattern``.
+
+    The remote counterpart of ``recursive``. It is S3-only by construction:
+    plain HTTPS exposes no listing operation, so a bare https:// prefix cannot
+    be enumerated — use ``url`` for one known file, or ``manifest`` to list
+    several explicitly.
+
+    ``id_regex`` optionally captures an entity id from the object key. It lands
+    on the File as ``manifest_id`` and is read back as the
+    ``depictio_manifest_id`` column, so a prefix scan gets the same cross-DC
+    join key as manifest mode without anyone writing a manifest.
+    """
+
+    prefix: str
+    # Glob (fnmatch) applied to the key *relative to* the prefix, so callers can
+    # write "*.csv" rather than repeating the prefix path.
+    pattern: str = "*"
+    id_regex: str | None = None
+    # Backstop against pointing a DC at a bucket root holding millions of keys.
+    # The ceiling matches what one list_s3_prefix pass is expected to page through.
+    max_files: int = Field(default=10_000, gt=0, le=100_000)
+
+    class Config:
+        extra = "forbid"
+
+    @field_validator("prefix")
+    def validate_prefix(cls, v):
+        if not v:
+            raise ValueError("prefix cannot be empty")
+        if not v.lower().startswith("s3://"):
+            raise ValueError(
+                f"prefix must be an s3:// URL (got '{v}'). HTTPS prefixes cannot be listed; "
+                "use scan mode 'url' for a single file or 'manifest' for an explicit list."
+            )
+        if not v[len("s3://") :].strip("/"):
+            raise ValueError("prefix must include a bucket, e.g. s3://my-bucket/run42/")
+        return v
+
+    @field_validator("pattern")
+    def validate_pattern(cls, v):
+        if not v or not v.strip():
+            raise ValueError("pattern cannot be empty (use '*' to match every key)")
+        return v.strip()
+
+    @field_validator("id_regex")
+    def validate_id_regex(cls, v):
+        if v is None:
+            return v
+        try:
+            compiled = re.compile(v)
+        except re.error as exc:
+            raise ValueError(f"Invalid id_regex: {exc}")
+        if compiled.groups != 1:
+            raise ValueError(
+                f"id_regex must have exactly one capture group (found {compiled.groups}) — "
+                "it captures the entity id used as the cross-DC join key"
+            )
+        return v
+
+
+class ScanManifest(BaseModel):
+    """Manifest-driven acquisition: this DC consumes every entry of the
+    manifest whose ``type`` equals ``manifest_type`` (= this DC's tag by
+    convention). ``manifest_url`` may be a remote URL or, in CLI context, a
+    local path. The ``*_field`` overrides remap non-canonical manifest
+    columns onto the contract's id/type/url/run fields.
+    """
+
+    manifest_url: str
+    manifest_type: str
+    id_field: str = "id"
+    url_field: str = "url"
+    type_field: str = "type"
+    run_field: str | None = "run"
+
+    class Config:
+        extra = "forbid"
+
+    @field_validator("manifest_url")
+    def validate_manifest_url(cls, v):
+        if not v:
+            raise ValueError("manifest_url cannot be empty")
+        # Local paths are legitimate in CLI context; remote URLs get the
+        # same syntactic screen as ScanURL. Reachability is checked at fetch.
+        if "://" in v:
+            return validate_remote_url_syntax(v)
+        return v
+
+    @field_validator("manifest_type")
+    def validate_manifest_type(cls, v):
+        if not v or not v.strip():
+            raise ValueError("manifest_type cannot be empty")
+        return v.strip()
+
+
+ScanParameters = ScanRecursive | ScanSingle | ScanURL | ScanS3Prefix | ScanManifest
+
+# Scan mode -> the parameter block it requires. The mapping is the single
+# source of truth for both the mode allowlist and the mode/parameters check.
+_SCAN_MODE_PARAMETERS: dict[str, type[BaseModel]] = {
+    "recursive": ScanRecursive,
+    "single": ScanSingle,
+    "url": ScanURL,
+    "s3_prefix": ScanS3Prefix,
+    "manifest": ScanManifest,
+}
+# The required key that identifies each parameter block when it arrives as a
+# plain dict (YAML / Mongo), so a mismatch can be reported before the union
+# silently picks whichever member happens to accept the keys.
+_SCAN_MODE_DISCRIMINATOR: dict[str, str] = {
+    "recursive": "regex_config",
+    "single": "filename",
+    "url": "url",
+    "s3_prefix": "prefix",
+    "manifest": "manifest_url",
+}
+
+
+def _scan_mode_of(parameters: object) -> str | None:
+    """Scan mode a parameter block belongs to, or None for a foreign object."""
+    for mode, cls in _SCAN_MODE_PARAMETERS.items():
+        if isinstance(parameters, cls):
+            return mode
+    return None
+
+
+def _describe_scan_parameters(mode: str) -> str:
+    cls = _SCAN_MODE_PARAMETERS[mode]
+    return f"{cls.__name__} parameters ({', '.join(cls.model_fields)})"
+
+
+def _scan_mode_mismatch(mode: str, actual_mode: str | None) -> str:
+    message = f"Scan mode '{mode}' expects {_describe_scan_parameters(mode)}"
+    if actual_mode is None:
+        return f"{message}, but scan_parameters do not match any scan mode."
+    return (
+        f"{message}, but scan_parameters are {_describe_scan_parameters(actual_mode)} "
+        f"for mode '{actual_mode}'. Change mode to '{actual_mode}' or provide the "
+        f"parameters of mode '{mode}'."
+    )
+
+
 class Scan(BaseModel):
     mode: str
-    scan_parameters: ScanRecursive | ScanSingle
+    scan_parameters: ScanParameters
 
     @field_validator("mode")
     def validate_mode(cls, v):
-        allowed_values = ["recursive", "single"]
+        allowed_values = list(_SCAN_MODE_PARAMETERS)
         if v.lower() not in allowed_values:
             raise ValueError(f"mode must be one of {allowed_values}")
         return v
 
     @model_validator(mode="before")
-    def validate_join(cls, values):
-        type_value = values.get("mode").lower()  # normalize to lowercase for comparison
+    def coerce_scan_parameters(cls, values):
+        """Build the parameter block declared by ``mode`` from a plain dict.
+
+        The declared class validates the dict itself, so its own error (a bad
+        ``id_regex``, a missing ``manifest_type``, ...) surfaces instead of an
+        opaque five-branch union error. A dict carrying another mode's
+        identifying key is a mode/parameters mismatch and is reported as such.
+        Unknown modes are left to ``validate_mode``.
+        """
+        if not isinstance(values, dict):
+            return values
+        mode = values.get("mode")
+        if not isinstance(mode, str) or mode.lower() not in _SCAN_MODE_PARAMETERS:
+            return values
+        mode = mode.lower()
         scan_parameters = values.get("scan_parameters")
-        if type_value == "recursive":
-            if not isinstance(scan_parameters, ScanRecursive):
-                if isinstance(scan_parameters, dict) and "regex_config" in scan_parameters:
-                    try:
-                        values["scan_parameters"] = ScanRecursive(**scan_parameters)  # type: ignore[missing-argument]
-                    except Exception:
-                        # Keep original if conversion fails
-                        pass
-        elif type_value == "single":
-            if not isinstance(scan_parameters, ScanSingle):
-                if isinstance(scan_parameters, dict) and "filename" in scan_parameters:
-                    try:
-                        values["scan_parameters"] = ScanSingle(**scan_parameters)  # type: ignore[missing-argument]
-                    except Exception:
-                        # Keep original if conversion fails
-                        pass
+        if not isinstance(scan_parameters, dict):
+            return values
+        if _SCAN_MODE_DISCRIMINATOR[mode] not in scan_parameters:
+            for other_mode, key in _SCAN_MODE_DISCRIMINATOR.items():
+                if key in scan_parameters:
+                    raise ValueError(_scan_mode_mismatch(mode, other_mode))
+        # Work on a copy: before-validators receive the caller's dict.
+        values = dict(values)
+        values["scan_parameters"] = _SCAN_MODE_PARAMETERS[mode].model_validate(scan_parameters)
         return values
+
+    @model_validator(mode="after")
+    def check_mode_matches_parameters(self):
+        """``mode`` and the class of ``scan_parameters`` must agree.
+
+        Guards the instance path (``Scan(mode="url", scan_parameters=ScanSingle(...))``)
+        that the before-validator never sees; without it the mismatch only shows
+        up as an AttributeError at scan time.
+        """
+        mode = self.mode.lower()
+        actual_mode = _scan_mode_of(self.scan_parameters)
+        if actual_mode != mode:
+            raise ValueError(_scan_mode_mismatch(mode, actual_mode))
+        return self
 
 
 class TableJoinConfig(BaseModel):

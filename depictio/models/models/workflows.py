@@ -10,7 +10,13 @@ from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.logging import logger
 from depictio.models.models.base import DirectoryPath, MongoModel, PyObjectId
 from depictio.models.models.data_collections import DataCollection, DataCollectionResponse
+from depictio.models.models.manifest import validate_remote_url_syntax
 from depictio.models.models.users import Permission
+
+
+def _is_url(value: str) -> bool:
+    """A location carrying a scheme is a remote URL, not a filesystem path."""
+    return "://" in value
 
 
 class WorkflowDataLocation(MongoModel):
@@ -26,13 +32,24 @@ class WorkflowDataLocation(MongoModel):
 
     @field_validator("locations", mode="after")
     def validate_and_recast_parent_runs_location(cls, value):
+        # Remote locations (manifest/url-backed workflows) are not local
+        # directories: no existence check, but the scheme allowlist applies in
+        # every context (http:// only behind DEPICTIO_REMOTE_ALLOW_HTTP, and
+        # matched case-insensitively, exactly like ScanURL / manifest entries).
+        value = [
+            validate_remote_url_syntax(location) if _is_url(location) else location
+            for location in value
+        ]
         if DEPICTIO_CONTEXT.lower() == "cli":
             # Recast to List[DirectoryPath] and validate
 
             env_var_pattern = re.compile(r"\{([A-Z0-9_]+)\}")
 
-            expanded_paths = []
+            validated: list[str] = []
             for location in value:
+                if _is_url(location):
+                    validated.append(location)
+                    continue
                 matches = env_var_pattern.findall(location)
                 for match in matches:
                     env_value = os.environ.get(match)
@@ -45,10 +62,16 @@ class WorkflowDataLocation(MongoModel):
                         )
                     # Replace the placeholder with the actual value
                     location = location.replace(f"{{{match}}}", env_value)
-                expanded_paths.append(location)
+                # A local manifest file is a valid data location (it lists the
+                # actual sources) — only directories go through the scan-root
+                # existence validation.
+                if Path(location).is_file():
+                    validated.append(str(Path(location)))
+                    continue
+                # Validate the expanded local path (existence check)
+                validated.append(DirectoryPath(path=str(Path(location))).path)
 
-            # Validate the expanded paths if in CLI context
-            return [DirectoryPath(path=str(Path(location))).path for location in expanded_paths]
+            return validated
         else:
             return value
 
@@ -97,11 +120,17 @@ class WorkflowRun(MongoModel):
 
     @field_validator("run_location", mode="after")
     def validate_and_recast_parent_runs_location(cls, value):
+        # Remote acquisition modes (url / s3_prefix / manifest) put the source
+        # URL here, not a directory. There is nothing on the local filesystem to
+        # check, and the CLI branch below would reject every one of them. The
+        # scheme allowlist still applies: http:// only behind
+        # DEPICTIO_REMOTE_ALLOW_HTTP, matched case-insensitively.
+        if value and _is_url(value):
+            return validate_remote_url_syntax(value)
         if DEPICTIO_CONTEXT == "CLI":
             # Recast to List[DirectoryPath] and validate
             env_var_pattern = re.compile(r"\{([A-Z0-9_]+)\}")
 
-            expanded_paths = []
             location = value
             matches = env_var_pattern.findall(location)
             for match in matches:
@@ -115,7 +144,12 @@ class WorkflowRun(MongoModel):
                     )
                 # Replace the placeholder with the actual value
                 location = location.replace(f"{{{match}}}", env_value)
-            expanded_paths.append(location)
+
+            # A manifest run records the manifest itself as its location, and a
+            # manifest is a file. Only require a *directory* when the location is
+            # actually a scan root.
+            if Path(location).is_file():
+                return str(Path(location))
 
             # Validate the expanded paths if in CLI context
             return DirectoryPath(path=str(Path(location))).path

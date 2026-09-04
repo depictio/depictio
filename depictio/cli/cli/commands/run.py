@@ -92,6 +92,14 @@ def _ingestion_data_collections(project_config) -> list[dict]:
                 elif mode == "recursive":
                     rc = getattr(params, "regex_config", None)
                     pattern = getattr(rc, "pattern", None) if rc else None
+                elif mode == "url":
+                    pattern = getattr(params, "url", None)
+                elif mode == "s3_prefix":
+                    prefix = getattr(params, "prefix", None)
+                    glob = getattr(params, "pattern", None)
+                    pattern = f"{prefix}{glob}" if prefix and glob else prefix
+                elif mode == "manifest":
+                    pattern = getattr(params, "manifest_url", None)
                 else:
                     pattern = None
                 dcsp = getattr(cfg, "dc_specific_properties", None) if cfg else None
@@ -179,7 +187,17 @@ def register_run_command(app: typer.Typer):
             str | None,
             typer.Option(
                 "--data-root",
-                help="Root directory containing data for template. Required when --template is used.",
+                help="Root directory containing data for template. Required when --template "
+                "is used, unless --manifest is provided instead.",
+            ),
+        ] = None,
+        manifest: Annotated[
+            str | None,
+            typer.Option(
+                "--manifest",
+                help="Data Manifest URL (https://) or local file path listing "
+                "{id, type, url[, run]} entries. Alternative to --data-root for "
+                "manifest-driven templates (sets the MANIFEST_URL template variable).",
             ),
         ] = None,
         project_name: Annotated[
@@ -219,6 +237,20 @@ def register_run_command(app: typer.Typer):
                 ),
             ),
         ] = None,
+        bind: Annotated[
+            list[str],
+            typer.Option(
+                "--bind",
+                help=(
+                    "Point one data collection at where its data actually is, as "
+                    "TAG=LOCATION. Repeatable. The scan mode is inferred from the "
+                    "location: a local directory or glob scans locally, a local file "
+                    "is a single file, https:// is a remote file, an s3:// prefix or "
+                    "glob is listed remotely. Example: "
+                    "--bind samples=s3://my-bucket/run42/*.samples.csv"
+                ),
+            ),
+        ] = [],
         dashboard: Annotated[
             list[str] | None,
             typer.Option(
@@ -342,6 +374,9 @@ def register_run_command(app: typer.Typer):
 
         Template mode:
             depictio-cli run --template nf-core/ampliseq/latest --data-root /path/to/data
+
+        Manifest mode (remote data, no local root):
+            depictio-cli run --template generic/manifest-tables/1 --manifest https://data.example.org/run42/manifest.json
         """
         rich_print_command_usage("run")
 
@@ -354,8 +389,24 @@ def register_run_command(app: typer.Typer):
             )
             raise typer.Exit(code=1)
 
-        if template and not data_root:
-            rich_print_checked_statement("--data-root is required when using --template.", "error")
+        if manifest and not template:
+            rich_print_checked_statement("--manifest requires --template.", "error")
+            raise typer.Exit(code=1)
+
+        if manifest and data_root:
+            rich_print_checked_statement(
+                "--manifest and --data-root are mutually exclusive. Use one or the other.",
+                "error",
+            )
+            raise typer.Exit(code=1)
+
+        # --bind supplies each DC's location itself, so it satisfies the same need
+        # as --data-root / --manifest and is accepted in their place.
+        if template and not data_root and not manifest and not bind:
+            rich_print_checked_statement(
+                "--data-root (or --manifest, or --bind) is required when using --template.",
+                "error",
+            )
             raise typer.Exit(code=1)
 
         if dry_run:
@@ -432,8 +483,10 @@ def register_run_command(app: typer.Typer):
             try:
                 from depictio.cli.cli.utils.templates import resolve_template
 
-                # Check data root exists before doing anything
-                if not Path(data_root).is_dir():  # type: ignore[arg-type]
+                # Check data root exists before doing anything (manifest mode
+                # has no local root — everything is fetched from the manifest's
+                # URLs).
+                if data_root is not None and not Path(data_root).is_dir():
                     rich_print_checked_statement(
                         f"--data-root does not exist or is not a directory: {data_root}",
                         "error",
@@ -451,6 +504,22 @@ def register_run_command(app: typer.Typer):
                     k, val = v.split("=", 1)
                     extra_vars[k.strip()] = val.strip()
 
+                # Manifest mode: MANIFEST_URL is just a template variable. A
+                # local manifest path is resolved to absolute so the config
+                # stays valid from any working directory.
+                if manifest:
+                    from depictio.models.models.manifest import is_remote_url
+
+                    if not is_remote_url(manifest):
+                        manifest_path = Path(manifest).resolve()
+                        if not manifest_path.is_file():
+                            rich_print_checked_statement(
+                                f"--manifest file does not exist: {manifest}", "error"
+                            )
+                            raise typer.Exit(code=1)
+                        manifest = str(manifest_path)
+                    extra_vars.setdefault("MANIFEST_URL", manifest)
+
                 # Resolve template
                 (
                     resolved_config,
@@ -464,6 +533,10 @@ def register_run_command(app: typer.Typer):
                     project_name=project_name,
                     extra_vars=extra_vars or None,
                     provenance_files=provenance_file,
+                    # --bind can make a declared variable irrelevant by replacing
+                    # the scan block that used it; assert_no_unbound_vars below
+                    # still fails when it turns out to be genuinely needed.
+                    allow_missing_vars=bool(bind),
                 )
 
                 rich_print_checked_statement(
@@ -477,6 +550,24 @@ def register_run_command(app: typer.Typer):
                 )
 
                 template_resolved_config = resolved_config
+
+                # --bind overrides the template author's scan choice per DC.
+                # Applied after resolution so it wins over {DATA_ROOT} / {MANIFEST_URL}
+                # substitution rather than being overwritten by it.
+                if bind:
+                    from depictio.cli.cli.utils.bindings import (
+                        BindingError,
+                        apply_bindings,
+                        assert_no_unbound_vars,
+                    )
+
+                    try:
+                        for note in apply_bindings(template_resolved_config, list(bind)):
+                            rich_print_checked_statement(f"Bound {note}", "info")
+                        assert_no_unbound_vars(template_resolved_config)
+                    except BindingError as exc:
+                        rich_print_checked_statement(str(exc), "error")
+                        raise typer.Exit(code=1)
 
                 # Resolve dashboard paths: CLI --dashboard overrides template defaults
                 if dashboard:
@@ -576,6 +667,26 @@ def register_run_command(app: typer.Typer):
                     CLI_config, validation_response = validate_template_project_config(
                         CLI_config_path=CLI_config_path,
                         resolved_config=template_resolved_config,
+                    )
+                elif bind:
+                    # --bind without a template: patch the YAML in memory and take
+                    # the dict path, since the file on disk must stay untouched.
+                    import yaml as _yaml
+
+                    from depictio.cli.cli.utils.bindings import BindingError, apply_bindings
+                    from depictio.cli.cli.utils.config import validate_template_project_config
+
+                    with open(project_config_path) as handle:
+                        bound_config = _yaml.safe_load(handle)
+                    try:
+                        for note in apply_bindings(bound_config, list(bind)):
+                            rich_print_checked_statement(f"Bound {note}", "info")
+                    except BindingError as exc:
+                        rich_print_checked_statement(str(exc), "error")
+                        raise typer.Exit(code=1)
+                    CLI_config, validation_response = validate_template_project_config(
+                        CLI_config_path=CLI_config_path,
+                        resolved_config=bound_config,
                     )
                 else:
                     # Standard mode: load from YAML file

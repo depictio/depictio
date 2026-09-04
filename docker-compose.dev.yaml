@@ -112,6 +112,19 @@ services:
         # Realtime event system — opt-in. Backend hosts the MongoDB watcher
         # and the WebSocket / SSE endpoints — both gated on this flag.
         DEPICTIO_EVENTS_ENABLED: "${DEPICTIO_EVENTS_ENABLED:-false}"
+        # Remote data sources (URL / manifest scan modes). Policy for the SSRF
+        # gateway in depictio/api/v1/remote_fetch.py; read by BOTH the backend
+        # and the celery worker, so the worker block below must stay identical.
+        # Safe defaults (https only, no host lists, 500 MiB cap); a value in the
+        # --env-file (docker-compose/.env, the documented launch) or the shell
+        # wins. Plain http:// is only needed for the local demo server. The
+        # allowlist is EXCLUSIVE while set: every other host is rejected.
+        DEPICTIO_REMOTE_ALLOW_HTTP: "${DEPICTIO_REMOTE_ALLOW_HTTP:-false}"
+        DEPICTIO_REMOTE_URL_ALLOWLIST: "${DEPICTIO_REMOTE_URL_ALLOWLIST:-}"
+        DEPICTIO_REMOTE_URL_DENYLIST: "${DEPICTIO_REMOTE_URL_DENYLIST:-}"
+        DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES: "${DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES:-524288000}"
+        DEPICTIO_REMOTE_TIMEOUT_S: "${DEPICTIO_REMOTE_TIMEOUT_S:-30}"
+        DEPICTIO_REMOTE_MAX_REDIRECTS: "${DEPICTIO_REMOTE_MAX_REDIRECTS:-3}"
         # Anonymous installation telemetry. Off by default in the DEV stack: this
         # compose file is what maintainers and contributors run, and counting our
         # own development boots as installations would be the fastest way to make
@@ -248,6 +261,14 @@ services:
         # Match the backend flag — keeps event publishers consistent whether
         # the work runs on the API process or the celery worker.
         DEPICTIO_EVENTS_ENABLED: "${DEPICTIO_EVENTS_ENABLED:-false}"
+        # Remote data source policy: must match the backend block above (the
+        # worker performs the remote reads the API enqueues).
+        DEPICTIO_REMOTE_ALLOW_HTTP: "${DEPICTIO_REMOTE_ALLOW_HTTP:-false}"
+        DEPICTIO_REMOTE_URL_ALLOWLIST: "${DEPICTIO_REMOTE_URL_ALLOWLIST:-}"
+        DEPICTIO_REMOTE_URL_DENYLIST: "${DEPICTIO_REMOTE_URL_DENYLIST:-}"
+        DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES: "${DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES:-524288000}"
+        DEPICTIO_REMOTE_TIMEOUT_S: "${DEPICTIO_REMOTE_TIMEOUT_S:-30}"
+        DEPICTIO_REMOTE_MAX_REDIRECTS: "${DEPICTIO_REMOTE_MAX_REDIRECTS:-3}"
         # Mirror the backend mount so both processes write to the same dir.
         DEPICTIO_MULTIQC_PRERENDER_DIR: "/app/multiqc_prerender"
         DEPICTIO_S3_CACHE_DIR: "/app/cache/s3_files"

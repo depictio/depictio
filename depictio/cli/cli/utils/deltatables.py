@@ -1,11 +1,18 @@
 import os
+import tempfile
 from collections.abc import Iterable
 from datetime import datetime
+from urllib.parse import urlparse
 
 import polars as pl
 from deltalake.exceptions import TableNotFoundError
 from pydantic import validate_call
 
+from depictio.api.v1.remote_fetch import (
+    bounded_download,
+    direct_download,
+    is_server_context,
+)
 from depictio.cli.cli.utils.api_calls import (
     api_get_files_by_dc_id,
     api_upsert_deltatable,
@@ -18,6 +25,7 @@ from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.cli import CLIConfig
 from depictio.models.models.data_collections import DataCollection
 from depictio.models.models.files import File
+from depictio.models.models.manifest import is_remote_url
 from depictio.models.models.s3 import PolarsStorageOptions
 from depictio.models.s3_utils import turn_S3_config_into_polars_storage_options
 
@@ -78,11 +86,13 @@ def fetch_file_data(dc_id: str, CLI_config: CLIConfig) -> list[File]:
         raise Exception(error_msg)
 
     # Filter out stale file records whose paths no longer exist locally
-    # (happens when re-running with a different template or data_root)
+    # (happens when re-running with a different template or data_root).
+    # Remote locations (scan mode "url") are never staleness-checked here —
+    # reachability surfaces at read time.
     valid_files_data = []
     for fd in files_data:
         loc = fd.get("file_location", "")
-        if os.path.exists(loc):
+        if is_remote_url(loc) or os.path.exists(loc):
             valid_files_data.append(fd)
         else:
             logger.warning(f"Skipping stale file record (path does not exist): {loc}")
@@ -135,7 +145,113 @@ def convert_to_file_objects(files_data: list) -> list:
     return files
 
 
-def read_single_file_lazy(file_info: File, file_format: str, polars_kwargs: dict) -> pl.LazyFrame:
+def _lazy_scan_path(file_path: str, file_format: str, polars_kwargs: dict) -> pl.LazyFrame:
+    """Format dispatch shared by local paths and downloaded remote files."""
+    if file_format in ["csv", "tsv", "txt"]:
+        effective_kwargs = dict(polars_kwargs)
+        if "separator" not in effective_kwargs:
+            # Pick the delimiter from the on-disk extension first, falling
+            # back to the declared format when the extension is ambiguous.
+            # nf-core pipelines emit samplesheets/metadata as either .csv or
+            # .tsv depending on the user's input, so a DC declared "CSV" may
+            # actually point at a tab-separated file — without this a .tsv
+            # lands as one comma-joined column. A `.csv` extension keeps the
+            # comma default; an extensionless path uses the declared format.
+            path_str = str(file_path)
+            suffix = path_str.rsplit(".", 1)[-1].lower() if "." in path_str else ""
+            if suffix in ("tsv", "tab"):
+                effective_kwargs["separator"] = "\t"
+            elif suffix != "csv" and file_format == "tsv":
+                effective_kwargs["separator"] = "\t"
+        return pl.scan_csv(file_path, **effective_kwargs)
+    elif file_format == "parquet":
+        return pl.scan_parquet(file_path, **polars_kwargs)
+    elif file_format == "feather":
+        return pl.scan_ipc(file_path, **polars_kwargs)
+    elif file_format in ["xls", "xlsx"]:
+        # Polars does not natively support lazy Excel scans.
+        # In this case, read eagerly and convert to lazy.
+        return pl.read_excel(file_path, **polars_kwargs).lazy()
+    error_msg = f"Unsupported file format: {file_format}"
+    logger.error(error_msg)
+    raise ValueError(error_msg)
+
+
+def _download_remote_to_temp(url: str) -> str:
+    """Bounded streaming download of an http(s) URL to a temp file.
+
+    The temp file keeps the URL's extension so the csv/tsv separator
+    inference in _lazy_scan_path still applies.
+
+    The URLs read here (a url-mode location, every manifest entry) are never
+    vetted anywhere else, so server context (API process, Celery worker)
+    downloads through the SSRF gateway: validation, redirect re-validation and
+    the size cap from ``RemoteConfig``. CLI context reads directly, since
+    loopback and intranet hosts are the user's own, with the same redirect and
+    size caps. A partial file never survives a failure in either path.
+    """
+    suffix = os.path.splitext(urlparse(url).path)[1]
+    fd, temp_path = tempfile.mkstemp(prefix="depictio_remote_", suffix=suffix)
+    os.close(fd)
+    try:
+        if is_server_context():
+            bounded_download(url, temp_path)
+        else:
+            direct_download(url, temp_path)
+    except Exception:
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
+        raise
+    return temp_path
+
+
+def _read_remote_file_lazy(
+    url: str,
+    file_format: str,
+    polars_kwargs: dict,
+    remote_storage_options: dict | None,
+) -> pl.LazyFrame:
+    """Read a remote file (scan mode "url") into a LazyFrame.
+
+    s3:// — lazy scan straight through the object store using the instance's
+    configured credentials (phase 1: per-project storage config comes later).
+    http(s):// — bounded download to a temp file, eager read, temp deleted;
+    keeps lifetime simple at the cost of holding one file in memory.
+    """
+    if url.startswith("s3://"):
+        storage_options = remote_storage_options or {}
+        if file_format == "parquet":
+            return pl.scan_parquet(url, storage_options=storage_options, **polars_kwargs)
+        if file_format in ["csv", "tsv", "txt"]:
+            effective_kwargs = dict(polars_kwargs)
+            if "separator" not in effective_kwargs and file_format == "tsv":
+                effective_kwargs["separator"] = "\t"
+            return pl.scan_csv(url, storage_options=storage_options, **effective_kwargs)
+        raise ValueError(
+            f"Format '{file_format}' is not supported for s3:// remote reads "
+            "(supported: parquet, csv, tsv, txt)."
+        )
+
+    temp_path = _download_remote_to_temp(url)
+    try:
+        # Eager read so the temp file can be deleted immediately — a lazy scan
+        # would dangle on a path removed before collection.
+        return _lazy_scan_path(temp_path, file_format, polars_kwargs).collect().lazy()
+    finally:
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
+
+
+def read_single_file_lazy(
+    file_info: File,
+    file_format: str,
+    polars_kwargs: dict,
+    remote_storage_options: dict | None = None,
+) -> pl.LazyFrame:
     """
     Lazily scan a single file into a Polars LazyFrame according to the specified format.
 
@@ -143,6 +259,8 @@ def read_single_file_lazy(file_info: File, file_format: str, polars_kwargs: dict
         file_info (File): A validated File object.
         file_format (str): The file format (e.g. csv, parquet).
         polars_kwargs (dict): Additional keyword arguments for the Polars scanner.
+        remote_storage_options (dict | None): Polars storage options used for
+            s3:// remote locations (scan mode "url").
 
     Returns:
         pl.LazyFrame: The lazy DataFrame representation of the file.
@@ -156,40 +274,20 @@ def read_single_file_lazy(file_info: File, file_format: str, polars_kwargs: dict
     logger.debug(f"Polars kwargs: {polars_kwargs}")
 
     try:
-        if file_format in ["csv", "tsv", "txt"]:
-            effective_kwargs = dict(polars_kwargs)
-            if "separator" not in effective_kwargs:
-                # Pick the delimiter from the on-disk extension first, falling
-                # back to the declared format when the extension is ambiguous.
-                # nf-core pipelines emit samplesheets/metadata as either .csv or
-                # .tsv depending on the user's input, so a DC declared "CSV" may
-                # actually point at a tab-separated file — without this a .tsv
-                # lands as one comma-joined column. A `.csv` extension keeps the
-                # comma default; an extensionless path uses the declared format.
-                path_str = str(file_path)
-                suffix = path_str.rsplit(".", 1)[-1].lower() if "." in path_str else ""
-                if suffix in ("tsv", "tab"):
-                    effective_kwargs["separator"] = "\t"
-                elif suffix != "csv" and file_format == "tsv":
-                    effective_kwargs["separator"] = "\t"
-            lf = pl.scan_csv(file_path, **effective_kwargs)
-        elif file_format == "parquet":
-            lf = pl.scan_parquet(file_path, **polars_kwargs)
-        elif file_format == "feather":
-            lf = pl.scan_ipc(file_path, **polars_kwargs)
-        elif file_format in ["xls", "xlsx"]:
-            # Polars does not natively support lazy Excel scans.
-            # In this case, read eagerly and convert to lazy.
-            df = pl.read_excel(file_path, **polars_kwargs)
-            lf = df.lazy()
+        if is_remote_url(file_path):
+            lf = _read_remote_file_lazy(
+                file_path, file_format, polars_kwargs, remote_storage_options
+            )
         else:
-            error_msg = f"Unsupported file format: {file_format}"
-            logger.error(error_msg)
-            raise ValueError(error_msg)
+            lf = _lazy_scan_path(file_path, file_format, polars_kwargs)
 
         # Optionally, add a column from file_info if available (e.g., run_id)
         if hasattr(file_info, "run_id"):
             lf = lf.with_columns(pl.lit(str(file_info.run_tag)).alias("depictio_run_id"))
+        # Manifest-built DCs carry the canonical entry ID as a column — the
+        # zero-config cross-DC join key (LinkConfig `direct` resolver).
+        if getattr(file_info, "manifest_id", None):
+            lf = lf.with_columns(pl.lit(str(file_info.manifest_id)).alias("depictio_manifest_id"))
         return lf
 
     except Exception as e:
@@ -198,7 +296,12 @@ def read_single_file_lazy(file_info: File, file_format: str, polars_kwargs: dict
         raise Exception(error_msg)
 
 
-def read_files_lazy(files: list, file_format: str, polars_kwargs: dict) -> list:
+def read_files_lazy(
+    files: list,
+    file_format: str,
+    polars_kwargs: dict,
+    remote_storage_options: dict | None = None,
+) -> list:
     """
     Lazily read all files into Polars LazyFrames.
 
@@ -206,13 +309,15 @@ def read_files_lazy(files: list, file_format: str, polars_kwargs: dict) -> list:
         files (list): List of validated File objects.
         file_format (str): Format of the files.
         polars_kwargs (dict): Additional keyword arguments for the Polars scanners.
+        remote_storage_options (dict | None): Polars storage options for s3://
+            remote locations.
 
     Returns:
         list: List of Polars LazyFrames.
     """
     lazy_frames = []
     for file_info in files:
-        lf = read_single_file_lazy(file_info, file_format, polars_kwargs)
+        lf = read_single_file_lazy(file_info, file_format, polars_kwargs, remote_storage_options)
         lazy_frames.append(lf)
     if not lazy_frames:
         error_msg = "No LazyFrames were generated from the files."
@@ -691,7 +796,15 @@ def client_aggregate_data(
     file_format = dc_props.get("format", "csv").lower()
     polars_kwargs = dict(dc_props.get("polars_kwargs", {}))
     with timed("parse"):
-        lazy_frames = read_files_lazy(files, file_format, polars_kwargs)
+        # Remote locations read with the project's own storage credentials
+        # when configured (per-project storage config, RFC §5.3), falling back
+        # to the instance's S3 config. The Delta write target below always
+        # stays on the instance config — read and write are two different
+        # credentials by design.
+        remote_options = CLI_config.remote_storage_options or storage_options.model_dump()
+        lazy_frames = read_files_lazy(
+            files, file_format, polars_kwargs, remote_storage_options=remote_options
+        )
     record("n_files", len(files) if files else 0)
 
     # 4/5. Aggregate + write to Delta Lake.

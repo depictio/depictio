@@ -21,16 +21,18 @@ DC_ID = ObjectId()
 
 
 def _run_cascade():
-    """Run the cascade against mocked collections; return the runs mock."""
+    """Run the cascade against mocked collections; return the runs and storage mocks."""
     from depictio.api.v1.endpoints.projects_endpoints.routes import _cascade_delete_project
 
     projects = MagicMock()
     projects.aggregate.return_value = [{"dc_id": DC_ID, "wf_id": WF_ID}]
     runs = MagicMock()
+    storage = MagicMock()
 
     with (
         patch(f"{MODULE}.projects_collection", projects),
         patch(f"{MODULE}.runs_collection", runs),
+        patch(f"{MODULE}.project_storage_collection", storage),
         patch(f"{MODULE}.files_collection", MagicMock()),
         patch(f"{MODULE}.deltatables_collection", MagicMock()),
         patch(f"{MODULE}.multiqc_collection", MagicMock()),
@@ -40,11 +42,11 @@ def _run_cascade():
         patch(f"{MODULE}._collect_s3_locations_for_project", return_value=[]),
     ):
         _cascade_delete_project(PROJECT_ID, "demo")
-    return runs
+    return runs, storage
 
 
 def test_runs_are_deleted_by_workflow():
-    runs = _run_cascade()
+    runs, _ = _run_cascade()
     queried = [call.args[0] for call in runs.delete_many.call_args_list]
     by_workflow = [q for q in queried if "workflow_id" in q]
     assert by_workflow, f"cascade never deleted runs by workflow: {queried}"
@@ -57,9 +59,16 @@ def test_runs_are_not_queried_by_collection():
     Keeping it as belt-and-braces is what let the missing workflow filter go
     unnoticed: the cascade looked like it deleted runs.
     """
-    runs = _run_cascade()
+    runs, _ = _run_cascade()
     queried = [call.args[0] for call in runs.delete_many.call_args_list]
     assert not any("data_collection_id" in q for q in queried), queried
+
+
+def test_project_storage_config_is_deleted():
+    """Per-project storage credentials live in their own collection; the
+    cascade must not orphan an encrypted secret for a project that is gone."""
+    _, storage = _run_cascade()
+    storage.delete_one.assert_called_once_with({"project_id": PROJECT_ID})
 
 
 def test_the_run_model_really_has_no_collection_key():

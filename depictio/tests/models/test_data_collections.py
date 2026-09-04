@@ -1,3 +1,4 @@
+import re
 from unittest.mock import patch
 
 import pytest
@@ -10,7 +11,9 @@ from depictio.models.models.data_collections import (
     Regex,
     Scan,
     ScanRecursive,
+    ScanS3Prefix,
     ScanSingle,
+    ScanURL,
     TableJoinConfig,
     WildcardRegexBase,
 )
@@ -200,6 +203,76 @@ class TestScan:
         scan_params = {"filename": "test.txt"}
         config = Scan(mode="SINGLE", scan_parameters=scan_params)  # type: ignore[arg-type]
         assert config.mode == "SINGLE"  # maintains original case
+
+    _URL_VS_SINGLE_MISMATCH = (
+        "Scan mode 'url' expects ScanURL parameters (url), but scan_parameters are "
+        "ScanSingle parameters (filename) for mode 'single'. Change mode to 'single' "
+        "or provide the parameters of mode 'url'."
+    )
+
+    def test_mode_and_parameters_dict_mismatch_rejected(self, monkeypatch):
+        """A dict shaped like another mode's parameters is a mismatch, not a
+        silent union pick that crashes at scan time."""
+        monkeypatch.setattr("depictio.models.models.data_collections.DEPICTIO_CONTEXT", "server")
+        with pytest.raises(ValidationError, match=re.escape(self._URL_VS_SINGLE_MISMATCH)):
+            Scan(mode="url", scan_parameters={"filename": "test.txt"})  # type: ignore[arg-type]
+
+    def test_mode_and_parameters_instance_mismatch_rejected(self, monkeypatch):
+        """The instance path never reaches the before-validator; the after
+        check catches it with the same message."""
+        monkeypatch.setattr("depictio.models.models.data_collections.DEPICTIO_CONTEXT", "server")
+        with pytest.raises(ValidationError, match=re.escape(self._URL_VS_SINGLE_MISMATCH)):
+            Scan(mode="url", scan_parameters=ScanSingle(filename="test.txt"))
+
+    def test_mode_case_ignored_in_mismatch_check(self):
+        """An upper-case mode still matches its own parameter class."""
+        scan = Scan(mode="URL", scan_parameters=ScanURL(url="https://example.org/x.csv"))
+        assert scan.mode == "URL"
+        assert isinstance(scan.scan_parameters, ScanURL)
+
+    def test_declared_mode_reports_its_own_validation_error(self):
+        """A bad ScanS3Prefix surfaces ScanS3Prefix's message on its own field,
+        not a five-branch union error."""
+        with pytest.raises(ValidationError) as exc_info:
+            Scan(
+                mode="s3_prefix",
+                scan_parameters={"prefix": "s3://bucket/run42/", "id_regex": r"(a)(b)"},  # type: ignore[arg-type]
+            )
+        errors = exc_info.value.errors()
+        assert len(errors) == 1
+        assert errors[0]["loc"] == ("id_regex",)
+        assert "id_regex must have exactly one capture group (found 2)" in errors[0]["msg"]
+
+    def test_missing_required_parameter_named(self):
+        """No identifying key at all: the declared class names what is missing."""
+        with pytest.raises(ValidationError) as exc_info:
+            Scan(mode="recursive", scan_parameters={})  # type: ignore[arg-type]
+        errors = exc_info.value.errors()
+        assert [e["loc"] for e in errors] == [("regex_config",)]
+        assert errors[0]["type"] == "missing"
+
+
+class TestScanS3Prefix:
+    """Bounds on ScanS3Prefix.max_files (the list_s3_prefix budget)."""
+
+    def test_default_within_bounds(self):
+        assert ScanS3Prefix(prefix="s3://bucket/run42/").max_files == 10_000
+
+    def test_max_files_zero_rejected(self):
+        with pytest.raises(ValidationError, match="Input should be greater than 0"):
+            ScanS3Prefix(prefix="s3://bucket/run42/", max_files=0)
+
+    def test_max_files_above_ceiling_rejected(self):
+        with pytest.raises(ValidationError, match="Input should be less than or equal to 100000"):
+            ScanS3Prefix(prefix="s3://bucket/run42/", max_files=10**7)
+
+    def test_max_files_bounds_apply_through_scan(self):
+        with pytest.raises(ValidationError) as exc_info:
+            Scan(
+                mode="s3_prefix",
+                scan_parameters={"prefix": "s3://bucket/run42/", "max_files": 0},  # type: ignore[arg-type]
+            )
+        assert exc_info.value.errors()[0]["loc"] == ("max_files",)
 
 
 class TestTableJoinConfig:
