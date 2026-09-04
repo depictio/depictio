@@ -25,11 +25,11 @@ depictio-cli run \
   --CLI-config-path ~/.depictio/CLI.yaml \
   --data-root <absolute path>/results \
   --project-config-path <absolute path>/depictio_project.yaml \
-  --nextflow-manifest depictio/nextflow-trigger-example/0.1.0 \
+  --pipeline-id depictio/nextflow-trigger-example/0.1.0 \
   --project-name 'Nextflow trigger example'
 ```
 
-`--nextflow-manifest` is forwarded from the manifest block but ignored by the
+`--pipeline-id` is forwarded from the manifest block but ignored by the
 CLI here, because `--project-config-path` was given explicitly.
 
 If `depictio-cli` is not installed or not configured, the pipeline still
