@@ -1157,6 +1157,62 @@ def _print_recipe_preview(
     console.print()
 
 
+class _ScopedDataRoot:
+    """One sub-directory of a data root, answered through the parent root.
+
+    A ``sequencing-runs`` layout executes the same recipe once per run
+    directory. Building a fresh root per run would re-list the whole S3 prefix
+    every time, so a run is addressed as a prefix on the root that already holds
+    the listing. Only the questions the recipe layer asks are implemented; the
+    clean home for this is a ``scoped()`` method on ``DataRoot`` itself.
+    """
+
+    def __init__(self, parent, sub: str):
+        self._parent = parent
+        self._sub = sub.strip("/")
+        self.location = parent.url(self._sub)
+        self.name = self._sub.rsplit("/", 1)[-1]
+        self.is_remote = parent.is_remote
+
+    def __repr__(self) -> str:
+        return f"_ScopedDataRoot({self.location!r})"
+
+    def _scoped(self, rel: str) -> str:
+        rel = rel.strip("/")
+        return f"{self._sub}/{rel}" if rel else self._sub
+
+    def exists(self, rel: str) -> bool:
+        return self._parent.exists(self._scoped(rel))
+
+    def glob(self, pattern: str) -> list[str]:
+        prefix = f"{self._sub}/"
+        # The parent answers relative to itself, so every hit carries the run
+        # prefix the pattern started with; strip it back off. Sorting survives.
+        return [hit[len(prefix) :] for hit in self._parent.glob(f"{prefix}{pattern}")]
+
+    def match(self, regex: str, within: str = "") -> list[str]:
+        prefix = f"{self._sub}/"
+        return [hit[len(prefix) :] for hit in self._parent.match(regex, self._scoped(within))]
+
+    def url(self, rel: str) -> str:
+        return self._parent.url(self._scoped(rel))
+
+    def relative_of(self, location: str) -> str | None:
+        outer = self._parent.relative_of(location)
+        if outer is None:
+            return None
+        if outer == self._sub:
+            return ""
+        prefix = f"{self._sub}/"
+        return outer[len(prefix) :] if outer.startswith(prefix) else None
+
+    def read_bytes(self, rel: str) -> bytes:
+        return self._parent.read_bytes(self._scoped(rel))
+
+    def storage_options(self) -> dict | None:
+        return self._parent.storage_options()
+
+
 def process_recipe_data_collection(
     data_collection: DataCollection,
     CLI_config: CLIConfig,
@@ -1222,10 +1278,13 @@ def process_recipe_data_collection(
             for ref, so in transform_config.source_overrides.items()
         }
 
-    # Resolve data directory from workflow's data_location
-    # For sequencing-runs structure, collect all run directories
-    data_dir = "."
-    run_data_dirs: list[str] = []
+    from depictio.cli.cli.utils.data_root import DataRoot, data_root_for
+
+    # Resolve the data root from the workflow's data_location. It is a DataRoot
+    # rather than a path so the same recipe runs against a local directory or an
+    # s3:// prefix; for a sequencing-runs structure, one scoped root per run.
+    data_dir: str | DataRoot = "."
+    run_data_roots: list[DataRoot] = []
     if workflow is not None and hasattr(workflow, "data_location") and workflow.data_location:
         locations = getattr(workflow.data_location, "locations", None)
         structure = getattr(workflow.data_location, "structure", None)
@@ -1233,25 +1292,31 @@ def process_recipe_data_collection(
 
         if locations and len(locations) > 0:
             base_location = str(locations[0])
+            try:
+                base_root = data_root_for(base_location, CLI_config)
+            except ValueError as exc:
+                # An unlistable scheme, or an s3:// prefix that is neither
+                # allowlisted nor credentialed. A configuration problem, so it
+                # reads as one rather than as a traceback out of ingestion.
+                return {"result": "error", "message": f"Recipe data root unusable: {exc}"}
 
             if structure == "sequencing-runs" and runs_regex:
-                import re as _re
-
-                for entry in sorted(os.listdir(base_location)):
-                    entry_path = os.path.join(base_location, entry)
-                    if os.path.isdir(entry_path) and _re.match(runs_regex, entry):
-                        run_data_dirs.append(entry_path)
-                if run_data_dirs:
-                    data_dir = run_data_dirs[0]
+                # Same rule the listdir walk applied (``re.match`` on the
+                # directory name), asked of the root so it also answers on S3.
+                run_data_roots = [
+                    _ScopedDataRoot(base_root, run) for run in base_root.runs(runs_regex)
+                ]
+                if run_data_roots:
+                    data_dir = run_data_roots[0]
                     rich_print_checked_statement(
-                        f"Recipe data dir: {base_location} ({len(run_data_dirs)} run(s))", "info"
+                        f"Recipe data dir: {base_location} ({len(run_data_roots)} run(s))", "info"
                     )
                 else:
-                    data_dir = base_location
-                    rich_print_checked_statement(f"Recipe data dir: {data_dir}", "info")
+                    data_dir = base_root
+                    rich_print_checked_statement(f"Recipe data dir: {base_location}", "info")
             else:
-                data_dir = base_location
-                rich_print_checked_statement(f"Recipe data dir: {data_dir}", "info")
+                data_dir = base_root
+                rich_print_checked_statement(f"Recipe data dir: {base_location}", "info")
 
     # Resolve dc_ref sources: load referenced DCs from their Delta tables
     extra_sources: dict[str, pl.DataFrame] | None = None
@@ -1317,15 +1382,15 @@ def process_recipe_data_collection(
             return {"result": "error", "message": f"Recipe failed: {e}"}
 
     try:
-        if run_data_dirs and len(run_data_dirs) > 1:
+        if run_data_roots and len(run_data_roots) > 1:
             # Multi-run: execute recipe per run and concatenate
             all_dfs = []
-            for run_dir in run_data_dirs:
-                run_tag = os.path.basename(run_dir)
+            for run_root in run_data_roots:
+                run_tag = run_root.name
                 try:
                     run_df = execute_recipe(
                         recipe_name,
-                        run_dir,
+                        run_root,
                         overrides,
                         extra_sources=extra_sources,
                         pipeline_version=pipeline_version,
