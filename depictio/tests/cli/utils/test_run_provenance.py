@@ -104,3 +104,78 @@ def test_user_provenance_file_tsv(tmp_path):
 def test_missing_sources_are_quiet(tmp_path):
     entries, files = collect_run_provenance(str(tmp_path), None)
     assert entries == [] and files == []
+
+
+def test_default_spec_reads_the_nf_params_shape(tmp_path):
+    """The connector accepts three params filenames; the default spec must too.
+
+    A pipeline writing `nf-params.json` used to get a correct identity and
+    template from the Nextflow connector, then an ingestion report whose
+    Parameters section was empty, with nothing explaining the gap.
+    """
+    _write_params(tmp_path, "nf-params.json", {"max_ee": 2})
+    entries, files = collect_run_provenance(str(tmp_path), None)
+    assert files == ["pipeline_info/nf-params.json"]
+    assert [(e.key, e.value) for e in entries] == [("max_ee", "2")]
+
+
+def test_default_spec_reads_the_underscore_params_shape(tmp_path):
+    _write_params(tmp_path, "nf_params.json", {"max_ee": 3})
+    entries, files = collect_run_provenance(str(tmp_path), None)
+    assert files == ["pipeline_info/nf_params.json"]
+    assert [(e.key, e.value) for e in entries] == [("max_ee", "3")]
+
+
+class TestSequencingRunsFallbackPicksOneRun:
+    """Parameters must describe the run whose identity the report shows.
+
+    Globbing `*/pipeline_info/params*.json` across every run sorts the run
+    directory name before the timestamp, so `pick: latest` returned the LAST
+    run alphabetically while `NextflowRunInfoReader` reads its identity from the
+    FIRST. Measured on a real five-run viralrecon project, 19 parameters
+    differed between those two runs: the report showed the nanopore run's
+    parameters next to the amplicon run's pipeline version.
+    """
+
+    @staticmethod
+    def _project(tmp_path):
+        for run, payload in (
+            ("run_amplicon", {"platform": "illumina", "primer_set": "artic"}),
+            ("run_nanopore", {"platform": "nanopore", "primer_set": "midnight"}),
+        ):
+            d = tmp_path / run / "pipeline_info"
+            d.mkdir(parents=True)
+            (d / "params_2026-01-01_00-00-00.json").write_text(json.dumps(payload))
+        return tmp_path
+
+    def test_it_reads_the_first_run_not_the_last(self, tmp_path):
+        entries, files = collect_run_provenance(str(self._project(tmp_path)), None)
+        assert files == ["run_amplicon/pipeline_info/params_2026-01-01_00-00-00.json"]
+        assert dict((e.key, e.value) for e in entries)["platform"] == "illumina"
+
+    def test_it_does_not_merge_parameters_across_runs(self, tmp_path):
+        """Merging would invent a run that never happened."""
+        entries, _ = collect_run_provenance(str(self._project(tmp_path)), None)
+        values = dict((e.key, e.value) for e in entries)
+        assert values["primer_set"] == "artic"
+        assert len([e for e in entries if e.key == "primer_set"]) == 1
+
+    def test_the_newest_params_of_that_run_still_wins(self, tmp_path):
+        """`pick: latest` keeps its meaning inside the chosen run."""
+        root = self._project(tmp_path)
+        (root / "run_amplicon" / "pipeline_info" / "params_2026-03-03_00-00-00.json").write_text(
+            json.dumps({"platform": "illumina", "primer_set": "artic-v5"})
+        )
+        entries, files = collect_run_provenance(str(root), None)
+        assert files == ["run_amplicon/pipeline_info/params_2026-03-03_00-00-00.json"]
+        assert dict((e.key, e.value) for e in entries)["primer_set"] == "artic-v5"
+
+    def test_a_flat_layout_is_unaffected(self, tmp_path):
+        """The nested fallback only runs when the top level matched nothing."""
+        _write_params(tmp_path, "params_2026-01-01_00-00-00.json", {"platform": "flat"})
+        (tmp_path / "run_x" / "pipeline_info").mkdir(parents=True)
+        (tmp_path / "run_x" / "pipeline_info" / "params_2026-09-09_00-00-00.json").write_text(
+            json.dumps({"platform": "nested"})
+        )
+        entries, _ = collect_run_provenance(str(tmp_path), None)
+        assert dict((e.key, e.value) for e in entries)["platform"] == "flat"

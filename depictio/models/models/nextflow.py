@@ -263,6 +263,7 @@ class NextflowRunInfoReader:
             # over the runs it holds: a nanopore run and an illumina run under
             # one project ran different tools, and reporting either alone would
             # be wrong.
+            seen: set[tuple[str | None, str | None]] = set()
             for candidate in subdirs:
                 candidate_versions = _newest_matching(candidate, _VERSIONS_GLOBS)
                 candidate_workflow: dict[str, Any] = {}
@@ -270,6 +271,11 @@ class NextflowRunInfoReader:
                 if candidate_versions is not None:
                     candidate_workflow, candidate_tools = _parse_versions_yaml(candidate_versions)
                 tools.update(candidate_tools)
+                if candidate_workflow:
+                    candidate_name, candidate_raw, _ = _identity_from_workflow_section(
+                        candidate_workflow
+                    )
+                    seen.add((candidate_name, normalize_pipeline_version(candidate_raw)))
                 if versions_path is not None or not candidate_workflow:
                     continue
                 workflow = candidate_workflow
@@ -297,10 +303,24 @@ class NextflowRunInfoReader:
 
         # Only when the run wrote no versions YAML we recognise: catalog's reader
         # searches the whole tree for a legacy `software_versions.yml`.
+        #
+        # Guarded, because that search walks the WHOLE results tree and any
+        # malformed YAML anywhere under it makes it raise. Unguarded, the
+        # exception escaped to the registry, which dropped this reader entirely:
+        # a run with a perfectly good `Workflow:` section came back unidentified
+        # because some unrelated legacy file three directories away was a list
+        # instead of a mapping. The tool list is a nice-to-have; the identity is
+        # the point, and it is already in hand here.
         if not tools:
-            from depictio.models.components.advanced_viz.catalog import read_software_versions
+            try:
+                from depictio.models.components.advanced_viz.catalog import read_software_versions
 
-            tools = read_software_versions(run_dir)
+                tools = read_software_versions(run_dir)
+            except Exception as exc:
+                logger.warning(
+                    f"Nextflow run-info: could not collect the tool list under {run_dir} "
+                    f"({exc}); keeping the identity read from {versions_path or 'the manifest'}."
+                )
 
         params = _read_params(params_path)
         extra: dict[str, Any] = {}
@@ -313,6 +333,19 @@ class NextflowRunInfoReader:
             # one run out of several.
             extra["run_subdirs_scanned"] = len(subdirs)
             extra["identity_from_run"] = pipeline_info.parent.name
+            # Aggregating runs of different pipelines, or of different versions
+            # of one, is a real thing people do by accident: a DATA_ROOT one
+            # level too high, or a directory reused across studies. Reporting
+            # one identity for it is defensible, choosing it silently is not.
+            if len(seen) > 1:
+                extra["identities_seen"] = sorted(f"{n} {v}" for n, v in seen)
+                logger.warning(
+                    f"Nextflow run-info: {run_dir} aggregates runs of more than one pipeline "
+                    f"or version ({', '.join(extra['identities_seen'])}). Reporting "
+                    f"{pipeline_name} {normalize_pipeline_version(raw_version)} from "
+                    f"{pipeline_info.parent.name}, with the tools of all of them. Point "
+                    f"--data-root at one pipeline's runs if that is not what you meant."
+                )
 
         run_name = params.get("run_name")
         return WorkflowRunInfo(

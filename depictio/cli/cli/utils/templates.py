@@ -19,6 +19,7 @@ import httpx
 import yaml
 
 from depictio.cli.cli_logging import logger
+from depictio.models.models.nextflow import PARAMS_GLOBS
 from depictio.models.models.templates import (
     DCOverride,
     ExpectedDataCollection,
@@ -834,14 +835,19 @@ def _log_removal_report(report: list[dict[str, str]]) -> None:
 # Fallback when a template declares no `provenance:` block: nf-core pipelines
 # all write pipeline_info/params*.json, so at minimum the run's parameters are
 # captured, ungrouped. Templates refine this with their own sources/groups.
+# The three shapes the Nextflow connector already recognises (PARAMS_GLOBS).
+# Listing only `params*.json` here meant a pipeline writing `nf-params.json`
+# got a correct identity and template from the connector, then an ingestion
+# report with an empty Parameters section, with nothing saying why.
 _DEFAULT_PROVENANCE_SPEC = ProvenanceSpec(
     sources=[
         ProvenanceSource(
             name="params",
-            glob="pipeline_info/params*.json",
+            glob=f"pipeline_info/{pattern}",
             format="json",
             pick="latest",
-        ),
+        )
+        for pattern in PARAMS_GLOBS
     ],
     groups=[ProvenanceGroupRule(group="Parameters", key_patterns=["*"])],
 )
@@ -948,8 +954,17 @@ def collect_run_provenance(
     for source in spec.sources:
         matches = sorted(root.glob(source.glob))
         if not matches:
-            # sequencing-runs layouts keep pipeline_info one level down
-            matches = sorted(root.glob(f"*/{source.glob}"))
+            # sequencing-runs layouts keep pipeline_info one level down. Keep to
+            # ONE run directory: globbing across all of them sorts the run name
+            # before the timestamp, so `pick: latest` returned the last run
+            # alphabetically while the run-info reader reads its identity from
+            # the FIRST. The report then married one run's pipeline version to
+            # another run's parameters. Same run for both, and the reader
+            # records which one in extra["identity_from_run"].
+            nested = sorted(root.glob(f"*/{source.glob}"))
+            if nested:
+                first_run = nested[0].relative_to(root).parts[0]
+                matches = [m for m in nested if m.relative_to(root).parts[0] == first_run]
         if not matches:
             logger.info(f"Provenance source '{source.name}': no file matches {source.glob!r}")
             continue

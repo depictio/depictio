@@ -154,6 +154,18 @@ params.depictio_project = 'Ampliseq 16S survey'
 params.depictio_attach  = true
 ```
 
+One limitation is worth knowing before you build a project this way. In a
+template whose `data_location.structure` is `flat`, data collections declared
+with `scan.mode: single` name one file, and that path is resolved from the data
+root of the run that created the project. A samplesheet, a metadata table or a
+tree file is typically declared that way. Attaching a second run adds its
+`recursive` collections as expected, but the `single` ones keep pointing at the
+first run's files, so they describe the project rather than the new run. The
+CLI reports this in the attach summary rather than failing, and it is the
+correct behaviour for a samplesheet that genuinely covers the whole project.
+Templates whose structure is `sequencing-runs`, viralrecon among them, resolve
+those paths per run and are unaffected.
+
 ### Re-running the same pipeline
 
 A second execution finds its project already on the server. The CLI refuses to
@@ -329,7 +341,8 @@ Everything the handler emits is prefixed with `[depictio]`, on the console and i
 | No `[depictio]` lines at all | `params.depictio_enabled` is false, or the snippet was never included. Check `nextflow config` for the `depictio_*` parameters |
 | `Pipeline did not complete successfully, skipping ingestion` | Working as designed. Fix the pipeline first |
 | `No data root to ingest` | Neither `params.depictio_data_root` nor `params.outdir` is set |
-| `Ingestion trigger failed ... Cannot run program` | `depictio-cli` is not on the head job's PATH. Set `params.depictio_cli_executable` to an absolute path, for example the CLI inside a virtual environment |
+| `Could not start the Depictio CLI, so nothing was ingested` | `depictio-cli` is not on the head job's PATH. Installing it in the pipeline's containers does not help: the handler runs on the head job. Set `params.depictio_cli_executable` to an absolute path, or to a container invocation |
+| `Ingestion trigger failed, pipeline result unchanged` | Anything else the handler hit. The exception is on that line; the pipeline's own result is never affected |
 | `depictio-cli exited with code N` | The ingestion itself failed. The CLI's own output is in the log above that line, prefixed with `[depictio]` |
 
 To see the exact command without running a pipeline, read the
