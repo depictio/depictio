@@ -77,7 +77,29 @@ To read the snippet, or to keep an editable copy of it:
 depictio-cli config nextflow --print > depictio.config
 ```
 
-Permanently, from your own `nextflow.config`:
+Nothing was copied along the way. The snippet arrived with `pip install`, like
+any other file in the package, and `-c` just points at where it landed.
+
+### Turning it on for good
+
+Adding `-c` to each run is the explicit form. To stop thinking about it, name the
+snippet once and every `nextflow run` on that machine triggers Depictio:
+
+```bash
+echo "includeConfig '$(depictio-cli config nextflow)'" >> ~/.nextflow/config
+```
+
+```bash
+# no -c, no flags, nothing added to the command
+nextflow run nf-core/ampliseq -profile test,docker --outdir results
+```
+
+`~/.nextflow/config` is read for every run, so this covers all your pipelines at
+once. Set `params.depictio_enabled = false` in a pipeline's own config to opt one
+of them back out.
+
+Per pipeline rather than per machine, put the same line in that pipeline's
+`nextflow.config`:
 
 ```groovy
 includeConfig '/path/to/depictio.config'
