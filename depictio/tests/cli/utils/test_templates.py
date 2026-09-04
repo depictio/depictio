@@ -674,6 +674,26 @@ class TestRemoteTemplateResolution:
         # params.json has no `ancombc: true`, so the ANCOM-BC DCs are gated out.
         assert variables["SKIP_ANCOM"] == "true"
 
+    def test_a_local_metadata_override_is_still_read_under_a_remote_root(
+        self, monkeypatch, tmp_path
+    ):
+        """A METADATA_FILE outside the root has to fall back to the filesystem.
+
+        `--data-root s3://... --var METADATA_FILE=/local/meta.tsv` is a
+        supported combination. Bailing out as soon as the root was remote left
+        GROUP_COL at the `__no_group__` sentinel with nothing logged, so every
+        group-aware dashboard rendered ungrouped and the run still reported
+        success.
+        """
+        local_meta = tmp_path / "outside_the_root.tsv"
+        local_meta.write_text("ID\tbiome\tdepth\nS1\tsoil\t10\n")
+        _config, _meta, _origin, _dashboards, variables = self._resolve(
+            monkeypatch, extra_vars={"METADATA_FILE": str(local_meta)}
+        )
+        assert variables["METADATA_ID_COL"] == "ID"
+        assert variables["GROUP_COL"] == "biome"
+        assert variables["ANNOTATION_COLS"] == "biome,depth"
+
     def test_scan_modes_become_their_remote_counterparts(self, monkeypatch):
         config, _meta, _origin, _dashboards, _variables = self._resolve(monkeypatch)
         scans = _scans_by_tag(config)
