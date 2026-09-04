@@ -167,6 +167,16 @@ export type {
   WrapWithChromeOpts,
 } from './components/chrome';
 
+// Per-tile review of an AI-generated draft. Exported from the module rather
+// than from `./components/chrome`'s barrel because the chrome barrel is the
+// stable action-icon surface; this is the editor-only hook into it.
+export {
+  DraftReviewContext,
+  DraftReviewProvider,
+  useDraftReview,
+} from './components/chrome/ComponentChrome';
+export type { DraftReviewControl } from './components/chrome/ComponentChrome';
+
 // API surface — fetchers, payload types, filter types
 export {
   fetchDashboard,

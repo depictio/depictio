@@ -107,7 +107,7 @@ def test_static_sheets_ignore_the_data_context(component_type: str) -> None:
 
 def test_interactive_sheet_quotes_the_current_group_cap() -> None:
     sheet = _constraint_sheet("interactive", None)
-    assert f"≤ {MAX_INTERACTIVE_GROUP_SIZE}" in sheet
+    assert f"at most {MAX_INTERACTIVE_GROUP_SIZE} per group" in sheet
     assert "≤ 3 " not in sheet
 
 

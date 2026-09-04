@@ -1,5 +1,5 @@
-import React, { useContext, useEffect, useRef, useState } from 'react';
-import { ActionIcon, Group, Tooltip } from '@mantine/core';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { ActionIcon, Group, LoadingOverlay, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import { StoredMetadata } from '../../api';
@@ -14,6 +14,45 @@ import SaveGroupAction, { SaveGroupContext, SelectionHintAction } from './SaveGr
 import { supportsSelectionGrouping } from '../../selection';
 import { useGroupingColorVar } from '../../selectionGroups';
 import './chrome.css';
+
+/**
+ * Lets a host mark up the tiles of an AI draft from outside the chrome,
+ * without threading a prop through the grid, the renderer dispatch and
+ * `wrapWithChrome`'s ten call sites — the same reasoning (and the same
+ * shape) as `InspectorContext` next door.
+ *
+ * Only marks: the decisions themselves are taken in the draft banner's
+ * review bar, so a tile never grows a control of its own. Mounted only by
+ * the editor, and only on a dashboard the AI generated and nobody has
+ * reviewed yet. A null context — the default — is the off state: the chrome
+ * paints no outline, which is every other host and every promoted dashboard.
+ */
+export interface DraftReviewControl {
+  /** Tile still awaiting a Keep / Remove decision — painted with a subtle
+   *  outline so what is left to review is legible at a glance. */
+  isUnreviewed?: (metadata: StoredMetadata) => boolean;
+  /** Tile whose regeneration is streaming: the chrome scrims it, so the
+   *  stale render is visibly not the answer yet. */
+  isBusy?: (metadata: StoredMetadata) => boolean;
+  /** The one tile the review bar is currently talking about. Outlined
+   *  harder than the rest, so "3 / 12" has an answer on the canvas. */
+  isCurrent?: (metadata: StoredMetadata) => boolean;
+}
+
+export const DraftReviewContext = createContext<DraftReviewControl | null>(null);
+
+/** `value={null}` is the disabled state, so a host can mount this
+ *  unconditionally and decide per dashboard. */
+export const DraftReviewProvider: React.FC<{
+  value: DraftReviewControl | null;
+  children: React.ReactNode;
+}> = ({ value, children }) => (
+  <DraftReviewContext.Provider value={value}>{children}</DraftReviewContext.Provider>
+);
+
+export function useDraftReview(): DraftReviewControl | null {
+  return useContext(DraftReviewContext);
+}
 
 export type ChromeAction =
   | 'inspect'
@@ -70,6 +109,12 @@ export interface ComponentChromeProps {
    * action is its own component with its own hard-coded `size`.
    */
   compact?: boolean;
+  /** Tile of a draft that has not been reviewed yet: paints a subtle dashed
+   *  outline (see `unreviewedOutline`). Falls back to the context. */
+  unreviewed?: boolean;
+  /** A regeneration for this tile is in flight: scrims the rendered
+   *  component. Falls back to the context. */
+  draftBusy?: boolean;
 }
 
 /** View-accessible action visibility per component type. Mirrors the
@@ -140,6 +185,8 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
   showDragHandle = false,
   sourceFilterActive = false,
   compact = false,
+  unreviewed,
+  draftBusy,
 }) => {
   const localFullscreenRef = useRef<HTMLDivElement | null>(null);
   const fullscreenRef = externalFullscreenRef ?? localFullscreenRef;
@@ -207,6 +254,35 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
    */
   const persistentReset =
     sourceFilterActive && Boolean(onResetFilter) && componentType !== 'interactive';
+
+  // Draft review. The prop wins where a host can pass one; otherwise the
+  // provider answers per component, and with neither this is all inert.
+  const draftReview = useDraftReview();
+  const isUnreviewed = unreviewed ?? draftReview?.isUnreviewed?.(metadata) ?? false;
+  const isRegenerating = draftBusy ?? draftReview?.isBusy?.(metadata) ?? false;
+  const isCurrentReview = draftReview?.isCurrent?.(metadata) ?? false;
+  // Outline rather than border: the renderers already draw their own Paper,
+  // and an outline is painted outside the box model, so a tile sized to the
+  // pixel by the grid does not move. Dashed and inset for the same reason the
+  // selection-capable marker is (see chrome.css). Cyan repeats
+  // depictio-react-ai's AI_COLOR, which this package cannot import — react-ai
+  // depends on react-core, not the reverse.
+  const unreviewedOutline: React.CSSProperties = {
+    // A hairline, and one shade lighter than the selection marker's: on a
+    // fresh draft EVERY tile carries this, so it has to read as "not looked
+    // at yet" across a whole dashboard without shouting on any one tile.
+    outline: '1px dashed var(--mantine-color-cyan-3)',
+    outlineOffset: '-1px',
+    borderRadius: 'var(--mantine-radius-md)',
+  };
+  // The tile the review bar names. Solid and twice as thick, because exactly
+  // one tile carries it at a time and it has to be findable on a canvas where
+  // every other generated tile is already dashed.
+  const currentReviewOutline: React.CSSProperties = {
+    outline: '2px solid var(--mantine-color-cyan-6)',
+    outlineOffset: '-2px',
+    borderRadius: 'var(--mantine-radius-md)',
+  };
 
   const renderAction = (action: ChromeAction) => {
     switch (action) {
@@ -369,11 +445,16 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
         (isFullscreenActive ? ' fullscreen-active' : '') +
         (selectionCapable ? ' depictio-selection-capable' : '')
       }
-      style={
-        selectionCapable
+      style={{
+        ...(selectionCapable
           ? ({ '--depictio-grouping-color': groupingColorVar } as React.CSSProperties)
-          : undefined
-      }
+          : {}),
+        ...(isCurrentReview
+          ? currentReviewOutline
+          : isUnreviewed
+            ? unreviewedOutline
+            : {}),
+      }}
     >
       <Group
         gap={compact ? 2 : 4}
@@ -384,7 +465,7 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
           // icon, so the row moves to the quiet bottom edge. Still horizontal.
           (componentType === 'card' ? ' depictio-actions-bottom' : '') +
           // Any icon that stays on screen without hover needs the backdrop to
-          // stay with it: the active-reset icon, and the analysis marker.
+          // stay with it: the active-reset icon and the analysis marker.
           (persistentReset || selectionCapable ? ' has-persistent-action' : '') +
           (compact ? ' is-compact' : '')
         }
@@ -455,6 +536,15 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
          *  orientation. */}
         {otherActions.map((child, i) => wrapAction(child, `extra-${i}`))}
       </Group>
+      {/* The tile is being rewritten server-side: what is on screen is the
+       *  previous answer, so it is scrimmed rather than left to look current.
+       *  Sits under the action row's z-index so the chrome stays reachable. */}
+      <LoadingOverlay
+        visible={isRegenerating}
+        zIndex={1050}
+        overlayProps={{ blur: 1 }}
+        loaderProps={{ size: 'sm', color: 'cyan' }}
+      />
       {children}
     </div>
   );

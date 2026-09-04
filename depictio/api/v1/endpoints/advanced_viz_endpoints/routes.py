@@ -705,8 +705,19 @@ def fetch_advanced_viz_data(
     # Drop any requested columns that didn't survive projection (e.g. user
     # bound an optional column the recipe didn't emit). The renderer
     # decides what to do with missing optional columns.
+    #
+    # Deduplicated as well as filtered, because ``columns`` is the caller's raw
+    # request list and a renderer that projects the same column into two roles
+    # sends it twice: an advanced_viz whose ``depth`` and ``metric`` roles both
+    # bind ``bill_depth_mm``, for instance, asks for that column once per role.
+    # ``projection`` above is already collapsed with ``dict.fromkeys``, so ``df``
+    # holds a single copy; leaving the duplicate in ``present`` made the
+    # ``df.with_columns([...])`` rounding pass below raise polars'
+    # ``ComputeError: the name '<col>' passed to LazyFrame.with_columns is
+    # duplicate``, and would also have serialised the same column twice into the
+    # echoed ``columns`` list.
     _t_build = _time.perf_counter()
-    present = [c for c in columns if c in df.columns]
+    present = list(dict.fromkeys(c for c in columns if c in df.columns))
 
     # Round float columns before serialising. This endpoint's cost is dominated
     # by transport, not compute — the benchmark shows ~50 ms of server time

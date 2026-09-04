@@ -272,8 +272,14 @@ export interface StoredMetadata {
   catalog_source?: CatalogSource;
   /** Set when the component's config was produced by the AI assistant
    *  ("Describe with AI" in the builder). Drives the "Authored with AI"
-   *  badge in the component chrome; `prompt` is the user's own wording. */
-  ai_source?: { flow: string; prompt?: string } | null;
+   *  badge in the component chrome; `prompt` is the user's own wording.
+   *  `tag` is set only by whole-dashboard generation: it is the handle the
+   *  plan gave this tile, and the one the review / regenerate routes
+   *  address it by. */
+  ai_source?: { flow: string; prompt?: string; tag?: string } | null;
+  /** Authoring handle from the dashboard YAML / a generated plan. Unique
+   *  within a dashboard; `index` (a UUID) stays the runtime identity. */
+  tag?: string;
   // Card
   title?: string;
   value?: unknown;
@@ -360,6 +366,16 @@ export interface FilterSectionSpec {
  *  depictio/models/models/dashboards.py. `draft` until the owner promotes
  *  it from the editor banner; the autosave path never writes this field,
  *  only the promote route changes it. */
+/** One section of the plan with the planner's own reason for it. Mirrors
+ *  AISectionRationale in depictio/models/models/dashboards.py. */
+export interface DashboardAISection {
+  name: string;
+  /** Filter-panel section or main-grid section. */
+  kind: 'filter' | 'grid';
+  /** One sentence on why the section exists and what it holds. */
+  rationale: string;
+}
+
 export interface DashboardAIGeneration {
   status: 'draft' | 'promoted';
   model: string;
@@ -368,6 +384,15 @@ export interface DashboardAIGeneration {
   generated_at: string;
   run_id: string;
   warnings: string[];
+  /** Generation tags of the tiles the owner has been through, written only
+   *  by POST /ai/generated-dashboards/{id}/review (autosave strips the whole
+   *  block, as it does the draft flag). Absent on drafts saved before the
+   *  review flow existed, which is why readers default it to an empty list. */
+  reviewed?: string[];
+  /** Why the planner shaped each section the way it did, filter panel first
+   *  then the grid, in plan order. Absent on drafts saved before the planner
+   *  was asked to explain itself. */
+  sections?: DashboardAISection[];
 }
 
 export interface DashboardData {
