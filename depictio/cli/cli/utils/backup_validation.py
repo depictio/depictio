@@ -272,12 +272,14 @@ def check_backup_collections_coverage() -> Dict[str, Any]:
         # match current reality, not a judgment that it shouldn't ever be backed up;
         # adding real backup coverage for it is a separate, deliberate change.
         ledger_collections = ["task_events", "app_logs", "telemetry", "ingestion_runs"]
-        # The assistant's history ('ai_summaries', 'ai_analyses') is LLM output
-        # keyed by dashboard: useful to keep, but not wired into
-        # _create_mongodb_backup's collections_config yet, and its documents
-        # have no backup validator. Excluded to match current reality; giving
-        # it real backup coverage is a separate, deliberate change.
-        assistant_collections = ["ai_summaries", "ai_analyses"]
+        # The assistant's history ('ai_summaries', 'ai_analyses', and the
+        # 'ai_generations' run records) is LLM output keyed by dashboard:
+        # useful to keep, but not wired into _create_mongodb_backup's
+        # collections_config yet, and its documents have no backup validator.
+        # Excluded to match current reality; giving it real backup coverage is
+        # a separate, deliberate change. The `ai_generation` stamp a draft
+        # carries lives on the dashboard document, which is backed up.
+        assistant_collections = ["ai_summaries", "ai_analyses", "ai_generations"]
         core_collections = {
             col
             for col in collections_in_settings
