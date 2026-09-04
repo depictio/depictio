@@ -7,7 +7,7 @@ from depictio.cli.cli.utils.api_calls import (
     api_login,
     api_sync_project_config_to_server,
 )
-from depictio.cli.cli.utils.common import load_depictio_config
+from depictio.cli.cli.utils.common import describe_api_target, load_depictio_config
 from depictio.cli.cli.utils.config import validate_project_config_and_check_S3_storage
 from depictio.cli.cli.utils.rich_utils import (
     rich_print_checked_statement,
@@ -261,11 +261,22 @@ def check(
             rich_print_checked_statement(
                 "Server check failed - Invalid credentials or token expired", "error"
             )
+            rich_print_checked_statement(f"Tried {describe_api_target(CLI_config_path)}", "info")
     except Exception as e:
+        # This is the command the docs tell you to run before trusting a long
+        # pipeline to the trigger, so a bare "Connection refused" is the one
+        # answer it must not give: it says nothing about which instance was
+        # tried, which is the thing that is usually wrong.
         rich_print_checked_statement(f"Unable to access server - {e}", "error")
+        rich_print_checked_statement(f"Tried {describe_api_target(CLI_config_path)}", "info")
 
     try:
-        cli_config = load_depictio_config(yaml_config_path=CLI_config_path)
+        # Announced, and read quietly: probing an unreachable endpoint blocks
+        # until it times out, and the second "Loading Depictio configuration..."
+        # this used to print was the last thing on screen during that wait, so
+        # the command looked like it had died mid-load.
+        rich_print_checked_statement("Checking S3 storage configuration...", "loading")
+        cli_config = load_depictio_config(yaml_config_path=CLI_config_path, quiet=True)
         S3_storage_checks(cli_config.s3_storage)
         rich_print_checked_statement("S3 storage configuration is valid", "success")
     except Exception as e:
