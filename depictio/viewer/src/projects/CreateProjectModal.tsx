@@ -970,9 +970,9 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                         >
                           <Text size="sm">
                             {runTotals.considered - runTotals.matched} of{' '}
-                            {runTotals.considered} collections found no files. You can
+                            {runTotals.considered} collections found no inputs. You can
                             still create the project; those collections stay empty
-                            until their files exist.
+                            until their inputs exist.
                           </Text>
                         </Alert>
                       )}
