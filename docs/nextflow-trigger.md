@@ -210,6 +210,58 @@ the provisioning endpoints return `503`. Full setup, security model and the
 lifetime of the link: [Pipeline provisioning and passwordless
 login](pipeline-provisioning-magic-link.md).
 
+## Running the CLI from the published container
+
+The CLI is published to GHCR as `ghcr.io/depictio/depictio-cli`, built by the
+same workflow as the other Depictio images and tagged with the same versions.
+Nothing has to be installed on the machine that runs `nextflow`, only a
+container runtime.
+
+`depictio_cli_executable` accepts a list as well as a string, which is what lets
+the image be used without inventing a second parameter:
+
+```groovy
+def home = System.getProperty('user.home')
+
+params.depictio_cli_executable = [
+    'docker', 'run', '--rm',
+    '-v', "${params.outdir}:${params.outdir}",
+    '-v', "${home}/.depictio:${home}/.depictio:ro",
+    '--network', 'host',
+    'ghcr.io/depictio/depictio-cli:1.9.2',
+]
+```
+
+The image sets `depictio-cli` as its entrypoint, so the list stops at the image
+name and the handler appends `run` and its options.
+
+Both binds map a host path onto **the same path inside the container**, and
+that is not cosmetic. The handler builds an absolute `--data-root` and an
+absolute `--CLI-config-path` from the host's point of view and passes them
+through verbatim, so a bind that lands them anywhere else makes the CLI fail on
+a path it cannot see. The data root is also what gets recorded in the project.
+
+Instead of binding the configuration you can supply `DEPICTIO_CLI_TOKEN` and
+`DEPICTIO_CLI_API_BASE_URL` with `-e`, which is the better fit for CI, where the
+token comes from a secret rather than a file on disk.
+
+The container must also reach both the Depictio API and its S3 endpoint;
+`--network host` is the simplest way to do that against a local stack.
+
+Singularity or Apptainer works the same way, with `--bind` in place of `-v`:
+
+```groovy
+params.depictio_cli_executable = [
+    'singularity', 'exec',
+    '--bind', "${params.outdir}",
+    'docker://ghcr.io/depictio/depictio-cli:1.9.2',
+    'depictio-cli',
+]
+```
+
+Under Singularity the host home is bind-mounted by default and paths keep their
+names, so the configuration is usually already reachable.
+
 ## Parameters
 
 | Parameter | Default | CLI option it drives |
@@ -223,7 +275,7 @@ login](pipeline-provisioning-magic-link.md).
 | `depictio_attach` | `false` | `--attach-run` |
 | `depictio_update` | `false` | `--update-config --overwrite` (ignored with `--attach-run`, which implies both) |
 | `depictio_user` | none | `--user` |
-| `depictio_cli_executable` | `depictio-cli` | the executable that is run |
+| `depictio_cli_executable` | `depictio-cli` | the executable that is run, or a list (a container invocation) |
 
 Booleans are coerced explicitly, so `--depictio_enabled false` and
 `--depictio_attach false` behave as expected. Groovy treats every non-empty
