@@ -1,0 +1,18 @@
+# CI-only overlay for the e2e-playwright `standard` leg.
+#
+# The create-from-manifest spec fetches a Data Manifest that the runner serves
+# from the docker host (python -m http.server on port 8099). The backend and
+# the celery worker reach it as http://host.docker.internal:8099; Docker on
+# Linux does not provide that name by itself, so it is mapped to the host
+# gateway here. Nothing else changes: the stack stays as declared in
+# docker-compose.dev.yaml. Layer it with a second -f:
+#
+#   docker compose -f docker-compose.dev.yaml \
+#     -f docker-compose/docker-compose.e2e-manifest.yaml --env-file docker-compose/.env up
+services:
+  depictio-backend:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+  depictio-celery-worker:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
