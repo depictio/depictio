@@ -79,7 +79,9 @@ ingestion logs a warning and leaves the pipeline's own exit status untouched.
 
 `depictio-cli` must be installed on the PATH of the **Nextflow head job**, the
 shell or scheduler job that runs `nextflow run`. The handler executes there, not
-on compute nodes.
+on compute nodes. Its credentials come from `~/.depictio/CLI.yaml`, the file the
+viewer's CLI agents page tells you to save; `depictio-cli config check` confirms
+they work before a long pipeline depends on them.
 
 ### Quick start, nf-core pipeline
 
@@ -87,19 +89,26 @@ on compute nodes.
 nextflow run nf-core/ampliseq \
   -profile docker \
   --outdir results \
-  -c /path/to/depictio/cli/configs/nextflow/depictio.config
+  -c $(depictio-cli config nextflow)
 ```
 
-The snippet forwards the pipeline's identity as
-`--pipeline-id nf-core/ampliseq/2.16.0`, taken from `workflow.manifest`. The CLI
-matches it against its bundled templates.
+`depictio-cli config nextflow` prints the path of the snippet bundled with the
+CLI, so there is no file to download or keep in sync. The snippet forwards the
+pipeline's identity as `--pipeline-id nf-core/ampliseq/2.16.0`, taken from
+`workflow.manifest`, and the CLI matches it against its bundled templates.
 
-To make it permanent, add `includeConfig` to your own `nextflow.config` instead
-of passing `-c` on every run:
+To stop repeating the `-c`, once per machine:
 
-```groovy
-includeConfig '/path/to/depictio/cli/configs/nextflow/depictio.config'
+```bash
+depictio-cli config nextflow --install
 ```
+
+Every later `nextflow run` on that machine triggers Depictio with no extra
+flag; `--uninstall` reverses it. It copies the handler to
+`~/.depictio/nextflow.config` and includes that from `~/.nextflow/config`,
+rather than pointing at the CLI's own copy: Nextflow refuses to parse a config
+whose `includeConfig` target is missing, so an include into a virtualenv would
+break every pipeline on the machine the day the CLI moved.
 
 ### Custom pipelines
 
@@ -119,9 +128,16 @@ data_location:
     - "{DEPICTIO_DATA_ROOT}"
 ```
 
-A runnable example lives in `depictio/cli/configs/nextflow/example/`.
-`params.depictio_project_config` wins over `params.depictio_template` when both
-are set.
+A project YAML says what to ingest, not what to show, and only a template
+brings dashboards. Point the trigger at your own:
+
+```groovy
+params.depictio_dashboard = "${projectDir}/depictio_dashboard.yaml"
+```
+
+A runnable example lives in `depictio/cli/configs/nextflow/example/`, dashboard
+included. `params.depictio_project_config` wins over `params.depictio_template`
+when both are set.
 
 ### New project or additional run
 
@@ -157,6 +173,7 @@ provisioning key. See `docs/pipeline-provisioning-magic-link.md`.
 | `depictio_template` | none | `--template` |
 | `depictio_project_config` | none | `--project-config-path` (wins over `--template`) |
 | `depictio_project` | none | `--project-name` |
+| `depictio_dashboard` | none | `--dashboard` (one path or a list; templates bring their own) |
 | `depictio_attach` | `false` | `--attach-run` |
 | `depictio_update` | `false` | `--update-config --overwrite` (ignored with `--attach-run`, which implies both) |
 | `depictio_user` | none | `--user` |

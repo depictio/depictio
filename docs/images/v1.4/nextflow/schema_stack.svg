@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="620" viewBox="0 0 1400 620">
+  <rect width="1400" height="620" fill="#ffffff"/>
+  <text x="46.0" y="52.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="25" fill="#1e1e1e" text-anchor="start" font-weight="normal">Three pull requests, one dependency each</text>
+  <text x="46.0" y="78.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#5c5c5c" text-anchor="start" font-weight="normal">read from the bottom: each layer is what the one above could not exist without</text>
+  <rect x="60.0" y="110.0" width="820.0" height="136.0" rx="6" fill="#ebfbee"/>
+  <path d="M60.1,109.8 C332.8,108.9 607.1,108.6 879.3,110.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.9,110.5 C331.9,109.8 605.3,108.7 879.4,109.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M880.8,109.3 C880.4,156.8 880.2,200.3 880.6,245.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M879.5,110.1 C878.9,154.1 879.4,201.7 880.2,245.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M880.3,245.9 C606.8,244.6 331.9,245.1 59.7,246.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M879.6,246.1 C606.5,245.4 334.3,246.6 60.0,246.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.9,246.4 C60.7,200.0 61.5,154.1 59.4,110.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.6,245.7 C58.5,201.2 60.8,155.6 60.3,110.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="470.0" y="137.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">#1037  the Nextflow onComplete trigger</text>
+  <text x="470.0" y="161.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">depictio.config + config nextflow (--print / --install / --uninstall)</text>
+  <text x="470.0" y="182.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">example pipeline with a dashboard and a catalog recipe, published CLI image</text>
+  <text x="470.0" y="203.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">run summary links, ingestion badge with the pipeline's identity</text>
+  <rect x="60.0" y="272.0" width="820.0" height="124.0" rx="6" fill="#e7f5ff"/>
+  <path d="M60.0,272.3 C333.6,271.9 607.8,273.4 879.3,272.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.8,272.3 C333.8,273.6 607.7,271.3 879.2,271.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M879.4,271.6 C878.9,312.1 878.6,355.5 879.8,396.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M880.5,272.6 C878.7,313.2 880.2,355.9 879.6,395.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M879.5,395.6 C606.2,397.2 334.8,394.9 59.6,396.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M879.8,396.1 C607.0,395.2 331.7,395.7 60.7,396.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.6,396.4 C60.0,355.0 60.6,311.9 60.6,272.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.3,395.3 C59.7,354.3 58.7,313.8 59.5,271.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="470.0" y="299.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">#1036  which pipeline produced this directory</text>
+  <text x="470.0" y="323.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">WorkflowRunInfo + a priority registry of readers (nextflow 100, snakemake 50)</text>
+  <text x="470.0" y="344.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">reads pipeline_info/: identity, engine version, tools; picks the template ≤ run version</text>
+  <text x="470.0" y="365.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">stamps engine_name / pipeline_version / tools_executed on the WorkflowConfig</text>
+  <rect x="60.0" y="422.0" width="820.0" height="136.0" rx="6" fill="#fff9db"/>
+  <path d="M59.4,421.8 C332.8,420.6 605.1,420.9 879.2,422.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.8,421.4 C333.7,420.9 605.9,421.5 880.6,422.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M879.7,421.6 C879.9,467.3 878.7,511.4 880.5,557.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M880.1,421.2 C878.5,468.8 880.1,511.5 880.0,558.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M879.5,558.4 C607.8,558.6 332.6,557.6 60.1,558.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M880.6,558.5 C606.1,557.1 334.3,559.6 60.5,558.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.2,557.6 C59.1,512.7 59.5,465.8 59.6,422.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.7,557.8 C61.5,512.5 61.4,468.9 59.6,421.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="470.0" y="449.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">#1035  auth without a secret in the file, and a second run that does not abort</text>
+  <text x="470.0" y="473.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">DEPICTIO_CLI_TOKEN / _API_BASE_URL / _CONFIG_PATH overrides</text>
+  <text x="470.0" y="494.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">sync returns created / updated / exists instead of raising typer.Exit(0)</text>
+  <text x="470.0" y="515.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">--attach-run: union of locations, ids kept, single-file DCs protected</text>
+  <path d="M470.7,272.0 C468.8,262.2 470.5,256.3 470.3,246.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M470.5,272.0 C468.3,264.0 471.6,255.8 469.4,246.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M469.9,246.4 C467.5,250.7 466.6,254.0 463.7,258.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M469.6,246.3 C471.4,249.4 475.2,254.9 477.1,258.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M470.9,422.3 C469.4,413.5 468.5,402.7 470.1,396.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M469.5,421.6 C469.7,414.8 471.3,403.5 469.5,396.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M469.9,396.0 C467.3,400.0 464.9,405.1 463.5,408.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M470.0,395.5 C472.0,401.0 474.4,404.3 476.5,408.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="930.0" y="156.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">needs:</text>
+  <text x="930.0" y="178.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#1e1e1e" text-anchor="start" font-weight="normal">--pipeline-id resolved to a template</text>
+  <text x="930.0" y="200.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#1e1e1e" text-anchor="start" font-weight="normal">provenance read without a template</text>
+  <text x="930.0" y="312.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">needs:</text>
+  <text x="930.0" y="334.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#1e1e1e" text-anchor="start" font-weight="normal">a run.py that reaches step 4 twice</text>
+  <text x="930.0" y="356.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#1e1e1e" text-anchor="start" font-weight="normal">a WorkflowConfig with room for it</text>
+  <text x="930.0" y="478.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">base = main</text>
+  <text x="930.0" y="500.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#1e1e1e" text-anchor="start" font-weight="normal">the only PR the unit-test CI runs on</text>
+  <text x="930.0" y="522.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="start" font-weight="normal">(pull_request: branches: [main])</text>
+  <text x="46.0" y="586.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">supersedes #811 (registry) and #813 (config, docs): ported, not rebased, 740 commits behind main</text>
+</svg>
