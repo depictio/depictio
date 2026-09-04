@@ -249,3 +249,105 @@ class TestNextflowConfigFallback:
         plain.mkdir()
         (plain / "nextflow.config").write_text("process {\n    cpus = 2\n}\n")
         assert _reader().read(plain) is None
+
+
+# A sequencing-runs project points DATA_ROOT at the PARENT of several run_*/
+# directories, each a complete pipeline output with its own pipeline_info. This
+# is the viralrecon layout (~/Data/viralrecon/validation-runs-3.0.0 holds five).
+# Two runs of the same pipeline that executed different tools, which is the
+# normal case: a nanopore run and an illumina run share a project.
+VIRALRECON_NANOPORE = """\
+ARTIC_MINION:
+  artic: 1.2.4
+NANOPLOT:
+  nanoplot: 1.41.6
+Workflow:
+    nf-core/viralrecon: 3.0.0
+    Nextflow: 25.04.6
+"""
+
+VIRALRECON_ILLUMINA = """\
+FASTP:
+  fastp: 0.23.4
+IVAR_VARIANTS:
+  ivar: 1.4.2
+Workflow:
+    nf-core/viralrecon: 3.0.0
+    Nextflow: 25.04.6
+"""
+
+
+class TestSequencingRunsLayout:
+    """DATA_ROOT is the parent of the run directories, not a run itself.
+
+    Reading only `<root>/pipeline_info` left every such project with no engine,
+    no pipeline version, no Nextflow version and no tools, whatever chose the
+    template. The failure was invisible: the ingestion succeeded and simply
+    recorded nothing about what produced the data.
+    """
+
+    @staticmethod
+    def _project(root: Path) -> Path:
+        for name, versions in (
+            ("run_nanopore", VIRALRECON_NANOPORE),
+            ("run_illumina", VIRALRECON_ILLUMINA),
+        ):
+            (_pipeline_info(root / name) / "software_versions.yml").write_text(versions)
+        return root
+
+    def test_identity_is_found_one_level_down(self, tmp_path):
+        info = _reader().read(self._project(tmp_path))
+        assert info is not None
+        assert info.pipeline_name == "nf-core/viralrecon"
+        assert info.pipeline_version == "3.0.0"
+        assert info.engine_version == "25.04.6"
+
+    def test_tools_are_unioned_across_the_runs(self, tmp_path):
+        """Neither run alone describes the project: report what all of them ran."""
+        info = _reader().read(self._project(tmp_path))
+        assert info is not None
+        assert info.tools_executed == {"artic", "nanoplot", "fastp", "ivar"}
+
+    def test_it_records_which_run_the_identity_came_from(self, tmp_path):
+        """Otherwise a version silently describes one run out of several."""
+        info = _reader().read(self._project(tmp_path))
+        assert info is not None
+        assert info.extra["run_subdirs_scanned"] == 2
+        # Deterministic: sorted, so the first run carrying an identity wins.
+        assert info.extra["identity_from_run"] == "run_illumina"
+
+    def test_a_flat_run_is_unchanged(self, tmp_path):
+        """The top level still wins outright, and gains no sequencing-runs keys."""
+        (_pipeline_info(tmp_path) / "software_versions.yml").write_text(VIRALRECON_NANOPORE)
+        (_pipeline_info(tmp_path / "ignored") / "software_versions.yml").write_text(
+            VIRALRECON_ILLUMINA
+        )
+
+        info = _reader().read(tmp_path)
+
+        assert info is not None
+        assert info.tools_executed == {"artic", "nanoplot"}
+        assert "run_subdirs_scanned" not in info.extra
+
+    def test_artefact_paths_come_from_the_identifying_run(self, tmp_path):
+        """Mixing one run's versions with another's params would be incoherent."""
+        root = self._project(tmp_path)
+        (root / "run_illumina" / "pipeline_info" / "params_2026-01-01_00-00-00.json").write_text(
+            '{"platform": "illumina"}'
+        )
+        (root / "run_nanopore" / "pipeline_info" / "params_2026-01-01_00-00-00.json").write_text(
+            '{"platform": "nanopore"}'
+        )
+
+        info = _reader().read(root)
+
+        assert info is not None
+        assert info.extra["identity_from_run"] == "run_illumina"
+        assert info.params["platform"] == "illumina"
+        assert "run_illumina" in str(info.software_versions_path)
+
+    def test_a_directory_with_neither_is_still_unrecognised(self, tmp_path):
+        """A curated project directory is not a pipeline output; say so."""
+        (tmp_path / "multiqc").mkdir()
+        (tmp_path / "small").mkdir()
+        assert _reader().read(tmp_path) is None
