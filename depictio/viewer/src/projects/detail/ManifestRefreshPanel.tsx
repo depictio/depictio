@@ -23,8 +23,8 @@ import type {
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 
 /** The slice of a project data collection this panel reads: its tag and the
- *  raw `config` bag, where `scan.mode === "manifest"` marks it as
- *  manifest-backed. */
+ *  raw `config` bag, whose `scan.mode` says whether the server can re-read the
+ *  collection's source. */
 export interface ManifestRefreshDc {
   data_collection_tag?: string;
   config?: Record<string, unknown>;
@@ -112,9 +112,9 @@ function summarize(report: ManifestRefreshReport): string {
 
 type PanelState = 'idle' | 'starting' | 'running' | 'success' | 'failed';
 
-/** "Refresh from manifest" for projects with manifest-backed collections.
- *  Dispatches the refresh to the workers and polls the run until every
- *  collection is either ingested or failed, showing the rows live. */
+/** "Refresh data" for projects with a collection whose source the server can
+ *  read again. Dispatches the refresh to the workers and polls the run until
+ *  every collection is either ingested or failed, showing the rows live. */
 const ManifestRefreshPanel: React.FC<ManifestRefreshPanelProps> = ({
   projectId,
   canMutate,
@@ -228,7 +228,7 @@ const ManifestRefreshPanel: React.FC<ManifestRefreshPanelProps> = ({
         setFinishedAt(Date.now());
       }
     } catch (err) {
-      setError((err as Error).message || 'Failed to refresh from manifest.');
+      setError((err as Error).message || 'Failed to refresh.');
       setFinishedAt(Date.now());
     } finally {
       setSubmitting(false);
@@ -299,15 +299,16 @@ const ManifestRefreshPanel: React.FC<ManifestRefreshPanelProps> = ({
             disabled={Boolean(disabledReason) || inFlight}
             title={disabledReason ?? undefined}
           >
-            Refresh from manifest
+            Refresh now
           </Button>
         </Group>
       </Group>
 
       <Text size="sm" c="dimmed" pt="xs">
-        Re-fetch the stored manifest of each manifest-backed collection and rebuild
-        its table from the entries it lists now. A collection whose type vanished
-        from the manifest is reported failed and left untouched.
+        Re-read each refreshable collection from its own source and rebuild its
+        table: a manifest is fetched again and the entries it lists now are used,
+        a URL or a prefix is read again. A collection whose source no longer
+        yields its type is reported failed and left untouched.
         {disabledReason && ` ${disabledReason}.`}
       </Text>
 
