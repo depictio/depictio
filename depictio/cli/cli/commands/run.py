@@ -16,11 +16,16 @@ from depictio.cli.cli.utils.common import generate_api_headers, load_depictio_co
 from depictio.cli.cli.utils.config import validate_project_config_and_check_S3_storage
 from depictio.cli.cli.utils.helpers import process_project_helper
 from depictio.cli.cli.utils.rich_utils import (
+    render_records_table,
     rich_print_checked_statement,
     rich_print_command_usage,
     rich_print_section_separator,
 )
 from depictio.cli.cli.utils.scan import scan_project_files
+from depictio.cli.cli.utils.scan_utils import (
+    count_data_collection_matches,
+    resolve_run_locations,
+)
 from depictio.cli.cli_logging import logger
 from depictio.models.s3_utils import S3_storage_checks
 from depictio.models.utils import convert_model_to_dict
@@ -74,22 +79,40 @@ def _redacted_command_line() -> str | None:
         return None
 
 
-def _ingestion_data_collections(project_config) -> list[dict]:
+def _ingestion_data_collections(project_config, count_files: bool = False) -> list[dict]:
     """Per-DC summary (tag / type / format) + the local scan paths the CLI
-    resolved, walked from the validated project config. Best-effort; never raises."""
+    resolved, walked from the validated project config. Best-effort; never raises.
+
+    ``count_files`` walks the run directories to fill ``file_count`` with what a
+    scan would match. Off by default: the monitoring ledger is written after the
+    scan, which already knows the real counts, so pre-walking for it would be
+    both slower and less accurate. The dry run is the one caller with no scan to
+    learn from, so it is the one that pays for the walk.
+    """
     out: list[dict] = []
     try:
         for wf in getattr(project_config, "workflows", None) or []:
             dl = getattr(wf, "data_location", None)
             locations = [str(x) for x in (getattr(dl, "locations", None) or [])] if dl else []
-            for dc in getattr(wf, "data_collections", None) or []:
+            data_collections = getattr(wf, "data_collections", None) or []
+            # Counted for the whole workflow at once: the counter walks each run
+            # directory a single time and tests every pattern against that one
+            # listing, as the scanner does.
+            file_counts: list[int | None] = [None] * len(data_collections)
+            if count_files:
+                run_locations = resolve_run_locations(wf).locations
+                file_counts = count_data_collection_matches(data_collections, run_locations)
+            for dc, file_count in zip(data_collections, file_counts, strict=True):
                 cfg = getattr(dc, "config", None)
                 scan = getattr(cfg, "scan", None) if cfg else None
                 mode = getattr(scan, "mode", None) if scan else None
                 params = getattr(scan, "scan_parameters", None) if scan else None
-                if mode == "single":
+                # Lowercased like the scanner, which compares `scan.mode.lower()`
+                # while the model stores whatever spelling the config used.
+                normalized_mode = mode.lower() if mode else None
+                if normalized_mode == "single":
                     pattern = getattr(params, "filename", None)
-                elif mode == "recursive":
+                elif normalized_mode == "recursive":
                     rc = getattr(params, "regex_config", None)
                     pattern = getattr(rc, "pattern", None) if rc else None
                 else:
@@ -103,12 +126,79 @@ def _ingestion_data_collections(project_config) -> list[dict]:
                         "scan_mode": mode,
                         "scan_pattern": pattern,
                         "locations": locations,
-                        "file_count": None,
+                        "file_count": file_count,
                     }
                 )
     except Exception:
         return out
     return out
+
+
+def _shorten_scan_pattern(pattern: str | None, locations: list[str]) -> str:
+    """Render a scan pattern short enough to survive the preview table.
+
+    A single-file scan's pattern is an absolute path, and in a terminal-width
+    table it truncates to the data root every collection shares, hiding the one
+    part that identifies the file. Relative to the configured location it stays
+    unambiguous and readable.
+    """
+    if not pattern:
+        return "-"
+    for location in locations:
+        try:
+            return str(Path(pattern).relative_to(location))
+        except ValueError:
+            continue
+    return pattern
+
+
+def _print_dry_run_scan_preview(project_config) -> bool:
+    """Show what a real scan would match, per data collection.
+
+    Answering "is --data-root pointing at the right level?" is the whole reason
+    to run ``--dry-run``, and it could not: every step was wrapped in
+    ``if not dry_run`` and the run then printed "Data scanning completed" all
+    the same. The counts come from the scanner's own matcher, so a preview
+    cannot promise files the scan would not find.
+
+    Returns whether every data collection would find something, so the caller
+    does not follow a warning with a green "completed".
+    """
+    records = _ingestion_data_collections(project_config, count_files=True)
+    if not records:
+        rich_print_checked_statement("No data collection found in the project config.", "warning")
+        return False
+
+    # Reported before the table: a location that resolved no run at all explains
+    # every zero below it, and naming the directory level is what turns "0 files"
+    # into a fix.
+    for workflow in getattr(project_config, "workflows", None) or []:
+        for warning in resolve_run_locations(workflow).warnings:
+            rich_print_checked_statement(warning, "warning")
+
+    rows = []
+    for record in records:
+        file_count = record["file_count"]
+        rows.append(
+            {
+                "data collection": record["tag"],
+                "scan mode": record["scan_mode"] or "-",
+                "pattern": _shorten_scan_pattern(record["scan_pattern"], record["locations"]),
+                # A collection with no scan config (a derived one) has no files
+                # to count, which is not the same as counting zero.
+                "files": "n/a (no scan)" if file_count is None else str(file_count),
+            }
+        )
+    render_records_table(rows, title="Dry run: files each data collection would match")
+
+    empty = [record["tag"] for record in records if record["file_count"] == 0]
+    if empty:
+        rich_print_checked_statement(
+            f"{len(empty)} data collection(s) would match no file: {', '.join(empty)}. "
+            "Check --data-root and the scan patterns before running for real.",
+            "warning",
+        )
+    return not empty
 
 
 def _write_provisioned_cli_config(base_raw_config: dict, provision: dict) -> str:
@@ -566,26 +656,36 @@ def register_run_command(app: typer.Typer):
             _rec("s3_check", "skipped")
 
         # Step 3: Validate project configuration
+        # Stays None when validation fails under --continue-on-error. Every later
+        # step has to check it: reading it unbound surfaced the validation failure
+        # as "Data scanning failed: cannot access local variable 'project_config'",
+        # blaming the scan for something the step above had already reported.
+        project_config = None
         rich_print_section_separator(f"Step 3/{total_steps}: Validating project configuration")
         try:
-            if not dry_run:
-                if is_template_mode and template_resolved_config is not None:
-                    # Template mode: use resolved config dict
-                    from depictio.cli.cli.utils.config import validate_template_project_config
+            # Runs under --dry-run too, offline. Validation is read-only, and
+            # skipping it made the dry run's "validation passed" line mean
+            # nothing was checked, on top of leaving the later steps with no
+            # project config to preview.
+            if is_template_mode and template_resolved_config is not None:
+                # Template mode: use resolved config dict
+                from depictio.cli.cli.utils.config import validate_template_project_config
 
-                    CLI_config, validation_response = validate_template_project_config(
-                        CLI_config_path=CLI_config_path,
-                        resolved_config=template_resolved_config,
-                    )
-                else:
-                    # Standard mode: load from YAML file
-                    CLI_config, validation_response = validate_project_config_and_check_S3_storage(
-                        CLI_config_path=CLI_config_path,
-                        project_config_path=project_config_path,
-                    )
-                if not validation_response["success"]:
-                    raise Exception("Project configuration validation failed")
-                project_config = validation_response["project_config"]
+                CLI_config, validation_response = validate_template_project_config(
+                    CLI_config_path=CLI_config_path,
+                    resolved_config=template_resolved_config,
+                    offline=dry_run,
+                )
+            else:
+                # Standard mode: load from YAML file
+                CLI_config, validation_response = validate_project_config_and_check_S3_storage(
+                    CLI_config_path=CLI_config_path,
+                    project_config_path=project_config_path,
+                    offline=dry_run,
+                )
+            if not validation_response["success"]:
+                raise Exception("Project configuration validation failed")
+            project_config = validation_response["project_config"]
             rich_print_checked_statement("Project configuration validation passed", "success")
             success_count += 1
             _rec("validate_config", "success", "config valid")
@@ -707,6 +807,10 @@ def register_run_command(app: typer.Typer):
         if not skip_scan:
             rich_print_section_separator(f"Step 5/{total_steps}: Scanning data files")
             try:
+                if project_config is None:
+                    raise Exception(
+                        "no validated project configuration, see the validation step above"
+                    )
                 if not dry_run:
                     # Get remote project configuration to compare hashes
                     remote_project_config = api_get_project_from_name(
@@ -747,8 +851,12 @@ def register_run_command(app: typer.Typer):
                             raise Exception("Local and remote project configurations do not match")
                     else:
                         raise Exception("Failed to fetch remote project configuration")
+                    rich_print_checked_statement("Data scanning completed", "success")
+                elif _print_dry_run_scan_preview(project_config):
+                    rich_print_checked_statement(
+                        "Scan preview completed, nothing was ingested", "success"
+                    )
 
-                rich_print_checked_statement("Data scanning completed", "success")
                 success_count += 1
                 _rec("scan", "success", "data files scanned")
             except Exception as e:
