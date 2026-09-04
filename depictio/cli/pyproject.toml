@@ -99,3 +99,8 @@ packages = [
   "**/dashboards/*.yaml",
   "**/recipes/*.py",
 ]
+
+# A dashboard export used as a test fixture sits next to the CLI package and
+# would otherwise ride along on the "*.yaml" pattern above.
+[tool.setuptools.exclude-package-data]
+"depictio.cli" = ["6824cb3b89d2b72169309737.yaml"]
