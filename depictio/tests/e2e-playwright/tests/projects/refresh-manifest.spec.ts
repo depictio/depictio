@@ -1,5 +1,5 @@
 /**
- * "Refresh from manifest" on the project detail page (ManifestRefreshPanel).
+ * The "Refresh data" panel on the project detail page (ManifestRefreshPanel).
  *
  * Needs a Data Manifest reachable from the API: set MANIFEST_E2E_URL, exactly
  * like the full-flow test in create-from-manifest.spec.ts. A project is

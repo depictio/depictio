@@ -91,6 +91,131 @@ def _split_hosts(raw: str) -> set[str]:
     return {h.strip().lower() for h in raw.split(",") if h.strip()}
 
 
+# Public buckets are read against the default AWS endpoint. Their real region is
+# resolved per bucket by :func:`public_s3_region`; this is the region that
+# resolution is itself asked in, and the fallback when it comes back empty.
+AWS_DEFAULT_REGION = "us-east-1"
+
+# Buckets do not move, so one successful lookup per bucket per process is enough.
+_public_bucket_regions: dict[str, str] = {}
+
+
+def _split_public_buckets(raw: str) -> list[tuple[str, str]]:
+    """Parse ``public_s3_buckets`` into ``(bucket, prefix)`` pairs.
+
+    An entry is either ``bucket`` (the whole bucket, prefix ``""``) or
+    ``bucket/prefix`` (that subtree only). Bucket names are case sensitive, so
+    unlike the host lists these are not lowercased.
+    """
+    entries: list[tuple[str, str]] = []
+    for raw_entry in raw.split(","):
+        entry = raw_entry.strip().strip("/")
+        if not entry:
+            continue
+        bucket, _, prefix = entry.partition("/")
+        entries.append((bucket, prefix))
+    return entries
+
+
+def is_public_s3_location(url: str, policy: RemoteConfig | None = None) -> bool:
+    """Whether ``url`` names an s3 location the administrator marked public.
+
+    Decided from configuration alone, never by probing: an unsigned read
+    attempted against an arbitrary user-supplied bucket would leak whether that
+    bucket exists and in which region, through the error it returns. So the
+    answer has to be known before any request goes out.
+
+    A ``bucket/prefix`` entry matches that prefix and everything under it, and
+    only on a path boundary, so ``data`` does not match ``database/``.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme.lower() != "s3":
+        return False
+
+    policy = policy if policy is not None else remote_policy()
+    key = parsed.path.lstrip("/")
+    for bucket, prefix in _split_public_buckets(policy.public_s3_buckets):
+        if bucket != parsed.netloc:
+            continue
+        if not prefix or key == prefix or key.startswith(f"{prefix}/"):
+            return True
+    return False
+
+
+def _bucket_region_header(response: dict) -> str | None:
+    """``x-amz-bucket-region`` out of a boto3 response or an error payload."""
+    headers = (response.get("ResponseMetadata") or {}).get("HTTPHeaders") or {}
+    return headers.get("x-amz-bucket-region")
+
+
+def public_s3_region(bucket: str) -> str:
+    """Region of an allowlisted public ``bucket``, ``us-east-1`` when unknown.
+
+    The region has to be the bucket's own before the read starts: object-store
+    does not follow the 301 S3 answers for a bucket that lives elsewhere, it
+    fails with "Received redirect without LOCATION".
+
+    Asked with an unsigned HeadBucket: the ``x-amz-bucket-region`` header comes
+    back even on that 301 and on the 403 a bucket that forbids listing returns,
+    which is what makes this work without credentials. ``GetBucketLocation``
+    does not, it is denied outright.
+
+    This one talks to the network, so it must only ever be called for a bucket
+    :func:`is_public_s3_location` has already accepted: deciding the allowlist
+    from configuration alone is what keeps a user-supplied bucket name from
+    becoming an existence-and-region oracle.
+    """
+    cached = _public_bucket_regions.get(bucket)
+    if cached:
+        return cached
+
+    import boto3
+    from botocore import UNSIGNED
+    from botocore.config import Config
+    from botocore.exceptions import ClientError
+
+    probed: str | None = None
+    try:
+        client = boto3.client(
+            "s3",
+            config=Config(signature_version=UNSIGNED),
+            region_name=AWS_DEFAULT_REGION,
+        )
+        probed = _bucket_region_header(client.head_bucket(Bucket=bucket))
+    except ClientError as exc:
+        # The 301 and the 403 are answers, not failures: both name the region.
+        probed = _bucket_region_header(exc.response)
+    except Exception as exc:
+        # Offline, DNS down, a response in an unexpected shape: fall back and
+        # let the read itself report the real failure rather than masking it.
+        logger.warning(f"Could not resolve the region of public bucket '{bucket}': {exc}")
+
+    # Only a real answer is cached. Caching the fallback would pin a bucket to
+    # the wrong region for the life of the process after one transient failure,
+    # and a long-lived worker would then fail every later read of it.
+    if probed:
+        _public_bucket_regions[bucket] = probed
+    return probed or AWS_DEFAULT_REGION
+
+
+def public_s3_storage_options(url: str, policy: RemoteConfig | None = None) -> dict | None:
+    """Polars/object-store options for reading ``url`` unsigned, or ``None``.
+
+    ``None`` means "not an allowlisted public location", and the caller keeps
+    whatever credentials it already had. ``PolarsStorageOptions`` cannot express
+    this shape (it requires a non-empty ``endpoint_url``), so this is a plain
+    dict: a public bucket is read against the default AWS endpoint with the
+    signature switched off, in the region :func:`public_s3_region` resolves for
+    it (one unsigned HeadBucket on the first call for a given bucket).
+    """
+    if not is_public_s3_location(url, policy):
+        return None
+    return {
+        "aws_skip_signature": "true",
+        "aws_region": public_s3_region(urlparse(url).netloc),
+    }
+
+
 def _resolve_addresses(host: str) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
     try:
         infos = socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)

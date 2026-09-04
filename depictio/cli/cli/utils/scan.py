@@ -12,8 +12,10 @@ from depictio.api.v1.remote_fetch import (
     direct_fetch_text,
     direct_probe,
     fetch_validated_text,
+    is_public_s3_location,
     is_server_context,
     probe_remote_url,
+    public_s3_region,
     validate_remote_url,
 )
 from depictio.cli.cli.utils.api_calls import (
@@ -1022,16 +1024,31 @@ def scan_url_for_data_collection(
     return {"result": "success"}
 
 
-def _s3_read_client(CLI_config: CLIConfig):
+def _s3_read_client(CLI_config: CLIConfig, url: str | None = None):
     """boto3 client for *reading* user data buckets (scan mode ``s3_prefix``).
 
-    Credential precedence mirrors the read/write split in CLIConfig: the
-    per-project ``remote_storage_options`` win, then the instance's own
+    A location on the administrator's public bucket allowlist gets an unsigned
+    client: signing with credentials that have no relationship to someone else's
+    open bucket only earns a rejection. The allowlist is configuration, so this
+    is decided before the client makes any call.
+
+    Otherwise credential precedence mirrors the read/write split in CLIConfig:
+    the per-project ``remote_storage_options`` win, then the instance's own
     ``s3_storage``. Anything still missing is left to boto3's default chain
     (env vars, ~/.aws, IAM role) so real AWS deployments work without ever
     putting keys in a config file.
     """
     import boto3
+
+    if url and is_public_s3_location(url):
+        from botocore import UNSIGNED
+        from botocore.config import Config
+
+        return boto3.client(
+            "s3",
+            config=Config(signature_version=UNSIGNED),
+            region_name=public_s3_region(urlparse(url).netloc),
+        )
 
     remote = CLI_config.remote_storage_options or {}
     # polars storage_options spells the endpoint either way depending on version
@@ -1089,7 +1106,7 @@ def list_s3_prefix(prefix: str, pattern: str, max_files: int, CLI_config: CLICon
     if not bucket:
         raise ValueError(f"s3_prefix '{prefix}' has no bucket")
 
-    client = _s3_read_client(CLI_config)
+    client = _s3_read_client(CLI_config, url=prefix)
     paginator = client.get_paginator("list_objects_v2")
 
     key_budget = max_files * S3_PREFIX_KEY_BUDGET_FACTOR
