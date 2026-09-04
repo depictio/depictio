@@ -200,11 +200,17 @@ def _preview_recipe_dc(
     dc_config: dict,
     root: DataRoot,
     optional: bool,
+    present_tags: frozenset[str] = frozenset(),
 ) -> DataCollectionPreview:
     """One row for a ``source: transformed`` DC, resolved through its recipe's SOURCES.
 
-    ``dc_ref`` sources are skipped: they are satisfied from another DC's output,
-    not from a file under the root, so their absence here says nothing.
+    ``matched`` counts inputs found, not files: a ``dc_ref`` source is satisfied
+    by another collection's output, so it counts when that collection is in the
+    resolved project (``present_tags``). Without this every canonical that only
+    reads other tables previewed as "0 files", indistinguishable from a
+    collection whose inputs are genuinely absent. A required ``dc_ref`` to a
+    collection that resolution dropped is reported missing by name, since the
+    recipe would fail on it at ingestion.
     """
     transform = dc_config.get("transform") or {}
     recipe_name = transform.get("recipe") or ""
@@ -225,6 +231,10 @@ def _preview_recipe_dc(
     overrides = transform.get("source_overrides") or {}
     for source in module.SOURCES:
         if source.dc_ref is not None:
+            if source.dc_ref in present_tags:
+                row.matched += 1
+            elif not source.optional:
+                row.missing_sources.append(f"collection '{source.dc_ref}'")
             continue
         override = overrides.get(source.ref)
         glob_pattern = _override_binding(override, "glob_pattern")
@@ -283,6 +293,11 @@ def preview_data_root(
 
     rows: list[DataCollectionPreview] = []
     detected_runs: list[str] = []
+    present_tags = frozenset(
+        dc.get("data_collection_tag") or ""
+        for workflow in config.get("workflows") or []
+        for dc in workflow.get("data_collections") or []
+    )
     for workflow in config.get("workflows") or []:
         data_location = workflow.get("data_location") or {}
         runs: list[str] = []
@@ -298,7 +313,7 @@ def preview_data_root(
             # A materialized recipe DC has a scan block over its seed, so it is
             # previewed as what it now is: a file scan.
             if dc_config.get("source") == "transformed" and not dc_config.get("scan"):
-                rows.append(_preview_recipe_dc(tag, dc_config, root, optional))
+                rows.append(_preview_recipe_dc(tag, dc_config, root, optional, present_tags))
             else:
                 rows.append(_preview_scan_dc(tag, dc_config, root, runs, optional))
 
