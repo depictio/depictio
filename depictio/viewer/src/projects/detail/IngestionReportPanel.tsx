@@ -63,6 +63,12 @@ const HEALTH_META: Record<string, { color: string; icon: string; label: string }
   missing_required: { color: 'red', icon: 'mdi:alert-octagon', label: 'Missing required data' },
 };
 
+// Trigger engines with a brand identity. Keyed by what the CLI stamps into
+// `triggered_by`, which is the engine name in lowercase.
+const TRIGGER_ENGINES: Record<string, { label: string; color: string; icon: string }> = {
+  nextflow: { label: 'Nextflow', color: 'teal', icon: 'simple-icons:nextflow' },
+};
+
 const RUN_STATUS_COLOR: Record<string, string> = { ok: 'green', partial: 'yellow' };
 
 /** Plain list of monospace paths that wrap instead of widening their container. */
@@ -447,6 +453,16 @@ const IngestionReportPanel: React.FC<IngestionReportPanelProps> = ({
   // than switched on.
   const trigger =
     report.triggered_by && report.triggered_by !== 'manual' ? report.triggered_by : null;
+  // Engines we can badge properly. Nextflow is the only one whose brand mark is
+  // in the bundled simple-icons set, so anything else keeps a generic pipeline
+  // icon: a recognisable-but-wrong logo is worse than a neutral one.
+  const engine = trigger
+    ? (TRIGGER_ENGINES[trigger.toLowerCase()] ?? {
+        label: trigger,
+        color: 'violet',
+        icon: 'mdi:pipe',
+      })
+    : null;
   const provenance = isLive
     ? {
         color: 'blue',
@@ -483,23 +499,50 @@ const IngestionReportPanel: React.FC<IngestionReportPanelProps> = ({
             </div>
           </Group>
           <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
-            {trigger && (
+            {engine && (
               <Tooltip
-                label={`Ingested automatically when a ${trigger} pipeline completed, not by a command someone ran.`}
+                label={
+                  <Stack gap={2}>
+                    <Text size="xs">
+                      Ingested automatically when a {engine.label} pipeline completed, not by a
+                      command someone ran.
+                    </Text>
+                    {/* Everything below is what the run itself reported, so it is
+                        absent for a run whose engine left no breadcrumbs rather
+                        than shown as "unknown". */}
+                    {report.pipeline?.name && (
+                      <Text size="xs">
+                        Pipeline: {report.pipeline.name}
+                        {report.pipeline.version ? ` ${report.pipeline.version}` : ''}
+                      </Text>
+                    )}
+                    {report.pipeline?.engine_version && (
+                      <Text size="xs">
+                        {engine.label} {report.pipeline.engine_version}
+                      </Text>
+                    )}
+                    {!!report.pipeline?.tool_count && (
+                      <Text size="xs">
+                        {report.pipeline.tool_count} tools recorded, listed under Run provenance
+                      </Text>
+                    )}
+                    {template?.data_root && <Text size="xs">Ingested from {template.data_root}</Text>}
+                  </Stack>
+                }
                 withArrow
                 multiline
-                maw={320}
+                maw={360}
                 withinPortal
               >
                 <Badge
                   size="lg"
                   radius="sm"
                   variant="light"
-                  color="violet"
+                  color={engine.color}
                   tt="none"
-                  leftSection={<Icon icon="mdi:pipe" width={14} />}
+                  leftSection={<Icon icon={engine.icon} width={14} />}
                 >
-                  Triggered by {trigger}
+                  Triggered by {engine.label}
                 </Badge>
               </Tooltip>
             )}
