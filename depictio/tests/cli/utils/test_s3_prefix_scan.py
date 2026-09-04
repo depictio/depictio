@@ -227,11 +227,22 @@ class TestS3ReadClientPublicBuckets:
         from botocore import UNSIGNED
 
         monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "open-data")
+        monkeypatch.setattr(scan_module, "public_s3_region", lambda bucket: "eu-west-1")
 
         scan_module._s3_read_client(self._cfg(), url="s3://open-data/run42/x.csv")
 
         assert captured_boto3[0]["config"].signature_version is UNSIGNED
         assert "aws_access_key_id" not in captured_boto3[0]
+
+    def test_the_unsigned_client_uses_the_buckets_own_region(self, captured_boto3, monkeypatch):
+        """object-store fails on S3's cross-region redirect rather than
+        following it, so the client has to be built in the bucket's own region."""
+        monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "open-data")
+        monkeypatch.setattr(scan_module, "public_s3_region", lambda bucket: f"region-of-{bucket}")
+
+        scan_module._s3_read_client(self._cfg(), url="s3://open-data/run42/x.csv")
+
+        assert captured_boto3[0]["region_name"] == "region-of-open-data"
 
     def test_an_unlisted_bucket_keeps_its_credentials(self, captured_boto3, monkeypatch):
         monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "open-data")

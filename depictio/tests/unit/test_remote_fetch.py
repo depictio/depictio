@@ -10,6 +10,7 @@ deployments bypass the private-range rejection).
 import ipaddress
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
@@ -26,6 +27,7 @@ from depictio.api.v1.remote_fetch import (
     is_server_context,
     open_validated_stream,
     probe_remote_url,
+    public_s3_region,
     public_s3_storage_options,
     remote_policy,
     validate_remote_url,
@@ -591,8 +593,93 @@ class TestPublicS3Allowlist:
 
     def test_storage_options_disable_signing_only_for_a_listed_location(self, monkeypatch):
         monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "open-data")
+        monkeypatch.setattr(remote_fetch, "public_s3_region", lambda bucket: "eu-west-1")
 
         options = public_s3_storage_options("s3://open-data/x.parquet")
 
-        assert options == {"aws_skip_signature": "true", "aws_region": AWS_DEFAULT_REGION}
+        assert options == {"aws_skip_signature": "true", "aws_region": "eu-west-1"}
         assert public_s3_storage_options("s3://closed-data/x.parquet") is None
+
+
+class TestPublicBucketRegion:
+    """object-store does not follow S3's cross-region redirect, so the region
+    has to be the bucket's own before the read starts. It is asked for
+    unsigned, and only ever for a bucket the allowlist already accepted."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        remote_fetch._public_bucket_regions.clear()
+        yield
+        remote_fetch._public_bucket_regions.clear()
+
+    @staticmethod
+    def _stub_head_bucket(monkeypatch, head):
+        """Every boto3 client answers ``head_bucket`` with ``head``."""
+        import boto3
+
+        monkeypatch.setattr(boto3, "client", lambda *_a, **_k: SimpleNamespace(head_bucket=head))
+
+    def test_the_region_comes_from_the_head_bucket_header(self, monkeypatch):
+        self._stub_head_bucket(
+            monkeypatch,
+            lambda Bucket: {
+                "ResponseMetadata": {"HTTPHeaders": {"x-amz-bucket-region": "eu-west-1"}}
+            },
+        )
+
+        assert public_s3_region("nf-core-awsmegatests") == "eu-west-1"
+
+    def test_a_denied_head_still_carries_the_region(self, monkeypatch):
+        """A bucket that forbids listing answers 403, and a bucket in another
+        region answers 301. Both still name the region in the header."""
+        from botocore.exceptions import ClientError
+
+        def _denied(Bucket):
+            raise ClientError(
+                {
+                    "Error": {"Code": "403"},
+                    "ResponseMetadata": {"HTTPHeaders": {"x-amz-bucket-region": "us-west-2"}},
+                },
+                "HeadBucket",
+            )
+
+        self._stub_head_bucket(monkeypatch, _denied)
+
+        assert public_s3_region("listing-closed") == "us-west-2"
+
+    def test_an_unreachable_bucket_falls_back_to_the_default(self, monkeypatch):
+        def _boom(Bucket):
+            raise OSError("no network")
+
+        self._stub_head_bucket(monkeypatch, _boom)
+
+        assert public_s3_region("offline") == AWS_DEFAULT_REGION
+
+    def test_a_bucket_is_looked_up_once(self, monkeypatch):
+        calls: list[str] = []
+
+        def _head(Bucket):
+            calls.append(Bucket)
+            return {"ResponseMetadata": {"HTTPHeaders": {"x-amz-bucket-region": "ap-south-1"}}}
+
+        self._stub_head_bucket(monkeypatch, _head)
+
+        assert public_s3_region("stable") == "ap-south-1"
+        assert public_s3_region("stable") == "ap-south-1"
+        assert calls == ["stable"]
+
+    def test_a_failed_lookup_is_retried(self, monkeypatch):
+        """Caching the fallback would pin the bucket to the wrong region for the
+        life of the process after one transient failure."""
+        answers: list = [OSError("no network"), "eu-west-1"]
+
+        def _head(Bucket):
+            answer = answers.pop(0)
+            if isinstance(answer, Exception):
+                raise answer
+            return {"ResponseMetadata": {"HTTPHeaders": {"x-amz-bucket-region": answer}}}
+
+        self._stub_head_bucket(monkeypatch, _head)
+
+        assert public_s3_region("flaky") == AWS_DEFAULT_REGION
+        assert public_s3_region("flaky") == "eu-west-1"

@@ -8,7 +8,6 @@ from bson import ObjectId
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 
 from depictio.api.v1.remote_fetch import (
-    AWS_DEFAULT_REGION,
     RemoteFetchFailed,
     direct_fetch_text,
     direct_probe,
@@ -16,6 +15,7 @@ from depictio.api.v1.remote_fetch import (
     is_public_s3_location,
     is_server_context,
     probe_remote_url,
+    public_s3_region,
     validate_remote_url,
 )
 from depictio.cli.cli.utils.api_calls import (
@@ -1047,7 +1047,7 @@ def _s3_read_client(CLI_config: CLIConfig, url: str | None = None):
         return boto3.client(
             "s3",
             config=Config(signature_version=UNSIGNED),
-            region_name=AWS_DEFAULT_REGION,
+            region_name=public_s3_region(urlparse(url).netloc),
         )
 
     remote = CLI_config.remote_storage_options or {}
