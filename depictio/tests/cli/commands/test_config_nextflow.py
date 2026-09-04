@@ -59,3 +59,76 @@ class TestPrintOutput:
         copy = tmp_path / "depictio.config"
         copy.write_text(_stdout("--print"))
         assert copy.read_text() == source.read_text()
+
+
+class TestInstallEnablesTheTriggerGlobally:
+    """`--install` writes the include Nextflow reads before every run.
+
+    The point is to stop repeating `-c` on every command. What it must not do
+    is disturb the rest of that file, or leave behind an include that outlives
+    the CLI: Nextflow refuses to parse a config whose `includeConfig` target is
+    missing, so a stale entry breaks *every* pipeline on the machine, whether
+    or not it has anything to do with Depictio.
+    """
+
+    def _run(self, monkeypatch, home, *args):
+        monkeypatch.delenv("NXF_HOME", raising=False)
+        monkeypatch.setenv("HOME", str(home))
+        monkeypatch.setattr(
+            Path, "expanduser", lambda self: Path(str(self).replace("~", str(home), 1))
+        )
+        return runner.invoke(app, ["nextflow", *args])
+
+    def test_include_target_is_outside_the_python_environment(self, monkeypatch, tmp_path):
+        """The include must survive a pip uninstall or a change of virtualenv."""
+        result = self._run(monkeypatch, tmp_path, "--install")
+
+        assert result.exit_code == 0
+        written = (tmp_path / ".nextflow" / "config").read_text()
+        assert str(tmp_path / ".depictio" / "nextflow.config") in written
+        assert "site-packages" not in written
+
+    def test_handler_is_copied_to_the_stable_location(self, monkeypatch, tmp_path):
+        self._run(monkeypatch, tmp_path, "--install")
+
+        copied = tmp_path / ".depictio" / "nextflow.config"
+        assert copied.is_file()
+        assert "workflow.onComplete" in copied.read_text()
+
+    def test_existing_settings_are_preserved(self, monkeypatch, tmp_path):
+        config = tmp_path / ".nextflow" / "config"
+        config.parent.mkdir(parents=True)
+        config.write_text("process.executor = 'slurm'\n")
+
+        self._run(monkeypatch, tmp_path, "--install")
+
+        assert "process.executor = 'slurm'" in config.read_text()
+
+    def test_installing_twice_does_not_duplicate_the_block(self, monkeypatch, tmp_path):
+        self._run(monkeypatch, tmp_path, "--install")
+        self._run(monkeypatch, tmp_path, "--install")
+
+        written = (tmp_path / ".nextflow" / "config").read_text()
+        assert written.count("includeConfig") == 1
+
+    def test_uninstall_removes_only_our_block(self, monkeypatch, tmp_path):
+        config = tmp_path / ".nextflow" / "config"
+        config.parent.mkdir(parents=True)
+        config.write_text("process.executor = 'slurm'\n")
+        self._run(monkeypatch, tmp_path, "--install")
+
+        self._run(monkeypatch, tmp_path, "--uninstall")
+
+        written = config.read_text()
+        assert "includeConfig" not in written
+        assert "process.executor = 'slurm'" in written
+
+    def test_uninstall_without_an_install_is_not_an_error(self, monkeypatch, tmp_path):
+        result = self._run(monkeypatch, tmp_path, "--uninstall")
+
+        assert result.exit_code == 0
+
+    def test_install_and_uninstall_together_are_refused(self, monkeypatch, tmp_path):
+        result = self._run(monkeypatch, tmp_path, "--install", "--uninstall")
+
+        assert result.exit_code == 1
