@@ -74,3 +74,37 @@ export function sectionIconId(
   if (icon && PLAN_SECTION_ICONS.has(icon)) return icon;
   return kind === 'filter' ? FALLBACK_FILTER_ICON : FALLBACK_GRID_ICON;
 }
+
+/** What each validation gate is, spelled as the thing that actually runs.
+ *
+ * The strip that draws these is the reviewer's answer to "was this checked?",
+ * so the tooltip names the function rather than a reassuring label: a reader
+ * who wants to know what `schema` covers can go read `check_against_schema`.
+ * Keyed loosely because the server may record a gate this build predates.
+ */
+export const CHECK_LAYER_RUNS: Record<string, string> = {
+  model: 'DashboardDataLite.from_yaml, the loader the CLI imports with',
+  style: 'sanitize_style, the icon and colour allowlists',
+  substance: 'substance_error, a component that would draw nothing',
+  schema: "check_against_schema, against the collection's real columns",
+  render: 'probe_verdict, the real render path on one row',
+};
+
+/** Icon and Mantine palette name for one gate verdict.
+ *
+ * `skipped` is deliberately colourless rather than a paler green: a gate that
+ * did not run is not a weak pass, and the whole point of recording it is that
+ * a reviewer can tell the two apart at a glance.
+ */
+export function checkStatusVisual(status: string): { icon: string; color: string } {
+  if (status === 'passed') return { icon: 'mdi:check-circle', color: 'teal' };
+  if (status === 'failed') return { icon: 'mdi:close-circle', color: 'red' };
+  return { icon: 'mdi:minus-circle-outline', color: 'gray' };
+}
+
+/** How a verdict reads in a sentence, for the tooltip's first line. */
+export function checkStatusLabel(status: string): string {
+  if (status === 'passed') return 'passed';
+  if (status === 'failed') return 'failed';
+  return 'not run';
+}

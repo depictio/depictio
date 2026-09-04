@@ -1305,10 +1305,14 @@ const EditorApp: React.FC = () => {
   const draftTiles = useMemo<DraftTile[]>(() => {
     if (!aiDraft) return [];
     const reviewedSet = new Set(reviewedTags);
+    // Which gates each tile passed, stamped on the draft by the run and
+    // refreshed by every regeneration, so the panel needs no second fetch.
+    const checksByTag = new Map((aiDraft.checks ?? []).map((c) => [c.tag, c] as const));
     const tiles: DraftTile[] = [];
     for (const m of dashboard?.stored_metadata ?? []) {
       const tag = generationTagOf(m);
       if (!tag) continue;
+      const recorded = checksByTag.get(tag);
       tiles.push({
         tag,
         componentId: m.index,
@@ -1324,6 +1328,8 @@ const EditorApp: React.FC = () => {
           typeof m.ai_source?.prompt === 'string' && m.ai_source.prompt
             ? m.ai_source.prompt
             : null,
+        checks: recorded?.checks ?? null,
+        repair: recorded?.repair || null,
         reviewed: reviewedSet.has(tag),
       });
     }
