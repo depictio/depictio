@@ -275,6 +275,29 @@ params.depictio_cli_executable = [
 Under Singularity the host home is bind-mounted by default and paths keep their
 names, so the configuration is usually already reachable.
 
+## When a run is incomplete
+
+The trigger refuses to ingest a pipeline that failed, but a pipeline can succeed
+and still not produce everything a template expects: `--skip_multiqc`, a
+protocol that skips a whole output subtree, a run resumed with different flags.
+
+Templates handle most of that themselves. Data collections the template marks
+optional are skipped with a warning and the run carries on, and conditional
+gating removes whole groups of collections when the run's parameters say they
+cannot exist.
+
+What is left is a **required** collection whose source is genuinely absent. That
+fails, and the CLI exits non-zero at step 6 with the collections named. Steps 1
+to 5 have already run at that point, so the project exists, is scanned, and has
+whatever could be processed, but no dashboard was imported. That is a partial
+project, not an absent one: fix the missing outputs and re-run with
+`depictio_update`, or delete the project if the run is not worth keeping.
+
+Measured on an ampliseq run missing both `multiqc/` and
+`qiime2/rel_abundance_tables/`: 8 optional collections skipped with a warning, 7
+required ones failed, 1 processed, no dashboard, exit 1. The pipeline itself
+stayed green, as designed.
+
 ## Parameters
 
 | Parameter | Default | CLI option it drives |
