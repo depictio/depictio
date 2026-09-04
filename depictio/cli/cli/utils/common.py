@@ -139,12 +139,20 @@ def _apply_env_overrides(config: dict) -> dict:
 
 
 @validate_call(validate_return=True)
-def load_depictio_config(yaml_config_path: str = "~/.depictio/CLI.yaml") -> CLIConfig:
+def load_depictio_config(
+    yaml_config_path: str = "~/.depictio/CLI.yaml", quiet: bool = False
+) -> CLIConfig:
     """
     Load the Depictio configuration file.
+
+    ``quiet`` suppresses the "Loading..." line, for callers that re-read an
+    already-loaded config only to name a field (the API URL in an error
+    message, the viewer URL in the summary). Without it those reads announce a
+    second load that never happened, in the middle of reporting a failure.
     """
     try:
-        rich_print_checked_statement("Loading Depictio configuration...", "loading")
+        if not quiet:
+            rich_print_checked_statement("Loading Depictio configuration...", "loading")
         # DEPICTIO_CLI_CONFIG_PATH overrides the path only when the caller left it
         # at a default - an explicit --CLI-config-path always wins.
         env_path = os.environ.get("DEPICTIO_CLI_CONFIG_PATH")
