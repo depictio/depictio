@@ -120,6 +120,14 @@ later disappears, Nextflow still parses, the handler reports that it cannot find
 `params.depictio_enabled = false` in a pipeline's own config to opt one of them
 back out.
 
+Having installed it globally and *also* passing `-c $(depictio-cli config
+nextflow)`, or running a pipeline that includes the snippet itself, ingests
+once, not twice: the snippet assigns `workflow.onComplete`, so a second include
+replaces the first rather than adding to it. A handler the pipeline registers
+for itself is a different matter and still runs, because nf-core registers it
+from inside a workflow block, which appends. Both were checked against Nextflow
+26.04.
+
 Per pipeline rather than per machine, put the same line in that pipeline's
 `nextflow.config`:
 
