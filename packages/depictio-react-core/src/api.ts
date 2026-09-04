@@ -3172,6 +3172,85 @@ export async function createProjectFromManifest(
   return (await res.json()) as FromManifestReport;
 }
 
+/** What one data collection of a template resolved to under a run folder.
+ *
+ *  `matched` is how many sources the server actually found; `missing_sources`
+ *  names the ones it looked for and did not find, verbatim, because a data
+ *  root set one directory too high (or too low) shows every row at 0 and only
+ *  those paths say why. `status` is `ok` when something matched, `empty` when
+ *  the location exists but holds nothing, `missing` when it does not exist,
+ *  and `pruned` when a template conditional dropped the collection. */
+export interface FromRunDCPreview {
+  data_collection_tag: string;
+  /** `scan` walks a location for files; `recipe` derives a table from sources. */
+  kind: 'scan' | 'recipe';
+  /** Scan mode (`recursive`, `s3_prefix`, ...); null for a recipe. */
+  mode: string | null;
+  location: string;
+  matched: number;
+  missing_sources: string[];
+  optional: boolean;
+  status: 'ok' | 'empty' | 'missing' | 'pruned';
+}
+
+/** Inputs for POST /projects/from_run. The backend injects the `DATA_ROOT`
+ *  template variable from `dataRoot`, so it is never sent via `variables`. With
+ *  `dryRun` nothing is created: the report comes back with the per-collection
+ *  plan and null ids. */
+export interface FromRunRequest {
+  /** An `s3://bucket/prefix` pointing at one pipeline run folder. */
+  dataRoot: string;
+  templateId: string;
+  projectName?: string | null;
+  variables?: Record<string, string>;
+  dryRun?: boolean;
+}
+
+/** Report returned by POST /projects/from_run, both for a dry-run plan and
+ *  for a real creation. A real run answers as soon as the project and its
+ *  dashboards exist and hands back `run_id`: the per-collection ingestion
+ *  continues on the workers and is polled with `getManifestRefreshRun`.
+ *  `truncated` means the server stopped counting early, so every `matched`
+ *  is a lower bound. */
+export interface FromRunReport {
+  project_id: string | null;
+  project_name: string;
+  /** Resolved template id, e.g. a `latest` alias expanded to its version. */
+  template_id: string;
+  data_root: string;
+  detected_runs: string[];
+  resolved_variables: Record<string, string>;
+  data_collections: FromRunDCPreview[];
+  /** Empty on a dry run. */
+  dashboards: DashboardImportResult[];
+  pruned_optional_dcs: string[];
+  truncated: boolean;
+  /** Ingestion run to poll; null on a dry run. */
+  run_id: string | null;
+  dry_run: boolean;
+  success: boolean;
+}
+
+/** Create (or, with `dryRun`, plan) a project from a pipeline run folder.
+ *  Backend errors carry actionable `{detail}` strings (unreadable prefix,
+ *  unknown template, duplicate name) and they are surfaced verbatim. */
+export async function createProjectFromRun(
+  input: FromRunRequest,
+): Promise<FromRunReport> {
+  const res = await authFetch(`${API_BASE}/projects/from_run`, {
+    method: 'POST',
+    body: JSON.stringify({
+      data_root: input.dataRoot,
+      template_id: input.templateId,
+      project_name: input.projectName ?? null,
+      variables: input.variables ?? {},
+      dry_run: Boolean(input.dryRun),
+    }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to create project from run folder');
+  return (await res.json()) as FromRunReport;
+}
+
 /** Per-DC status of a manifest refresh. A synchronous refresh reports
  *  `ingested` / `failed` (or `planned` under `dry_run`); a polled async run
  *  additionally passes through `dispatched` (queued for a worker) and
@@ -3181,7 +3260,9 @@ export type ManifestRefreshStatus =
   | 'failed'
   | 'planned'
   | 'dispatched'
-  | 'running';
+  | 'running'
+  /** An optional collection whose source is absent from the run folder: nominal, never a worker task. */
+  | 'skipped';
 
 /** One data collection of a manifest refresh (`ManifestIngestDCResult`
  *  server-side). `data_collection_id` is empty for a polled run whose project
