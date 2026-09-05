@@ -180,14 +180,27 @@ class CatalogFind(BaseModel):
 
     filename: str | None = None  # glob on the basename, e.g. "*.pangolin.csv"
     path_glob: str | None = None  # glob on the path under the run root (** aware)
+    # Extra path globs for layouts the canonical `path_glob` cannot reach; every
+    # entry of `path_globs()` is tried. `PurePosixPath.match` reads `**` as one
+    # segment (`full_match` is 3.13-only), so a nested report dir such as
+    # `multiqc/star_salmon/multiqc_report_data/` needs its own literal-depth glob.
+    path_glob_alt: list[str] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
     def _at_least_one(self) -> CatalogFind:
+        if self.path_glob_alt and not self.path_glob:
+            raise ValueError("path_glob_alt requires path_glob")
         if not (self.filename or self.path_glob):
             raise ValueError("find must declare at least one of: filename, path_glob")
         return self
+
+    def path_globs(self) -> list[str]:
+        """Every path glob to try, canonical first; empty when there is no `path_glob`."""
+        if not self.path_glob:
+            return []
+        return [self.path_glob, *self.path_glob_alt]
 
 
 class Render(BaseModel):
@@ -874,7 +887,16 @@ def match_run_dir(
         for output in entry.outputs:
             f = output.find
             if f.path_glob:
-                candidates = [p for p in run_dir.glob(f.path_glob) if p.is_file()]
+                # Every glob is tried; a file two of them reach (an alt overlapping
+                # the canonical glob) is reported once, in glob order.
+                candidates = list(
+                    dict.fromkeys(
+                        p
+                        for pattern in f.path_globs()
+                        for p in run_dir.glob(pattern)
+                        if p.is_file()
+                    )
+                )
             elif f.filename:
                 candidates = [p for p in run_dir.rglob(f.filename) if p.is_file()]
             else:

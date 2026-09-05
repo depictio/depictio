@@ -32,13 +32,13 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import polars as pl
 import yaml
 
+from depictio.dev_scripts.multiqc_reprocess import pin_creation_date
 from depictio.models.components.advanced_viz.catalog import (
     CatalogEntry,
     CatalogOutput,
@@ -287,34 +287,18 @@ def build_multiqc_report(sections: list[str], destination: Path) -> tuple[list[s
     return anchors, missing
 
 
-# A committed generated artifact has to be reproducible, and `creation_date` is
-# the only column MultiQC fills from the clock. Any fixed instant will do; this
-# one is the date the conformance project was first generated.
-FROZEN_CREATION_DATE = datetime(2026, 8, 25, 0, 0, 0)
+def multiqc_plots(anchors: list[str], parquet: Path) -> dict[str, list[str]]:
+    """Plot names per anchor, for the collection's `dc_specific_properties`.
 
-
-def pin_creation_date(parquet: Path) -> None:
-    """Freeze the report's creation timestamp so regeneration is a no-op diff.
-
-    Without this every rerun rewrites 70 KB of parquet for no change in content,
-    which both noises up the history and makes the drift test meaningless.
+    Always read the registry back from the parquet the collection points at.
+    `build_multiqc_report` skips MultiQC when the committed parquet already
+    covers every section, and on that path the in-memory registry is empty, so
+    asking `list_plots()` directly would silently collapse `plots:` to `{}`.
     """
-    frame = pl.read_parquet(parquet)
-    if "creation_date" not in frame.columns:
-        return
-    frame = frame.with_columns(
-        pl.when(pl.col("creation_date").is_not_null())
-        .then(pl.lit(FROZEN_CREATION_DATE).cast(frame.schema["creation_date"]))
-        .otherwise(pl.col("creation_date"))
-        .alias("creation_date")
-    )
-    frame.write_parquet(parquet)
-
-
-def multiqc_plots(anchors: list[str]) -> dict[str, list[str]]:
-    """Plot names per anchor, for the collection's `dc_specific_properties`."""
     import multiqc
 
+    multiqc.reset()
+    multiqc.parse_logs(str(parquet))
     plots: dict[str, list[str]] = {}
     for anchor, names in (multiqc.list_plots() or {}).items():
         flat = [n if isinstance(n, str) else next(iter(n)) for n in names]
@@ -488,7 +472,11 @@ def generate() -> None:
     if multiqc_sections:
         sections = sorted(set(multiqc_sections))
         anchors, missing = build_multiqc_report(sections, run_root / multiqc_relative)
-        collections.append(multiqc_collection(multiqc_relative, anchors, multiqc_plots(anchors)))
+        collections.append(
+            multiqc_collection(
+                multiqc_relative, anchors, multiqc_plots(anchors, run_root / multiqc_relative)
+            )
+        )
         # A section MultiQC could not be made to emit is recorded by name. The
         # coverage spec reads this list, so a gap stays visible instead of
         # quietly shrinking what the suite claims to cover.
