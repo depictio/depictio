@@ -1,0 +1,16 @@
+# comBGC: nf-core/funcscan's own aggregation script for biosynthetic gene
+# cluster predictions. It has NO nf-core module of its own (it ships as
+# `bin/comBGC.py` inside the pipeline and runs as a local process), so identity
+# cannot be derived from a meta.yml and is declared in full here.
+id: combgc
+name: comBGC
+description: >-
+  Aggregates the biosynthetic gene cluster predictions of antiSMASH, DeepBGC
+  and GECCO into one table per sample plus a run-level summary, with the
+  region coordinates, product class, CDS count and PFAM domains normalised
+  across the three callers.
+homepage: https://nf-co.re/funcscan
+source_url: https://github.com/nf-core/funcscan/blob/master/bin/comBGC.py
+edam_topics:
+  - http://edamontology.org/topic_3174 # Metagenomics
+  - http://edamontology.org/topic_0080 # Sequence analysis

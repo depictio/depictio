@@ -1,0 +1,13 @@
+id: dbcan_tool_overlap
+name: Annotation concordance
+mode: cazyme/concordance
+description: >-
+  Gene by annotation-tool membership matrix: 1 when HMMER, dbCAN-sub or DIAMOND
+  reported a CAZy family for the gene. run_dbCAN recommends a family only where
+  at least two of the three agree, so the intersections read as call confidence.
+find: { path_glob: "**/dbcan/cazyme_annotation/*/*_overview.tsv" }
+recipe: dbcan/tool_overlap.py
+fixture: tool_overlap.tsv
+renders_as:
+  - { id: cazyme_upset, component: advanced_viz, kind: upset_plot }
+  - { component: table }
