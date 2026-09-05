@@ -1,0 +1,20 @@
+id: fusionreport_caller_evidence
+name: Caller evidence
+mode: detect
+description: >-
+  Long form of the per-caller evidence strings fusion-report writes next to each
+  fusion: one row per fusion and caller, with the read support that caller
+  reported normalised to a single comparable count.
+find: { path_glob: "**/fusionreport/*/*.fusions.csv" }
+recipe: fusionreport/caller_evidence.py
+fixture: caller_evidence.tsv
+renders_as:
+  # Callers on one axis, fusions on the other: colour is how much read support the
+  # caller found, size is that caller's share of the fusion's total support.
+  - { id: evidence_dot_plot, component: advanced_viz, kind: dot_plot, roles: {cluster: caller, gene: fusion, mean_expression: log_support, frac_expressing: evidence_fraction} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: fusion, y: supporting_reads, color: caller} }
+  - { component: card, column: supporting_reads, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: fusion, aggregation: nunique, secondary_layout: top_n, breakdown_col: caller, top_n_count: 3 }
+  - { component: card, column: supporting_reads, aggregation: sum, secondary_layout: donut, breakdown_col: caller }
+  - { component: card, column: evidence_fraction, aggregation: average, secondary_layout: histogram }
+  - { component: table, row_selection_enabled: true, row_selection_column: fusion }

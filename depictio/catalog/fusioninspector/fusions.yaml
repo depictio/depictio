@@ -1,0 +1,46 @@
+id: fusioninspector_fusions
+name: Validated fusions
+mode: fusions/abridged
+description: >-
+  One row per fusion transcript pair that survived FusionInspector's
+  re-alignment, with the junction and spanning read support, the normalised
+  expression (FFPM), the fusion-allele ratios against each partner, and the
+  protein-level consequence of the fusion.
+find: { path_glob: "**/fusioninspector/*/*.FusionInspector.fusions.abridged.tsv" }
+recipe: fusioninspector/fusions.py
+fixture: fusions.tsv
+renders_as:
+  # Expression against junction purity, one dot per fusion, grouped by the
+  # protein consequence: an in-frame fusion carried by mostly junction reads
+  # sits top-right, a frameshift held up by spanning fragments bottom-left.
+  - { id: evidence_dot_plot, component: advanced_viz, kind: dot_plot, roles: {cluster: prot_fusion_type, gene: fusion, mean_expression: log_ffpm, frac_expressing: junction_fraction} }
+  # The two fusion-allele ratios against each other. A fusion dominant on both
+  # partners lands top-right; a ratio near the axis means the wild-type allele
+  # of that partner still dominates.
+  - component: figure
+    code: |
+      # FAR can be reported as 0, which a log axis cannot place, so shift both.
+      eps = 0.01
+      df_modified = df.with_columns(
+          (pl.col("far_left") + eps).alias("far_left_shift"),
+          (pl.col("far_right") + eps).alias("far_right_shift"),
+      )
+
+      fig = px.scatter(
+          df_modified.to_pandas(),
+          x="far_left_shift", y="far_right_shift",
+          color="prot_fusion_type", size="supporting_reads",
+          size_max=24, opacity=0.8, log_x=True, log_y=True,
+          hover_name="fusion",
+      )
+      fig.update_layout(
+          xaxis_title="FAR 5' partner (log)",
+          yaxis_title="FAR 3' partner (log)",
+          legend_title_text="Protein fusion type",
+          margin={"t": 24, "l": 56, "r": 16, "b": 48},
+      )
+  - { component: card, column: ffpm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: fusion, aggregation: nunique, secondary_layout: top_n, breakdown_col: prot_fusion_type, top_n_count: 3 }
+  - { component: card, column: supporting_reads, aggregation: sum, secondary_layout: donut, breakdown_col: splice_type }
+  - { component: card, column: junction_fraction, aggregation: average, secondary_layout: histogram }
+  - { component: table, row_selection_enabled: true, row_selection_column: fusion }

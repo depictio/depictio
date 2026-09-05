@@ -1,0 +1,22 @@
+id: fusioninspector_protein_domains
+name: Fusion protein domains
+mode: fusions/pfam
+description: >-
+  The Pfam domains FusionInspector annotates on the 5' and 3' partner of each
+  fusion protein, unpivoted from the packed PFAM_LEFT / PFAM_RIGHT fields into
+  one row per domain with its amino-acid span and e-value.
+find: { path_glob: "**/fusioninspector/*/*.FusionInspector.fusions.abridged.tsv" }
+recipe: fusioninspector/protein_domains.py
+fixture: protein_domains.tsv
+renders_as:
+  # Domain starts along the fusion protein, one lane per fusion, split by the
+  # partner that contributes the domain. This is the closest the catalog gets to
+  # a protein-domain track: it places each domain but cannot draw its extent.
+  - { id: domain_lollipop, component: advanced_viz, kind: lollipop, roles: {feature_id: fusion, position: domain_start, category: partner} }
+  # Domain extents as bars, so a domain the breakpoint truncated is visibly
+  # shorter than the same domain kept whole on the other side.
+  - { component: figure, visu_type: bar, dict_kwargs: {x: domain, y: domain_length, color: partner} }
+  - { component: card, column: domain, aggregation: nunique, secondary_layout: top_n, breakdown_col: partner, top_n_count: 3 }
+  - { component: card, column: domain_length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: neg_log10_evalue, aggregation: average, secondary_layout: histogram }
+  - { component: table, row_selection_enabled: true, row_selection_column: fusion }
