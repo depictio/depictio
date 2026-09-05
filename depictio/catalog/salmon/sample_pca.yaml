@@ -1,0 +1,20 @@
+id: salmon_sample_pca
+name: Sample overview
+mode: expression/pca
+description: >-
+  One row per sample: principal components of the log2(TPM + 1) matrix over its
+  most variable genes, plus how many genes the sample detects and expresses and
+  the median TPM of the genes it detects.
+find: { path_glob: "**/salmon.merged.gene_tpm.tsv" }
+recipe: salmon/sample_pca.py
+fixture: sample_pca.tsv
+renders_as:
+  - { id: pca, component: advanced_viz, kind: embedding, roles: {sample_id: sample_id, dim_1: dim_1, dim_2: dim_2} }
+  - { component: card, column: sample_id, aggregation: nunique, secondary_layout: donut, breakdown_col: group }
+  - { component: card, column: median_tpm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  # A library that expresses far fewer genes than its peers is the classic
+  # under-sequenced / degraded sample; 10k is the usual floor for a bulk
+  # human RNA-seq library, and the dashboard tile can retune it per run.
+  - { component: card, column: genes_expressed, aggregation: average, secondary_layout: threshold, threshold_value: 10000, threshold_direction: min, threshold_warn: 8000 }
+  - { component: card, column: genes_detected, aggregation: average, secondary_layout: histogram }
+  - { component: table }
