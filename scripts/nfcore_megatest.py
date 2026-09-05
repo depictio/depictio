@@ -266,30 +266,26 @@ def release_for_version(
     raise MegatestError(f"nf-core/{pipeline} has no release {version!r} (known: {known})")
 
 
-def sha_to_tag(index: dict[str, Any] | None, pipeline: str, sha: str) -> str | None:
-    """Release tag whose ``tag_sha`` is ``sha`` (``None`` when unknown or no index)."""
+def _release_by_sha(index: dict[str, Any] | None, pipeline: str, sha: str) -> dict[str, Any] | None:
+    """The release published under ``sha`` (``None`` when unknown or no index)."""
     if index is None:
         return None
     try:
         releases = releases_for(index, pipeline)
     except MegatestError:
-        return None
-    for release in releases:
-        if release["tag_sha"] == sha:
-            return release["tag_name"]
-    return None
+        return None  # pipeline (or its releases) unknown to the index
+    return next((r for r in releases if r["tag_sha"] == sha), None)
+
+
+def sha_to_tag(index: dict[str, Any] | None, pipeline: str, sha: str) -> str | None:
+    """Release tag whose ``tag_sha`` is ``sha`` (``None`` when unknown or no index)."""
+    release = _release_by_sha(index, pipeline, sha)
+    return release["tag_name"] if release else None
 
 
 def _release_published_at(index: dict[str, Any] | None, pipeline: str, sha: str) -> str:
-    if index is None:
-        return ""
-    try:
-        for release in releases_for(index, pipeline):
-            if release["tag_sha"] == sha:
-                return release.get("published_at", "") or ""
-    except MegatestError:
-        pass
-    return ""
+    release = _release_by_sha(index, pipeline, sha)
+    return (release.get("published_at") or "") if release else ""
 
 
 # ---------------------------------------------------------------------------
@@ -361,8 +357,7 @@ def list_s3_objects(
         token = root.findtext(f"{_S3_NS}NextContinuationToken")
         if not truncated or not token:
             return Listing(objects, False)
-        if limit is not None and len(objects) >= limit:
-            return Listing(objects, True)
+        # More pages exist: loop back, where a reached ``limit`` ends the walk.
 
 
 def list_objects(
@@ -1103,10 +1098,12 @@ def default_dest(pipeline: str, version: str) -> Path:
 
 
 def _human_size(n_bytes: int) -> str:
-    value = float(n_bytes)
-    for unit in ("B", "KB", "MB", "GB"):
-        if value < 1000 or unit == "GB":
-            return f"{value:.1f} {unit}" if unit != "B" else f"{int(value)} B"
+    if n_bytes < 1000:
+        return f"{n_bytes} B"
+    value = n_bytes / 1000
+    for unit in ("KB", "MB"):
+        if value < 1000:
+            return f"{value:.1f} {unit}"
         value /= 1000
     return f"{value:.1f} GB"
 
@@ -1114,6 +1111,9 @@ def _human_size(n_bytes: int) -> str:
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+_ACTION_MARKERS = {"planned": "plan", "downloaded": "get ", "kept": "keep", "too-large": "SKIP"}
+
+
 def _index_from_args(args: argparse.Namespace) -> dict[str, Any] | None:
     if getattr(args, "index", None):
         return load_pipelines_index(args.index)
@@ -1125,14 +1125,14 @@ def _prefix_for(
     version: str | None,
     results_hash: str | None,
     index: dict[str, Any] | None,
-) -> tuple[str, str, str | None]:
-    """Unverified ``(prefix, sha, tag)`` for ``ls`` (which may inspect empty runs)."""
+) -> tuple[str, str | None]:
+    """Unverified ``(prefix, tag)`` for ``ls`` (which may inspect empty runs)."""
     if results_hash:
         sha = _normalize_sha(results_hash)
-        return f"{pipeline}/results-{sha}/", sha, sha_to_tag(index, pipeline, sha)
+        return f"{pipeline}/results-{sha}/", sha_to_tag(index, pipeline, sha)
     index = index if index is not None else load_pipelines_index()
     release = release_for_version(index, pipeline, version)
-    return f"{pipeline}/results-{release['tag_sha']}/", release["tag_sha"], release["tag_name"]
+    return f"{pipeline}/results-{release['tag_sha']}/", release["tag_name"]
 
 
 def _print_resolved(run: ResolvedRun) -> None:
@@ -1176,7 +1176,7 @@ def cmd_resolve(args: argparse.Namespace) -> int:
 
 def cmd_ls(args: argparse.Namespace) -> int:
     index = _index_from_args(args)
-    prefix, sha, tag = _prefix_for(args.pipeline, args.version, args.results_hash, index)
+    prefix, tag = _prefix_for(args.pipeline, args.version, args.results_hash, index)
     sub = _normalize_run_root(args.prefix)
     _log(f"-> listing s3://{MEGATEST_BUCKET}/{prefix}{sub}  (tag {tag or '?'})")
     objects = [
@@ -1214,6 +1214,20 @@ def _load_fetch_manifest(args: argparse.Namespace) -> Manifest | None:
         if default.is_file():
             return load_manifest(default)
     return None
+
+
+def _print_fetch_summary(summary: FetchSummary) -> None:
+    """One line per file, the unmatched manifest patterns on stderr, then the totals."""
+    for entry in summary.files:
+        rel = entry.dest.relative_to(summary.dest)
+        print(f"  {_ACTION_MARKERS[entry.action]}  {_human_size(entry.size):>10}  {rel}")
+    for pattern in summary.unmatched:
+        _log(f"! no object matches manifest pattern {pattern!r}")
+    print(
+        f"\n{len(summary.files)} file(s), {_human_size(summary.total_bytes)}"
+        f" (downloaded {summary.count('downloaded')}, kept {summary.count('kept')},"
+        f" planned {summary.count('planned')}, too large {summary.count('too-large')})"
+    )
 
 
 def cmd_fetch(args: argparse.Namespace) -> int:
@@ -1265,19 +1279,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         dry_run=args.dry_run,
         max_file_mb=args.max_file_mb,
     )
-    for entry in summary.files:
-        rel = entry.dest.relative_to(dest)
-        marker = {"planned": "plan", "downloaded": "get ", "kept": "keep", "too-large": "SKIP"}[
-            entry.action
-        ]
-        print(f"  {marker}  {_human_size(entry.size):>10}  {rel}")
-    for pattern in summary.unmatched:
-        _log(f"! no object matches manifest pattern {pattern!r}")
-    print(
-        f"\n{len(summary.files)} file(s), {_human_size(summary.total_bytes)}"
-        f" (downloaded {summary.count('downloaded')}, kept {summary.count('kept')},"
-        f" planned {summary.count('planned')}, too large {summary.count('too-large')})"
-    )
+    _print_fetch_summary(summary)
     if manifest and manifest.post_fetch_help and not args.dry_run:
         print("\n" + manifest.post_fetch_help.replace("{dest}", str(dest)).rstrip())
     return 0
