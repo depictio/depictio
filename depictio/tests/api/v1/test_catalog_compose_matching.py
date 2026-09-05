@@ -24,6 +24,8 @@ from depictio.models.components.advanced_viz.catalog import load_catalog_entries
 # to the run, so the raw pipeline layout the `find` patterns describe is gone.
 SEEDED_TSV = "/app/depictio/projects/nf-core/ampliseq/2.16.0/rarefaction_canonical.tsv"
 RAW_MULTIQC = "/app/depictio/projects/nf-core/ampliseq/2.16.0/multiqc/multiqc_data/multiqc.parquet"
+# rnaseq nests the report under the aligner and renames the data dir.
+NESTED_MULTIQC = "/app/data/rnaseq/results/multiqc/star_salmon/multiqc_report_data/multiqc.parquet"
 
 
 @pytest.fixture(scope="module")
@@ -67,6 +69,14 @@ class TestMatchSignals:
     def test_path_glob_still_matches(self, entries):
         matched = _match_dc_to_catalog(entries, basename="multiqc.parquet", full_path=RAW_MULTIQC)
         assert "multiqc_cutadapt" in _ids(matched)
+
+    def test_path_glob_alt_matches_nested_report_data_layout(self, entries):
+        """`**` is one segment to PurePosixPath.match, so the nested rnaseq report
+        is reached through `path_glob_alt`; it must offer the same sections."""
+        nested = _match_dc_to_catalog(entries, basename="multiqc.parquet", full_path=NESTED_MULTIQC)
+        assert "multiqc_fastqc" in _ids(nested)
+        canonical = _match_dc_to_catalog(entries, basename="multiqc.parquet", full_path=RAW_MULTIQC)
+        assert _ids(nested) == _ids(canonical)
 
     def test_filename_glob_still_matches(self, entries):
         matched = _match_dc_to_catalog(

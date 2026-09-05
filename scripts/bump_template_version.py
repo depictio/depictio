@@ -41,6 +41,25 @@ _VERSION_RE = re.compile(r"^\d+(\.\d+)*$")
 # Never rewrite content in these (binary or data) suffixes.
 _BINARY_SUFFIXES = {".parquet", ".biom", ".gz", ".png", ".pdf", ".qza", ".qzv", ".nwk"}
 
+# Megatest manifest (scripts/nfcore_megatest.py): the copied one still pins the
+# OLD release's run, so its sha is blanked and the checklist asks for the new one.
+MEGATEST_MANIFEST = "megatest.yaml"
+_RESULTS_SHA_LINE_RE = re.compile(r"^results_sha:[^\n]*$", re.MULTILINE)
+
+
+def blank_manifest_sha(manifest: Path) -> bool:
+    """Set ``results_sha: null`` in a copied ``megatest.yaml``; True when the file changed."""
+    text = manifest.read_text(encoding="utf-8")
+    new_text = _RESULTS_SHA_LINE_RE.sub(
+        "results_sha: null  # TODO: pin with `scripts/nfcore_megatest.py resolve`",
+        text,
+        count=1,
+    )
+    if new_text == text:
+        return False
+    manifest.write_text(new_text, encoding="utf-8")
+    return True
+
 
 def rewrite_versions(new_dir: Path, old_version: str, new_version: str) -> list[Path]:
     """Replace the exact old version string in every text file under ``new_dir``.
@@ -106,6 +125,9 @@ def bump(
     print(f"→ copied to {new_dir}")
     for path in changed:
         print(f"  rewrote {old_version} → {new_version} in {path.relative_to(new_dir)}")
+    manifest = new_dir / MEGATEST_MANIFEST
+    if manifest.is_file() and blank_manifest_sha(manifest):
+        print(f"  blanked results_sha in {MEGATEST_MANIFEST} (it pinned the {old_version} run)")
 
     try:
         new_dir_display = new_dir.relative_to(_REPO_ROOT)
@@ -115,12 +137,16 @@ def bump(
         f"""
 Done. Follow-up checklist for {pipeline} {new_version}:
 
-  1. Refresh the bundled demo data from a real {new_version} run — the copied
-     TSV/multiqc files still hold {old_version} outputs (see
-     {new_dir_display}/download_test_data.sh / generate_validation_runs.sh
-     where present).
+  1. Refresh the test data from the {new_version} megatest (the copied
+     TSV/multiqc files still hold {old_version} outputs):
+       python scripts/nfcore_megatest.py resolve --pipeline {pipeline} --version {new_version}
+       python scripts/nfcore_megatest.py fetch --pipeline {pipeline} --version {new_version}
+     Pin the resolved sha as `results_sha` in {new_dir_display}/{MEGATEST_MANIFEST}
+     (blanked by this copy; `resolve` exits 3 with a table of real runs when the
+     release's own run is empty) and regenerate the bundled seeds where the
+     version dir ships a generate_canonical_seeds.py / generate_validation_runs.sh.
   2. Drift-check the template against the new release's megatest:
-       python scripts/nfcore_monitor.py report --pipeline {pipeline}
+       python scripts/nfcore_monitor.py report --pipeline {pipeline} --version {new_version}
      Fix any moved/renamed recipe source paths it reports.
   3. If dashboards changed, regenerate the JSON seeds
      (generate_seeds.sh + remap_seeds_to_static_ids.py in the version dir) —

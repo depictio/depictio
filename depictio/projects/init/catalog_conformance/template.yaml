@@ -528,6 +528,8 @@ workflows:
           happy:
           - INDEL
           - SNP
+          iVar:
+          - iVar Primer Counts
           kraken:
           - Top taxa
           mosdepth:

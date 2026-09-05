@@ -81,6 +81,7 @@ existence-checking validates; the derived fields are trusted until a future
 |---|---|---|
 | `filename` | str | Glob on the basename, e.g. `*.pangolin.csv`. |
 | `path_glob` | str | Glob on the path under the run root, `**`-aware. |
+| `path_glob_alt` | list[str] | Extra path globs tried after `path_glob` (which it requires) for layouts the canonical glob cannot reach. The path matcher reads `**` as a single segment, so a nested report dir such as `multiqc/star_salmon/multiqc_report_data/` needs its own literal-depth entry. |
 
 ### Render — one render target
 

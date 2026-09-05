@@ -8,7 +8,7 @@ suggestion engine, and JSON-Schema freshness.
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 
@@ -67,6 +67,49 @@ def test_identity_is_stored_as_urls():
 def test_find_requires_a_condition():
     with pytest.raises(ValueError, match="at least one"):
         CatalogFind()
+
+
+def test_find_path_glob_alt_requires_canonical():
+    with pytest.raises(ValueError, match="path_glob_alt requires path_glob"):
+        CatalogFind(filename="*.csv", path_glob_alt=["**/tool/*/*.csv"])
+    with pytest.raises(ValueError, match="path_glob_alt requires path_glob"):
+        CatalogFind(path_glob_alt=["**/tool/*/*.csv"])
+    find = CatalogFind(path_glob="**/tool/x.csv", path_glob_alt=["**/tool/*/x.csv"])
+    assert find.path_globs() == ["**/tool/x.csv", "**/tool/*/x.csv"]
+    assert CatalogFind(filename="*.csv").path_globs() == []
+
+
+# The two MultiQC report layouts every parquet output must recognise, plus the
+# same nested report sitting deeper under an aligner-specific results tree.
+CANONICAL_MULTIQC = "run_1/multiqc/multiqc_data/multiqc.parquet"
+NESTED_MULTIQC = "run_1/multiqc/star_salmon/multiqc_report_data/multiqc.parquet"  # rnaseq
+DEEP_NESTED_MULTIQC = (
+    "results/aligner_star_salmon/multiqc/star_salmon/multiqc_report_data/multiqc.parquet"
+)
+
+
+def _multiqc_parquet_outputs() -> list[CatalogOutput]:
+    return [
+        o
+        for e in load_catalog_entries()
+        for o in e.outputs
+        if o.find.path_glob and o.find.path_glob.endswith("multiqc.parquet")
+    ]
+
+
+def test_every_multiqc_parquet_output_accepts_both_layouts():
+    """`PurePosixPath.match` (the compose endpoint's primitive) reads `**` as one
+    segment and `full_match` is 3.13-only, so the canonical glob alone cannot
+    reach a nested report dir: that is what `path_glob_alt` carries."""
+    outputs = _multiqc_parquet_outputs()
+    assert len(outputs) >= 15
+    for output in outputs:
+        globs = output.find.path_globs()
+        assert len(globs) > 1, output.id
+        # the guard is only meaningful while the canonical glob misses the nested layout
+        assert not PurePosixPath(NESTED_MULTIQC).match(output.find.path_glob), output.id
+        for layout in (CANONICAL_MULTIQC, NESTED_MULTIQC, DEEP_NESTED_MULTIQC):
+            assert any(PurePosixPath(layout).match(g) for g in globs), (output.id, layout)
 
 
 # ---------------------------------------------------------------------------
@@ -384,7 +427,17 @@ def test_all_recipe_output_roles_resolve_against_the_recipe():
                 continue
             cols = set(recipe_output_columns(out.recipe))  # raises if recipe missing
             for r in out.renders_as:
-                missing = set(r.roles.values()) - cols
+                # A role binds either one column or a list of them (sunburst ranks,
+                # sankey steps, complex_heatmap row_annotation_cols), so flatten before
+                # comparing. Taking set(roles.values()) raises on the list-valued ones,
+                # which turned this assertion into a crash instead of a check.
+                role_cols: set[str] = set()
+                for value in r.roles.values():
+                    if isinstance(value, str):
+                        role_cols.add(value)
+                    elif isinstance(value, (list, tuple)):
+                        role_cols.update(v for v in value if isinstance(v, str))
+                missing = role_cols - cols
                 assert not missing, (
                     f"{out.id} render {r.kind}: roles {sorted(missing)} "
                     f"not in recipe output {sorted(cols)}"
@@ -446,6 +499,27 @@ def test_confirm_with_versions_is_noop_without_versions_file(tmp_path):
     (tmp_path / "variants_long_table.csv").write_text("x\n")
     # no software_versions.yml → confirm must not filter (non-breaking)
     assert {m.tool_id for m in match_run_dir(tmp_path, confirm_with_versions=True)} == {"ivar"}
+
+
+def test_match_run_dir_recognises_nested_report_data_layout(tmp_path):
+    """rnaseq writes multiqc/star_salmon/multiqc_report_data/, not multiqc/multiqc_data/."""
+    nested = tmp_path / "multiqc" / "star_salmon" / "multiqc_report_data" / "multiqc.parquet"
+    nested.parent.mkdir(parents=True)
+    nested.write_bytes(b"x")
+    matches = [m for m in match_run_dir(tmp_path) if m.tool_id == "multiqc"]
+    assert {m.output_id for m in matches} == {o.id for o in _multiqc_parquet_outputs()}
+    assert {m.path for m in matches} == {"multiqc/star_salmon/multiqc_report_data/multiqc.parquet"}
+
+
+def test_match_run_dir_reports_a_file_reached_by_two_globs_once(tmp_path):
+    """The canonical layout satisfies both `path_glob` and the `*_data` alt."""
+    canonical = tmp_path / "multiqc" / "multiqc_data" / "multiqc.parquet"
+    canonical.parent.mkdir(parents=True)
+    canonical.write_bytes(b"x")
+    matches = [m for m in match_run_dir(tmp_path) if m.tool_id == "multiqc"]
+    output_ids = [m.output_id for m in matches]
+    assert len(output_ids) == len(set(output_ids))
+    assert set(output_ids) == {o.id for o in _multiqc_parquet_outputs()}
 
 
 # ---------------------------------------------------------------------------
