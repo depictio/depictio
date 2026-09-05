@@ -1,0 +1,13 @@
+id: combgc_tool_overlap
+name: Caller concordance
+mode: bgc/concordance
+description: >-
+  Contig by caller membership matrix, one 0/1 column per BGC prediction tool.
+  Agreement is scored on the contig: the callers disagree on region boundaries
+  by design, so a coordinate join would report no overlap at all.
+find: { path_glob: "**/combgc/combgc_complete_summary.tsv" }
+recipe: combgc/tool_overlap.py
+fixture: tool_overlap.tsv
+renders_as:
+  - { id: bgc_upset, component: advanced_viz, kind: upset_plot }
+  - { component: table }
