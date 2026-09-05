@@ -889,14 +889,8 @@ def match_run_dir(
             if f.path_glob:
                 # Every glob is tried; a file two of them reach (an alt overlapping
                 # the canonical glob) is reported once, in glob order.
-                candidates = list(
-                    dict.fromkeys(
-                        p
-                        for pattern in f.path_globs()
-                        for p in run_dir.glob(pattern)
-                        if p.is_file()
-                    )
-                )
+                hits = (p for g in f.path_globs() for p in run_dir.glob(g) if p.is_file())
+                candidates = list(dict.fromkeys(hits))
             elif f.filename:
                 candidates = [p for p in run_dir.rglob(f.filename) if p.is_file()]
             else:
