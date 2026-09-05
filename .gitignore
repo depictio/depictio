@@ -176,6 +176,7 @@ dump.rdb
 # nf-core/test-datasets; they are committed so the template is self-describing and
 # SAMPLESHEET_FILE resolves without network access.
 !depictio/projects/nf-core/differentialabundance/*/input/*.tsv
+!depictio/projects/nf-core/funcscan/*/input/*.csv
 # Allow advanced_viz_showcase synthetic fixtures
 !depictio/projects/init/advanced_viz_showcase/data/*.tsv
 # Allow the catalog conformance project's generated data. Every file here is a

@@ -155,6 +155,43 @@ non-SARS pathogen (no lineage DBs) + metagenomic protocol (no ivar/amplicon mosd
 
 ---
 
+## funcscan 4.0.0
+
+**Megatest:** `s3://nf-core-awsmegatests/funcscan/results-aee3dc965eb0c77267435544dda30da858763913/` (tag 4.0.0, run_root `.`, manifest `megatest.yaml`)
+
+**MultiQC:** run wrote 1.34, used as-is. The parquet holds a single `run_metadata` row with no general-stats table and no module sections, because funcscan feeds MultiQC nothing but software versions. `multiqc_data` stays in the template as `optional: true` and the dashboard ships no QC tab.
+
+**Template requirements:**
+- Always: `screening_summary`, the hub, assembled through `dc_ref` from the four screening
+  arms.
+- Every other collection is `optional: true`, one group per screening arm: ARG
+  (`hamronization_*`), AMP (`ampcombi_*`), BGC (`combgc_*`), CAZyme (`dbcan_*`).
+- Conditionals `SKIP_ARG`, `SKIP_AMP`, `SKIP_BGC`, `SKIP_CAZYME` prune each group and its
+  dashboard tab explicitly.
+- Declaration order is load-bearing: `screening_summary` is declared last because a
+  `dc_ref` source is resolved from the referenced collection's Delta table, which only
+  exists once that collection has been processed.
+
+### Run executed (this branch)
+
+| Run | Source | Notes |
+|---|---|---|
+| megatest 4.0.0 | AWS megatest, tag_sha `aee3dc96` | 19 MGnify metagenome assemblies with all four screening arms enabled, 15/15 collections ingested |
+
+### Further scenarios (analytical, not yet run)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| F1 | **all screens skipped** | none of the four `--run_*_screening` flags | the four `dc_ref` sources of the hub are all absent | `screening_summary` is not optional, so the run fails rather than degrading. The clearest negative test the template has. |
+| F2 | **one screen only** | `--run_arg_screening` alone | three arms produce nothing | Exercises three conditionals at once and the hub with a single input. |
+| F3 | **taxonomic classification on** | `--run_taxa_classification` | MMseqs2 adds taxonomy columns to every screening report | Tests that the four recipes tolerate extra columns rather than pinning a column count. |
+| F4 | **protein input** | `--input` with pre-called proteins | the annotation arm never runs | ARG and AMP reports keep their shape, contig-derived columns are absent. |
+| F5 | **a release that feeds MultiQC** | any future funcscan with module sections | the parquet gains real modules | The optional `multiqc_data` collection would populate and the missing QC tab becomes a visible gap. |
+
+**Ranking by template stress:** F1 > F3 > F2 > F4 > F5
+
+---
+
 ## Priority additions to `generate_validation_runs.sh`
 
 In order of value-per-effort:

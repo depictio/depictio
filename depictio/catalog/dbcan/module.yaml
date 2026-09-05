@@ -1,0 +1,8 @@
+# run_dbCAN. Lightweight: identity is derived from the nf-core meta.yml that
+# `nf_core_url` points at (not duplicated). Override a field here only on drift.
+# run_dbCAN annotates carbohydrate-active enzymes with three tools at once
+# (HMMER against the dbCAN HMMs, dbCAN-sub, DIAMOND against CAZy) and predicts
+# the substrate of each CAZyme gene cluster.
+id: dbcan
+name: run_dbCAN
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/rundbcan/cazymeannotation
