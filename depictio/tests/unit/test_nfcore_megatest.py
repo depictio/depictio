@@ -747,10 +747,22 @@ def test_every_shipped_manifest_is_consistent(mt: ModuleType, manifest_file: Pat
     assert manifest.keys, "a manifest must list at least one key"
     for key in manifest.keys + manifest.prefix_keys:
         assert mt.is_relative_key(key)
-    # provenance is always part of the subset (the CLI introspects params.json)
-    assert any(
-        fnmatchcase("pipeline_info/params_2026-01-01_00-00-00.json", k) for k in manifest.keys
+    # Provenance is always part of the subset, because the CLI introspects it and the
+    # template's `provenance` block reads it. Which file carries it depends on the
+    # pipeline's era: DSL2 runs write a timestamped params JSON, while pre-DSL2 runs
+    # (chipseq 1.2.0, atacseq 1.2.x, cutandrun 3.1) write only a software-versions
+    # table. Requiring the params JSON alone would reject every older run, which is
+    # exactly the set that has to be reprocessed and templated from an older release.
+    provenance_names = (
+        "pipeline_info/params_2026-01-01_00-00-00.json",
+        "pipeline_info/software_versions.yml",
+        "pipeline_info/software_versions.csv",
     )
+    assert any(
+        fnmatchcase(name, k)
+        for k in manifest.keys + manifest.prefix_keys
+        for name in provenance_names
+    ), "the manifest fetches no provenance file (params JSON or software versions)"
 
     template = yaml.safe_load((version_dir / "template.yaml").read_text(encoding="utf-8"))
     patterns = _multiqc_dc_patterns(template)
@@ -760,9 +772,23 @@ def test_every_shipped_manifest_is_consistent(mt: ModuleType, manifest_file: Pat
         assert manifest.multiqc["version"] is None
     else:
         assert parquet.endswith("multiqc.parquet")
-        assert any(k == parquet or fnmatchcase(parquet, k) for k in manifest.keys), (
-            "multiqc.parquet must be fetched by one of the manifest keys"
-        )
+        if manifest.multiqc["reprocess"]:
+            # A reprocessed run has no parquet to fetch: its report predates the
+            # parquet era, so `multiqc.parquet` names the file that
+            # depictio.dev_scripts.multiqc_reprocess writes into the fetched tree
+            # afterwards. Requiring a key for it would make the manifest claim the
+            # bucket publishes a file it does not.
+            assert not any(k == parquet or fnmatchcase(parquet, k) for k in manifest.keys), (
+                "multiqc.reprocess is set, so multiqc.parquet is produced locally "
+                "and must not also be listed as a fetched key"
+            )
+            assert "multiqc_reprocess" in (manifest.post_fetch_help or ""), (
+                "a reprocessed manifest must tell the caller how to produce the parquet"
+            )
+        else:
+            assert any(k == parquet or fnmatchcase(parquet, k) for k in manifest.keys), (
+                "multiqc.parquet must be fetched by one of the manifest keys"
+            )
         assert patterns, "manifest names a parquet but the template has no MultiQC DC"
         assert any(re.search(p, parquet) for p in patterns), (
             f"template MultiQC pattern(s) {patterns} do not match {parquet}"

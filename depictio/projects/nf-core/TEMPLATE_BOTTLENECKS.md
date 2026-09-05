@@ -3,7 +3,8 @@
 Companion to `MEGATEST_STATUS.md`. That file records what the **AWS megatest bucket**
 publishes. This one records what **Depictio itself** lacks, found while building the
 lot-1 templates (differentialabundance 2.0.0, funcscan 4.0.0, airrflow 5.1.0,
-rnafusion 4.1.3, rnaseq 3.26.0, taxprofiler 2.0.1, chipseq 1.2.0) against real runs.
+rnafusion 4.1.3, rnaseq 3.26.0, taxprofiler 2.0.1, chipseq 1.2.0, atacseq 1.2.2 and
+cutandrun 3.1) against real runs.
 
 Every item below was hit in this lot, not predicted. Each says what happened, why it
 costs, and the smallest fix that would remove it. Items are ordered by how much they
@@ -140,6 +141,21 @@ Bound with a code-mode figure in this lot because no kind exists:
 
 - diversity profile with confidence ribbons (airrflow Hill profiles)
 - fusion protein-domain track (rnafusion FusionInspector)
+- **metagene / reference-point signal profile**: mean signal against position
+  relative to a TSS or across a scaled gene body, one line per sample, classically
+  paired with a heatmap of every region sorted by signal. This is the strongest
+  candidate for the next kind, because it recurs across four pipelines in this lot
+  alone: cutandrun `04_reporting/deeptools_heatmaps/*/*.plotHeatmap.mat.tab`,
+  atacseq ataqv TSS enrichment and deepTools plotProfile, chipseq deepTools
+  plotProfile, rnaseq RSeQC gene body coverage.
+
+  `coverage_track` is the closest existing kind and does not fit: it requires a
+  `chromosome` column, treats `position` as an absolute coordinate rather than a
+  signed offset from a reference point, and stacks one subplot per sample where
+  this figure needs the samples overlaid to be read at all. The parts that justify
+  a kind rather than a code-mode line are the reference-point axis (a labelled
+  marker at 0, scaled-body ticks) and the paired per-region heatmap; a plain
+  `px.line` covers the rest, which is why the lot ships code mode for now.
 
 Wanted by pipelines not in this lot, and still missing:
 
@@ -177,5 +193,4 @@ airrflow's V-to-J pairing and rnafusion's per-read evidence are unbound.
 | smrnaseq | isomiR views need a kind that does not exist |
 | scrnaseq | nested `aligner_*` run roots plus a missing knee plot |
 | oncoanalyser | signature and circos kinds missing; run root `HCC1395/` |
-| atacseq, cutandrun | release prefixes are empty or truncated syncs |
 | methylseq, raredisease, quantms, bacass | no usable megatest run at all |
