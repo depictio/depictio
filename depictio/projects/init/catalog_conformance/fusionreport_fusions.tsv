@@ -1,0 +1,21 @@
+fusion	gene_5p	gene_3p	databases	n_databases	fii	explained_fii	arriba	fusioncatcher	starfusion	n_tools	tool_support	rank
+AKAP9--BRAF	AKAP9	BRAF	Mitelman,FusionGDB2	2	1.0	0.5 * (3 / 3) + 0.5 * (0.5 / 0.5)	1	1	1	3	3 callers	1
+BRD4--NUTM1	BRD4	NUTM1	Mitelman,FusionGDB2	2	1.0	0.5 * (3 / 3) + 0.5 * (0.5 / 0.5)	1	1	1	3	3 callers	2
+CD74--ROS1	CD74	ROS1	Mitelman,FusionGDB2	2	1.0	0.5 * (3 / 3) + 0.5 * (0.5 / 0.5)	1	1	1	3	3 callers	3
+EML4--ALK	EML4	ALK	Mitelman,FusionGDB2	2	1.0	0.5 * (3 / 3) + 0.5 * (0.5 / 0.5)	1	1	1	3	3 callers	4
+ETV6--NTRK3	ETV6	NTRK3	Mitelman,FusionGDB2	2	1.0	0.5 * (3 / 3) + 0.5 * (0.5 / 0.5)	1	1	1	3	3 callers	5
+EWSR1--ATF1	EWSR1	ATF1	Mitelman,FusionGDB2	2	1.0	0.5 * (3 / 3) + 0.5 * (0.5 / 0.5)	1	1	1	3	3 callers	6
+EWSR1--FLI1	EWSR1	FLI1	Mitelman,FusionGDB2	2	1.0	0.5 * (3 / 3) + 0.5 * (0.5 / 0.5)	1	1	1	3	3 callers	7
+FGFR3--TACC3	FGFR3	TACC3	Mitelman,FusionGDB2	2	1.0	0.5 * (3 / 3) + 0.5 * (0.5 / 0.5)	1	1	1	3	3 callers	8
+FIP1L1--PDGFRA	FIP1L1	PDGFRA	Mitelman,FusionGDB2	2	1.0	0.5 * (3 / 3) + 0.5 * (0.5 / 0.5)	1	1	1	3	3 callers	9
+HOOK3--RET	HOOK3	RET	Mitelman,FusionGDB2	2	1.0	0.5 * (3 / 3) + 0.5 * (0.5 / 0.5)	1	1	1	3	3 callers	10
+NPM1--ALK	NPM1	ALK	Mitelman,FusionGDB2	2	1.0	0.5 * (3 / 3) + 0.5 * (0.5 / 0.5)	1	1	1	3	3 callers	11
+TMPRSS2--ETV1	TMPRSS2	ETV1	Mitelman,FusionGDB2	2	1.0	0.5 * (3 / 3) + 0.5 * (0.5 / 0.5)	1	1	1	3	3 callers	12
+GOPC--ROS1	GOPC	ROS1	Mitelman	1	0.833	0.5 * (2 / 3) + 0.5 * (0.5 / 0.5)	1	1	0	2	2 callers	13
+CIC--DUX4	CIC	DUX4	Mitelman	1	0.667	0.5 * (1 / 3) + 0.5 * (0.5 / 0.5)	0	1	0	1	1 caller	14
+CIC--DUX4L8	CIC	DUX4L8	""	0	0.167	0.5 * (1 / 3) + 0.5 * (0 / 0.5)	1	0	0	1	1 caller	15
+DUX4--IGH@	DUX4	IGH@	""	0	0.167	0.5 * (1 / 3) + 0.5 * (0 / 0.5)	0	1	0	1	1 caller	16
+IGH-@-ext--CRLF2	IGH-@-ext	CRLF2	""	0	0.167	0.5 * (1 / 3) + 0.5 * (0 / 0.5)	0	0	1	1	1 caller	17
+IGH@--CRLF2	IGH@	CRLF2	""	0	0.167	0.5 * (1 / 3) + 0.5 * (0 / 0.5)	0	1	0	1	1 caller	18
+MALT1--IGH-@-ext	MALT1	IGH-@-ext	""	0	0.167	0.5 * (1 / 3) + 0.5 * (0 / 0.5)	0	0	1	1	1 caller	19
+MALT1--IGH@	MALT1	IGH@	""	0	0.167	0.5 * (1 / 3) + 0.5 * (0 / 0.5)	0	1	0	1	1 caller	20

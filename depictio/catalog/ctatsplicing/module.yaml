@@ -1,0 +1,7 @@
+# CTAT-SPLICING. Lightweight: identity is derived from the nf-core meta.yml that
+# `nf_core_url` points at (not duplicated). Override a field here only on drift.
+# CTAT-SPLICING scores the splice junctions a STAR alignment reports against the
+# CTAT cancer intron reference to flag candidate cancer-specific introns.
+id: ctatsplicing
+name: CTAT-SPLICING
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/ctatsplicing/startocancerintrons
