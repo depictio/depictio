@@ -1,0 +1,11 @@
+id: deseq2_sample_distance
+name: Sample distances
+mode: exploratory/distance
+description: >-
+  Euclidean sample-to-sample distances over the most variable features, the
+  square matrix behind the DESeq2 sample-clustering QC panel.
+find: { path_glob: "**/all.vst.tsv" }
+recipe: deseq2/vst_sample_distance.py
+fixture: sample_distance.tsv
+renders_as:
+  - { id: distance_matrix, component: advanced_viz, kind: complex_heatmap, roles: {index: sample} }
