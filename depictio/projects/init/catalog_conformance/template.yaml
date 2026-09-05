@@ -39,6 +39,112 @@ workflows:
     locations:
     - '{DATA_ROOT}'
   data_collections:
+  - id: 10ea452e48d10fe976eda340
+    data_collection_tag: ampcombi_clusters
+    description: Peptide clusters — recipe output (ampcombi/clusters.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: ampcombi/clusters.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 392b4bfceb44ae11be8c345d
+    data_collection_tag: ampcombi_embedding
+    description: Property embedding — recipe output (ampcombi/embedding.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: ampcombi/embedding.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: cee943549921a773ac9ebacf
+    data_collection_tag: ampcombi_summary
+    description: AMP candidates — recipe output (ampcombi/summary.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: ampcombi/summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 388b6dc6693134432c3cd55c
+    data_collection_tag: combgc_summary
+    description: BGC regions — recipe output (combgc/summary.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: combgc/summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 22cbd2ae8c73d8473c261f76
+    data_collection_tag: combgc_tool_overlap
+    description: Caller concordance — recipe output (combgc/tool_overlap.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: combgc/tool_overlap.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: b4f3bca32040610e7f9758b8
+    data_collection_tag: dbcan_overview
+    description: CAZyme annotations — recipe output (dbcan/overview.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: dbcan/overview.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 08a74c31263c031ad65b71ed
+    data_collection_tag: dbcan_substrates
+    description: CGC substrates — recipe output (dbcan/substrates.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: dbcan/substrates.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: b0790afe72957376fdcad4d2
+    data_collection_tag: dbcan_tool_overlap
+    description: Annotation concordance — recipe output (dbcan/tool_overlap.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: dbcan/tool_overlap.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: 10908a70f616f6a105ea4291
     data_collection_tag: deseq2_results_annotated
     description: Annotated results — recipe output (deseq2/results_annotated.py), seeded from the catalog
@@ -104,6 +210,61 @@ workflows:
       source: transformed
       transform:
         recipe: deseq2/vst_top_variable.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: a8a58ea4ddc3fb818bf93cd4
+    data_collection_tag: hamronization_gene_matrix
+    description: Gene by sample matrix — recipe output (hamronization/gene_matrix.py), seeded from the
+      catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: hamronization/gene_matrix.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 244e3e4377a9815d0e60316f
+    data_collection_tag: hamronization_gene_presence
+    description: Gene support — recipe output (hamronization/gene_presence.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: hamronization/gene_presence.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: c6e6efd9f5cf0d9e12c057ff
+    data_collection_tag: hamronization_report
+    description: ARG hits — recipe output (hamronization/report.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: hamronization/report.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 6c20e5123091364d24b3a434
+    data_collection_tag: hamronization_tool_overlap
+    description: Tool concordance — recipe output (hamronization/tool_overlap.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: hamronization/tool_overlap.py
       dc_specific_properties:
         format: TSV
         polars_kwargs:

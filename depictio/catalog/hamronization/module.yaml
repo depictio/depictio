@@ -1,0 +1,7 @@
+# hAMRonization. Lightweight: identity is derived from the nf-core meta.yml that
+# `nf_core_url` points at (not duplicated). Override a field here only on drift.
+# The tool normalises the reports of every ARG screening tool (ABRicate,
+# AMRFinderPlus, DeepARG, fARGene, RGI, ...) into one shared vocabulary.
+id: hamronization
+name: hAMRonization
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/hamronization/summarize

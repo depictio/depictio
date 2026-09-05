@@ -1,0 +1,42 @@
+id: ampcombi_summary
+name: AMP candidates
+mode: amp/candidates
+description: >-
+  One row per antimicrobial-peptide candidate, with the per-tool probabilities,
+  the physicochemistry AMPcombi computes (molecular weight, isoelectric point,
+  hydrophobicity, secondary-structure fractions) and the reference-database hit.
+find: { path_glob: "**/ampcombi2/Ampcombi_summary.tsv" }
+recipe: ampcombi/summary.py
+fixture: summary.tsv
+renders_as:
+  # Charge against hydrophobicity is the classic AMP property plane: cationic
+  # and hydrophobic peptides cluster in the upper right. Colour = best tool
+  # probability, size = peptide length.
+  - component: figure
+    code: |
+      # keep the physicochemistry complete so no point is silently dropped
+      df_modified = df.drop_nulls(["hydrophobicity", "isoelectric_point", "prob_max"])
+
+      fig = px.scatter(
+          df_modified.to_pandas(),
+          x="hydrophobicity",
+          y="isoelectric_point",
+          color="prob_max",
+          size="aa_length",
+          size_max=18,
+          opacity=0.75,
+          color_continuous_scale="Tealgrn",
+          hover_name="cds_id",
+          custom_data=["sample"],
+      )
+      fig.update_layout(
+          xaxis_title="Hydrophobicity",
+          yaxis_title="Isoelectric point (pI)",
+          coloraxis_colorbar_title="Best probability",
+          margin={"t": 24, "l": 56, "r": 16, "b": 48},
+      )
+  - { component: card, column: cds_id, aggregation: count, secondary_layout: donut, breakdown_col: charge_class }
+  - { component: card, column: prob_ampir, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: aa_length, aggregation: average, secondary_layout: histogram }
+  - { component: card, column: prob_max, aggregation: average, secondary_layout: threshold, threshold_value: 0.8, threshold_direction: min, threshold_warn: 0.6 }
+  - { component: table, row_selection_enabled: true, row_selection_column: cds_id }
