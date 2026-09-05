@@ -1,0 +1,19 @@
+id: deseq2_results_annotated
+name: Annotated results
+mode: differential/annotated
+description: >-
+  The same DESeq2 statistics joined to the GTF gene annotation: symbol,
+  chromosome, coordinates and biotype, so the calls can be placed on the genome.
+find: { path_glob: "**/*_deseq2.annotated.tsv" }
+recipe: deseq2/results_annotated.py
+fixture: results_annotated.tsv
+renders_as:
+  - { id: manhattan, component: advanced_viz, kind: manhattan, roles: {chr: chromosome, pos: start, score: neg_log10_padj} }
+  - { id: annotated_volcano, component: advanced_viz, kind: volcano, roles: {feature_id: gene_name, effect_size: log2fc, significance: padj} }
+  - { id: annotated_da_barplot, component: advanced_viz, kind: da_barplot, roles: {feature_id: gene_name, contrast: contrast, lfc: log2fc} }
+  - { id: chromosome_lollipop, component: advanced_viz, kind: lollipop, roles: {feature_id: chromosome, position: start, category: direction} }
+  - { component: card, column: gene_name, aggregation: nunique, secondary_layout: top_n, breakdown_col: gene_biotype, top_n_count: 3 }
+  - { component: card, column: chromosome, aggregation: nunique, secondary_layout: composition, breakdown_col: chromosome }
+  - { component: card, column: log2fc, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: gene_biotype, y: neg_log10_padj, color: direction} }
+  - { component: table, row_selection_enabled: true, row_selection_column: gene_id }

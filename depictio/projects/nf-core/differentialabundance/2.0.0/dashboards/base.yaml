@@ -1,0 +1,1108 @@
+version: 1
+# nf-core/differentialabundance 2.0.0: DESeq2 differential expression.
+#
+# Funnel: Samples (is the experiment sound?) -> Differential expression (what
+# changed?) -> Expression (how do the samples separate on the features that
+# move?) -> Genome view (where do the calls sit?). `Reference tables` is
+# persistent and pinned to the bottom, so the rows behind every tile trail the
+# viewer onto every tab.
+#
+# No MultiQC tab: this pipeline runs no MultiQC (it ships an R/shinyngs report
+# instead), so the Samples tab carries the run-level quality read.
+main_dashboard:
+  title: nf-core/differentialabundance
+  subtitle: DESeq2 differential expression - sample space, contrasts and gene annotation
+  project_tag: Differential Abundance Analysis
+  main_tab_name: Samples
+  tab_icon: mdi:test-tube
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  # Persistent: the sample picks render in every tab's filter panel and survive
+  # tab switches. `samples` is the hub collection, so template.yaml translates a
+  # pick here onto the PCA and the distance matrix. The differential tables have
+  # no sample column (a contrast pools its samples), so the fan-out stops there
+  # by design.
+  filter_sections:
+  - name: Samples
+    icon: mdi:test-tube
+    color: teal
+    description: Applies to every tab that reads per-sample data
+    persistent: true
+    pin: top
+  - name: Library size
+    icon: mdi:tune
+    color: teal
+    description: Narrow the cohort by DESeq2 size factor
+    collapsed: true
+  grid_sections:
+  - name: Study at a glance
+    icon: mdi:counter
+    color: teal
+    description: Cohort size, experimental groups and how evenly the libraries were sequenced
+  - name: Sample space
+    icon: mdi:chart-scatter-plot
+    color: indigo
+    description: Where the samples sit once the counts are variance stabilised
+  - name: Reference tables
+    icon: mdi:table
+    color: gray
+    description: The rows behind every tile, on every tab
+    collapsed: true
+    persistent: true
+    pin: bottom
+  components:
+  # ------------------------------------------------------- study at a glance
+  - component_type: text
+    tag: da-samples-intro
+    section: Study at a glance
+    workflow_tag: differentialabundance
+    data_collection_tag: samples
+    title: The cohort behind the contrasts
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Every differential call rests on these samples. The cards count the
+      cohort, split it by experimental group and check that DESeq2 had to
+      correct library sizes by roughly the same amount everywhere: a size
+      factor far from the rest is a sample worth looking at twice.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: da-card-samples
+    section: Study at a glance
+    workflow_tag: differentialabundance
+    data_collection_tag: samples
+    aggregation: nunique
+    column_name: sample_id
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: group
+    display: {icon_name: 'mdi:test-tube', icon_color: '#0E9384', title_color: '#0E9384', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Samples
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: da-card-sizefactor
+    section: Study at a glance
+    workflow_tag: differentialabundance
+    data_collection_tag: samples
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: size_factor
+    column_type: float64
+    display: {icon_name: 'mdi:scale-balance', icon_color: '#0E9384', title_color: '#0E9384', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Size factor
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: da-card-groups
+    section: Study at a glance
+    workflow_tag: differentialabundance
+    data_collection_tag: samples
+    aggregation: nunique
+    column_name: group
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: group
+    top_n_count: 3
+    display: {icon_name: 'mdi:account-group-outline', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Groups
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: da-card-sizefactor-max
+    section: Study at a glance
+    workflow_tag: differentialabundance
+    data_collection_tag: samples
+    aggregation: max
+    column_name: size_factor
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 1.5
+    threshold_direction: max
+    threshold_warn: 1.25
+    display: {icon_name: 'mdi:alert-outline', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Largest size factor
+    layout: {x: 6, y: 2, w: 2, h: 2}
+
+  # ------------------------------------------------------------ sample space
+  - component_type: text
+    tag: da-space-intro
+    section: Sample space
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_vst_pca
+    title: Do the samples separate the way the design says they should?
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Both panels read the variance-stabilised matrix. The PCA places each
+      sample on its two leading components; the matrix beside it is the
+      Euclidean distance between every pair over the 500 most variable
+      features. Lasso a cluster in the PCA to carry those samples across.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: da-av-pca
+    index: da-av-pca
+    section: Sample space
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_vst_pca
+    use: deseq2/pca
+    config:
+      color_col: group
+      default_color_by: group
+      point_size: 11
+      marker_outline: true
+      show_centroids: true
+      legend_pos: right
+      selection_enabled: true
+      selection_column: sample_id
+    title: Sample PCA
+    description: One point per sample, coloured by the sheet's leading factor. Lasso a cluster to filter the linked panels.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 4, h: 7}
+  - component_type: advanced_viz
+    tag: da-av-distance
+    index: da-av-distance
+    section: Sample space
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_sample_distance
+    use: deseq2/distance_matrix
+    config:
+      index_column: sample
+      cluster_rows: true
+      cluster_cols: true
+      cluster_method: ward
+      normalize: none
+      colorscale: Blues
+    title: Sample-to-sample distance
+    description: Euclidean distance over the 500 most variable features; the dendrograms group replicates that behave alike.
+    title_size: h3
+    layout: {x: 4, y: 2, w: 4, h: 7}
+
+  # -------------------------------------------------------- reference tables
+  - component_type: text
+    tag: da-tables-intro
+    section: Reference tables
+    workflow_tag: differentialabundance
+    data_collection_tag: samples
+    title: The rows behind every tile
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The observation sheet and the full DESeq2 result set, on every tab.
+      Selecting a gene row here carries it onto the annotated table on the
+      Differential expression tab, and filters picked in the left panel narrow
+      these tables too.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: table
+    tag: da-table-samples
+    section: Reference tables
+    workflow_tag: differentialabundance
+    data_collection_tag: samples
+    row_selection_enabled: false
+    title: Observation sheet
+    description: The pipeline's --input sheet, normalised, with the DESeq2 size factor joined on.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 2, w: 8, h: 4}
+  - component_type: table
+    tag: da-table-results
+    section: Reference tables
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results
+    row_selection_enabled: true
+    row_selection_column: gene_id
+    title: DESeq2 results
+    description: Every feature in every contrast, with the significance call. Select a row to follow that gene into the annotated table.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 6, w: 8, h: 5}
+
+  # --------------------------------------------------------------- left panel
+  - component_type: interactive
+    tag: da-filter-sample
+    index: da-sample-filter
+    section: Samples
+    group: Sample scope
+    workflow_tag: differentialabundance
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample_id
+    column_type: object
+    display: {title_size: md, custom_color: '#0E9384', icon_name: 'mdi:test-tube'}
+    placement: left
+    title: Sample
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: da-filter-group
+    index: da-group-filter
+    section: Samples
+    group: Sample scope
+    workflow_tag: differentialabundance
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: group
+    column_type: object
+    display: {title_size: md, custom_color: '#0E9384', icon_name: 'mdi:account-group-outline'}
+    placement: left
+    title: Group
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: da-filter-sizefactor
+    index: da-sizefactor-range
+    section: Library size
+    group: Normalisation
+    workflow_tag: differentialabundance
+    data_collection_tag: samples
+    interactive_component_type: RangeSlider
+    column_name: size_factor
+    column_type: float64
+    display: {title_size: md, custom_color: '#0E9384', icon_name: 'mdi:scale-balance'}
+    placement: left
+    title: Size factor
+    layout: {x: 0, y: 0, w: 1, h: 3}
+
+tabs:
+- title: Differential expression
+  subtitle: Per-contrast DESeq2 statistics - volcano, MA and the test's own diagnostics
+  tab_order: 2
+  tab_icon: mdi:chart-scatter-plot
+  tab_icon_color: indigo
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Contrast
+    icon: mdi:scale-balance
+    color: indigo
+    description: Which comparison, and which side of it
+  - name: Statistics
+    icon: mdi:tune
+    color: indigo
+    description: Keep only the calls inside an effect-size or significance band
+    collapsed: true
+  grid_sections:
+  - name: Calls at a glance
+    icon: mdi:counter
+    color: indigo
+    description: How many features were tested and how many cleared both thresholds
+  - name: Volcano and MA
+    icon: mdi:chart-scatter-plot
+    color: indigo
+    description: Effect size against significance, and against expression level
+  - name: Test diagnostics
+    icon: mdi:chart-bell-curve
+    color: orange
+    description: Is the p-value distribution well behaved, and do the contrasts agree
+  - name: Gene table
+    icon: mdi:table
+    color: blue
+    description: The annotated calls, selectable row by row
+  components:
+  # ------------------------------------------------------- calls at a glance
+  - component_type: text
+    tag: da-de-intro
+    section: Calls at a glance
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results
+    title: Two contrasts, one of them empty
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      A call is significant when the adjusted p-value is below 0.05 and the
+      fold change is at least 2. The WT versus KO contrast returns 520 such
+      genes; Control versus Treated returns none. The empty one is kept on
+      purpose: a null result has to read as a null result, not as a broken tile.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: da-de-card-tested
+    section: Calls at a glance
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results
+    aggregation: nunique
+    column_name: gene_id
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: direction
+    top_n_count: 3
+    display: {icon_name: 'mdi:dna', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Features tested
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: da-de-card-lfc
+    section: Calls at a glance
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: log2fc
+    column_type: float64
+    display: {icon_name: 'mdi:chart-bell-curve', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: log2 fold change
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: da-de-card-direction
+    section: Calls at a glance
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results
+    aggregation: count
+    column_name: direction
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: direction
+    display: {icon_name: 'mdi:chart-donut', icon_color: '#7048E8', title_color: '#7048E8', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Call composition
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: da-de-card-signal
+    section: Calls at a glance
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results
+    aggregation: max
+    column_name: neg_log10_padj
+    column_type: float64
+    secondary_layout: gauge
+    coverage_max: 300
+    display: {icon_name: 'mdi:star-outline', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Strongest signal
+    layout: {x: 6, y: 2, w: 2, h: 2}
+
+  # ----------------------------------------------------------- volcano and MA
+  - component_type: text
+    tag: da-de-volcano-intro
+    section: Volcano and MA
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results
+    title: Effect size read two ways
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The volcano puts significance against effect size, the MA plot puts
+      effect size against expression level. Together they separate a real
+      change from a loud one measured on almost no reads. Pick a single
+      contrast in the left panel before reading either.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: da-av-volcano
+    index: da-av-volcano
+    section: Volcano and MA
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results
+    use: deseq2/volcano
+    config:
+      label_col: gene_id
+      category_col: direction
+      significance_threshold: 0.05
+      effect_threshold: 1.0
+      top_n_labels: 15
+      show_labels: true
+    title: Volcano
+    description: -log10(padj) against log2 fold change. The dashed lines are the pipeline's own cut-offs, padj 0.05 and a two-fold change.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 4, h: 7}
+  - component_type: advanced_viz
+    tag: da-av-ma
+    index: da-av-ma
+    section: Volcano and MA
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results
+    use: deseq2/ma
+    config:
+      significance_col: padj
+      label_col: gene_id
+      significance_threshold: 0.05
+      fold_change_threshold: 1.0
+      top_n_labels: 15
+    title: MA plot
+    description: Fold change against mean expression. The funnel narrowing to the right is the shrinkage DESeq2 applies to low-count features.
+    title_size: h3
+    layout: {x: 4, y: 2, w: 4, h: 7}
+
+  # ------------------------------------------------------- test diagnostics
+  - component_type: text
+    tag: da-de-diag-intro
+    section: Test diagnostics
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results
+    title: Does the test behave, and do the contrasts agree
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The QQ plot compares the observed p-values with the uniform null: a curve
+      that lifts off the diagonal only at the far right is what a healthy
+      contrast looks like. The scatter beside it puts one contrast's effect
+      sizes against the other's, one point per gene.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: da-av-qq
+    index: da-av-qq
+    section: Test diagnostics
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results
+    use: deseq2/qq
+    config:
+      feature_id_col: gene_id
+      category_col: direction
+      show_ci: true
+      show_identity: true
+    title: QQ plot
+    description: Observed against expected p-value quantiles, with the 95% null band. Filter to one contrast to read it.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 4, h: 6}
+  - component_type: figure
+    tag: da-fig-contrast-vs-contrast
+    index: da-contrast-vs-contrast
+    section: Test diagnostics
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results
+    mode: code
+    code_content: |
+      # One point per gene: its effect size in the first contrast against the
+      # second. Needs a per-contrast reshape, so this tile is code mode.
+      contrasts = sorted(df['contrast'].unique().to_list())
+      if len(contrasts) >= 2:
+          a, b = contrasts[0], contrasts[1]
+          left = df.filter(pl.col('contrast') == a).select(
+              'gene_id', pl.col('log2fc').alias('x'), pl.col('significant').alias('sig_x')
+          )
+          right = df.filter(pl.col('contrast') == b).select(
+              'gene_id', pl.col('log2fc').alias('y'), pl.col('significant').alias('sig_y')
+          )
+          paired = left.join(right, on='gene_id', how='inner').with_columns(
+              pl.when(pl.col('sig_x') & pl.col('sig_y')).then(pl.lit('both'))
+              .when(pl.col('sig_x')).then(pl.lit(a))
+              .when(pl.col('sig_y')).then(pl.lit(b))
+              .otherwise(pl.lit('neither'))
+              .alias('called_in')
+          )
+          fig = px.scatter(
+              paired.to_pandas(), x='x', y='y', color='called_in',
+              custom_data=['gene_id'], opacity=0.55,
+              labels={'x': a, 'y': b, 'called_in': 'Called in'},
+          )
+          fig.add_hline(y=0, line_dash='dot', line_color='#adb5bd')
+          fig.add_vline(x=0, line_dash='dot', line_color='#adb5bd')
+      else:
+          # A single-contrast run has nothing to pair: fall back to the MA view.
+          fig = px.scatter(
+              df.to_pandas(), x='log2_base_mean', y='log2fc', color='direction',
+              custom_data=['gene_id'], opacity=0.55,
+              labels={'log2_base_mean': 'log2 mean expression', 'log2fc': 'log2 fold change'},
+          )
+      fig.update_traces(marker={'size': 6})
+      fig.update_layout(margin={'t': 24, 'l': 56, 'r': 16, 'b': 48})
+    selection_enabled: true
+    selection_column: gene_id
+    title: Contrast against contrast
+    description: Effect sizes of the two contrasts, gene by gene. Points off the axes moved in both; select one to follow it into the annotated table.
+    title_size: h3
+    layout: {x: 4, y: 2, w: 4, h: 6}
+
+  # ---------------------------------------------------------------- gene table
+  - component_type: text
+    tag: da-de-table-intro
+    section: Gene table
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results_annotated
+    title: The calls with their annotation
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The same statistics carrying the gene symbol, coordinates and biotype
+      from the GTF. Selecting a row sends that gene back to the panels above
+      and to the DESeq2 results table pinned at the bottom of every tab.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: table
+    tag: da-de-table-annotated
+    section: Gene table
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results_annotated
+    row_selection_enabled: true
+    row_selection_column: gene_id
+    title: Annotated DESeq2 results
+    description: Statistics joined to the GTF. Features the annotation did not cover are dropped, so this table is shorter than the raw one.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 2, w: 8, h: 5}
+
+  # --------------------------------------------------------------- left panel
+  - component_type: interactive
+    tag: da-de-filter-contrast
+    index: da-de-contrast-filter
+    section: Contrast
+    group: Contrast scope
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results
+    interactive_component_type: MultiSelect
+    column_name: contrast
+    column_type: object
+    display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:scale-balance'}
+    placement: left
+    title: Contrast
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: da-de-filter-direction
+    index: da-de-direction-filter
+    section: Contrast
+    group: Contrast scope
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results
+    interactive_component_type: MultiSelect
+    column_name: direction
+    column_type: object
+    display: {title_size: md, custom_color: '#7048E8', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: Direction
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: da-de-filter-lfc
+    index: da-de-lfc-range
+    section: Statistics
+    group: Thresholds
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results
+    interactive_component_type: RangeSlider
+    column_name: log2fc
+    column_type: float64
+    display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:chart-bell-curve'}
+    placement: left
+    title: log2 fold change
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: da-de-filter-signal
+    index: da-de-signal-range
+    section: Statistics
+    group: Thresholds
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results
+    interactive_component_type: RangeSlider
+    column_name: neg_log10_padj
+    column_type: float64
+    display: {title_size: md, custom_color: '#F2A93B', icon_name: 'mdi:star-outline'}
+    placement: left
+    title: Significance
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: da-de-filter-basemean
+    index: da-de-basemean-range
+    section: Statistics
+    group: Thresholds
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results
+    interactive_component_type: RangeSlider
+    column_name: log2_base_mean
+    column_type: float64
+    display: {title_size: md, custom_color: '#0E9384', icon_name: 'mdi:ruler'}
+    placement: left
+    title: Expression level
+    layout: {x: 0, y: 6, w: 1, h: 3}
+
+- title: Expression
+  subtitle: The variance-stabilised matrix and how the effect sizes split by biotype
+  tab_order: 3
+  tab_icon: mdi:chart-box-outline
+  tab_icon_color: grape
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Feature scope
+    icon: mdi:shape-outline
+    color: grape
+    description: Which biotypes and which contrast the annotated panels show
+  grid_sections:
+  - name: Annotation at a glance
+    icon: mdi:counter
+    color: grape
+    description: How the annotated features distribute across biotypes and directions
+  - name: Top variable features
+    icon: mdi:chart-box-outline
+    color: grape
+    description: The 500 features that move most across the cohort, clustered both ways
+  - name: Effect by biotype
+    icon: mdi:shape-outline
+    color: violet
+    description: Whether the calls concentrate in one class of feature
+  components:
+  # -------------------------------------------------- annotation at a glance
+  - component_type: text
+    tag: da-expr-intro
+    section: Annotation at a glance
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results_annotated
+    title: What kind of feature is moving
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Only features the GTF placed on the genome reach this tab. The cards say
+      how many biotypes are represented, how concentrated they are, and how
+      strong the annotated calls get.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: da-expr-card-biotypes
+    section: Annotation at a glance
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results_annotated
+    aggregation: nunique
+    column_name: gene_biotype
+    column_type: object
+    secondary_layout: concentration
+    breakdown_col: gene_biotype
+    display: {icon_name: 'mdi:shape-outline', icon_color: '#9C36B5', title_color: '#9C36B5', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Biotypes
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: da-expr-card-genes
+    section: Annotation at a glance
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results_annotated
+    aggregation: nunique
+    column_name: gene_name
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: direction
+    display: {icon_name: 'mdi:dna', icon_color: '#9C36B5', title_color: '#9C36B5', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Annotated genes
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: da-expr-card-basemean
+    section: Annotation at a glance
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results_annotated
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: base_mean
+    column_type: float64
+    display: {icon_name: 'mdi:ruler', icon_color: '#7048E8', title_color: '#7048E8', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Mean expression
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: da-expr-card-signal
+    section: Annotation at a glance
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results_annotated
+    aggregation: average
+    column_name: neg_log10_padj
+    column_type: float64
+    secondary_layout: coverage
+    # Gauged against the significance cut-off itself, -log10(0.05) = 1.301, not against
+    # the largest value in the table. The mean of this column is around 1, so a max taken
+    # from the strongest call renders an empty bar that says nothing; against the cut-off
+    # the bar reads as how close the average feature comes to being called.
+    coverage_max: 1.301
+    display: {icon_name: 'mdi:star-outline', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Mean significance
+    layout: {x: 6, y: 2, w: 2, h: 2}
+
+  # --------------------------------------------------- top variable features
+  - component_type: text
+    tag: da-expr-heatmap-intro
+    section: Top variable features
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_vst_heatmap
+    title: The 500 features that move most
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Rows are features, columns are samples, values are variance-stabilised
+      counts z-scored per row so a highly expressed gene does not swamp the
+      scale. Both dendrograms are computed on the tile. This matrix has no
+      contrast column, so the contrast filter does not reach it.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: da-av-vst-heatmap
+    index: da-av-vst-heatmap
+    section: Top variable features
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_vst_heatmap
+    use: deseq2/top_variable_heatmap
+    config:
+      index_column: gene_id
+      cluster_rows: true
+      cluster_cols: true
+      cluster_method: ward
+      normalize: row_z
+      colorscale: RdBu
+    title: Top variable features
+    description: Row z-scored variance-stabilised expression for the 500 most variable features, clustered on both axes.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 9}
+
+  # -------------------------------------------------------- effect by biotype
+  - component_type: text
+    tag: da-expr-biotype-intro
+    section: Effect by biotype
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results_annotated
+    title: Do the calls concentrate in one class of feature
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The bar chart ranks the strongest calls per contrast; the box plot beside
+      it shows the whole effect-size distribution per biotype, so a class with
+      a handful of loud genes is easy to tell from one that shifts as a whole.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: da-av-biotype-bars
+    index: da-av-biotype-bars
+    section: Effect by biotype
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results_annotated
+    use: deseq2/annotated_da_barplot
+    config:
+      significance_col: padj
+      significance_threshold: 0.05
+      top_n: 15
+    title: Strongest calls per contrast
+    description: The 15 largest effect sizes in each contrast. An empty panel means the contrast returned no call above the threshold.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 4, h: 7}
+  - component_type: figure
+    tag: da-fig-biotype-box
+    index: da-biotype-box
+    section: Effect by biotype
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results_annotated
+    visu_type: box
+    dict_kwargs: {x: gene_biotype, y: log2fc, color: direction}
+    title: Effect size by biotype
+    description: Distribution of log2 fold change within each biotype, split by call direction.
+    title_size: h3
+    layout: {x: 4, y: 2, w: 4, h: 7}
+
+  # --------------------------------------------------------------- left panel
+  - component_type: interactive
+    tag: da-expr-filter-biotype
+    index: da-expr-biotype-filter
+    section: Feature scope
+    group: Features
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results_annotated
+    interactive_component_type: MultiSelect
+    column_name: gene_biotype
+    column_type: object
+    display: {title_size: md, custom_color: '#9C36B5', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: Biotype
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: da-expr-filter-contrast
+    index: da-expr-contrast-filter
+    section: Feature scope
+    group: Features
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results_annotated
+    interactive_component_type: MultiSelect
+    column_name: contrast
+    column_type: object
+    display: {title_size: md, custom_color: '#9C36B5', icon_name: 'mdi:scale-balance'}
+    placement: left
+    title: Contrast
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+- title: Genome view
+  subtitle: Where the calls sit on the genome, chromosome by chromosome
+  tab_order: 4
+  tab_icon: mdi:dna
+  tab_icon_color: red
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Region
+    icon: mdi:map-marker-outline
+    color: red
+    description: Which chromosomes and which contrast to place
+  - name: Signal
+    icon: mdi:tune
+    color: red
+    description: Narrow to the calls above a significance or effect-size band
+    collapsed: true
+  grid_sections:
+  - name: Calls on the genome
+    icon: mdi:counter
+    color: red
+    description: How the placed calls spread across chromosomes and directions
+  - name: Signal along the genome
+    icon: mdi:dna
+    color: red
+    description: Every annotated feature at its coordinate, height is significance
+  - name: Per-chromosome detail
+    icon: mdi:star-outline
+    color: pink
+    description: The same calls one chromosome at a time, and the annotated volcano
+  components:
+  # ------------------------------------------------------ calls on the genome
+  - component_type: text
+    tag: da-gv-intro
+    section: Calls on the genome
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results_annotated
+    title: Placing the calls
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Coordinates come from the GTF the run was given, so this tab covers only
+      the annotated features. The cards count the genes placed, how they spread
+      over chromosomes, and how far the significance reaches.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: da-gv-card-genes
+    section: Calls on the genome
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results_annotated
+    aggregation: nunique
+    column_name: gene_name
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: direction
+    display: {icon_name: 'mdi:dna', icon_color: '#E03131', title_color: '#E03131', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Genes placed
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: da-gv-card-chromosomes
+    section: Calls on the genome
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results_annotated
+    aggregation: nunique
+    column_name: chromosome
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: chromosome
+    top_n_count: 3
+    display: {icon_name: 'mdi:map-marker-outline', icon_color: '#E03131', title_color: '#E03131', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Chromosomes
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: da-gv-card-signal
+    section: Calls on the genome
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results_annotated
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: neg_log10_padj
+    column_type: float64
+    display: {icon_name: 'mdi:chart-bell-curve', icon_color: '#D6336C', title_color: '#D6336C', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Significance
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: da-gv-card-padj
+    section: Calls on the genome
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results_annotated
+    aggregation: min
+    column_name: padj
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 0.05
+    threshold_direction: max
+    threshold_warn: 0.1
+    display: {icon_name: 'mdi:check-decagram', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Best adjusted p-value
+    layout: {x: 6, y: 2, w: 2, h: 2}
+
+  # -------------------------------------------------- signal along the genome
+  - component_type: text
+    tag: da-gv-manhattan-intro
+    section: Signal along the genome
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results_annotated
+    title: Every annotated feature at its coordinate
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One dot per gene, laid out along the chromosomes, height is -log10 of the
+      adjusted p-value. Points above the line cleared padj 0.05. Select one to
+      carry that gene onto the DESeq2 results table pinned below.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: da-av-manhattan
+    index: da-av-manhattan
+    section: Signal along the genome
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results_annotated
+    use: deseq2/manhattan
+    config:
+      feature_col: gene_name
+      score_kind: "-log10(padj)"
+      score_threshold: 1.3
+      highlight: above
+      color_by_columns: [direction, gene_biotype]
+      default_color_by: direction
+      top_n_labels: 12
+      selection_enabled: true
+      selection_column: gene_id
+    title: Significance along the genome
+    description: Height is -log10(padj); the threshold line sits at padj 0.05. Features whose padj underflowed to zero are drawn at 300.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 6}
+
+  # --------------------------------------------------- per-chromosome detail
+  - component_type: text
+    tag: da-gv-detail-intro
+    section: Per-chromosome detail
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results_annotated
+    title: One chromosome at a time
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The lollipop panel splits the same calls per chromosome and colours each
+      stem by direction; pick a few chromosomes in the left panel to keep it
+      readable. The volcano repeats the contrast view with gene symbols rather
+      than Ensembl ids.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: da-av-lollipop
+    index: da-av-lollipop
+    section: Per-chromosome detail
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results_annotated
+    use: deseq2/chromosome_lollipop
+    config:
+      effect_col: neg_log10_padj
+      scale_points_by_effect: true
+      max_subplot_genes: 6
+      gene_sort: count
+      show_stems: true
+      point_size: 7
+    title: Calls per chromosome
+    description: One panel per chromosome, stems at the gene start coordinate, head size scaled by significance.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 4, h: 7}
+  - component_type: advanced_viz
+    tag: da-av-annotated-volcano
+    index: da-av-annotated-volcano
+    section: Per-chromosome detail
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results_annotated
+    use: deseq2/annotated_volcano
+    config:
+      label_col: gene_name
+      category_col: gene_biotype
+      significance_threshold: 0.05
+      effect_threshold: 1.0
+      top_n_labels: 15
+      show_labels: true
+    title: Volcano with gene symbols
+    description: The annotated calls, laid out as a volcano and coloured by biotype rather than by direction.
+    title_size: h3
+    layout: {x: 4, y: 2, w: 4, h: 7}
+
+  # --------------------------------------------------------------- left panel
+  - component_type: interactive
+    tag: da-gv-filter-chromosome
+    index: da-gv-chromosome-filter
+    section: Region
+    group: Region scope
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results_annotated
+    interactive_component_type: MultiSelect
+    column_name: chromosome
+    column_type: object
+    display: {title_size: md, custom_color: '#E03131', icon_name: 'mdi:map-marker-outline'}
+    placement: left
+    title: Chromosome
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: da-gv-filter-contrast
+    index: da-gv-contrast-filter
+    section: Region
+    group: Region scope
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results_annotated
+    interactive_component_type: MultiSelect
+    column_name: contrast
+    column_type: object
+    display: {title_size: md, custom_color: '#E03131', icon_name: 'mdi:scale-balance'}
+    placement: left
+    title: Contrast
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: da-gv-filter-signal
+    index: da-gv-signal-range
+    section: Signal
+    group: Thresholds
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results_annotated
+    interactive_component_type: RangeSlider
+    column_name: neg_log10_padj
+    column_type: float64
+    display: {title_size: md, custom_color: '#D6336C', icon_name: 'mdi:star-outline'}
+    placement: left
+    title: Significance
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: da-gv-filter-lfc
+    index: da-gv-lfc-range
+    section: Signal
+    group: Thresholds
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results_annotated
+    interactive_component_type: RangeSlider
+    column_name: log2fc
+    column_type: float64
+    display: {title_size: md, custom_color: '#D6336C', icon_name: 'mdi:chart-bell-curve'}
+    placement: left
+    title: log2 fold change
+    layout: {x: 0, y: 3, w: 1, h: 3}
