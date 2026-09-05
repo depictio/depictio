@@ -71,7 +71,8 @@ OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
 PADJ_THRESHOLD = 0.05
 LFC_THRESHOLD = 1.0
 # See results_long.PADJ_ZERO_NEG_LOG10: a padj that underflowed to 0 is capped
-# rather than sent to +inf (recipes may not import each other).
+# rather than sent to +inf (recipes may not import each other; shared helpers
+# belong in depictio/recipes/lib).
 PADJ_ZERO_NEG_LOG10 = 300.0
 SOURCE_PATH_COL = "source_path"
 
@@ -189,7 +190,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     is_sig = (padj < PADJ_THRESHOLD) & (lfc.abs() >= LFC_THRESHOLD)
     df = df.with_columns(
         pl.when(padj.is_not_null() & (padj > 0))
-        .then(-padj.log10())
+        .then(pl.min_horizontal(-padj.log10(), pl.lit(PADJ_ZERO_NEG_LOG10)))
         .when(padj == 0)
         .then(pl.lit(PADJ_ZERO_NEG_LOG10))
         .otherwise(None)
