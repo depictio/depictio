@@ -1,0 +1,111 @@
+BOWTIE2_ALIGN:
+  bowtie2: 2.5.4
+  samtools: 1.21
+  pigz: 2.8
+BOWTIE2_BUILD:
+  bowtie2: 2.5.4
+BRACKEN_BRACKEN:
+  bracken: 3.0.1
+BRACKEN_COMBINEBRACKENOUTPUTS:
+  combine_bracken_output: 2.9
+CENTRIFUGE_CENTRIFUGE:
+  centrifuge: 1.0.4
+CENTRIFUGE_KREPORT:
+  centrifuge: 1.0.4
+DIAMOND_BLASTX:
+  diamond: 2.2.1
+FASTP_PAIRED:
+  fastp: 0.24.0
+FASTQC:
+  fastqc: 0.12.1
+FASTQC_PROCESSED:
+  fastqc: 0.12.1
+GANON_CLASSIFY:
+  ganon: 2.1.0
+GANON_REPORT:
+  ganon: 2.1.0
+GANON_TABLE:
+  ganon: 2.1.0
+KAIJU_KAIJU2KRONA:
+  kaiju: 1.10.0
+KAIJU_KAIJU2TABLE_COMBINED:
+  kaiju: 1.10.0
+KAIJU_KAIJU2TABLE_SINGLE:
+  kaiju: 1.10.0
+KAIJU_KAIJU:
+  kaiju: 1.10.0
+KMCP_PROFILE:
+  kmcp: 0.9.4
+KMCP_SEARCH:
+  kmcp: 0.9.4
+KRAKEN2_KRAKEN2:
+  kraken2: 2.1.5
+  pigz: 2.8
+KRAKENTOOLS_COMBINEKREPORTS_CENTRIFUGE:
+  combine_kreports.py: 1.2
+KRAKENTOOLS_COMBINEKREPORTS_KRAKEN:
+  combine_kreports.py: 1.2
+KRAKENTOOLS_KREPORT2KRONA:
+  kreport2krona.py: 1.2
+KRAKENUNIQ_PRELOADEDKRAKENUNIQ:
+  krakenuniq: 1.0.4
+KRONA_KTIMPORTTEXT:
+  krona: 2.8.1
+MALT_RUN:
+  malt: 0.6.1
+MEGAN_RMA2INFO_TSV:
+  megan: 6.25.9
+MELON:
+  melon: 0.2.5
+MERGE_RUNS:
+  cat: 9.5
+METACACHE_QUERY:
+  metacache: 2.5.0
+METAPHLAN_MERGEMETAPHLANTABLES:
+  metaphlan: 4.1.1
+METAPHLAN_METAPHLAN:
+  metaphlan: 4.1.1
+MINIMAP2_ALIGN:
+  minimap2: 2.29-r1283
+  samtools: 1.21
+MINIMAP2_INDEX:
+  minimap2: 2.29-r1283
+MOTUS_MERGE:
+  motus: 3.0.3
+MOTUS_PREPLONG:
+  motus: 3.0.3
+MOTUS_PROFILE:
+  motus: 3.0.3
+NANOQ:
+  nanoq: 0.10.0
+NONPAREIL_CURVE:
+  nonpareil: 3.5.3
+NONPAREIL_NONPAREIL:
+  nonpareil: 3.5.5
+NONPAREIL_NONPAREILCURVESR:
+  nonpareil: 3.5.5
+NONPAREIL_SET:
+  nonpareil: 3.5.3
+PORECHOP_ABI:
+  porechop_abi: 0.5.0
+SAMTOOLS_FASTQ:
+  samtools: 1.22.1
+SAMTOOLS_INDEX:
+  samtools: 1.22.1
+SAMTOOLS_STATS:
+  samtools: 1.22.1
+SAMTOOLS_VIEW:
+  samtools: 1.22.1
+SYLPHTAX_MERGE:
+  sylph-tax: 1.2.0
+SYLPHTAX_TAXPROF:
+  sylph-tax: 1.2.0
+SYLPH_PROFILE:
+  sylph: 0.7.0
+TAXPASTA_MERGE:
+  taxpasta: 0.7.0
+UNTAR:
+  untar: 1.34
+Workflow:
+    nf-core/taxprofiler: v2.0.1-g70ecc15
+    Nextflow: 26.04.3

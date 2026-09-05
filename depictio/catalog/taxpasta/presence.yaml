@@ -1,0 +1,23 @@
+id: taxpasta_presence
+name: Profiler detection overlap
+mode: merge/presence
+description: >-
+  Per sample and taxon, a 0/1 membership column for every profiler in the run.
+  The intersections show how much of the community the classifiers agree on and
+  how long each profiler's private tail is.
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/taxpasta/merge
+find: { path_glob: "**/taxpasta/*.tsv" }
+recipe: taxpasta/presence.py
+fixture: presence.tsv
+renders_as:
+  # upset_plot binds no canonical role: the set columns are the run's profilers,
+  # so they are named in the tile's config rather than in a role.
+  - { id: profiler_upset, component: advanced_viz, kind: upset_plot }
+  - {
+      component: card,
+      column: n_profilers,
+      aggregation: median,
+      aggregations: [box_plot_stats],
+      secondary_layout: box_plot,
+    }
+  - { component: table }
