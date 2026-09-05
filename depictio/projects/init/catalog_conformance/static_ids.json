@@ -4,6 +4,11 @@
     "catalog_conformance": "045f1f968289500c09ea3939"
   },
   "data_collections": {
+    "deseq2_results_annotated": "10908a70f616f6a105ea4291",
+    "deseq2_results": "32d9b8873e1202ae8bfba322",
+    "deseq2_vst_pca": "d97c1fa079415bb09846679e",
+    "deseq2_sample_distance": "707624558c70837c221d3ae0",
+    "deseq2_vst_heatmap": "71cf2aa5bbcd54243e6cc328",
     "happy_roc": "7dfb6a2a8decc2592e83e7e9",
     "happy_summary": "8f15e6d58e41b27de15e8772",
     "ivar_variants_long": "f7cf57984ff91bc0a9c56aa2",

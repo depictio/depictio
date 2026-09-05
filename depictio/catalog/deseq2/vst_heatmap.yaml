@@ -1,0 +1,13 @@
+id: deseq2_vst_heatmap
+name: Top variable features
+mode: exploratory/heatmap
+description: >-
+  The 500 most variable features of the variance-stabilised matrix, wide
+  (features x samples), with the sample sheet's factors as column annotations.
+find: { path_glob: "**/all.vst.tsv" }
+recipe: deseq2/vst_top_variable.py
+fixture: vst_heatmap.tsv
+renders_as:
+  # `index` is not optional in practice: ComplexHeatmapConfig.index_column falls
+  # back to the literal "sample_id", which this matrix does not have.
+  - { id: top_variable_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: gene_id} }
