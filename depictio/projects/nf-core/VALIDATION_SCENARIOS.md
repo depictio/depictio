@@ -120,6 +120,41 @@ non-SARS pathogen (no lineage DBs) + metagenomic protocol (no ivar/amplicon mosd
 
 ---
 
+## differentialabundance 2.0.0
+
+**Megatest:** `s3://nf-core-awsmegatests/differentialabundance/results-30ed7741fc392127156c2fb10cfa3d69d216b54b/` (tag 2.0.0, run_root `.`, manifest `megatest.yaml`)
+
+**MultiQC:** the run writes none, by pipeline design, so the template declares no `multiqc_data` collection and the dashboard ships no QC tab.
+
+**Template requirements:**
+- Always: `samples` (hub), `deseq2_results_raw`, `deseq2_results`, `deseq2_vst_pca`,
+  `deseq2_vst_heatmap`, `deseq2_sample_distance`
+- Conditional on `--gtf`: `deseq2_results_annotated_raw` and `deseq2_results_annotated`,
+  both `optional: true`. Without them the Expression and Genome view tabs have no data.
+- The samplesheet and the contrasts file are not published under the results prefix.
+  `pipeline_info/params.json` names them as public URLs and `post_fetch_help` in the
+  manifest carries the two `curl` lines that mirror them into `<DATA_ROOT>/input/`.
+
+### Run executed (this branch)
+
+| Run | Source | Notes |
+|---|---|---|
+| megatest 2.0.0 | AWS megatest, tag_sha `30ed7741` | 24 mouse RNA-seq samples from a featureCounts matrix, two contrasts, DESeq2 route, 8/8 collections ingested |
+
+### Further scenarios (analytical, not yet run)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| D1 | **limma route** | `--differential_method limma` | writes `*.limma.results.tsv`, no DESeq2 tables and no `all.vst.tsv` | No conditional prunes the DESeq2 collections, so every one of them fails instead of being removed. Highest-value unrun scenario. |
+| D2 | **no annotation** | omit `--gtf` | the annotated tables are never written | Exercises the two `optional: true` collections and the empty Expression / Genome view tabs. Cheapest scenario with real coverage. |
+| D3 | **affy arrays** | `-profile test_affy` | matrix comes from CEL files, no variance-stabilising transform | The three VST-derived collections have no source file and fail; a route conditional would be needed. |
+| D4 | **single contrast** | one row in the contrasts file | no second contrast | The contrast-versus-contrast scatter degenerates to a single group and the contrast MultiSelect has one option. |
+| D5 | **enrichment enabled** | `--gsea_run` or gprofiler2 | publishes GSEA / g:Profiler tables under `tables/` | No collection binds them today, so the `enrichment` visualisation kind stays unused on this template. |
+
+**Ranking by template stress:** D1 > D3 > D2 > D5 > D4
+
+---
+
 ## Priority additions to `generate_validation_runs.sh`
 
 In order of value-per-effort:
