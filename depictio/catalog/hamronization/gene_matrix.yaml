@@ -11,5 +11,5 @@ find:
 recipe: hamronization/gene_matrix.py
 fixture: gene_matrix.tsv
 renders_as:
-  - { id: arg_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: gene_symbol, row_annotation_cols: [drug_class]} }
+  - { id: arg_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: gene_symbol, row_annotation_cols: [drug_class_primary]} }
   - { component: table }
