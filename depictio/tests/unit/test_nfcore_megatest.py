@@ -560,6 +560,30 @@ def test_fetch_run_dry_run_writes_nothing_and_reports_unmatched(
     assert not dest.exists()
 
 
+def test_fetch_run_refuses_a_key_that_escapes_the_destination(
+    mt: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A bucket key that is absolute or climbs out must not be written.
+
+    Path joining drops the destination when the right operand is absolute, so
+    without the guard such a key would land outside the fetch directory.
+    """
+    prefix = f"ampliseq/results-{SHA_A}/"
+    for hostile in ("../escape.tsv", "/etc/escape.tsv"):
+        monkeypatch.setattr(mt, "_s3_list", FakeBucket(_run(prefix, (hostile, 12))))
+
+        def must_not_download(*args, **kwargs):
+            raise AssertionError("a rejected key must not be downloaded")
+
+        monkeypatch.setattr(mt, "download_object", must_not_download)
+        run = mt.ResolvedRun("ampliseq", SHA_A, prefix, "2.18.0", "")
+        dest = tmp_path / "megatest"
+        with pytest.raises(mt.MegatestError, match="below the destination"):
+            mt.fetch_run(run, dest, keys=["*escape.tsv"])
+        assert not (tmp_path / "escape.tsv").exists()
+        assert not Path("/etc/escape.tsv").exists()
+
+
 def test_download_object_skips_same_size_and_leaves_no_part_file(
     mt: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
