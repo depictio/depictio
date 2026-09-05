@@ -1,0 +1,15 @@
+id: ampcombi_embedding
+name: Property embedding
+mode: amp/embedding
+description: >-
+  Two-dimensional PCA of the AMP candidates over their physicochemical
+  descriptors (molecular weight, isoelectric point, hydrophobicity and the
+  helix, turn and sheet fractions), standardised before the decomposition.
+find: { path_glob: "**/ampcombi2/Ampcombi_summary.tsv" }
+recipe: ampcombi/embedding.py
+fixture: embedding.tsv
+renders_as:
+  # One point per candidate, so the embedding's `sample_id` role carries the
+  # CDS id; the sample rides along as an optional colour key.
+  - { id: amp_embedding, component: advanced_viz, kind: embedding, roles: {sample_id: cds_id, dim_1: dim_1, dim_2: dim_2} }
+  - { component: table }

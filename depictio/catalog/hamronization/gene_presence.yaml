@@ -1,0 +1,19 @@
+id: hamronization_gene_presence
+name: Gene support
+mode: arg/support
+description: >-
+  One row per sample and resistance gene: how many hits were reported, how many
+  of the screening tools agree on it, and the mean identity and coverage of the
+  hits that carry them.
+find:
+  path_glob: "**/hamronization_summarize/*combined_report.tsv"
+  path_glob_alt: ["**/hamronization/*combined_report.tsv"]
+recipe: hamronization/gene_presence.py
+fixture: gene_presence.tsv
+renders_as:
+  # Dot colour = mean identity of the hits, dot size = share of the screening
+  # tools that called the gene in that sample.
+  - { id: arg_dot_plot, component: advanced_viz, kind: dot_plot, roles: {cluster: sample, gene: gene_symbol, mean_expression: mean_identity, frac_expressing: tool_frac} }
+  - { component: card, column: n_tools, aggregation: average, secondary_layout: gauge, coverage_max: 5.0 }
+  - { component: card, column: mean_identity, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

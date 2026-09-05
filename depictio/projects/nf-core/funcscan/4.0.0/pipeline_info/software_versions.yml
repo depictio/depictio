@@ -1,0 +1,96 @@
+ABRICATE_RUN:
+  abricate: 1.0.1
+AMPCOMBI2_CLUSTER:
+  ampcombi: 3.0.0
+AMPCOMBI2_COMPLETE:
+  ampcombi: 3.0.0
+AMPCOMBI2_PARSETABLES:
+  ampcombi: 3.0.0
+AMPIR:
+  ampir: 1.1.0
+AMP_DATABASE_DOWNLOAD:
+  ampcombi: 3.0.0
+AMP_GUNZIP_HMMER_HMMSEARCH:
+  gunzip: 1.13
+AMP_HMMER_HMMSEARCH:
+  hmmer: 3.4
+AMRFINDERPLUS_RUN:
+  amrfinderplus: 4.0.23
+  amrfinderplus-database: null
+AMRFINDERPLUS_UPDATE:
+  amrfinderplus: 4.0.23
+ANTISMASH_ANTISMASH:
+  antismash: 8.0.1
+ANTISMASH_ANTISMASHDOWNLOADDATABASES:
+  antismash: 8.0.1
+ARGNORM_ABRICATE:
+  argnorm: 0.5.0
+ARGNORM_AMRFINDERPLUS:
+  argnorm: 0.5.0
+ARGNORM_DEEPARG:
+  argnorm: 0.5.0
+BGC_HMMER_HMMSEARCH:
+  hmmer: 3.4
+COMBGC:
+  comBGC: null
+DEEPARG_DOWNLOADDATA:
+  deeparg: 1.0.4
+DEEPARG_PREDICT:
+  deeparg: 1.0.4
+FARGENE:
+  fargene: 0.1
+GECCO_RUN:
+  gecco: 0.10.1
+GUNZIP_INPUT_PREP:
+  gunzip: 1.13
+GUNZIP_MACREL_ORFS:
+  gunzip: 1.13
+GUNZIP_MACREL_PRED:
+  gunzip: 1.13
+GUNZIP_PYRODIGAL_FAA:
+  gunzip: 1.13
+GUNZIP_PYRODIGAL_FNA:
+  gunzip: 1.13
+GUNZIP_PYRODIGAL_GBK:
+  gunzip: 1.13
+GUNZIP_PYRODIGAL_GFF:
+  gunzip: 1.13
+HAMRONIZATION_ABRICATE:
+  hamronization: 1.1.9
+HAMRONIZATION_AMRFINDERPLUS:
+  hamronization: 1.1.9
+HAMRONIZATION_DEEPARG:
+  hamronization: 1.1.9
+HAMRONIZATION_FARGENE:
+  hamronization: 1.1.9
+HAMRONIZATION_RGI:
+  hamronization: 1.1.9
+HAMRONIZATION_SUMMARIZE:
+  hamronization: 1.1.9
+MACREL_CONTIGS:
+  macrel: 1.4.0
+PYRODIGAL_GBK:
+  pyrodigal: 3.6.3
+PYRODIGAL_GFF:
+  pyrodigal: 3.6.3
+RGI_CARDANNOTATION:
+  rgi: 6.0.5
+  rgi-database: 4.0.1
+RGI_MAIN:
+  rgi: 6.0.5
+  rgi-database: 4.0.1
+RUNDBCAN_CAZYMEANNOTATION:
+  rundbcan: 5.2.9
+RUNDBCAN_DATABASE:
+  rundbcan: 5.2.9
+RUNDBCAN_EASYCGC:
+  rundbcan: 5.2.9
+RUNDBCAN_EASYSUBSTRATE:
+  rundbcan: 5.2.9
+SEQKIT_SEQ_LENGTH:
+  seqkit: v2.9.0
+UNTAR_CARD:
+  untar: 1.34
+Workflow:
+    nf-core/funcscan: v4.0.0-gaee3dc9
+    Nextflow: 26.04.4

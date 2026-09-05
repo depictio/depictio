@@ -1,0 +1,18 @@
+id: combgc_summary
+name: BGC regions
+mode: bgc/regions
+description: >-
+  One row per predicted biosynthetic gene cluster, with the caller, product
+  class, region coordinates, CDS count and PFAM domain richness normalised
+  across antiSMASH, DeepBGC and GECCO.
+find: { path_glob: "**/combgc/combgc_complete_summary.tsv" }
+recipe: combgc/summary.py
+fixture: summary.tsv
+renders_as:
+  - { id: bgc_hierarchy, component: advanced_viz, kind: sunburst, roles: {ranks: [tool, product_class], abundance: regions} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: regions, color: product_class, title: BGC regions per sample} }
+  - { component: card, column: regions, aggregation: sum, secondary_layout: top_n, breakdown_col: product_class, top_n_count: 4 }
+  - { component: card, column: contig, aggregation: nunique, secondary_layout: composition, breakdown_col: complete }
+  - { component: card, column: length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: cds_count, aggregation: average, secondary_layout: histogram }
+  - { component: table, row_selection_enabled: true, row_selection_column: contig }
