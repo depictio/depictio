@@ -91,6 +91,11 @@ at a local copy.
 
 ## Known gaps
 
+These are gaps in what the **bucket publishes**. The gaps in **Depictio itself** that
+this lot exposed (recipe provenance, `dc_ref` ordering, catalog loading, the MultiQC
+version gate, seeding, missing visualisation kinds) are in
+[`TEMPLATE_BOTTLENECKS.md`](TEMPLATE_BOTTLENECKS.md).
+
 - **Empty release prefixes** (failed runs or truncated syncs, to report to
   nf-core): methylseq 4.2.0 / 4.0.0 / 3.0.0, chipseq 2.1.0 / 2.0.0, atacseq
   2.1.1 / 2.1.2, cutandrun 3.2 / 3.2.1 / 3.2.2, quantms 1.2.0, bacass 2.1.0 to
