@@ -1,0 +1,4 @@
+intron	chrom	start	end	strand	gene	gene_id	uniq_mapped	multi_mapped	score	n_tcga_cohorts	top_tcga_cohort	top_tcga_pct	n_gtex_tissues	top_gtex_tissue	top_gtex_pct	variant_name
+chr7:91941148-91970472	chr7	91941148	91970472	+	AKAP9	ENSG00000127914.19	3	0	3.0	5	ESCA	13.61	1	Thyroid	0.22	""
+chr7:91970509-91973710	chr7	91970509	91973710	+	AKAP9	ENSG00000127914.19	4	0	4.0	5	ESCA	16.23	2	Thyroid	0.22	""
+chr8:42897189-42925556	chr8	42897189	42925556	+	HOOK3	ENSG00000168172.9	2	0	2.0	4	ESCA	3.66	1	Thyroid	0.22	""

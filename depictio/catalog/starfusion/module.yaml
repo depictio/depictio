@@ -1,0 +1,5 @@
+# STAR-Fusion — fusion transcript detection from STAR chimeric alignments.
+# Identity beyond these three fields is derived from the nf-core meta.yml.
+id: starfusion
+name: STAR-Fusion
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/starfusion/detect
