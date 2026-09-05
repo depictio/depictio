@@ -192,6 +192,45 @@ non-SARS pathogen (no lineage DBs) + metagenomic protocol (no ivar/amplicon mosd
 
 ---
 
+## airrflow 5.1.0
+
+**Megatest:** `s3://nf-core-awsmegatests/airrflow/results-e69d49e3f23f11a3391755b5fb7aa4283c0a2471/` (tag 5.1.0, run_root `.`, manifest `megatest.yaml`). 5.1.1 publishes no megatest run.
+
+**MultiQC:** run wrote 1.34, used as-is (fastp plus FastQC on raw and post-assembly reads, four module sections).
+
+**Template requirements:**
+- Always: `multiqc_data`, `samplesheet` (hub), `sequence_counts`, `sequence_fates`,
+  `repertoire_summary`, `clonal_diversity`, `clone_sizes`, `clone_sets`, `clonal_overlap`,
+  `v_gene_usage`, `v_gene_matrix`
+- `optional: true`: `threshold_summary`
+- Conditionals: `SKIP_CLONAL_ANALYSIS`, `SKIP_REPORT`, `SKIP_THRESHOLD_REPORT`,
+  `SKIP_MULTIQC`, `ASSEMBLED_MODE`
+- None of those five flags is auto-detected. `_introspect_pipeline_params` in
+  `depictio/cli/cli/utils/templates.py` maps only the ampliseq and viralrecon flags, so a
+  run that skipped a step needs the matching `--var`. Every affected collection is either
+  optional or pruned by its conditional, so a run that omits the flag still ingests.
+
+### Run executed (this branch)
+
+| Run | Source | Notes |
+|---|---|---|
+| megatest 5.1.0 | AWS megatest, tag_sha `e69d49e3` | ten-sample, two-subject multiple sclerosis B cell study, default `--mode fastq` UMI route, 12/12 collections ingested |
+
+### Further scenarios (analytical, not yet run)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| A1 | **assembled input** | `--mode assembled` | pRESTO never runs, `parsed_logs/` is absent | Exercises `ASSEMBLED_MODE`: the two sequence-log collections and the Sequence processing funnel are pruned. |
+| A2 | **TCR instead of BCR** | `--loci tr` | V, D and J gene names are TR, not IG | Tests that the V-usage recipes read the gene column rather than assuming an IGHV prefix. |
+| A3 | **report skipped** | `--skip_report` | `repertoire_comparison/` is absent | Exercises `SKIP_REPORT`: the two V-gene collections go and the Repertoire tab loses its heatmap. |
+| A4 | **fixed clonal threshold** | `--clonal_threshold 0.1` | no find-threshold fit is published | Exercises `SKIP_THRESHOLD_REPORT` and the one `optional: true` collection. |
+| A5 | **single subject** | any one-subject samplesheet | one value in `subject_id` | The persistent Subject filter degenerates and the faceted diversity figure collapses to one panel. |
+| A6 | **no UMIs** | `--library_generation_method specific_pcr` | different pRESTO stage set | `sequence_fates` carries a different stage vocabulary, so the funnel must not pin stage names. |
+
+**Ranking by template stress:** A2 > A1 > A6 > A3 > A5 > A4
+
+---
+
 ## Priority additions to `generate_validation_runs.sh`
 
 In order of value-per-effort:

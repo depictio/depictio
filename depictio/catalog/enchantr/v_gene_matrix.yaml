@@ -1,0 +1,17 @@
+id: enchantr_v_gene_matrix
+name: V gene usage matrix
+mode: repertoire-comparison/v-matrix
+# Written by airrflow's repertoire_comparison Rmd (alakazam countGenes) rather
+# than by enchantR itself; kept in this tool because it is the same report.
+description: >-
+  Sample by V gene matrix of sequence fractions, one row per sample and locus,
+  ready to be clustered so samples with a similar V repertoire group together.
+find: { path_glob: "**/repertoire_comparison/V_family/V_gene_distribution_by_sequence_data.tsv" }
+recipe: enchantr/v_gene_matrix.py
+fixture: v_gene_matrix.tsv
+renders_as:
+  - id: v_gene_heatmap
+    component: advanced_viz
+    kind: complex_heatmap
+    roles: { index: row_id }
+  - { component: table }

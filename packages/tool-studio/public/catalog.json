@@ -1049,6 +1049,651 @@
     },
     {
       "biotools_url": null,
+      "description": "Immcantation R package that drives nf-core/airrflow's adaptive immune receptor repertoire (AIRR) analysis: clonal assignment, nearest-neighbour distance threshold finding, and the clonal diversity / abundance / overlap report.",
+      "dir": "depictio/catalog/enchantr",
+      "homepage": "https://immcantation.readthedocs.io",
+      "id": "enchantr",
+      "name": "enchantR",
+      "nf_core_url": null,
+      "outputs": [
+        {
+          "columns": {},
+          "description": "alakazam Hill diversity profile per sample: the bootstrapped diversity d at every order q from richness to inverse Simpson, with its confidence band and the matching evenness.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/repertoire_analysis_report/tables/clonal_diversity.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "clonal_diversity.tsv",
+          "fixtureContent": "sample_id\tsubject_id\tq\td\td_sd\td_lower\td_upper\te\te_lower\te_upper\nSRR1383451\tM4\t0.0\t440.65\t6.59431001872945\t427.725389860399\t453.574610139601\t1.0\t0.970669215614203\t1.0293307843858\nSRR1383451\tM4\t0.1\t438.997725374576\t6.86731399622702\t425.538037271443\t452.457413477708\t0.996250369623456\t0.96570529279801\t1.0267954464489\nSRR1383451\tM4\t0.2\t437.251918668312\t7.16077078092417\t423.217065836154\t451.28677150047\t0.992288479900856\t0.960438138740846\t1.02413882106087\nSRR1383451\tM4\t0.3\t435.4064701563\t7.47681694744752\t420.752178220304\t450.060762092295\t0.988100465576534\t0.954844384932041\t1.02135654622103\nSRR1383451\tM4\t0.4\t433.454929102582\t7.81783151887966\t418.132260888376\t448.777597316788\t0.983671687512952\t0.948898810594295\t1.01844456443161\nSRR1383452\tM4\t0.0\t437.4\t6.80008867810933\t424.072071099227\t450.727928900773\t1.0\t0.969529197757721\t1.03047080224228\nSRR1383452\tM4\t0.1\t435.600847986708\t7.07813708785541\t421.727954216874\t449.473741756542\t0.995886712361015\t0.964169991350878\t1.02760343337115\nSRR1383452\tM4\t0.2\t433.698231468475\t7.37580390556323\t419.241921456541\t448.154541480409\t0.991536880357739\t0.958486331633611\t1.02458742908187\nSRR1383452\tM4\t0.3\t431.68533063026\t7.69500256171383\t416.603402748358\t446.767258512163\t0.986934912277687\t0.952454052922628\t1.02141577163275\nSRR1383452\tM4\t0.4\t429.554953954241\t8.03786714312801\t413.801023841192\t445.30888406729\t0.982064366607776\t0.946047150985808\t1.01808158222974\nSRR1383453\tM4\t0.0\t438.585\t7.3929733718161\t424.095038452577\t453.074961547423\t1.0\t0.966962022076854\t1.03303797792315\nSRR1383453\tM4\t0.1\t436.843798289631\t7.69967036699798\t421.752721677484\t451.934874901777\t0.996029956085208\t0.961621399905342\t1.03043851226507\nSRR1383453\tM4\t0.2\t435.00351250558\t8.02818344938714\t419.2685620835\t450.738462927659\t0.991833994563379\t0.955957367633413\t1.02771062149335\nSRR1383453\tM4\t0.3\t433.057702393874\t8.38055211944615\t416.632122069199\t449.483282718549\t0.987397431270732\t0.949946126906298\t1.02484873563517\nSRR1383453\tM4\t0.4\t430.999585731856\t8.75901278044329\t413.832236142061\t448.166935321651\t0.982704802334453\t0.943562219734057\t1.02184738493485\nSRR1383463\tM5\t0.0\t452.29\t5.60293354606389\t441.308452041943\t463.271547958057\t1.0\t0.975720117716384\t1.02427988228362\nSRR1383463\tM5\t0.1\t451.17989638286\t5.80335269947784\t439.805534102301\t462.55425866342\t0.997545593276129\t0.972397209980987\t1.02269397657127\nSRR1383463\tM5\t0.2\t450.015292672314\t6.01519055498017\t438.225735824407\t461.80484952022\t0.994970688435105\t0.968904322059756\t1.02103705481045\nSRR1383463\tM5\t0.3\t448.793242515066\t6.23928003679221\t436.564478353493\t461.022006676638\t0.992268771175718\t0.965231330238328\t1.01930621211311\nSRR1383463\tM5\t0.4\t447.510669754253\t6.47651856362955\t434.816926624334\t460.204412884172\t0.989433040204854\t0.961367544328494\t1.01749853608121\nSRR1383464\tM5\t0.0\t441.74\t6.40841155774716\t429.179744148705\t454.300255851295\t1.0\t0.971566405914577\t1.02843359408542\nSRR1383464\tM5\t0.1\t440.264925898646\t6.63985855930817\t427.251042259962\t453.27880953733\t0.996660764021021\t0.967200258658853\t1.02612126938319\nSRR1383464\tM5\t0.2\t438.717423471542\t6.88480517223652\t425.223453293383\t452.2113936497\t0.993157566603753\t0.962610253301451\t1.02370487990605\nSRR1383464\tM5\t0.3\t437.093680923962\t7.14429515081873\t423.091119733433\t451.096242114491\t0.989481778702317\t0.95778312974472\t1.02118042765991\nSRR1383464\tM5\t0.4\t435.389747202964\t7.41946708380496\t420.847858934225\t449.931635471702\t0.985624456021559\t0.95270489186903\t1.01854402017409\nSRR1383465\tM5\t0.0\t448.775\t6.04043119696153\t436.935972402863\t460.614027597137\t1.0\t0.973619235480727\t1.02638076451927\nSRR1383465\tM5\t0.1\t447.54459991266\t6.26038964651196\t435.274461676309\t459.81473814901\t0.997258314105419\t0.969916910871391\t1.02459971733945\nSRR1383465\tM5\t0.2\t446.253907250988\t6.49322657584182\t433.52741701888\t458.980397483096\t0.994382278983874\t0.966023992020232\t1.02274056594752\nSRR1383465\tM5\t0.3\t444.899704928692\t6.73990433396501\t431.689735174876\t458.109674682509\t0.991364726040204\t0.96192910740321\t1.0208003446772\nSRR1383465\tM5\t0.4\t443.478643771874\t7.00146083373461\t429.756032698586\t457.201254845161\t0.988198192350006\t0.957620261152217\t1.01877612354779\nSRR1383466\tM5\t0.0\t379.92\t8.81259947732442\t362.647622414268\t397.192377585732\t1.0\t0.954536803575141\t1.04546319642486\nSRR1383466\tM5\t0.1\t375.273479500682\t9.24477623846798\t357.154051028153\t393.392907973211\t0.987769739683834\t0.940076992598845\t1.03546248676882\nSRR1383466\tM5\t0.2\t370.28495270588\t9.72210861885463\t351.229969959138\t389.339935452621\t0.974639273283533\t0.924484022844647\t1.02479452372242\nSRR1383466\tM5\t0.3\t364.926332887167\t10.2506795115669\t344.835370227433\t385.017295546901\t0.96053467279208\t0.907652585353319\t1.01341676023084\nSRR1383466\tM5\t0.4\t359.168800916014\t10.837042555182\t337.928587808929\t380.409014023098\t0.945380082427915\t0.889473014868732\t1.0012871499871\nSRR1383467\tM5\t0.0\t407.835\t7.98288212584752\t392.18883854051\t423.48116145949\t1.0\t0.961636050217638\t1.03836394978236\nSRR1383467\tM5\t0.1\t404.864587942752\t8.31261799586209\t388.572156053622\t421.157019831881\t0.99271663281168\t0.952768046032397\t1.03266521959096\nSRR1383467\tM5\t0.2\t401.716184465505\t8.66754512473714\t384.728108186644\t418.704260744365\t0.984996835645554\t0.94334254830175\t1.02665112298936\nSRR1383467\tM5\t0.3\t398.377895992886\t9.05033489291582\t380.639565554745\t416.116226431027\t0.976811445787846\t0.933317556253742\t1.02030533532195\nSRR1383467\tM5\t0.4\t394.837393656008\t9.46393409341811\t376.288423680848\t413.386363631168\t0.968130233197269\t0.922648678217534\t1.013611788177\nSRR1383468\tM5\t0.0\t386.475\t8.37856651727622\t370.053311384065\t402.896688615935\t1.0\t0.95750905332574\t1.04249094667426\nSRR1383468\tM5\t0.1\t381.720636634254\t8.82216192370498\t364.429516998012\t399.011756270497\t0.98769813476746\t0.942957544467331\t1.03243872506759\nSRR1383468\tM5\t0.2\t376.596096620344\t9.3101725630368\t358.348493706939\t394.843699533749\t0.974438441348973\t0.927222960623427\t1.02165392207452\nSRR1383468\tM5\t0.3\t371.071566566302\t9.84748846205495\t351.7708438425\t390.372289290103\t0.960143777906208\t0.910203360741317\t1.0100841950711\nSRR1383468\tM5\t0.4\t365.116981805074\t10.439091407108\t344.65673861582\t385.577224994327\t0.944736352429196\t0.891795688248452\t0.997677016609941\n",
+          "id": "enchantr_clonal_diversity",
+          "mode": "repertoire-analysis/diversity",
+          "name": "Clonal diversity profile",
+          "path_glob": "**/repertoire_analysis_report/tables/clonal_diversity.tsv",
+          "rawYaml": "id: enchantr_clonal_diversity\nname: Clonal diversity profile\nmode: repertoire-analysis/diversity\ndescription: >-\n  alakazam Hill diversity profile per sample: the bootstrapped diversity d at\n  every order q from richness to inverse Simpson, with its confidence band and\n  the matching evenness.\nfind: { path_glob: \"**/repertoire_analysis_report/tables/clonal_diversity.tsv\" }\nrecipe: enchantr/clonal_diversity.py\nfixture: clonal_diversity.tsv\nrenders_as:\n  # A diversity profile is a curve per sample over an ordered x: the same shape\n  # a rarefaction curve has, so the rarefaction renderer draws it directly.\n  - id: diversity_profile\n    component: advanced_viz\n    kind: rarefaction\n    roles: { sample_id: sample_id, depth: q, metric: d }\n  # Narrowed to one q, the same rows are one Hill number per sample with its\n  # bootstrap confidence interval.\n  - id: diversity_ci_bars\n    component: advanced_viz\n    kind: metric_ci_bars\n    roles: { label: sample_id, value: d, lower: d_lower, upper: d_upper }\n  - { component: table }\n",
+          "recipe": "enchantr/clonal_diversity.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "diversity_profile",
+              "kind": "rarefaction",
+              "roles": {
+                "depth": "q",
+                "metric": "d",
+                "sample_id": "sample_id"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "diversity_ci_bars",
+              "kind": "metric_ci_bars",
+              "roles": {
+                "label": "sample_id",
+                "lower": "d_lower",
+                "upper": "d_upper",
+                "value": "d"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "clonal_diversity",
+          "yamlPath": "depictio/catalog/enchantr/clonal_diversity.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Sample by sample matrix of how many clones two samples share. Clones are defined within a subject, so samples of different subjects always read zero; the diagonal is zeroed so the colour scale spans the real sharing.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/repertoire_analysis_report/tables/clonal_overlap.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "clonal_overlap.tsv",
+          "fixtureContent": "sample_id\tsubject_id\tSRR1383451\tSRR1383452\tSRR1383453\tSRR1383456\tSRR1383463\tSRR1383464\tSRR1383465\tSRR1383466\tSRR1383467\tSRR1383468\nSRR1383451\tM4\t0.0\t2815.0\t2732.0\t1.0\t0.0\t0.0\t0.0\t0.0\t0.0\t0.0\nSRR1383452\tM4\t2815.0\t0.0\t2799.0\t1.0\t0.0\t0.0\t0.0\t0.0\t0.0\t0.0\nSRR1383453\tM4\t2732.0\t2799.0\t0.0\t1.0\t0.0\t0.0\t0.0\t0.0\t0.0\t0.0\nSRR1383456\tM4\t1.0\t1.0\t1.0\t0.0\t0.0\t0.0\t0.0\t0.0\t0.0\t0.0\nSRR1383463\tM5\t0.0\t0.0\t0.0\t0.0\t0.0\t6548.0\t7458.0\t132.0\t166.0\t148.0\nSRR1383464\tM5\t0.0\t0.0\t0.0\t0.0\t6548.0\t0.0\t6755.0\t148.0\t181.0\t148.0\nSRR1383465\tM5\t0.0\t0.0\t0.0\t0.0\t7458.0\t6755.0\t0.0\t131.0\t165.0\t147.0\nSRR1383466\tM5\t0.0\t0.0\t0.0\t0.0\t132.0\t148.0\t131.0\t0.0\t98.0\t111.0\nSRR1383467\tM5\t0.0\t0.0\t0.0\t0.0\t166.0\t181.0\t165.0\t98.0\t0.0\t114.0\nSRR1383468\tM5\t0.0\t0.0\t0.0\t0.0\t148.0\t148.0\t147.0\t111.0\t114.0\t0.0\n",
+          "id": "enchantr_clonal_overlap",
+          "mode": "repertoire-analysis/overlap",
+          "name": "Clonal overlap matrix",
+          "path_glob": "**/repertoire_analysis_report/tables/clonal_overlap.tsv",
+          "rawYaml": "id: enchantr_clonal_overlap\nname: Clonal overlap matrix\nmode: repertoire-analysis/overlap\ndescription: >-\n  Sample by sample matrix of how many clones two samples share. Clones are\n  defined within a subject, so samples of different subjects always read zero;\n  the diagonal is zeroed so the colour scale spans the real sharing.\nfind: { path_glob: \"**/repertoire_analysis_report/tables/clonal_overlap.tsv\" }\nrecipe: enchantr/clonal_overlap.py\nfixture: clonal_overlap.tsv\nrenders_as:\n  - id: overlap_heatmap\n    component: advanced_viz\n    kind: complex_heatmap\n    roles: { index: sample_id }\n  - { component: table }\n",
+          "recipe": "enchantr/clonal_overlap.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "overlap_heatmap",
+              "kind": "complex_heatmap",
+              "roles": {
+                "index": "sample_id"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "clonal_overlap",
+          "yamlPath": "depictio/catalog/enchantr/clonal_overlap.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Clone by sample presence matrix. Each row is one clone of one subject and each sample column is a 0/1 membership flag, so an UpSet reads the intersections as clones shared by exactly those samples.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/repertoire_analysis_report/tables/clone_sizes_table.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "clone_sets.tsv",
+          "fixtureContent": "clone\tsubject_id\tn_samples\ttotal_sequences\tSRR1383451\tSRR1383452\tSRR1383453\tSRR1383456\tSRR1383463\tSRR1383464\tSRR1383465\tSRR1383466\tSRR1383467\tSRR1383468\nM5:24369\tM5\t6\t299\t0\t0\t0\t0\t1\t1\t1\t1\t1\t1\nM5:26299\tM5\t6\t276\t0\t0\t0\t0\t1\t1\t1\t1\t1\t1\nM5:15275\tM5\t6\t210\t0\t0\t0\t0\t1\t1\t1\t1\t1\t1\nM5:6942\tM5\t6\t194\t0\t0\t0\t0\t1\t1\t1\t1\t1\t1\nM5:3268\tM5\t6\t131\t0\t0\t0\t0\t1\t1\t1\t1\t1\t1\nM5:22663\tM5\t6\t95\t0\t0\t0\t0\t1\t1\t1\t1\t1\t1\nM5:12562\tM5\t6\t90\t0\t0\t0\t0\t1\t1\t1\t1\t1\t1\nM5:20762\tM5\t6\t69\t0\t0\t0\t0\t1\t1\t1\t1\t1\t1\nM5:29024\tM5\t6\t13\t0\t0\t0\t0\t1\t1\t1\t1\t1\t1\nM5:5442\tM5\t6\t9\t0\t0\t0\t0\t1\t1\t1\t1\t1\t1\nM5:100\tM5\t5\t345\t0\t0\t0\t0\t1\t1\t1\t0\t1\t1\nM5:19010\tM5\t5\t325\t0\t0\t0\t0\t1\t1\t1\t1\t0\t1\nM5:6125\tM5\t5\t279\t0\t0\t0\t0\t1\t1\t1\t1\t0\t1\nM5:6245\tM5\t5\t268\t0\t0\t0\t0\t1\t1\t1\t0\t1\t1\nM5:8485\tM5\t5\t240\t0\t0\t0\t0\t1\t1\t1\t0\t1\t1\nM5:19215\tM5\t5\t232\t0\t0\t0\t0\t1\t1\t1\t1\t1\t0\nM5:28905\tM5\t5\t230\t0\t0\t0\t0\t1\t1\t1\t0\t1\t1\nM5:2103\tM5\t5\t217\t0\t0\t0\t0\t1\t1\t1\t1\t1\t0\nM5:1403\tM5\t5\t206\t0\t0\t0\t0\t1\t1\t1\t1\t0\t1\nM5:976\tM5\t5\t202\t0\t0\t0\t0\t1\t1\t1\t0\t1\t1\nM5:19087\tM5\t5\t179\t0\t0\t0\t0\t1\t1\t1\t0\t1\t1\nM5:27112\tM5\t5\t177\t0\t0\t0\t0\t1\t1\t1\t1\t1\t0\nM5:144\tM5\t5\t169\t0\t0\t0\t0\t1\t1\t1\t0\t1\t1\nM5:2191\tM5\t5\t164\t0\t0\t0\t0\t1\t1\t1\t1\t0\t1\nM5:6986\tM5\t5\t159\t0\t0\t0\t0\t1\t1\t1\t1\t0\t1\nM5:1009\tM5\t5\t142\t0\t0\t0\t0\t1\t1\t1\t1\t1\t0\nM5:221\tM5\t5\t138\t0\t0\t0\t0\t1\t1\t1\t0\t1\t1\nM5:6713\tM5\t5\t130\t0\t0\t0\t0\t1\t1\t1\t1\t1\t0\nM5:25723\tM5\t5\t115\t0\t0\t0\t0\t1\t1\t1\t0\t1\t1\nM5:7198\tM5\t5\t108\t0\t0\t0\t0\t1\t1\t1\t1\t1\t0\nM5:2755\tM5\t5\t106\t0\t0\t0\t0\t1\t1\t1\t0\t1\t1\nM5:27666\tM5\t5\t99\t0\t0\t0\t0\t1\t1\t1\t1\t0\t1\nM5:3252\tM5\t5\t85\t0\t0\t0\t0\t1\t1\t1\t1\t0\t1\nM5:21538\tM5\t5\t83\t0\t0\t0\t0\t1\t1\t1\t1\t1\t0\nM5:133\tM5\t5\t81\t0\t0\t0\t0\t1\t1\t1\t1\t0\t1\nM5:18081\tM5\t5\t80\t0\t0\t0\t0\t1\t1\t1\t1\t0\t1\nM5:24525\tM5\t5\t78\t0\t0\t0\t0\t1\t1\t1\t1\t0\t1\nM5:7714\tM5\t5\t76\t0\t0\t0\t0\t1\t1\t1\t1\t1\t0\nM5:27946\tM5\t5\t74\t0\t0\t0\t0\t1\t1\t1\t0\t1\t1\nM5:14615\tM5\t5\t74\t0\t0\t0\t0\t1\t1\t1\t1\t1\t0\nM5:5123\tM5\t5\t74\t0\t0\t0\t0\t1\t1\t1\t0\t1\t1\nM5:24459\tM5\t5\t63\t0\t0\t0\t0\t1\t1\t1\t1\t0\t1\nM5:3404\tM5\t5\t62\t0\t0\t0\t0\t1\t1\t1\t1\t0\t1\nM5:13930\tM5\t5\t49\t0\t0\t0\t0\t1\t1\t1\t1\t0\t1\nM5:13146\tM5\t5\t46\t0\t0\t0\t0\t1\t1\t1\t1\t0\t1\nM5:28073\tM5\t5\t44\t0\t0\t0\t0\t1\t1\t1\t1\t1\t0\nM5:24012\tM5\t5\t41\t0\t0\t0\t0\t1\t1\t1\t1\t0\t1\nM5:21265\tM5\t5\t37\t0\t0\t0\t0\t1\t1\t1\t0\t1\t1\nM5:24782\tM5\t5\t31\t0\t0\t0\t0\t1\t1\t1\t0\t1\t1\nM5:8443\tM5\t5\t28\t0\t0\t0\t0\t1\t1\t1\t1\t1\t0\n",
+          "id": "enchantr_clone_sets",
+          "mode": "repertoire-analysis/clone-sets",
+          "name": "Shared clone sets",
+          "path_glob": "**/repertoire_analysis_report/tables/clone_sizes_table.tsv",
+          "rawYaml": "id: enchantr_clone_sets\nname: Shared clone sets\nmode: repertoire-analysis/clone-sets\ndescription: >-\n  Clone by sample presence matrix. Each row is one clone of one subject and each\n  sample column is a 0/1 membership flag, so an UpSet reads the intersections as\n  clones shared by exactly those samples.\nfind: { path_glob: \"**/repertoire_analysis_report/tables/clone_sizes_table.tsv\" }\nrecipe: enchantr/clone_sets.py\nfixture: clone_sets.tsv\nrenders_as:\n  - id: shared_clones_upset\n    component: advanced_viz\n    kind: upset_plot\n  - { component: card, column: n_samples, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: table }\n",
+          "recipe": "enchantr/clone_sets.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "shared_clones_upset",
+              "kind": "upset_plot",
+              "roles": {}
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "n_samples",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "clone_sets",
+          "yamlPath": "depictio/catalog/enchantr/clone_sets.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Every clone of every sample with its sequence count and frequency, its rank within the sample (a rank-abundance curve) and its clonal-homeostasis size class.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/repertoire_analysis_report/tables/clone_sizes_table.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "clone_sizes.tsv",
+          "fixtureContent": "sample_id\tsubject_id\tclone_id\tseq_count\tseq_freq\trank\tsize_class\nSRR1383451\tM4\t7666\t103\t0.0077182465342825\t1\tLarge (0.1-1%)\nSRR1383451\tM4\t494\t92\t0.00689396777819408\t2\tLarge (0.1-1%)\nSRR1383451\tM4\t2237\t67\t0.00502060696890221\t3\tLarge (0.1-1%)\nSRR1383451\tM4\t5951\t62\t0.00464593480704384\t4\tLarge (0.1-1%)\nSRR1383451\tM4\t599\t54\t0.00404645934807044\t5\tLarge (0.1-1%)\nSRR1383452\tM4\t494\t112\t0.00905269964435823\t1\tLarge (0.1-1%)\nSRR1383452\tM4\t483\t74\t0.00598124797930811\t2\tLarge (0.1-1%)\nSRR1383452\tM4\t5951\t73\t0.00590042030391206\t3\tLarge (0.1-1%)\nSRR1383452\tM4\t3976\t61\t0.00493048819915939\t4\tLarge (0.1-1%)\nSRR1383452\tM4\t7666\t57\t0.00460717749757517\t5\tLarge (0.1-1%)\nSRR1383453\tM4\t494\t103\t0.00838079739625712\t1\tLarge (0.1-1%)\nSRR1383453\tM4\t483\t77\t0.00626525630593979\t2\tLarge (0.1-1%)\nSRR1383453\tM4\t5951\t74\t0.00602115541090317\t3\tLarge (0.1-1%)\nSRR1383453\tM4\t7375\t68\t0.00553295362082994\t4\tLarge (0.1-1%)\nSRR1383453\tM4\t7887\t59\t0.0048006509357201\t5\tLarge (0.1-1%)\nSRR1383456\tM4\t12100\t2\t0.0740740740740741\t1\tHyperexpanded (>1%)\nSRR1383456\tM4\t12553\t2\t0.0740740740740741\t2\tHyperexpanded (>1%)\nSRR1383456\tM4\t2231\t2\t0.0740740740740741\t3\tHyperexpanded (>1%)\nSRR1383456\tM4\t10221\t1\t0.037037037037037\t4\tHyperexpanded (>1%)\nSRR1383456\tM4\t13482\t1\t0.037037037037037\t5\tHyperexpanded (>1%)\nSRR1383463\tM5\t8485\t135\t0.00404761190897371\t1\tLarge (0.1-1%)\nSRR1383463\tM5\t100\t126\t0.00377777111504213\t2\tLarge (0.1-1%)\nSRR1383463\tM5\t28905\t101\t0.00302821335412107\t3\tLarge (0.1-1%)\nSRR1383463\tM5\t6125\t89\t0.00266842562887896\t4\tLarge (0.1-1%)\nSRR1383463\tM5\t19010\t88\t0.00263844331844212\t5\tLarge (0.1-1%)\nSRR1383464\tM5\t19010\t114\t0.00456164219118883\t1\tLarge (0.1-1%)\nSRR1383464\tM5\t24369\t112\t0.00448161338081709\t2\tLarge (0.1-1%)\nSRR1383464\tM5\t100\t105\t0.00420151254451603\t3\tLarge (0.1-1%)\nSRR1383464\tM5\t15275\t99\t0.00396142611340082\t4\tLarge (0.1-1%)\nSRR1383464\tM5\t26299\t91\t0.00364131087191389\t5\tLarge (0.1-1%)\nSRR1383465\tM5\t19010\t121\t0.00375694724749278\t1\tLarge (0.1-1%)\nSRR1383465\tM5\t100\t112\t0.00347750489024125\t2\tLarge (0.1-1%)\nSRR1383465\tM5\t6125\t107\t0.00332225913621262\t3\tLarge (0.1-1%)\nSRR1383465\tM5\t7708\t106\t0.0032912099854069\t4\tLarge (0.1-1%)\nSRR1383465\tM5\t26299\t96\t0.00298071847734964\t5\tLarge (0.1-1%)\nSRR1383466\tM5\t23336\t13\t0.0268041237113402\t1\tHyperexpanded (>1%)\nSRR1383466\tM5\t17370\t11\t0.022680412371134\t2\tHyperexpanded (>1%)\nSRR1383466\tM5\t20996\t9\t0.0185567010309278\t3\tHyperexpanded (>1%)\nSRR1383466\tM5\t13120\t6\t0.0123711340206186\t4\tHyperexpanded (>1%)\nSRR1383466\tM5\t19191\t5\t0.0103092783505155\t5\tHyperexpanded (>1%)\nSRR1383467\tM5\t6525\t8\t0.0136286201022147\t1\tHyperexpanded (>1%)\nSRR1383467\tM5\t23336\t7\t0.0119250425894378\t2\tHyperexpanded (>1%)\nSRR1383467\tM5\t13120\t5\t0.00851788756388416\t3\tLarge (0.1-1%)\nSRR1383467\tM5\t29024\t5\t0.00851788756388416\t4\tLarge (0.1-1%)\nSRR1383467\tM5\t5998\t5\t0.00851788756388416\t5\tLarge (0.1-1%)\nSRR1383468\tM5\t13120\t15\t0.0260869565217391\t1\tHyperexpanded (>1%)\nSRR1383468\tM5\t17370\t11\t0.0191304347826087\t2\tHyperexpanded (>1%)\nSRR1383468\tM5\t20996\t10\t0.0173913043478261\t3\tHyperexpanded (>1%)\nSRR1383468\tM5\t23336\t8\t0.0139130434782609\t4\tHyperexpanded (>1%)\nSRR1383468\tM5\t19191\t7\t0.0121739130434783\t5\tHyperexpanded (>1%)\n",
+          "id": "enchantr_clone_sizes",
+          "mode": "repertoire-analysis/clone-sizes",
+          "name": "Clone sizes",
+          "path_glob": "**/repertoire_analysis_report/tables/clone_sizes_table.tsv",
+          "rawYaml": "id: enchantr_clone_sizes\nname: Clone sizes\nmode: repertoire-analysis/clone-sizes\ndescription: >-\n  Every clone of every sample with its sequence count and frequency, its rank\n  within the sample (a rank-abundance curve) and its clonal-homeostasis size\n  class.\nfind: { path_glob: \"**/repertoire_analysis_report/tables/clone_sizes_table.tsv\" }\nrecipe: enchantr/clone_sizes.py\nfixture: clone_sizes.tsv\nrenders_as:\n  - id: clone_composition\n    component: advanced_viz\n    kind: sunburst\n    roles: { ranks: [subject_id, sample_id, size_class], abundance: seq_count }\n  - { component: card, column: seq_count, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: clone_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: size_class, top_n_count: 5 }\n  - { component: table }\n",
+          "recipe": "enchantr/clone_sizes.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "clone_composition",
+              "kind": "sunburst",
+              "roles": {
+                "abundance": "seq_count",
+                "ranks": [
+                  "subject_id",
+                  "sample_id",
+                  "size_class"
+                ]
+              }
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "seq_count",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "size_class",
+              "column": "clone_id",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 5
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "clone_sizes",
+          "yamlPath": "depictio/catalog/enchantr/clone_sizes.yaml"
+        },
+        {
+          "columns": {},
+          "description": "One row per sample: sequences that entered clonal assignment, the clones they collapsed into, the clone-size spread, and the rarefied Hill numbers with their confidence bounds.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/repertoire_analysis_report/tables/num_clones_table.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "repertoire_summary.tsv",
+          "fixtureContent": "sample_id\tsubject_id\tsequences\tnumber_of_clones\tsequences_per_clone\tclone_size_count_min\tclone_size_count_median\tclone_size_count_max\trichness\trichness_lower\trichness_upper\tshannon\tshannon_lower\tshannon_upper\tsimpson\tsimpson_lower\tsimpson_upper\tevenness\tevenness_lower\tevenness_upper\nSRR1383451\tM4\t13345\t7852\t1.6995669893020886\t1.0\t2.0\t103.0\t440.65\t427.725389860399\t453.574610139601\t419.120610671006\t398.433173700756\t439.808047641257\t381.91441686957\t343.787653598331\t420.04118014081\t0.951141746671976\t0.904194198798947\t0.998089294545006\nSRR1383452\tM4\t12372\t7242\t1.7083678541839271\t1.0\t2.0\t112.0\t437.4\t424.072071099227\t450.727928900773\t413.865432512609\t392.807291784327\t434.923573240892\t373.102512005462\t335.073870935658\t411.131153075265\t0.946194404464128\t0.898050507051502\t0.994338301876753\nSRR1383453\tM4\t12290\t7285\t1.6870281400137268\t1.0\t2.0\t103.0\t438.585\t424.095038452577\t453.074961547423\t415.878624882225\t392.891608491349\t438.865641273102\t376.79371392457\t336.20802093905\t417.37940691009\t0.948228108307912\t0.895816337748324\t1.0006398788675\nSRR1383456\tM4\t27\t24\t1.125\t1.0\t1.0\t2.0\nSRR1383463\tM5\t33353\t16497\t2.02176153239983\t1.0\t3.0\t135.0\t452.29\t441.308452041943\t463.271547958057\t438.358674878593\t422.219125239998\t454.498224517187\t415.916806902333\t390.387890365386\t441.445723439279\t0.969198246431698\t0.933514172853696\t1.0048823200097\nSRR1383464\tM5\t24991\t12088\t2.067422236929186\t1.0\t3.0\t114.0\t441.74\t429.179744148705\t454.300255851295\t423.249522389904\t404.674973335352\t441.824071444456\t393.866169025153\t363.873314182461\t423.859023867845\t0.958141717729669\t0.91609311661917\t1.00019031884017\nSRR1383465\tM5\t32207\t15427\t2.0877033771958255\t1.0\t3.0\t121.0\t448.775\t436.935972402863\t460.614027597137\t433.348076155009\t415.804136052754\t450.892016257264\t408.648499138319\t380.562389660134\t436.734608616504\t0.965624368904259\t0.926531415637578\t1.00471732217094\nSRR1383466\tM5\t485\t392\t1.2372448979591837\t1.0\t1.0\t13.0\t379.92\t362.647622414268\t397.192377585732\t314.810611564182\t283.634784968621\t345.986438159743\t209.385337080451\t156.856469702026\t261.914204458877\t0.828623424837287\t0.746564500338547\t0.910682349336027\nSRR1383467\tM5\t587\t500\t1.174\t1.0\t1.0\t8.0\t407.835\t392.18883854051\t423.48116145949\t368.651121069764\t343.591217894609\t393.71102424492\t303.320267728406\t259.346549297027\t347.293986159785\t0.90392222607124\t0.842476045201145\t0.965368406941336\nSRR1383468\tM5\t575\t463\t1.2419006479481642\t1.0\t1.0\t15.0\t386.475\t370.053311384065\t402.896688615935\t318.970340132415\t288.92842358721\t349.01225667762\t211.123446417286\t162.937445410966\t259.309447423607\t0.82533240217974\t0.747599258909917\t0.903065545449564\n",
+          "id": "enchantr_repertoire_summary",
+          "mode": "repertoire-analysis/summary",
+          "name": "Repertoire summary",
+          "path_glob": "**/repertoire_analysis_report/tables/num_clones_table.tsv",
+          "rawYaml": "id: enchantr_repertoire_summary\nname: Repertoire summary\nmode: repertoire-analysis/summary\ndescription: >-\n  One row per sample: sequences that entered clonal assignment, the clones they\n  collapsed into, the clone-size spread, and the rarefied Hill numbers with\n  their confidence bounds.\nfind: { path_glob: \"**/repertoire_analysis_report/tables/num_clones_table.tsv\" }\nrecipe: enchantr/repertoire_summary.py\nfixture: repertoire_summary.tsv\nrenders_as:\n  - { component: card, column: number_of_clones, aggregation: sum, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: sequences_per_clone, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: shannon, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: evenness, aggregation: median, secondary_layout: threshold, threshold_value: 0.9, threshold_direction: min, threshold_warn: 0.85 }\n  - component: figure\n    visu_type: scatter\n    dict_kwargs: { x: sequences, y: number_of_clones, color: subject_id, size: sequences_per_clone, log_x: \"True\", log_y: \"True\" }\n  - { component: table, row_selection_enabled: true, row_selection_column: sample_id }\n",
+          "recipe": "enchantr/repertoire_summary.py",
+          "renders_as": [
+            {
+              "aggregation": "sum",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "number_of_clones",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "sequences_per_clone",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "shannon",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "evenness",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "threshold",
+              "threshold_direction": "min",
+              "threshold_value": 0.9,
+              "threshold_warn": 0.85
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "subject_id",
+                "log_x": "True",
+                "log_y": "True",
+                "size": "sequences_per_clone",
+                "x": "sequences",
+                "y": "number_of_clones"
+              },
+              "roles": {},
+              "visu_type": "scatter"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {},
+              "row_selection_column": "sample_id",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "repertoire_summary",
+          "yamlPath": "depictio/catalog/enchantr/repertoire_summary.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Sequences left after every pRESTO and Change-O step, one row per sample, with the fraction of raw reads that reach the final annotated repertoire.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/parsed_logs/Table_sequences_process.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "sequence_counts.tsv",
+          "fixtureContent": "sample_id\tsubject_id\tsequences\tquality_filtered\tprimers_masked\tpaired\tconsensus\tassembled\tunique\trepresentative\tigblast_assigned\tannotated\tquality_pass\tproductive\tjunction_mod3\tcollapsed\tretention\nSRR1383451\tM4\t1293168\t1124564\t1097325\t1007776\t499411\t492430\t271208\t59111\t59111\t57931\t57820\t57493\t57489\t13436\t0.010389987998465784\nSRR1383452\tM4\t1360994\t980449\t958341\t879930\t482008\t474750\t272357\t53851\t53851\t52797\t52712\t52433\t52432\t12456\t0.009152134395890063\nSRR1383453\tM4\t1059990\t806828\t794199\t734931\t494069\t488042\t279442\t51421\t51421\t50154\t50036\t49848\t49845\t12329\t0.011631241804167964\nSRR1383456\tM4\t63073\t50989\t48661\t43936\t5481\t1630\t1149\t508\t508\t62\t58\t58\t58\t27\t0.0004280754046898039\nSRR1383463\tM5\t1852661\t1430789\t1395655\t1290122\t989816\t980725\t576656\t103422\t103422\t102425\t102384\t101634\t101631\t33482\t0.018072383452774145\nSRR1383464\tM5\t1648098\t980319\t949025\t883569\t716238\t711194\t461504\t71877\t71877\t71478\t71460\t71135\t71135\t25056\t0.015202979434475378\nSRR1383465\tM5\t2123400\t1302618\t1265261\t1179417\t988171\t980206\t598439\t98677\t98677\t97764\t97724\t97242\t97241\t32273\t0.015198737873222191\nSRR1383466\tM5\t264734\t134551\t127495\t118390\t10415\t6245\t4371\t1456\t1456\t979\t973\t960\t960\t494\t0.0018660240090052657\nSRR1383467\tM5\t265299\t228387\t221589\t210703\t6413\t5074\t3264\t1256\t1256\t1094\t1091\t1080\t1080\t604\t0.0022766765046230856\nSRR1383468\tM5\t461154\t356602\t345897\t324819\t10035\t8091\t4722\t1739\t1739\t1385\t1381\t1368\t1367\t585\t0.0012685567077375453\n",
+          "id": "enchantr_sequence_counts",
+          "mode": "parsed-logs/sequences",
+          "name": "Sequence processing counts",
+          "path_glob": "**/parsed_logs/Table_sequences_process.tsv",
+          "rawYaml": "id: enchantr_sequence_counts\nname: Sequence processing counts\nmode: parsed-logs/sequences\ndescription: >-\n  Sequences left after every pRESTO and Change-O step, one row per sample, with\n  the fraction of raw reads that reach the final annotated repertoire.\nfind: { path_glob: \"**/parsed_logs/Table_sequences_process.tsv\" }\nrecipe: enchantr/sequence_counts.py\nfixture: sequence_counts.tsv\nrenders_as:\n  # The funnel as a single card: hero = raw reads, strip = every later stage.\n  - component: card\n    column: sequences\n    aggregation: sum\n    secondary_layout: attrition\n    attrition_cols: [quality_filtered, primers_masked, paired, consensus, assembled, representative, productive, collapsed]\n  - { component: card, column: sequences, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: collapsed, aggregation: sum, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: retention, aggregation: median, secondary_layout: gauge, coverage_max: 0.1 }\n  - { component: table }\n",
+          "recipe": "enchantr/sequence_counts.py",
+          "renders_as": [
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [
+                "quality_filtered",
+                "primers_masked",
+                "paired",
+                "consensus",
+                "assembled",
+                "representative",
+                "productive",
+                "collapsed"
+              ],
+              "column": "sequences",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "attrition"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "sequences",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "collapsed",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "retention",
+              "columns": [],
+              "component": "card",
+              "coverage_max": 0.1,
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "gauge"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "sequence_counts",
+          "yamlPath": "depictio/catalog/enchantr/sequence_counts.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Where the reads of each sample go through the pRESTO and Change-O funnel, one weighted row per loss point, shaped for a Sankey.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/parsed_logs/Table_sequences_process.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "sequence_fates.tsv",
+          "fixtureContent": "sample_id\tsubject_id\tinput\tquality\tpaired\tconsensus\tassembled\trepresentative\tproductive\tcollapsed\treads\nSRR1383451\tM4\tInput reads\tQuality filtered\tPaired\tLost\tLost\tLost\tLost\tLost\t508365\nSRR1383451\tM4\tInput reads\tQuality filtered\tPaired\tUMI consensus\tAssembled\tLost\tLost\tLost\t433319\nSRR1383451\tM4\tInput reads\tLost\tLost\tLost\tLost\tLost\tLost\tLost\t168604\nSRR1383451\tM4\tInput reads\tQuality filtered\tLost\tLost\tLost\tLost\tLost\tLost\t116788\nSRR1383451\tM4\tInput reads\tQuality filtered\tPaired\tUMI consensus\tAssembled\tRepresentative\tProductive\tLost\t44057\nSRR1383451\tM4\tInput reads\tQuality filtered\tPaired\tUMI consensus\tAssembled\tRepresentative\tProductive\tUnique sequences\t13436\nSRR1383451\tM4\tInput reads\tQuality filtered\tPaired\tUMI consensus\tLost\tLost\tLost\tLost\t6981\nSRR1383451\tM4\tInput reads\tQuality filtered\tPaired\tUMI consensus\tAssembled\tRepresentative\tLost\tLost\t1618\nSRR1383452\tM4\tInput reads\tQuality filtered\tPaired\tUMI consensus\tAssembled\tLost\tLost\tLost\t420899\nSRR1383452\tM4\tInput reads\tQuality filtered\tPaired\tLost\tLost\tLost\tLost\tLost\t397922\nSRR1383452\tM4\tInput reads\tLost\tLost\tLost\tLost\tLost\tLost\tLost\t380545\nSRR1383452\tM4\tInput reads\tQuality filtered\tLost\tLost\tLost\tLost\tLost\tLost\t100519\nSRR1383452\tM4\tInput reads\tQuality filtered\tPaired\tUMI consensus\tAssembled\tRepresentative\tProductive\tLost\t39977\nSRR1383452\tM4\tInput reads\tQuality filtered\tPaired\tUMI consensus\tAssembled\tRepresentative\tProductive\tUnique sequences\t12456\nSRR1383452\tM4\tInput reads\tQuality filtered\tPaired\tUMI consensus\tLost\tLost\tLost\tLost\t7258\nSRR1383452\tM4\tInput reads\tQuality filtered\tPaired\tUMI consensus\tAssembled\tRepresentative\tLost\tLost\t1418\nSRR1383453\tM4\tInput reads\tQuality filtered\tPaired\tUMI consensus\tAssembled\tLost\tLost\tLost\t436621\nSRR1383453\tM4\tInput reads\tLost\tLost\tLost\tLost\tLost\tLost\tLost\t253162\nSRR1383453\tM4\tInput reads\tQuality filtered\tPaired\tLost\tLost\tLost\tLost\tLost\t240862\nSRR1383453\tM4\tInput reads\tQuality filtered\tLost\tLost\tLost\tLost\tLost\tLost\t71897\nSRR1383453\tM4\tInput reads\tQuality filtered\tPaired\tUMI consensus\tAssembled\tRepresentative\tProductive\tLost\t37519\nSRR1383453\tM4\tInput reads\tQuality filtered\tPaired\tUMI consensus\tAssembled\tRepresentative\tProductive\tUnique sequences\t12329\nSRR1383453\tM4\tInput reads\tQuality filtered\tPaired\tUMI consensus\tLost\tLost\tLost\tLost\t6027\nSRR1383453\tM4\tInput reads\tQuality filtered\tPaired\tUMI consensus\tAssembled\tRepresentative\tLost\tLost\t1573\nSRR1383456\tM4\tInput reads\tQuality filtered\tPaired\tLost\tLost\tLost\tLost\tLost\t38455\nSRR1383456\tM4\tInput reads\tLost\tLost\tLost\tLost\tLost\tLost\tLost\t12084\nSRR1383456\tM4\tInput reads\tQuality filtered\tLost\tLost\tLost\tLost\tLost\tLost\t7053\nSRR1383456\tM4\tInput reads\tQuality filtered\tPaired\tUMI consensus\tLost\tLost\tLost\tLost\t3851\nSRR1383456\tM4\tInput reads\tQuality filtered\tPaired\tUMI consensus\tAssembled\tLost\tLost\tLost\t1122\nSRR1383456\tM4\tInput reads\tQuality filtered\tPaired\tUMI consensus\tAssembled\tRepresentative\tLost\tLost\t450\nSRR1383456\tM4\tInput reads\tQuality filtered\tPaired\tUMI consensus\tAssembled\tRepresentative\tProductive\tLost\t31\nSRR1383456\tM4\tInput reads\tQuality filtered\tPaired\tUMI consensus\tAssembled\tRepresentative\tProductive\tUnique sequences\t27\nSRR1383463\tM5\tInput reads\tQuality filtered\tPaired\tUMI consensus\tAssembled\tLost\tLost\tLost\t877303\nSRR1383463\tM5\tInput reads\tLost\tLost\tLost\tLost\tLost\tLost\tLost\t421872\nSRR1383463\tM5\tInput reads\tQuality filtered\tPaired\tLost\tLost\tLost\tLost\tLost\t300306\nSRR1383463\tM5\tInput reads\tQuality filtered\tLost\tLost\tLost\tLost\tLost\tLost\t140667\nSRR1383463\tM5\tInput reads\tQuality filtered\tPaired\tUMI consensus\tAssembled\tRepresentative\tProductive\tLost\t68152\nSRR1383463\tM5\tInput reads\tQuality filtered\tPaired\tUMI consensus\tAssembled\tRepresentative\tProductive\tUnique sequences\t33482\nSRR1383463\tM5\tInput reads\tQuality filtered\tPaired\tUMI consensus\tLost\tLost\tLost\tLost\t9091\nSRR1383463\tM5\tInput reads\tQuality filtered\tPaired\tUMI consensus\tAssembled\tRepresentative\tLost\tLost\t1788\nSRR1383464\tM5\tInput reads\tLost\tLost\tLost\tLost\tLost\tLost\tLost\t667779\nSRR1383464\tM5\tInput reads\tQuality filtered\tPaired\tUMI consensus\tAssembled\tLost\tLost\tLost\t639317\nSRR1383464\tM5\tInput reads\tQuality filtered\tPaired\tLost\tLost\tLost\tLost\tLost\t167331\nSRR1383464\tM5\tInput reads\tQuality filtered\tLost\tLost\tLost\tLost\tLost\tLost\t96750\nSRR1383464\tM5\tInput reads\tQuality filtered\tPaired\tUMI consensus\tAssembled\tRepresentative\tProductive\tLost\t46079\nSRR1383464\tM5\tInput reads\tQuality filtered\tPaired\tUMI consensus\tAssembled\tRepresentative\tProductive\tUnique sequences\t25056\nSRR1383464\tM5\tInput reads\tQuality filtered\tPaired\tUMI consensus\tLost\tLost\tLost\tLost\t5044\nSRR1383464\tM5\tInput reads\tQuality filtered\tPaired\tUMI consensus\tAssembled\tRepresentative\tLost\tLost\t742\n",
+          "id": "enchantr_sequence_fates",
+          "mode": "parsed-logs/fates",
+          "name": "Sequence attrition flow",
+          "path_glob": "**/parsed_logs/Table_sequences_process.tsv",
+          "rawYaml": "id: enchantr_sequence_fates\nname: Sequence attrition flow\nmode: parsed-logs/fates\ndescription: >-\n  Where the reads of each sample go through the pRESTO and Change-O funnel, one\n  weighted row per loss point, shaped for a Sankey.\nfind: { path_glob: \"**/parsed_logs/Table_sequences_process.tsv\" }\nrecipe: enchantr/sequence_fates.py\nfixture: sequence_fates.tsv\nrenders_as:\n  # Only the pRESTO milestones are bound: they exist on every fastq-mode run.\n  # The two Change-O ones ride in the collection for the depth slider to reach.\n  - id: attrition_sankey\n    component: advanced_viz\n    kind: sankey\n    roles:\n      steps: [input, quality, paired, consensus, assembled, representative]\n  - { component: table }\n",
+          "recipe": "enchantr/sequence_fates.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "attrition_sankey",
+              "kind": "sankey",
+              "roles": {
+                "steps": [
+                  "input",
+                  "quality",
+                  "paired",
+                  "consensus",
+                  "assembled",
+                  "representative"
+                ]
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "sequence_fates",
+          "yamlPath": "depictio/catalog/enchantr/sequence_fates.yaml"
+        },
+        {
+          "columns": {},
+          "description": "The nearest-neighbour distance model shazam fitted per subject and the threshold it chose to separate clonally related from unrelated sequences, with the sensitivity and specificity that threshold achieves.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/find_threshold/*_dist_report/tables/*threshold-summary.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "threshold_summary.tsv",
+          "fixtureContent": "subject_id\tmodel\tcutoff\tloglk\tthreshold\tsensitivity\tspecificity\tpvalue\tmean_threshold\nM4\tgamma-norm\tuser\t11753.33\t0.0526092161733018\t0.905864077630491\t0.994999999969682\t0.0\t0.0393678149410341\nM5\tgamma-norm\tuser\t16714.73\t0.0261264137087665\t0.491826024738684\t0.995000000004467\t0.0\t0.0393678149410341\n",
+          "id": "enchantr_threshold_summary",
+          "mode": "find-threshold/summary",
+          "name": "Clonal distance threshold",
+          "path_glob": "**/find_threshold/*_dist_report/tables/*threshold-summary.tsv",
+          "rawYaml": "id: enchantr_threshold_summary\nname: Clonal distance threshold\nmode: find-threshold/summary\ndescription: >-\n  The nearest-neighbour distance model shazam fitted per subject and the\n  threshold it chose to separate clonally related from unrelated sequences,\n  with the sensitivity and specificity that threshold achieves.\nfind: { path_glob: \"**/find_threshold/*_dist_report/tables/*threshold-summary.tsv\" }\nrecipe: enchantr/threshold_summary.py\nfixture: threshold_summary.tsv\nrenders_as:\n  - { component: card, column: threshold, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: sensitivity, aggregation: median, secondary_layout: gauge, coverage_max: 1 }\n  - { component: card, column: specificity, aggregation: median, secondary_layout: threshold, threshold_value: 0.95, threshold_direction: min, threshold_warn: 0.9 }\n  - { component: table }\n",
+          "recipe": "enchantr/threshold_summary.py",
+          "renders_as": [
+            {
+              "aggregation": "average",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "threshold",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "sensitivity",
+              "columns": [],
+              "component": "card",
+              "coverage_max": 1.0,
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "gauge"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "specificity",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "threshold",
+              "threshold_direction": "min",
+              "threshold_value": 0.95,
+              "threshold_warn": 0.9
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "threshold_summary",
+          "yamlPath": "depictio/catalog/enchantr/threshold_summary.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Sample by V gene matrix of sequence fractions, one row per sample and locus, ready to be clustered so samples with a similar V repertoire group together.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/repertoire_comparison/V_family/V_gene_distribution_by_sequence_data.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "v_gene_matrix.tsv",
+          "fixtureContent": "row_id\tsample_id\tsubject_id\tlocus\tIGHV1-18\tIGHV1-2\tIGHV1-24\tIGHV1-3\tIGHV1-45\tIGHV1-46\tIGHV1-58\tIGHV1-69\tIGHV1-69-2\tIGHV1-8\tIGHV1/OR15-1\tIGHV2-26\tIGHV2-5\tIGHV2-70\tIGHV3-11\tIGHV3-13\tIGHV3-15\tIGHV3-20\tIGHV3-21\tIGHV3-23\tIGHV3-30\tIGHV3-30-3\tIGHV3-30-5\tIGHV3-33\tIGHV3-35\tIGHV3-43\tIGHV3-48\tIGHV3-49\tIGHV3-52\tIGHV3-53\tIGHV3-64\tIGHV3-66\tIGHV3-69-1\tIGHV3-7\tIGHV3-72\tIGHV3-73\tIGHV3-74\tIGHV3-9\tIGHV3-NL1\tIGHV3/OR16-17\tIGHV4-28\tIGHV4-30-2\tIGHV4-30-4\tIGHV4-31\tIGHV4-34\tIGHV4-38-2\tIGHV4-39\tIGHV4-4\tIGHV4-59\tIGHV4-61\tIGHV4/OR15-8\tIGHV5-10-1\tIGHV5-51\tIGHV6-1\tIGHV7-4-1\nSRR1383451\tSRR1383451\tM4\tIGH\t0.0480797856504912\t0.0689937481393272\t0.0049866031557011\t0.00893122953259899\t0.00275379577255135\t0.0250818696040488\t0.00327478416195296\t0.0625186067281929\t0.0\t0.0201696933611194\t0.0\t0.00714498362607919\t0.0666865138434058\t0.0349806490026794\t0.0280589461149152\t0.00387019946412623\t0.0207651086632926\t0.000372134563858291\t0.0262727002083954\t0.0316314379279547\t0.0749479011610598\t0.00260494194700804\t0.000223280738314975\t0.0410836558499553\t0.0\t0.000893122953259899\t0.0177880321524263\t0.0127270020839536\t0.0\t0.00297707651086633\t0.00394462637689789\t0.0201696933611194\t0.0\t0.0166716284608514\t0.00707055671330753\t0.00900565644537065\t0.0271658231616553\t0.0510568621613575\t0.0\t0.0\t0.0\t0.000297707651086633\t0.0259005656445371\t0.00104197677880322\t0.00602857993450432\t0.000148853825543316\t0.0168204822863948\t0.0142155403393867\t0.0477076510866329\t0.032226853230128\t0.0\t0.0\t0.0742780589461149\t0.00654956832390592\t0.0218815123548675\nSRR1383452\tSRR1383452\tM4\tIGH\t0.0478484264611432\t0.070407835581246\t0.00505780346820809\t0.00963391136801541\t0.00232819524727039\t0.0187861271676301\t0.00385356454720617\t0.0671965317919075\t0.0\t0.0203917790622993\t0.0\t0.00971419396274888\t0.0597302504816956\t0.0300256904303147\t0.0267341040462428\t0.00505780346820809\t0.0206326268464997\t0.000561978163134232\t0.0274566473988439\t0.0306679511881824\t0.0778741168914579\t0.00208734746307001\t0.000321130378933847\t0.0439948619139371\t0.0\t0.00088310854206808\t0.0191072575465639\t0.0111592806679512\t0.0\t0.00240847784200385\t0.00337186897880539\t0.019990366088632\t0.0\t0.0182241490044958\t0.00594091201027617\t0.0136480411046885\t0.0255298651252408\t0.0513808606294155\t0.0\t0.0\t0.0000802825947334618\t0.000160565189466924\t0.0260918432883751\t0.00088310854206808\t0.00682402055234425\t0.0\t0.0178227360308285\t0.0138086062941554\t0.0508991650610148\t0.0296242774566474\t0.0\t0.0\t0.0761078998073218\t0.00682402055234425\t0.0188664097623635\nSRR1383453\tSRR1383453\tM4\tIGH\t0.0466380079487387\t0.0810284694622435\t0.00600210884905507\t0.00835428664125233\t0.0026766161083624\t0.0223862438153946\t0.0037310406358991\t0.0662665260767297\t0.0\t0.022791791710601\t0.0000811095790412848\t0.00738097169275691\t0.0633465812312434\t0.0358504339362479\t0.0309027496147295\t0.00340660231973396\t0.0184929840214129\t0.000648876632330278\t0.0269283802417065\t0.0307405304566469\t0.0797307161975829\t0.00389325979398167\t0.000811095790412848\t0.0425825289966745\t0.0\t0.000729986211371563\t0.0188174223375781\t0.0124097655933166\t0.0\t0.00186552031794955\t0.00405547895206424\t0.0184929840214129\t0.0\t0.0163841349663395\t0.00624543758617893\t0.0124097655933166\t0.0246573120285506\t0.0541000892205369\t0.0\t0.0\t0.00016221915808257\t0.0000811095790412848\t0.0300105442452754\t0.00137886284370184\t0.00462324600535323\t0.0\t0.0107875740124909\t0.0103009165382432\t0.0490712953199773\t0.0203585043393625\t0.0\t0.0\t0.0698353475545462\t0.00843539622029362\t0.0201151756022386\nSRR1383456\tSRR1383456\tM4\tIGH\t0.037037037037037\t0.0740740740740741\t0.0\t0.0\t0.0\t0.0\t0.0\t0.0740740740740741\t0.0\t0.037037037037037\t0.0\t0.0\t0.0740740740740741\t0.0\t0.037037037037037\t0.0\t0.037037037037037\t0.0\t0.0\t0.037037037037037\t0.0740740740740741\t0.037037037037037\t0.0\t0.037037037037037\t0.0\t0.0\t0.037037037037037\t0.0\t0.0\t0.0\t0.0\t0.0\t0.0\t0.0740740740740741\t0.0\t0.0\t0.0740740740740741\t0.0\t0.0\t0.0\t0.0\t0.0\t0.0\t0.0\t0.0\t0.0\t0.0740740740740741\t0.0740740740740741\t0.0\t0.037037037037037\t0.0\t0.0\t0.0740740740740741\t0.0\t0.0\nSRR1383463\tSRR1383463\tM5\tIGH\t0.028522788363897\t0.0373932262110985\t0.00480855384982976\t0.0188160802819425\t0.000268801146884893\t0.0310614658622543\t0.0089003046412998\t0.150439041873245\t0.00134400573442447\t0.0211755570157099\t0.0\t0.0162774027835852\t0.063078669135655\t0.038737231945523\t0.0245505047488203\t0.00516695537900962\t0.0157398004898154\t0.000866137028851323\t0.0410071082969954\t0.0312705334209426\t0.057135177110089\t0.0179798100471895\t0.000119467176393286\t0.032704139537662\t0.0\t0.0015232064990144\t0.0138880592557195\t0.00424108476196165\t0.0\t0.00857176990621827\t0.000448001911474822\t0.0000298667940983215\t0.000238934352786572\t0.0190848814288274\t0.00376321605638851\t0.00489815423212472\t0.0145749955199809\t0.0273281165999642\t0.0000298667940983215\t0.0\t0.000059733588196643\t0.0237739681022639\t0.045337793441252\t0.00173227405770265\t0.0101547099934293\t0.0\t0.0158592676662087\t0.0181590108117795\t0.0421121796786333\t0.0175019413416164\t0.0\t0.0\t0.0329729406845469\t0.00349441490950361\t0.0428588495310913\nSRR1383464\tSRR1383464\tM5\tIGH\t0.0285759897828863\t0.0367975734355045\t0.00510855683269476\t0.0185983397190294\t0.000199553001277139\t0.0325670498084291\t0.00722381864623244\t0.181313856960409\t0.00175606641123883\t0.0237068965517241\t0.0000399106002554278\t0.0131704980842912\t0.0637771392081737\t0.0354007024265645\t0.021831098339719\t0.00594667943805875\t0.013809067688378\t0.000798212005108557\t0.0377554278416347\t0.0234674329501916\t0.0640565134099617\t0.0203144955300128\t0.000159642401021711\t0.0344428480204342\t0.0\t0.00147669220945083\t0.0113745210727969\t0.00331257982120051\t0.0000399106002554278\t0.00674489144316731\t0.000159642401021711\t0.0\t0.000239463601532567\t0.0122924648786718\t0.00411079182630907\t0.00379150702426564\t0.0154454022988506\t0.0217512771392082\t0.0\t0.0\t0.0\t0.023507343550447\t0.040948275862069\t0.00127713920817369\t0.00590676883780332\t0.0\t0.00738346104725415\t0.0131305874840358\t0.0380747126436782\t0.0148467432950192\t0.0000798212005108557\t0.0\t0.0433828224776501\t0.00355204342273308\t0.0563537675606641\nSRR1383465\tSRR1383465\tM5\tIGH\t0.0309856536423636\t0.0408390915006352\t0.00480277631456636\t0.0188702630681994\t0.000247885229138909\t0.0344250611966659\t0.00762247079602144\t0.158274718805193\t0.00210702444768072\t0.025656121215877\t0.0\t0.0159266259721749\t0.0674867536330679\t0.0400644501595761\t0.02726737520528\t0.00607318811390326\t0.016701267313234\t0.000650698726489635\t0.0404982493105692\t0.0325969076317665\t0.0654417004926719\t0.0202336318284634\t0.000278870882781272\t0.0335264772410374\t0.0000619713072847272\t0.00130139745297927\t0.0154928268211818\t0.00387320670529545\t0.0\t0.00690980076224708\t0.000216899575496545\t0.0\t0.000123942614569454\t0.0170111238496576\t0.00390419235893781\t0.00439996281721563\t0.0112787779258203\t0.0258730207913736\t0.0\t0.0000309856536423636\t0.0000929569609270908\t0.0222476993152171\t0.0377095404827565\t0.00142534006754872\t0.00827316952251108\t0.0\t0.00802528429337217\t0.0140055154463483\t0.037244755678121\t0.0159576116258172\t0.0\t0.0\t0.028289901775478\t0.00340842190065999\t0.0422644315681839\nSRR1383466\tSRR1383466\tM5\tIGH\t0.0506072874493927\t0.0566801619433198\t0.00607287449392713\t0.0222672064777328\t0.00202429149797571\t0.0202429149797571\t0.00202429149797571\t0.117408906882591\t0.0\t0.0242914979757085\t0.0\t0.00809716599190283\t0.0769230769230769\t0.0242914979757085\t0.0161943319838057\t0.00202429149797571\t0.01417004048583\t0.00202429149797571\t0.0283400809716599\t0.0161943319838057\t0.0789473684210526\t0.0242914979757085\t0.0\t0.0242914979757085\t0.0\t0.00202429149797571\t0.00404858299595142\t0.00809716599190283\t0.0\t0.00607287449392713\t0.00202429149797571\t0.00202429149797571\t0.0\t0.0465587044534413\t0.00202429149797571\t0.0\t0.0121457489878543\t0.0161943319838057\t0.0\t0.0\t0.0\t0.0202429149797571\t0.0283400809716599\t0.0\t0.00809716599190283\t0.0\t0.0182186234817814\t0.0101214574898785\t0.0506072874493927\t0.0587044534412955\t0.0\t0.00202429149797571\t0.0546558704453441\t0.00202429149797571\t0.0283400809716599\nSRR1383467\tSRR1383467\tM5\tIGH\t0.0480132450331126\t0.0463576158940397\t0.0165562913907285\t0.00662251655629139\t0.0\t0.0397350993377483\t0.00662251655629139\t0.147350993377483\t0.0\t0.0198675496688742\t0.0\t0.00496688741721854\t0.0794701986754967\t0.0182119205298013\t0.0165562913907285\t0.00165562913907285\t0.0165562913907285\t0.0033112582781457\t0.0364238410596026\t0.0198675496688742\t0.0695364238410596\t0.0248344370860927\t0.00165562913907285\t0.0231788079470199\t0.0\t0.00165562913907285\t0.00496688741721854\t0.0033112582781457\t0.0\t0.00993377483443709\t0.00165562913907285\t0.0\t0.0\t0.021523178807947\t0.00662251655629139\t0.0033112582781457\t0.0298013245033113\t0.0231788079470199\t0.0\t0.0\t0.0\t0.0231788079470199\t0.0264900662251656\t0.00165562913907285\t0.00496688741721854\t0.0\t0.0248344370860927\t0.0182119205298013\t0.043046357615894\t0.0447019867549669\t0.0\t0.0\t0.043046357615894\t0.0033112582781457\t0.0132450331125828\nSRR1383468\tSRR1383468\tM5\tIGH\t0.0427350427350427\t0.0564102564102564\t0.00341880341880342\t0.011965811965812\t0.00341880341880342\t0.0222222222222222\t0.00854700854700855\t0.131623931623932\t0.0\t0.0153846153846154\t0.0\t0.00341880341880342\t0.0547008547008547\t0.0188034188034188\t0.0222222222222222\t0.00170940170940171\t0.0153846153846154\t0.00170940170940171\t0.0256410256410256\t0.0358974358974359\t0.0888888888888889\t0.0290598290598291\t0.0\t0.0188034188034188\t0.0\t0.00170940170940171\t0.0136752136752137\t0.00512820512820513\t0.0\t0.00341880341880342\t0.00170940170940171\t0.0\t0.0\t0.0393162393162393\t0.00512820512820513\t0.0\t0.0239316239316239\t0.0256410256410256\t0.0\t0.0\t0.0\t0.0239316239316239\t0.0205128205128205\t0.0\t0.00683760683760684\t0.0\t0.0376068376068376\t0.011965811965812\t0.0393162393162393\t0.0427350427350427\t0.0\t0.0\t0.064957264957265\t0.00170940170940171\t0.0188034188034188\n",
+          "id": "enchantr_v_gene_matrix",
+          "mode": "repertoire-comparison/v-matrix",
+          "name": "V gene usage matrix",
+          "path_glob": "**/repertoire_comparison/V_family/V_gene_distribution_by_sequence_data.tsv",
+          "rawYaml": "id: enchantr_v_gene_matrix\nname: V gene usage matrix\nmode: repertoire-comparison/v-matrix\n# Written by airrflow's repertoire_comparison Rmd (alakazam countGenes) rather\n# than by enchantR itself; kept in this tool because it is the same report.\ndescription: >-\n  Sample by V gene matrix of sequence fractions, one row per sample and locus,\n  ready to be clustered so samples with a similar V repertoire group together.\nfind: { path_glob: \"**/repertoire_comparison/V_family/V_gene_distribution_by_sequence_data.tsv\" }\nrecipe: enchantr/v_gene_matrix.py\nfixture: v_gene_matrix.tsv\nrenders_as:\n  - id: v_gene_heatmap\n    component: advanced_viz\n    kind: complex_heatmap\n    roles: { index: row_id }\n  - { component: table }\n",
+          "recipe": "enchantr/v_gene_matrix.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "v_gene_heatmap",
+              "kind": "complex_heatmap",
+              "roles": {
+                "index": "row_id"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "v_gene_matrix",
+          "yamlPath": "depictio/catalog/enchantr/v_gene_matrix.yaml"
+        },
+        {
+          "columns": {},
+          "description": "V gene usage per sample at two resolutions, family and gene, stacked into one long table so the composition can be read at either level.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/repertoire_comparison/V_family/V_family_distribution_data.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "v_gene_usage.tsv",
+          "fixtureContent": "sample_id\tsubject_id\tlocus\trank\ttaxon\tv_family\tseq_count\tlocus_count\tseq_freq\nSRR1383451\tM4\tIGH\tV family\tIGHV1\tIGHV1\t3289\t13436\t0.244790116105984\nSRR1383451\tM4\tIGH\tV family\tIGHV2\tIGHV2\t1462\t13436\t0.108812146472164\nSRR1383451\tM4\tIGH\tV family\tIGHV3\tIGHV3\t5365\t13436\t0.399300387019946\nSRR1383451\tM4\tIGH\tV family\tIGHV4\tIGHV4\t1940\t13436\t0.144388210777017\nSRR1383451\tM4\tIGH\tV family\tIGHV5\tIGHV5\t998\t13436\t0.0742780589461149\nSRR1383451\tM4\tIGH\tV family\tIGHV6\tIGHV6\t88\t13436\t0.00654956832390592\nSRR1383451\tM4\tIGH\tV family\tIGHV7\tIGHV7\t294\t13436\t0.0218815123548675\nSRR1383452\tM4\tIGH\tV family\tIGHV1\tIGHV1\t3058\t12456\t0.245504174694926\nSRR1383452\tM4\tIGH\tV family\tIGHV2\tIGHV2\t1239\t12456\t0.0994701348747592\nSRR1383452\tM4\tIGH\tV family\tIGHV3\tIGHV3\t5070\t12456\t0.407032755298651\nSRR1383452\tM4\tIGH\tV family\tIGHV4\tIGHV4\t1821\t12456\t0.146194605009634\nSRR1383452\tM4\tIGH\tV family\tIGHV5\tIGHV5\t948\t12456\t0.0761078998073218\nSRR1383452\tM4\tIGH\tV family\tIGHV6\tIGHV6\t85\t12456\t0.00682402055234425\nSRR1383452\tM4\tIGH\tV family\tIGHV7\tIGHV7\t235\t12456\t0.0188664097623635\nSRR1383453\tM4\tIGH\tV family\tIGHV1\tIGHV1\t3205\t12329\t0.259956200827318\nSRR1383453\tM4\tIGH\tV family\tIGHV2\tIGHV2\t1314\t12329\t0.106577986860248\nSRR1383453\tM4\tIGH\tV family\tIGHV3\tIGHV3\t5034\t12329\t0.408305620893828\nSRR1383453\tM4\tIGH\tV family\tIGHV4\tIGHV4\t1563\t12329\t0.126774272041528\nSRR1383453\tM4\tIGH\tV family\tIGHV5\tIGHV5\t861\t12329\t0.0698353475545462\nSRR1383453\tM4\tIGH\tV family\tIGHV6\tIGHV6\t104\t12329\t0.00843539622029362\nSRR1383453\tM4\tIGH\tV family\tIGHV7\tIGHV7\t248\t12329\t0.0201151756022386\nSRR1383456\tM4\tIGH\tV family\tIGHV1\tIGHV1\t6\t27\t0.222222222222222\nSRR1383456\tM4\tIGH\tV family\tIGHV2\tIGHV2\t2\t27\t0.0740740740740741\nSRR1383456\tM4\tIGH\tV family\tIGHV3\tIGHV3\t12\t27\t0.444444444444444\nSRR1383456\tM4\tIGH\tV family\tIGHV4\tIGHV4\t5\t27\t0.185185185185185\nSRR1383451\tM4\tIGH\tV gene\tIGHV1-18\tIGHV1\t646\t13436\t0.0480797856504912\nSRR1383451\tM4\tIGH\tV gene\tIGHV1-2\tIGHV1\t927\t13436\t0.0689937481393272\nSRR1383451\tM4\tIGH\tV gene\tIGHV1-24\tIGHV1\t67\t13436\t0.0049866031557011\nSRR1383451\tM4\tIGH\tV gene\tIGHV1-3\tIGHV1\t120\t13436\t0.00893122953259899\nSRR1383451\tM4\tIGH\tV gene\tIGHV1-45\tIGHV1\t37\t13436\t0.00275379577255135\nSRR1383451\tM4\tIGH\tV gene\tIGHV1-46\tIGHV1\t337\t13436\t0.0250818696040488\nSRR1383451\tM4\tIGH\tV gene\tIGHV1-58\tIGHV1\t44\t13436\t0.00327478416195296\nSRR1383451\tM4\tIGH\tV gene\tIGHV1-69\tIGHV1\t840\t13436\t0.0625186067281929\nSRR1383451\tM4\tIGH\tV gene\tIGHV1-8\tIGHV1\t271\t13436\t0.0201696933611194\nSRR1383451\tM4\tIGH\tV gene\tIGHV2-26\tIGHV2\t96\t13436\t0.00714498362607919\nSRR1383451\tM4\tIGH\tV gene\tIGHV2-5\tIGHV2\t896\t13436\t0.0666865138434058\nSRR1383451\tM4\tIGH\tV gene\tIGHV2-70\tIGHV2\t470\t13436\t0.0349806490026794\nSRR1383451\tM4\tIGH\tV gene\tIGHV3-11\tIGHV3\t377\t13436\t0.0280589461149152\nSRR1383451\tM4\tIGH\tV gene\tIGHV3-13\tIGHV3\t52\t13436\t0.00387019946412623\nSRR1383451\tM4\tIGH\tV gene\tIGHV3-15\tIGHV3\t279\t13436\t0.0207651086632926\nSRR1383451\tM4\tIGH\tV gene\tIGHV3-20\tIGHV3\t5\t13436\t0.000372134563858291\nSRR1383451\tM4\tIGH\tV gene\tIGHV3-21\tIGHV3\t353\t13436\t0.0262727002083954\nSRR1383451\tM4\tIGH\tV gene\tIGHV3-23\tIGHV3\t425\t13436\t0.0316314379279547\nSRR1383451\tM4\tIGH\tV gene\tIGHV3-30\tIGHV3\t1007\t13436\t0.0749479011610598\nSRR1383451\tM4\tIGH\tV gene\tIGHV3-30-3\tIGHV3\t35\t13436\t0.00260494194700804\nSRR1383451\tM4\tIGH\tV gene\tIGHV3-30-5\tIGHV3\t3\t13436\t0.000223280738314975\nSRR1383451\tM4\tIGH\tV gene\tIGHV3-33\tIGHV3\t552\t13436\t0.0410836558499553\nSRR1383451\tM4\tIGH\tV gene\tIGHV3-43\tIGHV3\t12\t13436\t0.000893122953259899\nSRR1383451\tM4\tIGH\tV gene\tIGHV3-48\tIGHV3\t239\t13436\t0.0177880321524263\nSRR1383451\tM4\tIGH\tV gene\tIGHV3-49\tIGHV3\t171\t13436\t0.0127270020839536\n",
+          "id": "enchantr_v_gene_usage",
+          "mode": "repertoire-comparison/v-usage",
+          "name": "V gene usage",
+          "path_glob": "**/repertoire_comparison/V_family/V_family_distribution_data.tsv",
+          "rawYaml": "id: enchantr_v_gene_usage\nname: V gene usage\nmode: repertoire-comparison/v-usage\n# Written by airrflow's repertoire_comparison Rmd (alakazam countGenes) rather\n# than by enchantR itself; kept in this tool because it is the same report.\ndescription: >-\n  V gene usage per sample at two resolutions, family and gene, stacked into one\n  long table so the composition can be read at either level.\nfind: { path_glob: \"**/repertoire_comparison/V_family/V_family_distribution_data.tsv\" }\nrecipe: enchantr/v_gene_usage.py\nfixture: v_gene_usage.tsv\nrenders_as:\n  - id: v_usage_composition\n    component: advanced_viz\n    kind: stacked_taxonomy\n    roles: { sample_id: sample_id, taxon: taxon, rank: rank, abundance: seq_freq }\n  - { component: card, column: taxon, aggregation: nunique, secondary_layout: top_n, breakdown_col: v_family, top_n_count: 5 }\n  - { component: table }\n",
+          "recipe": "enchantr/v_gene_usage.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "v_usage_composition",
+              "kind": "stacked_taxonomy",
+              "roles": {
+                "abundance": "seq_freq",
+                "rank": "rank",
+                "sample_id": "sample_id",
+                "taxon": "taxon"
+              }
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "v_family",
+              "column": "taxon",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 5
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "v_gene_usage",
+          "yamlPath": "depictio/catalog/enchantr/v_gene_usage.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": null,
       "description": "",
       "dir": "depictio/catalog/hamronization",
       "homepage": null,
