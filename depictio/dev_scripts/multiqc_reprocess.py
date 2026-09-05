@@ -34,9 +34,9 @@ import json
 import re
 import shutil
 import sys
+from collections.abc import Iterable, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, Sequence
 
 import polars as pl
 
@@ -203,9 +203,8 @@ def detect_source_multiqc_version(src: Path) -> str | None:
 
 def _skipped(relative: Path, exclude: Sequence[str]) -> bool:
     parts = relative.parts
-    for part in parts[:-1]:
-        if part.startswith(SKIP_DIR_PREFIXES) or part in SKIP_DIR_NAMES:
-            return True
+    if any(part.startswith(SKIP_DIR_PREFIXES) or part in SKIP_DIR_NAMES for part in parts[:-1]):
+        return True
     if any(part.startswith(SKIP_ANY_PREFIXES) for part in parts):
         return True
     posix = relative.as_posix()

@@ -185,7 +185,9 @@ def test_write_provenance_records_the_run(tmp_path: Path) -> None:
 # --------------------------------------------------------------------------
 
 
-def test_dry_run_prints_plan_without_writing(results_dir: Path, tmp_path: Path, capsys) -> None:
+def test_dry_run_prints_plan_without_writing(
+    results_dir: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     dest = tmp_path / "dest"
     parquet = mr.reprocess(results_dir, dest, exclude=("*.bam",), dry_run=True)
     out = capsys.readouterr().out
@@ -197,7 +199,9 @@ def test_dry_run_prints_plan_without_writing(results_dir: Path, tmp_path: Path, 
     assert not dest.exists()
 
 
-def test_main_dry_run_exit_codes(results_dir: Path, tmp_path: Path, capsys) -> None:
+def test_main_dry_run_exit_codes(
+    results_dir: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     dest = tmp_path / "dest"
     assert mr.main(["--src", str(results_dir), "--dest", str(dest), "--dry-run"]) == 0
     assert "files to stage:    3" in capsys.readouterr().out
