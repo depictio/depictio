@@ -47,9 +47,14 @@ and are lower bounds for the big runs.
 
 ## Selected runs for this lot
 
-The seven pipelines added in this lot, with the run each template is validated
+The nine pipelines added in this lot, with the run each template is validated
 against. `resolve` verifies the prefix; `fetch` mirrors the manifest subset
 below the run root into `~/Data/depictio-nfcore/<pipeline>/<version>/megatest/`.
+
+Two of them are pinned to an **older release than the latest**, because every
+recent release of theirs published an empty or truncated prefix. `resolve` reports
+that and prints the fallback table the pin was chosen from, so the mismatch is
+deliberate and visible rather than silent.
 
 | pipeline | version | results_sha | run_root | MultiQC |
 |---|---|---|---|---|
@@ -60,6 +65,8 @@ below the run root into `~/Data/depictio-nfcore/<pipeline>/<version>/megatest/`.
 | rnaseq | 3.26.0 | `e7ca46272c8f9d5ceee3f71759f4ba551d3217a4` | `aligner_star_salmon/` | 1.33 at `multiqc/star_salmon/multiqc_report_data/` |
 | taxprofiler | 2.0.1 | `70ecc15e49b4f1fcf79d876643b5d14b65c66178` | `.` | 1.34 |
 | chipseq | 1.2.0 | `048fd6854fcc85b355c61dfc2e21da0bcc6399ea` | `.` (`bwa/mergedLibrary/...`) | 1.9, reprocessed with 1.35 |
+| atacseq | 1.2.2 | `f327c86324427c64716be09c98634ae0bc8165f6` | `.` (`bwa/mergedLibrary/...`) | none, reprocessed with 1.35; raw inputs under `multiqc/broadPeak/multiqc_data/` |
+| cutandrun | 3.1 | `42502fb44975e930eec865353c5481f472bcf766` | `.` (numbered stage dirs) | none, reprocessed with 1.35 |
 
 ## How to use
 
@@ -130,3 +137,9 @@ version gate, seeding, missing visualisation kinds) are in
 - **variantbenchmarking**: the shipped 1.4.0 template pins the 1.5.0 run because
   the 1.4.0 release's own run is a truncated sync; `fetch` warns about the
   release mismatch and keeps the pin.
+- **An empty latest release does not mean the pipeline is untemplatable.** atacseq
+  and cutandrun both publish nothing usable on every recent release, but atacseq
+  1.2.2 (488 objects) and cutandrun 3.1 (415 objects) are complete runs, so both
+  are templated against those. `resolve` exits 3 and prints the fallback table
+  precisely so an older usable run can be found instead of the pipeline being
+  written off. Worth re-checking the other `empty` rows above the same way.
