@@ -85,6 +85,13 @@ function tryGen(command: string): string | null {
         cwd: repoRoot,
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'ignore'],
+        // execFileSync buffers stdout and its default cap is 1 MB. The catalog
+        // manifest passed that as the catalog grew (it embeds each output's raw
+        // YAML and a sample of its fixture), and the overflow surfaces as an
+        // ENOBUFS the catch below swallows, so the build failed with "could not
+        // regenerate" and no reason. Give it room the manifest cannot plausibly
+        // reach.
+        maxBuffer: 128 * 1024 * 1024,
       });
       const trimmed = out.trim();
       if (trimmed.startsWith('{')) {
