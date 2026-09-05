@@ -363,6 +363,37 @@ non-SARS pathogen (no lineage DBs) + metagenomic protocol (no ivar/amplicon mosd
 
 **Ranking by template stress:** T1 > T2/T3 > T4 > T5 > T6 > T8 > T7 > T9 > T10
 
+---
+
+## chipseq 1.2.0
+
+**Megatest:** `s3://nf-core-awsmegatests/chipseq/results-048fd6854fcc85b355c61dfc2e21da0bcc6399ea/`
+(tag 1.2.0, run_root `.`, manifest megatest.yaml)
+
+**MultiQC:** run wrote 1.9 -> reprocessed with 1.35
+
+**Template requirements:**
+- Always: `design`, `design_reads`, `multiqc_data` (REPROCESSED parquet), `macs2_peaks`,
+  `macs2_peak_summary`, `homer_annotated_peaks`
+- Consensus route (>= 2 replicates per antibody): `macs2_consensus_boolean`, `macs2_consensus_fc`
+- Differential route (>= 2 conditions per antibody): `deseq2_results_raw` -> `deseq2_results` (dc_ref)
+
+**Scenarios:**
+
+| Scenario | Flags | Expected effect |
+|---|---|---|
+| narrowPeak default (validated) | none | all 10 DCs populated |
+| broad peaks | `--broad_peak` | `macs/broadPeak/*_peaks.broadPeak` is BED6+3 with no summit column: `macs2_peaks` finds nothing. Needs a dedicated `macs2/broad_peaks` output, deferred |
+| single replicate per antibody | design with one replicate | no consensus peak set is built; `macs2_consensus_*` and both `deseq2_*` DCs empty |
+| single condition per antibody | design with one group | consensus built, DESeq2 not run; both `deseq2_*` DCs empty |
+| `--skip_peak_annotation` | flag | `homer_annotated_peaks` empty; the Peaks tab loses its annotation section |
+| `--skip_consensus_peaks` / `--skip_diff_analysis` | flags | Consensus and Differential binding tabs lose their data |
+| MultiQC not reprocessed | (omit the reprocess step) | `multiqc_data` finds no parquet; the whole QC tab is empty. This is the pipeline's normal state: the reprocess is mandatory, not optional |
+
+**Known gap:** the MultiQC General Statistics table cannot be bound for this pipeline
+(samtools stats + flagstat both emit a "Reads mapped" column; the API general-stats payload
+collapses them and answers 500). See chipseq VALIDATION_REPORT.md CS-D3.
+
 ## Priority additions to `generate_validation_runs.sh`
 
 In order of value-per-effort:

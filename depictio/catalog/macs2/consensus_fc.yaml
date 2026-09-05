@@ -1,0 +1,16 @@
+id: macs2_consensus_fc
+name: Consensus fold enrichment
+mode: peaks/consensus_signal
+description: >-
+  Fold enrichment of the most strongly bound consensus intervals, one numeric
+  column per sample, ready to cluster. Intervals a sample did not call are 0,
+  so blocks of contrast-specific binding stand out.
+find:
+  path_glob: "**/*.consensus_peaks.boolean.txt"
+recipe: macs2/consensus_fc.py
+fixture: consensus_fc.tsv
+renders_as:
+  - { id: consensus_signal_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: region} }
+  - { component: card, column: peak_id, aggregation: count, secondary_layout: top_n, breakdown_col: consensus_set, top_n_count: 3 }
+  - { component: card, column: support, aggregation: count, secondary_layout: donut, breakdown_col: support }
+  - { component: table }
