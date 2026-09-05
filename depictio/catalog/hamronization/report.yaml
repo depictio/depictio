@@ -1,0 +1,22 @@
+id: hamronization_report
+name: ARG hits
+mode: arg/hits
+description: >-
+  One row per antimicrobial-resistance gene hit, with the sample recovered from
+  the per-tool input file name and the drug class, screening tool, reference
+  database, identity and coverage normalised across every ARG tool.
+find:
+  path_glob: "**/hamronization_summarize/*combined_report.tsv"
+  path_glob_alt: ["**/hamronization/*combined_report.tsv"]
+recipe: hamronization/report.py
+fixture: report.tsv
+renders_as:
+  # Screen -> drug class -> gene: which tool contributes which part of the
+  # resistome. hAMRonization does not normalise the drug-class vocabulary
+  # across tools, so the tool ring keeps the three vocabularies apart.
+  - { id: arg_hierarchy, component: advanced_viz, kind: sunburst, roles: {ranks: [tool, drug_class, gene_symbol], abundance: hits} }
+  - { component: card, column: hits, aggregation: sum, secondary_layout: top_n, breakdown_col: drug_class, top_n_count: 4 }
+  - { component: card, column: gene_symbol, aggregation: nunique, secondary_layout: donut, breakdown_col: tool }
+  - { component: card, column: identity_pct, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: coverage_pct, aggregation: average, secondary_layout: threshold, threshold_value: 80.0, threshold_direction: min, threshold_warn: 90.0 }
+  - { component: table, row_selection_enabled: true, row_selection_column: gene_symbol }

@@ -1,0 +1,84 @@
+# Megatest manifest for nf-core/funcscan 4.0.0 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the tables-only
+# subset of it that the template recipes need. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline funcscan --version 4.0.0 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing
+#
+# Keys are fnmatch globs relative to run_root (here the prefix root) and are
+# mirrored 1:1 below the destination, which becomes the template DATA_ROOT.
+# Timestamped pipeline_info files are renamed to stable names (params.json,
+# software_versions.yml); the newest one wins when a run wrote several.
+#
+# The run is a 19-sample metagenome-assembly screen (ERZ166450x MGnify
+# assemblies) with all four screening arms on: ARG (abricate, amrfinderplus,
+# deeparg, fargene, rgi -> hAMRonization), AMP (ampir, macrel, hmmsearch ->
+# AMPcombi), BGC (antiSMASH, GECCO, hmmsearch -> comBGC) and CAZyme (run_dbCAN).
+# Only the aggregated reports plus the small per-sample dbCAN tables are
+# fetched: the per-tool raw outputs (1.2 GB bgc/, 1.1 GB annotation/,
+# 431 MB amp/, 55 MB arg/) are not needed by any data collection.
+pipeline: funcscan
+version: "4.0.0"
+# s3://nf-core-awsmegatests/funcscan/results-<results_sha>/ == the 4.0.0 release tag_sha.
+results_sha: "aee3dc965eb0c77267435544dda30da858763913"
+run_root: ""
+multiqc:
+  # The run wrote a MultiQC 1.34 report, but funcscan feeds MultiQC nothing but
+  # software versions: the parquet holds a single run_metadata row, with no
+  # general-stats table and no module sections. The template keeps the
+  # multiqc_data DC optional and ships no QC tab.
+  version: "1.34"
+  parquet: multiqc/multiqc_data/multiqc.parquet
+  reprocess: false
+keys:
+  # Pipeline params + software versions. params.json carries the four
+  # run_*_screening flags and the input samplesheet URL.
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  # MultiQC parquet (versions-only, see above) + its JSON summary for inspection.
+  - multiqc/multiqc_data/multiqc.parquet
+  - multiqc/multiqc_data/multiqc_data.json
+  # ARG: hAMRonization summarize combined report (all five ARG tools, one row per hit).
+  - reports/hamronization_summarize/hamronization_combined_report.tsv
+  # AMP: AMPcombi2 summary (per-candidate physicochemistry + tool probabilities),
+  # cluster assignments and the cluster representative table.
+  - reports/ampcombi2/Ampcombi_summary.tsv
+  - reports/ampcombi2/Ampcombi_summary_cluster.tsv
+  - reports/ampcombi2/Ampcombi_summary_cluster_representative_seq.tsv
+  # BGC: the comBGC run-level summary. The per-sample
+  # reports/combgc/<sample>/combgc_summary.tsv files hold the antiSMASH branch
+  # only (137 of the 155 regions), so the complete summary is the one the
+  # recipes read and the per-sample files are not fetched.
+  - reports/combgc/combgc_complete_summary.tsv
+  # CAZyme: run_dbCAN per-sample overview (HMMER / dbCAN-sub / DIAMOND per gene)
+  # and the CGC substrate predictions.
+  - cazyme/dbcan/cazyme_annotation/*/*_overview.tsv
+  - cazyme/dbcan/substrate/*/*_substrate_prediction.tsv
+prefix_keys: []
+renames: {}
+post_fetch_help: |
+  === Samplesheet (not published with the results) ===
+
+  The run's outdir carries no input/ directory. params.json names the
+  samplesheet it ran on, so fetch it next to the data before ingesting:
+
+    mkdir -p {dest}/input
+    curl -fsSL -o {dest}/input/samplesheet_full.csv \
+      https://raw.githubusercontent.com/nf-core/test-datasets/funcscan/samplesheet_full.csv
+
+  SAMPLESHEET_FILE is auto-detected from {dest}/input/ when it is there; the
+  samplesheet DC is optional, so ingestion still succeeds without it (the hub
+  sample list is derived from the four screening reports instead).
+
+  === Quick test commands ===
+
+  # All four screening arms are on in this run, so no --var is needed. A run
+  # that switched one off is ingested the same way: the arm's data collections
+  # are optional and prune themselves.
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli run --template nf-core/funcscan/4.0.0 --data-root {dest} --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli run --template nf-core/funcscan/4.0.0 --data-root {dest}
