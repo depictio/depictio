@@ -554,6 +554,19 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: bd89d37fb5301417e476c957
+    data_collection_tag: melon_ranks
+    description: Genome-copy composition — recipe output (melon/ranks.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: melon/ranks.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: 125be31f418373fc3af51f4d
     data_collection_tag: mosdepth_amplicon_heatmap
     description: Amplicon coverage matrix — recipe output (mosdepth/complex_heatmap_canonical.py), seeded
@@ -943,6 +956,101 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: fc644bd1303a23bdd9321b05
+    data_collection_tag: sylph_ani
+    description: Containment ANI — recipe output (sylph/ani.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: sylph/ani.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 67161da7e85d138b6fdc1cc5
+    data_collection_tag: sylph_profile
+    description: Taxonomic profile — recipe output (sylph/profile.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: sylph/profile.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: a70964eb5ccbd30038c351f3
+    data_collection_tag: taxpasta_embedding
+    description: Profiler ordination — recipe output (taxpasta/embedding.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: taxpasta/embedding.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 1e448464b1b9dfdae1ad1d24
+    data_collection_tag: taxpasta_matrix
+    description: Taxon by run matrix — recipe output (taxpasta/matrix.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: taxpasta/matrix.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 33e29e7bc4b45b93e65ab481
+    data_collection_tag: taxpasta_presence
+    description: Profiler detection overlap — recipe output (taxpasta/presence.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: taxpasta/presence.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 0760ff0680fa294c7f5d951f
+    data_collection_tag: taxpasta_profiles
+    description: Cross-profiler abundances — recipe output (taxpasta/profiles.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: taxpasta/profiles.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: d23a201667e3090a02d1596a
+    data_collection_tag: taxpasta_sample_summary
+    description: Per-run profile statistics — recipe output (taxpasta/sample_summary.py), seeded from
+      the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: taxpasta/sample_summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: 6badabd9545cadd3f6250bdf
     data_collection_tag: truvari_summary
     description: Truvari SV summary — recipe output (truvari/summary.py), seeded from the catalog fixture
@@ -1041,6 +1149,8 @@ workflows:
         modules:
         - bcftools
         - bowtie2
+        - bracken
+        - centrifuge
         - cutadapt
         - dupradar
         - fastp
@@ -1048,9 +1158,13 @@ workflows:
         - featurecounts
         - happy
         - iVar
+        - kaiju
         - kraken
+        - metaphlan
         - mosdepth
         - multiqc_software_versions
+        - nanoq
+        - nonpareil
         - picard
         - qualimap
         - quast
@@ -1067,6 +1181,10 @@ workflows:
           - Indel Distribution
           bowtie2:
           - Paired-end alignments
+          bracken:
+          - Top taxa
+          centrifuge:
+          - Top taxa
           cutadapt:
           - Filtered Reads
           - Trimmed Sequence Lengths (3')
@@ -1086,11 +1204,22 @@ workflows:
           - SNP
           iVar:
           - iVar Primer Counts
+          kaiju:
+          - Top taxa
           kraken:
+          - Top taxa
+          metaphlan:
           - Top taxa
           mosdepth:
           - Cumulative coverage distribution
           - Average coverage per contig
+          nanoq:
+          - Nanoq Summary
+          - Read quality
+          - Read lengths
+          nonpareil:
+          - Statistics
+          - Redundancy levels
           picard:
           - Insert Size
           - Mark Duplicates

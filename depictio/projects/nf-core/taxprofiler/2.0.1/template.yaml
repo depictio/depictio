@@ -1,0 +1,465 @@
+# nf-core/taxprofiler Template v2.0.1 - Metagenomic Taxonomic Profiling
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/taxprofiler/2.0.1 --data-root /path/to/your/data
+#
+# Tested against nf-core/taxprofiler AWS megatest results:
+#   s3://nf-core-awsmegatests/taxprofiler/results-70ecc15e49b4f1fcf79d876643b5d14b65c66178
+# (3 mock communities x 2 sequencing platforms x 12 profiler/database combinations)
+# ============================================================================
+
+# Template metadata (parsed and removed before Project model validation)
+#
+# taxprofiler runs an arbitrary subset of its profilers, chosen by the database
+# sheet and the run_* flags. Rather than gating each profiler behind a template
+# variable, every profiler-specific data collection is declared `optional: true`:
+# a run without melon or sylph skips those collections and ingests the rest. The
+# taxpasta collections need only `taxpasta/*.tsv`, which any run with
+# --run_profile_standardisation produces whatever profilers it used.
+template:
+  template_id: "nf-core/taxprofiler/2.0.1"
+  description: "nf-core/taxprofiler template for metagenomic taxonomic profiling across many classifiers"
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory containing taxprofiler pipeline output (multiqc/, taxpasta/, one directory per profiler)"
+      required: true
+    - name: "SAMPLESHEET_FILE"
+      description: "Path to the taxprofiler samplesheet (sample, run_accession, instrument_platform, fastq_1, fastq_2, fasta). Auto-detected from {DATA_ROOT}/input/ when omitted; supplies the sample ids and the sequencing platform the profiles are annotated with."
+      required: false
+  # Variables supplied when materialising the BUNDLED reference/demo dataset
+  # (db_init_reference_datasets.resolve_template_for_init). Both sheets ship in
+  # the template's input/ directory: the samplesheet is named here, the database
+  # sheet is found by its own scan pattern.
+  reference:
+    vars:
+      SAMPLESHEET_FILE: "{DATA_ROOT}/input/samplesheet_full.csv"
+  # How this pipeline's run provenance (parameters, filtering thresholds, tool
+  # versions) is collected at ingest, surfaced in the project's ingestion
+  # report and the dashboard Settings drawer. Keys not matched by any group
+  # rule land in 'Other'; only exclude_keys are ever omitted.
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "hook_url" # nf-core runs put a live Slack webhook here
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Profilers"
+        key_patterns:
+          ["run_*", "kraken2_*", "krakenuniq_*", "bracken_*", "centrifuge_*", "metaphlan_*",
+           "kaiju_*", "diamond_*", "motus_*", "kmcp_*", "ganon_*", "malt_*", "sylph_*",
+           "melon_*", "metacache_*", "krona_*"]
+      - group: "Databases"
+        key_patterns: ["databases", "save_untarred_databases", "*_db", "*_index"]
+      - group: "Short-read preprocessing"
+        key_patterns: ["shortread_*", "preprocessing_qc_tool", "perform_shortread_*"]
+      - group: "Long-read preprocessing"
+        key_patterns: ["longread_*", "perform_longread_*"]
+      - group: "Host removal & run merging"
+        key_patterns: ["hostremoval_*", "perform_runmerging", "save_runmerged_reads",
+                       "save_hostremoval_*", "save_analysis_ready_fastqs", "save_preprocessed_reads"]
+      - group: "Standardisation"
+        key_patterns: ["standardisation_*", "taxpasta_*", "run_profile_standardisation"]
+      - group: "Run context"
+        key_patterns: ["input", "outdir", "email*", "version", "config_profile_*",
+                       "custom_config_*", "trace_report_suffix", "publish_dir_mode",
+                       "pipelines_testdata_base_path", "multiqc_*", "max_multiqc_email_size",
+                       "monochrome_logs", "validate_params", "help*", "show_hidden",
+                       "modules_testdata_base_path"]
+      - group: "Reporting"
+        key_patterns: ["plaintext_email", "hook_url"]
+      - group: "Skipped steps"
+        key_patterns: ["skip_*"]
+    highlight:
+      - "databases"
+      - "run_profile_standardisation"
+      - "perform_shortread_hostremoval"
+      - "perform_longread_hostremoval"
+      - "perform_runmerging"
+      - "shortread_qc_tool"
+      - "longread_filter_tool"
+      - "taxpasta_add_name"
+  dashboards:
+    - "dashboards/base.yaml"
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Taxprofiler Metagenomic Profiling"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "taxprofiler"
+    version: "2.0.1"
+    engine:
+      name: "nextflow"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/taxprofiler"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Raw inputs. Declared first: the taxpasta recipes join against them
+      # by dc_ref, and dc_ref sources are read back from their own tables.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samplesheet"
+        optional: true
+        description: "Taxprofiler samplesheet: the sample ids and their sequencing platform"
+        config:
+          type: "Table"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{SAMPLESHEET_FILE}"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "sample": "Sample identifier (used for cross-DC filtering via links)"
+              "run_accession": "Sequencing run the FASTQ belongs to; several runs per sample are merged"
+              "instrument_platform": "ILLUMINA or OXFORD_NANOPORE; drives which profilers a sample reaches"
+
+      - data_collection_tag: "database_sheet"
+        optional: true
+        # The sheet is an input, not a pipeline output: taxprofiler never copies
+        # it into the results tree, so it is curl'd from the `databases` URL in
+        # params.json into <DATA_ROOT>/input/ (see megatest.yaml post_fetch_help).
+        # Matched by pattern rather than by an explicit path because the file is
+        # named after that URL and the template variables carry no defaults.
+        description: "Taxprofiler database sheet under input/: which database every profiler ran against"
+        config:
+          type: "Table"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "input/database.*\\.csv"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "tool": "Profiler the database belongs to"
+              "db_name": "Database label; taxpasta names its output columns after it"
+              "db_type": "short, long or short;long: which read type the database is used for"
+
+      # ----------------------------------------------------------------
+      # Recipe-transformed data collections. taxpasta_profiles is the hub:
+      # the four collections after it read it back through dc_ref, so it
+      # must stay ahead of them in this list.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "taxon_names"
+        optional: true # needs kraken2 / krakenuniq / centrifuge reports
+        description: "taxonomy_id to name and rank lookup, harvested from the profilers' own reports"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/taxprofiler/taxon_names.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "taxonomy_id": "NCBI taxonomy identifier"
+              "name": "Scientific name reported for the identifier"
+              "rank": "Taxonomic rank of the identifier"
+
+      - data_collection_tag: "taxpasta_profiles"
+        description: "Every standardised taxpasta table melted into one long profiler x sample x taxon frame"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "taxpasta/profiles.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "profiler": "Classifier that produced the profile"
+              "database": "Database the classifier ran against"
+              "profiler_db": "Profiler and database as one label"
+              "sample": "Sample identifier (matches the samplesheet)"
+              "platform": "Sequencing platform the sample came from"
+              "taxonomy_id": "NCBI taxonomy identifier"
+              "name": "Scientific name; falls back to 'taxid <id>' when no report named it"
+              "rank": "Taxonomic rank"
+              "count": "Reads or genome copies the profiler assigned"
+              "rel_abundance": "Share of that profiling run's assigned total (0-1)"
+
+      - data_collection_tag: "taxpasta_matrix"
+        description: "Top taxa as a wide taxon x profiling-run matrix of relative abundances"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "taxpasta/matrix.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "taxon": "Taxon name (row identifier)"
+              "rank": "Taxonomic rank (row annotation)"
+
+      - data_collection_tag: "taxpasta_embedding"
+        description: "Bray-Curtis PCoA over every profiling run: one point per sample x profiler x database"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "taxpasta/embedding.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Profiling run label (sample, profiler and database)"
+              "dim_1": "First PCoA axis"
+              "dim_2": "Second PCoA axis"
+              "profiler": "Classifier that produced the profile"
+              "platform": "Sequencing platform the sample came from"
+
+      - data_collection_tag: "taxpasta_presence"
+        description: "Per sample and taxon, a 0/1 detection column for every profiler in the run"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "taxpasta/presence.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "taxon": "Taxon name"
+              "n_profilers": "How many profilers detected the taxon in that sample"
+
+      - data_collection_tag: "taxpasta_sample_summary"
+        description: "Per profiling run: taxa reported, reads assigned, top-hit share, Shannon diversity and evenness"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "taxpasta/sample_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "profiler_db": "Profiler and database as one label"
+              "taxa_observed": "Distinct taxa the run reported with a positive count"
+              "assigned_count": "Total reads or genome copies assigned"
+              "top_taxon_fraction": "Share of the profile held by its single most abundant taxon"
+              "shannon": "Shannon diversity of the profile"
+              "evenness": "Pielou evenness (Shannon over log richness)"
+
+      - data_collection_tag: "sylph_ani"
+        optional: true # only when --run_sylph
+        description: "sylph per-genome containment: adjusted ANI against abundance and coverage"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "sylph/ani.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "genome": "Reference genome the containment match is against"
+              "adjusted_ani": "Adjusted average nucleotide identity of the match"
+              "taxonomic_abundance": "Taxonomic abundance of the genome, as a percentage"
+              "eff_cov": "Effective coverage of the genome in the sample"
+
+      - data_collection_tag: "sylph_profile"
+        optional: true # only when --run_sylph with a sylph taxonomy
+        description: "sylph-tax merged profile as long sample x rank x taxon composition"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "sylph/profile.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample identifier"
+              "clade_name": "Full lineage of the clade"
+              "taxon": "Leaf name of the lineage"
+              "rank": "Rank of the leaf"
+              "abundance": "Relative abundance reported for the clade"
+
+      - data_collection_tag: "melon_ranks"
+        optional: true # only when --run_melon (long reads)
+        description: "Melon genome-copy composition, seven ranks wide, pooled over the long-read samples"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "melon/ranks.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "species": "Species level of the lineage"
+              "copy_number": "Estimated genome copies for the lineage"
+              "abundance": "Share of the pooled melon community (0-1)"
+              "identity_mean": "Mean read identity behind the estimate"
+
+      # ----------------------------------------------------------------
+      # The pipeline's own MultiQC report. Every panel the pipeline already
+      # renders stays here rather than being recomputed as a figure.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report data (16 modules: read QC, host removal, and the profiler top-taxa panels)"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "multiqc/multiqc_data/multiqc.parquet"
+          dc_specific_properties:
+            modules:
+              - "fastqc"
+              - "fastqc-1"
+              - "fastp"
+              - "porechop_abi"
+              - "nanoq"
+              - "bowtie2"
+              - "samtools"
+              - "nonpareil"
+              - "kraken"
+              - "bracken"
+              - "centrifuge"
+              - "metaphlan"
+              - "kaiju"
+              - "malt"
+              - "motus"
+            plots:
+              fastqc:
+                - "Sequence Counts"
+                - "Sequence Quality Histograms"
+                - "Per Sequence Quality Scores"
+                - "Per Sequence GC Content"
+                - "Sequence Length Distribution"
+                - "Adapter Content"
+                - "Status Checks"
+              fastqc-1:
+                - "Sequence Counts"
+                - "Sequence Quality Histograms"
+                - "Per Sequence GC Content"
+                - "Sequence Length Distribution"
+              fastp:
+                - "Filtered Reads"
+                - "Duplication Rates"
+                - "Sequence Quality"
+                - "GC Content"
+                - "N content"
+              porechop_abi:
+                - "No adapters found"
+              nanoq:
+                - "Nanoq Summary"
+                - "Read quality"
+                - "Read lengths"
+              bowtie2:
+                - "Single-end alignments"
+              samtools:
+                - "Percent mapped"
+                - "Alignment stats"
+              nonpareil:
+                - "Statistics"
+                - "Redundancy levels"
+              kraken:
+                - "Top taxa"
+              bracken:
+                - "Top taxa"
+              centrifuge:
+                - "Top taxa"
+              metaphlan:
+                - "Top taxa"
+              kaiju:
+                - "Top taxa"
+              malt:
+                - "Metagenomic Mappability"
+                - "Taxonomic assignment success"
+              motus:
+                - "mOTUs: Read filtering information"
+                - "Motus: Insert mapping information"
+                - "Motus: mOTU identification information"
+
+links:
+  # Link 1: samplesheet -> MultiQC. The persistent sample filter in the left rail
+  # reads the samplesheet, so it has to reach the MultiQC panels too.
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Filter MultiQC by samplesheet samples"
+    enabled: true
+
+  # Link 2: samplesheet -> the taxpasta hub. Everything downstream of the hub
+  # narrows through its own sample column.
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "taxpasta_profiles"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the cross-profiler abundances by selected samples"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "taxpasta_sample_summary"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the per-run statistics by selected samples"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "taxpasta_presence"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the profiler-overlap matrix by selected samples"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "sylph_ani"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the sylph containment table by selected samples"
+    enabled: true
+
+  # Link 6: the PCoA scatter and the per-run table share `profiler_db`, so a
+  # point picked in the ordination and a row picked in the table filter each other.
+  - source_dc_tag: "taxpasta_embedding"
+    source_column: "profiler_db"
+    target_dc_tag: "taxpasta_sample_summary"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "profiler_db"
+    description: "Cross-select the ordination and the per-run statistics on the profiling run"
+    enabled: true
+
+  - source_dc_tag: "taxpasta_sample_summary"
+    source_column: "profiler_db"
+    target_dc_tag: "taxpasta_embedding"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "profiler_db"
+    description: "Cross-select the per-run statistics and the ordination on the profiling run"
+    enabled: true

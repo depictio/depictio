@@ -1,0 +1,82 @@
+# Megatest manifest for nf-core/taxprofiler 2.0.1 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the tables-only
+# subset of it that the template recipes and MultiQC need. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline taxprofiler --version 2.0.1 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing
+#
+# Keys are fnmatch globs relative to run_root (here the prefix root) and are
+# mirrored 1:1 below the destination, which becomes the template DATA_ROOT.
+# Timestamped pipeline_info files are renamed to stable names (params.json,
+# software_versions.yml); the newest one wins when a run wrote several.
+#
+# The run profiles 3 mock communities (MOCK_001..003) on 2 platforms (Illumina
+# HiSeq 3000, ONT MinION R9) with 12 profiler x database combinations. Only the
+# per-sample summary tables are fetched: read-level outputs (kaiju/diamond/ganon
+# per-read hits, centrifuge results, malt RMA, kmcp search, samtools stats on the
+# nanopore BAMs, analysis-ready FASTQs) are 3 GB and never read by the template.
+pipeline: taxprofiler
+version: "2.0.1"
+# s3://nf-core-awsmegatests/taxprofiler/results-<results_sha>/ == the 2.0.1 release tag_sha.
+results_sha: "70ecc15e49b4f1fcf79d876643b5d14b65c66178"
+run_root: ""
+multiqc:
+  version: "1.34"
+  parquet: multiqc/multiqc_data/multiqc.parquet
+  reprocess: false
+keys:
+  # Pipeline params + software versions: the CLI reads pipeline_info/params.json
+  # for the run_* flags that decide which data collections the template keeps.
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  # MultiQC parquet (fastqc, fastp, porechop, nanoq, bowtie2, samtools, kraken,
+  # bracken, centrifuge, kaiju, metaphlan, motus, malt, diamond, nonpareil).
+  - multiqc/multiqc_data/multiqc.parquet
+  # taxpasta standardised profiles: one long table per profiler x database, the
+  # hub every cross-profiler tile is computed from.
+  - taxpasta/*.tsv
+  # Profiler combined reports (taxon names + per-sample counts) and the
+  # per-sample report tables MultiQC does not surface as data.
+  - bracken/bracken_*_combined_reports.txt
+  - bracken/*/*.bracken.tsv
+  - centrifuge/centrifuge_*_combined_reports.txt
+  - centrifuge/*/*.centrifuge.report.txt
+  - centrifuge/*/*.centrifuge.txt
+  - kaiju/kaiju_*_combined_reports.txt
+  - kaiju/*/*.kaijutable.txt
+  - kraken2/kraken2_*_combined_reports.txt
+  - kraken2/*/*.kraken2.report.txt
+  - krakenuniq/*/*.krakenuniq.report.txt
+  - kmcp/*/*.kmcp.profile
+  - metaphlan/metaphlan_*_combined_reports.txt
+  - metaphlan/*/*_profile.txt
+  - ganon/ganon_*_combined_reports.txt
+  - ganon/*/*.ganon_report.tre
+  - metacache/*/*.abundances.txt
+  # melon (nanopore): per-sample 7-rank genome-copy estimates.
+  - melon/*/*/*.tsv
+  # sylph: per-sample ANI/coverage/abundance tables, the taxonomic (sylphmpa)
+  # profiles and the merged report.
+  - sylph/sylph_*_combined_reports.tsv
+  - sylph/*/*.sylph.tsv
+  - sylph/*/*.sylphmpa
+  # Coverage / redundancy estimates and nanopore read stats.
+  - nonpareil/nonpareil_all_samples.tsv
+  - nonpareil/nonpareil_all_samples.csv
+  - nanoq/*.stats
+prefix_keys: []
+renames: {}
+post_fetch_help: |
+  === Quick test commands ===
+
+  # The run_* / perform_* flags come from pipeline_info/params.json, so no
+  # --var is needed. The samplesheet and database sheet are fetched from the
+  # nf-core test-datasets URLs in params.json into {dest}/input/ (see
+  # download_test_data.sh).
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli run --template nf-core/taxprofiler/2.0.1 --data-root {dest} --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli run --template nf-core/taxprofiler/2.0.1 --data-root {dest}

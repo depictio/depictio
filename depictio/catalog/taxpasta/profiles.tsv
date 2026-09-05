@@ -1,0 +1,33 @@
+profiler	database	profiler_db	sample	platform	taxonomy_id	name	rank	count	rel_abundance
+bracken	bracken-db	bracken / bracken-db	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	66851	Methanobrevibacter oralis	species	18773.0	0.0428472307811694
+bracken	bracken-db	bracken / bracken-db	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	173480	Gemmatimonas aurantiaca	species	22249.0	0.05078080422150099
+bracken	bracken-db	bracken / bracken-db	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	65	Herpetosiphon aurantiacus	species	22959.0	0.052401298221108415
+bracken	bracken-db	bracken / bracken-db	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	62322	Shewanella baltica	species	24213.0	0.05526341015844323
+bracken	bracken-db	bracken / bracken-db	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	93929	Thermotoga petrophila	species	25049.0	0.05717148478333311
+bracken	bracken-db	bracken / bracken-db	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	2190	Methanocaldococcus jannaschii	species	25160.0	0.05742482961989145
+bracken	bracken-db	bracken / bracken-db	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	2337	Thermotoga neapolitana	species	31786.0	0.07254791869228416
+bracken	bracken-db	bracken / bracken-db	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	44001	Caldicellulosiruptor saccharolyticus	species	34683.0	0.07915999068786547
+kaiju	kaiju-db1	kaiju / kaiju-db1	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	0	unclassified	unclassified	66225.0	0.14580645445378448
+kaiju	kaiju-db1	kaiju / kaiju-db1	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	44001	Caldicellulosiruptor saccharolyticus	species	29859.0	0.06574005169551606
+kaiju	kaiju-db1	kaiju / kaiju-db1	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	2337	Thermotoga neapolitana	species	28125.0	0.06192233343167517
+kaiju	kaiju-db1	kaiju / kaiju-db1	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	2190	Methanocaldococcus jannaschii	species	22658.0	0.04988573265404075
+kaiju	kaiju-db1	kaiju / kaiju-db1	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	173480	Gemmatimonas aurantiaca	species	21121.0	0.0465017459345924
+kaiju	kaiju-db1	kaiju / kaiju-db1	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	62322	Shewanella baltica	species	21085.0	0.04642248534779986
+kaiju	kaiju-db1	kaiju / kaiju-db1	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	65	Herpetosiphon aurantiacus	species	20266.0	0.04461930699826948
+kaiju	kaiju-db1	kaiju / kaiju-db1	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	265606	Rhodopirellula baltica	species	17975.0	0.03957525132211062
+kraken2	bracken-db	kraken2 / bracken-db	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	351627	Caldicellulosiruptor saccharolyticus DSM 8903	species	34521.0	0.07600429768515053
+kraken2	bracken-db	kraken2 / bracken-db	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	309803	Thermotoga neapolitana DSM 4359	species	29965.0	0.06597343008996076
+kraken2	bracken-db	kraken2 / bracken-db	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	243232	Methanocaldococcus jannaschii DSM 2661	species	25160.0	0.055394343436122574
+kraken2	bracken-db	kraken2 / bracken-db	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	316274	Herpetosiphon aurantiacus DSM 785	species	22959.0	0.050548439226945074
+kraken2	bracken-db	kraken2 / bracken-db	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	379066	Gemmatimonas aurantiaca T-27	species	22249.0	0.048985244320758785
+kraken2	bracken-db	kraken2 / bracken-db	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	66851	Methanobrevibacter oralis	species	18773.0	0.04133219432934535
+kraken2	bracken-db	kraken2 / bracken-db	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	243090	Rhodopirellula baltica SH 1	species	18340.0	0.040378865604868364
+kraken2	bracken-db	kraken2 / bracken-db	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	390874	Thermotoga petrophila RKU-1	species	16567.0	0.03647528170533556
+metaphlan	metaphlan3-db	metaphlan / metaphlan3-db	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	2	Bacteria	domain	63563810.0	0.09080544843519184
+metaphlan	metaphlan3-db	metaphlan / metaphlan3-db	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	2335	Thermotoga	genus	23686490.0	0.033837844935753335
+metaphlan	metaphlan3-db	metaphlan / metaphlan3-db	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	188709	Thermotogaceae	family	23686490.0	0.033837844935753335
+metaphlan	metaphlan3-db	metaphlan / metaphlan3-db	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	2419	Thermotogales	order	23686490.0	0.033837844935753335
+metaphlan	metaphlan3-db	metaphlan / metaphlan3-db	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	188708	Thermotogae	class	23686490.0	0.033837844935753335
+metaphlan	metaphlan3-db	metaphlan / metaphlan3-db	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	200918	Thermotogae	phylum	23686490.0	0.033837844935753335
+metaphlan	metaphlan3-db	metaphlan / metaphlan3-db	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	28890	Euryarchaeota	phylum	28337360.0	0.04048194534389093
+metaphlan	metaphlan3-db	metaphlan / metaphlan3-db	MOCK_001_Illumina_Hiseq_3000	ILLUMINA	2157	Archaea	domain	36436190.0	0.05205170319746177

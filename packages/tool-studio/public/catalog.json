@@ -3112,6 +3112,106 @@
       ]
     },
     {
+      "biotools_url": null,
+      "description": "",
+      "dir": "depictio/catalog/melon",
+      "homepage": null,
+      "id": "melon",
+      "name": "Melon",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/melon",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "Melon's marker-gene estimate of the community, as genome copies rather than read counts, with the seven NCBI ranks already split into their own columns. The rows are pooled across the long-read samples the tool ran on: the sample id lives only in melon's output path.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/melon/*/*/*.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "ranks.tsv",
+          "fixtureContent": "superkingdom\tphylum\tclass\torder\tfamily\tgenus\tspecies\tcopy_number\tabundance\tidentity_mean\tlineages\nBacteria\tThermotogota\tThermotogae\tThermotogales\tThermotogaceae\tThermotoga\tThermotoga neapolitana\t407.625\t0.2033015421972805\t0.9263666666666666\t3\nBacteria\tThermotogota\tThermotogae\tThermotogales\tThermotogaceae\tThermotoga\tThermotoga petrophila\t154.375\t0.07944415159709832\t0.9233666666666668\t3\nBacteria\tBacillota\tunclassified\tCaldicellulosiruptorales\tCaldicellulosiruptoraceae\tCaldicellulosiruptor\tCaldicellulosiruptor saccharolyticus\t152.75\t0.07757933004912543\t0.9271666666666666\t3\nBacteria\tGemmatimonadota\tGemmatimonadia\tGemmatimonadales\tGemmatimonadaceae\tGemmatimonas\tGemmatimonas aurantiaca\t119.875\t0.06055063930667452\t0.9211999999999999\t3\nBacteria\tThermotogota\tThermotogae\tThermotogales\tThermotogaceae\tThermotoga\tThermotoga sp. RQ2\t116.375\t0.05688426681348734\t0.9284\t2\nBacteria\tPseudomonadota\tBetaproteobacteria\tNitrosomonadales\tNitrosomonadaceae\tNitrosomonas\tNitrosomonas europaea\t104.5\t0.053011395644630165\t0.9257\t3\nBacteria\tBacillota\tClostridia\tThermoanaerobacterales\tThermoanaerobacteraceae\tThermoanaerobacter\tThermoanaerobacter pseudethanolicus\t90.375\t0.045505665317380324\t0.9269\t3\nBacteria\tPseudomonadota\tGammaproteobacteria\tAlteromonadales\tShewanellaceae\tShewanella\tShewanella baltica\t70.125\t0.035485954880520955\t0.9271666666666666\t3\nBacteria\tChlorobiota\tChlorobiia\tChlorobiales\tChlorobiaceae\tChlorobium\tChlorobium limicola\t64.0\t0.03243473474748776\t0.9253\t3\nBacteria\tAquificota\tAquificia\tAquificales\tHydrogenothermaceae\tPersephonella\tPersephonella marina\t62.125\t0.03173958471717921\t0.9314333333333332\t3\nBacteria\tChlorobiota\tChlorobiia\tChlorobiales\tChlorobiaceae\tChlorobium\tChlorobium phaeovibrioides\t53.625\t0.026897597839401922\t0.9192\t3\nBacteria\tPlanctomycetota\tPlanctomycetia\tPirellulales\tPirellulaceae\tRhodopirellula\tRhodopirellula baltica\t52.75\t0.026616734493822947\t0.9216666666666665\t3\nBacteria\tFusobacteriota\tFusobacteriia\tFusobacteriales\tFusobacteriaceae\tFusobacterium\tFusobacterium nucleatum\t48.875\t0.024734014411736352\t0.9288666666666666\t3\nBacteria\tChlorobiota\tChlorobiia\tChlorobiales\tChlorobiaceae\tChlorobaculum\tChlorobaculum tepidum\t48.625\t0.024224874389537847\t0.9216000000000001\t3\nBacteria\tBacteroidota\tBacteroidia\tBacteroidales\tPorphyromonadaceae\tPorphyromonas\tPorphyromonas gingivalis\t38.875\t0.019480560849352443\t0.9222333333333333\t3\nBacteria\tChloroflexota\tChloroflexia\tHerpetosiphonales\tHerpetosiphonaceae\tHerpetosiphon\tHerpetosiphon sp.\t34.75\t0.017510214096778665\t0.9206666666666666\t3\nBacteria\tThermodesulfobacteriota\tDesulfobulbia\tDesulfobulbales\tDesulfobulbaceae\tDesulfobulbus\tDesulfobulbus oralis\t34.25\t0.01740041942532495\t0.9254333333333333\t3\nBacteria\tBacteroidota\tBacteroidia\tBacteroidales\tBacteroidaceae\tPhocaeicola\tPhocaeicola vulgatus\t29.5\t0.014755793643352597\t0.9293\t3\nBacteria\tChlorobiota\tChlorobiia\tChlorobiales\tChlorobiaceae\tChlorobium\tChlorobium phaeobacteroides\t28.0\t0.014081937280639127\t0.9215\t3\nBacteria\tPseudomonadota\tGammaproteobacteria\tPseudomonadales\tPseudomonadaceae\tPseudomonas\tPseudomonas putida\t26.875\t0.013596760592818757\t0.9238666666666666\t3\nBacteria\tVerrucomicrobiota\tVerrucomicrobiia\tVerrucomicrobiales\tAkkermansiaceae\tAkkermansia\tAkkermansia muciniphila\t24.5\t0.012276261201911652\t0.9200666666666667\t3\nBacteria\tPseudomonadota\tGammaproteobacteria\tPseudomonadales\tPseudomonadaceae\tPseudomonas\tPseudomonas marginalis\t20.625\t0.010527472792331145\t0.926\t3\nBacteria\tThermodesulfobacteriota\tDesulfovibrionia\tDesulfovibrionales\tDesulfovibrionaceae\tDesulfovibrio\tDesulfovibrio piger\t19.75\t0.009813055761182563\t0.9203666666666667\t3\nBacteria\tunclassified Bacteria phylum\tunclassified Bacteria class\tunclassified Bacteria order\tunclassified Bacteria family\tunclassified Bacteria genus\tunclassified Bacteria species\t15.0\t0.007578618997094452\t0.0\t3\nBacteria\tAquificota\tAquificia\tAquificales\tAquificaceae\tHydrogenobaculum\tHydrogenobaculum sp. Y04AAS1\t14.25\t0.007197285647134985\t0.9315666666666665\t3\nBacteria\tChloroflexota\tChloroflexia\tChloroflexales\tChloroflexaceae\tChloroflexus\tChloroflexus aurantiacus\t13.25\t0.006758845628019\t0.9187666666666666\t3\nBacteria\tCyanobacteriota\tCyanophyceae\tNostocales\tNostocaceae\tTrichormus\tTrichormus variabilis\t13.375\t0.006665454290613805\t0.9232999999999999\t3\nBacteria\tChloroflexota\tChloroflexia\tHerpetosiphonales\tHerpetosiphonaceae\tHerpetosiphon\tHerpetosiphon geysericola\t11.75\t0.006072086598076306\t0.8472666666666666\t3\nBacteria\tPseudomonadota\tGammaproteobacteria\tAlteromonadales\tShewanellaceae\tShewanella\tShewanella loihica\t10.125\t0.005116810556426272\t0.9188666666666666\t3\nBacteria\tCampylobacterota\tEpsilonproteobacteria\tCampylobacterales\tHelicobacteraceae\tWolinella\tWolinella succinogenes\t10.125\t0.0051112355561832015\t0.9195333333333333\t3\n",
+          "id": "melon_ranks",
+          "name": "Genome-copy composition",
+          "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/melon",
+          "path_glob": "**/melon/*/*/*.tsv",
+          "rawYaml": "id: melon_ranks\nname: Genome-copy composition\ndescription: >-\n  Melon's marker-gene estimate of the community, as genome copies rather than\n  read counts, with the seven NCBI ranks already split into their own columns.\n  The rows are pooled across the long-read samples the tool ran on: the sample\n  id lives only in melon's output path.\nnf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/melon\nfind: { path_glob: \"**/melon/*/*/*.tsv\" }\nrecipe: melon/ranks.py\nfixture: ranks.tsv\nrenders_as:\n  # wide per-rank columns -> sunburst fits; stacked_taxonomy would need the long\n  # rank column, and a per-sample axis this pooled table does not carry.\n  - {\n      id: sunburst,\n      component: advanced_viz,\n      kind: sunburst,\n      roles:\n        {\n          ranks: [superkingdom, phylum, class, order, family, genus, species],\n          abundance: abundance,\n        },\n    }\n  - {\n      component: card,\n      column: species,\n      aggregation: nunique,\n      secondary_layout: top_n,\n      breakdown_col: phylum,\n      top_n_count: 4,\n    }\n  - {\n      component: card,\n      column: copy_number,\n      aggregation: sum,\n      aggregations: [box_plot_stats],\n      secondary_layout: box_plot,\n    }\n  - {\n      component: card,\n      column: identity_mean,\n      aggregation: average,\n      secondary_layout: gauge,\n      coverage_max: 1,\n    }\n  - { component: table }\n",
+          "recipe": "melon/ranks.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "sunburst",
+              "kind": "sunburst",
+              "roles": {
+                "abundance": "abundance",
+                "ranks": [
+                  "superkingdom",
+                  "phylum",
+                  "class",
+                  "order",
+                  "family",
+                  "genus",
+                  "species"
+                ]
+              }
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "phylum",
+              "column": "species",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 4
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "copy_number",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "identity_mean",
+              "columns": [],
+              "component": "card",
+              "coverage_max": 1.0,
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "gauge"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "ranks",
+          "yamlPath": "depictio/catalog/melon/ranks.yaml"
+        }
+      ]
+    },
+    {
       "biotools_url": "https://bio.tools/metaphlan",
       "description": "",
       "dir": "depictio/catalog/metaphlan",
@@ -3399,6 +3499,74 @@
         },
         {
           "columns": {},
+          "description": "Bayesian re-estimation of species abundance from the kraken2 report (top taxa), from Bracken via MultiQC.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+            "path_glob_alt": [
+              "**/multiqc/*_data/multiqc.parquet",
+              "**/multiqc/*/*_data/multiqc.parquet"
+            ]
+          },
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixtureContent": null,
+          "id": "multiqc_bracken",
+          "mode": "bracken",
+          "name": "Abundance re-estimation",
+          "origin_tool": "Bracken",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_bracken\nname: Abundance re-estimation\norigin_tool: Bracken\nmode: bracken\ndescription: Bayesian re-estimation of species abundance from the kraken2 report (top taxa), from Bracken via MultiQC.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: bracken }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "bracken"
+            }
+          ],
+          "slug": "bracken",
+          "yamlPath": "depictio/catalog/multiqc/bracken.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Taxonomic read classification against a compressed FM-index (top taxa), from Centrifuge via MultiQC.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+            "path_glob_alt": [
+              "**/multiqc/*_data/multiqc.parquet",
+              "**/multiqc/*/*_data/multiqc.parquet"
+            ]
+          },
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixtureContent": null,
+          "id": "multiqc_centrifuge",
+          "mode": "centrifuge",
+          "name": "Read classification (Centrifuge)",
+          "origin_tool": "Centrifuge",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_centrifuge\nname: Read classification (Centrifuge)\norigin_tool: Centrifuge\nmode: centrifuge\ndescription: Taxonomic read classification against a compressed FM-index (top taxa), from Centrifuge via MultiQC.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: centrifuge }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "centrifuge"
+            }
+          ],
+          "slug": "centrifuge",
+          "yamlPath": "depictio/catalog/multiqc/centrifuge.yaml"
+        },
+        {
+          "columns": {},
           "description": "Adapter/primer trimming summary (filtered reads, trimmed sequence lengths) \u2014 Cutadapt, surfaced via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -3637,6 +3805,40 @@
         },
         {
           "columns": {},
+          "description": "Protein-level taxonomic classification of reads (top taxa), from Kaiju via MultiQC.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+            "path_glob_alt": [
+              "**/multiqc/*_data/multiqc.parquet",
+              "**/multiqc/*/*_data/multiqc.parquet"
+            ]
+          },
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixtureContent": null,
+          "id": "multiqc_kaiju",
+          "mode": "kaiju",
+          "name": "Protein-level classification",
+          "origin_tool": "Kaiju",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_kaiju\nname: Protein-level classification\norigin_tool: Kaiju\nmode: kaiju\ndescription: Protein-level taxonomic classification of reads (top taxa), from Kaiju via MultiQC.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: kaiju }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "kaiju"
+            }
+          ],
+          "slug": "kaiju",
+          "yamlPath": "depictio/catalog/multiqc/kaiju.yaml"
+        },
+        {
+          "columns": {},
           "description": "Taxonomic read classification (top species/clades) \u2014 Kraken2, surfaced via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -3671,6 +3873,40 @@
         },
         {
           "columns": {},
+          "description": "Clade-specific marker-gene community profile (top taxa), from MetaPhlAn via MultiQC.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+            "path_glob_alt": [
+              "**/multiqc/*_data/multiqc.parquet",
+              "**/multiqc/*/*_data/multiqc.parquet"
+            ]
+          },
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixtureContent": null,
+          "id": "multiqc_metaphlan",
+          "mode": "metaphlan",
+          "name": "Marker-gene profile",
+          "origin_tool": "MetaPhlAn",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_metaphlan\nname: Marker-gene profile\norigin_tool: MetaPhlAn\nmode: metaphlan\ndescription: Clade-specific marker-gene community profile (top taxa), from MetaPhlAn via MultiQC.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: metaphlan }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "metaphlan"
+            }
+          ],
+          "slug": "metaphlan",
+          "yamlPath": "depictio/catalog/multiqc/metaphlan.yaml"
+        },
+        {
+          "columns": {},
           "description": "Coverage-depth distribution and per-contig coverage \u2014 mosdepth, surfaced via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -3702,6 +3938,74 @@
           ],
           "slug": "mosdepth",
           "yamlPath": "depictio/catalog/multiqc/mosdepth.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Long-read length and quality distributions after filtering, from nanoq via MultiQC.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+            "path_glob_alt": [
+              "**/multiqc/*_data/multiqc.parquet",
+              "**/multiqc/*/*_data/multiqc.parquet"
+            ]
+          },
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixtureContent": null,
+          "id": "multiqc_nanoq",
+          "mode": "nanoq",
+          "name": "Long-read filtering",
+          "origin_tool": "nanoq",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_nanoq\nname: Long-read filtering\norigin_tool: nanoq\nmode: nanoq\ndescription: Long-read length and quality distributions after filtering, from nanoq via MultiQC.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: nanoq }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "nanoq"
+            }
+          ],
+          "slug": "nanoq",
+          "yamlPath": "depictio/catalog/multiqc/nanoq.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Metagenome coverage and sequencing-effort redundancy curves, from Nonpareil via MultiQC.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+            "path_glob_alt": [
+              "**/multiqc/*_data/multiqc.parquet",
+              "**/multiqc/*/*_data/multiqc.parquet"
+            ]
+          },
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixtureContent": null,
+          "id": "multiqc_nonpareil",
+          "mode": "nonpareil",
+          "name": "Coverage redundancy",
+          "origin_tool": "Nonpareil",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_nonpareil\nname: Coverage redundancy\norigin_tool: Nonpareil\nmode: nonpareil\ndescription: Metagenome coverage and sequencing-effort redundancy curves, from Nonpareil via MultiQC.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: nonpareil }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "nonpareil"
+            }
+          ],
+          "slug": "nonpareil",
+          "yamlPath": "depictio/catalog/multiqc/nonpareil.yaml"
         },
         {
           "columns": {},
@@ -5627,6 +5931,556 @@
           ],
           "slug": "svbenchmark",
           "yamlPath": "depictio/catalog/svanalyzer/svbenchmark.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": null,
+      "description": "",
+      "dir": "depictio/catalog/sylph",
+      "homepage": null,
+      "id": "sylph",
+      "name": "sylph",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/sylph/profile",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "One row per reference genome sylph detected in a sample: the adjusted ANI of the containment match next to the taxonomic and sequence abundances and the effective coverage. ANI against abundance separates confident calls from divergent relatives, which read-count profilers cannot express.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "filename": "*.sylph.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "ani.tsv",
+          "fixtureContent": "sample\tgenome\tcontig_name\ttaxonomic_abundance\tabundance_frac\tsequence_abundance\tadjusted_ani\tnaive_ani\teff_cov\tmedian_cov\tcontainment_frac\tkmers_reassigned\nMOCK_001_Illumina_Hiseq_3000\tGCA_000018945.1_ASM1894v1_genomic\tCP000916.1 Thermotoga neapolitana DSM 4359, complete genome\t11.3126\t0.113126\t8.3009\t99.84\t99.84\t3.497\t3.0\t0.9527656929770043\t0\nMOCK_001_Illumina_Hiseq_3000\tGCA_000091665.1_ASM9166v1_genomic\tL77117.1 Methanocaldococcus jannaschii DSM 2661, complete ge\t9.4179\t0.094179\t6.3802\t99.72\t99.72\t2.911\t3.0\t0.9161861338339815\t1\nMOCK_001_Illumina_Hiseq_3000\tGCA_000016785.1_ASM1678v1_genomic\tCP000702.1 Thermotoga petrophila RKU-1, complete genome\t8.0107\t0.080107\t5.6876\t99.78\t99.51\t2.476\t2.0\t0.8596311475409836\t458\nMOCK_001_Illumina_Hiseq_3000\tGCA_000016545.1_ASM1654v1_genomic\tCP000679.1 Caldicellulosiruptor saccharolyticus DSM 8903, co\t6.4827\t0.06482700000000001\t7.4973\t100.0\t99.56\t2.004\t2.0\t0.8726056043496445\t0\nMOCK_001_Illumina_Hiseq_3000\tGCA_000166095.1_ASM16609v1_genomic\tCP002278.1 Methanothermus fervidus DSM 2088, complete genome\t6.3542\t0.063542\t3.0761\t100.0\t99.63\t1.964\t2.0\t0.8904239212717638\t0\nMOCK_001_Illumina_Hiseq_3000\tGCA_000008085.1_ASM808v1_genomic\tAE017199.1 Nanoarchaeum equitans Kin4-M chromosome, complete\t4.6001\t0.04600100000000001\t0.8792\t99.76\t98.91\t1.422\t2.0\t0.71240345297592\t1\nMOCK_001_Illumina_Hiseq_3000\tGCA_001639275.1_ASM163927v1_genomic\tLWMU01000001.1 Methanobrevibacter oralis strain DSM 7256 MBO\t3.9889\t0.039889\t3.3244\t99.85\t98.79\t1.233\t1.0\t0.6857336649333032\t0\nMOCK_001_Illumina_Hiseq_3000\tGCA_000019085.1_ASM1908v1_genomic\tCP000924.1 Thermoanaerobacter pseudethanolicus ATCC 33223, c\t3.9443\t0.039443\t3.6287\t99.89\t98.8\t1.219\t1.0\t0.6884652252636063\t2\nMOCK_001_Illumina_Hiseq_3000\tGCA_000011105.1_ASM1110v1_genomic\tBA000001.2 Pyrococcus horikoshii OT3 DNA, complete genome\t3.088\t0.03088\t2.0903\t99.92\t98.41\t0.955\t1.0\t0.6085404547858276\t0\nMOCK_001_Illumina_Hiseq_3000\tGCA_000009145.1_ASM914v1_genomic\tAL954747.1 Nitrosomonas europaea ATCC 19718, complete genome\t3.0145\t0.030145\t3.3007\t99.93\t98.38\t0.932\t1.0\t0.6019891966046472\t0\nMOCK_001_Illumina_Hiseq_3000\tGCA_000021565.1_ASM2156v1_genomic\tCP001230.1 Persephonella marina EX-H1, complete genome\t2.9866\t0.029866000000000004\t2.3071\t99.91\t98.33\t0.923\t1.0\t0.5942045716924498\t0\nMOCK_001_Illumina_Hiseq_3000\tGCA_000010305.1_ASM1030v1_genomic\tAP009153.1 Gemmatimonas aurantiaca T-27 DNA, complete genome\t2.8202\t0.028201999999999998\t5.0917\t99.83\t98.15\t0.872\t1.0\t0.5605622570032898\t1\nMOCK_001_Illumina_Hiseq_3000\tGCA_000010505.1_ASM1050v1_genomic\tAP009380.1 Porphyromonas gingivalis ATCC 33277 DNA, complete\t2.6042\t0.026042000000000003\t2.3878\t99.82\t97.98\t0.805\t1.0\t0.5307898979043525\t0\nMOCK_001_Illumina_Hiseq_3000\tGCA_002952055.1_ASM295205v1_genomic\tCP021255.1 Desulfobulbus oralis strain HOT041/ORNL chromosom\t2.2569\t0.022569\t2.438\t99.83\t97.68\t0.698\t1.0\t0.4836115724149987\t1\nMOCK_001_Illumina_Hiseq_3000\tGCA_000020465.1_ASM2046v1_genomic\tCP001097.1 Chlorobium limicola DSM 245 chromosome, complete \t2.0577\t0.020577\t2.2138\t99.81\t97.47\t0.636\t1.0\t0.45211972263670674\t1\nMOCK_001_Illumina_Hiseq_3000\tGCA_000018565.1_ASM1856v1_genomic\tCP000875.1 Herpetosiphon aurantiacus DSM 785, complete genom\t1.9084\t0.019084\t5.0419\t99.82\t97.3\t0.59\t1.0\t0.4284856193908558\t0\nMOCK_001_Illumina_Hiseq_3000\tGCA_000021665.1_ASM2166v1_genomic\tCP001252.1 Shewanella baltica OS223 chromosome, complete gen\t1.7367\t0.017367\t3.6237\t99.74\t97.01\t0.537\t1.0\t0.3902014652014652\t1\nMOCK_001_Illumina_Hiseq_3000\tGCA_003019295.1_ASM301929v1_genomic\tCP028101.1 Fusobacterium nucleatum subsp. nucleatum strain 2\t1.6507\t0.016507\t1.4012\t99.82\t96.96\t0.51\t1.0\t0.3844207283529541\t1\nMOCK_001_Illumina_Hiseq_3000\tGCA_000017945.1_ASM1794v1_genomic\tCP000816.1 Ignicoccus hospitalis KIN4/I, complete genome\t1.5519\t0.015519000000000002\t0.784\t99.68\t96.68\t0.48\t1.0\t0.35137034434293746\t2\nMOCK_001_Illumina_Hiseq_3000\tGCA_000196115.1_ASM19611v1_genomic\tBX119912.1 Rhodopirellula baltica SH 1 complete genome\t1.4241\t0.014241\t3.962\t99.74\t96.53\t0.44\t1.0\t0.33484908395940427\t1\nMOCK_001_Illumina_Hiseq_3000\tGCA_000006805.1_ASM680v1_genomic\tAE004437.1 Halobacterium sp. NRC-1, complete genome\t1.3982\t0.013982000000000001\t1.3997\t99.89\t96.63\t0.432\t1.0\t0.3451994555543922\t0\nMOCK_001_Illumina_Hiseq_3000\tGCA_000016125.1_ASM1612v1_genomic\tCP000609.1 Methanococcus maripaludis C5, complete genome\t1.1406\t0.011406000000000001\t0.7945\t99.85\t96.08\t0.353\t1.0\t0.2895331826040697\t0\nMOCK_001_Illumina_Hiseq_3000\tGCA_000009705.1_ASM970v1_genomic\tBA000019.2 Nostoc sp. PCC 7120 DNA, complete genome\t1.0299\t0.010299\t2.8919\t98.41\t94.43\t0.318\t1.0\t0.16946039035591273\t0\nMOCK_001_Illumina_Hiseq_3000\tGCA_001481685.1_ASM148168v1_genomic\tCP006867.1 Ignicoccus islandicus DSM 13165, complete genome\t1.0087\t0.010086999999999999\t0.5477\t99.5\t95.42\t0.312\t1.0\t0.23366204245361857\t10\nMOCK_001_Illumina_Hiseq_3000\tGCA_000017325.1_ASM1732v1_genomic\tCP000753.1 Shewanella baltica OS185, complete genome\t0.9319\t0.009319\t1.9278\t97.83\t93.62\t0.288\t1.0\t0.12963376009278674\t4963\nMOCK_001_Illumina_Hiseq_3000\tGCA_000006985.1_ASM698v1_genomic\tAE006470.1 Chlorobium tepidum TLS, complete genome\t0.8948\t0.008948000000000001\t0.7508\t99.65\t95.25\t0.277\t1.0\t0.22092896769280976\t10\nMOCK_001_Illumina_Hiseq_3000\tGCA_000015125.1_ASM1512v1_genomic\tCP000492.1 Chlorobium phaeobacteroides DSM 266, complete gen\t0.8685\t0.008685\t1.0597\t99.65\t95.17\t0.268\t1.0\t0.21559993709702782\t73\nMOCK_001_Illumina_Hiseq_3000\tGCA_000007985.2_ASM798v2_genomic\tAE017180.2 Geobacter sulfurreducens PCA, complete genome\t0.846\t0.00846\t1.2564\t99.92\t95.36\t0.262\t1.0\t0.22932993135289473\t0\nMOCK_001_Illumina_Hiseq_3000\tGCA_931907645.1_MPBAS00001_genomic\tOV986001.1 Pseudomonas fluorescens SBW25 genome assembly, ch\t0.7027\t0.007027\t1.8393\t99.58\t94.54\t0.217\t1.0\t0.17520187366728424\t52\nMOCK_001_Illumina_Hiseq_3000\tGCA_000018865.1_ASM1886v1_genomic\tCP000909.1 Chloroflexus aurantiacus J-10-fl, complete genome\t0.6685\t0.006685\t1.3688\t99.03\t93.88\t0.207\t1.0\t0.14113176821821144\t2\n",
+          "id": "sylph_ani",
+          "mode": "profile",
+          "name": "Containment ANI",
+          "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/sylph/profile",
+          "path_glob": null,
+          "rawYaml": "id: sylph_ani\nname: Containment ANI\nmode: profile\ndescription: >-\n  One row per reference genome sylph detected in a sample: the adjusted ANI of\n  the containment match next to the taxonomic and sequence abundances and the\n  effective coverage. ANI against abundance separates confident calls from\n  divergent relatives, which read-count profilers cannot express.\nnf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/sylph/profile\nfind: { filename: \"*.sylph.tsv\" }\nrecipe: sylph/ani.py\nfixture: ani.tsv\nrenders_as:\n  - {\n      id: ani_dot_plot,\n      component: advanced_viz,\n      kind: dot_plot,\n      roles:\n        {\n          cluster: sample,\n          gene: genome,\n          mean_expression: adjusted_ani,\n          frac_expressing: abundance_frac,\n        },\n    }\n  - {\n      component: figure,\n      visu_type: scatter,\n      dict_kwargs:\n        { x: taxonomic_abundance, y: adjusted_ani, color: sample, size: eff_cov },\n    }\n  - {\n      component: card,\n      column: adjusted_ani,\n      aggregation: median,\n      aggregations: [box_plot_stats],\n      secondary_layout: box_plot,\n    }\n  - {\n      component: card,\n      column: genome,\n      aggregation: nunique,\n      secondary_layout: top_n,\n      breakdown_col: sample,\n      top_n_count: 3,\n    }\n  - {\n      component: card,\n      column: eff_cov,\n      aggregation: median,\n      secondary_layout: threshold,\n      threshold_value: 1,\n      threshold_direction: min,\n    }\n  - { component: table }\n",
+          "recipe": "sylph/ani.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "ani_dot_plot",
+              "kind": "dot_plot",
+              "roles": {
+                "cluster": "sample",
+                "frac_expressing": "abundance_frac",
+                "gene": "genome",
+                "mean_expression": "adjusted_ani"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "sample",
+                "size": "eff_cov",
+                "x": "taxonomic_abundance",
+                "y": "adjusted_ani"
+              },
+              "roles": {},
+              "visu_type": "scatter"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "adjusted_ani",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample",
+              "column": "genome",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "eff_cov",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "threshold",
+              "threshold_direction": "min",
+              "threshold_value": 1.0
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "ani",
+          "yamlPath": "depictio/catalog/sylph/ani.yaml"
+        },
+        {
+          "columns": {},
+          "description": "The sylph-tax merged report melted into the canonical long composition shape (sample, rank, taxon, abundance), so one tile can switch between taxonomic ranks instead of needing a collapsed table per rank.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/sylph/sylph_*_combined_reports.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "profile.tsv",
+          "fixtureContent": "sample_id\tclade_name\ttaxon\trank\tabundance\nMOCK_001_Illumina_Hiseq_3000\td__Bacteria|p__Thermotogota|c__Thermotogae\tThermotogae\tclass\t19.3233\nMOCK_001_Illumina_Hiseq_3000\td__Archaea|p__Methanobacteriota|c__Methanococci\tMethanococci\tclass\t11.2155\nMOCK_001_Illumina_Hiseq_3000\td__Bacteria|p__Bacillota_A|c__Thermoanaerobacteria\tThermoanaerobacteria\tclass\t10.8818\nMOCK_001_Illumina_Hiseq_3000\td__Archaea|p__Methanobacteriota|c__Methanobacteria\tMethanobacteria\tclass\t10.3431\nMOCK_001_Illumina_Hiseq_3000\td__Bacteria|p__Pseudomonadota|c__Gammaproteobacteria\tGammaproteobacteria\tclass\t7.236499999999999\nMOCK_001_Illumina_Hiseq_3000\td__Archaea|p__Nanoarchaeota|c__Nanoarchaeia\tNanoarchaeia\tclass\t4.6001\nMOCK_001_Illumina_Hiseq_3000\td__Bacteria|p__Bacteroidota|c__Chlorobia\tChlorobia\tclass\t3.821\nMOCK_001_Illumina_Hiseq_3000\td__Bacteria|p__Bacteroidota|c__Bacteroidia\tBacteroidia\tclass\t3.318\nMOCK_001_Illumina_Hiseq_3000\td__Archaea|p__Methanobacteriota_B|c__Thermococci\tThermococci\tclass\t3.088\nMOCK_001_Illumina_Hiseq_3000\td__Bacteria|p__Aquificota|c__Aquificae\tAquificae\tclass\t2.9866\nMOCK_001_Illumina_Hiseq_3000\td__Bacteria|p__Gemmatimonadota|c__Gemmatimonadetes\tGemmatimonadetes\tclass\t2.8202\nMOCK_001_Illumina_Hiseq_3000\td__Archaea|p__Thermoproteota|c__Thermoprotei_A\tThermoprotei A\tclass\t2.7593\nMOCK_001_Illumina_Hiseq_3000\td__Bacteria|p__Chloroflexota|c__Chloroflexia\tChloroflexia\tclass\t2.5769\nMOCK_001_Illumina_Hiseq_3000\td__Bacteria|p__Desulfobacterota|c__Desulfobulbia\tDesulfobulbia\tclass\t2.2569\nMOCK_001_Illumina_Hiseq_3000\td__Bacteria|p__Fusobacteriota|c__Fusobacteriia\tFusobacteriia\tclass\t1.6507\nMOCK_001_Illumina_Hiseq_3000\td__Bacteria|p__Planctomycetota|c__Planctomycetia\tPlanctomycetia\tclass\t1.4241\nMOCK_001_Illumina_Hiseq_3000\td__Archaea|p__Halobacteriota|c__Halobacteria\tHalobacteria\tclass\t1.3982\nMOCK_001_Illumina_Hiseq_3000\td__Bacteria|p__Cyanobacteriota|c__Cyanobacteriia\tCyanobacteriia\tclass\t1.0299\nMOCK_001_Illumina_Hiseq_3000\td__Bacteria|p__Desulfobacterota_F|c__Desulfuromonadia\tDesulfuromonadia\tclass\t0.846\nMOCK_001_Illumina_Hiseq_3000\td__Bacteria|p__Verrucomicrobiota|c__Verrucomicrobiae\tVerrucomicrobiae\tclass\t0.6514\nMOCK_001_Illumina_Hiseq_3000\td__Bacteria|p__Desulfobacterota|c__Desulfovibrionia\tDesulfovibrionia\tclass\t0.5834\nMOCK_001_Illumina_Hiseq_3000\td__Archaea|p__Thermoproteota|c__Thermoprotei\tThermoprotei\tclass\t0.5693\nMOCK_001_Illumina_Hiseq_3000\td__Bacteria|p__Bacillota_A|c__Clostridia\tClostridia\tclass\t0.569\nMOCK_001_Illumina_Hiseq_3000\td__Bacteria|p__Campylobacterota|c__Campylobacteria\tCampylobacteria\tclass\t0.5638\nMOCK_001_Illumina_Hiseq_3000\td__Bacteria|p__Spirochaetota|c__Spirochaetia\tSpirochaetia\tclass\t0.5591\nMOCK_001_Illumina_Hiseq_3000\td__Archaea|p__Halobacteriota|c__Archaeoglobi\tArchaeoglobi\tclass\t0.4679\nMOCK_001_Illumina_Hiseq_3000\td__Archaea|p__Methanobacteriota|c__Methanopyri\tMethanopyri\tclass\t0.4115\nMOCK_001_Illumina_Hiseq_3000\td__Bacteria|p__Acidobacteriota|c__Terriglobia\tTerriglobia\tclass\t0.3148\nMOCK_001_Illumina_Hiseq_3000\td__Bacteria|p__Deinococcota|c__Deinococci\tDeinococci\tclass\t0.3122\nMOCK_001_Illumina_Hiseq_3000\td__Bacteria|p__Dictyoglomota|c__Dictyoglomia\tDictyoglomia\tclass\t0.3036\n",
+          "id": "sylph_profile",
+          "mode": "profile/merged",
+          "name": "Taxonomic profile",
+          "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/sylphtax/merge",
+          "path_glob": "**/sylph/sylph_*_combined_reports.tsv",
+          "rawYaml": "id: sylph_profile\nname: Taxonomic profile\nmode: profile/merged\ndescription: >-\n  The sylph-tax merged report melted into the canonical long composition shape\n  (sample, rank, taxon, abundance), so one tile can switch between taxonomic\n  ranks instead of needing a collapsed table per rank.\nnf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/sylphtax/merge\nfind: { path_glob: \"**/sylph/sylph_*_combined_reports.tsv\" }\nrecipe: sylph/profile.py\nfixture: profile.tsv\nrenders_as:\n  - {\n      id: stacked_taxonomy,\n      component: advanced_viz,\n      kind: stacked_taxonomy,\n      roles: { sample_id: sample_id, taxon: taxon, rank: rank, abundance: abundance },\n    }\n  - {\n      component: card,\n      column: taxon,\n      aggregation: nunique,\n      secondary_layout: top_n,\n      breakdown_col: rank,\n      top_n_count: 4,\n    }\n  - { component: table }\n",
+          "recipe": "sylph/profile.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "stacked_taxonomy",
+              "kind": "stacked_taxonomy",
+              "roles": {
+                "abundance": "abundance",
+                "rank": "rank",
+                "sample_id": "sample_id",
+                "taxon": "taxon"
+              }
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "rank",
+              "column": "taxon",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 4
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "profile",
+          "yamlPath": "depictio/catalog/sylph/profile.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": null,
+      "description": "",
+      "dir": "depictio/catalog/taxpasta",
+      "homepage": null,
+      "id": "taxpasta",
+      "name": "taxpasta",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/taxpasta/merge",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "Bray-Curtis PCoA over every profiling run. One point per sample, profiler and database, so runs that agree on the community land together and the spread reads as profiler disagreement rather than as biological distance.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/taxpasta/*.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "embedding.tsv",
+          "fixtureContent": "sample_id\tdim_1\tdim_2\tsample\tprofiler\tdatabase\tprofiler_db\tplatform\nMOCK_001_Illumina_Hiseq_3000 | bracken / bracken-db\t0.39894531156174934\t-0.09832182302186457\tMOCK_001_Illumina_Hiseq_3000\tbracken\tbracken-db\tbracken / bracken-db\tILLUMINA\nMOCK_001_Illumina_Hiseq_3000 | centrifuge / centrifuge-db\t-0.4402100120413935\t-0.0813886436537681\tMOCK_001_Illumina_Hiseq_3000\tcentrifuge\tcentrifuge-db\tcentrifuge / centrifuge-db\tILLUMINA\nMOCK_001_Illumina_Hiseq_3000 | diamond / diamond-db1\t-0.41071677452577077\t-0.08008235030914147\tMOCK_001_Illumina_Hiseq_3000\tdiamond\tdiamond-db1\tdiamond / diamond-db1\tILLUMINA\nMOCK_001_Illumina_Hiseq_3000 | diamond / diamond-db3\t-0.41071677452577054\t-0.08008235030914147\tMOCK_001_Illumina_Hiseq_3000\tdiamond\tdiamond-db3\tdiamond / diamond-db3\tILLUMINA\nMOCK_001_Illumina_Hiseq_3000 | kaiju / kaiju-db1\t0.41865060851846536\t-0.11596327389649076\tMOCK_001_Illumina_Hiseq_3000\tkaiju\tkaiju-db1\tkaiju / kaiju-db1\tILLUMINA\nMOCK_001_Illumina_Hiseq_3000 | kaiju / kaiju-db3\t0.41865060851846536\t-0.11596327389649087\tMOCK_001_Illumina_Hiseq_3000\tkaiju\tkaiju-db3\tkaiju / kaiju-db3\tILLUMINA\nMOCK_001_Illumina_Hiseq_3000 | kmcp / kmcp_db\t0.028205120266207893\t0.7225390921341319\tMOCK_001_Illumina_Hiseq_3000\tkmcp\tkmcp_db\tkmcp / kmcp_db\tILLUMINA\nMOCK_001_Illumina_Hiseq_3000 | kraken2 / bracken-db\t-0.4375694706688353\t-0.08317189798167629\tMOCK_001_Illumina_Hiseq_3000\tkraken2\tbracken-db\tkraken2 / bracken-db\tILLUMINA\nMOCK_001_Illumina_Hiseq_3000 | kraken2 / kraken2-db\t-0.43756947066883517\t-0.08317189798167628\tMOCK_001_Illumina_Hiseq_3000\tkraken2\tkraken2-db\tkraken2 / kraken2-db\tILLUMINA\nMOCK_001_Illumina_Hiseq_3000 | krakenuniq / krakenuniq-db\t-0.43857445370423964\t-0.08244858312195455\tMOCK_001_Illumina_Hiseq_3000\tkrakenuniq\tkrakenuniq-db\tkrakenuniq / krakenuniq-db\tILLUMINA\nMOCK_001_Illumina_Hiseq_3000 | megan6 / malt-db\t-0.4489394026558755\t-0.05865301258625456\tMOCK_001_Illumina_Hiseq_3000\tmegan6\tmalt-db\tmegan6 / malt-db\tILLUMINA\nMOCK_001_Illumina_Hiseq_3000 | metaphlan / metaphlan3-db\t0.09178435839636713\t0.39041860295539366\tMOCK_001_Illumina_Hiseq_3000\tmetaphlan\tmetaphlan3-db\tmetaphlan / metaphlan3-db\tILLUMINA\nMOCK_001_Illumina_Hiseq_3000 | motus / motus-db1\t0.4470461193748985\t-0.08662790494064698\tMOCK_001_Illumina_Hiseq_3000\tmotus\tmotus-db1\tmotus / motus-db1\tILLUMINA\nMOCK_001_Illumina_Hiseq_3000 | motus / motus-db3\t0.4470461193748985\t-0.08662790494064698\tMOCK_001_Illumina_Hiseq_3000\tmotus\tmotus-db3\tmotus / motus-db3\tILLUMINA\nMOCK_001_Minion_R9 | diamond / diamond-db2\t-0.41257938928253285\t-0.03495061034466313\tMOCK_001_Minion_R9\tdiamond\tdiamond-db2\tdiamond / diamond-db2\tOXFORD_NANOPORE\nMOCK_001_Minion_R9 | diamond / diamond-db3\t-0.4260010511790749\t-0.061960538235448066\tMOCK_001_Minion_R9\tdiamond\tdiamond-db3\tdiamond / diamond-db3\tOXFORD_NANOPORE\nMOCK_001_Minion_R9 | kaiju / kaiju-db2\t0.30781347574179324\t0.1003104970005693\tMOCK_001_Minion_R9\tkaiju\tkaiju-db2\tkaiju / kaiju-db2\tOXFORD_NANOPORE\nMOCK_001_Minion_R9 | kaiju / kaiju-db3\t0.4082787814445404\t-0.10807486022085612\tMOCK_001_Minion_R9\tkaiju\tkaiju-db3\tkaiju / kaiju-db3\tOXFORD_NANOPORE\nMOCK_001_Minion_R9 | motus / motus-db2\t0.4382680872641338\t-0.0941911850085963\tMOCK_001_Minion_R9\tmotus\tmotus-db2\tmotus / motus-db2\tOXFORD_NANOPORE\nMOCK_001_Minion_R9 | motus / motus-db3\t0.43826808726413374\t-0.09419118500859637\tMOCK_001_Minion_R9\tmotus\tmotus-db3\tmotus / motus-db3\tOXFORD_NANOPORE\nMOCK_002_Illumina_Hiseq_3000 | bracken / bracken-db\t0.3992773024570437\t-0.09869992907366032\tMOCK_002_Illumina_Hiseq_3000\tbracken\tbracken-db\tbracken / bracken-db\tILLUMINA\nMOCK_002_Illumina_Hiseq_3000 | centrifuge / centrifuge-db\t-0.4427685722551475\t-0.07917865120052592\tMOCK_002_Illumina_Hiseq_3000\tcentrifuge\tcentrifuge-db\tcentrifuge / centrifuge-db\tILLUMINA\nMOCK_002_Illumina_Hiseq_3000 | diamond / diamond-db1\t-0.41225965959144434\t-0.07912922880519435\tMOCK_002_Illumina_Hiseq_3000\tdiamond\tdiamond-db1\tdiamond / diamond-db1\tILLUMINA\nMOCK_002_Illumina_Hiseq_3000 | diamond / diamond-db3\t-0.41225965959144434\t-0.07912922880519432\tMOCK_002_Illumina_Hiseq_3000\tdiamond\tdiamond-db3\tdiamond / diamond-db3\tILLUMINA\nMOCK_002_Illumina_Hiseq_3000 | kaiju / kaiju-db1\t0.41744088485105224\t-0.11706280481933652\tMOCK_002_Illumina_Hiseq_3000\tkaiju\tkaiju-db1\tkaiju / kaiju-db1\tILLUMINA\nMOCK_002_Illumina_Hiseq_3000 | kaiju / kaiju-db3\t0.41744088485105224\t-0.11706280481933654\tMOCK_002_Illumina_Hiseq_3000\tkaiju\tkaiju-db3\tkaiju / kaiju-db3\tILLUMINA\nMOCK_002_Illumina_Hiseq_3000 | kmcp / kmcp_db\t0.028207407237645626\t0.722781980541407\tMOCK_002_Illumina_Hiseq_3000\tkmcp\tkmcp_db\tkmcp / kmcp_db\tILLUMINA\nMOCK_002_Illumina_Hiseq_3000 | kraken2 / bracken-db\t-0.4404719952806516\t-0.08074349903330819\tMOCK_002_Illumina_Hiseq_3000\tkraken2\tbracken-db\tkraken2 / bracken-db\tILLUMINA\nMOCK_002_Illumina_Hiseq_3000 | kraken2 / kraken2-db\t-0.4404719952806516\t-0.08074349903330832\tMOCK_002_Illumina_Hiseq_3000\tkraken2\tkraken2-db\tkraken2 / kraken2-db\tILLUMINA\nMOCK_002_Illumina_Hiseq_3000 | krakenuniq / krakenuniq-db\t-0.44127014647762797\t-0.0801594104124843\tMOCK_002_Illumina_Hiseq_3000\tkrakenuniq\tkrakenuniq-db\tkrakenuniq / krakenuniq-db\tILLUMINA\n",
+          "id": "taxpasta_embedding",
+          "mode": "merge/ordination",
+          "name": "Profiler ordination",
+          "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/taxpasta/merge",
+          "path_glob": "**/taxpasta/*.tsv",
+          "rawYaml": "id: taxpasta_embedding\nname: Profiler ordination\nmode: merge/ordination\ndescription: >-\n  Bray-Curtis PCoA over every profiling run. One point per sample, profiler and\n  database, so runs that agree on the community land together and the spread\n  reads as profiler disagreement rather than as biological distance.\nnf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/taxpasta/merge\nfind: { path_glob: \"**/taxpasta/*.tsv\" }\nrecipe: taxpasta/embedding.py\nfixture: embedding.tsv\nrenders_as:\n  - {\n      id: profiler_embedding,\n      component: advanced_viz,\n      kind: embedding,\n      roles: { sample_id: sample_id, dim_1: dim_1, dim_2: dim_2 },\n    }\n  - { component: table }\n",
+          "recipe": "taxpasta/embedding.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "profiler_embedding",
+              "kind": "embedding",
+              "roles": {
+                "dim_1": "dim_1",
+                "dim_2": "dim_2",
+                "sample_id": "sample_id"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "embedding",
+          "yamlPath": "depictio/catalog/taxpasta/embedding.yaml"
+        },
+        {
+          "columns": {},
+          "description": "The top taxa as a wide taxon by profiling-run matrix of relative abundances, with the taxonomic rank as a row annotation and the profiler and platform of each column serialised for the heatmap's column strips.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/taxpasta/*.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "matrix.tsv",
+          "fixtureContent": "taxon\trank\tMOCK_001_Illumina_Hiseq_3000__bracken__bracken-db\tMOCK_001_Illumina_Hiseq_3000__centrifuge__centrifuge-db\tMOCK_001_Illumina_Hiseq_3000__diamond__diamond-db1\tMOCK_001_Illumina_Hiseq_3000__diamond__diamond-db3\tMOCK_001_Illumina_Hiseq_3000__kaiju__kaiju-db1\tMOCK_001_Illumina_Hiseq_3000__kaiju__kaiju-db3\t_col_annotations_json\nBacteria\tdomain\t0.0\t0.000026420195597514742\t0.0036390630232323966\t0.0036390630232323966\t0.0\t0.0\t\"{\"\"profiler\"\": {\"\"values\"\": [\"\"bracken\"\", \"\"centrifuge\"\", \"\"diamond\"\", \"\"diamond\"\", \"\"kaiju\"\", \"\"kaiju\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"bracken\"\": \"\"#636EFA\"\", \"\"centrifuge\"\": \"\"#EF553B\"\", \"\"diamond\"\": \"\"#00CC96\"\", \"\"kaiju\"\": \"\"#AB63FA\"\"}}, \"\"platform\"\": {\"\"values\"\": [\"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"ILLUMINA\"\": \"\"#636EFA\"\"}}}\"\nCaldicellulosiruptor\tgenus\t0.0\t0.00034786590870061073\t0.029438005962068504\t0.029438005962068504\t0.0\t0.0\t\"{\"\"profiler\"\": {\"\"values\"\": [\"\"bracken\"\", \"\"centrifuge\"\", \"\"diamond\"\", \"\"diamond\"\", \"\"kaiju\"\", \"\"kaiju\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"bracken\"\": \"\"#636EFA\"\", \"\"centrifuge\"\": \"\"#EF553B\"\", \"\"diamond\"\": \"\"#00CC96\"\", \"\"kaiju\"\": \"\"#AB63FA\"\"}}, \"\"platform\"\": {\"\"values\"\": [\"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"ILLUMINA\"\": \"\"#636EFA\"\"}}}\"\nCaldicellulosiruptor saccharolyticus\tspecies\t0.07915999068786547\t0.0\t0.0\t0.0\t0.06574005169551606\t0.06574005169551606\t\"{\"\"profiler\"\": {\"\"values\"\": [\"\"bracken\"\", \"\"centrifuge\"\", \"\"diamond\"\", \"\"diamond\"\", \"\"kaiju\"\", \"\"kaiju\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"bracken\"\": \"\"#636EFA\"\", \"\"centrifuge\"\": \"\"#EF553B\"\", \"\"diamond\"\": \"\"#00CC96\"\", \"\"kaiju\"\": \"\"#AB63FA\"\"}}, \"\"platform\"\": {\"\"values\"\": [\"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"ILLUMINA\"\": \"\"#636EFA\"\"}}}\"\nCaldicellulosiruptor saccharolyticus DSM 8903\tspecies\t0.0\t0.07612539024830581\t0.04471317204993525\t0.04471317204993525\t0.0\t0.0\t\"{\"\"profiler\"\": {\"\"values\"\": [\"\"bracken\"\", \"\"centrifuge\"\", \"\"diamond\"\", \"\"diamond\"\", \"\"kaiju\"\", \"\"kaiju\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"bracken\"\": \"\"#636EFA\"\", \"\"centrifuge\"\": \"\"#EF553B\"\", \"\"diamond\"\": \"\"#00CC96\"\", \"\"kaiju\"\": \"\"#AB63FA\"\"}}, \"\"platform\"\": {\"\"values\"\": [\"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"ILLUMINA\"\": \"\"#636EFA\"\"}}}\"\nChlorobaculum tepidum\tspecies\t0.007420036609470076\t0.0\t0.0\t0.0\t0.00758479781945319\t0.00758479781945319\t\"{\"\"profiler\"\": {\"\"values\"\": [\"\"bracken\"\", \"\"centrifuge\"\", \"\"diamond\"\", \"\"diamond\"\", \"\"kaiju\"\", \"\"kaiju\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"bracken\"\": \"\"#636EFA\"\", \"\"centrifuge\"\": \"\"#EF553B\"\", \"\"diamond\"\": \"\"#00CC96\"\", \"\"kaiju\"\": \"\"#AB63FA\"\"}}, \"\"platform\"\": {\"\"values\"\": [\"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"ILLUMINA\"\": \"\"#636EFA\"\"}}}\"\nChlorobaculum tepidum TLS\tspecies\t0.0\t0.007170881421758792\t0.006212634620743596\t0.006212634620743596\t0.0\t0.0\t\"{\"\"profiler\"\": {\"\"values\"\": [\"\"bracken\"\", \"\"centrifuge\"\", \"\"diamond\"\", \"\"diamond\"\", \"\"kaiju\"\", \"\"kaiju\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"bracken\"\": \"\"#636EFA\"\", \"\"centrifuge\"\": \"\"#EF553B\"\", \"\"diamond\"\": \"\"#00CC96\"\", \"\"kaiju\"\": \"\"#AB63FA\"\"}}, \"\"platform\"\": {\"\"values\"\": [\"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"ILLUMINA\"\": \"\"#636EFA\"\"}}}\"\nChlorobium limicola\tspecies\t0.026126471568318658\t0.0\t0.0\t0.0\t0.024330798462344615\t0.024330798462344615\t\"{\"\"profiler\"\": {\"\"values\"\": [\"\"bracken\"\", \"\"centrifuge\"\", \"\"diamond\"\", \"\"diamond\"\", \"\"kaiju\"\", \"\"kaiju\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"bracken\"\": \"\"#636EFA\"\", \"\"centrifuge\"\": \"\"#EF553B\"\", \"\"diamond\"\": \"\"#00CC96\"\", \"\"kaiju\"\": \"\"#AB63FA\"\"}}, \"\"platform\"\": {\"\"values\"\": [\"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"ILLUMINA\"\": \"\"#636EFA\"\"}}}\"\nChlorobium limicola DSM 245\tspecies\t0.0\t0.025299538967586823\t0.019717445724335123\t0.019717445724335123\t0.0\t0.0\t\"{\"\"profiler\"\": {\"\"values\"\": [\"\"bracken\"\", \"\"centrifuge\"\", \"\"diamond\"\", \"\"diamond\"\", \"\"kaiju\"\", \"\"kaiju\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"bracken\"\": \"\"#636EFA\"\", \"\"centrifuge\"\": \"\"#EF553B\"\", \"\"diamond\"\": \"\"#00CC96\"\", \"\"kaiju\"\": \"\"#AB63FA\"\"}}, \"\"platform\"\": {\"\"values\"\": [\"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"ILLUMINA\"\": \"\"#636EFA\"\"}}}\"\nChlorobium phaeobacteroides\tspecies\t0.013618996754447228\t0.0\t0.0\t0.0\t0.012144483242990943\t0.012144483242990943\t\"{\"\"profiler\"\": {\"\"values\"\": [\"\"bracken\"\", \"\"centrifuge\"\", \"\"diamond\"\", \"\"diamond\"\", \"\"kaiju\"\", \"\"kaiju\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"bracken\"\": \"\"#636EFA\"\", \"\"centrifuge\"\": \"\"#EF553B\"\", \"\"diamond\"\": \"\"#00CC96\"\", \"\"kaiju\"\": \"\"#AB63FA\"\"}}, \"\"platform\"\": {\"\"values\"\": [\"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"ILLUMINA\"\": \"\"#636EFA\"\"}}}\"\nChlorobium phaeobacteroides DSM 266\tspecies\t0.0\t0.0131594590905288\t0.009952392438055138\t0.009952392438055138\t0.0\t0.0\t\"{\"\"profiler\"\": {\"\"values\"\": [\"\"bracken\"\", \"\"centrifuge\"\", \"\"diamond\"\", \"\"diamond\"\", \"\"kaiju\"\", \"\"kaiju\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"bracken\"\": \"\"#636EFA\"\", \"\"centrifuge\"\": \"\"#EF553B\"\", \"\"diamond\"\": \"\"#00CC96\"\", \"\"kaiju\"\": \"\"#AB63FA\"\"}}, \"\"platform\"\": {\"\"values\"\": [\"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"ILLUMINA\"\": \"\"#636EFA\"\"}}}\"\nChloroflexus aurantiacus J-10-fl\tspecies\t0.0\t0.01562314232999705\t0.01049567597820309\t0.01049567597820309\t0.0\t0.0\t\"{\"\"profiler\"\": {\"\"values\"\": [\"\"bracken\"\", \"\"centrifuge\"\", \"\"diamond\"\", \"\"diamond\"\", \"\"kaiju\"\", \"\"kaiju\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"bracken\"\": \"\"#636EFA\"\", \"\"centrifuge\"\": \"\"#EF553B\"\", \"\"diamond\"\": \"\"#00CC96\"\", \"\"kaiju\"\": \"\"#AB63FA\"\"}}, \"\"platform\"\": {\"\"values\"\": [\"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"ILLUMINA\"\": \"\"#636EFA\"\"}}}\"\nDesulfobulbus oralis\tspecies\t0.027680776376392827\t0.026752649725450134\t0.023670301826790904\t0.023670301826790904\t0.022529821795780693\t0.022529821795780693\t\"{\"\"profiler\"\": {\"\"values\"\": [\"\"bracken\"\", \"\"centrifuge\"\", \"\"diamond\"\", \"\"diamond\"\", \"\"kaiju\"\", \"\"kaiju\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"bracken\"\": \"\"#636EFA\"\", \"\"centrifuge\"\": \"\"#EF553B\"\", \"\"diamond\"\": \"\"#00CC96\"\", \"\"kaiju\"\": \"\"#AB63FA\"\"}}, \"\"platform\"\": {\"\"values\"\": [\"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"ILLUMINA\"\": \"\"#636EFA\"\"}}}\"\nFusobacterium nucleatum\tspecies\t0.013507159844615167\t0.0\t0.0\t0.0\t0.012518769347289068\t0.012518769347289068\t\"{\"\"profiler\"\": {\"\"values\"\": [\"\"bracken\"\", \"\"centrifuge\"\", \"\"diamond\"\", \"\"diamond\"\", \"\"kaiju\"\", \"\"kaiju\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"bracken\"\": \"\"#636EFA\"\", \"\"centrifuge\"\": \"\"#EF553B\"\", \"\"diamond\"\": \"\"#00CC96\"\", \"\"kaiju\"\": \"\"#AB63FA\"\"}}, \"\"platform\"\": {\"\"values\"\": [\"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"ILLUMINA\"\": \"\"#636EFA\"\"}}}\"\nGemmatimonas aurantiaca\tspecies\t0.05078080422150099\t0.0\t0.0\t0.0\t0.0465017459345924\t0.0465017459345924\t\"{\"\"profiler\"\": {\"\"values\"\": [\"\"bracken\"\", \"\"centrifuge\"\", \"\"diamond\"\", \"\"diamond\"\", \"\"kaiju\"\", \"\"kaiju\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"bracken\"\": \"\"#636EFA\"\", \"\"centrifuge\"\": \"\"#EF553B\"\", \"\"diamond\"\": \"\"#00CC96\"\", \"\"kaiju\"\": \"\"#AB63FA\"\"}}, \"\"platform\"\": {\"\"values\"\": [\"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"ILLUMINA\"\": \"\"#636EFA\"\"}}}\"\nGemmatimonas aurantiaca T-27\tspecies\t0.0\t0.049055698175685496\t0.04977601262665883\t0.04977601262665883\t0.0\t0.0\t\"{\"\"profiler\"\": {\"\"values\"\": [\"\"bracken\"\", \"\"centrifuge\"\", \"\"diamond\"\", \"\"diamond\"\", \"\"kaiju\"\", \"\"kaiju\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"bracken\"\": \"\"#636EFA\"\", \"\"centrifuge\"\": \"\"#EF553B\"\", \"\"diamond\"\": \"\"#00CC96\"\", \"\"kaiju\"\": \"\"#AB63FA\"\"}}, \"\"platform\"\": {\"\"values\"\": [\"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"ILLUMINA\"\": \"\"#636EFA\"\"}}}\"\nGeobacter sulfurreducens PCA\tspecies\t0.0\t0.015233444444933707\t0.014382963377537568\t0.014382963377537568\t0.0\t0.0\t\"{\"\"profiler\"\": {\"\"values\"\": [\"\"bracken\"\", \"\"centrifuge\"\", \"\"diamond\"\", \"\"diamond\"\", \"\"kaiju\"\", \"\"kaiju\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"bracken\"\": \"\"#636EFA\"\", \"\"centrifuge\"\": \"\"#EF553B\"\", \"\"diamond\"\": \"\"#00CC96\"\", \"\"kaiju\"\": \"\"#AB63FA\"\"}}, \"\"platform\"\": {\"\"values\"\": [\"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"ILLUMINA\"\": \"\"#636EFA\"\"}}}\"\nHalobacterium salinarum\tspecies\t0.015483706046953243\t0.0\t0.0\t0.0\t0.01316386245646172\t0.01316386245646172\t\"{\"\"profiler\"\": {\"\"values\"\": [\"\"bracken\"\", \"\"centrifuge\"\", \"\"diamond\"\", \"\"diamond\"\", \"\"kaiju\"\", \"\"kaiju\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"bracken\"\": \"\"#636EFA\"\", \"\"centrifuge\"\": \"\"#EF553B\"\", \"\"diamond\"\": \"\"#00CC96\"\", \"\"kaiju\"\": \"\"#AB63FA\"\"}}, \"\"platform\"\": {\"\"values\"\": [\"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"ILLUMINA\"\": \"\"#636EFA\"\"}}}\"\nHalobacterium salinarum NRC-1\tspecies\t0.0\t0.015008872782354831\t0.013731959825118902\t0.013731959825118902\t0.0\t0.0\t\"{\"\"profiler\"\": {\"\"values\"\": [\"\"bracken\"\", \"\"centrifuge\"\", \"\"diamond\"\", \"\"diamond\"\", \"\"kaiju\"\", \"\"kaiju\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"bracken\"\": \"\"#636EFA\"\", \"\"centrifuge\"\": \"\"#EF553B\"\", \"\"diamond\"\": \"\"#00CC96\"\", \"\"kaiju\"\": \"\"#AB63FA\"\"}}, \"\"platform\"\": {\"\"values\"\": [\"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"ILLUMINA\"\": \"\"#636EFA\"\"}}}\"\nHerpetosiphon aurantiacus\tspecies\t0.052401298221108415\t0.0\t0.0\t0.0\t0.04461930699826948\t0.04461930699826948\t\"{\"\"profiler\"\": {\"\"values\"\": [\"\"bracken\"\", \"\"centrifuge\"\", \"\"diamond\"\", \"\"diamond\"\", \"\"kaiju\"\", \"\"kaiju\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"bracken\"\": \"\"#636EFA\"\", \"\"centrifuge\"\": \"\"#EF553B\"\", \"\"diamond\"\": \"\"#00CC96\"\", \"\"kaiju\"\": \"\"#AB63FA\"\"}}, \"\"platform\"\": {\"\"values\"\": [\"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"ILLUMINA\"\": \"\"#636EFA\"\"}}}\"\nHerpetosiphon aurantiacus DSM 785\tspecies\t0.0\t0.05058366615440843\t0.04656314617371491\t0.04656314617371491\t0.0\t0.0\t\"{\"\"profiler\"\": {\"\"values\"\": [\"\"bracken\"\", \"\"centrifuge\"\", \"\"diamond\"\", \"\"diamond\"\", \"\"kaiju\"\", \"\"kaiju\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"bracken\"\": \"\"#636EFA\"\", \"\"centrifuge\"\": \"\"#EF553B\"\", \"\"diamond\"\": \"\"#00CC96\"\", \"\"kaiju\"\": \"\"#AB63FA\"\"}}, \"\"platform\"\": {\"\"values\"\": [\"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\", \"\"ILLUMINA\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"ILLUMINA\"\": \"\"#636EFA\"\"}}}\"\n",
+          "id": "taxpasta_matrix",
+          "mode": "merge/matrix",
+          "name": "Taxon by run matrix",
+          "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/taxpasta/merge",
+          "path_glob": "**/taxpasta/*.tsv",
+          "rawYaml": "id: taxpasta_matrix\nname: Taxon by run matrix\nmode: merge/matrix\ndescription: >-\n  The top taxa as a wide taxon by profiling-run matrix of relative abundances,\n  with the taxonomic rank as a row annotation and the profiler and platform of\n  each column serialised for the heatmap's column strips.\nnf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/taxpasta/merge\nfind: { path_glob: \"**/taxpasta/*.tsv\" }\nrecipe: taxpasta/matrix.py\nfixture: matrix.tsv\nrenders_as:\n  - {\n      id: concordance_heatmap,\n      component: advanced_viz,\n      kind: complex_heatmap,\n      roles: { index: taxon },\n    }\n  - { component: table }\n",
+          "recipe": "taxpasta/matrix.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "concordance_heatmap",
+              "kind": "complex_heatmap",
+              "roles": {
+                "index": "taxon"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "matrix",
+          "yamlPath": "depictio/catalog/taxpasta/matrix.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Per sample and taxon, a 0/1 membership column for every profiler in the run. The intersections show how much of the community the classifiers agree on and how long each profiler's private tail is.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/taxpasta/*.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "presence.tsv",
+          "fixtureContent": "sample\ttaxonomy_id\ttaxon\trank\tn_profilers\tbracken\tcentrifuge\tdiamond\tkaiju\tkmcp\tkraken2\tkrakenuniq\tmegan6\tmetaphlan\tmotus\nMOCK_001_Illumina_Hiseq_3000\t66851\tMethanobrevibacter oralis\tspecies\t9\t1\t1\t1\t1\t0\t1\t1\t1\t1\t1\nMOCK_001_Illumina_Hiseq_3000\t39152\tMethanococcus maripaludis\tspecies\t9\t1\t1\t1\t1\t0\t1\t1\t1\t1\t1\nMOCK_001_Illumina_Hiseq_3000\t62322\tShewanella baltica\tspecies\t9\t1\t1\t1\t1\t0\t1\t1\t1\t1\t1\nMOCK_001_Illumina_Hiseq_3000\t1986146\tDesulfobulbus oralis\tspecies\t8\t1\t1\t1\t1\t0\t1\t1\t1\t1\t0\nMOCK_001_Illumina_Hiseq_3000\t103690\tNostoc sp. PCC 7120 = FACHB-418\tspecies\t7\t1\t1\t1\t1\t0\t1\t1\t0\t0\t1\nMOCK_001_Illumina_Hiseq_3000\t126740\tThermotoga sp. RQ2\tspecies\t7\t1\t1\t1\t1\t0\t1\t1\t1\t0\t0\nMOCK_001_Illumina_Hiseq_3000\t0\tunclassified\tunclassified\t7\t0\t1\t1\t1\t0\t1\t1\t0\t1\t1\nMOCK_001_Illumina_Hiseq_3000\t2\tBacteria\tdomain\t6\t0\t1\t1\t0\t0\t1\t1\t1\t1\t0\nMOCK_001_Illumina_Hiseq_3000\t44000\tCaldicellulosiruptor\tgenus\t6\t0\t1\t1\t0\t0\t1\t1\t1\t1\t0\nMOCK_001_Illumina_Hiseq_3000\t1091\tChlorobium\tgenus\t6\t0\t1\t1\t0\t0\t1\t1\t1\t1\t0\nMOCK_001_Illumina_Hiseq_3000\t1236\tGammaproteobacteria\tclass\t6\t0\t1\t1\t0\t0\t1\t1\t1\t1\t0\nMOCK_001_Illumina_Hiseq_3000\t2276\tPyrobaculum\tgenus\t6\t0\t1\t1\t0\t0\t1\t1\t1\t1\t0\nMOCK_001_Illumina_Hiseq_3000\t2260\tPyrococcus\tgenus\t6\t0\t1\t1\t0\t0\t1\t1\t1\t1\t0\nMOCK_001_Illumina_Hiseq_3000\t22\tShewanella\tgenus\t6\t0\t1\t1\t0\t0\t1\t1\t1\t1\t0\nMOCK_001_Illumina_Hiseq_3000\t2335\tThermotoga\tgenus\t6\t0\t1\t1\t0\t0\t1\t1\t1\t1\t0\nMOCK_001_Illumina_Hiseq_3000\t203119\tAcetivibrio thermocellus ATCC 27405\tspecies\t5\t0\t1\t1\t0\t0\t1\t1\t1\t0\t0\nMOCK_001_Illumina_Hiseq_3000\t666510\tAcidilobus saccharovorans 345-15\tspecies\t5\t0\t1\t1\t0\t0\t1\t1\t1\t0\t0\nMOCK_001_Illumina_Hiseq_3000\t240015\tAcidobacterium capsulatum ATCC 51196\tspecies\t5\t0\t1\t1\t0\t0\t1\t1\t1\t0\t0\nMOCK_001_Illumina_Hiseq_3000\t439481\tAciduliprofundum boonei T469\tspecies\t5\t0\t1\t1\t0\t0\t1\t1\t1\t0\t0\nMOCK_001_Illumina_Hiseq_3000\t349741\tAkkermansia muciniphila ATCC BAA-835\tspecies\t5\t0\t1\t1\t0\t0\t1\t1\t1\t0\t0\nMOCK_001_Illumina_Hiseq_3000\t224325\tArchaeoglobus fulgidus DSM 4304\tspecies\t5\t0\t1\t1\t0\t0\t1\t1\t1\t0\t0\nMOCK_001_Illumina_Hiseq_3000\t815\tBacteroidaceae\tfamily\t5\t0\t1\t1\t0\t0\t1\t1\t0\t1\t0\nMOCK_001_Illumina_Hiseq_3000\t226186\tBacteroides thetaiotaomicron VPI-5482\tspecies\t5\t0\t1\t1\t0\t0\t1\t1\t1\t0\t0\nMOCK_001_Illumina_Hiseq_3000\t80840\tBurkholderiales\torder\t5\t0\t0\t1\t0\t0\t1\t1\t1\t1\t0\nMOCK_001_Illumina_Hiseq_3000\t521460\tCaldicellulosiruptor bescii DSM 6725\tspecies\t5\t0\t1\t1\t0\t0\t1\t1\t1\t0\t0\nMOCK_001_Illumina_Hiseq_3000\t351627\tCaldicellulosiruptor saccharolyticus DSM 8903\tspecies\t5\t0\t1\t1\t0\t0\t1\t1\t1\t0\t0\nMOCK_001_Illumina_Hiseq_3000\t191412\tChlorobiaceae\tfamily\t5\t0\t1\t1\t0\t0\t1\t1\t0\t1\t0\nMOCK_001_Illumina_Hiseq_3000\t290315\tChlorobium limicola DSM 245\tspecies\t5\t0\t1\t1\t0\t0\t1\t1\t1\t0\t0\nMOCK_001_Illumina_Hiseq_3000\t290317\tChlorobium phaeobacteroides DSM 266\tspecies\t5\t0\t1\t1\t0\t0\t1\t1\t1\t0\t0\nMOCK_001_Illumina_Hiseq_3000\t274493\tChlorobium/Pelodictyon group\tfamily\t5\t0\t1\t1\t0\t0\t1\t1\t1\t0\t0\n",
+          "id": "taxpasta_presence",
+          "mode": "merge/presence",
+          "name": "Profiler detection overlap",
+          "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/taxpasta/merge",
+          "path_glob": "**/taxpasta/*.tsv",
+          "rawYaml": "id: taxpasta_presence\nname: Profiler detection overlap\nmode: merge/presence\ndescription: >-\n  Per sample and taxon, a 0/1 membership column for every profiler in the run.\n  The intersections show how much of the community the classifiers agree on and\n  how long each profiler's private tail is.\nnf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/taxpasta/merge\nfind: { path_glob: \"**/taxpasta/*.tsv\" }\nrecipe: taxpasta/presence.py\nfixture: presence.tsv\nrenders_as:\n  # upset_plot binds no canonical role: the set columns are the run's profilers,\n  # so they are named in the tile's config rather than in a role.\n  - { id: profiler_upset, component: advanced_viz, kind: upset_plot }\n  - {\n      component: card,\n      column: n_profilers,\n      aggregation: median,\n      aggregations: [box_plot_stats],\n      secondary_layout: box_plot,\n    }\n  - { component: table }\n",
+          "recipe": "taxpasta/presence.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "profiler_upset",
+              "kind": "upset_plot",
+              "roles": {}
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "n_profilers",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "presence",
+          "yamlPath": "depictio/catalog/taxpasta/presence.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Every standardised taxpasta table melted into one long frame: one row per profiler, database, sample and taxon, with the raw count and the within-run relative abundance. The hub every cross-profiler comparison is computed from.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/taxpasta/*.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "profiles.tsv",
+          "fixtureContent": "profiler\tdatabase\tprofiler_db\tsample\tplatform\ttaxonomy_id\tname\trank\tcount\trel_abundance\nbracken\tbracken-db\tbracken / bracken-db\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t66851\tMethanobrevibacter oralis\tspecies\t18773.0\t0.0428472307811694\nbracken\tbracken-db\tbracken / bracken-db\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t173480\tGemmatimonas aurantiaca\tspecies\t22249.0\t0.05078080422150099\nbracken\tbracken-db\tbracken / bracken-db\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t65\tHerpetosiphon aurantiacus\tspecies\t22959.0\t0.052401298221108415\nbracken\tbracken-db\tbracken / bracken-db\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t62322\tShewanella baltica\tspecies\t24213.0\t0.05526341015844323\nbracken\tbracken-db\tbracken / bracken-db\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t93929\tThermotoga petrophila\tspecies\t25049.0\t0.05717148478333311\nbracken\tbracken-db\tbracken / bracken-db\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t2190\tMethanocaldococcus jannaschii\tspecies\t25160.0\t0.05742482961989145\nbracken\tbracken-db\tbracken / bracken-db\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t2337\tThermotoga neapolitana\tspecies\t31786.0\t0.07254791869228416\nbracken\tbracken-db\tbracken / bracken-db\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t44001\tCaldicellulosiruptor saccharolyticus\tspecies\t34683.0\t0.07915999068786547\nkaiju\tkaiju-db1\tkaiju / kaiju-db1\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t0\tunclassified\tunclassified\t66225.0\t0.14580645445378448\nkaiju\tkaiju-db1\tkaiju / kaiju-db1\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t44001\tCaldicellulosiruptor saccharolyticus\tspecies\t29859.0\t0.06574005169551606\nkaiju\tkaiju-db1\tkaiju / kaiju-db1\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t2337\tThermotoga neapolitana\tspecies\t28125.0\t0.06192233343167517\nkaiju\tkaiju-db1\tkaiju / kaiju-db1\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t2190\tMethanocaldococcus jannaschii\tspecies\t22658.0\t0.04988573265404075\nkaiju\tkaiju-db1\tkaiju / kaiju-db1\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t173480\tGemmatimonas aurantiaca\tspecies\t21121.0\t0.0465017459345924\nkaiju\tkaiju-db1\tkaiju / kaiju-db1\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t62322\tShewanella baltica\tspecies\t21085.0\t0.04642248534779986\nkaiju\tkaiju-db1\tkaiju / kaiju-db1\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t65\tHerpetosiphon aurantiacus\tspecies\t20266.0\t0.04461930699826948\nkaiju\tkaiju-db1\tkaiju / kaiju-db1\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t265606\tRhodopirellula baltica\tspecies\t17975.0\t0.03957525132211062\nkraken2\tbracken-db\tkraken2 / bracken-db\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t351627\tCaldicellulosiruptor saccharolyticus DSM 8903\tspecies\t34521.0\t0.07600429768515053\nkraken2\tbracken-db\tkraken2 / bracken-db\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t309803\tThermotoga neapolitana DSM 4359\tspecies\t29965.0\t0.06597343008996076\nkraken2\tbracken-db\tkraken2 / bracken-db\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t243232\tMethanocaldococcus jannaschii DSM 2661\tspecies\t25160.0\t0.055394343436122574\nkraken2\tbracken-db\tkraken2 / bracken-db\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t316274\tHerpetosiphon aurantiacus DSM 785\tspecies\t22959.0\t0.050548439226945074\nkraken2\tbracken-db\tkraken2 / bracken-db\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t379066\tGemmatimonas aurantiaca T-27\tspecies\t22249.0\t0.048985244320758785\nkraken2\tbracken-db\tkraken2 / bracken-db\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t66851\tMethanobrevibacter oralis\tspecies\t18773.0\t0.04133219432934535\nkraken2\tbracken-db\tkraken2 / bracken-db\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t243090\tRhodopirellula baltica SH 1\tspecies\t18340.0\t0.040378865604868364\nkraken2\tbracken-db\tkraken2 / bracken-db\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t390874\tThermotoga petrophila RKU-1\tspecies\t16567.0\t0.03647528170533556\nmetaphlan\tmetaphlan3-db\tmetaphlan / metaphlan3-db\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t2\tBacteria\tdomain\t63563810.0\t0.09080544843519184\nmetaphlan\tmetaphlan3-db\tmetaphlan / metaphlan3-db\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t2335\tThermotoga\tgenus\t23686490.0\t0.033837844935753335\nmetaphlan\tmetaphlan3-db\tmetaphlan / metaphlan3-db\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t188709\tThermotogaceae\tfamily\t23686490.0\t0.033837844935753335\nmetaphlan\tmetaphlan3-db\tmetaphlan / metaphlan3-db\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t2419\tThermotogales\torder\t23686490.0\t0.033837844935753335\nmetaphlan\tmetaphlan3-db\tmetaphlan / metaphlan3-db\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t188708\tThermotogae\tclass\t23686490.0\t0.033837844935753335\nmetaphlan\tmetaphlan3-db\tmetaphlan / metaphlan3-db\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t200918\tThermotogae\tphylum\t23686490.0\t0.033837844935753335\nmetaphlan\tmetaphlan3-db\tmetaphlan / metaphlan3-db\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t28890\tEuryarchaeota\tphylum\t28337360.0\t0.04048194534389093\nmetaphlan\tmetaphlan3-db\tmetaphlan / metaphlan3-db\tMOCK_001_Illumina_Hiseq_3000\tILLUMINA\t2157\tArchaea\tdomain\t36436190.0\t0.05205170319746177\n",
+          "id": "taxpasta_profiles",
+          "mode": "merge",
+          "name": "Cross-profiler abundances",
+          "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/taxpasta/merge",
+          "path_glob": "**/taxpasta/*.tsv",
+          "rawYaml": "id: taxpasta_profiles\nname: Cross-profiler abundances\nmode: merge\ndescription: >-\n  Every standardised taxpasta table melted into one long frame: one row per\n  profiler, database, sample and taxon, with the raw count and the within-run\n  relative abundance. The hub every cross-profiler comparison is computed from.\nnf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/taxpasta/merge\nfind: { path_glob: \"**/taxpasta/*.tsv\" }\nrecipe: taxpasta/profiles.py\nfixture: profiles.tsv\nrenders_as:\n  # long format (sample x rank x taxon x abundance) -> stacked_taxonomy fits; a\n  # sunburst would need the wide per-rank columns this frame does not carry.\n  - {\n      id: stacked_taxonomy,\n      component: advanced_viz,\n      kind: stacked_taxonomy,\n      roles: { sample_id: sample, taxon: name, rank: rank, abundance: rel_abundance },\n    }\n  - {\n      component: card,\n      column: name,\n      aggregation: nunique,\n      secondary_layout: uniqueness,\n    }\n  - {\n      component: card,\n      column: count,\n      aggregation: median,\n      aggregations: [box_plot_stats],\n      secondary_layout: box_plot,\n    }\n  - {\n      component: card,\n      column: sample,\n      aggregation: nunique,\n      secondary_layout: donut,\n      breakdown_col: profiler,\n    }\n  - {\n      component: card,\n      column: rel_abundance,\n      aggregation: max,\n      secondary_layout: threshold,\n      threshold_value: 0.5,\n      threshold_direction: max,\n      threshold_warn: 0.3,\n    }\n  - { component: interactive, interactive_type: MultiSelect, column_name: profiler }\n  - { component: interactive, interactive_type: MultiSelect, column_name: sample }\n  - { component: table }\n",
+          "recipe": "taxpasta/profiles.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "stacked_taxonomy",
+              "kind": "stacked_taxonomy",
+              "roles": {
+                "abundance": "rel_abundance",
+                "rank": "rank",
+                "sample_id": "sample",
+                "taxon": "name"
+              }
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "name",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "uniqueness"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "count",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "profiler",
+              "column": "sample",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "donut"
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "rel_abundance",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "threshold",
+              "threshold_direction": "max",
+              "threshold_value": 0.5,
+              "threshold_warn": 0.3
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "profiler",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "sample",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "profiles",
+          "yamlPath": "depictio/catalog/taxpasta/profiles.yaml"
+        },
+        {
+          "columns": {},
+          "description": "One row per sample, profiler and database: how many taxa were reported, how many reads were assigned, how concentrated the profile is on its top hit, and Shannon diversity with Pielou evenness.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/taxpasta/*.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "sample_summary.tsv",
+          "fixtureContent": "sample\tprofiler\tdatabase\tprofiler_db\tplatform\ttaxa_observed\tassigned_count\ttop_taxon\ttop_taxon_fraction\tshannon\tevenness\nMOCK_001_Illumina_Hiseq_3000\tbracken\tbracken-db\tbracken / bracken-db\tILLUMINA\t66\t438138.0\tCaldicellulosiruptor saccharolyticus\t0.07915999068786547\t3.4806843457015497\t0.8307807110659516\nMOCK_001_Illumina_Hiseq_3000\tcentrifuge\tcentrifuge-db\tcentrifuge / centrifuge-db\tILLUMINA\t102\t454198.0\tCaldicellulosiruptor saccharolyticus DSM 8903\t0.07612539024830581\t3.615498558937368\t0.7817340133443815\nMOCK_001_Illumina_Hiseq_3000\tdiamond\tdiamond-db1\tdiamond / diamond-db1\tILLUMINA\t134\t427033.0\tThermotoga\t0.0853236166759946\t3.769833303688972\t0.7696930601378091\nMOCK_001_Illumina_Hiseq_3000\tdiamond\tdiamond-db3\tdiamond / diamond-db3\tILLUMINA\t134\t427033.0\tThermotoga\t0.0853236166759946\t3.769833303688972\t0.7696930601378091\nMOCK_001_Illumina_Hiseq_3000\tkaiju\tkaiju-db1\tkaiju / kaiju-db1\tILLUMINA\t83\t454198.0\tunclassified\t0.14580645445378448\t3.4227830775733077\t0.7745884908213598\nMOCK_001_Illumina_Hiseq_3000\tkaiju\tkaiju-db3\tkaiju / kaiju-db3\tILLUMINA\t83\t454198.0\tunclassified\t0.14580645445378448\t3.4227830775733077\t0.7745884908213598\nMOCK_001_Illumina_Hiseq_3000\tkmcp\tkmcp_db\tkmcp / kmcp_db\tILLUMINA\t48\t425924.0\ttaxid 1033214769\t0.08143941172603564\t3.4535489799438657\t0.8921130600588276\nMOCK_001_Illumina_Hiseq_3000\tkraken2\tbracken-db\tkraken2 / bracken-db\tILLUMINA\t97\t454198.0\tCaldicellulosiruptor saccharolyticus DSM 8903\t0.07600429768515053\t3.615130324001073\t0.7902423433936285\nMOCK_001_Illumina_Hiseq_3000\tkraken2\tkraken2-db\tkraken2 / kraken2-db\tILLUMINA\t97\t454198.0\tCaldicellulosiruptor saccharolyticus DSM 8903\t0.07600429768515053\t3.615130324001073\t0.7902423433936285\nMOCK_001_Illumina_Hiseq_3000\tkrakenuniq\tkrakenuniq-db\tkrakenuniq / krakenuniq-db\tILLUMINA\t95\t454198.0\tCaldicellulosiruptor saccharolyticus DSM 8903\t0.07610117173567475\t3.613375335495878\t0.7934723361012715\nMOCK_001_Illumina_Hiseq_3000\tmegan6\tmalt-db\tmegan6 / malt-db\tILLUMINA\t106\t438510.0\tCaldicellulosiruptor saccharolyticus DSM 8903\t0.07350117443159791\t3.610147491896823\t0.7741384456923428\nMOCK_001_Illumina_Hiseq_3000\tmetaphlan\tmetaphlan3-db\tmetaphlan / metaphlan3-db\tILLUMINA\t205\t699999957.0\tBacteria\t0.09080544843519184\t4.345812987506566\t0.8164202217426589\nMOCK_001_Illumina_Hiseq_3000\tmotus\tmotus-db1\tmotus / motus-db1\tILLUMINA\t45\t304.0\tunclassified\t0.1875\t3.127949802480617\t0.8217040020980022\nMOCK_001_Illumina_Hiseq_3000\tmotus\tmotus-db3\tmotus / motus-db3\tILLUMINA\t45\t304.0\tunclassified\t0.1875\t3.127949802480617\t0.8217040020980022\nMOCK_001_Minion_R9\tdiamond\tdiamond-db2\tdiamond / diamond-db2\tOXFORD_NANOPORE\t136\t620336.0\tThermotoga\t0.1119280518944572\t3.7525286398788555\t0.7638494311445251\nMOCK_001_Minion_R9\tdiamond\tdiamond-db3\tdiamond / diamond-db3\tOXFORD_NANOPORE\t134\t616747.0\tThermotoga\t0.08625741187229123\t3.72688401576064\t0.7609240334479688\nMOCK_001_Minion_R9\tkaiju\tkaiju-db2\tkaiju / kaiju-db2\tOXFORD_NANOPORE\t66\t620336.0\tunclassified\t0.7762502901653298\t1.2870434979955236\t0.30719559897983734\nMOCK_001_Minion_R9\tkaiju\tkaiju-db3\tkaiju / kaiju-db3\tOXFORD_NANOPORE\t83\t620336.0\tunclassified\t0.10523168089551468\t3.4879126097547224\t0.7893275452390504\nMOCK_001_Minion_R9\tmotus\tmotus-db2\tmotus / motus-db2\tOXFORD_NANOPORE\t33\t122.0\tunclassified\t0.18032786885245902\t3.0181591216666694\t0.8631925052668311\nMOCK_001_Minion_R9\tmotus\tmotus-db3\tmotus / motus-db3\tOXFORD_NANOPORE\t33\t122.0\tunclassified\t0.18032786885245902\t3.0181591216666694\t0.8631925052668311\nMOCK_002_Illumina_Hiseq_3000\tbracken\tbracken-db\tbracken / bracken-db\tILLUMINA\t80\t588582.0\tCaldicellulosiruptor saccharolyticus\t0.0803558382689243\t3.48408286697596\t0.7950848220335502\nMOCK_002_Illumina_Hiseq_3000\tcentrifuge\tcentrifuge-db\tcentrifuge / centrifuge-db\tILLUMINA\t111\t608498.0\tCaldicellulosiruptor saccharolyticus DSM 8903\t0.07743821672380188\t3.6211096251102934\t0.7688897767554932\nMOCK_002_Illumina_Hiseq_3000\tdiamond\tdiamond-db1\tdiamond / diamond-db1\tILLUMINA\t137\t575359.0\tThermotoga\t0.08906265479465864\t3.7708248095988663\t0.7664307781770853\nMOCK_002_Illumina_Hiseq_3000\tdiamond\tdiamond-db3\tdiamond / diamond-db3\tILLUMINA\t137\t575359.0\tThermotoga\t0.08906265479465864\t3.7708248095988663\t0.7664307781770853\nMOCK_002_Illumina_Hiseq_3000\tkaiju\tkaiju-db1\tkaiju / kaiju-db1\tILLUMINA\t83\t608498.0\tunclassified\t0.13947457510131503\t3.4347547675703174\t0.7772977286191404\nMOCK_002_Illumina_Hiseq_3000\tkaiju\tkaiju-db3\tkaiju / kaiju-db3\tILLUMINA\t83\t608498.0\tunclassified\t0.13947457510131503\t3.4347547675703174\t0.7772977286191404\nMOCK_002_Illumina_Hiseq_3000\tkmcp\tkmcp_db\tkmcp / kmcp_db\tILLUMINA\t50\t570740.0\ttaxid 1033214769\t0.08289063321302169\t3.445192391972387\t0.880667722861546\nMOCK_002_Illumina_Hiseq_3000\tkraken2\tbracken-db\tkraken2 / bracken-db\tILLUMINA\t109\t608498.0\tCaldicellulosiruptor saccharolyticus DSM 8903\t0.07732975293263084\t3.6210225553069115\t0.7718512133844025\nMOCK_002_Illumina_Hiseq_3000\tkraken2\tkraken2-db\tkraken2 / kraken2-db\tILLUMINA\t109\t608498.0\tCaldicellulosiruptor saccharolyticus DSM 8903\t0.07732975293263084\t3.6210225553069115\t0.7718512133844025\nMOCK_002_Illumina_Hiseq_3000\tkrakenuniq\tkrakenuniq-db\tkrakenuniq / krakenuniq-db\tILLUMINA\t107\t608498.0\tCaldicellulosiruptor saccharolyticus DSM 8903\t0.07741849603449806\t3.6188829166453194\t0.7744522739536741\n",
+          "id": "taxpasta_sample_summary",
+          "mode": "merge/summary",
+          "name": "Per-run profile statistics",
+          "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/taxpasta/merge",
+          "path_glob": "**/taxpasta/*.tsv",
+          "rawYaml": "id: taxpasta_sample_summary\nname: Per-run profile statistics\nmode: merge/summary\ndescription: >-\n  One row per sample, profiler and database: how many taxa were reported, how\n  many reads were assigned, how concentrated the profile is on its top hit, and\n  Shannon diversity with Pielou evenness.\nnf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/taxpasta/merge\nfind: { path_glob: \"**/taxpasta/*.tsv\" }\nrecipe: taxpasta/sample_summary.py\nfixture: sample_summary.tsv\nrenders_as:\n  - {\n      id: richness_dot_plot,\n      component: advanced_viz,\n      kind: dot_plot,\n      roles:\n        {\n          cluster: sample,\n          gene: profiler_db,\n          mean_expression: shannon,\n          frac_expressing: top_taxon_fraction,\n        },\n    }\n  - {\n      component: card,\n      column: taxa_observed,\n      aggregation: median,\n      aggregations: [box_plot_stats],\n      secondary_layout: box_plot,\n    }\n  - {\n      component: card,\n      column: shannon,\n      aggregation: average,\n      secondary_layout: gauge,\n      coverage_max: 6,\n    }\n  - {\n      component: card,\n      column: evenness,\n      aggregation: average,\n      secondary_layout: threshold,\n      threshold_value: 0.6,\n      threshold_direction: min,\n      threshold_warn: 0.4,\n    }\n  - {\n      component: card,\n      column: profiler_db,\n      aggregation: nunique,\n      secondary_layout: top_n,\n      breakdown_col: profiler,\n      top_n_count: 4,\n    }\n  - {\n      component: figure,\n      visu_type: scatter,\n      dict_kwargs: { x: taxa_observed, y: shannon, color: profiler, symbol: platform },\n    }\n  - { component: table }\n",
+          "recipe": "taxpasta/sample_summary.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "richness_dot_plot",
+              "kind": "dot_plot",
+              "roles": {
+                "cluster": "sample",
+                "frac_expressing": "top_taxon_fraction",
+                "gene": "profiler_db",
+                "mean_expression": "shannon"
+              }
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "taxa_observed",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "shannon",
+              "columns": [],
+              "component": "card",
+              "coverage_max": 6.0,
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "gauge"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "evenness",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "threshold",
+              "threshold_direction": "min",
+              "threshold_value": 0.6,
+              "threshold_warn": 0.4
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "profiler",
+              "column": "profiler_db",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 4
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "profiler",
+                "symbol": "platform",
+                "x": "taxa_observed",
+                "y": "shannon"
+              },
+              "roles": {},
+              "visu_type": "scatter"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "sample_summary",
+          "yamlPath": "depictio/catalog/taxpasta/sample_summary.yaml"
         }
       ]
     },

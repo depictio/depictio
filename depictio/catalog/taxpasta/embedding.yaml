@@ -1,0 +1,19 @@
+id: taxpasta_embedding
+name: Profiler ordination
+mode: merge/ordination
+description: >-
+  Bray-Curtis PCoA over every profiling run. One point per sample, profiler and
+  database, so runs that agree on the community land together and the spread
+  reads as profiler disagreement rather than as biological distance.
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/taxpasta/merge
+find: { path_glob: "**/taxpasta/*.tsv" }
+recipe: taxpasta/embedding.py
+fixture: embedding.tsv
+renders_as:
+  - {
+      id: profiler_embedding,
+      component: advanced_viz,
+      kind: embedding,
+      roles: { sample_id: sample_id, dim_1: dim_1, dim_2: dim_2 },
+    }
+  - { component: table }
