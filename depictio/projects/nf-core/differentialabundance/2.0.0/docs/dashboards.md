@@ -55,7 +55,7 @@ Is the experiment sound before any contrast is read?
 * **Sample space**: the sample PCA on the 500 most variable features, coloured by the
   sheet's leading factor with group centroids, next to the Euclidean sample-to-sample
   distance matrix with dendrograms on both axes. Lassoing the PCA carries those samples to
-  the distance matrix through the `samples` hub links.
+  the distance matrix through the PCA's own outgoing link.
 
 ![Samples tab, cohort cards](screenshots/samples-overview.png)
 
