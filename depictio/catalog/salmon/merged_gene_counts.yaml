@@ -1,0 +1,12 @@
+id: salmon_merged_gene_counts
+name: Merged gene counts
+mode: quantification/counts
+description: >-
+  The raw merged gene-level count matrix (gene_id, gene_name and one estimated
+  count column per sample) tximport writes next to the TPM matrix. Shown as
+  rows: it is the input a differential-expression tool is handed, so the value a
+  dashboard adds is letting someone read and search it, not replot it.
+find: { path_glob: "**/salmon.merged.gene_counts.tsv" }
+fixture: merged_gene_counts.tsv
+renders_as:
+  - { component: table }
