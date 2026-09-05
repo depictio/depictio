@@ -1,0 +1,21 @@
+id: macs2_peak_summary
+name: Peak QC summary
+mode: peaks/qc
+description: >-
+  One row per sample: how many peaks MACS2 called, the FRiP score, and the
+  median, mean and maximum of peak width, fold enrichment and significance
+  across those peaks.
+# The long summary table the peak-QC step writes next to the calls; the FRiP
+# score is joined on from the sibling MultiQC custom-content files.
+find:
+  path_glob: "**/*peak.summary.txt"
+recipe: macs2/peak_summary.py
+fixture: peak_summary.tsv
+renders_as:
+  # Signal-to-noise per sample, then the yield behind it.
+  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: frip_score, color: sample, title: FRiP score per sample} }
+  - { component: card, column: num_peaks, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: frip_score, aggregation: average, secondary_layout: gauge, coverage_max: 1.0 }
+  - { component: card, column: width_median, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: fold_enrichment_median, aggregation: average, secondary_layout: threshold, threshold_value: 5.0 }
+  - { component: table }
