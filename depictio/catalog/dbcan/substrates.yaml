@@ -1,0 +1,14 @@
+id: dbcan_substrates
+name: CGC substrates
+mode: cazyme/substrates
+description: >-
+  One row per CAZyme gene cluster with a predicted substrate, from homology to
+  dbCAN-PUL (with its bitscore) and from the dbCAN-sub majority vote.
+find: { path_glob: "**/dbcan/substrate/*/*_substrate_prediction.tsv" }
+recipe: dbcan/substrates.py
+fixture: substrates.tsv
+renders_as:
+  - { component: figure, visu_type: bar, dict_kwargs: {x: substrate, y: clusters, color: sample, title: Predicted substrates per sample} }
+  - { component: card, column: clusters, aggregation: sum, secondary_layout: top_n, breakdown_col: substrate, top_n_count: 4 }
+  - { component: card, column: bitscore, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }
