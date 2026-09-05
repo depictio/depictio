@@ -216,6 +216,126 @@
     },
     {
       "biotools_url": null,
+      "description": "",
+      "dir": "depictio/catalog/arriba",
+      "homepage": null,
+      "id": "arriba",
+      "name": "Arriba",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/arriba/arriba",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "Fusion calls Arriba retained, one row per call. The recipe labels each fusion from its two partner genes, sums the split reads, discordant mates and local coverage into one evidence block, and derives a log-scaled support and the fraction of local reads that support the call.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "filename": "*.arriba.fusions.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "fusions.tsv",
+          "fixtureContent": "fusion\tgene_5p\tgene_3p\tbreakpoint_5p\tbreakpoint_3p\tsite_5p\tsite_3p\tfusion_type\tconfidence\treading_frame\tsplit_reads\tdiscordant_mates\tsupporting_reads\tcoverage\tlog_support\tsupport_fraction\tretained_protein_domains\ttags\nFGFR3--TACC3\tFGFR3\tTACC3\tchr4:1806934\tchr4:1727977\tCDS/splice-site\tCDS\tduplication\thigh\tin-frame\t194\t300\t494\t670\t2.6946051989335684\t0.42439862542955326\tImmunoglobulin_I-set_domain(100%),Immunoglobulin_domain(100%),NA(100%),Protein_kinase_domain(100%)|Transforming_acidic_coiled-coil-containing_protein_(TACC)__C-terminal(100%)\t\"\"\nFIP1L1--PDGFRA\tFIP1L1\tPDGFRA\tchr4:53425965\tchr4:54274925\tCDS/splice-site\tCDS\tdeletion\thigh\tstop-codon\t95\t12\t107\t130\t2.0334237554869494\t0.45147679324894513\tFip1_motif(100%)|Protein_kinase_domain(100%)\t\"\"\nGOPC--ROS1\tGOPC\tROS1\tchr6:117566854\tchr6:117321394\tCDS/splice-site\tCDS/splice-site\tdeletion/read-through\thigh\tin-frame\t50\t25\t75\t264\t1.8808135922807911\t0.22123893805309736\tPDZ_domain(100%)|Protein_kinase_domain(100%)\t\"\"\nGOPC--ROS1\tGOPC\tROS1\tchr6:117566854\tchr6:117320030\tCDS/splice-site\tCDS/splice-site\tdeletion/read-through\tlow\tout-of-frame\t1\t8\t9\t149\t1.0\t0.056962025316455694\tPDZ_domain(100%)|Protein_kinase_domain(100%)\t\"\"\nHOOK3--RET\tHOOK3\tRET\tchr8:42968214\tchr10:43116584\tCDS/splice-site\tCDS/splice-site\ttranslocation\thigh\tin-frame\t12\t2\t14\t43\t1.1760912590556811\t0.24561403508771928\tHOOK_domain(100%),HOOK_protein_coiled-coil_region(36%)|Protein_kinase_domain(100%)\t\"\"\nETV6--NTRK3\tETV6\tNTRK3\tchr12:11869969\tchr15:87940753\tCDS/splice-site\tCDS/splice-site\ttranslocation\thigh\tin-frame\t11\t2\t13\t93\t1.1461280356782377\t0.12264150943396226\tSterile_alpha_motif_(SAM)/Pointed_domain(100%)|Protein_kinase_domain(100%)\t\"\"\nAKAP9--BRAF\tAKAP9\tBRAF\tchr7:92003235\tchr7:140787584\tCDS/splice-site\tCDS/splice-site\tinversion\thigh\tin-frame\t9\t4\t13\t86\t1.1461280356782377\t0.13131313131313133\t|Protein_kinase_domain(100%)\t\"\"\nBRD4--NUTM1\tBRD4\tNUTM1\tchr19:15254152\tchr15:34347969\tCDS/splice-site\tCDS/splice-site\ttranslocation\thigh\tin-frame\t7\t1\t8\t110\t0.9542425094393249\t0.06779661016949153\tBromodomain(100%),Bromodomain_extra-terminal_-_transcription_regulation(100%)|NUT_protein(100%)\t\"\"\nEML4--ALK\tEML4\tALK\tchr2:42301394\tchr2:29223584\tintron\t5'UTR\tinversion\thigh\tin-frame\t5\t3\t8\t79\t0.9542425094393249\t0.09195402298850575\tHELP_motif(100%),WD_domain__G-beta_repeat(44%)|Protein_kinase_domain(100%)\t\"\"\nNPM1--ALK\tNPM1\tALK\tchr5:171391799\tchr2:29223528\tCDS/splice-site\tCDS/splice-site\ttranslocation\thigh\tin-frame\t5\t2\t7\t51\t0.9030899869919434\t0.1206896551724138\tNucleoplasmin/nucleophosmin_domain(94%)|Protein_kinase_domain(100%)\t\"\"\nCD74--ROS1\tCD74\tROS1\tchr5:150404680\tchr6:117324415\tCDS/splice-site\tCDS/splice-site\ttranslocation\thigh\tin-frame\t6\t0\t6\t13\t0.8450980400142567\t0.3157894736842105\tCLIP__MHC2_interacting(100%),Class_II_MHC-associated_invariant_chain_trimerisation_domain(100%)|Protein_kinase_domain(100%)\t\"\"\nTMPRSS2--ETV1\tTMPRSS2\tETV1\tchr21:41494375\tchr7:13935838\tCDS\tCDS\ttranslocation\tmedium\tin-frame\t12\t3\t15\t123\t1.2041199826559246\t0.10869565217391304\t|Ets-domain(100%),PEA3_subfamily_ETS-domain_transcription_factor_N_terminal_domain(56%)\t\"\"\nEWSR1--ATF1\tEWSR1\tATF1\tchr22:29287134\tchr12:50814280\tCDS/splice-site\tCDS/splice-site\ttranslocation\tmedium\tin-frame\t8\t1\t9\t1229\t1.0\t0.007269789983844911\t|bZIP_transcription_factor(100%)\t\"\"\nCIC--DUX4L8\tCIC\tDUX4L8\tchr19:42295049\tchr4:190068609\tCDS\texon\ttranslocation\tmedium\tout-of-frame\t6\t3\t9\t16\t1.0\t0.36\tDomain_of_unknown_function_(DUF4819)(100%),HMG_(high_mobility_group)_box(100%)|\t\"\"\nEWSR1--FLI1\tEWSR1\tFLI1\tchr22:29287134\tchr11:128807180\tCDS/splice-site\tCDS/splice-site\ttranslocation\tmedium\tin-frame\t5\t3\t8\t1115\t0.9542425094393249\t0.007123775601068566\t|Ets-domain(100%)\t\"\"\n",
+          "id": "arriba_fusions",
+          "mode": "fusion-detection",
+          "name": "Arriba fusion calls",
+          "path_glob": null,
+          "rawYaml": "id: arriba_fusions\nname: Arriba fusion calls\nmode: fusion-detection\ndescription: >-\n  Fusion calls Arriba retained, one row per call. The recipe labels each fusion\n  from its two partner genes, sums the split reads, discordant mates and local\n  coverage into one evidence block, and derives a log-scaled support and the\n  fraction of local reads that support the call.\nfind: { filename: \"*.arriba.fusions.tsv\" }\nrecipe: arriba/fusions.py\nfixture: fusions.tsv\nrenders_as:\n  - { id: evidence_dot_plot, component: advanced_viz, kind: dot_plot, roles: {cluster: confidence, gene: fusion, mean_expression: log_support, frac_expressing: support_fraction} }\n  - { component: figure, visu_type: bar, dict_kwargs: {x: fusion_type, y: supporting_reads, color: reading_frame} }\n  - { component: card, column: supporting_reads, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: fusion, aggregation: nunique, secondary_layout: top_n, breakdown_col: confidence, top_n_count: 3 }\n  - { component: card, column: split_reads, aggregation: sum, secondary_layout: donut, breakdown_col: fusion_type }\n  - { component: card, column: support_fraction, aggregation: average, secondary_layout: histogram }\n  - { component: table, row_selection_enabled: true, row_selection_column: fusion }\n",
+          "recipe": "arriba/fusions.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "evidence_dot_plot",
+              "kind": "dot_plot",
+              "roles": {
+                "cluster": "confidence",
+                "frac_expressing": "support_fraction",
+                "gene": "fusion",
+                "mean_expression": "log_support"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "reading_frame",
+                "x": "fusion_type",
+                "y": "supporting_reads"
+              },
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "supporting_reads",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "confidence",
+              "column": "fusion",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "fusion_type",
+              "column": "split_reads",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "donut"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "support_fraction",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {},
+              "row_selection_column": "fusion",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "fusions",
+          "yamlPath": "depictio/catalog/arriba/fusions.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": null,
       "description": "Aggregates the biosynthetic gene cluster predictions of antiSMASH, DeepBGC and GECCO into one table per sample plus a run-level summary, with the region coordinates, product class, CDS count and PFAM domains normalised across the three callers.",
       "dir": "depictio/catalog/combgc",
       "homepage": "https://nf-co.re/funcscan",
@@ -373,6 +493,206 @@
           ],
           "slug": "tool_overlap",
           "yamlPath": "depictio/catalog/combgc/tool_overlap.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": null,
+      "description": "",
+      "dir": "depictio/catalog/ctatsplicing",
+      "homepage": null,
+      "id": "ctatsplicing",
+      "name": "CTAT-SPLICING",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/ctatsplicing/startocancerintrons",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "Splice junctions that matched the CTAT cancer intron reference, with their prevalence in TCGA tumour cohorts and GTEx normal tissues unpacked into a leading cohort and tissue. Empty on runs with no annotated cancer introns.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/ctatsplicing/*.cancer.introns",
+            "path_glob_alt": []
+          },
+          "fixture": "cancer_introns.tsv",
+          "fixtureContent": "intron\tchrom\tstart\tend\tstrand\tgene\tgene_id\tuniq_mapped\tmulti_mapped\tscore\tn_tcga_cohorts\ttop_tcga_cohort\ttop_tcga_pct\tn_gtex_tissues\ttop_gtex_tissue\ttop_gtex_pct\tvariant_name\nchr7:91941148-91970472\tchr7\t91941148\t91970472\t+\tAKAP9\tENSG00000127914.19\t3\t0\t3.0\t5\tESCA\t13.61\t1\tThyroid\t0.22\t\"\"\nchr7:91970509-91973710\tchr7\t91970509\t91973710\t+\tAKAP9\tENSG00000127914.19\t4\t0\t4.0\t5\tESCA\t16.23\t2\tThyroid\t0.22\t\"\"\nchr8:42897189-42925556\tchr8\t42897189\t42925556\t+\tHOOK3\tENSG00000168172.9\t2\t0\t2.0\t4\tESCA\t3.66\t1\tThyroid\t0.22\t\"\"\n",
+          "id": "ctatsplicing_cancer_introns",
+          "mode": "cancer.introns",
+          "name": "Cancer intron candidates",
+          "path_glob": "**/ctatsplicing/*.cancer.introns",
+          "rawYaml": "id: ctatsplicing_cancer_introns\nname: Cancer intron candidates\nmode: cancer.introns\ndescription: >-\n  Splice junctions that matched the CTAT cancer intron reference, with their\n  prevalence in TCGA tumour cohorts and GTEx normal tissues unpacked into a\n  leading cohort and tissue. Empty on runs with no annotated cancer introns.\nfind: { path_glob: \"**/ctatsplicing/*.cancer.introns\" }\nrecipe: ctatsplicing/cancer_introns.py\nfixture: cancer_introns.tsv\nrenders_as:\n  - { id: cancer_intron_manhattan, component: advanced_viz, kind: manhattan, roles: {chr: chrom, pos: start, score: score} }\n  - { component: card, column: uniq_mapped, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: intron, aggregation: nunique, secondary_layout: top_n, breakdown_col: top_tcga_cohort, top_n_count: 3 }\n  - { component: card, column: top_tcga_pct, aggregation: max, secondary_layout: histogram }\n  - { component: table }\n",
+          "recipe": "ctatsplicing/cancer_introns.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "cancer_intron_manhattan",
+              "kind": "manhattan",
+              "roles": {
+                "chr": "chrom",
+                "pos": "start",
+                "score": "score"
+              }
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "uniq_mapped",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "top_tcga_cohort",
+              "column": "intron",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "top_tcga_pct",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "cancer_introns",
+          "yamlPath": "depictio/catalog/ctatsplicing/cancer_introns.yaml"
+        },
+        {
+          "columns": {},
+          "description": "One row per splice junction CTAT-SPLICING read from the STAR alignment, with the junction coordinate split into chromosome and position, the gene it falls in and how many uniquely and multi mapped reads support it.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/ctatsplicing/*.introns",
+            "path_glob_alt": []
+          },
+          "fixture": "introns.tsv",
+          "fixtureContent": "intron\tchrom\tstart\tend\tintron_length\tstrand\tgene\tgene_id\tuniq_mapped\tmulti_mapped\ttotal_mapped\tuniq_fraction\tscore\nchr10:43116732-43118372\tchr10\t43116732\t43118372\t1640\t+\tRET\tENSG00000165731.22\t8\t0\t8\t1.0\t8.0\nchr10:43122017-43123670\tchr10\t43122017\t43123670\t1653\t+\tRET\tENSG00000165731.22\t17\t0\t17\t1.0\t17.0\nchr10:87228963-87230919\tchr10\t87228963\t87230919\t1956\t+\tNUTM2A\tENSG00000184923.12\t0\t1\t1\t0.0\t0.0\nchr11:128772986-128781957\tchr11\t128772986\t128781957\t8971\t+\tFLI1\tENSG00000151702.18\t5\t0\t5\t1.0\t5.0\nchr11:128805432-128807179\tchr11\t128805432\t128807179\t1747\t+\tFLI1\tENSG00000151702.18\t14\t0\t14\t1.0\t14.0\nchr12:11752580-11839139\tchr12\t11752580\t11839139\t86559\t+\tETV6\tENSG00000139083.11\t33\t0\t33\t1.0\t33.0\nchr12:11869970-11884444\tchr12\t11869970\t11884444\t14474\t+\tETV6\tENSG00000139083.11\t54\t0\t54\t1.0\t54.0\nchr12:50809590-50814009\tchr12\t50809590\t50814009\t4419\t+\tATF1\tENSG00000123268.9\t10\t0\t10\t1.0\t10.0\nchr12:56117212-56117481\tchr12\t56117212\t56117481\t269\t+\tRPL41\tENSG00000229117.9\t0\t1\t1\t0.0\t0.0\nchr15:34354733-34355020\tchr15\t34354733\t34355020\t287\t+\tNUTM1\tENSG00000184507.17\t13\t0\t13\t1.0\t13.0\nchr15:87929435-87933011\tchr15\t87929435\t87933011\t3576\t-\tNTRK3\tENSG00000140538.17\t12\t1\t13\t0.9230769230769231\t12.0\nchr19:15244763-15254151\tchr19\t15244763\t15254151\t9388\t-\tBRD4\tENSG00000141867.19\t31\t0\t31\t1.0\t31.0\nchr19:15255593-15256063\tchr19\t15255593\t15256063\t470\t-\tBRD4\tENSG00000141867.19\t102\t1\t103\t0.9902912621359223\t102.0\nchr19:42249943-42250330\tchr19\t42249943\t42250330\t387\t-\tERF\tENSG00000105722.11\t22\t0\t22\t1.0\t22.0\nchr2:29207273-29209785\tchr2\t29207273\t29209785\t2512\t-\tALK\tENSG00000171094.18\t19\t0\t19\t1.0\t19.0\nchr2:29222409-29222516\tchr2\t29222409\t29222516\t107\t-\tALK\tENSG00000171094.18\t27\t0\t27\t1.0\t27.0\nchr2:42256631-42263177\tchr2\t42256631\t42263177\t6546\t+\tEML4\tENSG00000143924.19\t1\t0\t1\t1.0\t1.0\nchr2:42264732-42280849\tchr2\t42264732\t42280849\t16117\t+\tEML4\tENSG00000143924.19\t49\t3\t52\t0.9423076923076923\t49.0\nchr2:42284704-42286268\tchr2\t42284704\t42286268\t1564\t+\tEML4\tENSG00000143924.19\t46\t0\t46\t1.0\t46.0\nchr2:42295517-42301240\tchr2\t42295517\t42301240\t5723\t+\tEML4\tENSG00000143924.19\t116\t0\t116\t1.0\t116.0\nchr2:207577656-207596913\tchr2\t207577656\t207596913\t19257\t+\tCREB1\tENSG00000118260.15\t6\t0\t6\t1.0\t6.0\nchr22:29272432-29278130\tchr22\t29272432\t29278130\t5698\t+\tEWSR1\tENSG00000182944.18\t42\t1\t43\t0.9767441860465116\t42.0\nchr22:29273865-29286922\tchr22\t29273865\t29286922\t13057\t+\tEWSR1\tENSG00000182944.18\t1\t0\t1\t1.0\t1.0\nchr22:29287135-29292136\tchr22\t29287135\t29292136\t5001\t+\tEWSR1\tENSG00000182944.18\t4\t0\t4\t1.0\t4.0\nchr22:29288787-29292136\tchr22\t29288787\t29292136\t3349\t+\tEWSR1\tENSG00000182944.18\t1\t0\t1\t1.0\t1.0\nchr22:29292170-29292487\tchr22\t29292170\t29292487\t317\t+\tEWSR1\tENSG00000182944.18\t3\t0\t3\t1.0\t3.0\nchr4:1805477-1805558\tchr4\t1805477\t1805558\t81\t+\tFGFR3\tENSG00000068078.20\t1\t0\t1\t1.0\t1.0\nchr4:1806174-1806545\tchr4\t1806174\t1806545\t371\t+\tFGFR3\tENSG00000068078.20\t1\t0\t1\t1.0\t1.0\nchr4:53390629-53391008\tchr4\t53390629\t53391008\t379\t+\tFIP1L1\tENSG00000145216.17\t1\t0\t1\t1.0\t1.0\nchr4:53399840-53425871\tchr4\t53399840\t53425871\t26031\t+\tFIP1L1\tENSG00000145216.17\t10\t0\t10\t1.0\t10.0\nchr4:54274974-54277387\tchr4\t54274974\t54277387\t2413\t+\tPDGFRA\tENSG00000134853.12\t97\t0\t97\t1.0\t97.0\nchr4:54280483-54285370\tchr4\t54280483\t54285370\t4887\t+\tPDGFRA\tENSG00000134853.12\t1\t0\t1\t1.0\t1.0\nchr5:150405181-150406258\tchr5\t150405181\t150406258\t1077\t-\tCD74\tENSG00000019582.17\t8\t0\t8\t1.0\t8.0\nchr6:117288803-117300973\tchr6\t117288803\t117300973\t12170\t-\tROS1\tENSG00000047936.11\t13\t1\t14\t0.9285714285714286\t13.0\nchr6:117311118-117317142\tchr6\t117311118\t117317142\t6024\t-\tROS1\tENSG00000047936.11\t13\t0\t13\t1.0\t13.0\nchr6:117321395-117324331\tchr6\t117321395\t117324331\t2936\t-\tROS1\tENSG00000047936.11\t5\t0\t5\t1.0\t5.0\nchr6:117570956-117573466\tchr6\t117570956\t117573466\t2510\t-\tGOPC\tENSG00000047932.14\t2\t0\t2\t1.0\t2.0\nchr7:13906600-13909631\tchr7\t13906600\t13909631\t3031\t-\tETV1\tENSG00000006468.15\t150\t0\t150\t1.0\t150.0\nchr7:13931750-13939116\tchr7\t13931750\t13939116\t7366\t-\tETV1\tENSG00000006468.15\t0\t8\t8\t0.0\t0.0\nchr7:13977481-13986637\tchr7\t13977481\t13986637\t9156\t-\tETV1\tENSG00000006468.15\t3\t0\t3\t1.0\t3.0\nchr7:91970509-91973710\tchr7\t91970509\t91973710\t3201\t+\tAKAP9\tENSG00000127914.19\t4\t0\t4\t1.0\t4.0\nchr7:91980959-91992157\tchr7\t91980959\t91992157\t11198\t+\tAKAP9\tENSG00000127914.19\t1\t0\t1\t1.0\t1.0\nchr7:91995801-92000847\tchr7\t91995801\t92000847\t5046\t+\tAKAP9\tENSG00000127914.19\t40\t0\t40\t1.0\t40.0\nchr7:140734771-140739811\tchr7\t140734771\t140739811\t5040\t-\tBRAF\tENSG00000157764.14\t133\t0\t133\t1.0\t133.0\nchr7:140749419-140776911\tchr7\t140749419\t140776911\t27492\t-\tBRAF\tENSG00000157764.14\t2\t0\t2\t1.0\t2.0\nchr7:140777089-140777990\tchr7\t140777089\t140777990\t901\t-\tBRAF\tENSG00000157764.14\t94\t1\t95\t0.9894736842105263\t94.0\nchr7:140787585-140794307\tchr7\t140787585\t140794307\t6722\t-\tBRAF\tENSG00000157764.14\t25\t0\t25\t1.0\t25.0\nchr8:42906259-42925556\tchr8\t42906259\t42925556\t19297\t+\tHOOK3\tENSG00000168172.9\t25\t0\t25\t1.0\t25.0\nchr8:42950456-42957093\tchr8\t42950456\t42957093\t6637\t+\tHOOK3\tENSG00000168172.9\t25\t0\t25\t1.0\t25.0\nchr8:42966614-42968012\tchr8\t42966614\t42968012\t1398\t+\tHOOK3\tENSG00000168172.9\t36\t0\t36\t1.0\t36.0\n",
+          "id": "ctatsplicing_introns",
+          "mode": "introns",
+          "name": "Splice junctions",
+          "path_glob": "**/ctatsplicing/*.introns",
+          "rawYaml": "id: ctatsplicing_introns\nname: Splice junctions\nmode: introns\ndescription: >-\n  One row per splice junction CTAT-SPLICING read from the STAR alignment, with\n  the junction coordinate split into chromosome and position, the gene it falls\n  in and how many uniquely and multi mapped reads support it.\nfind: { path_glob: \"**/ctatsplicing/*.introns\" }\nrecipe: ctatsplicing/introns.py\nfixture: introns.tsv\nrenders_as:\n  - { id: intron_manhattan, component: advanced_viz, kind: manhattan, roles: {chr: chrom, pos: start, score: score} }\n  - { component: figure, visu_type: bar, dict_kwargs: {x: gene, y: uniq_mapped, color: strand} }\n  - { component: card, column: uniq_mapped, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: intron, aggregation: nunique, secondary_layout: top_n, breakdown_col: gene, top_n_count: 5 }\n  - { component: card, column: total_mapped, aggregation: sum, secondary_layout: donut, breakdown_col: chrom }\n  - { component: card, column: intron_length, aggregation: average, secondary_layout: histogram }\n  - { component: table, row_selection_enabled: true, row_selection_column: gene }\n",
+          "recipe": "ctatsplicing/introns.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "intron_manhattan",
+              "kind": "manhattan",
+              "roles": {
+                "chr": "chrom",
+                "pos": "start",
+                "score": "score"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "strand",
+                "x": "gene",
+                "y": "uniq_mapped"
+              },
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "uniq_mapped",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "gene",
+              "column": "intron",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 5
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "chrom",
+              "column": "total_mapped",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "donut"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "intron_length",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {},
+              "row_selection_column": "gene",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "introns",
+          "yamlPath": "depictio/catalog/ctatsplicing/introns.yaml"
         }
       ]
     },
@@ -1695,6 +2015,576 @@
     {
       "biotools_url": null,
       "description": "",
+      "dir": "depictio/catalog/fusioncatcher",
+      "homepage": null,
+      "id": "fusioncatcher",
+      "name": "FusionCatcher",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/fusioncatcher/fusioncatcher",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "One row per FusionCatcher candidate fusion, with both partner genes, the annotation labels the pair matched, the read evidence supporting the call and its predicted effect on the coding sequence.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "filename": "*.fusion-genes.txt",
+            "path_glob_alt": []
+          },
+          "fixture": "fusion_genes.tsv",
+          "fixtureContent": "fusion\tgene_5p\tgene_3p\tdescription\tn_annotations\tcommon_mapping_reads\tspanning_pairs\tspanning_unique_reads\tsupporting_reads\tlongest_anchor\tfinding_method\tbreakpoint_5p\tbreakpoint_3p\tpredicted_effect\tlog_support\tunique_fraction\nFGFR3--TACC3\tFGFR3\tTACC3\tknown,adjacent,oncogene,tcga,18cancers,gliomas,mitelman,ccle,tcga3,t36,tcga-oesophagus,10K<gap<100K\t12\t0\t840\t75\t915\t42\tBOWTIE+STAR\t4:1806934:+\t4:1727977:+\tin-frame\t2.96189547366785\t0.08196721311475409\nFGFR3--TACC3\tFGFR3\tTACC3\tknown,adjacent,oncogene,tcga,18cancers,gliomas,mitelman,ccle,tcga3,t36,tcga-oesophagus,10K<gap<100K\t12\t0\t840\t10\t850\t42\tBOWTIE+STAR\t4:1807033:+\t4:1727832:+\tintronic/CDS(truncated)\t2.9299295600845876\t0.011764705882352941\nFIP1L1--PDGFRA\tFIP1L1\tPDGFRA\tknown,oncogene,tcga,tumor,mitelman,t52\t6\t0\t89\t34\t123\t44\tBOWTIE+STAR\t4:53425965:+\t4:54274925:+\tin-frame\t2.093421685162235\t0.2764227642276423\nGOPC--ROS1\tGOPC\tROS1\tknown,oncogene,tumor,mitelman,ccle,100K<gap<200K,exon-exon\t7\t0\t70\t20\t90\t29\tBOWTIE;BOWTIE+STAR\t6:117566854:-\t6:117321394:-\tin-frame\t1.9590413923210932\t0.2222222222222222\nGOPC--ROS1\tGOPC\tROS1\tknown,oncogene,tumor,mitelman,ccle,100K<gap<200K,exon-exon\t7\t0\t70\t2\t72\t26\tBOWTIE\t6:117566854:-\t6:117320030:-\tout-of-frame\t1.8633228601204557\t0.027777777777777776\nIGH@--CRLF2\tIGH@\tCRLF2\tknown,oncogene,mitelman\t3\t0\t31\t10\t41\t95\tBOWTIE+SPOTLIGHT\t14:105863258:+\tX:105799296:-\t---/intergenic\t1.6232492903979003\t0.24390243902439024\nIGH@--CRLF2\tIGH@\tCRLF2\tknown,oncogene,mitelman\t3\t0\t31\t5\t36\t32\tBOWTIE+STAR\t14:105863262:+\tX:1228687:-\t---/intergenic\t1.5682017240669948\t0.1388888888888889\nIGH@--CRLF2\tIGH@\tCRLF2\tknown,oncogene,mitelman\t3\t0\t31\t3\t34\t96\tBOWTIE+SPOTLIGHT\t14:105863343:+\tX:105812546:-\t---/intergenic\t1.5440680443502754\t0.08823529411764706\nHOOK3--RET\tHOOK3\tRET\tknown,oncogene,tumor,mitelman,t3,exon-exon\t6\t0\t13\t10\t23\t29\tBOWTIE;BOWTIE+STAR\t8:42968214:+\t10:43116584:+\tin-frame\t1.380211241711606\t0.43478260869565216\nAKAP9--BRAF\tAKAP9\tBRAF\tknown,oncogene,tumor,mitelman,t2,exon-exon\t6\t0\t12\t13\t25\t30\tBOWTIE;BOWTIE+STAR\t7:92003235:+\t7:140787584:-\tin-frame\t1.414973347970818\t0.52\nEWSR1--ATF1\tEWSR1\tATF1\tknown,oncogene,tumor,m5,mitelman,t1,exon-exon\t7\t0\t11\t10\t21\t30\tBOWTIE;BOWTIE+STAR\t22:29287134:+\t12:50814280:+\tin-frame\t1.3424226808222062\t0.47619047619047616\nDUX4--IGH@\tDUX4\tIGH@\tknown,mitelman\t2\t0\t10\t7\t17\t59\tBOWTIE+SPOTLIGHT\t4:190175280:+\t14:190193345:-\tUTR/---\t1.2552725051033058\t0.4117647058823529\nDUX4--IGH@\tDUX4\tIGH@\tknown,mitelman\t2\t0\t10\t7\t17\t46\tBOWTIE+STAR\t4:190175284:+\t14:106638525:-\tUTR/---\t1.2552725051033058\t0.4117647058823529\nTMPRSS2--ETV1\tTMPRSS2\tETV1\tknown,oncogene,tumor,mitelman,t3\t5\t0\t10\t11\t21\t37\tBOWTIE+STAR\t21:41494381:-\t7:13935844:-\tin-frame\t1.3424226808222062\t0.5238095238095238\nEWSR1--FLI1\tEWSR1\tFLI1\tknown,oncogene,tumor,m6,mitelman,ccle,exon-exon\t7\t0\t9\t12\t21\t29\tBOWTIE;BOWTIE+STAR\t22:29287134:+\t11:128807180:+\tin-frame\t1.3424226808222062\t0.5714285714285714\nETV6--NTRK3\tETV6\tNTRK3\tknown,oncogene,tcga,18cancers,tumor,mitelman,tcga3,t1,exon-exon\t9\t0\t7\t9\t16\t29\tBOWTIE\t12:11869969:+\t15:87940753:-\tin-frame\t1.2304489213782739\t0.5625\nBRD4--NUTM1\tBRD4\tNUTM1\tknown,oncogene,mitelman,ccle,t1,exon-exon\t6\t0\t6\t9\t15\t29\tBOWTIE;BOWTIE+STAR\t19:15254152:-\t15:34347969:+\tin-frame\t1.2041199826559246\t0.6\nCD74--ROS1\tCD74\tROS1\tknown,oncogene,tcga,18cancers,tumor,mitelman,t3,exon-exon\t8\t0\t6\t7\t13\t30\tBOWTIE;BOWTIE+STAR\t5:150404680:-\t6:117324415:-\tin-frame\t1.1461280356782377\t0.5384615384615384\nCIC--DUX4\tCIC\tDUX4\tknown,mitelman,ccle\t3\t0\t5\t5\t10\t34\tBOWTIE+STAR\t19:42295047:+\t4:190174446:+\tin-frame\t1.041392685158225\t0.5\nDUX4--IGH@\tDUX4\tIGH@\tknown,mitelman\t2\t0\t5\t5\t10\t84\tBOWTIE+SPOTLIGHT\t4:190174997:+\t14:190287409:+\tCDS(truncated)/---\t1.041392685158225\t0.5\nEML4--ALK\tEML4\tALK\tknown,oncogene,tcga,18cancers,tumor,mitelman,ccle,ccle3,tcga3,t1\t10\t0\t5\t4\t9\t33\tBOWTIE+STAR\t2:42301391:+\t2:29223587:-\tCDS(truncated)/UTR\t1.0\t0.4444444444444444\nMALT1--IGH@\tMALT1\tIGH@\tknown,oncogene,mitelman\t3\t0\t3\t3\t6\t34\tBOWTIE+STAR\t18:58669909:+\t14:105888559:+\tintergenic/---\t0.8450980400142567\t0.5\nNPM1--ALK\tNPM1\tALK\tknown,oncogene,tumor,mitelman,ccle,ccle3,exon-exon\t7\t0\t3\t3\t6\t30\tBOWTIE\t5:171391799:+\t2:29223528:-\tin-frame\t0.8450980400142567\t0.5\n",
+          "id": "fusioncatcher_fusion_genes",
+          "mode": "fusion-genes",
+          "name": "FusionCatcher fusion genes",
+          "path_glob": null,
+          "rawYaml": "id: fusioncatcher_fusion_genes\nname: FusionCatcher fusion genes\nmode: fusion-genes\ndescription: >-\n  One row per FusionCatcher candidate fusion, with both partner genes, the\n  annotation labels the pair matched, the read evidence supporting the call and\n  its predicted effect on the coding sequence.\nfind: { filename: \"*.fusion-genes.txt\" }\nrecipe: fusioncatcher/fusion_genes.py\nfixture: fusion_genes.tsv\nrenders_as:\n  - { id: evidence_dot_plot, component: advanced_viz, kind: dot_plot, roles: {cluster: predicted_effect, gene: fusion, mean_expression: log_support, frac_expressing: unique_fraction} }\n  - { component: figure, visu_type: bar, dict_kwargs: {x: predicted_effect, y: supporting_reads, color: finding_method} }\n  - { component: card, column: supporting_reads, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: fusion, aggregation: nunique, secondary_layout: top_n, breakdown_col: predicted_effect, top_n_count: 3 }\n  - { component: card, column: spanning_unique_reads, aggregation: sum, secondary_layout: donut, breakdown_col: finding_method }\n  - { component: card, column: n_annotations, aggregation: average, secondary_layout: histogram }\n  - { component: table, row_selection_enabled: true, row_selection_column: fusion }\n",
+          "recipe": "fusioncatcher/fusion_genes.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "evidence_dot_plot",
+              "kind": "dot_plot",
+              "roles": {
+                "cluster": "predicted_effect",
+                "frac_expressing": "unique_fraction",
+                "gene": "fusion",
+                "mean_expression": "log_support"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "finding_method",
+                "x": "predicted_effect",
+                "y": "supporting_reads"
+              },
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "supporting_reads",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "predicted_effect",
+              "column": "fusion",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "finding_method",
+              "column": "spanning_unique_reads",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "donut"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "n_annotations",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {},
+              "row_selection_column": "fusion",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "fusion_genes",
+          "yamlPath": "depictio/catalog/fusioncatcher/fusion_genes.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": null,
+      "description": "",
+      "dir": "depictio/catalog/fusioninspector",
+      "homepage": null,
+      "id": "fusioninspector",
+      "name": "FusionInspector",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/fusioninspector",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "One row per fusion transcript pair that survived FusionInspector's re-alignment, with the junction and spanning read support, the normalised expression (FFPM), the fusion-allele ratios against each partner, and the protein-level consequence of the fusion.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/fusioninspector/*/*.FusionInspector.fusions.abridged.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "fusions.tsv",
+          "fixtureContent": "fusion\tgene_5p\tgene_3p\tbreakpoint_5p\tbreakpoint_3p\tsplice_type\tjunction_reads\tspanning_frags\tsupporting_reads\tffpm\tlog_ffpm\tjunction_fraction\tfar_left\tfar_right\tcounter_fusion_left\tcounter_fusion_right\tprot_fusion_type\tlarge_anchor_support\tcds_left_id\tcds_right_id\tn_domains_5p\tn_domains_3p\nFGFR3--TACC3\tFGFR3\tTACC3\tchr4:1806934:+\tchr4:1727977:+\tINCL_NON_REF_SPLICE\t225\t428\t653\t50029.9476\t4.699238728619041\t0.3445635528330781\t130.8\t327.0\t4\t1\tINFRAME\tYES\tENST00000481110.7\tENST00000313288.9\t33\t11\nFGFR3--TACC3\tFGFR3\tTACC3\tchr4:1806934:+\tchr4:1727981:+\tINCL_NON_REF_SPLICE\t31\t427\t458\t6870.4767\t3.8370500782160932\t0.06768558951965066\t91.8\t229.5\t4\t1\tFRAMESHIFT\tYES\tENST00000340107.9\tENST00000313288.9\t27\t11\nFIP1L1--PDGFRA\tFIP1L1\tPDGFRA\tchr4:53425965:+\tchr4:54274925:+\tINCL_NON_REF_SPLICE\t115\t13\t128\t10648.0326\t4.02731015654803\t0.8984375\t129.0\t129.0\t0\t0\tINFRAME\tYES\tENST00000703489.1\tENST00000257290.10\t1\t0\nFGFR3--TACC3\tFGFR3\tTACC3\tchr4:1808872:+\tchr4:1712858:+\tNO_JUNCTION_READS_IDENTIFIED\t0\t103\t103\t8568.3387\t3.9329473085016993\t0.0\t104.0\t104.0\t0\t0\tunknown\tNO\t\"\"\t\"\"\t0\t0\nGOPC--ROS1\tGOPC\tROS1\tchr6:117566854:-\tchr6:117321394:-\tONLY_REF_SPLICE\t49\t34\t83\t6894.6011\t3.8385721302703146\t0.5903614457831325\t84.0\t14.0\t0\t5\tINFRAME\tYES\tENST00000368498.7\tENST00000368508.7\t32\t0\nAKAP9--BRAF\tAKAP9\tBRAF\tchr7:92003235:+\tchr7:140787584:-\tONLY_REF_SPLICE\t15\t4\t19\t1580.5673\t3.1990876770590493\t0.7894736842105263\t0.47\t0.61\t42\t32\tINFRAME\tYES\tENST00000680534.1\tENST00000644969.2\t6\t0\nEWSR1--ATF1\tEWSR1\tATF1\tchr22:29287134:+\tchr12:50814280:+\tONLY_REF_SPLICE\t14\t3\t17\t1414.1919\t3.1508153341785383\t0.8235294117647058\t0.02\t0.14\t887\t128\tINFRAME\tYES\tENST00000414183.6\tENST00000262053.8\t2\t0\nTMPRSS2--ETV1\tTMPRSS2\tETV1\tchr21:41494381:-\tchr7:13935844:-\tINCL_NON_REF_SPLICE\t14\t2\t16\t1331.0041\t3.1245055616245487\t0.875\t8.5\t0.19\t1\t89\tINFRAME\tYES\tENST00000679263.1\tENST00000242066.10\t8\t2\nHOOK3--RET\tHOOK3\tRET\tchr8:42968214:+\tchr10:43116584:+\tONLY_REF_SPLICE\t13\t2\t15\t1247.8163\t3.0964985586593063\t0.8666666666666667\t0.64\t5.33\t24\t2\tINFRAME\tYES\tENST00000533539.2\tENST00000355710.8\t46\t0\nETV6--NTRK3\tETV6\tNTRK3\tchr12:11869969:+\tchr15:87940753:-\tONLY_REF_SPLICE\t11\t3\t14\t1164.6286\t3.066560194792992\t0.7857142857142857\t0.24\t5.0\t61\t2\tINFRAME\tYES\tENST00000396373.9\tENST00000626019.2\t7\t0\nEWSR1--FLI1\tEWSR1\tFLI1\tchr22:29287134:+\tchr11:128807180:+\tONLY_REF_SPLICE\t8\t3\t11\t915.0653\t2.961926432640415\t0.7272727272727273\t0.01\t0.71\t886\t16\tINFRAME\tYES\tENST00000414183.6\tENST00000281428.12\t2\t0\nGOPC--ROS1\tGOPC\tROS1\tchr6:117566854:-\tchr6:117320030:-\tONLY_REF_SPLICE\t1\t9\t10\t93.1703\t1.9739139539615655\t0.1\t11.0\t0.79\t0\t13\tFRAMESHIFT\tYES\tENST00000368498.7\tENST00000368508.7\t32\t0\nBRD4--NUTM1\tBRD4\tNUTM1\tchr19:15254152:-\tchr15:34347969:+\tONLY_REF_SPLICE\t8\t1\t9\t748.6898\t2.874881602037455\t0.8888888888888888\t0.13\t5.0\t77\t1\tINFRAME\tYES\tENST00000360016.9\tENST00000537011.6\t7\t2\nCIC--DUX4L8\tCIC\tDUX4L8\tchr19:42295048:+\tchr4:190068608:+\tINCL_NON_REF_SPLICE\t6\t3\t9\t748.6898\t2.874881602037455\t0.6666666666666666\t10.0\t10.0\t0\t0\tunknown\tYES\t\"\"\t\"\"\t0\t0\nEML4--ALK\tEML4\tALK\tchr2:42301391:+\tchr2:29223587:-\tINCL_NON_REF_SPLICE\t5\t3\t8\t665.5021\t2.8238015221174324\t0.625\t0.12\t2.25\t75\t3\tunknown\tYES\t\"\"\t\"\"\t0\t0\nCD74--ROS1\tCD74\tROS1\tchr5:150404680:-\tchr6:117324415:-\tONLY_REF_SPLICE\t7\t0\t7\t582.3143\t2.765902623326923\t1.0\t1.6\t8.0\t4\t0\tINFRAME\tYES\tENST00000353334.11\tENST00000368508.7\t4\t0\nNPM1--ALK\tNPM1\tALK\tchr5:171391799:+\tchr2:29223528:-\tONLY_REF_SPLICE\t5\t2\t7\t582.3143\t2.765902623326923\t0.7142857142857143\t8.0\t0.73\t0\t10\tINFRAME\tYES\tENST00000677357.1\tENST00000389048.8\t9\t0\n",
+          "id": "fusioninspector_fusions",
+          "mode": "fusions/abridged",
+          "name": "Validated fusions",
+          "path_glob": "**/fusioninspector/*/*.FusionInspector.fusions.abridged.tsv",
+          "rawYaml": "id: fusioninspector_fusions\nname: Validated fusions\nmode: fusions/abridged\ndescription: >-\n  One row per fusion transcript pair that survived FusionInspector's\n  re-alignment, with the junction and spanning read support, the normalised\n  expression (FFPM), the fusion-allele ratios against each partner, and the\n  protein-level consequence of the fusion.\nfind: { path_glob: \"**/fusioninspector/*/*.FusionInspector.fusions.abridged.tsv\" }\nrecipe: fusioninspector/fusions.py\nfixture: fusions.tsv\nrenders_as:\n  # Expression against junction purity, one dot per fusion, grouped by the\n  # protein consequence: an in-frame fusion carried by mostly junction reads\n  # sits top-right, a frameshift held up by spanning fragments bottom-left.\n  - { id: evidence_dot_plot, component: advanced_viz, kind: dot_plot, roles: {cluster: prot_fusion_type, gene: fusion, mean_expression: log_ffpm, frac_expressing: junction_fraction} }\n  # The two fusion-allele ratios against each other. A fusion dominant on both\n  # partners lands top-right; a ratio near the axis means the wild-type allele\n  # of that partner still dominates.\n  - component: figure\n    code: |\n      # FAR can be reported as 0, which a log axis cannot place, so shift both.\n      eps = 0.01\n      df_modified = df.with_columns(\n          (pl.col(\"far_left\") + eps).alias(\"far_left_shift\"),\n          (pl.col(\"far_right\") + eps).alias(\"far_right_shift\"),\n      )\n\n      fig = px.scatter(\n          df_modified.to_pandas(),\n          x=\"far_left_shift\", y=\"far_right_shift\",\n          color=\"prot_fusion_type\", size=\"supporting_reads\",\n          size_max=24, opacity=0.8, log_x=True, log_y=True,\n          hover_name=\"fusion\",\n      )\n      fig.update_layout(\n          xaxis_title=\"FAR 5' partner (log)\",\n          yaxis_title=\"FAR 3' partner (log)\",\n          legend_title_text=\"Protein fusion type\",\n          margin={\"t\": 24, \"l\": 56, \"r\": 16, \"b\": 48},\n      )\n  - { component: card, column: ffpm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: fusion, aggregation: nunique, secondary_layout: top_n, breakdown_col: prot_fusion_type, top_n_count: 3 }\n  - { component: card, column: supporting_reads, aggregation: sum, secondary_layout: donut, breakdown_col: splice_type }\n  - { component: card, column: junction_fraction, aggregation: average, secondary_layout: histogram }\n  - { component: table, row_selection_enabled: true, row_selection_column: fusion }\n",
+          "recipe": "fusioninspector/fusions.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "evidence_dot_plot",
+              "kind": "dot_plot",
+              "roles": {
+                "cluster": "prot_fusion_type",
+                "frac_expressing": "junction_fraction",
+                "gene": "fusion",
+                "mean_expression": "log_ffpm"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "code": "# FAR can be reported as 0, which a log axis cannot place, so shift both.\neps = 0.01\ndf_modified = df.with_columns(\n    (pl.col(\"far_left\") + eps).alias(\"far_left_shift\"),\n    (pl.col(\"far_right\") + eps).alias(\"far_right_shift\"),\n)\n\nfig = px.scatter(\n    df_modified.to_pandas(),\n    x=\"far_left_shift\", y=\"far_right_shift\",\n    color=\"prot_fusion_type\", size=\"supporting_reads\",\n    size_max=24, opacity=0.8, log_x=True, log_y=True,\n    hover_name=\"fusion\",\n)\nfig.update_layout(\n    xaxis_title=\"FAR 5' partner (log)\",\n    yaxis_title=\"FAR 3' partner (log)\",\n    legend_title_text=\"Protein fusion type\",\n    margin={\"t\": 24, \"l\": 56, \"r\": 16, \"b\": 48},\n)\n",
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {},
+              "roles": {}
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "ffpm",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "prot_fusion_type",
+              "column": "fusion",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "splice_type",
+              "column": "supporting_reads",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "donut"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "junction_fraction",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {},
+              "row_selection_column": "fusion",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "fusions",
+          "yamlPath": "depictio/catalog/fusioninspector/fusions.yaml"
+        },
+        {
+          "columns": {},
+          "description": "The Pfam domains FusionInspector annotates on the 5' and 3' partner of each fusion protein, unpivoted from the packed PFAM_LEFT / PFAM_RIGHT fields into one row per domain with its amino-acid span and e-value.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/fusioninspector/*/*.FusionInspector.fusions.abridged.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "protein_domains.tsv",
+          "fixtureContent": "fusion\tpartner\tdomain\tdomain_start\tdomain_end\tdomain_length\tevalue\tneg_log10_evalue\tprot_fusion_type\nAKAP9--BRAF\t5p\tPACT_coil_coil\t190\t226\t37\t0.23\t0.638272163982407\tINFRAME\nAKAP9--BRAF\t5p\tPACT_coil_coil\t376\t401\t26\t0.87\t0.06048074738138147\tINFRAME\nAKAP9--BRAF\t5p\tPACT_coil_coil\t921\t951\t31\t0.7\t0.1549019599857432\tINFRAME\nBRD4--NUTM1\t3p\tNUT-PARTIAL\t101\t557\t457\t5.3e-228\t227.2757241303992\tINFRAME\nBRD4--NUTM1\t3p\tNUT\t935\t1157\t223\t1.5e-58\t57.82390874094431\tINFRAME\nBRD4--NUTM1\t5p\tBromodomain\t70\t151\t82\t1.1e-25\t24.95860731484177\tINFRAME\nBRD4--NUTM1\t5p\tBET\t159\t168\t10\t1.9\t-0.2787536009528289\tINFRAME\nBRD4--NUTM1\t5p\tBromodomain\t357\t444\t88\t3e-25\t24.522878745280334\tINFRAME\nCD74--ROS1\t5p\tMHC2-interact\t17\t128\t112\t5.1e-50\t49.292429823902054\tINFRAME\nCD74--ROS1\t5p\tYvrJ\t51\t59\t9\t0.02\t1.6989700043360185\tINFRAME\nCD74--ROS1\t5p\tYvrJ\t67\t89\t23\t0.00052\t3.2839966563652006\tINFRAME\nETV6--NTRK3\t5p\tSAM_PNT\t40\t123\t84\t1.2e-31\t30.920818753952375\tINFRAME\nETV6--NTRK3\t5p\tSAM_3\t63\t117\t55\t0.000013\t4.886056647693163\tINFRAME\nETV6--NTRK3\t5p\tEts\t65\t79\t15\t3.3\t-0.5185139398778874\tINFRAME\nEWSR1--ATF1\t5p\tRRM_1\t368\t446\t79\t1e-13\t12.999999999999998\tINFRAME\nEWSR1--ATF1\t5p\tZn_ribbon_RanBP\t523\t553\t31\t7.6e-15\t14.119186407719207\tINFRAME\nEWSR1--FLI1\t5p\tRRM_1\t368\t446\t79\t1e-13\t12.999999999999998\tINFRAME\nEWSR1--FLI1\t5p\tZn_ribbon_RanBP\t523\t553\t31\t7.6e-15\t14.119186407719207\tINFRAME\nFGFR3--TACC3\t3p\tTACC_C\t639\t832\t194\t1.4e-86\t85.85387196432175\tINFRAME\nFGFR3--TACC3\t3p\tDUF4776\t646\t820\t175\t0.0003\t3.522878745280337\tINFRAME\nFGFR3--TACC3\t3p\tDUF3802\t674\t721\t48\t0.000025\t4.602059991327962\tINFRAME\nFGFR3--TACC3\t5p\tI-set\t48\t110\t63\t3e-6\t5.522878745280337\tINFRAME\nFGFR3--TACC3\t5p\tig\t49\t110\t62\t6.1e-7\t6.214670164989233\tINFRAME\nFGFR3--TACC3\t5p\tIg_3\t50\t110\t61\t4.8e-7\t6.318758762624412\tINFRAME\nFIP1L1--PDGFRA\t5p\tFip1\t154\t196\t43\t1.6e-29\t28.795880017344075\tINFRAME\nGOPC--ROS1\t5p\tDUF6212\t62\t136\t75\t0.13\t0.8860566476931632\tINFRAME\nGOPC--ROS1\t5p\tDUF4140\t65\t118\t54\t0.015\t1.8239087409443187\tINFRAME\nGOPC--ROS1\t5p\tNPV_P10\t67\t103\t37\t0.00055\t3.259637310505756\tINFRAME\nHOOK3--RET\t5p\tHOOK_N\t11\t156\t146\t2.7e-79\t78.56863623584101\tINFRAME\nHOOK3--RET\t5p\tCH_2\t16\t54\t39\t4.6e-6\t5.337242168318426\tINFRAME\nHOOK3--RET\t5p\tCH_2\t128\t154\t27\t5.7\t-0.7558748556724914\tINFRAME\nNPM1--ALK\t5p\tNPL\t18\t114\t97\t8.1e-7\t6.09151498112135\tINFRAME\nNPM1--ALK\t5p\tNucleoplasmin\t18\t117\t100\t1.3e-42\t41.88605664769316\tINFRAME\nNPM1--ALK\t5p\tYL1\t120\t237\t118\t0.000057\t4.2441251443275085\tINFRAME\nTMPRSS2--ETV1\t3p\tEts-PARTIAL\t364\t397\t34\t1.4e-38\t37.85387196432176\tINFRAME\nTMPRSS2--ETV1\t3p\tHSF_DNA-bind-PARTIAL\t364\t378\t15\t0.000018\t4.7447274948966935\tINFRAME\nTMPRSS2--ETV1\t5p\tMicrop_archaea\t144\t158\t15\t0.000098\t4.008773924307505\tINFRAME\nTMPRSS2--ETV1\t5p\tLdl_recept_a\t165\t201\t37\t5.7e-7\t6.2441251443275085\tINFRAME\nTMPRSS2--ETV1\t5p\tSRCR_2\t206\t300\t95\t2.3e-37\t36.63827216398241\tINFRAME\n",
+          "id": "fusioninspector_protein_domains",
+          "mode": "fusions/pfam",
+          "name": "Fusion protein domains",
+          "path_glob": "**/fusioninspector/*/*.FusionInspector.fusions.abridged.tsv",
+          "rawYaml": "id: fusioninspector_protein_domains\nname: Fusion protein domains\nmode: fusions/pfam\ndescription: >-\n  The Pfam domains FusionInspector annotates on the 5' and 3' partner of each\n  fusion protein, unpivoted from the packed PFAM_LEFT / PFAM_RIGHT fields into\n  one row per domain with its amino-acid span and e-value.\nfind: { path_glob: \"**/fusioninspector/*/*.FusionInspector.fusions.abridged.tsv\" }\nrecipe: fusioninspector/protein_domains.py\nfixture: protein_domains.tsv\nrenders_as:\n  # Domain starts along the fusion protein, one lane per fusion, split by the\n  # partner that contributes the domain. This is the closest the catalog gets to\n  # a protein-domain track: it places each domain but cannot draw its extent.\n  - { id: domain_lollipop, component: advanced_viz, kind: lollipop, roles: {feature_id: fusion, position: domain_start, category: partner} }\n  # Domain extents as bars, so a domain the breakpoint truncated is visibly\n  # shorter than the same domain kept whole on the other side.\n  - { component: figure, visu_type: bar, dict_kwargs: {x: domain, y: domain_length, color: partner} }\n  - { component: card, column: domain, aggregation: nunique, secondary_layout: top_n, breakdown_col: partner, top_n_count: 3 }\n  - { component: card, column: domain_length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: neg_log10_evalue, aggregation: average, secondary_layout: histogram }\n  - { component: table, row_selection_enabled: true, row_selection_column: fusion }\n",
+          "recipe": "fusioninspector/protein_domains.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "domain_lollipop",
+              "kind": "lollipop",
+              "roles": {
+                "category": "partner",
+                "feature_id": "fusion",
+                "position": "domain_start"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "partner",
+                "x": "domain",
+                "y": "domain_length"
+              },
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "partner",
+              "column": "domain",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "domain_length",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "neg_log10_evalue",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {},
+              "row_selection_column": "fusion",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "protein_domains",
+          "yamlPath": "depictio/catalog/fusioninspector/protein_domains.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": null,
+      "description": "",
+      "dir": "depictio/catalog/fusionreport",
+      "homepage": null,
+      "id": "fusionreport",
+      "name": "fusion-report",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/fusionreport/detect",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "Long form of the per-caller evidence strings fusion-report writes next to each fusion: one row per fusion and caller, with the read support that caller reported normalised to a single comparable count.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/fusionreport/*/*.fusions.csv",
+            "path_glob_alt": []
+          },
+          "fixture": "caller_evidence.tsv",
+          "fixtureContent": "fusion\tcaller\tposition_5p\tposition_3p\tsupporting_reads\tlog_support\tevidence_fraction\tfii\tdetail\nAKAP9--BRAF\tarriba\tchr7:92003235\tchr7:140787584\t13\t1.1461280356782377\t0.25\t1.0\tposition: chr7:92003235#chr7:140787584,reading-frame: in-frame,type: inversion,split_reads1: 4,split_reads2: 5,discordant_mates: 4,coverage1: 51,coverage2: 35,confidence: high\nAKAP9--BRAF\tfusioncatcher\t7:92003235:+\t7:140787584:-\t25\t1.414973347970818\t0.4807692307692308\t1.0\tposition: 7:92003235:+#7:140787584:-,common_mapping_reads: 0,spanning_pairs: 12,spanning_unique_reads: 13,longest_anchor: 30,fusion_type: in-frame\nAKAP9--BRAF\tstarfusion\tchr7:92003235:+\tchr7:140787584:-\t14\t1.1760912590556811\t0.2692307692307692\t1.0\tposition: chr7:92003235:+#chr7:140787584:-,junction_reads: 9,spanning_reads: 5,ffmp: 1164.6286\nBRD4--NUTM1\tarriba\tchr19:15254152\tchr15:34347969\t8\t0.9542425094393249\t0.25\t1.0\tposition: chr19:15254152#chr15:34347969,reading-frame: in-frame,type: translocation,split_reads1: 2,split_reads2: 5,discordant_mates: 1,coverage1: 100,coverage2: 10,confidence: high\nBRD4--NUTM1\tfusioncatcher\t19:15254152:-\t15:34347969:+\t15\t1.2041199826559246\t0.46875\t1.0\tposition: 19:15254152:-#15:34347969:+,common_mapping_reads: 0,spanning_pairs: 6,spanning_unique_reads: 9,longest_anchor: 29,fusion_type: in-frame\nBRD4--NUTM1\tstarfusion\tchr19:15254152:-\tchr15:34347969:+\t9\t1.0\t0.28125\t1.0\tposition: chr19:15254152:-#chr15:34347969:+,junction_reads: 7,spanning_reads: 2,ffmp: 748.6898\nCD74--ROS1\tarriba\tchr5:150404680\tchr6:117324415\t6\t0.8450980400142567\t0.23076923076923078\t1.0\tposition: chr5:150404680#chr6:117324415,reading-frame: in-frame,type: translocation,split_reads1: 2,split_reads2: 4,discordant_mates: 0,coverage1: 8,coverage2: 5,confidence: high\nCD74--ROS1\tfusioncatcher\t5:150404680:-\t6:117324415:-\t13\t1.1461280356782377\t0.5\t1.0\tposition: 5:150404680:-#6:117324415:-,common_mapping_reads: 0,spanning_pairs: 6,spanning_unique_reads: 7,longest_anchor: 30,fusion_type: in-frame\nCD74--ROS1\tstarfusion\tchr5:150404680:-\tchr6:117324415:-\t7\t0.9030899869919434\t0.2692307692307692\t1.0\tposition: chr5:150404680:-#chr6:117324415:-,junction_reads: 7,spanning_reads: 0,ffmp: 582.3143\nCIC--DUX4\tfusioncatcher\t19:42295047:+\t4:190174446:+\t10\t1.041392685158225\t1.0\t0.667\tposition: 19:42295047:+#4:190174446:+,common_mapping_reads: 0,spanning_pairs: 5,spanning_unique_reads: 5,longest_anchor: 34,fusion_type: in-frame\nCIC--DUX4L8\tarriba\tchr19:42295049\tchr4:190068609\t9\t1.0\t1.0\t0.167\tposition: chr19:42295049#chr4:190068609,reading-frame: out-of-frame,type: translocation,split_reads1: 4,split_reads2: 2,discordant_mates: 3,coverage1: 10,coverage2: 6,confidence: medium\nDUX4--IGH@\tfusioncatcher\t4:190175280:+\t14:190193345:-\t17\t1.2552725051033058\t1.0\t0.167\tposition: 4:190175280:+#14:190193345:-,common_mapping_reads: 0,spanning_pairs: 10,spanning_unique_reads: 7,longest_anchor: 59,fusion_type: UTR/---\nEML4--ALK\tarriba\tchr2:42301394\tchr2:29223584\t8\t0.9542425094393249\t0.32\t1.0\tposition: chr2:42301394#chr2:29223584,reading-frame: in-frame,type: inversion,split_reads1: 1,split_reads2: 4,discordant_mates: 3,coverage1: 71,coverage2: 8,confidence: high\nEML4--ALK\tfusioncatcher\t2:42301391:+\t2:29223587:-\t9\t1.0\t0.36\t1.0\tposition: 2:42301391:+#2:29223587:-,common_mapping_reads: 0,spanning_pairs: 5,spanning_unique_reads: 4,longest_anchor: 33,fusion_type: CDS(truncated)/UTR\nEML4--ALK\tstarfusion\tchr2:42301394:+\tchr2:29223584:-\t8\t0.9542425094393249\t0.32\t1.0\tposition: chr2:42301394:+#chr2:29223584:-,junction_reads: 5,spanning_reads: 3,ffmp: 665.5021\nETV6--NTRK3\tarriba\tchr12:11869969\tchr15:87940753\t13\t1.1461280356782377\t0.29545454545454547\t1.0\tposition: chr12:11869969#chr15:87940753,reading-frame: in-frame,type: translocation,split_reads1: 7,split_reads2: 4,discordant_mates: 2,coverage1: 86,coverage2: 7,confidence: high\nETV6--NTRK3\tfusioncatcher\t12:11869969:+\t15:87940753:-\t16\t1.2304489213782739\t0.36363636363636365\t1.0\tposition: 12:11869969:+#15:87940753:-,common_mapping_reads: 0,spanning_pairs: 7,spanning_unique_reads: 9,longest_anchor: 29,fusion_type: in-frame\nETV6--NTRK3\tstarfusion\tchr12:11869969:+\tchr15:87940753:-\t15\t1.2041199826559246\t0.3409090909090909\t1.0\tposition: chr12:11869969:+#chr15:87940753:-,junction_reads: 11,spanning_reads: 4,ffmp: 1247.8163\nEWSR1--ATF1\tarriba\tchr22:29287134\tchr12:50814280\t9\t1.0\t0.21428571428571427\t1.0\tposition: chr22:29287134#chr12:50814280,reading-frame: in-frame,type: translocation,split_reads1: 4,split_reads2: 4,discordant_mates: 1,coverage1: 1087,coverage2: 142,confidence: medium\nEWSR1--ATF1\tfusioncatcher\t22:29287134:+\t12:50814280:+\t21\t1.3424226808222062\t0.5\t1.0\tposition: 22:29287134:+#12:50814280:+,common_mapping_reads: 0,spanning_pairs: 11,spanning_unique_reads: 10,longest_anchor: 30,fusion_type: in-frame\nEWSR1--ATF1\tstarfusion\tchr22:29287134:+\tchr12:50814280:+\t12\t1.1139433523068367\t0.2857142857142857\t1.0\tposition: chr22:29287134:+#chr12:50814280:+,junction_reads: 8,spanning_reads: 4,ffmp: 998.253\nEWSR1--FLI1\tarriba\tchr22:29287134\tchr11:128807180\t8\t0.9542425094393249\t0.21052631578947367\t1.0\tposition: chr22:29287134#chr11:128807180,reading-frame: in-frame,type: translocation,split_reads1: 2,split_reads2: 3,discordant_mates: 3,coverage1: 1087,coverage2: 28,confidence: medium\nEWSR1--FLI1\tfusioncatcher\t22:29287134:+\t11:128807180:+\t21\t1.3424226808222062\t0.5526315789473685\t1.0\tposition: 22:29287134:+#11:128807180:+,common_mapping_reads: 0,spanning_pairs: 9,spanning_unique_reads: 12,longest_anchor: 29,fusion_type: in-frame\nEWSR1--FLI1\tstarfusion\tchr22:29287134:+\tchr11:128807180:+\t9\t1.0\t0.23684210526315788\t1.0\tposition: chr22:29287134:+#chr11:128807180:+,junction_reads: 6,spanning_reads: 3,ffmp: 748.6898\nFGFR3--TACC3\tarriba\tchr4:1806934\tchr4:1727977\t494\t2.6946051989335684\t0.22403628117913832\t1.0\tposition: chr4:1806934#chr4:1727977,reading-frame: in-frame,type: duplication,split_reads1: 90,split_reads2: 104,discordant_mates: 300,coverage1: 245,coverage2: 425,confidence: high\nFGFR3--TACC3\tfusioncatcher\t4:1806934:+\t4:1727977:+\t915\t2.96189547366785\t0.41496598639455784\t1.0\tposition: 4:1806934:+#4:1727977:+,common_mapping_reads: 0,spanning_pairs: 840,spanning_unique_reads: 75,longest_anchor: 42,fusion_type: in-frame\nFGFR3--TACC3\tstarfusion\tchr4:1806934:+\tchr4:1727977:+\t796\t2.9014583213961123\t0.36099773242630384\t1.0\tposition: chr4:1806934:+#chr4:1727977:+,junction_reads: 253,spanning_reads: 543,ffmp: 66217.4528\nFIP1L1--PDGFRA\tarriba\tchr4:53425965\tchr4:54274925\t107\t2.0334237554869494\t0.311046511627907\t1.0\tposition: chr4:53425965#chr4:54274925,reading-frame: stop-codon,type: deletion,split_reads1: 28,split_reads2: 67,discordant_mates: 12,coverage1: 37,coverage2: 93,confidence: high\nFIP1L1--PDGFRA\tfusioncatcher\t4:53425965:+\t4:54274925:+\t123\t2.093421685162235\t0.35755813953488375\t1.0\tposition: 4:53425965:+#4:54274925:+,common_mapping_reads: 0,spanning_pairs: 89,spanning_unique_reads: 34,longest_anchor: 44,fusion_type: in-frame\nFIP1L1--PDGFRA\tstarfusion\tchr4:53425965:+\tchr4:54274925:+\t114\t2.0606978403536114\t0.3313953488372093\t1.0\tposition: chr4:53425965:+#chr4:54274925:+,junction_reads: 101,spanning_reads: 13,ffmp: 9483.404\nGOPC--ROS1\tarriba\tchr6:117566854\tchr6:117321394\t75\t1.8808135922807911\t0.45454545454545453\t0.833\tposition: chr6:117566854#chr6:117321394,reading-frame: in-frame,type: deletion/read-through,split_reads1: 34,split_reads2: 16,discordant_mates: 25,coverage1: 122,coverage2: 142,confidence: high\nGOPC--ROS1\tfusioncatcher\t6:117566854:-\t6:117321394:-\t90\t1.9590413923210932\t0.5454545454545454\t0.833\tposition: 6:117566854:-#6:117321394:-,common_mapping_reads: 0,spanning_pairs: 70,spanning_unique_reads: 20,longest_anchor: 29,fusion_type: in-frame\nHOOK3--RET\tarriba\tchr8:42968214\tchr10:43116584\t14\t1.1760912590556811\t0.27450980392156865\t1.0\tposition: chr8:42968214#chr10:43116584,reading-frame: in-frame,type: translocation,split_reads1: 9,split_reads2: 3,discordant_mates: 2,coverage1: 35,coverage2: 8,confidence: high\nHOOK3--RET\tfusioncatcher\t8:42968214:+\t10:43116584:+\t23\t1.380211241711606\t0.45098039215686275\t1.0\tposition: 8:42968214:+#10:43116584:+,common_mapping_reads: 0,spanning_pairs: 13,spanning_unique_reads: 10,longest_anchor: 29,fusion_type: in-frame\nHOOK3--RET\tstarfusion\tchr8:42968214:+\tchr10:43116584:+\t14\t1.1760912590556811\t0.27450980392156865\t1.0\tposition: chr8:42968214:+#chr10:43116584:+,junction_reads: 12,spanning_reads: 2,ffmp: 1164.6286\nIGH-@-ext--CRLF2\tstarfusion\tchr14:105863255\tchrY:1228636\t7\t0.9030899869919434\t1.0\t0.167\tposition: chr14:105863255#chrY:1228636,junction_reads: 0,spanning_reads: 7,ffmp: 291.1571\nIGH@--CRLF2\tfusioncatcher\t14:105863258:+\tX:105799296:-\t41\t1.6232492903979003\t1.0\t0.167\tposition: 14:105863258:+#X:105799296:-,common_mapping_reads: 0,spanning_pairs: 31,spanning_unique_reads: 10,longest_anchor: 95,fusion_type: ---/intergenic\nMALT1--IGH-@-ext\tstarfusion\tchr18:58669909:+\tchr14:105888559:+\t6\t0.8450980400142567\t1.0\t0.167\tposition: chr18:58669909:+#chr14:105888559:+,junction_reads: 3,spanning_reads: 3,ffmp: 499.1266\nMALT1--IGH@\tfusioncatcher\t18:58669909:+\t14:105888559:+\t6\t0.8450980400142567\t1.0\t0.167\tposition: 18:58669909:+#14:105888559:+,common_mapping_reads: 0,spanning_pairs: 3,spanning_unique_reads: 3,longest_anchor: 34,fusion_type: intergenic/---\nNPM1--ALK\tarriba\tchr5:171391799\tchr2:29223528\t7\t0.9030899869919434\t0.35\t1.0\tposition: chr5:171391799#chr2:29223528,reading-frame: in-frame,type: translocation,split_reads1: 0,split_reads2: 5,discordant_mates: 2,coverage1: 0,coverage2: 51,confidence: high\nNPM1--ALK\tfusioncatcher\t5:171391799:+\t2:29223528:-\t6\t0.8450980400142567\t0.3\t1.0\tposition: 5:171391799:+#2:29223528:-,common_mapping_reads: 0,spanning_pairs: 3,spanning_unique_reads: 3,longest_anchor: 30,fusion_type: in-frame\nNPM1--ALK\tstarfusion\tchr5:171391799:+\tchr2:29223528:-\t7\t0.9030899869919434\t0.35\t1.0\tposition: chr5:171391799:+#chr2:29223528:-,junction_reads: 5,spanning_reads: 2,ffmp: 582.3143\nTMPRSS2--ETV1\tarriba\tchr21:41494375\tchr7:13935838\t15\t1.2041199826559246\t0.29411764705882354\t1.0\tposition: chr21:41494375#chr7:13935838,reading-frame: in-frame,type: translocation,split_reads1: 4,split_reads2: 8,discordant_mates: 3,coverage1: 8,coverage2: 115,confidence: medium\nTMPRSS2--ETV1\tfusioncatcher\t21:41494381:-\t7:13935844:-\t21\t1.3424226808222062\t0.4117647058823529\t1.0\tposition: 21:41494381:-#7:13935844:-,common_mapping_reads: 0,spanning_pairs: 10,spanning_unique_reads: 11,longest_anchor: 37,fusion_type: in-frame\nTMPRSS2--ETV1\tstarfusion\tchr21:41494375:-\tchr7:13935838:-\t15\t1.2041199826559246\t0.29411764705882354\t1.0\tposition: chr21:41494375:-#chr7:13935838:-,junction_reads: 12,spanning_reads: 3,ffmp: 1247.8164\n",
+          "id": "fusionreport_caller_evidence",
+          "mode": "detect",
+          "name": "Caller evidence",
+          "path_glob": "**/fusionreport/*/*.fusions.csv",
+          "rawYaml": "id: fusionreport_caller_evidence\nname: Caller evidence\nmode: detect\ndescription: >-\n  Long form of the per-caller evidence strings fusion-report writes next to each\n  fusion: one row per fusion and caller, with the read support that caller\n  reported normalised to a single comparable count.\nfind: { path_glob: \"**/fusionreport/*/*.fusions.csv\" }\nrecipe: fusionreport/caller_evidence.py\nfixture: caller_evidence.tsv\nrenders_as:\n  # Callers on one axis, fusions on the other: colour is how much read support the\n  # caller found, size is that caller's share of the fusion's total support.\n  - { id: evidence_dot_plot, component: advanced_viz, kind: dot_plot, roles: {cluster: caller, gene: fusion, mean_expression: log_support, frac_expressing: evidence_fraction} }\n  - { component: figure, visu_type: bar, dict_kwargs: {x: fusion, y: supporting_reads, color: caller} }\n  - { component: card, column: supporting_reads, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: fusion, aggregation: nunique, secondary_layout: top_n, breakdown_col: caller, top_n_count: 3 }\n  - { component: card, column: supporting_reads, aggregation: sum, secondary_layout: donut, breakdown_col: caller }\n  - { component: card, column: evidence_fraction, aggregation: average, secondary_layout: histogram }\n  - { component: table, row_selection_enabled: true, row_selection_column: fusion }\n",
+          "recipe": "fusionreport/caller_evidence.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "evidence_dot_plot",
+              "kind": "dot_plot",
+              "roles": {
+                "cluster": "caller",
+                "frac_expressing": "evidence_fraction",
+                "gene": "fusion",
+                "mean_expression": "log_support"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "caller",
+                "x": "fusion",
+                "y": "supporting_reads"
+              },
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "supporting_reads",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "caller",
+              "column": "fusion",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "caller",
+              "column": "supporting_reads",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "donut"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "evidence_fraction",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {},
+              "row_selection_column": "fusion",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "caller_evidence",
+          "yamlPath": "depictio/catalog/fusionreport/caller_evidence.yaml"
+        },
+        {
+          "columns": {},
+          "description": "One row per fusion call, with the knowledge bases that already know it, the Fusion Indication Index fusion-report ranks by and a 0/1 flag per caller. The caller flags are the set columns a caller-concordance UpSet reads.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/fusionreport/*/*.fusions.csv",
+            "path_glob_alt": []
+          },
+          "fixture": "fusions.tsv",
+          "fixtureContent": "fusion\tgene_5p\tgene_3p\tdatabases\tn_databases\tfii\texplained_fii\tarriba\tfusioncatcher\tstarfusion\tn_tools\ttool_support\trank\nAKAP9--BRAF\tAKAP9\tBRAF\tMitelman,FusionGDB2\t2\t1.0\t0.5 * (3 / 3) + 0.5 * (0.5 / 0.5)\t1\t1\t1\t3\t3 callers\t1\nBRD4--NUTM1\tBRD4\tNUTM1\tMitelman,FusionGDB2\t2\t1.0\t0.5 * (3 / 3) + 0.5 * (0.5 / 0.5)\t1\t1\t1\t3\t3 callers\t2\nCD74--ROS1\tCD74\tROS1\tMitelman,FusionGDB2\t2\t1.0\t0.5 * (3 / 3) + 0.5 * (0.5 / 0.5)\t1\t1\t1\t3\t3 callers\t3\nEML4--ALK\tEML4\tALK\tMitelman,FusionGDB2\t2\t1.0\t0.5 * (3 / 3) + 0.5 * (0.5 / 0.5)\t1\t1\t1\t3\t3 callers\t4\nETV6--NTRK3\tETV6\tNTRK3\tMitelman,FusionGDB2\t2\t1.0\t0.5 * (3 / 3) + 0.5 * (0.5 / 0.5)\t1\t1\t1\t3\t3 callers\t5\nEWSR1--ATF1\tEWSR1\tATF1\tMitelman,FusionGDB2\t2\t1.0\t0.5 * (3 / 3) + 0.5 * (0.5 / 0.5)\t1\t1\t1\t3\t3 callers\t6\nEWSR1--FLI1\tEWSR1\tFLI1\tMitelman,FusionGDB2\t2\t1.0\t0.5 * (3 / 3) + 0.5 * (0.5 / 0.5)\t1\t1\t1\t3\t3 callers\t7\nFGFR3--TACC3\tFGFR3\tTACC3\tMitelman,FusionGDB2\t2\t1.0\t0.5 * (3 / 3) + 0.5 * (0.5 / 0.5)\t1\t1\t1\t3\t3 callers\t8\nFIP1L1--PDGFRA\tFIP1L1\tPDGFRA\tMitelman,FusionGDB2\t2\t1.0\t0.5 * (3 / 3) + 0.5 * (0.5 / 0.5)\t1\t1\t1\t3\t3 callers\t9\nHOOK3--RET\tHOOK3\tRET\tMitelman,FusionGDB2\t2\t1.0\t0.5 * (3 / 3) + 0.5 * (0.5 / 0.5)\t1\t1\t1\t3\t3 callers\t10\nNPM1--ALK\tNPM1\tALK\tMitelman,FusionGDB2\t2\t1.0\t0.5 * (3 / 3) + 0.5 * (0.5 / 0.5)\t1\t1\t1\t3\t3 callers\t11\nTMPRSS2--ETV1\tTMPRSS2\tETV1\tMitelman,FusionGDB2\t2\t1.0\t0.5 * (3 / 3) + 0.5 * (0.5 / 0.5)\t1\t1\t1\t3\t3 callers\t12\nGOPC--ROS1\tGOPC\tROS1\tMitelman\t1\t0.833\t0.5 * (2 / 3) + 0.5 * (0.5 / 0.5)\t1\t1\t0\t2\t2 callers\t13\nCIC--DUX4\tCIC\tDUX4\tMitelman\t1\t0.667\t0.5 * (1 / 3) + 0.5 * (0.5 / 0.5)\t0\t1\t0\t1\t1 caller\t14\nCIC--DUX4L8\tCIC\tDUX4L8\t\"\"\t0\t0.167\t0.5 * (1 / 3) + 0.5 * (0 / 0.5)\t1\t0\t0\t1\t1 caller\t15\nDUX4--IGH@\tDUX4\tIGH@\t\"\"\t0\t0.167\t0.5 * (1 / 3) + 0.5 * (0 / 0.5)\t0\t1\t0\t1\t1 caller\t16\nIGH-@-ext--CRLF2\tIGH-@-ext\tCRLF2\t\"\"\t0\t0.167\t0.5 * (1 / 3) + 0.5 * (0 / 0.5)\t0\t0\t1\t1\t1 caller\t17\nIGH@--CRLF2\tIGH@\tCRLF2\t\"\"\t0\t0.167\t0.5 * (1 / 3) + 0.5 * (0 / 0.5)\t0\t1\t0\t1\t1 caller\t18\nMALT1--IGH-@-ext\tMALT1\tIGH-@-ext\t\"\"\t0\t0.167\t0.5 * (1 / 3) + 0.5 * (0 / 0.5)\t0\t0\t1\t1\t1 caller\t19\nMALT1--IGH@\tMALT1\tIGH@\t\"\"\t0\t0.167\t0.5 * (1 / 3) + 0.5 * (0 / 0.5)\t0\t1\t0\t1\t1 caller\t20\n",
+          "id": "fusionreport_fusions",
+          "mode": "detect",
+          "name": "Fusion consensus",
+          "path_glob": "**/fusionreport/*/*.fusions.csv",
+          "rawYaml": "id: fusionreport_fusions\nname: Fusion consensus\nmode: detect\ndescription: >-\n  One row per fusion call, with the knowledge bases that already know it, the\n  Fusion Indication Index fusion-report ranks by and a 0/1 flag per caller. The\n  caller flags are the set columns a caller-concordance UpSet reads.\nfind: { path_glob: \"**/fusionreport/*/*.fusions.csv\" }\nrecipe: fusionreport/fusions.py\nfixture: fusions.tsv\nrenders_as:\n  # The three caller flags are the only binary columns in the table, so the\n  # renderer picks exactly the caller sets on its own.\n  - { id: caller_upset, component: advanced_viz, kind: upset_plot }\n  # Rank is the position in fusion-report's own FII ordering, so the lollipop\n  # reads as a ranked list of the run's fusions.\n  - { id: fii_lollipop, component: advanced_viz, kind: lollipop, roles: {feature_id: fusion, position: rank, category: tool_support} }\n  - { component: figure, visu_type: bar, dict_kwargs: {x: fusion, y: fii, color: tool_support} }\n  - { component: card, column: fii, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: fusion, aggregation: nunique, secondary_layout: top_n, breakdown_col: tool_support, top_n_count: 3 }\n  - { component: card, column: n_tools, aggregation: average, secondary_layout: donut, breakdown_col: tool_support }\n  - { component: card, column: n_databases, aggregation: average, secondary_layout: histogram }\n  - { component: table, row_selection_enabled: true, row_selection_column: fusion }\n",
+          "recipe": "fusionreport/fusions.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "caller_upset",
+              "kind": "upset_plot",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "fii_lollipop",
+              "kind": "lollipop",
+              "roles": {
+                "category": "tool_support",
+                "feature_id": "fusion",
+                "position": "rank"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "tool_support",
+                "x": "fusion",
+                "y": "fii"
+              },
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "fii",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "tool_support",
+              "column": "fusion",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "tool_support",
+              "column": "n_tools",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "donut"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "n_databases",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {},
+              "row_selection_column": "fusion",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "fusions",
+          "yamlPath": "depictio/catalog/fusionreport/fusions.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": null,
+      "description": "",
       "dir": "depictio/catalog/hamronization",
       "homepage": null,
       "id": "hamronization",
@@ -2747,6 +3637,40 @@
         },
         {
           "columns": {},
+          "description": "Library-level alignment metrics (duplication, insert-size distribution, where the bases land across transcript regions and along the gene body) from Picard, via MultiQC.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+            "path_glob_alt": [
+              "**/multiqc/*_data/multiqc.parquet",
+              "**/multiqc/*/*_data/multiqc.parquet"
+            ]
+          },
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixtureContent": null,
+          "id": "multiqc_picard",
+          "mode": "picard",
+          "name": "Library and transcript metrics",
+          "origin_tool": "Picard",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_picard\nname: Library and transcript metrics\norigin_tool: Picard\nmode: picard\ndescription: Library-level alignment metrics (duplication, insert-size distribution, where the bases land across transcript regions and along the gene body) from Picard, via MultiQC.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: picard }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "picard"
+            }
+          ],
+          "slug": "picard",
+          "yamlPath": "depictio/catalog/multiqc/picard.yaml"
+        },
+        {
+          "columns": {},
           "description": "Genome-assembly quality metrics (contig counts, lengths) \u2014 QUAST, surfaced via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -2880,6 +3804,40 @@
           ],
           "slug": "sompy",
           "yamlPath": "depictio/catalog/multiqc/sompy.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Splice-aware read alignment summary (uniquely mapped, multi-mapped and unmapped fractions, plus the per-gene count assignment) from STAR, via MultiQC.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+            "path_glob_alt": [
+              "**/multiqc/*_data/multiqc.parquet",
+              "**/multiqc/*/*_data/multiqc.parquet"
+            ]
+          },
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixtureContent": null,
+          "id": "multiqc_star",
+          "mode": "star",
+          "name": "Splice-aware alignment summary",
+          "origin_tool": "STAR",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_star\nname: Splice-aware alignment summary\norigin_tool: STAR\nmode: star\ndescription: Splice-aware read alignment summary (uniquely mapped, multi-mapped and unmapped fractions, plus the per-gene count assignment) from STAR, via MultiQC.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: star }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "star"
+            }
+          ],
+          "slug": "star",
+          "yamlPath": "depictio/catalog/multiqc/star.yaml"
         },
         {
           "columns": {},
@@ -4070,6 +5028,126 @@
           ],
           "slug": "summary",
           "yamlPath": "depictio/catalog/sompy/summary.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": null,
+      "description": "",
+      "dir": "depictio/catalog/starfusion",
+      "homepage": null,
+      "id": "starfusion",
+      "name": "STAR-Fusion",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/starfusion/detect",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "Fusion predictions from the abridged STAR-Fusion table, one row per call. The recipe strips the Ensembl id off each partner gene, sums junction reads and spanning fragments into one evidence count, and derives a log-scaled FFPM plus the fraction of the evidence that crosses the junction itself.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "filename": "*.starfusion.abridged.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "fusions.tsv",
+          "fixtureContent": "fusion\tgene_5p\tgene_3p\tbreakpoint_5p\tbreakpoint_3p\tsplice_type\tjunction_reads\tspanning_frags\tsupporting_reads\tffpm\tlog_ffpm\tjunction_fraction\tlarge_anchor_support\tannotations\nFGFR3--TACC3\tFGFR3\tTACC3\tchr4:1806934:+\tchr4:1727977:+\tINCL_NON_REF_SPLICE\t253\t543\t796\t66217.4528\t4.820979029205654\t0.3178391959798995\tYES_LDAS\t\"[\"\"FGFR3:Oncogene\"\",\"\"FGFR3:ArcherDX_panel\"\",\"\"FGFR3:FoundationOne_panel\"\",\"\"FGFR3:OncomapV4_panel\"\",\"\"FGFR3:OncocartaV1_panel\"\"];[\"\"TACC3:Oncogene\"\"];[\"\"ChimerKB\"\",\"\"ChimerSeq\"\",\"\"TCGA_StarF2019\"\",\"\"CCLE_StarF2019\"\",\"\"YOSHIHARA_TCGA\"\",\"\"Klijn_CellLines\"\",\"\"DEEPEST2019\"\",\"\"GUO2018CR_TCGA\"\",\"\"ChimerPub\"\",\"\"TumorFusionsNAR2018\"\",\"\"Cosmic\"\"];INTRACHROMOSOMAL[chr4:0.05Mb];LOCAL_REARRANGEMENT:+:[48122]\"\nFIP1L1--PDGFRA\tFIP1L1\tPDGFRA\tchr4:53425965:+\tchr4:54274925:+\tINCL_NON_REF_SPLICE\t101\t13\t114\t9483.404\t3.977010045014477\t0.8859649122807017\tYES_LDAS\t\"[\"\"FIP1L1:Oncogene\"\"];[\"\"PDGFRA:FoundationOne_panel\"\",\"\"PDGFRA:ArcherDX_panel\"\",\"\"PDGFRA:Oncogene\"\",\"\"PDGFRA:OncomapV4_panel\"\"];[\"\"Mitelman\"\",\"\"ChimerKB\"\",\"\"chimerdb_pubmed\"\",\"\"ConjoinG\"\",\"\"ChimerSeq\"\"];INTRACHROMOSOMAL[chr4:0.76Mb]\"\nHOOK3--RET\tHOOK3\tRET\tchr8:42968214:+\tchr10:43116584:+\tONLY_REF_SPLICE\t12\t2\t14\t1164.6286\t3.066560194792992\t0.8571428571428571\tYES_LDAS\t\"[\"\"HOOK3:Oncogene\"\"];[\"\"RET:FoundationOne_panel\"\",\"\"RET:OncomapV4_panel\"\",\"\"RET:Oncogene\"\",\"\"RET:ArcherDX_panel\"\",\"\"RET:OncocartaV1_panel\"\"];[\"\"ChimerKB\"\",\"\"HaasMedCancer\"\",\"\"Cosmic\"\",\"\"ChimerSeq\"\"];INTERCHROMOSOMAL[chr8--chr10]\"\nTMPRSS2--ETV1\tTMPRSS2\tETV1\tchr21:41494375:-\tchr7:13935838:-\tINCL_NON_REF_SPLICE\t12\t3\t15\t1247.8164\t3.096498593435795\t0.8\tYES_LDAS\t\"[\"\"TMPRSS2:FoundationOne_panel\"\",\"\"TMPRSS2:Oncogene\"\",\"\"TMPRSS2:ArcherDX_panel\"\"];[\"\"ETV1:FoundationOne_panel\"\",\"\"ETV1:ArcherDX_panel\"\",\"\"ETV1:Oncogene\"\"];[\"\"ChimerKB\"\",\"\"ChimerSeq\"\",\"\"TCGA_StarF2019\"\",\"\"DEEPEST2019\"\",\"\"chimerdb_pubmed\"\",\"\"ChimerPub\"\",\"\"TumorFusionsNAR2018\"\",\"\"Cosmic\"\"];INTERCHROMOSOMAL[chr21--chr7]\"\nETV6--NTRK3\tETV6\tNTRK3\tchr12:11869969:+\tchr15:87940753:-\tONLY_REF_SPLICE\t11\t4\t15\t1247.8163\t3.0964985586593063\t0.7333333333333333\tYES_LDAS\t\"[\"\"ETV6:FoundationOne_panel\"\",\"\"ETV6:Oncogene\"\",\"\"ETV6:ArcherDX_panel\"\"];[\"\"NTRK3:Oncogene\"\",\"\"NTRK3:ArcherDX_panel\"\",\"\"NTRK3:FoundationOne_panel\"\"];[\"\"ChimerKB\"\",\"\"Larsson_TCGA\"\",\"\"ChimerSeq\"\",\"\"TCGA_StarF2019\"\",\"\"YOSHIHARA_TCGA\"\",\"\"HaasMedCancer\"\",\"\"chimerdb_pubmed\"\",\"\"chimerdb_omim\"\",\"\"DEEPEST2019\"\",\"\"GUO2018CR_TCGA\"\",\"\"ChimerPub\"\",\"\"TumorFusionsNAR2018\"\",\"\"Cosmic\"\"];INTERCHROMOSOMAL[chr12--chr15]\"\nAKAP9--BRAF\tAKAP9\tBRAF\tchr7:92003235:+\tchr7:140787584:-\tONLY_REF_SPLICE\t9\t5\t14\t1164.6286\t3.066560194792992\t0.6428571428571429\tYES_LDAS\t\"[\"\"AKAP9:Oncogene\"\"];[\"\"BRAF:Oncogene\"\",\"\"BRAF:FoundationOne_panel\"\",\"\"BRAF:ArcherDX_panel\"\",\"\"BRAF:OncocartaV1_panel\"\",\"\"BRAF:OncomapV4_panel\"\"];[\"\"ChimerKB\"\",\"\"HaasMedCancer\"\",\"\"chimerdb_pubmed\"\",\"\"ChimerPub\"\",\"\"Cosmic\"\",\"\"ChimerSeq\"\"];INTRACHROMOSOMAL[chr7:48.61Mb]\"\nEWSR1--ATF1\tEWSR1\tATF1\tchr22:29287134:+\tchr12:50814280:+\tONLY_REF_SPLICE\t8\t4\t12\t998.253\t2.9996754607915266\t0.6666666666666666\tYES_LDAS\t\"[\"\"EWSR1:Oncogene\"\"];[\"\"ATF1:Oncogene\"\"];[\"\"Mitelman\"\",\"\"ChimerKB\"\",\"\"ChimerPub\"\",\"\"Cosmic\"\",\"\"ChimerSeq\"\"];INTERCHROMOSOMAL[chr22--chr12]\"\nCD74--ROS1\tCD74\tROS1\tchr5:150404680:-\tchr6:117324415:-\tONLY_REF_SPLICE\t7\t0\t7\t582.3143\t2.765902623326923\t1.0\tYES_LDAS\t\"[\"\"CD74:Oncogene\"\"];[\"\"ROS1:Oncogene\"\",\"\"ROS1:FoundationOne_panel\"\",\"\"ROS1:ArcherDX_panel\"\"];[\"\"ChimerKB\"\",\"\"ChimerSeq\"\",\"\"TCGA_StarF2019\"\",\"\"Klijn_CellLines\"\",\"\"chimerdb_pubmed\"\",\"\"DEEPEST2019\"\",\"\"GUO2018CR_TCGA\"\",\"\"ChimerPub\"\",\"\"TumorFusionsNAR2018\"\",\"\"Cosmic\"\"];INTERCHROMOSOMAL[chr5--chr6]\"\nBRD4--NUTM1\tBRD4\tNUTM1\tchr19:15254152:-\tchr15:34347969:+\tONLY_REF_SPLICE\t7\t2\t9\t748.6898\t2.874881602037455\t0.7777777777777778\tYES_LDAS\t\"[\"\"BRD4:Oncogene\"\",\"\"BRD4:FoundationOne_panel\"\",\"\"BRD4:ArcherDX_panel\"\"];[\"\"NUTM1:Oncogene\"\"];[\"\"ChimerKB\"\",\"\"HaasMedCancer\"\",\"\"Cosmic\"\",\"\"ChimerSeq\"\",\"\"CCLE_StarF2019\"\"];INTERCHROMOSOMAL[chr19--chr15]\"\nEWSR1--FLI1\tEWSR1\tFLI1\tchr22:29287134:+\tchr11:128807180:+\tONLY_REF_SPLICE\t6\t3\t9\t748.6898\t2.874881602037455\t0.6666666666666666\tYES_LDAS\t\"[\"\"EWSR1:Oncogene\"\"];[\"\"FLI1:Oncogene\"\"];[\"\"Mitelman\"\",\"\"ChimerKB\"\",\"\"Klijn_CellLines\"\",\"\"ChimerPub\"\",\"\"Cosmic\"\",\"\"ChimerSeq\"\",\"\"CCLE_StarF2019\"\"];INTERCHROMOSOMAL[chr22--chr11]\"\nNPM1--ALK\tNPM1\tALK\tchr5:171391799:+\tchr2:29223528:-\tONLY_REF_SPLICE\t5\t2\t7\t582.3143\t2.765902623326923\t0.7142857142857143\tYES_LDAS\t\"[\"\"NPM1:Oncogene\"\",\"\"NPM1:OncomapV4_panel\"\",\"\"NPM1:ArcherDX_panel\"\",\"\"NPM1:FoundationOne_panel\"\"];[\"\"ALK:Oncogene\"\",\"\"ALK:FoundationOne_panel\"\",\"\"ALK:ArcherDX_panel\"\"];[\"\"Mitelman\"\",\"\"ChimerKB\"\",\"\"ChimerSeq\"\",\"\"CCLE_StarF2019\"\",\"\"Klijn_CellLines\"\",\"\"chimerdb_omim\"\",\"\"chimerdb_pubmed\"\",\"\"ChimerPub\"\",\"\"Cosmic\"\"];INTERCHROMOSOMAL[chr5--chr2]\"\nEML4--ALK\tEML4\tALK\tchr2:42301394:+\tchr2:29223584:-\tINCL_NON_REF_SPLICE\t5\t3\t8\t665.5021\t2.8238015221174324\t0.625\tYES_LDAS\t\"[\"\"EML4:Oncogene\"\"];[\"\"ALK:Oncogene\"\",\"\"ALK:FoundationOne_panel\"\",\"\"ALK:ArcherDX_panel\"\"];[\"\"ChimerKB\"\",\"\"ChimerSeq\"\",\"\"TCGA_StarF2019\"\",\"\"CCLE_StarF2019\"\",\"\"YOSHIHARA_TCGA\"\",\"\"HaasMedCancer\"\",\"\"Klijn_CellLines\"\",\"\"chimerdb_pubmed\"\",\"\"DEEPEST2019\"\",\"\"GUO2018CR_TCGA\"\",\"\"ChimerPub\"\",\"\"TumorFusionsNAR2018\"\",\"\"Cosmic\"\"];INTRACHROMOSOMAL[chr2:12.25Mb]\"\nMALT1--IGH-@-ext\tMALT1\tIGH-@-ext\tchr18:58669909:+\tchr14:105888559:+\tINCL_NON_REF_SPLICE\t3\t3\t6\t499.1266\t2.6990799537798242\t0.5\tYES_LDAS\t\"[\"\"MALT1:Oncogene\"\"];INTERCHROMOSOMAL[chr18--chr14]\"\nIGH-@-ext--CRLF2\tIGH-@-ext\tCRLF2\tchr14:105863255\tchrY:1228636\tNO_JUNCTION_READS_IDENTIFIED\t0\t7\t7\t291.1571\t2.4656164449962903\t0.0\tNO_LDAS\t\"[\"\"CRLF2:ArcherDX_panel\"\",\"\"CRLF2:FoundationOne_panel\"\",\"\"CRLF2:Oncogene\"\"];INTERCHROMOSOMAL[chr14--chrX]\"\nIGH-@-ext--CRLF2\tIGH-@-ext\tCRLF2\tchr14:105863255\tchrX:1228636\tNO_JUNCTION_READS_IDENTIFIED\t0\t7\t7\t291.1571\t2.4656164449962903\t0.0\tNO_LDAS\t\"[\"\"CRLF2:ArcherDX_panel\"\",\"\"CRLF2:FoundationOne_panel\"\",\"\"CRLF2:Oncogene\"\"];INTERCHROMOSOMAL[chr14--chrX]\"\n",
+          "id": "starfusion_fusions",
+          "mode": "fusion-detection",
+          "name": "STAR-Fusion calls",
+          "path_glob": null,
+          "rawYaml": "id: starfusion_fusions\nname: STAR-Fusion calls\nmode: fusion-detection\ndescription: >-\n  Fusion predictions from the abridged STAR-Fusion table, one row per call. The\n  recipe strips the Ensembl id off each partner gene, sums junction reads and\n  spanning fragments into one evidence count, and derives a log-scaled FFPM plus\n  the fraction of the evidence that crosses the junction itself.\nfind: { filename: \"*.starfusion.abridged.tsv\" }\nrecipe: starfusion/fusions.py\nfixture: fusions.tsv\nrenders_as:\n  - { id: evidence_dot_plot, component: advanced_viz, kind: dot_plot, roles: {cluster: splice_type, gene: fusion, mean_expression: log_ffpm, frac_expressing: junction_fraction} }\n  - { component: figure, visu_type: bar, dict_kwargs: {x: splice_type, y: supporting_reads, color: large_anchor_support} }\n  - { component: card, column: ffpm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: fusion, aggregation: nunique, secondary_layout: top_n, breakdown_col: splice_type, top_n_count: 3 }\n  - { component: card, column: supporting_reads, aggregation: sum, secondary_layout: donut, breakdown_col: large_anchor_support }\n  - { component: card, column: junction_fraction, aggregation: average, secondary_layout: histogram }\n  - { component: table, row_selection_enabled: true, row_selection_column: fusion }\n",
+          "recipe": "starfusion/fusions.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "evidence_dot_plot",
+              "kind": "dot_plot",
+              "roles": {
+                "cluster": "splice_type",
+                "frac_expressing": "junction_fraction",
+                "gene": "fusion",
+                "mean_expression": "log_ffpm"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "large_anchor_support",
+                "x": "splice_type",
+                "y": "supporting_reads"
+              },
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "ffpm",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "splice_type",
+              "column": "fusion",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "large_anchor_support",
+              "column": "supporting_reads",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "donut"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "junction_fraction",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {},
+              "row_selection_column": "fusion",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "fusions",
+          "yamlPath": "depictio/catalog/starfusion/fusions.yaml"
         }
       ]
     },

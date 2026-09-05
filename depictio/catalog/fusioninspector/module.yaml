@@ -1,0 +1,6 @@
+# FusionInspector — multi-output tool → a folder. module.yaml holds the tool
+# identity only; each sibling *.yaml is one output (validated fusions, and the
+# Pfam domains of the fused proteins unpivoted into one row per domain).
+id: fusioninspector
+name: FusionInspector
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/fusioninspector
