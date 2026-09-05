@@ -185,6 +185,38 @@ outputs are 2.8 GB against 6.5 MB of aggregated reports. Every template in this 
 binds the aggregated report and leaves the per-sample corpus alone, which is why
 airrflow's V-to-J pairing and rnafusion's per-read evidence are unbound.
 
+## 13. A stale API catalog cache corrupts imports silently
+
+`load_catalog_entries()` is `@lru_cache(maxsize=1)` and nothing in the shipped code
+ever calls `cache_clear()`. The API process answers from whatever `depictio/catalog/`
+held the first time it was asked, so a tool added while the stack runs stays invisible
+until the container restarts.
+
+The damage is not confined to lookups. When the API cannot expand a `use:` handle the
+component does not raise, it degrades to a raw dict: `viz_kind` and `catalog_source`
+are stored as null, the inherited role bindings and config defaults are lost, and the
+import still reports success. `AdvancedVizDispatch.tsx` dispatches on `viz_kind`, so
+the viewer renders `Unknown advanced viz kind: ""` for a dashboard that every
+CLI-side check passed.
+
+The split across this branch is exactly whether the tool folder existed at API start:
+
+| project | advanced_viz tiles with a resolved kind |
+|---|---|
+| ampliseq, viralrecon, funcscan, airrflow, differentialabundance | all of them |
+| chipseq | 4 of 7 |
+| rnafusion | 0 of 9 |
+| taxprofiler | 0 of 8 |
+| rnaseq | 0 of 2 |
+
+Two probe imports through the same endpoint isolate it: `fusionreport/caller_upset`
+stores null, `hamronization/arg_upset` stores `upset_plot` with a 14-key config.
+
+Recovering needs a container restart AND a re-ingest, because the null is persisted;
+restarting alone leaves the stored dashboards broken. Declaring a redundant `viz_kind:`
+in the YAML would hide the symptom while still losing the config defaults and the
+catalog badge, so no template in this lot does that.
+
 ## Pipelines considered and not templated in this lot
 
 | pipeline | why not |
