@@ -1,0 +1,15 @@
+id: enchantr_threshold_summary
+name: Clonal distance threshold
+mode: find-threshold/summary
+description: >-
+  The nearest-neighbour distance model shazam fitted per subject and the
+  threshold it chose to separate clonally related from unrelated sequences,
+  with the sensitivity and specificity that threshold achieves.
+find: { path_glob: "**/find_threshold/*_dist_report/tables/*threshold-summary.tsv" }
+recipe: enchantr/threshold_summary.py
+fixture: threshold_summary.tsv
+renders_as:
+  - { component: card, column: threshold, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: sensitivity, aggregation: median, secondary_layout: gauge, coverage_max: 1 }
+  - { component: card, column: specificity, aggregation: median, secondary_layout: threshold, threshold_value: 0.95, threshold_direction: min, threshold_warn: 0.9 }
+  - { component: table }
