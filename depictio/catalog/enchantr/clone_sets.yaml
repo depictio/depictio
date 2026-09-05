@@ -1,0 +1,16 @@
+id: enchantr_clone_sets
+name: Shared clone sets
+mode: repertoire-analysis/clone-sets
+description: >-
+  Clone by sample presence matrix. Each row is one clone of one subject and each
+  sample column is a 0/1 membership flag, so an UpSet reads the intersections as
+  clones shared by exactly those samples.
+find: { path_glob: "**/repertoire_analysis_report/tables/clone_sizes_table.tsv" }
+recipe: enchantr/clone_sets.py
+fixture: clone_sets.tsv
+renders_as:
+  - id: shared_clones_upset
+    component: advanced_viz
+    kind: upset_plot
+  - { component: card, column: n_samples, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

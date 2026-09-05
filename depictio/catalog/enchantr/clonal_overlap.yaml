@@ -1,0 +1,16 @@
+id: enchantr_clonal_overlap
+name: Clonal overlap matrix
+mode: repertoire-analysis/overlap
+description: >-
+  Sample by sample matrix of how many clones two samples share. Clones are
+  defined within a subject, so samples of different subjects always read zero;
+  the diagonal is zeroed so the colour scale spans the real sharing.
+find: { path_glob: "**/repertoire_analysis_report/tables/clonal_overlap.tsv" }
+recipe: enchantr/clonal_overlap.py
+fixture: clonal_overlap.tsv
+renders_as:
+  - id: overlap_heatmap
+    component: advanced_viz
+    kind: complex_heatmap
+    roles: { index: sample_id }
+  - { component: table }

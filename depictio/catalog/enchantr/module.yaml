@@ -1,0 +1,22 @@
+# enchantR: multi-output tool → a folder. module.yaml holds the tool fields;
+# each sibling *.yaml is one output.
+#
+# enchantR is the Immcantation R package nf-core/airrflow runs for clonal
+# assignment, threshold finding and the repertoire analysis report. It has NO
+# nf-core module (airrflow calls it from its own local modules), so identity is
+# declared in full here rather than derived from a meta.yml. The same
+# documented exception as QIIME 2.
+#
+# Two of the outputs (v_gene_usage, v_gene_matrix) are written by airrflow's own
+# repertoire_comparison Rmd rather than by enchantR itself; they carry
+# `origin_tool: alakazam`, the library that computes them.
+id: enchantr
+name: enchantR
+description: >-
+  Immcantation R package that drives nf-core/airrflow's adaptive immune receptor
+  repertoire (AIRR) analysis: clonal assignment, nearest-neighbour distance
+  threshold finding, and the clonal diversity / abundance / overlap report.
+homepage: https://immcantation.readthedocs.io
+edam_topics:
+  - http://edamontology.org/topic_0804 # Immunology
+  - http://edamontology.org/topic_2830 # Immunoproteins, genes and antigens
