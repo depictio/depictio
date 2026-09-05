@@ -21,6 +21,10 @@ validated against (see `MEGATEST_STATUS.md` for the survey behind them):
 - `**MultiQC:** run wrote <version> -> used as-is` or
   `**MultiQC:** run wrote <version> -> reprocessed with 1.35`.
 
+The viralrecon 3.0.0 and ampliseq 2.16.0 sections predate this convention and document
+runs executed on the EMBL cluster rather than a megatest, so they carry only the pinned
+MultiQC version. Their megatest status is in `MEGATEST_STATUS.md`.
+
 MultiQC floor: depictio reads only `multiqc.parquet`, the MultiQC >= 1.31 name
 (1.30 wrote `BETA-multiqc.parquet`, older releases wrote no parquet at all). The
 template's MultiQC scan regex is the only gate, so a run from an older MultiQC
