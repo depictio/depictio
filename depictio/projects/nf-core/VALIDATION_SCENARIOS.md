@@ -6,6 +6,31 @@ executed on the EMBL cluster for this branch.
 Derived analytically from template YAML data collections and pipeline option space.
 Priority order at the bottom.
 
+## Conventions
+
+Each pipeline section opens with two header lines that pin what the template was
+validated against (see `MEGATEST_STATUS.md` for the survey behind them):
+
+- `**Megatest:** <prefix> (tag <tag>, run_root <root>, manifest megatest.yaml)`
+  where `<prefix>` is `s3://nf-core-awsmegatests/<pipeline>/results-<tag_sha>/`
+  (`tag_sha` of the release in <https://nf-co.re/pipelines.json>), `<root>` is the
+  sub-directory used as `DATA_ROOT` (`.` when it is the prefix root, e.g. rnaseq
+  `aligner_star_salmon/`), and the manifest is
+  `depictio/projects/nf-core/<pipeline>/<version>/megatest.yaml`, fetched with
+  `python scripts/nfcore_megatest.py fetch --pipeline <pipeline> --version <version>`.
+- `**MultiQC:** run wrote <version> -> used as-is` or
+  `**MultiQC:** run wrote <version> -> reprocessed with 1.35`.
+
+MultiQC floor: depictio reads only `multiqc.parquet`, the MultiQC >= 1.31 name
+(1.30 wrote `BETA-multiqc.parquet`, older releases wrote no parquet at all). The
+template's MultiQC scan regex is the only gate, so a run from an older MultiQC
+surfaces as a missing `multiqc_data` DC and must be reprocessed with the pinned
+MultiQC 1.35 (`multiqc.reprocess: true` in the manifest) before the template can
+be validated against it. The shipped templates were validated against MultiQC 1.31
+(viralrecon 3.0.0), 1.33 (ampliseq 2.16.0 and 2.17.0) and 1.34 (ampliseq 2.18.0);
+the 1.35 reader accepts all of them, but column and schema uniformity is only
+checked per data collection, never across pipelines.
+
 ---
 
 ## viralrecon 3.0.0
@@ -100,9 +125,3 @@ In order of value-per-effort:
 3. **A4** — ampliseq, 16S-multi + ANCOM-BC: validates full 6-dashboard path; needs metadata TSV
 4. **S1** — viralrecon, skip-kraken2: tests optional module absence in MultiQC parquet; one flag
 5. **A3** — ampliseq, Greengenes2: stresses taxonomy string parsing; one flag
-
-## MultiQC version compatibility note
-
-viralrecon 3.0.0 ships MultiQC **1.31**; ampliseq 2.16.0 and 2.17.0 ship **1.33**; ampliseq 2.18.0 ships **1.34**.
-If a depictio template reads MultiQC parquet, verify that column names and schema are
-stable across those two minor versions before assuming cross-pipeline portability.
