@@ -1,0 +1,24 @@
+id: seacr_consensus_peaks
+name: Consensus peak overlap
+mode: peaks/consensus
+description: >-
+  Merged consensus intervals per target against the replicates that called a
+  peak on them, as one 0/1 column per replicate. The intersections say how
+  reproducible the peak set is between replicates.
+# The CUT&RUN-family pipelines write this table for whichever caller ran; the
+# member file names carry both the replicate and the caller, which is where the
+# `caller` column and the set columns come from.
+find:
+  path_glob: "**/*.consensus.peak_counts.bed"
+recipe: seacr/consensus_peaks.py
+fixture: consensus_peaks.tsv
+renders_as:
+  # The renderer enumerates the binary replicate columns itself, so the upset
+  # render binds no role.
+  - { id: seacr_consensus_upset, component: advanced_viz, kind: upset_plot }
+  - { id: seacr_consensus_width_hist, component: figure, visu_type: histogram, dict_kwargs: {x: width, color: support, title: Consensus interval width by replicate support} }
+  - { component: card, column: peak_id, aggregation: count, secondary_layout: top_n, breakdown_col: target, top_n_count: 3 }
+  - { component: card, column: num_samples, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: support, aggregation: count, secondary_layout: donut, breakdown_col: support }
+  - { component: card, column: total_signal, aggregation: average, secondary_layout: histogram }
+  - { component: table, row_selection_enabled: true, row_selection_column: peak_id }
