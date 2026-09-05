@@ -119,6 +119,60 @@ def kraken(sample: str) -> dict[str, str]:
     return {f"{sample}.kraken2.report.txt": body}
 
 
+def ataqv(sample: str) -> dict[str, str]:
+    """`ataqv` writes one JSON per library, a list holding a single record.
+
+    MultiQC keys on the literal `ataqv_version` inside the first 10 lines, so the
+    file has to be indented rather than compact. The module reads the sample name
+    out of `metrics.name`, not out of the filename, and every key touched below is
+    read unconditionally by its parser: a missing one drops the whole file with a
+    logged error rather than a partial report.
+    """
+    paired = _vary(sample, 800_000, 1_200_000)
+    hqaa = int(paired * 0.72)
+    # A real ladder: nucleosome-free peak near 50 bp, mononucleosome near 190 bp.
+    fld = []
+    for length in range(0, 501):
+        free = 40_000 * 2.718281828 ** (-(((length - 50) / 45.0) ** 2))
+        mono = 18_000 * 2.718281828 ** (-(((length - 190) / 55.0) ** 2))
+        fld.append([length, int(free + mono) + 1, 0.0])
+    # MAPQ piles up at 0 (multi-mapped) and at 60 (uniquely mapped).
+    mapq = [[q, int(3_000 + 40_000 * (q >= 55) + 20_000 * (q == 0))] for q in range(0, 61)]
+    chroms = [[f"chr{n}", _vary(sample, 100_000, 400_000) // max(1, n)] for n in range(1, 23)] + [
+        ["chrX", _vary(sample, 40_000, 90_000)],
+        ["chrM", _vary(sample, 5_000, 60_000)],
+    ]
+    # Both percentile curves are cumulative and must end at 1.0.
+    steepness = _vary(sample, 12, 30) / 10.0
+    hqaa_curve = [round(1.0 - (1.0 - p / 100.0) ** steepness, 6) for p in range(1, 101)]
+    territory_curve = [round(p / 100.0, 6) for p in range(1, 101)]
+    record = {
+        "ataqv_version": "1.1.1",
+        "metrics": {
+            "name": sample,
+            "tss_enrichment": _vary(sample, 30, 90) / 10.0,
+            "hqaa": hqaa,
+            "paired_reads": paired,
+            "duplicate_fraction_in_peaks": _vary(sample, 80, 220) / 1000.0,
+            "duplicate_fraction_not_in_peaks": _vary(sample, 60, 180) / 1000.0,
+            "mean_mapq": _vary(sample, 480, 570) / 10.0,
+            "median_mapq": 60.0,
+            "hqaa_mononucleosomal_count": int(hqaa * 0.14),
+            "hqaa_tf_count": int(hqaa * 0.23),
+            "max_fraction_reads_from_single_autosome": _vary(sample, 60, 120) / 1000.0,
+            "peak_percentiles": {
+                "cumulative_fraction_of_hqaa": hqaa_curve,
+                "cumulative_fraction_of_territory": territory_curve,
+            },
+            "mapq_counts": mapq,
+            "chromosome_counts": chroms,
+            "fragment_length_counts": fld,
+        },
+        "timestamp": "2024-01-01T00:00:00Z",
+    }
+    return {f"{sample}.ataqv.json": json.dumps([record], indent=2) + "\n"}
+
+
 def bcftools(sample: str) -> dict[str, str]:
     snps = _vary(sample, 120, 260)
     indels = _vary(sample, 8, 30)
@@ -1196,6 +1250,7 @@ def preseq(sample: str) -> dict[str, str]:
 
 
 STUB_BUILDERS = {
+    "ataqv": ataqv,
     "bcftools": bcftools,
     "bowtie2": bowtie2,
     "bracken": bracken,

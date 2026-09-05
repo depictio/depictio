@@ -1,0 +1,18 @@
+id: ataqv_chromosome_counts
+name: Reads per reference sequence
+mode: qc/read_distribution
+description: >-
+  How each library's reads are spread over the reference sequences ataqv
+  counted. One sequence carrying a disproportionate share, or a library whose
+  profile does not match its peers, shows up here before any peak is called.
+find:
+  path_glob: "**/*.ataqv.json"
+recipe: ataqv/chromosome_counts.py
+fixture: chromosome_counts.tsv
+renders_as:
+  - { id: read_distribution, component: advanced_viz, kind: dot_plot, roles: {cluster: sample, gene: chromosome, mean_expression: log10_read_count, frac_expressing: fraction_of_reads} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: chromosome, y: fraction_of_reads, color: sample, title: Share of reads per reference sequence} }
+  - { component: card, column: read_count, aggregation: sum, secondary_layout: top_n, breakdown_col: chromosome, top_n_count: 3 }
+  - { component: card, column: fraction_of_reads, aggregation: max, secondary_layout: threshold, threshold_value: 0.12, threshold_direction: max, threshold_warn: 0.1 }
+  - { component: card, column: fraction_of_reads, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }
