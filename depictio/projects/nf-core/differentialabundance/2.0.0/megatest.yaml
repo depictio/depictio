@@ -1,0 +1,80 @@
+# Megatest manifest for nf-core/differentialabundance 2.0.0 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the tables-only
+# subset of it that the template recipes need. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline differentialabundance --version 2.0.0 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing
+#
+# Keys are fnmatch globs relative to run_root (here the prefix root) and are
+# mirrored 1:1 below the destination, which becomes the template DATA_ROOT.
+# Timestamped pipeline_info files are renamed to stable names (params.json,
+# software_versions.yml); the newest one wins when a run wrote several.
+#
+# Layout quirk of this run: the megatest was launched with two parameter sets
+# at once, so every output sits one directory deeper than a normal run, under
+# tables/<kind>/deseq2_rnaseq_gsea,deseq2_rnaseq_gprofiler2/ (comma in the dir
+# name). A plain run writes tables/differential/*.deseq2.results.tsv directly.
+# The template absorbs the difference: its recursive scans match on file NAME
+# (os.walk + re.match on the basename), and the recipes that do glob use `**`.
+# The manifest keys below are fnmatch globs where `*` crosses `/`, so a single
+# `tables/differential/*.deseq2.results.tsv` key matches both depths too.
+#
+# This pipeline runs no MultiQC: the shinyngs/R reports it ships are not
+# parquet-backed, so there is no multiqc_data DC and no QC tab.
+pipeline: differentialabundance
+version: "2.0.0"
+# s3://nf-core-awsmegatests/differentialabundance/results-<results_sha>/ == the 2.0.0 release tag_sha.
+results_sha: "30ed7741fc392127156c2fb10cfa3d69d216b54b"
+run_root: ""
+multiqc:
+  version: null
+  parquet: null
+  reprocess: false
+keys:
+  # Pipeline params + software versions: `params.json` names the public
+  # samplesheet/contrasts URLs the run used (see post_fetch_help) and feeds
+  # the template's provenance block.
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  # DESeq2 per-contrast results (deseq2_results_raw scan -> deseq2/results_long.py):
+  # gene_id, baseMean, log2FoldChange, lfcSE, pvalue, padj. The `_filtered` twin
+  # keeps only the calls that cleared both thresholds; it backs no data
+  # collection but is the on-disk proof that the Control vs Treated contrast
+  # found nothing (57 KB against 50 B, a header and no rows).
+  - tables/differential/*.deseq2.results.tsv
+  - tables/differential/*.deseq2.results_filtered.tsv
+  # Same statistics joined to the GTF annotation (gene_name, chromosome, start,
+  # gene_biotype ...): deseq2_results_annotated recipe -> manhattan / biotype bars.
+  - tables/differential/*_deseq2.annotated.tsv
+  # Variance-stabilised expression matrix, genes x samples (13 MB):
+  # vst_top_variable (complex_heatmap) + vst_pca (embedding).
+  - tables/processed_abundance/*/all.vst.tsv
+  # Per-sample DESeq2 size factors (644 B each): library-size normalisation cards.
+  - other/deseq2/*/*.deseq2.sizefactors.tsv
+prefix_keys: []
+renames: {}
+post_fetch_help: |
+  === Observation sheet + contrasts (not part of the results prefix) ===
+
+  # params.json names the two public inputs this run used. Mirror them under
+  # input/ so SAMPLESHEET_FILE auto-resolves (the CLI looks for a file whose
+  # name contains "samplesheet" under {dest}/input/):
+  mkdir -p {dest}/input
+  curl -fsSL -o {dest}/input/samplesheet.tsv \
+    https://raw.githubusercontent.com/nf-core/test-datasets/differentialabundance/testdata/rnaseq_featurecounts_sample_preparations.tsv
+  curl -fsSL -o {dest}/input/contrasts.yaml \
+    https://raw.githubusercontent.com/nf-core/test-datasets/refs/heads/differentialabundance/testdata/rnaseq_featurecounts_contrast_file.yaml
+
+  The contrasts file is documentation only: no data collection reads it (a
+  Table scan cannot read YAML), and the contrast ids are recovered from the
+  results file names. A copy of both files is committed next to the template
+  under input/ so the template is self-describing.
+
+  === Quick test commands ===
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli run --template nf-core/differentialabundance/2.0.0 --data-root {dest} --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli run --template nf-core/differentialabundance/2.0.0 --data-root {dest}
