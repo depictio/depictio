@@ -1,0 +1,94 @@
+# Megatest manifest for nf-core/rnaseq 3.26.0 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the tables-only
+# subset of it that the template recipes and MultiQC need. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline rnaseq --version 3.26.0 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing
+#
+# The run publishes two aligner routes side by side (aligner_star_salmon/ and
+# aligner_star_rsem/); the template covers the default STAR + Salmon route, so
+# run_root is aligner_star_salmon/ and the keys below are relative to it. They
+# are mirrored 1:1 below the destination, which becomes the template DATA_ROOT.
+# Timestamped pipeline_info files are renamed to stable names (params.json,
+# software_versions.yml); the newest one wins when a run wrote several.
+#
+# MultiQC 1.33 wrote its data dir as multiqc/star_salmon/multiqc_report_data/
+# (not multiqc_data/): the template scan regex pins that literal layout.
+pipeline: rnaseq
+version: "3.26.0"
+# s3://nf-core-awsmegatests/rnaseq/results-<results_sha>/ == the 3.26.0 release tag_sha.
+results_sha: "e7ca46272c8f9d5ceee3f71759f4ba551d3217a4"
+run_root: "aligner_star_salmon/"
+multiqc:
+  version: "1.33"
+  parquet: multiqc/star_salmon/multiqc_report_data/multiqc.parquet
+  reprocess: false
+keys:
+  # Pipeline params + software versions: the CLI reads pipeline_info/params.json
+  # for the run's input samplesheet URL and the route flags.
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  # MultiQC parquet (fastqc, cutadapt, star, salmon, samtools, picard, rseqc,
+  # qualimap, dupradar, featurecounts biotype + the DESeq2 QC custom content)
+  # and the per-module tables MultiQC exports next to it.
+  - multiqc/star_salmon/multiqc_report_data/multiqc.parquet
+  - multiqc/star_salmon/multiqc_report_data/multiqc_general_stats.txt
+  - multiqc/star_salmon/multiqc_report_data/multiqc_salmon.txt
+  - multiqc/star_salmon/multiqc_report_data/multiqc_star.txt
+  - multiqc/star_salmon/multiqc_report_data/multiqc_featurecounts_biotype_plot.txt
+  - multiqc/star_salmon/multiqc_report_data/multiqc_star_salmon_deseq2_pca.txt
+  - multiqc/star_salmon/multiqc_report_data/multiqc_star_salmon_deseq2_clustering.txt
+  - multiqc/star_salmon/multiqc_report_data/multiqc_software_versions.txt
+  # Salmon merged gene-level matrices of the STAR + Salmon route (the salmon
+  # catalog recipes: expression heatmap, sample PCA, sample correlation, gene
+  # explorer). Transcript-level matrices (12-19 MB each) are left out.
+  - star_salmon/salmon.merged.gene_tpm.tsv
+  - star_salmon/salmon.merged.gene_counts.tsv
+  # The same matrices from the stand-alone Salmon pseudo-aligner route: the
+  # catalog recipes' default source paths point here, so `depictio dev recipe
+  # run` works on this DATA_ROOT without overrides.
+  - salmon/salmon.merged.gene_tpm.tsv
+  - salmon/salmon.merged.gene_counts.tsv
+  # Per-sample Salmon quant metadata (mapping rate, library type) - small JSON.
+  - star_salmon/*/aux_info/meta_info.json
+  - salmon/*/aux_info/meta_info.json
+  - salmon/*/lib_format_counts.json
+  # DESeq2 QC of the merged counts (PCA values, sample distances, size factors).
+  - star_salmon/deseq2_qc/deseq2.pca.vals.txt
+  - star_salmon/deseq2_qc/deseq2.sample.dists.txt
+  - star_salmon/deseq2_qc/size_factors/*.txt
+  # featureCounts biotype tables and summaries (MultiQC renders the biotype plot).
+  - star_salmon/featurecounts/*.biotype_counts_mqc.tsv
+  - star_salmon/featurecounts/*.biotype_counts_rrna_mqc.tsv
+  - star_salmon/featurecounts/*.featureCounts.tsv.summary
+  # Raw per-sample QC inputs MultiQC parsed (kept for reprocessing / provenance).
+  - star_salmon/dupradar/intercepts_slope/*.txt
+  - star_salmon/picard_metrics/*.markdup.sorted.metrics.txt
+  - star_salmon/log/*.Log.final.out
+  - star_salmon/qualimap/*/rnaseq_qc_results.txt
+  - star_salmon/rseqc/bam_stat/*.bam_stat.txt
+  - star_salmon/rseqc/infer_experiment/*.infer_experiment.txt
+  - star_salmon/rseqc/read_distribution/*.read_distribution.txt
+  - star_salmon/rseqc/inner_distance/txt/*.inner_distance_freq.txt
+  - star_salmon/rseqc/inner_distance/txt/*.inner_distance_mean.txt
+  - star_salmon/rseqc/junction_annotation/log/*.junction_annotation.log
+  - star_salmon/samtools_stats/*.flagstat
+  - star_salmon/samtools_stats/*.idxstats
+  - trimgalore/*_trimming_report.txt
+prefix_keys: []
+renames: {}
+post_fetch_help: |
+  === Quick test commands ===
+
+  # The samplesheet is not part of the published run: fetch the one named by
+  # pipeline_info/params.json ("input") into {dest}/input/ first, e.g.
+  #   curl -fsSL "$(python -c 'import json;print(json.load(open("{dest}/pipeline_info/params.json"))["input"])')" \
+  #     -o {dest}/input/samplesheet.csv
+  # SAMPLESHEET_FILE is then auto-detected from input/.
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli run --template nf-core/rnaseq/3.26.0 --data-root {dest} --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli run --template nf-core/rnaseq/3.26.0 --data-root {dest}
