@@ -1,0 +1,18 @@
+id: enchantr_v_gene_usage
+name: V gene usage
+mode: repertoire-comparison/v-usage
+# Written by airrflow's repertoire_comparison Rmd (alakazam countGenes) rather
+# than by enchantR itself; kept in this tool because it is the same report.
+description: >-
+  V gene usage per sample at two resolutions, family and gene, stacked into one
+  long table so the composition can be read at either level.
+find: { path_glob: "**/repertoire_comparison/V_family/V_family_distribution_data.tsv" }
+recipe: enchantr/v_gene_usage.py
+fixture: v_gene_usage.tsv
+renders_as:
+  - id: v_usage_composition
+    component: advanced_viz
+    kind: stacked_taxonomy
+    roles: { sample_id: sample_id, taxon: taxon, rank: rank, abundance: seq_freq }
+  - { component: card, column: taxon, aggregation: nunique, secondary_layout: top_n, breakdown_col: v_family, top_n_count: 5 }
+  - { component: table }

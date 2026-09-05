@@ -214,6 +214,143 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: 0c131176efad9a7b6632a106
+    data_collection_tag: enchantr_clonal_diversity
+    description: Clonal diversity profile — recipe output (enchantr/clonal_diversity.py), seeded from
+      the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: enchantr/clonal_diversity.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 87cc5ee50209b5c2e9dbf928
+    data_collection_tag: enchantr_clonal_overlap
+    description: Clonal overlap matrix — recipe output (enchantr/clonal_overlap.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: enchantr/clonal_overlap.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 885f6aa1b0ef28eba0807ff8
+    data_collection_tag: enchantr_clone_sets
+    description: Shared clone sets — recipe output (enchantr/clone_sets.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: enchantr/clone_sets.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 4f5ab0c7c7a5e3c53f33ab0f
+    data_collection_tag: enchantr_clone_sizes
+    description: Clone sizes — recipe output (enchantr/clone_sizes.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: enchantr/clone_sizes.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: ad3693a3cdd30d3d8b307d54
+    data_collection_tag: enchantr_repertoire_summary
+    description: Repertoire summary — recipe output (enchantr/repertoire_summary.py), seeded from the
+      catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: enchantr/repertoire_summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 0638c098832895856474a4a8
+    data_collection_tag: enchantr_sequence_counts
+    description: Sequence processing counts — recipe output (enchantr/sequence_counts.py), seeded from
+      the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: enchantr/sequence_counts.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 4b3e9f15fcf353eca050986c
+    data_collection_tag: enchantr_sequence_fates
+    description: Sequence attrition flow — recipe output (enchantr/sequence_fates.py), seeded from the
+      catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: enchantr/sequence_fates.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: e003b9d2ec089d72d730c33c
+    data_collection_tag: enchantr_threshold_summary
+    description: Clonal distance threshold — recipe output (enchantr/threshold_summary.py), seeded from
+      the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: enchantr/threshold_summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: da04195f87be722e919c9b6e
+    data_collection_tag: enchantr_v_gene_matrix
+    description: V gene usage matrix — recipe output (enchantr/v_gene_matrix.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: enchantr/v_gene_matrix.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 8cdbcc4479bfecb452b99f20
+    data_collection_tag: enchantr_v_gene_usage
+    description: V gene usage — recipe output (enchantr/v_gene_usage.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: enchantr/v_gene_usage.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: a8a58ea4ddc3fb818bf93cd4
     data_collection_tag: hamronization_gene_matrix
     description: Gene by sample matrix — recipe output (hamronization/gene_matrix.py), seeded from the
