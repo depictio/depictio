@@ -1,0 +1,19 @@
+id: starfusion_fusions
+name: STAR-Fusion calls
+mode: fusion-detection
+description: >-
+  Fusion predictions from the abridged STAR-Fusion table, one row per call. The
+  recipe strips the Ensembl id off each partner gene, sums junction reads and
+  spanning fragments into one evidence count, and derives a log-scaled FFPM plus
+  the fraction of the evidence that crosses the junction itself.
+find: { filename: "*.starfusion.abridged.tsv" }
+recipe: starfusion/fusions.py
+fixture: fusions.tsv
+renders_as:
+  - { id: evidence_dot_plot, component: advanced_viz, kind: dot_plot, roles: {cluster: splice_type, gene: fusion, mean_expression: log_ffpm, frac_expressing: junction_fraction} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: splice_type, y: supporting_reads, color: large_anchor_support} }
+  - { component: card, column: ffpm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: fusion, aggregation: nunique, secondary_layout: top_n, breakdown_col: splice_type, top_n_count: 3 }
+  - { component: card, column: supporting_reads, aggregation: sum, secondary_layout: donut, breakdown_col: large_anchor_support }
+  - { component: card, column: junction_fraction, aggregation: average, secondary_layout: histogram }
+  - { component: table, row_selection_enabled: true, row_selection_column: fusion }

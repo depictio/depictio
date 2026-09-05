@@ -1,0 +1,82 @@
+# Megatest manifest for nf-core/rnafusion 4.1.3 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the tables-only
+# subset of it that the template recipes and MultiQC need. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline rnafusion --version 4.1.3 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing
+#
+# Keys are fnmatch globs relative to run_root (here the prefix root) and are
+# mirrored 1:1 below the destination, which becomes the template DATA_ROOT.
+# Timestamped pipeline_info files are renamed to stable names (params.json,
+# software_versions.yml); the newest one wins when a run wrote several.
+#
+# The run is the pipeline's full test profile on a single sample (`test`), so
+# every cross-sample panel is degenerate: the template treats the FUSION as the
+# unit of analysis instead.
+#
+# Excluded on purpose: stringtie/ (~415 MB of ctab/GTF) and salmon/ (transcript
+# quantification, no fusion content), the FusionInspector IGV tracks and its
+# fi_workdir/, agat/ (reference annotation), vcf/, every BAM/CRAM/FASTQ and the
+# MultiQC txt exports (the parquet carries them). Also skipped are the superset
+# twins of the tables below, because nothing reads them: arriba's
+# *.fusions.discarded.tsv, STAR-Fusion's *.fusion_predictions.tsv,
+# FusionInspector's non-abridged *.fusions.tsv and fusion-report's plain
+# fusion-name lists.
+pipeline: rnafusion
+version: "4.1.3"
+# s3://nf-core-awsmegatests/rnafusion/results-<results_sha>/ == the 4.1.3 release tag_sha.
+results_sha: "76ad76e7c39b2ba9edc35aa3602e3dc454d842ec"
+run_root: ""
+multiqc:
+  version: "1.33"
+  parquet: multiqc/multiqc_data/multiqc.parquet
+  reprocess: false
+keys:
+  # Pipeline params + software versions (provenance + route flags).
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  # MultiQC parquet (fastqc, fastqc-1, fastp, star, picard modules).
+  - multiqc/multiqc_data/multiqc.parquet
+  # fusion-report: the caller-consensus table, hub of the whole template.
+  - fusionreport/*/*.fusions.csv
+  # Per-caller evidence tables.
+  - arriba/*.arriba.fusions.tsv
+  - starfusion/*.starfusion.abridged.tsv
+  - fusioncatcher/*.fusion-genes.txt
+  # FusionInspector in-silico validation, with the Pfam domains of both partners.
+  - fusioninspector/*/*.FusionInspector.fusions.abridged.tsv
+  # CTAT-splicing: every intron, plus the cancer-intron subset. The final
+  # *.cancer.introns is header-only on this run (nothing survived the annotation
+  # filter), so the *.prelim candidates come along to document that.
+  - ctatsplicing/*.introns
+  - ctatsplicing/*.cancer.introns
+  - ctatsplicing/*.cancer.introns.prelim
+  # Raw MultiQC inputs, kept because they are small and because the shipped
+  # report is MultiQC 1.33 with no samtools module: a later reprocess with a
+  # newer MultiQC can recover it from these. FastQC would need its zip archives,
+  # which are not fetched, so the reprocess is not enabled here.
+  - star/*.Log.final.out
+  - picard/*.bam.metrics
+  - picard/*.rna_metrics
+  - picard/*_collectinsertsize.txt
+  - samtools/*.flagstat
+  - samtools/*.idxstats
+  - samtools/*.stats
+  - fastp/*.fastp.json
+prefix_keys: []
+renames: {}
+post_fetch_help: |
+  === Quick test commands ===
+
+  # The samplesheet is not published by the run; params.json `input` points at
+  # the nf-core test-datasets URL. Fetch it once into input/ (the template ships
+  # a copy at input/samplesheet.csv so it is self-describing):
+  mkdir -p {dest}/input && curl -fsSL -o {dest}/input/samplesheet.csv \
+    https://raw.githubusercontent.com/nf-core/test-datasets/rnafusion/testdata/human/samplesheet_valid.csv
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli run --template nf-core/rnafusion/4.1.3 --data-root {dest} --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli run --template nf-core/rnafusion/4.1.3 --data-root {dest}

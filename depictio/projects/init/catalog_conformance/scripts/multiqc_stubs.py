@@ -456,6 +456,127 @@ def truvari(sample: str) -> dict[str, str]:
 # Catalog `section` value → stub builder. Keyed on the catalog's own vocabulary
 # so a new MultiQC output shows up as a KeyError in the generator, not as a
 # section that silently never appears in the report.
+def star(sample: str) -> dict[str, str]:
+    total = _vary(sample, 90_000, 130_000)
+    unique = int(total * 0.87)
+    multi = int(total * 0.06)
+    too_many = int(total * 0.01)
+    too_short = total - unique - multi - too_many
+    body = f"""                                 Started job on |\tJun 02 07:13:20
+                             Started mapping on |\tJun 02 07:16:56
+                                    Finished on |\tJun 02 07:16:59
+       Mapping speed, Million of reads per hour |\t14.43
+
+                          Number of input reads |\t{total}
+                      Average input read length |\t200
+                                    UNIQUE READS:
+                   Uniquely mapped reads number |\t{unique}
+                        Uniquely mapped reads % |\t{100 * unique / total:.2f}%
+                          Average mapped length |\t199.93
+                       Number of splices: Total |\t{unique // 2}
+            Number of splices: Annotated (sjdb) |\t{unique // 2 - 20}
+                       Number of splices: GT/AG |\t{unique // 2 - 40}
+                       Number of splices: GC/AG |\t2
+                       Number of splices: AT/AC |\t0
+                  Number of splices: Non-canonical |\t38
+                      Mismatch rate per base, % |\t0.14%
+                         Deletion rate per base |\t0.00%
+                        Deletion average length |\t1.30
+                        Insertion rate per base |\t0.00%
+                       Insertion average length |\t1.15
+                                    MULTI-MAPPING READS:
+        Number of reads mapped to multiple loci |\t{multi}
+             % of reads mapped to multiple loci |\t{100 * multi / total:.2f}%
+        Number of reads mapped to too many loci |\t{too_many}
+             % of reads mapped to too many loci |\t{100 * too_many / total:.2f}%
+                                  UNMAPPED READS:
+  Number of reads unmapped: too many mismatches |\t0
+       % of reads unmapped: too many mismatches |\t0.00%
+            Number of reads unmapped: too short |\t{too_short}
+                 % of reads unmapped: too short |\t{100 * too_short / total:.2f}%
+                Number of reads unmapped: other |\t0
+                     % of reads unmapped: other |\t0.00%
+                                  CHIMERIC READS:
+                       Number of chimeric reads |\t0
+                            % of chimeric reads |\t0.00%
+"""
+    # ReadsPerGene.out.tab is what drives STAR's "Gene Counts" bar plot; the four
+    # header rows are the assignment summary MultiQC reads, the gene rows below
+    # only need to exist.
+    gene_counts = "\n".join(
+        [
+            f"N_unmapped\t{too_short}\t{too_short}\t{too_short}",
+            f"N_multimapping\t{multi}\t{multi}\t{multi}",
+            "N_noFeature\t900\t4200\t4300",
+            "N_ambiguous\t300\t120\t130",
+        ]
+        + [f"ENSG0000000{idx:04d}\t{100 + idx}\t{50 + idx}\t{50 + idx}" for idx in range(20)]
+    )
+    return {
+        f"{sample}.Log.final.out": body,
+        f"{sample}.ReadsPerGene.out.tab": gene_counts + "\n",
+    }
+
+
+def picard(sample: str) -> dict[str, str]:
+    pairs = _vary(sample, 40_000, 60_000)
+    dup_pairs = int(pairs * 0.10)
+    dedup = f"""## htsjdk.samtools.metrics.StringHeader
+# MarkDuplicates --INPUT {sample}.bam --OUTPUT {sample}.md.bam --METRICS_FILE {sample}.bam.metrics
+## htsjdk.samtools.metrics.StringHeader
+# Started on: Tue Jun 02 07:19:44 GMT 2026
+
+## METRICS CLASS\tpicard.sam.DuplicationMetrics
+LIBRARY\tUNPAIRED_READS_EXAMINED\tREAD_PAIRS_EXAMINED\tSECONDARY_OR_SUPPLEMENTARY_RDS\tUNMAPPED_READS\tUNPAIRED_READ_DUPLICATES\tREAD_PAIR_DUPLICATES\tREAD_PAIR_OPTICAL_DUPLICATES\tPERCENT_DUPLICATION\tESTIMATED_LIBRARY_SIZE
+Unknown Library\t0\t{pairs}\t2565\t202\t0\t{dup_pairs}\t0\t{dup_pairs / pairs:.6f}\t55357
+
+## HISTOGRAM\tjava.lang.Double
+BIN\tCoverageMult\tall_sets\tnon_optical_sets
+1.0\t1\t{pairs - dup_pairs}\t{pairs - dup_pairs}
+2.0\t1.806275\t838\t838
+3.0\t2.456356\t96\t96
+4.0\t2.980500\t33\t33
+5.0\t3.403104\t6\t6
+"""
+    insert_hist = "\n".join(
+        f"{size}\t{max(1, 400 - abs(size - 320) * 3)}" for size in range(180, 460, 10)
+    )
+    insert = f"""## htsjdk.samtools.metrics.StringHeader
+# CollectInsertSizeMetrics --INPUT {sample}.bam --OUTPUT {sample}_collectinsertsize.txt
+## htsjdk.samtools.metrics.StringHeader
+# Started on: Tue Jun 02 07:19:42 GMT 2026
+
+## METRICS CLASS\tpicard.analysis.InsertSizeMetrics
+MEDIAN_INSERT_SIZE\tMODE_INSERT_SIZE\tMEDIAN_ABSOLUTE_DEVIATION\tMIN_INSERT_SIZE\tMAX_INSERT_SIZE\tMEAN_INSERT_SIZE\tSTANDARD_DEVIATION\tREAD_PAIRS\tPAIR_ORIENTATION\tWIDTH_OF_10_PERCENT\tWIDTH_OF_20_PERCENT\tWIDTH_OF_30_PERCENT\tWIDTH_OF_40_PERCENT\tWIDTH_OF_50_PERCENT\tWIDTH_OF_60_PERCENT\tWIDTH_OF_70_PERCENT\tWIDTH_OF_80_PERCENT\tWIDTH_OF_90_PERCENT\tWIDTH_OF_95_PERCENT\tWIDTH_OF_99_PERCENT\tSAMPLE\tLIBRARY\tREAD_GROUP
+320\t318\t42\t180\t460\t321.400000\t45.100000\t{pairs}\tFR\t21\t41\t61\t81\t101\t121\t141\t161\t181\t201\t221\t\t\t
+
+## HISTOGRAM\tjava.lang.Integer
+insert_size\tAll_Reads.fr_count
+{insert_hist}
+"""
+    coverage_hist = "\n".join(
+        f"{pos}\t{0.35 + 0.65 * (1 - abs(pos - 50) / 50):.6f}" for pos in range(0, 101)
+    )
+    rnaseq = f"""## htsjdk.samtools.metrics.StringHeader
+# CollectRnaSeqMetrics --INPUT {sample}.bam --OUTPUT {sample}.rna_metrics
+## htsjdk.samtools.metrics.StringHeader
+# Started on: Tue Jun 02 07:19:43 GMT 2026
+
+## METRICS CLASS\tpicard.analysis.RnaSeqMetrics
+PF_BASES\tPF_ALIGNED_BASES\tRIBOSOMAL_BASES\tCODING_BASES\tUTR_BASES\tINTRONIC_BASES\tINTERGENIC_BASES\tIGNORED_READS\tCORRECT_STRAND_READS\tINCORRECT_STRAND_READS\tNUM_R1_TRANSCRIPT_STRAND_READS\tNUM_R2_TRANSCRIPT_STRAND_READS\tNUM_UNEXPLAINED_READS\tPCT_R1_TRANSCRIPT_STRAND_READS\tPCT_R2_TRANSCRIPT_STRAND_READS\tPCT_RIBOSOMAL_BASES\tPCT_CODING_BASES\tPCT_UTR_BASES\tPCT_INTRONIC_BASES\tPCT_INTERGENIC_BASES\tPCT_MRNA_BASES\tPCT_USABLE_BASES\tPCT_CORRECT_STRAND_READS\tMEDIAN_CV_COVERAGE\tMEDIAN_5PRIME_BIAS\tMEDIAN_3PRIME_BIAS\tMEDIAN_5PRIME_TO_3PRIME_BIAS\tSAMPLE\tLIBRARY\tREAD_GROUP
+2443249\t2381339\t0\t2318486\t42917\t14137\t5799\t0\t0\t0\t223\t9936\t787\t0.021951\t0.978049\t0\t0.973606\t0.018022\t0.005937\t0.002435\t0.991628\t0.966501\t0\t1.365731\t0.9\t0.95\t0.95\t\t\t
+
+## HISTOGRAM\tjava.lang.Integer
+normalized_position\tAll_Reads.normalized_coverage
+{coverage_hist}
+"""
+    return {
+        f"{sample}.bam.metrics": dedup,
+        f"{sample}_collectinsertsize.txt": insert,
+        f"{sample}.rna_metrics": rnaseq,
+    }
+
+
 STUB_BUILDERS = {
     "bcftools": bcftools,
     "bowtie2": bowtie2,
@@ -466,10 +587,12 @@ STUB_BUILDERS = {
     "ivar": ivar,
     "kraken": kraken,
     "mosdepth": mosdepth,
+    "picard": picard,
     "quast": quast,
     "samtools": samtools,
     "snpeff": snpeff,
     "sompy": sompy,
+    "star": star,
     "summary": summary,
     "truvari": truvari,
 }

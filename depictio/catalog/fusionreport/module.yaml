@@ -1,0 +1,7 @@
+# fusion-report - aggregates the fusion callers of a run into one consensus
+# table, scores every fusion against the fusion knowledge bases and ranks it.
+# Multi-output tool, so a folder: module.yaml holds the identity, each sibling
+# *.yaml is one output.
+id: fusionreport
+name: fusion-report
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/fusionreport/detect
