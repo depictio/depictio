@@ -182,7 +182,7 @@ def check_updates(
             try:
                 update_available = Version(remote_str) > local
             except InvalidVersion:
-                update_available = False
+                pass  # an unparseable remote tag never claims an update
         results.append(
             {
                 "pipeline": pipeline,
@@ -215,7 +215,8 @@ def resolve_results_prefix(
     returned prefix ends with ``run_root`` (e.g. rnaseq ``aligner_star_salmon/``)
     when the template's DATA_ROOT is a sub-directory of the run.
     """
-    root = run_root.strip("/") + "/" if run_root.strip("/") else ""
+    root = run_root.strip("/")
+    root = f"{root}/" if root else ""
     if results_hash:
         h = results_hash.removeprefix("results-")
         return f"{pipeline}/results-{h}/{root}"

@@ -88,18 +88,20 @@ def _match_dc_to_catalog(
     for entry in entries:
         for output in entry.outputs:
             find = output.find
-            # The `basename` / `full_path` guards keep a recipe-only lookup, which
-            # passes neither, from matching a wildcard `find` pattern on "".
-            matched = (
-                output.recipe is None
-                and (
+            if output.recipe is None:
+                # Raw lane. The `basename` / `full_path` guards keep a recipe-only
+                # lookup, which passes neither, from matching a wildcard `find`
+                # pattern on "".
+                matched = bool(
                     (basename and find.filename and fnmatch(basename, find.filename))
                     or (
                         full_path
                         and any(PurePosixPath(full_path).match(g) for g in find.path_globs())
                     )
                 )
-            ) or (recipe is not None and output.recipe is not None and recipe == output.recipe)
+            else:
+                # Recipe lane: only the recipe that produced the DC binds it.
+                matched = recipe is not None and recipe == output.recipe
             if matched:
                 matches.append(
                     {

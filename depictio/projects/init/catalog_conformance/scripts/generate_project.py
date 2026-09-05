@@ -471,11 +471,10 @@ def generate() -> None:
     exemptions: list[str] = []
     if multiqc_sections:
         sections = sorted(set(multiqc_sections))
-        anchors, missing = build_multiqc_report(sections, run_root / multiqc_relative)
+        parquet = run_root / multiqc_relative
+        anchors, missing = build_multiqc_report(sections, parquet)
         collections.append(
-            multiqc_collection(
-                multiqc_relative, anchors, multiqc_plots(anchors, run_root / multiqc_relative)
-            )
+            multiqc_collection(multiqc_relative, anchors, multiqc_plots(anchors, parquet))
         )
         # A section MultiQC could not be made to emit is recorded by name. The
         # coverage spec reads this list, so a gap stays visible instead of
