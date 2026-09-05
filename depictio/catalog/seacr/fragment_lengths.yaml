@@ -1,0 +1,21 @@
+id: seacr_fragment_lengths
+name: Fragment length distribution
+mode: qc/fragments
+description: >-
+  How long the sequenced fragments were, per sample: the count and the fraction
+  of fragments at every length, plus the running fraction at most that long.
+# The signature CUT&RUN QC figure. MNase cuts around nucleosomes, so a working
+# experiment shows a sharp sub-nucleosomal peak below about 120 bp next to a
+# mononucleosomal shoulder around 180 bp; a flat curve is a failed digestion.
+find:
+  path_glob: "**/*.frags.len.txt"
+recipe: seacr/fragment_lengths.py
+fixture: fragment_lengths.tsv
+renders_as:
+  - { id: seacr_fragment_curve, component: figure, visu_type: line, dict_kwargs: {x: fragment_length, y: fraction, color: sample, title: Fragment length distribution} }
+  - { id: seacr_fragment_cumulative, component: figure, visu_type: line, dict_kwargs: {x: fragment_length, y: cumulative_fraction, color: sample, title: Cumulative fragment length} }
+  - { component: card, column: count, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: fragment_length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: fraction, aggregation: max, secondary_layout: histogram }
+  - { component: card, column: target, aggregation: count, secondary_layout: donut, breakdown_col: target }
+  - { component: table }
