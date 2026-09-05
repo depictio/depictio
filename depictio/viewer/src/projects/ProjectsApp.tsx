@@ -19,6 +19,7 @@ import { Icon } from '@iconify/react';
 import {
   createProject,
   createProjectFromManifest,
+  createProjectFromRun,
   deleteProject as apiDeleteProject,
   importProjectZip,
   listProjects,
@@ -30,6 +31,8 @@ import type {
   EditProjectInput,
   FromManifestReport,
   FromManifestRequest,
+  FromRunReport,
+  FromRunRequest,
   ProjectListEntry,
 } from 'depictio-react-core';
 
@@ -41,6 +44,7 @@ import CreateProjectModal, {
   ManifestCreatedModal,
   manifestReportNeedsReview,
 } from './CreateProjectModal';
+import { FromRunCreatedModal } from './FromRunReport';
 import EditProjectModal from './EditProjectModal';
 import DeleteProjectModal from './DeleteProjectModal';
 import { usePageTitle } from '../branding';
@@ -87,6 +91,10 @@ const ProjectsApp: React.FC = () => {
   /** Real from-manifest report held back for review (unmatched types, pruned
    *  or failed collections) instead of redirecting past it. */
   const [createdReport, setCreatedReport] = useState<FromManifestReport | null>(null);
+  /** From-run report whose ingestion is still running on the workers. Kept so
+   *  the user can watch it finish instead of being redirected to a dashboard
+   *  whose collections are still empty. */
+  const [createdRunReport, setCreatedRunReport] = useState<FromRunReport | null>(null);
 
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [desktopOpened, toggleDesktop] = useProjectsSidebar();
@@ -179,6 +187,27 @@ const ProjectsApp: React.FC = () => {
         closeCreate();
         refresh();
       }
+      return report;
+    },
+    [closeCreate, refresh],
+  );
+
+  // Unlike the from-manifest flow, this one answers as soon as the project and
+  // its dashboards exist: the collections are still being ingested on the
+  // workers. So there is never a redirect: the list refreshes behind a modal
+  // that watches the run and offers the dashboard once the user is ready.
+  const handleCreateFromRun = useCallback(
+    async (input: FromRunRequest) => {
+      const report = await createProjectFromRun(input);
+      notifications.show({
+        color: 'teal',
+        title: 'Project created from run folder',
+        message: `"${report.project_name}" is ingesting in the background.`,
+        autoClose: 3000,
+      });
+      closeCreate();
+      refresh();
+      setCreatedRunReport(report);
       return report;
     },
     [closeCreate, refresh],
@@ -334,8 +363,13 @@ const ProjectsApp: React.FC = () => {
         onCreate={handleCreate}
         onImport={handleImport}
         onCreateFromManifest={handleCreateFromManifest}
+        onCreateFromRun={handleCreateFromRun}
       />
       <ManifestCreatedModal report={createdReport} onClose={() => setCreatedReport(null)} />
+      <FromRunCreatedModal
+        report={createdRunReport}
+        onClose={() => setCreatedRunReport(null)}
+      />
       <EditProjectModal
         opened={Boolean(editTarget)}
         project={editTarget}
