@@ -39,6 +39,75 @@ workflows:
     locations:
     - '{DATA_ROOT}'
   data_collections:
+  - id: 10908a70f616f6a105ea4291
+    data_collection_tag: deseq2_results_annotated
+    description: Annotated results — recipe output (deseq2/results_annotated.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: deseq2/results_annotated.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 32d9b8873e1202ae8bfba322
+    data_collection_tag: deseq2_results
+    description: Differential results — recipe output (deseq2/results_long.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: deseq2/results_long.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: d97c1fa079415bb09846679e
+    data_collection_tag: deseq2_vst_pca
+    description: Sample PCA — recipe output (deseq2/vst_pca.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: deseq2/vst_pca.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 707624558c70837c221d3ae0
+    data_collection_tag: deseq2_sample_distance
+    description: Sample distances — recipe output (deseq2/vst_sample_distance.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: deseq2/vst_sample_distance.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 71cf2aa5bbcd54243e6cc328
+    data_collection_tag: deseq2_vst_heatmap
+    description: Top variable features — recipe output (deseq2/vst_top_variable.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: deseq2/vst_top_variable.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: 7dfb6a2a8decc2592e83e7e9
     data_collection_tag: happy_roc
     description: hap.py threshold sweep — recipe output (happy/roc.py), seeded from the catalog fixture
