@@ -1,0 +1,31 @@
+superkingdom	phylum	class	order	family	genus	species	copy_number	abundance	identity_mean	lineages
+Bacteria	Thermotogota	Thermotogae	Thermotogales	Thermotogaceae	Thermotoga	Thermotoga neapolitana	407.625	0.2033015421972805	0.9263666666666666	3
+Bacteria	Thermotogota	Thermotogae	Thermotogales	Thermotogaceae	Thermotoga	Thermotoga petrophila	154.375	0.07944415159709832	0.9233666666666668	3
+Bacteria	Bacillota	unclassified	Caldicellulosiruptorales	Caldicellulosiruptoraceae	Caldicellulosiruptor	Caldicellulosiruptor saccharolyticus	152.75	0.07757933004912543	0.9271666666666666	3
+Bacteria	Gemmatimonadota	Gemmatimonadia	Gemmatimonadales	Gemmatimonadaceae	Gemmatimonas	Gemmatimonas aurantiaca	119.875	0.06055063930667452	0.9211999999999999	3
+Bacteria	Thermotogota	Thermotogae	Thermotogales	Thermotogaceae	Thermotoga	Thermotoga sp. RQ2	116.375	0.05688426681348734	0.9284	2
+Bacteria	Pseudomonadota	Betaproteobacteria	Nitrosomonadales	Nitrosomonadaceae	Nitrosomonas	Nitrosomonas europaea	104.5	0.053011395644630165	0.9257	3
+Bacteria	Bacillota	Clostridia	Thermoanaerobacterales	Thermoanaerobacteraceae	Thermoanaerobacter	Thermoanaerobacter pseudethanolicus	90.375	0.045505665317380324	0.9269	3
+Bacteria	Pseudomonadota	Gammaproteobacteria	Alteromonadales	Shewanellaceae	Shewanella	Shewanella baltica	70.125	0.035485954880520955	0.9271666666666666	3
+Bacteria	Chlorobiota	Chlorobiia	Chlorobiales	Chlorobiaceae	Chlorobium	Chlorobium limicola	64.0	0.03243473474748776	0.9253	3
+Bacteria	Aquificota	Aquificia	Aquificales	Hydrogenothermaceae	Persephonella	Persephonella marina	62.125	0.03173958471717921	0.9314333333333332	3
+Bacteria	Chlorobiota	Chlorobiia	Chlorobiales	Chlorobiaceae	Chlorobium	Chlorobium phaeovibrioides	53.625	0.026897597839401922	0.9192	3
+Bacteria	Planctomycetota	Planctomycetia	Pirellulales	Pirellulaceae	Rhodopirellula	Rhodopirellula baltica	52.75	0.026616734493822947	0.9216666666666665	3
+Bacteria	Fusobacteriota	Fusobacteriia	Fusobacteriales	Fusobacteriaceae	Fusobacterium	Fusobacterium nucleatum	48.875	0.024734014411736352	0.9288666666666666	3
+Bacteria	Chlorobiota	Chlorobiia	Chlorobiales	Chlorobiaceae	Chlorobaculum	Chlorobaculum tepidum	48.625	0.024224874389537847	0.9216000000000001	3
+Bacteria	Bacteroidota	Bacteroidia	Bacteroidales	Porphyromonadaceae	Porphyromonas	Porphyromonas gingivalis	38.875	0.019480560849352443	0.9222333333333333	3
+Bacteria	Chloroflexota	Chloroflexia	Herpetosiphonales	Herpetosiphonaceae	Herpetosiphon	Herpetosiphon sp.	34.75	0.017510214096778665	0.9206666666666666	3
+Bacteria	Thermodesulfobacteriota	Desulfobulbia	Desulfobulbales	Desulfobulbaceae	Desulfobulbus	Desulfobulbus oralis	34.25	0.01740041942532495	0.9254333333333333	3
+Bacteria	Bacteroidota	Bacteroidia	Bacteroidales	Bacteroidaceae	Phocaeicola	Phocaeicola vulgatus	29.5	0.014755793643352597	0.9293	3
+Bacteria	Chlorobiota	Chlorobiia	Chlorobiales	Chlorobiaceae	Chlorobium	Chlorobium phaeobacteroides	28.0	0.014081937280639127	0.9215	3
+Bacteria	Pseudomonadota	Gammaproteobacteria	Pseudomonadales	Pseudomonadaceae	Pseudomonas	Pseudomonas putida	26.875	0.013596760592818757	0.9238666666666666	3
+Bacteria	Verrucomicrobiota	Verrucomicrobiia	Verrucomicrobiales	Akkermansiaceae	Akkermansia	Akkermansia muciniphila	24.5	0.012276261201911652	0.9200666666666667	3
+Bacteria	Pseudomonadota	Gammaproteobacteria	Pseudomonadales	Pseudomonadaceae	Pseudomonas	Pseudomonas marginalis	20.625	0.010527472792331145	0.926	3
+Bacteria	Thermodesulfobacteriota	Desulfovibrionia	Desulfovibrionales	Desulfovibrionaceae	Desulfovibrio	Desulfovibrio piger	19.75	0.009813055761182563	0.9203666666666667	3
+Bacteria	unclassified Bacteria phylum	unclassified Bacteria class	unclassified Bacteria order	unclassified Bacteria family	unclassified Bacteria genus	unclassified Bacteria species	15.0	0.007578618997094452	0.0	3
+Bacteria	Aquificota	Aquificia	Aquificales	Aquificaceae	Hydrogenobaculum	Hydrogenobaculum sp. Y04AAS1	14.25	0.007197285647134985	0.9315666666666665	3
+Bacteria	Chloroflexota	Chloroflexia	Chloroflexales	Chloroflexaceae	Chloroflexus	Chloroflexus aurantiacus	13.25	0.006758845628019	0.9187666666666666	3
+Bacteria	Cyanobacteriota	Cyanophyceae	Nostocales	Nostocaceae	Trichormus	Trichormus variabilis	13.375	0.006665454290613805	0.9232999999999999	3
+Bacteria	Chloroflexota	Chloroflexia	Herpetosiphonales	Herpetosiphonaceae	Herpetosiphon	Herpetosiphon geysericola	11.75	0.006072086598076306	0.8472666666666666	3
+Bacteria	Pseudomonadota	Gammaproteobacteria	Alteromonadales	Shewanellaceae	Shewanella	Shewanella loihica	10.125	0.005116810556426272	0.9188666666666666	3
+Bacteria	Campylobacterota	Epsilonproteobacteria	Campylobacterales	Helicobacteraceae	Wolinella	Wolinella succinogenes	10.125	0.0051112355561832015	0.9195333333333333	3

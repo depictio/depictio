@@ -317,6 +317,52 @@ non-SARS pathogen (no lineage DBs) + metagenomic protocol (no ivar/amplicon mosd
 
 **Ranking by template stress:** R2 > R4/R5 > R1 > R3 > R6
 
+---
+
+## taxprofiler 2.0.1
+
+**Megatest:** `s3://nf-core-awsmegatests/taxprofiler/results-70ecc15e49b4f1fcf79d876643b5d14b65c66178/`
+(tag `70ecc15e`, run_root `.`, manifest megatest.yaml)
+
+**MultiQC:** run wrote 1.34 -> used as-is
+
+**Template requirements:**
+- Always: `multiqc_data` (parquet at `multiqc/multiqc_data/`), plus the five taxpasta
+  collections `taxpasta_profiles`, `taxpasta_matrix`, `taxpasta_embedding`,
+  `taxpasta_presence`, `taxpasta_sample_summary`. The hub `taxpasta_profiles` melts every
+  `taxpasta/*.tsv`; the other four read it back through `dc_ref`, so all five stand or fall
+  with `--run_profile_standardisation`
+- Optional, per profiler: `sylph_ani` and `sylph_profile` (`--run_sylph`, the profile also
+  needs a sylph-tax taxonomy), `melon_ranks` (`--run_melon`, long reads only)
+- Optional, per report format: `taxon_names`, a project-local recipe that harvests the
+  taxid to name and rank lookup from the kraken2, krakenuniq and centrifuge reports
+- Optional, per input: `samplesheet` and `database_sheet`, read from `{DATA_ROOT}/input/`
+  because taxprofiler never publishes either sheet into the results tree
+- No conditionals and no route flags: unlike rnaseq and airrflow, this template exposes only
+  `DATA_ROOT` and `SAMPLESHEET_FILE`, and every profiler-specific collection is
+  `optional: true` instead. A run with a different profiler set therefore ingests unchanged
+  and simply shows fewer tiles, at the cost of never failing loudly when a profiler is missing
+- Observed on this megatest (every `run_*` flag true): 10 profilers over 17 profiler and
+  database combinations reach the hub, split 10 profilers / 14 combinations on Illumina
+  against 3 (diamond, kaiju, mOTUs) / 6 on nanopore
+
+### Further scenarios (analytical, not yet run)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| T1 | **no standardisation** | `--run_profile_standardisation false` | Profilers run, `taxpasta/` is never written | All five non-optional collections go empty at once, so Profiles, Concordance and Confidence lose every taxpasta tile and only Read QC survives. The one scenario that breaks a collection the template declares mandatory; highest risk. |
+| T2 | **long-read only** | nanopore samplesheet, `--run_melon --run_sylph` | No fastp, FastQC, bowtie2 or nonpareil; porechop_abi and nanoq instead | The comparison collapses from 10 profilers to 3, so `n_profilers` maxes at 3 rather than 9 and the UpSet degenerates to three sets. Six of the 14 MultiQC tiles lose their module (both FastQC runs, fastp, bowtie2, nonpareil). `melon_ranks` is populated here and nowhere else. |
+| T3 | **short-read only** | Illumina samplesheet, no long-read route | No porechop_abi, nanoq or minimap2 host removal | `melon_ranks` empty: melon is a nanopore-only marker-gene profiler, so the Genome copies section has no tile. Tests that a collapsed section is dropped rather than half-rendered. |
+| T4 | **input sheets absent** | any run where `{DATA_ROOT}/input/` was not populated | Neither sheet is in the results tree, so a fetch that only mirrors S3 misses both | `samplesheet` and `database_sheet` are skipped, which costs the persistent sample filter, the platform annotation the taxpasta recipes join on, both reference tables and the whole `samplesheet -> *` link fan-out. Silent, because both are `optional: true`. |
+| T5 | **no sylph** | `--run_sylph false` | No `sylph/` tree | `sylph_ani` and `sylph_profile` pruned, taking the Confidence tab's Containment identity section and the Profiles tab's Containment composition section with them. The partial case is worth its own run: sylph without a sylph-tax taxonomy populates `sylph_ani` but leaves `sylph_profile` empty, so one tool's two collections disagree. |
+| T6 | **smaller profiler set** | e.g. `--run_kraken2 --run_bracken` only | Fewer `taxpasta/*.tsv` files | Nothing is pruned, only rows: the hub narrows, `taxpasta_presence` loses set columns and the UpSet, the ordination and the concordance heatmap all shrink. Tests that an optional-DC template degrades gracefully where a conditional-based one would prune. |
+| T7 | **no kraken-style reports** | a profiler set without kraken2, krakenuniq or centrifuge | Nothing writes `<profiler>/<db>/*.report.txt` | `taxon_names` empty, so every taxon keeps the `taxid <id>` fallback label in the composition tiles, the heatmap rows and the tables. Renders fine and reads as noise; the failure is legibility, not an error. |
+| T8 | **profiler assigns nothing** | observed here with ganon | taxpasta writes a full table whose every count is zero | `profiles.py` drops zero-count rows, so the profiler vanishes from every tile with no warning. ganon ran in this megatest and is absent from the 10. Worth a run that asserts the ingest reports it rather than silently omitting it. |
+| T9 | **skip preprocessing QC** | `--skip_preprocessing_qc` | No FastQC or fastp sections in the parquet | Four of the 14 MultiQC tiles lose their module, leaving the Read quality section empty while Host removal and Profiler panels still render. Tests silent absence of optional modules the template lists in `modules:`. |
+| T10 | **MultiQC sample-id shapes** | any run whose profiler panels key on `<sample>_<db>.<tool>` | Panel sample ids do not reduce to the samplesheet id | The persistent sample filter reaches 20 of 78 ids on this megatest and leaves 58 orphans: the profiler top-taxa panels, the raw FastQC series and the porechop_abi rows keyed on the ENA run accession. Not fixable from the template, `resolve_link` passes `target_known_values=None` so `regex` and `wildcard` degrade to passthrough. Needs a platform fix, not a scenario run. |
+
+**Ranking by template stress:** T1 > T2/T3 > T4 > T5 > T6 > T8 > T7 > T9 > T10
+
 ## Priority additions to `generate_validation_runs.sh`
 
 In order of value-per-effort:
