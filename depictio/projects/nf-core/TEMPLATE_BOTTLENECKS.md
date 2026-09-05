@@ -217,6 +217,28 @@ restarting alone leaves the stored dashboards broken. Declaring a redundant `viz
 in the YAML would hide the symptom while still losing the config defaults and the
 catalog badge, so no template in this lot does that.
 
+## 14. A long annotation label can collapse a complex_heatmap to nothing
+
+Binding `row_annotation_cols` to a field whose labels are long silently
+destroys the plot. Plotly sizes the strip's margin from the longest label and
+nothing clamps it against the tile, so on funcscan's ARG heatmap a 517 px tile
+got a 346 px right margin and a plot area 284 px wide NEGATIVE: the colour bar
+and a few tick labels drew, and not one cell did.
+
+Nothing catches this before a human looks. The data is correct, the recipe is
+correct, the roles resolve, every bound column exists, the server returns rows,
+and `test_shipped_dashboard_yamls.py` is satisfied. Only the rendered pixels
+are wrong, which is why the browser pass exists.
+
+The template-side fix is to bind a short form of the field and keep the long
+one on the row for the table, which is what `hamronization/gene_matrix.py` now
+does. The platform-side fix, not attempted here, is for the complex_heatmap
+renderer to clamp annotation margins to a fraction of the tile and truncate
+labels with a hover, so that no binding can produce a negative plot area.
+
+Worth checking wherever a field is free text rather than a controlled
+vocabulary: taxonomy lineages, GO terms and drug classes are all candidates.
+
 ## Pipelines considered and not templated in this lot
 
 | pipeline | why not |
