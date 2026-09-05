@@ -427,7 +427,17 @@ def test_all_recipe_output_roles_resolve_against_the_recipe():
                 continue
             cols = set(recipe_output_columns(out.recipe))  # raises if recipe missing
             for r in out.renders_as:
-                missing = set(r.roles.values()) - cols
+                # A role binds either one column or a list of them (sunburst ranks,
+                # sankey steps, complex_heatmap row_annotation_cols), so flatten before
+                # comparing. Taking set(roles.values()) raises on the list-valued ones,
+                # which turned this assertion into a crash instead of a check.
+                role_cols: set[str] = set()
+                for value in r.roles.values():
+                    if isinstance(value, str):
+                        role_cols.add(value)
+                    elif isinstance(value, (list, tuple)):
+                        role_cols.update(v for v in value if isinstance(v, str))
+                missing = role_cols - cols
                 assert not missing, (
                     f"{out.id} render {r.kind}: roles {sorted(missing)} "
                     f"not in recipe output {sorted(cols)}"
