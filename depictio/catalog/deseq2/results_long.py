@@ -95,9 +95,11 @@ PADJ_THRESHOLD = 0.05
 LFC_THRESHOLD = 1.0
 
 # DESeq2 writes a padj that underflowed to 0.0 for the very strongest features
-# (the megatest's WT/KO contrast has five). -log10(0) is +inf, which no plotly
-# axis can place, so those rows are capped just short of the double-underflow
-# limit (~1e-308 -> 308): they stay on the plot, above every finite value.
+# -log10(0) is +inf, which no plotly axis can place, so the value is clamped
+# just short of the double-underflow limit (~1e-308 -> 308). The clamp has to
+# apply to the computed log too, not only to an exact zero: a denormal padj such
+# as 1e-320 is > 0, so it takes the first branch and would otherwise land at 320,
+# above the ceiling that the gauge and the "beyond measurement" copy assume.
 PADJ_ZERO_NEG_LOG10 = 300.0
 
 # Column the scan is asked to add (polars include_file_paths).
@@ -219,9 +221,17 @@ def add_derived_columns(df: pl.DataFrame) -> pl.DataFrame:
     padj = pl.col("padj")
     is_sig = (padj < PADJ_THRESHOLD) & (lfc.abs() >= LFC_THRESHOLD)
     return df.with_columns(
-        (pl.col("base_mean").fill_null(0.0) + 1.0).log(base=2).alias("log2_base_mean"),
+        # Left null when base_mean is, rather than folded to log2(1) = 0. A tool
+        # that writes no base_mean gets an all-null column here, and filling it
+        # would put every gene on the same MA x coordinate while still passing
+        # the schema check. An empty axis is the honest rendering.
+        pl.when(pl.col("base_mean").is_not_null())
+        .then((pl.col("base_mean") + 1.0).log(base=2))
+        .otherwise(None)
+        .cast(pl.Float64)
+        .alias("log2_base_mean"),
         pl.when(padj.is_not_null() & (padj > 0))
-        .then(-padj.log10())
+        .then(pl.min_horizontal(-padj.log10(), pl.lit(PADJ_ZERO_NEG_LOG10)))
         .when(padj == 0)
         .then(pl.lit(PADJ_ZERO_NEG_LOG10))
         .otherwise(None)
