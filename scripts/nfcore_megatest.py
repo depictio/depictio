@@ -1193,7 +1193,12 @@ def cmd_ls(args: argparse.Namespace) -> int:
         if not obj.key.endswith("/")
     ]
     if args.ext:
-        exts = tuple(e if e.startswith(".") else f".{e}" for e in args.ext)
+        # Accept both "--ext tsv csv" and "--ext tsv,csv". An extension is never
+        # allowed to contain a comma, so the comma-joined form can only ever be a
+        # caller writing the list the other way, and left alone it matches nothing
+        # and reports the run as empty instead of saying the filter was malformed.
+        raw = [piece for value in args.ext for piece in value.split(",") if piece]
+        exts = tuple(e if e.startswith(".") else f".{e}" for e in raw)
         objects = [obj for obj in objects if obj.key.endswith(exts)]
     if args.grep:
         pattern = re.compile(args.grep)
@@ -1329,7 +1334,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_ls = sub.add_parser("ls", help="List objects of a megatest run")
     _add_common(p_ls, version_default="latest")
     p_ls.add_argument("--prefix", default="", help="list only below this sub-directory")
-    p_ls.add_argument("--ext", nargs="*", help="keep only these extensions (tsv csv parquet ...)")
+    p_ls.add_argument(
+        "--ext",
+        nargs="*",
+        help="keep only these extensions, space or comma separated (tsv csv parquet)",
+    )
     p_ls.add_argument("--grep", help="keep only keys matching this regex")
     p_ls.add_argument("--top-dirs", action="store_true", help="aggregate per top-level directory")
     p_ls.add_argument("--sizes", action="store_true", help="print sizes next to keys")
