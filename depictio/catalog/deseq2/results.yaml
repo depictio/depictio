@@ -1,0 +1,29 @@
+id: deseq2_results
+name: Differential results
+mode: differential
+description: >-
+  Per-contrast DESeq2 statistics concatenated into one tidy table, one row per
+  contrast and feature, with the significance call and the MA abscissa
+  precomputed.
+# A plain run writes tables/differential/<contrast>.deseq2.results.tsv; the
+# megatest adds a parameter-set directory in between, and chipseq writes
+# consensus/<antibody>/deseq2/<contrast>/<contrast>.deseq2.results.txt. The
+# canonical glob is the flat layout, the alternate covers both nested ones.
+find:
+  path_glob: "**/*.deseq2.results.tsv"
+  path_glob_alt: ["**/deseq2/**/*.deseq2.results.txt"]
+recipe: deseq2/results_long.py
+fixture: results.tsv
+renders_as:
+  - { id: volcano, component: advanced_viz, kind: volcano, roles: {feature_id: gene_id, effect_size: log2fc, significance: padj} }
+  - { id: ma, component: advanced_viz, kind: ma, roles: {feature_id: gene_id, avg_log_intensity: log2_base_mean, log2_fold_change: log2fc} }
+  - { id: qq, component: advanced_viz, kind: qq, roles: {p_value: pvalue} }
+  - { id: da_barplot, component: advanced_viz, kind: da_barplot, roles: {feature_id: gene_id, contrast: contrast, lfc: log2fc} }
+  # Effect-size spread, then the up/down/not-significant split, then how many
+  # features cleared the padj cut-off and how strong the top calls are.
+  - { component: card, column: log2fc, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: gene_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: direction, top_n_count: 3 }
+  - { component: card, column: direction, aggregation: count, secondary_layout: donut, breakdown_col: direction }
+  - { component: card, column: neg_log10_padj, aggregation: max, secondary_layout: histogram, aggregations: [box_plot_stats] }
+  - { component: figure, visu_type: histogram, dict_kwargs: {x: log2fc, color: direction} }
+  - { component: table, row_selection_enabled: true, row_selection_column: gene_id }
