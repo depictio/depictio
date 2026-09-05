@@ -31,6 +31,15 @@ def pipeline_dir(tmp_path: Path) -> Path:
         )
         (vdir / "dashboards" / "base.yaml").write_text(f"# ampliseq {version} dashboard\n")
         (vdir / "data.parquet").write_bytes(bytes([0, 159, 146, 150]) + version.encode())
+    # Only the latest version ships a megatest manifest pinning its own run.
+    (tmp_path / "ampliseq" / "2.16.0" / "megatest.yaml").write_text(
+        "# manifest\n"
+        "pipeline: ampliseq\n"
+        'version: "2.16.0"\n'
+        '# the release tag_sha\nresults_sha: "3d5c7e5bec28de279337f3ffe3c312a45940b782"\n'
+        'run_root: ""\n'
+        "keys:\n  - multiqc/multiqc_data/multiqc.parquet\n"
+    )
     return tmp_path
 
 
@@ -46,6 +55,22 @@ def test_bump_copies_from_latest_and_rewrites_versions(btv: ModuleType, pipeline
     # Source dir is untouched; latest now resolves to the new version.
     assert '"2.16.0"' in (pipeline_dir / "ampliseq" / "2.16.0" / "template.yaml").read_text()
     assert btv.latest_version(pipeline_dir / "ampliseq") == "2.18.0"
+
+
+def test_bump_blanks_megatest_results_sha_in_the_copy(btv: ModuleType, pipeline_dir: Path) -> None:
+    new_dir = btv.bump("ampliseq", "2.18.0", projects_dir=pipeline_dir)
+    copied = (new_dir / "megatest.yaml").read_text()
+    # The version string is rewritten like any text file, the pinned run is dropped
+    # (it belongs to 2.16.0) and everything else survives verbatim.
+    assert 'version: "2.18.0"' in copied
+    assert "3d5c7e5bec28de279337f3ffe3c312a45940b782" not in copied
+    assert "results_sha: null" in copied
+    assert "# the release tag_sha" in copied and "multiqc/multiqc_data/multiqc.parquet" in copied
+    # The source manifest keeps its pin.
+    source = (pipeline_dir / "ampliseq" / "2.16.0" / "megatest.yaml").read_text()
+    assert 'results_sha: "3d5c7e5bec28de279337f3ffe3c312a45940b782"' in source
+    # Idempotent: a manifest without a sha line is left alone.
+    assert btv.blank_manifest_sha(new_dir / "megatest.yaml") is False
 
 
 def test_bump_refusals_and_dry_run(btv: ModuleType, pipeline_dir: Path) -> None:
