@@ -303,7 +303,10 @@ workflows:
 # RUNTIME LINKS CONFIGURATION
 # ============================================================================
 # Two independent join keys. `sample_id` fans the persistent sample filter out
-# from the hub sheet to the two sample-space collections; `gene_id` carries a
+# from the hub sheet to the two sample-space collections, and carries a PCA
+# lasso on to the distance matrix. Links are directional and resolution never
+# derives a reverse, so a selection source needs its own outgoing link even
+# when the hub already reaches both ends. `gene_id` carries a
 # gene picked in a figure or a table row over to the annotated table (and back),
 # which is what makes the scatter <-> table selection pair work.
 links:
@@ -325,6 +328,16 @@ links:
       resolver: "direct"
       target_field: "sample"
     description: "Filter the sample-distance matrix by the samples picked on the hub sheet"
+    enabled: true
+
+  - source_dc_tag: "deseq2_vst_pca"
+    source_column: "sample_id"
+    target_dc_tag: "deseq2_sample_distance"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Carry a cluster lassoed on the PCA over to the sample-distance matrix"
     enabled: true
 
   - source_dc_tag: "deseq2_results"

@@ -127,7 +127,10 @@ main_dashboard:
     secondary_layout: threshold
     threshold_value: 1.5
     threshold_direction: max
-    threshold_warn: 1.25
+    # `direction: max` means lower is better, so the warn band has to sit BELOW
+    # the limit and above the data. card_metrics silently drops a warn value on
+    # the wrong side of the threshold, which is what 1.25 did here.
+    threshold_warn: 1.35
     display: {icon_name: 'mdi:alert-outline', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
@@ -318,16 +321,16 @@ tabs:
     section: Calls at a glance
     workflow_tag: differentialabundance
     data_collection_tag: deseq2_results
-    title: Two contrasts, one of them empty
+    title: Calls, contrast by contrast
     title_size: sm
     title_align: left
     order: 2
     alignment: left
     body: >
       A call is significant when the adjusted p-value is below 0.05 and the
-      fold change is at least 2. The WT versus KO contrast returns 520 such
-      genes; Control versus Treated returns none. The empty one is kept on
-      purpose: a null result has to read as a null result, not as a broken tile.
+      fold change is at least 2. Pick a contrast on the left to scope every
+      panel below. A contrast that calls nothing is kept rather than hidden: a
+      null result has to read as a null result, not as a broken tile.
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: card
     tag: da-de-card-tested
@@ -384,7 +387,10 @@ tabs:
     column_name: neg_log10_padj
     column_type: float64
     secondary_layout: gauge
-    coverage_max: 300
+    # 300 is the -log10 floor a double underflows at, so gauging against it puts
+    # a normal run (strongest call typically 10 to 60) flat against zero. 60 is
+    # a strong call, which makes the bar read as how strong the best hit is.
+    coverage_max: 60
     display: {icon_name: 'mdi:star-outline', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
@@ -983,7 +989,7 @@ tabs:
     config:
       feature_col: gene_name
       score_kind: "-log10(padj)"
-      score_threshold: 1.3
+      score_threshold: 1.301
       highlight: above
       color_by_columns: [direction, gene_biotype]
       default_color_by: direction
@@ -1022,12 +1028,16 @@ tabs:
     config:
       effect_col: neg_log10_padj
       scale_points_by_effect: true
+      # feature_id is the chromosome here, not a gene, and LollipopRenderer falls
+      # back to a single-value picker above this count. A mammalian GTF has more
+      # than 24 contigs once scaffolds are in, so the picker is the honest
+      # default and the description says so.
       max_subplot_genes: 6
       gene_sort: count
       show_stems: true
       point_size: 7
     title: Calls per chromosome
-    description: One panel per chromosome, stems at the gene start coordinate, head size scaled by significance.
+    description: One chromosome at a time, stems at the gene start coordinate, head size scaled by significance.
     title_size: h3
     layout: {x: 0, y: 2, w: 4, h: 7}
   - component_type: advanced_viz
