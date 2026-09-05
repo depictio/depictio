@@ -1154,12 +1154,54 @@ def module_order_for(sections: list[str]) -> list[dict] | None:
     return _KRAKEN_MODULE_ORDER if {"bracken", "centrifuge"} & set(sections) else None
 
 
+def deeptools(sample: str) -> dict[str, str]:
+    """deepTools `plotFingerprint --outRawCounts --outQualityMetrics`.
+
+    Both files are recognised by their first line and both name their samples
+    from inside the file rather than from the filename, so the quoted column
+    header is what puts `{sample}` in the report.
+    """
+    bins = 200
+    # The counts are skewed on purpose: MultiQC sorts them and plots the
+    # normalised cumulative sum, so a flat vector would draw the diagonal that
+    # means "no enrichment" for every sample.
+    enrichment = _vary(sample, 20, 45) / 10.0
+    counts = "\n".join(
+        str(int(1 + (rank / bins) ** enrichment * 4_000)) for rank in range(1, bins + 1)
+    )
+    raw = f"#plotFingerprint --outRawCounts\n'{sample}'\n{counts}\n"
+    metrics = f"""Sample\tAUC\tSynthetic AUC\tX-intercept\tSynthetic X-intercept\tElbow Point\tSynthetic Elbow Point
+{sample}\t{_vary(sample, 40, 70) / 100.0:.6f}\t0.500000\t{_vary(sample, 10, 40) / 100.0:.6f}\t0.000000\t{_vary(sample, 50, 80) / 100.0:.6f}\t0.500000
+"""
+    return {
+        f"{sample}.plotFingerprint.raw.txt": raw,
+        f"{sample}.plotFingerprint.qcmetrics.txt": metrics,
+    }
+
+
+def preseq(sample: str) -> dict[str, str]:
+    """`preseq lc_extrap` output. The header row is the search pattern *and* the
+    unit switch: `TOTAL_READS` is parsed as reads, `TOTAL_BASES` as base pairs,
+    and anything else raises and drops the file.
+    """
+    total = _vary(sample, 2_000_000, 3_000_000)
+    complexity = _vary(sample, 55, 85) / 100.0
+    rows = []
+    for step in range(0, 41):
+        reads = float(step) * total
+        distinct = total * complexity * (1.0 - 2.718281828 ** -(reads / (total * complexity)))
+        rows.append(f"{reads:.1f}\t{distinct:.1f}\t{distinct * 0.98:.1f}\t{distinct * 1.02:.1f}")
+    body = "TOTAL_READS\tEXPECTED_DISTINCT\tLOWER_0.95CI\tUPPER_0.95CI\n" + "\n".join(rows)
+    return {f"{sample}.lc_extrap.txt": body + "\n"}
+
+
 STUB_BUILDERS = {
     "bcftools": bcftools,
     "bowtie2": bowtie2,
     "bracken": bracken,
     "centrifuge": centrifuge,
     "cutadapt": cutadapt,
+    "deeptools": deeptools,
     "dupradar": dupradar,
     "fastp": fastp,
     "fastqc": fastqc,
@@ -1173,6 +1215,7 @@ STUB_BUILDERS = {
     "nanoq": nanoq,
     "nonpareil": nonpareil,
     "picard": picard,
+    "preseq": preseq,
     "qualimap": qualimap,
     "quast": quast,
     "rseqc": rseqc,

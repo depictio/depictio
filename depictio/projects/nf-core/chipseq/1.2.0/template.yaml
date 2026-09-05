@@ -1,0 +1,494 @@
+# nf-core/chipseq Template v1.2.0 - Transcription-factor / histone ChIP-seq
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/chipseq/1.2.0 --data-root /path/to/your/data
+#
+# Tested against nf-core/chipseq AWS megatest results:
+#   s3://nf-core-awsmegatests/chipseq/results-048fd6854fcc85b355c61dfc2e21da0bcc6399ea
+#   (16 human libraries: EZH2 ChIP in NTKO / TKO cells, FOXA1 ChIP in E2 /
+#    VEH-treated cells, each with its own input control. See megatest.yaml.)
+# ============================================================================
+#
+# SCOPE
+# This template covers the narrowPeak route (`--narrow_peak`, the default for a
+# transcription factor). A `--broad_peak` run writes the same tree under
+# `macs/broadPeak/` with `*_peaks.broadPeak` files, which are BED6+3 with no
+# summit column: that route needs its own peak output and is not bound here.
+#
+# MULTIQC WAS REPROCESSED.
+# chipseq 1.2.0 is a DSL1 pipeline and this run shipped MultiQC 1.9, which
+# writes `multiqc_data.json` and no parquet. Depictio reads only the parquet
+# (MultiQC >= 1.31), so the report bound below is NOT the one the run
+# published: it is produced by re-running the pinned MultiQC 1.35 over the same
+# raw tool outputs,
+#
+#   python -m depictio.dev_scripts.multiqc_reprocess --src DATA_ROOT --dest DATA_ROOT
+#
+# which writes `multiqc/multiqc_data/multiqc.parquet` next to a `REPROCESSED.json`
+# recording both versions. `modules` / `plots` below are authored against the
+# 1.35 anchors, which differ from the 1.9 ones (see docs/dashboards.md).
+#
+# NO params.json. DSL1 wrote no `pipeline_info/params*.json`; the run's
+# parameters survive only inside `execution_report.html`. Provenance therefore
+# collects the tool versions from the tab-separated `software_versions.csv` and
+# nothing else, and no template variable is auto-set from pipeline parameters.
+#
+# LAYOUT NOTE. Data collection scans and recipe globs match on file NAME, so the
+# `bwa/mergedLibrary/macs/narrowPeak/...` prefix is never spelled out: a run
+# aligned with a different aligner (`bowtie2/`, `star/`) lands in the same
+# collections.
+template:
+  template_id: "nf-core/chipseq/1.2.0"
+  description: "nf-core/chipseq template: MACS2 peak calls, HOMER peak annotation, consensus peak sets per antibody and DESeq2 differential binding, on top of the reprocessed MultiQC report."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory containing chipseq output (bwa/, fastqc/, trim_galore/, multiqc/, pipeline_info/) plus the reprocessed multiqc/multiqc_data/multiqc.parquet."
+      required: true
+  # The bundled reference dataset needs no variable beyond DATA_ROOT: the design
+  # sheets are part of the run's own pipeline_info/ output.
+  reference:
+    vars: {}
+  # How this run's provenance is collected at ingest, surfaced in the ingestion
+  # report and the dashboard Settings drawer. Keys matched by no group rule land
+  # in 'Other'.
+  provenance:
+    sources:
+      # DSL1 software_versions.csv is a two-column "tool<TAB>version" table, not
+      # the YAML later releases write.
+      - name: "software_versions"
+        glob: "pipeline_info/software_versions.csv"
+        format: "tsv"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Software versions"
+        key_patterns: ["*"]
+  dashboards:
+    - "dashboards/base.yaml"
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "ChIP-seq Peak Analysis"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "chipseq"
+    version: "1.2.0"
+    engine:
+      name: "nextflow"
+      version: "20.11.0-edge"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/chipseq"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Hub: the design sheet the pipeline derived, one row per ChIP sample
+      # with the input control it was called against and its antibody.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "design"
+        description: "Per-ChIP design: sample, its input control and the antibody (the hub every sample filter starts from)"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "design_controls\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "sample_id": "ChIP sample identifier, the key every other collection is linked on"
+              "control_id": "Input control the peaks were called against"
+              "antibody": "Antibody the ChIP was raised against; the consensus peak sets are built per antibody"
+              "replicatesExist": "1 when the antibody has more than one replicate"
+              "multipleGroups": "1 when the antibody was assayed in more than one condition"
+
+      - data_collection_tag: "design_reads"
+        description: "Library-level design: one row per sequencing library and its FASTQ files"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "design_reads\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "sample_id": "Library identifier (<sample>_T<technical replicate>)"
+              "fastq_1": "Read 1 FASTQ"
+              "fastq_2": "Read 2 FASTQ, empty for single-end libraries"
+
+      # ----------------------------------------------------------------
+      # MultiQC. Reprocessed with MultiQC 1.35: the anchors below are the
+      # 1.35 ones, not the 1.9 ones the run itself published.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report, re-generated with MultiQC 1.35 from the run's raw tool outputs (the run itself wrote MultiQC 1.9, which ships no parquet)"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "multiqc/multiqc_data/multiqc.parquet"
+          dc_specific_properties:
+            s3_location: null
+            modules:
+              - "general_stats"
+              - "fastqc"
+              - "cutadapt"
+              - "samtools"
+              - "picard"
+              - "preseq"
+              - "phantompeakqualtools"
+              - "deepTools"
+              - "macs"
+              - "featurecounts"
+              # Custom content the pipeline writes as *_mqc.tsv. The numeric
+              # suffixes are assigned per antibody by the run itself:
+              # _2 is EZH2, _1 is FOXA1 in the megatest.
+              - "peak_count"
+              - "frip_score"
+              - "peak_annotation"
+              - "nsc_coefficient"
+              - "rsc_coefficient"
+              - "strand_shift_correlation"
+              - "deseq2_pca_1"
+              - "deseq2_pca_2"
+              - "deseq2_clustering_1"
+              - "deseq2_clustering_2"
+            plots:
+              fastqc:
+                - "Sequence Counts"
+                - "Sequence Quality Histograms"
+                - "Per Sequence Quality Scores"
+                - "Per Sequence GC Content":
+                    - "Percentages"
+                    - "Counts"
+                - "Per Base N Content"
+                - "Sequence Length Distribution"
+                - "Sequence Duplication Levels"
+                - "Top overrepresented sequences"
+                - "Status Checks"
+              cutadapt:
+                - "Filtered Reads"
+                - "Trimmed Sequence Lengths (3')":
+                    - "Counts"
+                    - "Obs/Exp"
+              samtools:
+                - "Percent mapped"
+                - "Alignment stats"
+                - "Flagstat"
+                - "Flagstat: Percentage of total"
+                - "XY counts"
+                - "Mapped reads per contig":
+                    - "Normalised Counts"
+                    - "Observed over Expected Counts"
+                    - "Raw Counts"
+              picard:
+                - "Alignment Summary":
+                    - "Aligned Reads"
+                    - "Aligned Bases"
+                - "Mean read length"
+                - "Base Distribution":
+                    - "% Adenine"
+                    - "% Cytosine"
+                    - "% Guanine"
+                    - "% Thymine"
+                    - "% Undetermined"
+                - "Mark Duplicates"
+                - "Mean Base Quality by Cycle"
+                - "Base Quality Distribution"
+              preseq:
+                - "Complexity curve (molecule count)"
+              deepTools:
+                - "Fingerprint plot"
+                - "Read Distribution Profile after Annotation"
+              featurecounts:
+                - "Assignments"
+              peak_count:
+                - "peak_count-section"
+              frip_score:
+                - "frip_score-section"
+              peak_annotation:
+                - "peak_annotation-section"
+              nsc_coefficient:
+                - "nsc_coefficient-section"
+              rsc_coefficient:
+                - "rsc_coefficient-section"
+              strand_shift_correlation:
+                - "strand_shift_correlation-section"
+              deseq2_pca_1:
+                - "deseq2_pca_1-section"
+              deseq2_pca_2:
+                - "deseq2_pca_2-section"
+              deseq2_clustering_1:
+                - "deseq2_clustering_1-section"
+              deseq2_clustering_2:
+                - "deseq2_clustering_2-section"
+
+      # ----------------------------------------------------------------
+      # Catalog-transformed collections (tools `macs2` and `homer`)
+      # ----------------------------------------------------------------
+      - data_collection_tag: "macs2_peaks"
+        description: "Every MACS2 narrow peak of every sample, with summit, width and the enrichment and significance MACS2 reported"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "macs2/peaks.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the peak was called in, read off the MACS2 peak name"
+              "peak_id": "MACS2 peak name, unique across samples"
+              "chr": "Chromosome"
+              "start": "Peak start (0-based)"
+              "end": "Peak end"
+              "width": "Peak width in bp"
+              "summit": "Genomic position of the summit"
+              "score": "MACS2 integer score"
+              "fold_enrichment": "Fold enrichment at the summit over the input control"
+              "neg_log10_pvalue": "-log10 of the peak p-value"
+              "neg_log10_qvalue": "-log10 of the peak q-value (FDR)"
+
+      - data_collection_tag: "macs2_peak_summary"
+        description: "Per-sample peak QC: peak count, FRiP score and the spread of peak width, enrichment and significance"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "macs2/peak_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "ChIP sample"
+              "num_peaks": "Peaks MACS2 called for the sample"
+              "frip_score": "Fraction of mapped reads falling inside called peaks"
+              "width_median": "Median peak width (bp)"
+              "width_mean": "Mean peak width (bp)"
+              "width_max": "Widest peak (bp)"
+              "fold_enrichment_median": "Median fold enrichment over the control"
+              "fold_enrichment_mean": "Mean fold enrichment over the control"
+              "neg_log10_qvalue_median": "Median -log10 q-value"
+              "neg_log10_pvalue_median": "Median -log10 p-value"
+
+      - data_collection_tag: "homer_annotated_peaks"
+        description: "HOMER annotation of every peak: genomic feature class, distance to the nearest TSS and the gene it belongs to"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "homer/annotate_peaks.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the peak was called in"
+              "peak_id": "Peak identifier, the same one macs2_peaks uses"
+              "chr": "Chromosome"
+              "start": "Peak start"
+              "end": "Peak end"
+              "strand": "Peak strand as HOMER reports it (always + for MACS2 peaks)"
+              "peak_score": "Score carried over from the peak caller"
+              "annotation_class": "Coarse feature class: promoter-TSS, intron, exon, Intergenic, TTS"
+              "annotation": "Full HOMER annotation string, with the transcript detail"
+              "distance_to_tss": "Signed distance to the nearest transcription start site (bp)"
+              "nearest_promoter_id": "Identifier of the nearest promoter"
+              "gene_name": "Symbol of the nearest gene"
+              "gene_type": "Biotype of the nearest gene; empty when the run annotated against a plain GTF"
+
+      - data_collection_tag: "macs2_consensus_boolean"
+        description: "Consensus peak intervals per antibody against the samples that called them, as 0/1 set columns"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "macs2/consensus_boolean.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "peak_id": "<consensus set>:<interval id>, unique across antibodies"
+              "consensus_set": "Which consensus table the interval came from, named after its samples"
+              "interval_id": "Interval id inside that consensus table"
+              "chr": "Chromosome"
+              "start": "Merged interval start"
+              "end": "Merged interval end"
+              "num_peaks": "Per-sample peaks merged into the interval"
+              "num_samples": "Samples calling a peak on the interval"
+
+      - data_collection_tag: "macs2_consensus_fc"
+        description: "Fold enrichment of the most strongly bound consensus intervals, one numeric column per sample"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "macs2/consensus_fc.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "peak_id": "<consensus set>:<interval id>, unique across antibodies"
+              "consensus_set": "Which consensus table the interval came from"
+              "interval_id": "Interval id inside that consensus table"
+              "chr": "Chromosome"
+              "region": "chr:start-end, the heatmap row label"
+              "support": "How many samples call the peak, kept categorical"
+
+      # ----------------------------------------------------------------
+      # DESeq2 differential binding. The raw collection exists so the tidy
+      # one can read it through `dc_ref`: the contrast id lives only in the
+      # FILE NAME, and only a scan carries the path (`include_file_paths`)
+      # into the frame. `infer_schema_length: 0` reads every column as text
+      # because DESeq2 writes `NA` in numeric columns; the recipe recasts.
+      # The `*.deseq2.FDR0.05.results.txt` subsets are deliberately not
+      # scanned: they are a filtered copy of the same rows.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "deseq2_results_raw"
+        description: "Raw per-contrast DESeq2 differential-binding tables (input of deseq2_results)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.deseq2\\.results\\.txt$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              null_values: ["NA", "NaN", ""]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "Geneid": "Consensus interval identifier"
+              "baseMean": "Mean of normalised counts across samples"
+              "log2FoldChange": "Effect size of the contrast"
+              "lfcSE": "Standard error of log2FoldChange"
+              "pvalue": "Raw Wald p-value"
+              "padj": "Benjamini-Hochberg adjusted p-value"
+              "source_path": "File the row came from; the contrast id is derived from it"
+
+      - data_collection_tag: "deseq2_results"
+        description: "DESeq2 differential binding per contrast and consensus interval, with the significance call and the MA abscissa precomputed"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "deseq2/results_long.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "contrast": "Contrast id, derived from the results file name"
+              "gene_id": "Consensus interval the row scores"
+              "base_mean": "Mean of normalised counts across samples"
+              "log2fc": "log2 fold change between the two conditions"
+              "lfc_se": "Standard error of log2fc"
+              "stat": "Wald statistic (log2fc / lfc_se)"
+              "pvalue": "Raw Wald p-value"
+              "padj": "Benjamini-Hochberg adjusted p-value"
+              "log2_base_mean": "log2(baseMean + 1), the A axis of the MA plot"
+              "neg_log10_padj": "-log10(padj)"
+              "significant": "padj < 0.05 and |log2fc| >= 1"
+              "direction": "up / down / not significant"
+
+links:
+  # Hub -> everything keyed on the ChIP sample name.
+  - source_dc_tag: "design"
+    source_column: "sample_id"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Filter the MultiQC panels by the samples picked on the design sheet"
+    enabled: true
+
+  - source_dc_tag: "design"
+    source_column: "sample_id"
+    target_dc_tag: "macs2_peaks"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the peak table by the samples picked on the design sheet"
+    enabled: true
+
+  - source_dc_tag: "design"
+    source_column: "sample_id"
+    target_dc_tag: "macs2_peak_summary"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the peak QC summary by the samples picked on the design sheet"
+    enabled: true
+
+  - source_dc_tag: "design"
+    source_column: "sample_id"
+    target_dc_tag: "homer_annotated_peaks"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the peak annotation by the samples picked on the design sheet"
+    enabled: true
+
+  # Peak-level selection: pick peaks on the MACS2 panels, read their annotation.
+  - source_dc_tag: "macs2_peaks"
+    source_column: "peak_id"
+    target_dc_tag: "homer_annotated_peaks"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "peak_id"
+    description: "Carry a peak selected on the MACS2 panels over to its HOMER annotation"
+    enabled: true
+
+  - source_dc_tag: "homer_annotated_peaks"
+    source_column: "peak_id"
+    target_dc_tag: "macs2_peaks"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "peak_id"
+    description: "Carry a peak selected in the annotation table back to the MACS2 panels"
+    enabled: true
+
+  # Consensus-level selection: an interval scored by DESeq2 is the same
+  # interval the consensus matrices carry.
+  - source_dc_tag: "macs2_consensus_boolean"
+    source_column: "peak_id"
+    target_dc_tag: "macs2_consensus_fc"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "peak_id"
+    description: "Carry a consensus interval selected on the overlap panels over to the signal heatmap"
+    enabled: true
+
+  - source_dc_tag: "macs2_consensus_fc"
+    source_column: "peak_id"
+    target_dc_tag: "macs2_consensus_boolean"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "peak_id"
+    description: "Carry a consensus interval selected on the signal heatmap back to the overlap panels"
+    enabled: true
