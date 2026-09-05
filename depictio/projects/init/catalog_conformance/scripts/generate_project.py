@@ -267,6 +267,7 @@ def build_multiqc_report(sections: list[str], destination: Path) -> tuple[list[s
                 quiet=True,
                 make_report=False,
                 no_megaqc_upload=True,
+                module_order=multiqc_stubs.module_order_for(sections),
             ),
         )
         anchors = sorted(multiqc.list_modules())

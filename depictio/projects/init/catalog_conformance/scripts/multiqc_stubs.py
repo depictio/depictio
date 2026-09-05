@@ -869,9 +869,296 @@ def salmon(sample: str) -> dict[str, str]:
     }
 
 
+def _kraken_report(sample: str, tool: str) -> str:
+    """A six-column Kraken report, the format `bracken` and `centrifuge` share.
+
+    MultiQC 1.35 has no Bracken and no Centrifuge module: nf-core/taxprofiler
+    runs the `kraken` module three times, split by `module_order` +
+    `path_filters`, so both tools land here as a Kraken report rather than as
+    their own native table (`*.bracken.tsv` / `*.centrifuge.report.txt` are not
+    read by MultiQC at all). The `R`/`root` row is mandatory: `kraken.py` indexes
+    it unconditionally and a report without it takes the module down.
+    """
+    unclassified = _vary(sample + tool, 3, 11)
+    root = 100 - unclassified
+    total = _vary(sample + tool, 400_000, 460_000)
+
+    def cnt(pct: float) -> int:
+        return int(total * pct / 100)
+
+    rows = [
+        (unclassified, cnt(unclassified), cnt(unclassified), "U", 0, "unclassified"),
+        (root, cnt(root), 0, "R", 1, "root"),
+        (root - 2, cnt(root - 2), 0, "D", 2, "  Bacteria"),
+        (root - 20, cnt(root - 20), 0, "P", 1239, "    Bacillota"),
+        (root - 30, cnt(root - 30), 0, "C", 91061, "      Bacilli"),
+        (root - 40, cnt(root - 40), 0, "O", 1385, "        Bacillales"),
+        (root - 50, cnt(root - 50), 0, "F", 90964, "          Staphylococcaceae"),
+        (root - 55, cnt(root - 55), 0, "G", 1279, "            Staphylococcus"),
+        (
+            root - 60,
+            cnt(root - 60),
+            cnt(root - 60),
+            "S",
+            1280,
+            "              Staphylococcus aureus",
+        ),
+        (
+            root - 70,
+            cnt(root - 70),
+            cnt(root - 70),
+            "S",
+            1282,
+            "              Staphylococcus epidermidis",
+        ),
+        (root - 78, cnt(root - 78), 0, "P", 1224, "    Pseudomonadota"),
+        (root - 82, cnt(root - 82), 0, "G", 561, "            Escherichia"),
+        (root - 85, cnt(root - 85), cnt(root - 85), "S", 562, "              Escherichia coli"),
+    ]
+    return (
+        "\n".join(
+            f"{pct:6.2f}\t{rooted}\t{direct}\t{rank}\t{taxid}\t{taxon}"
+            for pct, rooted, direct, rank, taxid, taxon in rows
+        )
+        + "\n"
+    )
+
+
+def bracken(sample: str) -> dict[str, str]:
+    return {f"{sample}.bracken.kraken2.report.txt": _kraken_report(sample, "bracken")}
+
+
+def centrifuge(sample: str) -> dict[str, str]:
+    return {f"{sample}.centrifuge.txt": _kraken_report(sample, "centrifuge")}
+
+
+def kaiju(sample: str) -> dict[str, str]:
+    """kaiju2table output. The `cannot be assigned to a ... species` row is load-bearing.
+
+    It is the only place `kaiju.py` reads the taxonomic rank from, and a file
+    whose rank stays `None` is dropped whole, so a stub without that row and the
+    matching `unclassified` row produces no module at all.
+    """
+    total = _vary(sample, 400_000, 460_000)
+    shift = _vary(sample, 0, 4) / 2.0
+    rows = [
+        ("Staphylococcus aureus", "1280", 21.5 + shift),
+        ("Escherichia coli", "562", 17.25 + shift),
+        ("Bacillus subtilis", "1423", 12.75 + shift),
+        ("Pseudomonas aeruginosa", "287", 8.5 + shift),
+        ("Listeria monocytogenes", "1639", 6.25 + shift),
+        ("Salmonella enterica", "28901", 4.0 + shift),
+        ("cannot be assigned to a (non-viral) species", "NA", float(_vary(sample, 4, 9))),
+        ("unclassified", "NA", float(_vary(sample, 10, 16))),
+    ]
+    body = "\n".join(
+        ["file\tpercent\treads\ttaxon_id\ttaxon_name"]
+        + [
+            f"{sample}.kaiju.tsv\t{pct:f}\t{int(total * pct / 100)}\t{taxid}\t{name}"
+            for name, taxid, pct in rows
+        ]
+    )
+    return {f"{sample}.kaijutable.txt": body + "\n"}
+
+
+def metaphlan(sample: str) -> dict[str, str]:
+    reads = _vary(sample, 400_000, 460_000)
+    bacteria = 60.0 + _vary(sample, 0, 8)
+    archaea = 100.0 - bacteria
+    lineages = (
+        ("k__Bacteria", "2", bacteria),
+        ("k__Archaea", "2157", archaea),
+        ("k__Bacteria|p__Bacillota", "2|1239", bacteria * 0.62),
+        ("k__Bacteria|p__Pseudomonadota", "2|1224", bacteria * 0.38),
+        ("k__Bacteria|p__Bacillota|c__Bacilli", "2|1239|91061", bacteria * 0.62),
+        ("k__Bacteria|p__Bacillota|c__Bacilli|o__Bacillales", "2|1239|91061|1385", bacteria * 0.62),
+        (
+            "k__Bacteria|p__Bacillota|c__Bacilli|o__Bacillales|f__Staphylococcaceae",
+            "2|1239|91061|1385|90964",
+            bacteria * 0.62,
+        ),
+        (
+            "k__Bacteria|p__Bacillota|c__Bacilli|o__Bacillales|f__Staphylococcaceae|g__Staphylococcus",
+            "2|1239|91061|1385|90964|1279",
+            bacteria * 0.62,
+        ),
+        (
+            "k__Bacteria|p__Bacillota|c__Bacilli|o__Bacillales|f__Staphylococcaceae|"
+            "g__Staphylococcus|s__Staphylococcus_aureus",
+            "2|1239|91061|1385|90964|1279|1280",
+            bacteria * 0.40,
+        ),
+        (
+            "k__Bacteria|p__Bacillota|c__Bacilli|o__Bacillales|f__Staphylococcaceae|"
+            "g__Staphylococcus|s__Staphylococcus_epidermidis",
+            "2|1239|91061|1385|90964|1279|1282",
+            bacteria * 0.22,
+        ),
+        ("k__Archaea|p__Euryarchaeota", "2157|28890", archaea),
+        ("k__Archaea|p__Euryarchaeota|c__Methanobacteria", "2157|28890|183925", archaea),
+    )
+    rows = "\n".join(f"{clade}\t{taxid}\t{pct:.5f}\t" for clade, taxid, pct in lineages)
+    body = f"""#mpa_v31_CHOCOPhlAn_201901
+#/usr/local/bin/metaphlan --input_type fastq {sample}.fastq.gz --index mpa_v31_CHOCOPhlAn_201901
+#{reads} reads processed
+#SampleID\tMetaphlan_Analysis
+#clade_name\tNCBI_tax_id\trelative_abundance\tadditional_species
+{rows}
+"""
+    return {f"{sample}.metaphlan_profile.txt": body}
+
+
+def nanoq(sample: str) -> dict[str, str]:
+    reads = _vary(sample, 600_000, 640_000)
+    mean_len = _vary(sample, 4_600, 5_200)
+    length_rows = "\n".join(
+        f"> {threshold:<9} {int(reads * frac):<17} {100.0 * frac:04.1f}%"
+        for threshold, frac in (
+            (200, 1.0),
+            (500, 1.0),
+            (1000, 0.999),
+            (2000, 0.85),
+            (5000, 0.45),
+            (10000, 0.05),
+            (30000, 0.001),
+            (50000, 0.0),
+        )
+    )
+    quality_rows = "\n".join(
+        f"> {threshold:<3} {int(reads * frac):<13} {100.0 * frac:04.1f}%"
+        for threshold, frac in (
+            (5, 1.0),
+            (7, 1.0),
+            (10, 0.78),
+            (12, 0.09),
+            (15, 0.0),
+            (20, 0.0),
+        )
+    )
+    body = f"""Nanoq Read Summary
+====================
+
+Number of reads:      {reads}
+Number of bases:      {reads * mean_len}
+N50 read length:      {mean_len + 1_200}
+Longest read:         {mean_len * 9}
+Shortest read:        1000
+Mean read length:     {mean_len}
+Median read length:   {mean_len - 300}
+Mean read quality:    {_vary(sample, 100, 130) / 10:.2f}
+Median read quality:  {_vary(sample, 105, 135) / 10:.2f}
+
+
+Read length thresholds (bp)
+
+{length_rows}
+
+
+Read quality thresholds (Q)
+
+{quality_rows}
+"""
+    return {f"{sample}_filtered.stats": body}
+
+
+def nonpareil(sample: str) -> dict[str, str]:
+    """`NonpareilCurves.R --json` output, one file for the whole run.
+
+    Emitted once, like `summary`: nf-core/taxprofiler collects every sample's
+    curve into a single `nonpareil_all_samples.json`, and the module takes its
+    sample names from the JSON keys, not from the filename. The `.npo` table
+    (`nonpareil_all_samples.tsv`) is not what MultiQC reads.
+    """
+    if sample != SAMPLES[0]:
+        return {}
+    payload = {}
+    for s in SAMPLES:
+        kappa = _vary(s, 55, 65) / 100.0
+        coverage = _vary(s, 58, 68) / 100.0
+        effort = _vary(s, 80, 140) * 1_000_000.0
+        x_adj = [effort * 2**e / 512 for e in range(10)]
+        y_cov = [round(coverage * (1 - 2 ** -(e + 1)), 6) for e in range(10)]
+        x_model = [effort * 2**e / 512 for e in range(14)]
+        y_model = [round(min(0.99, coverage * (1 - 2 ** -(e + 1)) * 1.05), 6) for e in range(14)]
+        payload[s] = {
+            "label": s,
+            "LRstar": round(effort * 22.5, 3),
+            "version": "3.5.5",
+            "kappa": kappa,
+            "C": coverage,
+            "consistent": 1,
+            "star": 95,
+            "has.model": True,
+            "modelR": _vary(s, 990, 999) / 1000.0,
+            "diversity": _vary(s, 170, 185) / 10.0,
+            "L": 150.0,
+            "AL": 150.0,
+            "R": _vary(s, 600_000, 640_000),
+            "LR": effort,
+            "overlap": 50.0,
+            "log.sample": 1.1,
+            "x.adj": x_adj,
+            "y.cov": y_cov,
+            "y.sd": [0.01] * 10,
+            "y.p25": [round(v * 0.95, 6) for v in y_cov],
+            "y.p75": [round(v * 1.02, 6) for v in y_cov],
+            "x.model": x_model,
+            "y.model": y_model,
+        }
+    return {"nonpareil_all_samples.json": json.dumps(payload)}
+
+
+# MultiQC 1.35 ships no Bracken and no Centrifuge module: both write a
+# Kraken-style report, and nf-core/taxprofiler runs the `kraken` module three
+# times behind `path_filters` so each tool gets its own anchor. Without this the
+# three stubs collapse into one `kraken` section and both catalog sections are
+# missing from the report.
+#
+# The third entry is not optional. Naming `kraken` in `module_order` at all
+# replaces its default run, so the plain Kraken section disappears unless it is
+# listed too, and since Bracken's file also ends `.kraken2.report.txt` it has to
+# be excluded by path rather than left to the search pattern.
+_KRAKEN_MODULE_ORDER = [
+    {
+        "kraken": {
+            "name": "Bracken",
+            "anchor": "bracken",
+            "info": "Estimates species abundances by re-distributing reads in the taxonomic tree.",
+            "path_filters": ["*.bracken.kraken2.report.txt"],
+        }
+    },
+    {
+        "kraken": {
+            "name": "Centrifuge",
+            "anchor": "centrifuge",
+            "info": "Rapid, memory-efficient classification of DNA sequences from microbial samples.",
+            "path_filters": ["*.centrifuge.txt"],
+        }
+    },
+    {
+        "kraken": {
+            "path_filters": ["*.kraken2.report.txt"],
+            "path_filters_exclude": ["*.bracken.kraken2.report.txt"],
+        }
+    },
+]
+
+
+def module_order_for(sections: list[str]) -> list[dict] | None:
+    """The `module_order` these sections need, or None when the default will do.
+
+    Only requested when a Kraken-derived alias is in play: the override replaces
+    the plain `kraken` run, so applying it unconditionally would change how an
+    unrelated report is built.
+    """
+    return _KRAKEN_MODULE_ORDER if {"bracken", "centrifuge"} & set(sections) else None
+
+
 STUB_BUILDERS = {
     "bcftools": bcftools,
     "bowtie2": bowtie2,
+    "bracken": bracken,
+    "centrifuge": centrifuge,
     "cutadapt": cutadapt,
     "dupradar": dupradar,
     "fastp": fastp,
@@ -879,8 +1166,12 @@ STUB_BUILDERS = {
     "featurecounts": featurecounts,
     "happy": happy,
     "ivar": ivar,
+    "kaiju": kaiju,
     "kraken": kraken,
+    "metaphlan": metaphlan,
     "mosdepth": mosdepth,
+    "nanoq": nanoq,
+    "nonpareil": nonpareil,
     "picard": picard,
     "qualimap": qualimap,
     "quast": quast,
