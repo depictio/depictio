@@ -1,0 +1,18 @@
+id: ataqv_tss_coverage
+name: TSS coverage profile
+mode: qc/tss_profile
+description: >-
+  Aggregate read coverage in a window centred on every transcription start site,
+  recentred so 0 is the TSS. The height of the central spike over the flanks is
+  the TSS enrichment score; the shape says whether that enrichment is a sharp
+  signal or a broad shoulder.
+find:
+  path_glob: "**/*.ataqv.json"
+recipe: ataqv/tss_coverage.py
+fixture: tss_coverage.tsv
+renders_as:
+  - { component: figure, visu_type: line, dict_kwargs: {x: position, y: coverage, color: sample, title: Coverage around transcription start sites} }
+  - { component: card, column: coverage, aggregation: max, secondary_layout: threshold, threshold_value: 5.0, threshold_direction: min, threshold_warn: 3.0 }
+  - { component: card, column: coverage, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: position, aggregation: nunique, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: table }
