@@ -1,0 +1,31 @@
+sample	profiler	database	profiler_db	platform	taxa_observed	assigned_count	top_taxon	top_taxon_fraction	shannon	evenness
+MOCK_001_Illumina_Hiseq_3000	bracken	bracken-db	bracken / bracken-db	ILLUMINA	66	438138.0	Caldicellulosiruptor saccharolyticus	0.07915999068786547	3.4806843457015497	0.8307807110659516
+MOCK_001_Illumina_Hiseq_3000	centrifuge	centrifuge-db	centrifuge / centrifuge-db	ILLUMINA	102	454198.0	Caldicellulosiruptor saccharolyticus DSM 8903	0.07612539024830581	3.615498558937368	0.7817340133443815
+MOCK_001_Illumina_Hiseq_3000	diamond	diamond-db1	diamond / diamond-db1	ILLUMINA	134	427033.0	Thermotoga	0.0853236166759946	3.769833303688972	0.7696930601378091
+MOCK_001_Illumina_Hiseq_3000	diamond	diamond-db3	diamond / diamond-db3	ILLUMINA	134	427033.0	Thermotoga	0.0853236166759946	3.769833303688972	0.7696930601378091
+MOCK_001_Illumina_Hiseq_3000	kaiju	kaiju-db1	kaiju / kaiju-db1	ILLUMINA	83	454198.0	unclassified	0.14580645445378448	3.4227830775733077	0.7745884908213598
+MOCK_001_Illumina_Hiseq_3000	kaiju	kaiju-db3	kaiju / kaiju-db3	ILLUMINA	83	454198.0	unclassified	0.14580645445378448	3.4227830775733077	0.7745884908213598
+MOCK_001_Illumina_Hiseq_3000	kmcp	kmcp_db	kmcp / kmcp_db	ILLUMINA	48	425924.0	taxid 1033214769	0.08143941172603564	3.4535489799438657	0.8921130600588276
+MOCK_001_Illumina_Hiseq_3000	kraken2	bracken-db	kraken2 / bracken-db	ILLUMINA	97	454198.0	Caldicellulosiruptor saccharolyticus DSM 8903	0.07600429768515053	3.615130324001073	0.7902423433936285
+MOCK_001_Illumina_Hiseq_3000	kraken2	kraken2-db	kraken2 / kraken2-db	ILLUMINA	97	454198.0	Caldicellulosiruptor saccharolyticus DSM 8903	0.07600429768515053	3.615130324001073	0.7902423433936285
+MOCK_001_Illumina_Hiseq_3000	krakenuniq	krakenuniq-db	krakenuniq / krakenuniq-db	ILLUMINA	95	454198.0	Caldicellulosiruptor saccharolyticus DSM 8903	0.07610117173567475	3.613375335495878	0.7934723361012715
+MOCK_001_Illumina_Hiseq_3000	megan6	malt-db	megan6 / malt-db	ILLUMINA	106	438510.0	Caldicellulosiruptor saccharolyticus DSM 8903	0.07350117443159791	3.610147491896823	0.7741384456923428
+MOCK_001_Illumina_Hiseq_3000	metaphlan	metaphlan3-db	metaphlan / metaphlan3-db	ILLUMINA	205	699999957.0	Bacteria	0.09080544843519184	4.345812987506566	0.8164202217426589
+MOCK_001_Illumina_Hiseq_3000	motus	motus-db1	motus / motus-db1	ILLUMINA	45	304.0	unclassified	0.1875	3.127949802480617	0.8217040020980022
+MOCK_001_Illumina_Hiseq_3000	motus	motus-db3	motus / motus-db3	ILLUMINA	45	304.0	unclassified	0.1875	3.127949802480617	0.8217040020980022
+MOCK_001_Minion_R9	diamond	diamond-db2	diamond / diamond-db2	OXFORD_NANOPORE	136	620336.0	Thermotoga	0.1119280518944572	3.7525286398788555	0.7638494311445251
+MOCK_001_Minion_R9	diamond	diamond-db3	diamond / diamond-db3	OXFORD_NANOPORE	134	616747.0	Thermotoga	0.08625741187229123	3.72688401576064	0.7609240334479688
+MOCK_001_Minion_R9	kaiju	kaiju-db2	kaiju / kaiju-db2	OXFORD_NANOPORE	66	620336.0	unclassified	0.7762502901653298	1.2870434979955236	0.30719559897983734
+MOCK_001_Minion_R9	kaiju	kaiju-db3	kaiju / kaiju-db3	OXFORD_NANOPORE	83	620336.0	unclassified	0.10523168089551468	3.4879126097547224	0.7893275452390504
+MOCK_001_Minion_R9	motus	motus-db2	motus / motus-db2	OXFORD_NANOPORE	33	122.0	unclassified	0.18032786885245902	3.0181591216666694	0.8631925052668311
+MOCK_001_Minion_R9	motus	motus-db3	motus / motus-db3	OXFORD_NANOPORE	33	122.0	unclassified	0.18032786885245902	3.0181591216666694	0.8631925052668311
+MOCK_002_Illumina_Hiseq_3000	bracken	bracken-db	bracken / bracken-db	ILLUMINA	80	588582.0	Caldicellulosiruptor saccharolyticus	0.0803558382689243	3.48408286697596	0.7950848220335502
+MOCK_002_Illumina_Hiseq_3000	centrifuge	centrifuge-db	centrifuge / centrifuge-db	ILLUMINA	111	608498.0	Caldicellulosiruptor saccharolyticus DSM 8903	0.07743821672380188	3.6211096251102934	0.7688897767554932
+MOCK_002_Illumina_Hiseq_3000	diamond	diamond-db1	diamond / diamond-db1	ILLUMINA	137	575359.0	Thermotoga	0.08906265479465864	3.7708248095988663	0.7664307781770853
+MOCK_002_Illumina_Hiseq_3000	diamond	diamond-db3	diamond / diamond-db3	ILLUMINA	137	575359.0	Thermotoga	0.08906265479465864	3.7708248095988663	0.7664307781770853
+MOCK_002_Illumina_Hiseq_3000	kaiju	kaiju-db1	kaiju / kaiju-db1	ILLUMINA	83	608498.0	unclassified	0.13947457510131503	3.4347547675703174	0.7772977286191404
+MOCK_002_Illumina_Hiseq_3000	kaiju	kaiju-db3	kaiju / kaiju-db3	ILLUMINA	83	608498.0	unclassified	0.13947457510131503	3.4347547675703174	0.7772977286191404
+MOCK_002_Illumina_Hiseq_3000	kmcp	kmcp_db	kmcp / kmcp_db	ILLUMINA	50	570740.0	taxid 1033214769	0.08289063321302169	3.445192391972387	0.880667722861546
+MOCK_002_Illumina_Hiseq_3000	kraken2	bracken-db	kraken2 / bracken-db	ILLUMINA	109	608498.0	Caldicellulosiruptor saccharolyticus DSM 8903	0.07732975293263084	3.6210225553069115	0.7718512133844025
+MOCK_002_Illumina_Hiseq_3000	kraken2	kraken2-db	kraken2 / kraken2-db	ILLUMINA	109	608498.0	Caldicellulosiruptor saccharolyticus DSM 8903	0.07732975293263084	3.6210225553069115	0.7718512133844025
+MOCK_002_Illumina_Hiseq_3000	krakenuniq	krakenuniq-db	krakenuniq / krakenuniq-db	ILLUMINA	107	608498.0	Caldicellulosiruptor saccharolyticus DSM 8903	0.07741849603449806	3.6188829166453194	0.7744522739536741

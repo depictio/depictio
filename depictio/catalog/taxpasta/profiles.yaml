@@ -1,0 +1,52 @@
+id: taxpasta_profiles
+name: Cross-profiler abundances
+mode: merge
+description: >-
+  Every standardised taxpasta table melted into one long frame: one row per
+  profiler, database, sample and taxon, with the raw count and the within-run
+  relative abundance. The hub every cross-profiler comparison is computed from.
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/taxpasta/merge
+find: { path_glob: "**/taxpasta/*.tsv" }
+recipe: taxpasta/profiles.py
+fixture: profiles.tsv
+renders_as:
+  # long format (sample x rank x taxon x abundance) -> stacked_taxonomy fits; a
+  # sunburst would need the wide per-rank columns this frame does not carry.
+  - {
+      id: stacked_taxonomy,
+      component: advanced_viz,
+      kind: stacked_taxonomy,
+      roles: { sample_id: sample, taxon: name, rank: rank, abundance: rel_abundance },
+    }
+  - {
+      component: card,
+      column: name,
+      aggregation: nunique,
+      secondary_layout: uniqueness,
+    }
+  - {
+      component: card,
+      column: count,
+      aggregation: median,
+      aggregations: [box_plot_stats],
+      secondary_layout: box_plot,
+    }
+  - {
+      component: card,
+      column: sample,
+      aggregation: nunique,
+      secondary_layout: donut,
+      breakdown_col: profiler,
+    }
+  - {
+      component: card,
+      column: rel_abundance,
+      aggregation: max,
+      secondary_layout: threshold,
+      threshold_value: 0.5,
+      threshold_direction: max,
+      threshold_warn: 0.3,
+    }
+  - { component: interactive, interactive_type: MultiSelect, column_name: profiler }
+  - { component: interactive, interactive_type: MultiSelect, column_name: sample }
+  - { component: table }
