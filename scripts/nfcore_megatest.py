@@ -1079,6 +1079,14 @@ def fetch_run(
     for obj, target in plan:
         if target in seen_targets:
             continue
+        # The manifest strings are validated on load, but this target can also come
+        # straight from a bucket listing (rename_target passes unmatched keys through).
+        # Path joining silently discards dest when the right operand is absolute, so an
+        # absolute or dot-dot key would escape the destination instead of erroring.
+        if not is_relative_key(target):
+            raise MegatestError(
+                f"refusing to write {target!r}: object keys must stay below the destination"
+            )
         seen_targets.add(target)
         local = dest / target
         if obj.size > limit_bytes:
