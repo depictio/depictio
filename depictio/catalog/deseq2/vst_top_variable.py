@@ -53,7 +53,8 @@ SOURCES: list[RecipeSource] = [
 EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "gene_id": pl.Utf8,
 }
-# Sample columns are run-dependent; validated dynamically.
+# Sample columns are run-dependent, so they sit outside the declared schema
+# and go unchecked: the ingest validates EXPECTED_SCHEMA only.
 OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 TOP_N = 500
@@ -65,7 +66,8 @@ _PALETTE = plotly.colors.qualitative.Plotly
 
 
 # --- samplesheet helpers (duplicated in vst_pca.py / vst_sample_distance.py:
-# recipes may not import each other) ------------------------------------------
+# recipes may not import each other; shared helpers belong in
+# depictio/recipes/lib) -------------------------------------------------------
 
 
 def sanitise_column(name: str) -> str:

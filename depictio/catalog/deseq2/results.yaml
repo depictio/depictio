@@ -8,7 +8,8 @@ description: >-
 # A plain run writes tables/differential/<contrast>.deseq2.results.tsv; the
 # megatest adds a parameter-set directory in between, and chipseq writes
 # consensus/<antibody>/deseq2/<contrast>/<contrast>.deseq2.results.txt. The
-# canonical glob is the flat layout, the alternate covers both nested ones.
+# canonical glob matches a .tsv at any depth, since `**/` spans zero or more
+# directories; the alternate only adds chipseq's .txt under a deseq2/ dir.
 find:
   path_glob: "**/*.deseq2.results.tsv"
   path_glob_alt: ["**/deseq2/**/*.deseq2.results.txt"]
