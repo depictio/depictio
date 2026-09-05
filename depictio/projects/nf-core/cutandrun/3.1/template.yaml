@@ -1,0 +1,538 @@
+# nf-core/cutandrun Template v3.1 - CUT&RUN / CUT&Tag chromatin profiling
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/cutandrun/3.1 --data-root /path/to/your/data
+#
+# Tested against nf-core/cutandrun AWS megatest results:
+#   s3://nf-core-awsmegatests/cutandrun/results-42502fb44975e930eec865353c5481f472bcf766
+#   (GSE145187: H3K4me3 and H3K27me3 in two replicates each, against two IgG
+#    control replicates. See megatest.yaml.)
+# ============================================================================
+#
+# SCOPE
+# The run this template was validated against called peaks with BOTH callers
+# (`--peakcaller seacr,macs2`). SEACR is cutandrun's default and is the required
+# path here; the MACS2 collections are `optional: true` so a SEACR-only run
+# still ingests, and so does a MACS2-only one (the SEACR collections drop out
+# the same way).
+#
+# THE IgG CONTROL IS A SAMPLE, NOT NOISE.
+# CUT&RUN is only interpretable next to the IgG control it was thresholded
+# against, so the control samples stay in the hub, in the MultiQC panels and in
+# the QC cards. `samples.role` separates them from the targets without hiding
+# them; only the peak collections omit them, because peak calling never ran on
+# a control.
+#
+# MULTIQC WAS REPROCESSED.
+# The run shipped MultiQC 1.14, which writes `multiqc_data.json` and no parquet.
+# Depictio reads only the parquet (MultiQC >= 1.31), so the report bound below
+# is NOT the one the run published: it is produced by re-running the pinned
+# MultiQC 1.35 over the same raw tool outputs,
+#
+#   python -m depictio.dev_scripts.multiqc_reprocess --src DATA_ROOT --dest DATA_ROOT
+#
+# which writes `multiqc/multiqc_data/multiqc.parquet` next to a REPROCESSED.json
+# recording both versions. `modules` / `plots` below are the 1.35 names, which
+# differ from the 1.14 ones (see docs/dashboards.md).
+#
+# NO params.json. cutandrun 3.1 predates the nf-core params dump, so the run's
+# parameters survive only in `execution_report.html`. Provenance therefore
+# collects the tool versions from `pipeline_info/software_versions.yml` and
+# nothing else, and no template variable is auto-set from pipeline parameters.
+#
+# LAYOUT NOTE. The run publishes numbered stage directories (01_prealign/,
+# 02_alignment/, 03_peak_calling/, 04_reporting/). Data collection scans and
+# recipe globs match on file NAME, so those prefixes are never spelled out and a
+# run published with a different `--outdir` layout lands in the same
+# collections.
+template:
+  template_id: "nf-core/cutandrun/3.1"
+  description: "nf-core/cutandrun template: SEACR and MACS2 peak calls side by side, their per-sample agreement, the consensus peak set per target and the fragment-length distribution, on top of the reprocessed MultiQC report."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory containing cutandrun output (01_prealign/, 02_alignment/, 03_peak_calling/, 04_reporting/, pipeline_info/) plus the reprocessed multiqc/multiqc_data/multiqc.parquet."
+      required: true
+  # The bundled reference dataset needs no variable beyond DATA_ROOT: the
+  # samplesheet is part of the run's own pipeline_info/ output.
+  reference:
+    vars: {}
+  # How this run's provenance is collected at ingest, surfaced in the ingestion
+  # report and the dashboard Settings drawer. Keys matched by no group rule land
+  # in 'Other'.
+  provenance:
+    sources:
+      - name: "software_versions"
+        glob: "pipeline_info/software_versions.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+      - name: "local_versions"
+        glob: "pipeline_info/local_versions.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Software versions"
+        key_patterns: ["*"]
+  dashboards:
+    - "dashboards/base.yaml"
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "CUT&RUN Chromatin Profiling"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "cutandrun"
+    version: "3.1"
+    engine:
+      name: "nextflow"
+      version: "22.10.1"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/cutandrun"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Hub: one row per CUT&RUN sample, built from the samplesheet the
+      # pipeline validated. The samplesheet itself is library-level
+      # (`<sample>_T<n>`) and never spells out the `<group>_R<replicate>`
+      # name every output file uses, so a recipe derives it.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samples"
+        description: "Per-sample hub: the sample name every output file uses, its target, its replicate and whether it is an IgG control"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/cutandrun/samples.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "<group>_R<replicate>, the key every other collection is linked on"
+              "target": "Samplesheet group: the histone mark or the IgG control"
+              "replicate": "Replicate number inside the group"
+              "role": "target or IgG control"
+              "is_control": "True for the IgG control samples"
+              "control_target": "Group of the control this sample was called against"
+              "n_libraries": "Sequencing libraries merged into the sample"
+              "library_ids": "Those libraries' samplesheet ids"
+              "single_end": "True when the libraries are single-end"
+
+      - data_collection_tag: "samplesheet"
+        description: "The samplesheet the pipeline validated, one row per sequencing library with its FASTQ pair and its control"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "samplesheet\\.valid\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "id": "Library identifier (<sample>_T<technical replicate>)"
+              "group": "Histone mark or control group"
+              "replicate": "Replicate number inside the group"
+              "control": "Group of the IgG control this library is called against"
+              "single_end": "1 for single-end libraries"
+              "fastq_1": "Read 1 FASTQ"
+              "fastq_2": "Read 2 FASTQ, empty for single-end libraries"
+              "is_control": "1 when the library is an IgG control"
+
+      # ----------------------------------------------------------------
+      # MultiQC. Reprocessed with MultiQC 1.35: the module and plot names
+      # below are the 1.35 ones, not the 1.14 ones the run published.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report, re-generated with MultiQC 1.35 from the run's raw tool outputs (the run itself wrote MultiQC 1.14, which ships no parquet)"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "multiqc/multiqc_data/multiqc.parquet"
+          dc_specific_properties:
+            s3_location: null
+            modules:
+              - "general_stats"
+              - "fastqc"
+              - "cutadapt"
+              - "bowtie2"
+              - "samtools"
+              - "deepTools"
+              # MACS2 contributes general-stats columns only (no plot of its
+              # own), which is where a sample with zero peaks shows up.
+              - "macs"
+            plots:
+              fastqc:
+                - "Sequence Counts"
+                - "Sequence Quality Histograms"
+                - "Per Sequence Quality Scores"
+                - "Per Sequence GC Content":
+                    - "Percentages"
+                    - "Counts"
+                - "Per Base N Content"
+                - "Sequence Length Distribution"
+                - "Sequence Duplication Levels"
+                - "Top overrepresented sequences"
+                - "Status Checks"
+              cutadapt:
+                - "Filtered Reads"
+                - "Trimmed Sequence Lengths (3')":
+                    - "Counts"
+                    - "Obs/Exp"
+              bowtie2:
+                - "Paired-end alignments"
+              samtools:
+                - "Percent mapped"
+                - "Insert size distribution"
+                - "Alignment stats"
+                - "Flagstat"
+                - "Flagstat: Percentage of total"
+                - "XY counts"
+                - "Mapped reads per contig":
+                    - "Normalised Counts"
+                    - "Observed over Expected Counts"
+                    - "Raw Counts"
+              deepTools:
+                - "Correlation heatmap"
+                - "PCA plot"
+                - "Fingerprint plot"
+                - "Fingerprint quality metrics"
+
+      # ----------------------------------------------------------------
+      # SEACR, the CUT&RUN-specific caller and cutandrun's default. The
+      # raw collection exists so the tidy one can read it through
+      # `dc_ref`: the sample name lives only in the file NAME, and only a
+      # scan carries the path (`include_file_paths`) into the frame.
+      # `infer_schema_length: 0` reads every column as text because SEACR
+      # writes the signal columns in scientific notation and per-file
+      # inference disagrees between a sharp and a broad mark.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "seacr_peaks_raw"
+        description: "Raw per-sample SEACR peak beds (input of seacr_peaks)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.seacr\\.peaks\\.\\w+\\.bed$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              has_header: false
+              new_columns:
+                ["chr", "start", "end", "total_signal", "max_signal", "max_signal_region"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "chr": "Chromosome"
+              "start": "Region start (0-based)"
+              "end": "Region end"
+              "total_signal": "Summed fragment coverage over the region"
+              "max_signal": "Highest fragment coverage inside the region"
+              "max_signal_region": "Sub-interval where the maximum was reached"
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      - data_collection_tag: "seacr_peaks"
+        description: "Every SEACR region of every sample, with its width, its total and maximum fragment coverage and the coverage per base"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "seacr/peaks.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the region was called in"
+              "peak_id": "<sample>:<chr>:<start>-<end>, unique across samples"
+              "threshold_mode": "SEACR mode the call came from (stringent or relaxed)"
+              "chr": "Chromosome"
+              "start": "Region start (0-based)"
+              "end": "Region end"
+              "width": "Region width in bp"
+              "summit": "Midpoint of the max-signal sub-interval"
+              "total_signal": "Summed fragment coverage over the region"
+              "max_signal": "Highest fragment coverage inside the region"
+              "signal_density": "Coverage per base inside the region"
+              "log10_total_signal": "log10(total signal + 1), the genome-track height"
+
+      - data_collection_tag: "seacr_peak_summary"
+        description: "Per-sample SEACR QC: region count, bases covered and the median width, coverage and coverage per base behind it"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "seacr/peak_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the regions were called in"
+              "threshold_mode": "SEACR mode the calls came from"
+              "num_peaks": "Regions SEACR called"
+              "total_bp": "Bases those regions cover"
+              "width_median": "Median region width (bp)"
+              "width_mean": "Mean region width (bp)"
+              "width_max": "Widest region (bp)"
+              "total_signal_sum": "Summed fragment coverage over all regions"
+              "total_signal_median": "Median per-region total coverage"
+              "max_signal_median": "Median per-region maximum coverage"
+              "signal_density_median": "Median coverage per base inside a region"
+
+      # ----------------------------------------------------------------
+      # MACS2, the second caller. `optional: true`: a run launched with
+      # `--peakcaller seacr` alone writes none of these files, and the
+      # dashboard degrades to the SEACR-only panels.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "macs2_peaks"
+        description: "Every MACS2 narrow peak of every sample, with summit, width and the enrichment and significance MACS2 reported"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "macs2/peaks.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the peak was called in, read off the MACS2 peak name (cutandrun names MACS2 runs <sample>.macs2)"
+              "peak_id": "MACS2 peak name, unique across samples"
+              "chr": "Chromosome"
+              "start": "Peak start (0-based)"
+              "end": "Peak end"
+              "width": "Peak width in bp"
+              "summit": "Genomic position of the summit"
+              "score": "MACS2 integer score"
+              "fold_enrichment": "Fold enrichment at the summit over the IgG control"
+              "neg_log10_pvalue": "-log10 of the peak p-value"
+              "neg_log10_qvalue": "-log10 of the peak q-value (FDR)"
+
+      # ----------------------------------------------------------------
+      # Consensus peaks per target: the merged intervals with the
+      # replicates that supported them, read out of the member file names.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "seacr_consensus_peaks"
+        description: "Consensus peak intervals per target against the replicates that called them, as 0/1 set columns"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "seacr/consensus_peaks.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "peak_id": "<target>:<chr>:<start>-<end>, unique across targets"
+              "target": "Group the merged replicates belong to"
+              "caller": "Peak caller the member calls came from"
+              "chr": "Chromosome"
+              "start": "Merged interval start"
+              "end": "Merged interval end"
+              "width": "Merged interval width in bp"
+              "num_peaks": "Member peaks merged into the interval"
+              "num_samples": "Distinct replicates calling a peak on the interval"
+              "support": "num_samples as a category"
+              "total_signal": "Summed total signal of the member peaks"
+              "max_signal": "Highest max signal among the member peaks"
+
+      # ----------------------------------------------------------------
+      # Fragment lengths: the signature CUT&RUN QC curve. Same two-step as
+      # the SEACR peaks, for the same reason (the sample is in the name).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "seacr_fragment_lengths_raw"
+        description: "Raw per-sample fragment-length histograms (input of seacr_fragment_lengths)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.frags\\.len\\.txt$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              has_header: false
+              new_columns: ["fragment_length", "count"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "fragment_length": "Fragment length in bp"
+              "count": "Fragments of that length"
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      - data_collection_tag: "seacr_fragment_lengths"
+        description: "Fragment-length distribution per sample, with the fraction and the running fraction at each length"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "seacr/fragment_lengths.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the fragments came from"
+              "target": "Group the sample belongs to"
+              "fragment_length": "Fragment length in bp"
+              "count": "Fragments of that length"
+              "fraction": "Share of the sample's fragments at that length"
+              "cumulative_fraction": "Share of the sample's fragments at most that long"
+
+      # ----------------------------------------------------------------
+      # Caller agreement. Reads the two peak collections and the hub
+      # through `dc_ref`, so it runs after all three. A target a caller
+      # returned nothing for still gets a row, with n_peaks 0.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "caller_agreement"
+        description: "One row per sample and caller: how many peaks it called, how wide they are and how much of them the other caller reproduced"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/cutandrun/caller_agreement.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the peaks were called in"
+              "target": "Group the sample belongs to"
+              "caller": "macs2 or seacr"
+              "n_peaks": "Peaks this caller called for the sample"
+              "total_bp": "Bases those peaks cover"
+              "median_width": "Median peak width (bp)"
+              "max_width": "Widest peak (bp)"
+              "n_shared": "Peaks overlapping at least one peak of the other caller"
+              "n_unique": "Peaks the other caller did not reproduce"
+              "frac_shared": "n_shared / n_peaks, 0 when the caller called nothing"
+              "log10_n_peaks": "log10(n_peaks + 1), a colour axis that survives zeros"
+              "other_caller": "The caller compared against"
+              "n_peaks_other": "Peaks that other caller called for the same sample"
+
+links:
+  # Hub -> everything keyed on the sample name.
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Filter the MultiQC panels by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "seacr_peaks"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the SEACR peak table by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "seacr_peak_summary"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the SEACR QC summary by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "seacr_fragment_lengths"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the fragment-length curves by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "caller_agreement"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the caller comparison by the samples picked in the left panel"
+    enabled: true
+
+  # cutandrun runs MACS2 as `--name <sample>.macs2`, and macs2/peaks.py reads
+  # the sample off that peak name, so the hub key needs the caller suffix
+  # appended before it matches.
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "macs2_peaks"
+    target_type: "table"
+    link_config:
+      resolver: "pattern"
+      pattern: "{sample}.macs2"
+      target_field: "sample"
+    description: "Filter the MACS2 peak table by the samples picked in the left panel"
+    enabled: true
+
+  # The consensus table is per target, not per sample: it has no sample column,
+  # only one 0/1 set column per replicate.
+  - source_dc_tag: "samples"
+    source_column: "target"
+    target_dc_tag: "seacr_consensus_peaks"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "target"
+    description: "Filter the consensus intervals by the targets picked in the left panel"
+    enabled: true
+
+  # Sample-level selection: pick a sample on the caller comparison, read its
+  # peaks and its QC row.
+  - source_dc_tag: "caller_agreement"
+    source_column: "sample"
+    target_dc_tag: "seacr_peaks"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Carry a sample selected on the caller comparison over to its SEACR peaks"
+    enabled: true
+
+  - source_dc_tag: "caller_agreement"
+    source_column: "sample"
+    target_dc_tag: "seacr_peak_summary"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Carry a sample selected on the caller comparison over to its SEACR QC row"
+    enabled: true
+
+  - source_dc_tag: "seacr_peaks"
+    source_column: "sample"
+    target_dc_tag: "caller_agreement"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Carry a sample selected on the SEACR panels back to the caller comparison"
+    enabled: true

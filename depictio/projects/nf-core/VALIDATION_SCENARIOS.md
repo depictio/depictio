@@ -426,6 +426,37 @@ collapses them and answers 500). See chipseq VALIDATION_REPORT.md CS-D3.
 
 **Ranking by template stress:** K1 > K6 > K2 > K3/K4 > K5 > K7
 
+---
+
+## cutandrun 3.1
+
+**Megatest:** `s3://nf-core-awsmegatests/cutandrun/results-42502fb44975e930eec865353c5481f472bcf766/`
+(tag 3.1, run_root `.`, manifest megatest.yaml)
+
+**MultiQC:** run wrote 1.14 -> reprocessed with 1.35
+
+**Template requirements:**
+- Always: `samples`, `samplesheet`, `multiqc_data` (REPROCESSED parquet)
+- SEACR route: `seacr_peaks_raw` -> `seacr_peaks` (dc_ref), `seacr_peak_summary`,
+  `seacr_consensus_peaks`, `seacr_fragment_lengths_raw` -> `seacr_fragment_lengths` (dc_ref)
+- `caller_agreement` joins the two callers per sample, so it needs both
+- `macs2_peaks` is the only `optional: true` collection: a SEACR-only run keeps every
+  other tile and simply loses the comparison
+
+### Further scenarios (analytical, not yet run)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| C1 | **MultiQC not reprocessed** | omit the reprocess step | 1.14 wrote no `multiqc.parquet` | `multiqc_data` finds nothing and the QC tab is empty. Mandatory, not optional, as for chipseq and atacseq. |
+| C2 | **SEACR only** | `--peakcaller seacr` | No `macs2/` tree | `macs2_peaks` pruned, and `caller_agreement` degrades to one caller: the agreement tile is the one that reads wrong rather than empty, since a single caller trivially agrees with itself. The optional flag covers the collection but not the derived comparison. |
+| C3 | **MACS2 only** | `--peakcaller macs2` | No SEACR output | Six required collections empty at once, which is most of the dashboard. The template is SEACR-first by design and this is the scenario that breaks it. |
+| C4 | **both callers, different order** | `--peakcaller seacr,macs2` vs the reverse | cutandrun writes the primary caller's peaks to the consensus path | `seacr_consensus_peaks` may hold MACS2 intervals while the tile says SEACR. Worth a run: the failure is a mislabel, not an error. |
+| C5 | **single replicate per target** | samplesheet with one replicate | No consensus peak set per target | `seacr_consensus_peaks` empty; the Consensus tab loses its data. |
+| C6 | **IgG control absent** | `--igg_control false` | SEACR runs against a numeric threshold rather than the control | The peaks still populate but `seacr_peak_summary`'s control-normalised columns are absent or null. |
+| C7 | **numbered stage directories renamed** | a future release reorganising `01_prealign/` .. `04_reporting/` | Every scan path shifts | All recursive scans miss. This megatest's numbered layout is pinned in `megatest.yaml`, so a 3.2+ run is the thing to check before bumping the template. |
+
+**Ranking by template stress:** C3 > C1 > C7 > C2 > C5 > C4 > C6
+
 ## Priority additions to `generate_validation_runs.sh`
 
 In order of value-per-effort:
