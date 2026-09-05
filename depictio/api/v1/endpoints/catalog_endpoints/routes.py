@@ -66,8 +66,10 @@ def _match_dc_to_catalog(
     output columns, and such an output must not declare ``columns`` of its own.
 
     - **No recipe** → the raw file is the bindable frame, recognised by
-      ``find.filename`` (fnmatch on the basename) or ``find.path_glob``
-      (PurePosixPath.match on the full path, ** aware).
+      ``find.filename`` (fnmatch on the basename) or any of ``find.path_globs()``
+      (``path_glob`` plus ``path_glob_alt``, each tried with PurePosixPath.match
+      on the full path; ``**`` is a single segment there, which is what the alt
+      globs exist for).
     - **Recipe** → only the recipe that produced the DC binds it, compared to the
       output's ``recipe``. ``find`` still says which raw file the recipe eats,
       but the raw DC cannot satisfy renders authored against the recipe's
@@ -94,8 +96,7 @@ def _match_dc_to_catalog(
                     (basename and find.filename and fnmatch(basename, find.filename))
                     or (
                         full_path
-                        and find.path_glob
-                        and PurePosixPath(full_path).match(find.path_glob)
+                        and any(PurePosixPath(full_path).match(g) for g in find.path_globs())
                     )
                 )
             ) or (recipe is not None and output.recipe is not None and recipe == output.recipe)
