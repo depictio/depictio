@@ -577,18 +577,315 @@ normalized_position\tAll_Reads.normalized_coverage
     }
 
 
+def dupradar(sample: str) -> dict[str, str]:
+    """dupRadar has no MultiQC module — nf-core/rnaseq ships it as custom content.
+
+    So the section is whatever the `#id:` header says, and the header block is
+    the entire contract: MultiQC reads it as YAML, then the two headerless
+    columns below it as the x/y of one line per file.
+    """
+    intercept = _vary(sample, 12, 34)
+    rows = "\n".join(
+        f"{10 ** (-2 + n / 20.0):.6f}\t{min(99.0, intercept + 78.0 * (n / 120.0) ** 1.6):.4f}"
+        for n in range(121)
+    )
+    return {
+        f"{sample}_duprateExpDensCurve_mqc.txt": f"""#id: dupradar
+#section_name: 'dupRadar'
+#section_href: 'bioconductor.org/packages/release/bioc/html/dupRadar.html'
+#description: "provides duplication rate quality control for RNA-Seq datasets.
+#  Highly expressed genes can be expected to have a lot of duplicate reads, but
+#  high numbers of duplicates at low read counts can indicate low library
+#  complexity with technical duplication."
+#plot_type: 'linegraph'
+#anchor: 'dupradar'
+#pconfig:
+#    title: 'DupRadar General Linear Model'
+#    xlog: True
+#    xlab: 'expression (reads/kbp)'
+#    ylab: '% duplicate reads'
+#    ymin: 0
+#    ymax: 100
+{rows}
+"""
+    }
+
+
+def featurecounts(sample: str) -> dict[str, str]:
+    """featureCounts' `*.summary` sidecar — the filename suffix *is* the search
+    pattern, and the sample name comes from the `Status` header's column, not
+    from the file.
+    """
+    assigned = _vary(sample, 900_000, 1_200_000)
+    rows = [
+        ("Assigned", assigned),
+        ("Unassigned_Unmapped", int(assigned * 0.01)),
+        ("Unassigned_Read_Type", 0),
+        ("Unassigned_Singleton", 0),
+        ("Unassigned_MappingQuality", 0),
+        ("Unassigned_Chimera", 0),
+        ("Unassigned_FragmentLength", 0),
+        ("Unassigned_Duplicate", 0),
+        ("Unassigned_MultiMapping", int(assigned * 0.08)),
+        ("Unassigned_Secondary", 0),
+        ("Unassigned_NonSplit", 0),
+        ("Unassigned_NoFeatures", int(assigned * 0.06)),
+        ("Unassigned_Overlapping_Length", 0),
+        ("Unassigned_Ambiguity", int(assigned * 0.02)),
+    ]
+    body = "\n".join([f"Status\t{sample}.markdup.sorted.bam"] + [f"{k}\t{v}" for k, v in rows])
+    return {f"{sample}.featureCounts.txt.summary": body + "\n"}
+
+
+def qualimap(sample: str) -> dict[str, str]:
+    """Qualimap RNAseq: the two files behind genomic origin and gene-body coverage.
+
+    `rnaseq_qc_results.txt` names its own sample through the `bam file =` line,
+    while the coverage profile is named from the *grandparent* directory of the
+    file — hence the `raw_data_qualimapReport/` level, which is where Qualimap
+    puts it.
+    """
+    aligned = _vary(sample, 900_000, 1_200_000)
+    exonic = int(aligned * 0.86)
+    intronic = int(aligned * 0.08)
+    intergenic = aligned - exonic - intronic
+    results = f""">>>>>>> Input
+
+    bam file = {sample}.markdup.sorted.bam
+    gff file = genome.gtf
+    counting algorithm = uniquely-mapped-reads
+    protocol = strand-specific-reverse
+
+>>>>>>> Reads alignment
+
+    reads aligned  = {aligned}
+    total alignments = {int(aligned * 1.02)}
+    secondary alignments = 0
+    non-unique alignments = {int(aligned * 0.02)}
+    aligned to genes  = {exonic}
+    ambiguous alignments = {int(aligned * 0.01)}
+    no feature assigned = {intronic + intergenic}
+    not aligned = 0
+
+>>>>>>> Reads genomic origin
+
+    exonic =  {exonic} ({100.0 * exonic / aligned:.2f}%)
+    intronic = {intronic} ({100.0 * intronic / aligned:.2f}%)
+    intergenic = {intergenic} ({100.0 * intergenic / aligned:.2f}%)
+    overlapping exon = {int(aligned * 0.03)} ({3.0:.2f}%)
+
+>>>>>>> Transcript coverage profile
+
+    5' bias = {_vary(sample, 60, 90) / 100.0:.2f}
+    3' bias = {_vary(sample, 70, 95) / 100.0:.2f}
+    5'-3' bias = {_vary(sample, 90, 130) / 100.0:.2f}
+"""
+    depth = _vary(sample, 900, 1_400)
+    coverage = "\n".join(
+        f"{pos}.0\t{depth * (0.45 + 0.55 * (1.0 - abs(pos - 55) / 100.0)):.4f}"
+        for pos in range(0, 100)
+    )
+    return {
+        f"qualimap/{sample}/rnaseq_qc_results.txt": results,
+        f"qualimap/{sample}/raw_data_qualimapReport/coverage_profile_along_genes_(total).txt": (
+            "#Transcript position\tCoverage\n" + coverage + "\n"
+        ),
+    }
+
+
+def rseqc(sample: str) -> dict[str, str]:
+    """One file per RSeQC script the catalog's description names.
+
+    Most of these are recognised by content rather than by filename, and the
+    strings are load-bearing to the byte: `read_distribution` keys on the whole
+    `Group  Total_bases  Tag_count  Tags/Kb` header row, and
+    `junction_annotation` on `Total splicing  Events:` with its double space.
+    """
+    total = _vary(sample, 90_000, 130_000)
+    unique = int(total * 0.87)
+    # bam_stat: `read_2` is read unconditionally to decide single vs paired end,
+    # so dropping the line is a KeyError that takes every RSeQC section down.
+    bam_stat = f"""#Output (all numbers are read count)
+#==================================================
+Total records:                          {total}
+
+QC failed:                              0
+Optical/PCR duplicate:                  0
+Non primary hits                        {int(total * 0.04)}
+Unmapped reads:                         {total - unique - int(total * 0.04)}
+mapq < mapq_cut (non-unique):           {int(total * 0.05)}
+
+mapq >= mapq_cut (unique):              {unique}
+Read-1:                                 {unique // 2}
+Read-2:                                 {unique - unique // 2}
+Reads map to '+':                       {unique // 2}
+Reads map to '-':                       {unique - unique // 2}
+Non-splice reads:                       {int(unique * 0.72)}
+Splice reads:                           {unique - int(unique * 0.72)}
+Reads mapped in proper pairs:           {int(unique * 0.96)}
+Proper-paired reads map to different chrom:     0
+"""
+    tags = int(total * 1.1)
+    assigned = int(tags * 0.86)
+    groups = [
+        ("CDS_Exons", 33_302_033, int(assigned * 0.58)),
+        ("5'UTR_Exons", 21_717_577, int(assigned * 0.04)),
+        ("3'UTR_Exons", 15_347_371, int(assigned * 0.22)),
+        ("Introns", 1_132_917_579, int(assigned * 0.10)),
+        ("TSS_up_1kb", 17_827_098, int(assigned * 0.01)),
+        ("TSS_up_5kb", 81_971_725, int(assigned * 0.01)),
+        ("TSS_up_10kb", 149_730_983, int(assigned * 0.01)),
+        ("TES_down_1kb", 18_011_614, int(assigned * 0.01)),
+        ("TES_down_5kb", 78_700_757, int(assigned * 0.01)),
+        ("TES_down_10kb", 141_014_195, int(assigned * 0.01)),
+    ]
+    group_rows = "\n".join(
+        f"{name:<20}{bases:<20}{count:<20}{1000.0 * count / bases:.2f}"
+        for name, bases, count in groups
+    )
+    read_distribution = f"""Total Reads                   {total}
+Total Tags                    {tags}
+Total Assigned Tags           {assigned}
+=====================================================================
+Group               Total_bases         Tag_count           Tags/Kb
+{group_rows}
+=====================================================================
+"""
+    peak = _vary(sample, 60, 110)
+    inner_distance = "\n".join(
+        f"{lo}\t{lo + 5}\t{max(0, 900 - abs(lo + 2 - peak) * 9)}" for lo in range(-250, 250, 5)
+    )
+    events = _vary(sample, 40_000, 60_000)
+    junctions = _vary(sample, 20_000, 30_000)
+    junction_annotation = f"""Total splicing  Events:\t{events}
+Known Splicing Events:\t{int(events * 0.94)}
+Partial Novel Splicing Events:\t{int(events * 0.04)}
+Novel Splicing Events:\t{events - int(events * 0.94) - int(events * 0.04)}
+
+Total splicing  Junctions:\t{junctions}
+Known Splicing Junctions:\t{int(junctions * 0.88)}
+Partial Novel Splicing Junctions:\t{int(junctions * 0.08)}
+Novel Splicing Junctions:\t{junctions - int(junctions * 0.88) - int(junctions * 0.08)}
+"""
+
+    x_pct = list(range(5, 105, 5))
+
+    # junctionSaturation_plot.r is parsed with `^([xyzw])=c\(([\d,]+)\)$`: bare
+    # integers only, so no decimals and no spaces after the commas.
+    def _saturation(scale: float) -> str:
+        return ",".join(str(int(junctions * scale * (1.0 - (1.0 - p / 100.0) ** 2))) for p in x_pct)
+
+    junction_saturation = f"""pdf('{sample}.junctionSaturation_plot.pdf')
+x=c({",".join(str(p) for p in x_pct)})
+y=c({_saturation(0.88)})
+z=c({_saturation(1.0)})
+w=c({_saturation(0.12)})
+m=max(y,z,w)
+plot(x,z/1000,xlab='percent of total reads',ylab='Number of splicing junctions (x1000)',type='o',col='blue')
+dev.off()
+"""
+    antisense = _vary(sample, 9_400, 9_800) / 10_000.0
+    failed = _vary(sample, 100, 300) / 10_000.0
+    infer_experiment = f"""
+
+This is PairEnd Data
+Fraction of reads failed to determine: {failed:.4f}
+Fraction of reads explained by "1++,1--,2+-,2-+": {1.0 - antisense - failed:.4f}
+Fraction of reads explained by "1+-,1-+,2++,2--": {antisense:.4f}
+"""
+    return {
+        f"{sample}.bam_stat.txt": bam_stat,
+        f"{sample}.read_distribution.txt": read_distribution,
+        f"{sample}.inner_distance_freq.txt": inner_distance + "\n",
+        f"{sample}.junction_annotation.log": junction_annotation,
+        f"{sample}.junctionSaturation_plot.r": junction_saturation,
+        f"{sample}.infer_experiment.txt": infer_experiment,
+    }
+
+
+def salmon(sample: str) -> dict[str, str]:
+    """Salmon writes a directory per sample; MultiQC keys on the directory names.
+
+    `meta_info.json` is only read when its parent directory is `aux_info` or
+    `aux`, `flenDist.txt` only when its parent is `libParams`, and both take the
+    sample name from the directory above that — so the layout here is the
+    parser, not decoration.
+    """
+    total = _vary(sample, 100_000, 130_000)
+    mapped = int(total * 0.83)
+    meta = {
+        "salmon_version": "1.10.1",
+        "samp_type": "none",
+        "opt_type": "vb",
+        "quant_errors": [],
+        "num_libraries": 1,
+        "library_types": ["ISR"],
+        "frag_dist_length": 1001,
+        "seq_bias_correct": False,
+        "gc_bias_correct": False,
+        "num_bias_bins": 4096,
+        "mapping_type": "mapping",
+        "num_targets": 21_500,
+        "num_bootstraps": 0,
+        "num_processed": total,
+        "num_mapped": mapped,
+        "num_decoy_fragments": 0,
+        "num_dovetail_fragments": 0,
+        "num_fragments_filtered_vm": 0,
+        "num_alignments_below_threshold_for_mapped_fragments_vm": 0,
+        "percent_mapped": round(100.0 * mapped / total, 4),
+        "call": "quant",
+        "start_time": "Tue Jun  2 07:20:00 2026",
+        "end_time": "Tue Jun  2 07:21:00 2026",
+    }
+    lfc = {
+        "read_files": f"[ {sample}_R1.fastq.gz, {sample}_R2.fastq.gz ]",
+        "expected_format": "ISR",
+        "compatible_fragment_ratio": round(_vary(sample, 88, 97) / 100.0, 4),
+        "num_compatible_fragments": mapped,
+        "num_assigned_fragments": mapped,
+        "num_frags_with_concordant_consistent_mappings": mapped,
+        "num_frags_with_inconsistent_or_orphan_mappings": int(total * 0.02),
+        "strand_mapping_bias": round(_vary(sample, 40, 60) / 100.0, 4),
+        "MSF": 0,
+        "OSF": 0,
+        "ISF": int(mapped * 0.02),
+        "MSR": 0,
+        "OSR": 0,
+        "ISR": int(mapped * 0.96),
+        "SF": int(mapped * 0.01),
+        "SR": int(mapped * 0.01),
+    }
+    peak = _vary(sample, 180, 240)
+    # flenDist.txt is one whitespace-separated row of densities, indexed by
+    # fragment length; MultiQC numbers the buckets by position, not by a header.
+    fld = " ".join(
+        f"{max(0.0, 1.0 - abs(length - peak) / 120.0) / 240.0:.8f}" for length in range(1001)
+    )
+    return {
+        f"{sample}/aux_info/meta_info.json": json.dumps(meta, indent=2),
+        f"{sample}/lib_format_counts.json": json.dumps(lfc, indent=2),
+        f"{sample}/libParams/flenDist.txt": fld + "\n",
+    }
+
+
 STUB_BUILDERS = {
     "bcftools": bcftools,
     "bowtie2": bowtie2,
     "cutadapt": cutadapt,
+    "dupradar": dupradar,
     "fastp": fastp,
     "fastqc": fastqc,
+    "featurecounts": featurecounts,
     "happy": happy,
     "ivar": ivar,
     "kraken": kraken,
     "mosdepth": mosdepth,
     "picard": picard,
+    "qualimap": qualimap,
     "quast": quast,
+    "rseqc": rseqc,
+    "salmon": salmon,
     "samtools": samtools,
     "snpeff": snpeff,
     "sompy": sompy,
