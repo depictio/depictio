@@ -1,0 +1,559 @@
+# nf-core/rnafusion Template v4.1.3 - RNA fusion detection
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/rnafusion/4.1.3 --data-root /path/to/your/data
+#
+# Tested against the nf-core/rnafusion AWS megatest run:
+#   s3://nf-core-awsmegatests/rnafusion/results-76ad76e7c39b2ba9edc35aa3602e3dc454d842ec
+# (release 4.1.3). The exact file subset the template needs is listed in
+# megatest.yaml next to this file.
+# ============================================================================
+#
+# THE FUSION IS THE UNIT OF ANALYSIS, NOT THE SAMPLE.
+# rnafusion writes one file per tool per sample and none of those files carries a
+# sample column; the recipe harness concatenates the globbed files without their
+# path, so a sample column cannot be recovered from them. Every fusion table is
+# therefore keyed on the fusion name, the links fan a fusion selection out across
+# the callers, and the samplesheet only drives the MultiQC panels. On the
+# validation run this costs nothing (the megatest is a single sample, so every
+# cross-sample panel would be degenerate anyway); on a cohort run the caller
+# tables pool the samples, which is called out in docs/dashboards.md.
+#
+# rnafusion's route flags are NOT auto-detected from params.json (the CLI's
+# _introspect_pipeline_params only knows the ampliseq and viralrecon flags), so a
+# run that skipped a caller needs the matching --var. The conditionals below name
+# the params.json field each flag mirrors.
+template:
+  template_id: "nf-core/rnafusion/4.1.3"
+  description: "nf-core/rnafusion gene-fusion template: caller consensus, per-caller evidence, in-silico validation and splice-junction analysis"
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory containing rnafusion pipeline output (multiqc/, fusionreport/, arriba/, starfusion/, fusioncatcher/, fusioninspector/, ctatsplicing/)"
+      required: true
+    - name: "SAMPLESHEET_FILE"
+      description: "Path to the run samplesheet. Defaults to {DATA_ROOT}/input/samplesheet.csv. rnafusion does not publish the samplesheet, so fetch the one params.json `input` points at (see megatest.yaml post_fetch_help)."
+      required: false
+    - name: "SKIP_ARRIBA"
+      description: "Set when params.json `tools` does not include arriba. Prunes the Arriba data collection."
+      required: false
+    - name: "SKIP_STARFUSION"
+      description: "Set when params.json `tools` does not include starfusion. Prunes the STAR-Fusion data collection."
+      required: false
+    - name: "SKIP_FUSIONCATCHER"
+      description: "Set when params.json `tools` does not include fusioncatcher. Prunes the FusionCatcher data collection."
+      required: false
+    - name: "SKIP_FUSIONINSPECTOR"
+      description: "Set when the run did not validate the calls with FusionInspector. Prunes the validated-fusion and protein-domain collections."
+      required: false
+    - name: "SKIP_CTATSPLICING"
+      description: "Set when params.json `tools` does not include ctatsplicing. Prunes the splice-junction collections."
+      required: false
+    - name: "SKIP_QC"
+      description: "Set when the run used --skip_qc (params.json skip_qc). Prunes the MultiQC collection and the Quality control tab."
+      required: false
+  # Variables used when materialising the bundled reference dataset. The
+  # samplesheet is the one file the run does not publish, so its location is
+  # pinned here rather than guessed.
+  reference:
+    vars:
+      SAMPLESHEET_FILE: "{DATA_ROOT}/input/samplesheet.csv"
+  # How this pipeline's run provenance (parameters, reference builds, tool
+  # versions) is collected at ingest, surfaced in the project's ingestion report
+  # and the dashboard Settings drawer. Keys not matched by a group rule land in
+  # 'Other'; only exclude_keys are ever omitted.
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "genomes"            # the whole igenomes reference-path catalog
+          - "cosmic_username"    # COSMIC credentials for the fusion-report DB
+          - "cosmic_passwd"
+          - "hook_url"           # nf-core runs put a live Slack webhook here
+          - "email*"             # submitter address
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Fusion callers"
+        key_patterns: ["tools", "tools_cutoff", "arriba_fusions", "starfusion_fusions", "fusioncatcher_fusions", "fusioninspector_fusions", "fusioncatcher_limitSjdbInsertNsj", "fusioninspector_limitSjdbInsertNsj", "whitelist", "star_*"]
+      - group: "Reference and annotation"
+        key_patterns: ["genome", "genome_gencode_version", "genomes_base", "genomes_ignore", "species", "pfam_*", "dfam_*", "fusion_annot_lib", "annot_filter_url", "ctatsplicing_cancer_introns", "no_cosmic", "qiagen", "references_only"]
+      - group: "Read processing"
+        key_patterns: ["read_length", "trim_tail*", "adapter_fasta", "min_trimmed_reads", "save_merged", "save_trimmed_fail", "seq_center", "seq_platform", "cram"]
+      - group: "Reporting"
+        key_patterns: ["multiqc_*", "max_multiqc_email_size", "monochrome_logs", "plaintext_email"]
+      - group: "Run context"
+        key_patterns: ["input*", "outdir", "config_profile_*", "custom_config_*", "publish_dir_mode", "trace_report_suffix", "pipelines_testdata_base_path", "validate_params", "help*", "show_hidden", "version"]
+      - group: "Skipped steps"
+        key_patterns: ["skip_*"]
+    highlight:
+      - "tools"
+      - "tools_cutoff"
+      - "genome"
+      - "genome_gencode_version"
+      - "read_length"
+      - "no_cosmic"
+      - "whitelist"
+  dashboards:
+    - "dashboards/base.yaml"
+  conditional:
+    # A user-supplied samplesheet path overrides the default location.
+    - if_var_present: "SAMPLESHEET_FILE"
+      override_dcs:
+        - data_collection_tag: "samplesheet"
+          scan_filename: "{SAMPLESHEET_FILE}"
+    # --tools without arriba: no arriba/ directory at all.
+    - if_var_present: "SKIP_ARRIBA"
+      remove_dc_tags: ["arriba_fusions"]
+      dashboards: ["dashboards/base.yaml"]
+    - if_var_present: "SKIP_STARFUSION"
+      remove_dc_tags: ["starfusion_fusions"]
+      dashboards: ["dashboards/base.yaml"]
+    - if_var_present: "SKIP_FUSIONCATCHER"
+      remove_dc_tags: ["fusioncatcher_fusions"]
+      dashboards: ["dashboards/base.yaml"]
+    # No FusionInspector run means no validated calls and no Pfam domains: both
+    # collections read the same abridged table.
+    - if_var_present: "SKIP_FUSIONINSPECTOR"
+      remove_dc_tags: ["fusioninspector_fusions", "fusion_protein_domains"]
+      dashboards: ["dashboards/base.yaml"]
+    - if_var_present: "SKIP_CTATSPLICING"
+      remove_dc_tags: ["splice_junctions", "cancer_introns"]
+      dashboards: ["dashboards/base.yaml"]
+    # --skip_qc: no FastQC / Picard / samtools metrics reach MultiQC, so the
+    # report is not worth reading.
+    - if_var_present: "SKIP_QC"
+      remove_dc_tags: ["multiqc_data"]
+      dashboards: ["dashboards/base.yaml"]
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "RNAfusion Gene Fusion Detection"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "rnafusion"
+    version: "4.1.3"
+    engine:
+      name: "nextflow"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/rnafusion"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report data (FastQC before and after trimming, fastp, STAR alignment, Picard library and transcript metrics)"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "multiqc/multiqc_data/multiqc\\.parquet"
+          dc_specific_properties:
+            # rnafusion runs FastQC twice, on the raw reads and on the trimmed
+            # ones, so MultiQC anchors the second instance as 'fastqc-1'. Both
+            # spellings are listed so a single-FastQC run resolves too.
+            modules:
+              - "fastqc"
+              - "fastqc-1"
+              - "fastp"
+              - "star"
+              - "picard"
+            plots:
+              fastqc:
+                - "Sequence Counts"
+                - "Sequence Quality Histograms"
+                - "Per Sequence Quality Scores"
+                - "Per Sequence GC Content":
+                    - "Percentages"
+                    - "Counts"
+                - "Per Base N Content"
+                - "Sequence Length Distribution"
+                - "Sequence Duplication Levels"
+                - "Overrepresented sequences by sample"
+                - "Top overrepresented sequences"
+                - "Status Checks"
+              fastqc-1:
+                - "Sequence Counts"
+                - "Sequence Quality Histograms"
+                - "Per Sequence Quality Scores"
+                - "Per Sequence GC Content":
+                    - "Percentages"
+                    - "Counts"
+                - "Per Base N Content"
+                - "Sequence Length Distribution"
+                - "Sequence Duplication Levels"
+                - "Overrepresented sequences by sample"
+                - "Top overrepresented sequences"
+                - "Status Checks"
+              fastp:
+                - "Filtered Reads"
+                - "Insert Sizes"
+                - "Sequence Quality":
+                    - "Read 1: Before filtering"
+                    - "Read 1: After filtering"
+                    - "Read 2: Before filtering"
+                    - "Read 2: After filtering"
+                - "GC Content":
+                    - "Read 1: Before filtering"
+                    - "Read 1: After filtering"
+                    - "Read 2: Before filtering"
+                    - "Read 2: After filtering"
+                - "N content":
+                    - "Read 1: Before filtering"
+                    - "Read 1: After filtering"
+                    - "Read 2: Before filtering"
+                    - "Read 2: After filtering"
+              star:
+                - "Summary Statistics"
+                - "Alignment Scores"
+                - "Gene Counts":
+                    - "Unstranded"
+                    - "Same Stranded"
+                    - "Reverse Stranded"
+              picard:
+                - "Insert Size":
+                    - "Counts"
+                    - "Percentages"
+                - "Mark Duplicates"
+                - "RnaSeqMetrics Assignment"
+                - "Gene Coverage"
+
+      - data_collection_tag: "samplesheet"
+        description: "Run samplesheet (sample identifiers and library strandedness); drives the MultiQC sample filter"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{DATA_ROOT}/input/samplesheet.csv"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "sample": "Sample identifier, matched to the MultiQC report samples"
+              "fastq_1": "Read 1 FASTQ the run was given"
+              "fastq_2": "Read 2 FASTQ the run was given"
+              "strandedness": "Library strandedness declared for the sample"
+
+      # ----------------------------------------------------------------
+      # Recipe-transformed data collections. Each reads the caller's own
+      # output table and reshapes it at ingest. All are keyed on `fusion`.
+      # ----------------------------------------------------------------
+
+      - data_collection_tag: "fusion_consensus"
+        description: "fusion-report consensus: one row per fusion with its knowledge-base hits, Fusion Indication Index and a 0/1 flag per caller"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "fusionreport/fusions.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "fusion": "Fusion name, 5' partner and 3' partner joined by two dashes (the key every other collection is filtered by)"
+              "gene_5p": "5' partner gene"
+              "gene_3p": "3' partner gene"
+              "databases": "Fusion knowledge bases that already list this fusion"
+              "n_databases": "How many of those knowledge bases"
+              "fii": "Fusion Indication Index, the 0 to 1 score fusion-report ranks by"
+              "explained_fii": "The arithmetic behind the index, as fusion-report writes it"
+              "arriba": "1 when Arriba reported the fusion"
+              "fusioncatcher": "1 when FusionCatcher reported the fusion"
+              "starfusion": "1 when STAR-Fusion reported the fusion"
+              "n_tools": "How many callers agreed on the fusion"
+              "tool_support": "Caller agreement as a label, for grouping and colouring"
+              "rank": "Position in fusion-report's own ranking, 1 being the top call"
+
+      - data_collection_tag: "caller_evidence"
+        description: "Per-caller evidence in long form: one row per fusion and caller, with the read support that caller reported"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "fusionreport/caller_evidence.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "fusion": "Fusion the evidence belongs to"
+              "caller": "Caller that produced this row"
+              "position_5p": "Breakpoint on the 5' partner, as that caller writes it"
+              "position_3p": "Breakpoint on the 3' partner"
+              "supporting_reads": "Read support the caller reported, summed over the count fields it writes"
+              "log_support": "log10 of the read support plus one, so weak and strong calls stay on one colour scale"
+              "evidence_fraction": "This caller's share of the fusion's total read support across callers"
+              "fii": "Fusion Indication Index of the fusion, carried over for ranking"
+              "detail": "The caller's full evidence string, unparsed"
+
+      - data_collection_tag: "arriba_fusions"
+        description: "Arriba fusion calls with split reads, discordant mates, local coverage, confidence and reading frame"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "arriba/fusions.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "fusion": "Fusion name, matching the consensus collection"
+              "breakpoint_5p": "5' breakpoint coordinate"
+              "breakpoint_3p": "3' breakpoint coordinate"
+              "fusion_type": "Structural class Arriba assigned (deletion, translocation, inversion, duplication)"
+              "confidence": "Arriba's own confidence class for the call"
+              "reading_frame": "Whether the fusion transcript stays in frame"
+              "split_reads": "Reads spanning the breakpoint itself"
+              "discordant_mates": "Read pairs straddling the breakpoint"
+              "supporting_reads": "Split reads plus discordant mates"
+              "coverage": "Local coverage at both breakpoints"
+              "support_fraction": "Share of the local reads that support the fusion"
+              "retained_protein_domains": "Protein domains Arriba predicts the fusion keeps"
+
+      - data_collection_tag: "starfusion_fusions"
+        description: "STAR-Fusion calls with junction and spanning read counts, splice type and normalised abundance"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "starfusion/fusions.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "fusion": "Fusion name, matching the consensus collection"
+              "breakpoint_5p": "5' breakpoint coordinate"
+              "breakpoint_3p": "3' breakpoint coordinate"
+              "splice_type": "Whether both breakpoints sit on reference splice sites"
+              "junction_reads": "Reads crossing the fusion junction"
+              "spanning_frags": "Fragments straddling the junction without crossing it"
+              "supporting_reads": "Junction reads plus spanning fragments"
+              "ffpm": "Fusion fragments per million total reads"
+              "junction_fraction": "Share of the support that crosses the junction"
+              "large_anchor_support": "Whether a long anchor sequence backs the junction"
+
+      - data_collection_tag: "fusioncatcher_fusions"
+        description: "FusionCatcher fusion genes with spanning pairs, unique reads, anchor length and predicted effect"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "fusioncatcher/fusion_genes.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "fusion": "Fusion name, matching the consensus collection"
+              "description": "FusionCatcher's annotation labels for the pair (known, oncogene, tcga, read-through)"
+              "n_annotations": "How many of those labels apply"
+              "spanning_pairs": "Read pairs straddling the breakpoint"
+              "spanning_unique_reads": "Uniquely mapping reads crossing the breakpoint"
+              "supporting_reads": "Spanning pairs plus unique reads"
+              "longest_anchor": "Longest anchor sequence found on either side"
+              "finding_method": "Which FusionCatcher method found the fusion"
+              "predicted_effect": "Effect on the coding sequence FusionCatcher predicts"
+              "unique_fraction": "Share of the support that maps uniquely"
+
+      - data_collection_tag: "fusioninspector_fusions"
+        description: "FusionInspector in-silico validation: the calls re-quantified against a fusion contig reference"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "fusioninspector/fusions.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "fusion": "Fusion name, matching the consensus collection"
+              "splice_type": "Whether the validated junction sits on reference splice sites"
+              "junction_reads": "Reads crossing the junction after re-alignment"
+              "spanning_frags": "Fragments straddling the junction after re-alignment"
+              "ffpm": "Fusion fragments per million after re-alignment"
+              "far_left": "Fusion allelic ratio on the 5' side, fusion reads against the competing wild-type reads"
+              "far_right": "Fusion allelic ratio on the 3' side"
+              "counter_fusion_left": "Wild-type reads competing with the fusion on the 5' side"
+              "counter_fusion_right": "Wild-type reads competing on the 3' side"
+              "prot_fusion_type": "Whether the predicted fusion protein is in frame"
+              "n_domains_5p": "Pfam domains on the 5' partner"
+              "n_domains_3p": "Pfam domains on the 3' partner"
+
+      - data_collection_tag: "fusion_protein_domains"
+        description: "Pfam domains of both fusion partners in amino-acid coordinates, one row per domain"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "fusioninspector/protein_domains.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "fusion": "Fusion the domain belongs to"
+              "partner": "Which side of the fusion the domain sits on, 5p or 3p"
+              "domain": "Pfam domain name; a PARTIAL suffix means the breakpoint cuts through it"
+              "domain_start": "Domain start in amino-acid coordinates"
+              "domain_end": "Domain end in amino-acid coordinates"
+              "domain_length": "Domain length in amino acids"
+              "evalue": "Pfam hit e-value"
+              "neg_log10_evalue": "Minus log10 of the e-value, so stronger hits score higher"
+              "prot_fusion_type": "Whether the predicted fusion protein is in frame"
+
+      - data_collection_tag: "splice_junctions"
+        description: "Every splice junction CTAT-splicing scored, with uniquely and multi-mapped read support"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "ctatsplicing/introns.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "intron": "Junction coordinate as CTAT-splicing writes it"
+              "chrom": "Chromosome the junction sits on"
+              "start": "Junction start"
+              "end": "Junction end"
+              "intron_length": "Distance between the two junction ends"
+              "strand": "Strand of the transcript the junction belongs to"
+              "gene": "Gene symbol the junction was assigned to"
+              "uniq_mapped": "Uniquely mapping reads crossing the junction"
+              "multi_mapped": "Multi-mapping reads crossing the junction"
+              "total_mapped": "Uniquely plus multi-mapped reads"
+              "uniq_fraction": "Share of the support that maps uniquely"
+              "score": "Uniquely mapping read support, as a float, for the junction landscape"
+
+      - data_collection_tag: "cancer_introns"
+        # Only populated when the run's junctions survive the CTAT cancer-intron
+        # annotation filter. The megatest writes a header-only file, so this
+        # collection is optional and no dashboard tile depends on it.
+        optional: true
+        description: "Junctions matching the CTAT cancer-intron catalog, with their TCGA and GTEx prevalence"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "ctatsplicing/cancer_introns.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "intron": "Junction coordinate"
+              "chrom": "Chromosome the junction sits on"
+              "gene": "Gene symbol the junction was assigned to"
+              "uniq_mapped": "Uniquely mapping reads crossing the junction"
+              "n_tcga_cohorts": "TCGA cohorts that also report this junction"
+              "top_tcga_cohort": "TCGA cohort reporting it most often"
+              "top_tcga_pct": "Share of that cohort's samples carrying the junction"
+              "n_gtex_tissues": "GTEx tissues that also report this junction"
+              "top_gtex_tissue": "GTEx tissue reporting it most often"
+              "variant_name": "Named cancer splicing variant, when the catalog has one"
+
+# ============================================================================
+# CROSS-COLLECTION LINKS
+# The fusion consensus is the hub: every caller collection is keyed by `fusion`,
+# so a fusion picked anywhere narrows the whole dashboard. The samplesheet is a
+# second, smaller hub: it only reaches the MultiQC panels, which are the one
+# place where the sample rather than the fusion is the unit.
+# ============================================================================
+links:
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+    description: "Filter the MultiQC panels by samplesheet samples"
+    enabled: true
+
+  - source_dc_tag: "fusion_consensus"
+    source_column: "fusion"
+    target_dc_tag: "caller_evidence"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "fusion"
+    description: "Filter the per-caller evidence by the selected fusions"
+    enabled: true
+
+  - source_dc_tag: "fusion_consensus"
+    source_column: "fusion"
+    target_dc_tag: "arriba_fusions"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "fusion"
+    description: "Filter the Arriba calls by the selected fusions"
+    enabled: true
+
+  - source_dc_tag: "fusion_consensus"
+    source_column: "fusion"
+    target_dc_tag: "starfusion_fusions"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "fusion"
+    description: "Filter the STAR-Fusion calls by the selected fusions"
+    enabled: true
+
+  - source_dc_tag: "fusion_consensus"
+    source_column: "fusion"
+    target_dc_tag: "fusioncatcher_fusions"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "fusion"
+    description: "Filter the FusionCatcher calls by the selected fusions"
+    enabled: true
+
+  - source_dc_tag: "fusion_consensus"
+    source_column: "fusion"
+    target_dc_tag: "fusioninspector_fusions"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "fusion"
+    description: "Filter the FusionInspector validation by the selected fusions"
+    enabled: true
+
+  - source_dc_tag: "fusion_consensus"
+    source_column: "fusion"
+    target_dc_tag: "fusion_protein_domains"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "fusion"
+    description: "Filter the protein-domain rows by the selected fusions"
+    enabled: true
+
+  # The FusionInspector validation is the second hub of the drill-down tab: a
+  # fusion selected there narrows its protein domains and the caller evidence
+  # behind it.
+  - source_dc_tag: "fusioninspector_fusions"
+    source_column: "fusion"
+    target_dc_tag: "fusion_protein_domains"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "fusion"
+    description: "Filter the protein-domain rows by the validated fusion selection"
+    enabled: true
+
+  - source_dc_tag: "fusioninspector_fusions"
+    source_column: "fusion"
+    target_dc_tag: "caller_evidence"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "fusion"
+    description: "Filter the per-caller evidence by the validated fusion selection"
+    enabled: true
+
+  # splice_junctions and cancer_introns are keyed on the junction, not on the
+  # fusion: CTAT-splicing scores introns of a single gene, so a fusion name has
+  # nothing to match there. Left unlinked on purpose.
