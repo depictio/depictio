@@ -91,6 +91,61 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: 38315a2e3025322d7b4e211a
+    data_collection_tag: ataqv_chromosome_counts
+    description: Reads per reference sequence — recipe output (ataqv/chromosome_counts.py), seeded from
+      the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: ataqv/chromosome_counts.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 5926d7bfb6ffeb4df23f8329
+    data_collection_tag: ataqv_fragment_length
+    description: Fragment length distribution — recipe output (ataqv/fragment_length.py), seeded from
+      the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: ataqv/fragment_length.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: fc9a9fe3677f23d87c21b5e8
+    data_collection_tag: ataqv_metrics
+    description: ATAC quality metrics — recipe output (ataqv/metrics.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: ataqv/metrics.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: ca868ff71e44dddc630ad228
+    data_collection_tag: ataqv_tss_coverage
+    description: TSS coverage profile — recipe output (ataqv/tss_coverage.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: ataqv/tss_coverage.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: 388b6dc6693134432c3cd55c
     data_collection_tag: combgc_summary
     description: BGC regions — recipe output (combgc/summary.py), seeded from the catalog fixture
@@ -1214,6 +1269,7 @@ workflows:
       dc_specific_properties:
         s3_location: null
         modules:
+        - ataqv
         - bcftools
         - bowtie2
         - bracken
@@ -1246,6 +1302,11 @@ workflows:
         - summary_conformance_metrics
         - truvari
         plots:
+          ataqv:
+          - Fragment Length Distribution
+          - Peak percentiles
+          - Mapping Quality Distribution
+          - Chromosome Distribution
           bcftools:
           - Indel Distribution
           bowtie2:
