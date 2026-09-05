@@ -1,0 +1,88 @@
+# Megatest manifest for nf-core/ampliseq 2.18.0 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the tables-only
+# subset of it that the template recipes, MultiQC and the canonical-seed
+# generator (generate_canonical_seeds.py) need. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline ampliseq --version 2.18.0 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing
+#
+# Keys are fnmatch globs relative to run_root (here the prefix root) and are
+# mirrored 1:1 below the destination, which becomes the template DATA_ROOT.
+# Timestamped pipeline_info files are renamed to stable names (params.json,
+# software_versions.yml); the newest one wins when a run wrote several.
+#
+# Do NOT point the destination at this template directory: .gitignore allow-lists
+# input/*.tsv and the raw Metadata_full.tsv would overwrite the committed,
+# demo-augmented one (sampling_date / lon / lat / ctd_* columns).
+pipeline: ampliseq
+version: "2.18.0"
+# s3://nf-core-awsmegatests/ampliseq/results-<results_sha>/ == the 2.18.0 release tag_sha.
+results_sha: "2723d4c298d48321594920d0324697e14d73ee94"
+run_root: ""
+multiqc:
+  version: "1.34"
+  parquet: multiqc/multiqc_data/multiqc.parquet
+  reprocess: false
+keys:
+  # Pipeline params + software versions: the CLI reads pipeline_info/params.json
+  # to auto-fill METADATA_FILE (this run used --metadata) and the route/skip
+  # flags that decide which data collections the template keeps.
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  # Samplesheet (required DC; SAMPLESHEET_FILE auto-detected from input/) + metadata.
+  - input/Samplesheet_full.tsv
+  - input/Metadata_full.tsv
+  # MultiQC parquet (cutadapt + fastqc modules).
+  - multiqc/multiqc_data/multiqc.parquet
+  # Alpha diversity per-metric vectors (alpha_diversity + alpha_diversity_multi_canonical).
+  - qiime2/diversity/alpha_diversity/faith_pd_vector/metadata.tsv
+  - qiime2/diversity/alpha_diversity/shannon_vector/metadata.tsv
+  - qiime2/diversity/alpha_diversity/observed_features_vector/metadata.tsv
+  - qiime2/diversity/alpha_diversity/evenness_vector/metadata.tsv
+  # Alpha rarefaction CSVs (alpha_rarefaction + rarefaction_canonical).
+  - qiime2/alpha-rarefaction/faith_pd.csv
+  - qiime2/alpha-rarefaction/shannon.csv
+  - qiime2/alpha-rarefaction/observed_features.csv
+  # Taxonomy composition barplot levels. level-3 is the Phylum for this release's
+  # default database (sbdi-gtdb, 8 ranks) and is what template.yaml points the
+  # recipe at; level-2 is kept because the recipes' own default paths (used by
+  # `depictio dev recipe run` and CI's standalone recipe step) still name it.
+  - qiime2/barplot/level-2.csv
+  - qiime2/barplot/level-3.csv
+  # Relative abundance tables: level 2 (Phylum) to 6 (Genus) + ASV with DADA2 taxonomy.
+  # rel-table-2: taxonomy_rel_abundance; 2-6: stacked_taxonomy_canonical;
+  # 6: sunburst/sankey_canonical; ASV_with-DADA2-tax: tree_metadata_canonical.
+  - qiime2/rel_abundance_tables/rel-table-2.tsv
+  - qiime2/rel_abundance_tables/rel-table-3.tsv
+  - qiime2/rel_abundance_tables/rel-table-4.tsv
+  - qiime2/rel_abundance_tables/rel-table-5.tsv
+  - qiime2/rel_abundance_tables/rel-table-6.tsv
+  - qiime2/rel_abundance_tables/rel-table-ASV_with-DADA2-tax.tsv
+  # Taxonomy assignments + phylogenetic tree (phylogenetic_tree_canonical + tip metadata).
+  - qiime2/taxonomy/taxonomy.tsv
+  - qiime2/phylogenetic_tree/tree.nwk
+  # ANCOM-BC: lfc / p_val / q_val / w / se slices per level (level-3 = Phylum here,
+  # level-2 for the recipe defaults).
+  - qiime2/ancombc/differentials/Category-habitat-level-2/*_slice.csv
+  - qiime2/ancombc/differentials/Category-habitat-level-3/*_slice.csv
+prefix_keys: []
+renames: {}
+post_fetch_help: |
+  === Quick test commands ===
+
+  # METADATA_FILE and the route flags come from pipeline_info/params.json, so
+  # no --var is needed for them. GROUP_COL is auto-detected as the first
+  # annotation column ('name', one value per sample); 'habitat' is the one the
+  # ANCOM-BC slices were computed on, so pass it for meaningful grouping.
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli run --template nf-core/ampliseq/2.18.0 --data-root {dest} \
+    --var GROUP_COL=habitat --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli run --template nf-core/ampliseq/2.18.0 --data-root {dest} \
+    --var GROUP_COL=habitat
+
+  # 3. Regenerate this template's committed seed TSVs from the download
+  python depictio/projects/nf-core/ampliseq/2.18.0/generate_canonical_seeds.py --raw-root {dest}
