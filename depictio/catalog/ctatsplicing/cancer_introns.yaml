@@ -1,0 +1,16 @@
+id: ctatsplicing_cancer_introns
+name: Cancer intron candidates
+mode: cancer.introns
+description: >-
+  Splice junctions that matched the CTAT cancer intron reference, with their
+  prevalence in TCGA tumour cohorts and GTEx normal tissues unpacked into a
+  leading cohort and tissue. Empty on runs with no annotated cancer introns.
+find: { path_glob: "**/ctatsplicing/*.cancer.introns" }
+recipe: ctatsplicing/cancer_introns.py
+fixture: cancer_introns.tsv
+renders_as:
+  - { id: cancer_intron_manhattan, component: advanced_viz, kind: manhattan, roles: {chr: chrom, pos: start, score: score} }
+  - { component: card, column: uniq_mapped, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: intron, aggregation: nunique, secondary_layout: top_n, breakdown_col: top_tcga_cohort, top_n_count: 3 }
+  - { component: card, column: top_tcga_pct, aggregation: max, secondary_layout: histogram }
+  - { component: table }
