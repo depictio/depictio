@@ -180,6 +180,9 @@ dump.rdb
 !depictio/projects/nf-core/rnafusion/*/input/*.csv
 !depictio/projects/nf-core/rnaseq/*/input/*.csv
 !depictio/projects/nf-core/taxprofiler/*/input/*.csv
+!depictio/projects/nf-core/chipseq/*/input/*.csv
+# chipseq is pre-DSL2 and publishes its software versions as CSV, not YAML.
+!depictio/projects/nf-core/chipseq/*/pipeline_info/*.csv
 # Allow advanced_viz_showcase synthetic fixtures
 !depictio/projects/init/advanced_viz_showcase/data/*.tsv
 # Allow the catalog conformance project's generated data. Every file here is a

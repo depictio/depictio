@@ -1,0 +1,100 @@
+# Megatest manifest for nf-core/chipseq 1.2.0 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the tables-only
+# subset of it that the template recipes and MultiQC need. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline chipseq --version 1.2.0 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing
+#
+# Keys are fnmatch globs relative to run_root (here the prefix root) and are
+# mirrored 1:1 below the destination, which becomes the template DATA_ROOT.
+#
+# chipseq 1.2.0 is a DSL1 pipeline: there is no pipeline_info/params.json, the
+# samplesheet is pipeline_info/design_reads.csv and the software versions are a
+# tab-separated pipeline_info/software_versions.csv. The run wrote MultiQC 1.9
+# (multiqc/narrowPeak/ and multiqc/broadPeak/, multiqc_data.json only, no
+# parquet), so the manifest fetches every raw MultiQC input of the narrowPeak
+# main path and the parquet Depictio reads is produced afterwards by
+#
+#   python -m depictio.dev_scripts.multiqc_reprocess --src <dest> --dest <dest>
+#
+# which writes <dest>/multiqc/multiqc_data/multiqc.parquet + REPROCESSED.json.
+# The broadPeak twin of every output is left out on purpose: the same sample
+# names would collide inside one MultiQC report and the broadPeak-only route is
+# deferred (see VALIDATION_REPORT.md).
+pipeline: chipseq
+version: "1.2.0"
+# s3://nf-core-awsmegatests/chipseq/results-<results_sha>/ == the 1.2.0 release tag_sha.
+results_sha: "048fd6854fcc85b355c61dfc2e21da0bcc6399ea"
+run_root: ""
+multiqc:
+  version: "1.9"
+  parquet: multiqc/multiqc_data/multiqc.parquet
+  reprocess: true
+keys:
+  # Design (samplesheet + derived control mapping), software versions, trace.
+  - pipeline_info/design_reads.csv
+  - pipeline_info/design_controls.csv
+  - pipeline_info/software_versions.csv
+  - pipeline_info/execution_trace.txt
+  # Provenance of the original MultiQC 1.9 report (version banner, module list).
+  # The reprocess tool skips every multiqc*/ directory when it re-parses inputs.
+  - multiqc/narrowPeak/multiqc_data/multiqc.log
+  - multiqc/narrowPeak/multiqc_data/multiqc_data.json
+  # --- raw MultiQC inputs (re-parsed by MultiQC 1.35) ---------------------
+  # FastQC (raw + trimmed) and Trim Galore / cutadapt reports.
+  - fastqc/zips/*_fastqc.zip
+  - trim_galore/fastqc/zips/*_fastqc.zip
+  - trim_galore/logs/*_trimming_report.txt
+  # samtools stats/flagstat/idxstats for the mkD (marked) and clN (filtered) BAMs.
+  - bwa/mergedLibrary/samtools_stats/*.sorted.bam.stats
+  - bwa/mergedLibrary/samtools_stats/*.sorted.bam.flagstat
+  - bwa/mergedLibrary/samtools_stats/*.sorted.bam.idxstats
+  # Picard CollectMultipleMetrics + MarkDuplicates (text metrics only, no PDFs).
+  - bwa/mergedLibrary/picard_metrics/*.CollectMultipleMetrics.*_metrics
+  - bwa/mergedLibrary/picard_metrics/*.MarkDuplicates.metrics.txt
+  # preseq complexity curves.
+  - bwa/mergedLibrary/preseq/*.ccurve.txt
+  # phantompeakqualtools: spp.out (MultiQC module) + NSC/RSC/correlation custom content.
+  - bwa/mergedLibrary/phantompeakqualtools/*.spp.out
+  - bwa/mergedLibrary/phantompeakqualtools/*_mqc.tsv
+  # deepTools plotFingerprint (quality metrics + raw counts) and plotProfile.
+  - bwa/mergedLibrary/deepTools/plotFingerprint/*.plotFingerprint.qcmetrics.txt
+  - bwa/mergedLibrary/deepTools/plotFingerprint/*.plotFingerprint.raw.txt
+  - bwa/mergedLibrary/deepTools/plotProfile/*.plotProfile.tab
+  # --- MACS2 narrowPeak main path ------------------------------------------
+  # Peak calls (macs2_peaks), MACS2 xls (MultiQC macs2 module), HOMER annotation
+  # of the per-sample peaks. The consensus-level annotatePeaks.txt files are not
+  # fetched: the dashboard reads the consensus boolean matrix instead.
+  - bwa/mergedLibrary/macs/narrowPeak/*_IP_*_peaks.narrowPeak
+  - bwa/mergedLibrary/macs/narrowPeak/*_IP_*_peaks.xls
+  - bwa/mergedLibrary/macs/narrowPeak/*_IP_*_peaks.annotatePeaks.txt
+  # Peak QC: FRiP / peak count custom content, peak + annotation summaries.
+  - bwa/mergedLibrary/macs/narrowPeak/qc/*_mqc.tsv
+  - bwa/mergedLibrary/macs/narrowPeak/qc/*.summary.txt
+  # Consensus peaks per antibody: boolean matrix (upset + fold-change heatmap),
+  # intersect counts, featureCounts summary (MultiQC featurecounts module).
+  - bwa/mergedLibrary/macs/narrowPeak/consensus/*/*.consensus_peaks.boolean.txt
+  - bwa/mergedLibrary/macs/narrowPeak/consensus/*/*.consensus_peaks.boolean.intersect.txt
+  - bwa/mergedLibrary/macs/narrowPeak/consensus/*/*.consensus_peaks.featureCounts.txt.summary
+  # DESeq2 differential binding per contrast (CR-terminated txt) + FDR 0.05 subset,
+  # plus the PCA / sample-distance custom content MultiQC picks up.
+  - bwa/mergedLibrary/macs/narrowPeak/consensus/*/deseq2/*/*.deseq2.results.txt
+  - bwa/mergedLibrary/macs/narrowPeak/consensus/*/deseq2/*/*.deseq2.FDR0.05.results.txt
+  - bwa/mergedLibrary/macs/narrowPeak/consensus/*/deseq2/*_mqc.tsv
+prefix_keys: []
+renames: {}
+post_fetch_help: |
+  === Reprocess MultiQC (the run wrote MultiQC 1.9, Depictio reads >= 1.31 parquet) ===
+
+  python -m depictio.dev_scripts.multiqc_reprocess --src {dest} --dest {dest} --dry-run
+  python -m depictio.dev_scripts.multiqc_reprocess --src {dest} --dest {dest}
+  # -> {dest}/multiqc/multiqc_data/multiqc.parquet + REPROCESSED.json
+
+  === Quick test commands ===
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli run --template nf-core/chipseq/1.2.0 --data-root {dest} --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli run --template nf-core/chipseq/1.2.0 --data-root {dest}

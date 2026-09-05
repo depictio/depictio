@@ -2955,6 +2955,125 @@
       ]
     },
     {
+      "biotools_url": "https://bio.tools/homer",
+      "description": "",
+      "dir": "depictio/catalog/homer",
+      "homepage": null,
+      "id": "homer",
+      "name": "HOMER",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/homer/annotatepeaks",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "One row per annotated peak: the genomic feature class HOMER assigned it, the signed distance to the nearest transcription start site and the gene that start site belongs to.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*.annotatePeaks.txt",
+            "path_glob_alt": []
+          },
+          "fixture": "annotate_peaks.tsv",
+          "fixtureContent": "sample\tpeak_id\tchr\tstart\tend\tstrand\tpeak_score\tannotation_class\tannotation\tdistance_to_tss\tnearest_promoter_id\tgene_name\tgene_type\nEZH2_IP_NTKO_R1\tEZH2_IP_NTKO_R1_peak_1\tchr1\t805179\t805388\t+\t119.0\tintron\tintron (FAM41C, intron 2 of 2)\t6899\tFAM41C\tFAM41C\nEZH2_IP_NTKO_R1\tEZH2_IP_NTKO_R1_peak_6641\tchr16\t85451729\t85452984\t+\t107.0\tIntergenic\tIntergenic\t-112425\tMIR5093\tMIR5093\nEZH2_IP_NTKO_R1\tEZH2_IP_NTKO_R1_peak_13282\tchr20\t62732677\t62735044\t+\t695.0\tIntergenic\tIntergenic\t4324\tNPBWR2\tNPBWR2\nEZH2_IP_NTKO_R2\tEZH2_IP_NTKO_R2_peak_402\tchr1\t1955670\t1956163\t+\t94.0\tintron\tintron (GABRD, intron 1 of 8)\t5148\tGABRD\tGABRD\nEZH2_IP_NTKO_R2\tEZH2_IP_NTKO_R2_peak_7043\tchr1\t147064899\t147065024\t+\t89.0\tintron\tintron (BCL9, intron 1 of 9)\t51690\tBCL9\tBCL9\nEZH2_IP_NTKO_R2\tEZH2_IP_NTKO_R2_peak_13684\tchr11\t64393153\t64393320\t+\t61.0\tintron\tintron (NRXN2, intron 17 of 19)\t17551\tNRXN2\tNRXN2\nEZH2_IP_NTKO_R2\tEZH2_IP_NTKO_R2_peak_20324\tchr16\t1107321\t1107749\t+\t421.0\tIntergenic\tIntergenic\t-15221\tSSTR5\tSSTR5\nEZH2_IP_NTKO_R2\tEZH2_IP_NTKO_R2_peak_26965\tchr17\t72370454\t72370674\t+\t52.0\tIntergenic\tIntergenic\t6919\tGPR142\tGPR142\nEZH2_IP_NTKO_R2\tEZH2_IP_NTKO_R2_peak_33606\tchr19\t41883390\t41883535\t+\t39.0\tintron\tintron (TMEM91, intron 1 of 3)\t-13384\tB9D2\tB9D2\nEZH2_IP_NTKO_R2\tEZH2_IP_NTKO_R2_peak_40246\tchr20\t59989046\t59989379\t+\t59.0\tintron\tintron (CDH4, intron 2 of 15)\t161730\tCDH4\tCDH4\nEZH2_IP_NTKO_R2\tEZH2_IP_NTKO_R2_peak_46887\tchr3\t142839231\t142839534\t+\t76.0\texon\texon (CHST2, exon 1 of 2)\t764\tCHST2\tCHST2\nEZH2_IP_NTKO_R2\tEZH2_IP_NTKO_R2_peak_53528\tchr6\t49886494\t49886639\t+\t49.0\tIntergenic\tIntergenic\t30591\tDEFB133\tDEFB133\nEZH2_IP_NTKO_R2\tEZH2_IP_NTKO_R2_peak_60168\tchr8\t143207911\t143208132\t+\t145.0\tIntergenic\tIntergenic\t-49679\tMIR4472-1\tMIR4472-1\nEZH2_IP_TKO_R1\tEZH2_IP_TKO_R1_peak_805\tchr1\t21913242\t21913339\t+\t49.0\tIntergenic\tIntergenic\t77432\tALPL\tALPL\nEZH2_IP_TKO_R2\tEZH2_IP_TKO_R2_peak_587\tchr1\t2422788\t2423782\t+\t108.0\tintron\tintron (PLCH2, intron 11 of 21)\t15531\tPLCH2\tPLCH2\nEZH2_IP_TKO_R2\tEZH2_IP_TKO_R2_peak_7228\tchr1\t220702629\t220702799\t+\t121.0\tintron\tintron (MARK1, intron 1 of 17)\t1189\tMARK1\tMARK1\nEZH2_IP_TKO_R2\tEZH2_IP_TKO_R2_peak_13869\tchr12\t68495727\t68495845\t+\t32.0\tIntergenic\tIntergenic\t57735\tIFNG\tIFNG\nEZH2_IP_TKO_R2\tEZH2_IP_TKO_R2_peak_20509\tchr17\t47117\t48557\t+\t274.0\tIntergenic\tIntergenic\t-10795\tLOC100506371\tLOC100506371\nEZH2_IP_TKO_R2\tEZH2_IP_TKO_R2_peak_27150\tchr19\t45990889\t45991029\t+\t155.0\tintron\tintron (RTN2, intron 5 of 6)\t5544\tRTN2\tRTN2\nEZH2_IP_TKO_R2\tEZH2_IP_TKO_R2_peak_33791\tchr21\t32583401\t32583527\t+\t36.0\tintron\tintron (TIAM1, intron 11 of 28)\t-172669\tKRTAP19-8\tKRTAP19-8\nEZH2_IP_TKO_R2\tEZH2_IP_TKO_R2_peak_40431\tchr4\t181373884\t181374004\t+\t81.0\tIntergenic\tIntergenic\t706358\tLINC00290\tLINC00290\nEZH2_IP_TKO_R2\tEZH2_IP_TKO_R2_peak_47072\tchr7\t117427301\t117427425\t+\t67.0\tintron\tintron (CTTNBP2, intron 4 of 22)\t86198\tCTTNBP2\tCTTNBP2\nEZH2_IP_TKO_R2\tEZH2_IP_TKO_R2_peak_53713\tchr9\t139519553\t139520245\t+\t132.0\tIntergenic\tIntergenic\t-33409\tEGFL7\tEGFL7\nFOXA1_IP_E2_R1\tFOXA1_IP_E2_R1_peak_5612\tchr12\t113177593\t113177728\t+\t63.0\tIntergenic\tIntergenic\t-44679\tMIR1302-1\tMIR1302-1\nFOXA1_IP_E2_R1\tFOXA1_IP_E2_R1_peak_12253\tchr2\t164634907\t164635091\t+\t88.0\tIntergenic\tIntergenic\t-42486\tFIGN\tFIGN\nFOXA1_IP_E2_R1\tFOXA1_IP_E2_R1_peak_18894\tchr5\t171960411\t171960575\t+\t127.0\tIntergenic\tIntergenic\t-78966\tSH3PXD2B\tSH3PXD2B\nFOXA1_IP_E2_R2\tFOXA1_IP_E2_R2_peak_906\tchr1\t77447057\t77447264\t+\t224.0\tintron\tintron (ST6GALNAC5, intron 2 of 4)\t-78668\tMIR7156\tMIR7156\nFOXA1_IP_E2_R2\tFOXA1_IP_E2_R2_peak_7547\tchr12\t107879231\t107879395\t+\t91.0\tintron\tintron (BTBD11, intron 1 of 16)\t167116\tBTBD11\tBTBD11\nFOXA1_IP_E2_R2\tFOXA1_IP_E2_R2_peak_14187\tchr19\t57587563\t57587742\t+\t66.0\tIntergenic\tIntergenic\t-43857\tUSP29\tUSP29\nFOXA1_IP_E2_R2\tFOXA1_IP_E2_R2_peak_20828\tchr3\t162304424\t162304686\t+\t425.0\tIntergenic\tIntergenic\t716534\tLINC01192\tLINC01192\nFOXA1_IP_E2_R2\tFOXA1_IP_E2_R2_peak_27469\tchr7\t7232725\t7232843\t+\t49.0\tintron\tintron (C1GALT1, intron 1 of 3)\t10538\tC1GALT1\tC1GALT1\nFOXA1_IP_VEH_R1\tFOXA1_IP_VEH_R1_peak_645\tchr1\t74992588\t74992954\t+\t28.0\tintron\tintron (TNNI3K, intron 23 of 24)\t-50343\tERICH3-AS1\tERICH3-AS1\nFOXA1_IP_VEH_R1\tFOXA1_IP_VEH_R1_peak_7286\tchr14\t68936127\t68936438\t+\t554.0\tintron\tintron (RAD51B, intron 10 of 10)\t324349\tZFP36L1\tZFP36L1\nFOXA1_IP_VEH_R1\tFOXA1_IP_VEH_R1_peak_13927\tchr21\t24764622\t24764766\t+\t35.0\tIntergenic\tIntergenic\t-7538\tD21S2088E\tD21S2088E\nFOXA1_IP_VEH_R1\tFOXA1_IP_VEH_R1_peak_20567\tchr6\t88161614\t88161768\t+\t47.0\tintron\tintron (C6orf165, intron 11 of 12)\t-20952\tSLC35A1\tSLC35A1\nFOXA1_IP_VEH_R2\tFOXA1_IP_VEH_R2_peak_1286\tchr1\t120336644\t120336819\t+\t74.0\tTTS\tTTS (REG4)\t17472\tREG4\tREG4\nFOXA1_IP_VEH_R2\tFOXA1_IP_VEH_R2_peak_7927\tchr14\t72962459\t72962701\t+\t360.0\tintron\tintron (RGS6, intron 13 of 16)\t-20948\tMIR7843\tMIR7843\nFOXA1_IP_VEH_R2\tFOXA1_IP_VEH_R2_peak_14567\tchr20\t3613344\t3613476\t+\t77.0\tintron\tintron (ATRN, intron 25 of 28)\t30636\tGFRA4\tGFRA4\nFOXA1_IP_VEH_R2\tFOXA1_IP_VEH_R2_peak_21208\tchr5\t172521181\t172521397\t+\t79.0\tintron\tintron (CREBRF, intron 4 of 8)\t37934\tCREBRF\tCREBRF\nFOXA1_IP_VEH_R2\tFOXA1_IP_VEH_R2_peak_27849\tchrY\t59019771\t59019943\t+\t206.0\tIntergenic\tIntergenic\t-80546\tSPRY3\tSPRY3\n",
+          "id": "homer_annotated_peaks",
+          "mode": "peaks/annotation",
+          "name": "Peak annotation",
+          "path_glob": "**/*.annotatePeaks.txt",
+          "rawYaml": "id: homer_annotated_peaks\nname: Peak annotation\nmode: peaks/annotation\ndescription: >-\n  One row per annotated peak: the genomic feature class HOMER assigned it, the\n  signed distance to the nearest transcription start site and the gene that\n  start site belongs to.\nfind:\n  path_glob: \"**/*.annotatePeaks.txt\"\nrecipe: homer/annotate_peaks.py\nfixture: annotate_peaks.tsv\nrenders_as:\n  # Where the peaks land relative to genes, then how far from the TSS.\n  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, color: annotation_class, title: Peak annotation per sample} }\n  - { component: figure, visu_type: histogram, dict_kwargs: {x: distance_to_tss, color: annotation_class, title: Distance to nearest TSS} }\n  - { component: card, column: peak_id, aggregation: count, secondary_layout: top_n, breakdown_col: annotation_class, top_n_count: 3 }\n  - { component: card, column: annotation_class, aggregation: count, secondary_layout: donut, breakdown_col: annotation_class }\n  - { component: card, column: gene_name, aggregation: nunique, secondary_layout: composition, breakdown_col: annotation_class }\n  - { component: card, column: distance_to_tss, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: table, row_selection_enabled: true, row_selection_column: peak_id }\n",
+          "recipe": "homer/annotate_peaks.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "annotation_class",
+                "title": "Peak annotation per sample",
+                "x": "sample"
+              },
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "annotation_class",
+                "title": "Distance to nearest TSS",
+                "x": "distance_to_tss"
+              },
+              "roles": {},
+              "visu_type": "histogram"
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "annotation_class",
+              "column": "peak_id",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "annotation_class",
+              "column": "annotation_class",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "donut"
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "annotation_class",
+              "column": "gene_name",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "composition"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "distance_to_tss",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {},
+              "row_selection_column": "peak_id",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "annotated_peaks",
+          "yamlPath": "depictio/catalog/homer/annotate_peaks.yaml"
+        }
+      ]
+    },
+    {
       "biotools_url": "https://bio.tools/andersen-lab_ivar",
       "description": "",
       "dir": "depictio/catalog/ivar",
@@ -3108,6 +3227,377 @@
           ],
           "slug": "variants_long",
           "yamlPath": "depictio/catalog/ivar/variants_long.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": "https://bio.tools/macs",
+      "description": "",
+      "dir": "depictio/catalog/macs2",
+      "homepage": null,
+      "id": "macs2",
+      "name": "MACS2",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/macs2/callpeak",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "Merged consensus intervals against the samples that called a peak on them, as one 0/1 column per sample. The intersections say how reproducible the peak set is between replicates and between conditions.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*.consensus_peaks.boolean.txt",
+            "path_glob_alt": []
+          },
+          "fixture": "consensus_boolean.tsv",
+          "fixtureContent": "peak_id\tconsensus_set\tinterval_id\tchr\tstart\tend\tnum_peaks\tnum_samples\tEZH2_IP_NTKO_R1\tEZH2_IP_NTKO_R2\tEZH2_IP_TKO_R1\tEZH2_IP_TKO_R2\tFOXA1_IP_E2_R1\tFOXA1_IP_E2_R2\tFOXA1_IP_VEH_R1\tFOXA1_IP_VEH_R2\nEZH2_IP:Interval_1\tEZH2_IP\tInterval_1\tchr1\t738095\t738219\t1\t1\t0\t0\t0\t1\t0\t0\t0\t0\nEZH2_IP:Interval_3946\tEZH2_IP\tInterval_3946\tchr1\t17531680\t17531891\t1\t1\t0\t1\t0\t0\t0\t0\t0\t0\nEZH2_IP:Interval_7892\tEZH2_IP\tInterval_7892\tchr1\t68627758\t68627880\t1\t1\t0\t1\t0\t0\t0\t0\t0\t0\nEZH2_IP:Interval_11838\tEZH2_IP\tInterval_11838\tchr1\t208404775\t208404894\t1\t1\t0\t0\t0\t1\t0\t0\t0\t0\nEZH2_IP:Interval_15784\tEZH2_IP\tInterval_15784\tchr10\t116454615\t116454738\t1\t1\t0\t1\t0\t0\t0\t0\t0\t0\nEZH2_IP:Interval_19730\tEZH2_IP\tInterval_19730\tchr11\t62000148\t62000302\t1\t1\t0\t0\t0\t1\t0\t0\t0\t0\nEZH2_IP:Interval_23676\tEZH2_IP\tInterval_23676\tchr12\t65225944\t65226088\t1\t1\t0\t0\t0\t1\t0\t0\t0\t0\nEZH2_IP:Interval_27622\tEZH2_IP\tInterval_27622\tchr14\t105980710\t105980944\t1\t1\t0\t0\t0\t1\t0\t0\t0\t0\nEZH2_IP:Interval_31568\tEZH2_IP\tInterval_31568\tchr16\t29262926\t29263196\t1\t1\t0\t1\t0\t0\t0\t0\t0\t0\nEZH2_IP:Interval_35514\tEZH2_IP\tInterval_35514\tchr17\t5878\t6062\t2\t2\t0\t1\t0\t1\t0\t0\t0\t0\nEZH2_IP:Interval_39459\tEZH2_IP\tInterval_39459\tchr17\t74874943\t74877130\t7\t4\t1\t1\t1\t1\t0\t0\t0\t0\nEZH2_IP:Interval_43405\tEZH2_IP\tInterval_43405\tchr19\t2309698\t2309888\t1\t1\t0\t1\t0\t0\t0\t0\t0\t0\nEZH2_IP:Interval_47351\tEZH2_IP\tInterval_47351\tchr19\t42252966\t42253192\t2\t2\t1\t1\t0\t0\t0\t0\t0\t0\nEZH2_IP:Interval_51297\tEZH2_IP\tInterval_51297\tchr2\t46495988\t46496120\t1\t1\t0\t1\t0\t0\t0\t0\t0\t0\nEZH2_IP:Interval_55243\tEZH2_IP\tInterval_55243\tchr2\t241651050\t241651319\t1\t1\t0\t1\t0\t0\t0\t0\t0\t0\nEZH2_IP:Interval_59189\tEZH2_IP\tInterval_59189\tchr21\t19861395\t19861576\t1\t1\t0\t1\t0\t0\t0\t0\t0\t0\nEZH2_IP:Interval_63135\tEZH2_IP\tInterval_63135\tchr22\t44297142\t44297593\t1\t1\t0\t1\t0\t0\t0\t0\t0\t0\nEZH2_IP:Interval_67081\tEZH2_IP\tInterval_67081\tchr3\t166771856\t166772015\t1\t1\t0\t1\t0\t0\t0\t0\t0\t0\nEZH2_IP:Interval_71027\tEZH2_IP\tInterval_71027\tchr4\t108694823\t108694950\t1\t1\t0\t0\t0\t1\t0\t0\t0\t0\nEZH2_IP:Interval_74973\tEZH2_IP\tInterval_74973\tchr5\t112847109\t112847248\t1\t1\t0\t0\t0\t1\t0\t0\t0\t0\nEZH2_IP:Interval_78918\tEZH2_IP\tInterval_78918\tchr6\t137909650\t137909827\t1\t1\t0\t1\t0\t0\t0\t0\t0\t0\nEZH2_IP:Interval_82864\tEZH2_IP\tInterval_82864\tchr7\t87817264\t87817395\t1\t1\t0\t0\t0\t1\t0\t0\t0\t0\nEZH2_IP:Interval_86810\tEZH2_IP\tInterval_86810\tchr8\t42350802\t42350954\t1\t1\t0\t1\t0\t0\t0\t0\t0\t0\nEZH2_IP:Interval_90756\tEZH2_IP\tInterval_90756\tchr9\t33612245\t33612405\t1\t1\t0\t1\t0\t0\t0\t0\t0\t0\nEZH2_IP:Interval_94702\tEZH2_IP\tInterval_94702\tchr9\t138171194\t138171793\t1\t1\t0\t0\t0\t1\t0\t0\t0\t0\nFOXA1_IP:Interval_1410\tFOXA1_IP\tInterval_1410\tchr1\t66707660\t66707794\t1\t1\t0\t0\t0\t0\t0\t1\t0\t0\nFOXA1_IP:Interval_5356\tFOXA1_IP\tInterval_5356\tchr10\t21427981\t21428123\t1\t1\t0\t0\t0\t0\t0\t0\t1\t0\nFOXA1_IP:Interval_9302\tFOXA1_IP\tInterval_9302\tchr11\t99564636\t99564800\t1\t1\t0\t0\t0\t0\t0\t0\t1\t0\nFOXA1_IP:Interval_13248\tFOXA1_IP\tInterval_13248\tchr12\t125032631\t125032866\t3\t3\t0\t0\t0\t0\t0\t1\t1\t1\nFOXA1_IP:Interval_17194\tFOXA1_IP\tInterval_17194\tchr15\t40336767\t40336896\t1\t1\t0\t0\t0\t0\t0\t0\t0\t1\nFOXA1_IP:Interval_21139\tFOXA1_IP\tInterval_21139\tchr17\t56743671\t56743924\t4\t4\t0\t0\t0\t0\t1\t1\t1\t1\nFOXA1_IP:Interval_25085\tFOXA1_IP\tInterval_25085\tchr2\t34647092\t34647211\t1\t1\t0\t0\t0\t0\t0\t1\t0\t0\nFOXA1_IP:Interval_29031\tFOXA1_IP\tInterval_29031\tchr2\t235372591\t235372904\t4\t4\t0\t0\t0\t0\t1\t1\t1\t1\nFOXA1_IP:Interval_32977\tFOXA1_IP\tInterval_32977\tchr3\t41319683\t41319872\t2\t2\t0\t0\t0\t0\t0\t1\t0\t1\nFOXA1_IP:Interval_36923\tFOXA1_IP\tInterval_36923\tchr4\t27077287\t27077547\t4\t4\t0\t0\t0\t0\t1\t1\t1\t1\nFOXA1_IP:Interval_40869\tFOXA1_IP\tInterval_40869\tchr5\t72426499\t72426628\t1\t1\t0\t0\t0\t0\t0\t0\t0\t1\nFOXA1_IP:Interval_44815\tFOXA1_IP\tInterval_44815\tchr6\t56548812\t56549033\t4\t4\t0\t0\t0\t0\t1\t1\t1\t1\nFOXA1_IP:Interval_48761\tFOXA1_IP\tInterval_48761\tchr7\t105820318\t105820551\t4\t4\t0\t0\t0\t0\t1\t1\t1\t1\nFOXA1_IP:Interval_52707\tFOXA1_IP\tInterval_52707\tchr8\t134132629\t134132851\t4\t4\t0\t0\t0\t0\t1\t1\t1\t1\nFOXA1_IP:Interval_56653\tFOXA1_IP\tInterval_56653\tchrY\t59019740\t59020041\t4\t4\t0\t0\t0\t0\t1\t1\t1\t1\n",
+          "id": "macs2_consensus_boolean",
+          "mode": "peaks/consensus",
+          "name": "Consensus peak overlap",
+          "path_glob": "**/*.consensus_peaks.boolean.txt",
+          "rawYaml": "id: macs2_consensus_boolean\nname: Consensus peak overlap\nmode: peaks/consensus\ndescription: >-\n  Merged consensus intervals against the samples that called a peak on them,\n  as one 0/1 column per sample. The intersections say how reproducible the\n  peak set is between replicates and between conditions.\nfind:\n  path_glob: \"**/*.consensus_peaks.boolean.txt\"\nrecipe: macs2/consensus_boolean.py\nfixture: consensus_boolean.tsv\nrenders_as:\n  # The renderer enumerates the binary sample columns itself, so the upset\n  # render binds no role.\n  - { id: consensus_upset, component: advanced_viz, kind: upset_plot }\n  - { component: card, column: peak_id, aggregation: count, secondary_layout: top_n, breakdown_col: consensus_set, top_n_count: 3 }\n  - { component: card, column: num_samples, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: num_peaks, aggregation: sum, secondary_layout: histogram }\n  - { component: card, column: consensus_set, aggregation: count, secondary_layout: donut, breakdown_col: consensus_set }\n  - { component: table, row_selection_enabled: true, row_selection_column: peak_id }\n",
+          "recipe": "macs2/consensus_boolean.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "consensus_upset",
+              "kind": "upset_plot",
+              "roles": {}
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "consensus_set",
+              "column": "peak_id",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "num_samples",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "num_peaks",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "consensus_set",
+              "column": "consensus_set",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "donut"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {},
+              "row_selection_column": "peak_id",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "consensus_boolean",
+          "yamlPath": "depictio/catalog/macs2/consensus_boolean.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Fold enrichment of the most strongly bound consensus intervals, one numeric column per sample, ready to cluster. Intervals a sample did not call are 0, so blocks of contrast-specific binding stand out.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*.consensus_peaks.boolean.txt",
+            "path_glob_alt": []
+          },
+          "fixture": "consensus_fc.tsv",
+          "fixtureContent": "peak_id\tconsensus_set\tinterval_id\tchr\tregion\tsupport\tEZH2_IP_NTKO_R1\tEZH2_IP_NTKO_R2\tEZH2_IP_TKO_R1\tEZH2_IP_TKO_R2\tFOXA1_IP_E2_R1\tFOXA1_IP_E2_R2\tFOXA1_IP_VEH_R1\tFOXA1_IP_VEH_R2\nEZH2_IP:Interval_27\tEZH2_IP\tInterval_27\tchr1\tchr1:857407-863540\t4\t23.5918\t14.5678\t0.0\t0.0\t0.0\t0.0\t0.0\t0.0\nEZH2_IP:Interval_3175\tEZH2_IP\tInterval_3175\tchr1\tchr1:10927197-10927769\t4\t8.48445\t8.2578\t6.07951\t6.8319\t0.0\t0.0\t0.0\t0.0\nEZH2_IP:Interval_14055\tEZH2_IP\tInterval_14055\tchr10\tchr10:42672651-42673707\t4\t17.5457\t8.68252\t0.0\t7.09326\t0.0\t0.0\t0.0\t0.0\nEZH2_IP:Interval_17868\tEZH2_IP\tInterval_17868\tchr11\tchr11:1663564-1664928\t3\t6.30856\t12.5414\t0.0\t4.69179\t0.0\t0.0\t0.0\t0.0\nEZH2_IP:Interval_21057\tEZH2_IP\tInterval_21057\tchr11\tchr11:72352619-72353494\t4\t10.2398\t8.05574\t7.87117\t7.4677\t0.0\t0.0\t0.0\t0.0\nEZH2_IP:Interval_26115\tEZH2_IP\tInterval_26115\tchr14\tchr14:75895048-75896037\t4\t6.05742\t4.46373\t6.03457\t6.9331\t0.0\t0.0\t0.0\t0.0\nEZH2_IP:Interval_30312\tEZH2_IP\tInterval_30312\tchr16\tchr16:1046374-1051985\t4\t0.0\t10.9734\t0.0\t11.4815\t0.0\t0.0\t0.0\t0.0\nEZH2_IP:Interval_33115\tEZH2_IP\tInterval_33115\tchr16\tchr16:85453956-85454672\t4\t7.97497\t6.45365\t5.48689\t3.87626\t0.0\t0.0\t0.0\t0.0\nEZH2_IP:Interval_37207\tEZH2_IP\tInterval_37207\tchr17\tchr17:46678560-46680428\t4\t9.86623\t6.11871\t0.0\t7.79223\t0.0\t0.0\t0.0\t0.0\nEZH2_IP:Interval_40586\tEZH2_IP\tInterval_40586\tchr17\tchr17:79075395-79076329\t4\t9.01132\t8.42117\t7.189\t0.0\t0.0\t0.0\t0.0\t0.0\nEZH2_IP:Interval_43972\tEZH2_IP\tInterval_43972\tchr19\tchr19:3876844-3877329\t4\t10.0543\t7.27838\t5.55359\t4.93725\t0.0\t0.0\t0.0\t0.0\nEZH2_IP:Interval_50730\tEZH2_IP\tInterval_50730\tchr2\tchr2:27071034-27072146\t4\t9.46284\t7.95399\t0.0\t7.76279\t0.0\t0.0\t0.0\t0.0\nEZH2_IP:Interval_56653\tEZH2_IP\tInterval_56653\tchr20\tchr20:43374229-43375297\t4\t10.5039\t6.78647\t7.2919\t5.03441\t0.0\t0.0\t0.0\t0.0\nEZH2_IP:Interval_58794\tEZH2_IP\tInterval_58794\tchr20\tchr20:62284487-62284868\t4\t10.049\t7.42562\t2.55021\t5.10779\t0.0\t0.0\t0.0\t0.0\nEZH2_IP:Interval_68066\tEZH2_IP\tInterval_68066\tchr4\tchr4:1642286-1642782\t3\t4.53428\t13.3454\t0.0\t6.5389\t0.0\t0.0\t0.0\t0.0\nEZH2_IP:Interval_68141\tEZH2_IP\tInterval_68141\tchr4\tchr4:1956816-1957153\t4\t20.6861\t13.635\t19.4376\t9.18543\t0.0\t0.0\t0.0\t0.0\nEZH2_IP:Interval_70494\tEZH2_IP\tInterval_70494\tchr4\tchr4:83482331-83482923\t4\t8.82035\t9.79839\t3.02695\t4.72233\t0.0\t0.0\t0.0\t0.0\nEZH2_IP:Interval_82282\tEZH2_IP\tInterval_82282\tchr7\tchr7:64973982-64975435\t4\t10.658\t7.1188\t0.0\t5.94536\t0.0\t0.0\t0.0\t0.0\nEZH2_IP:Interval_91008\tEZH2_IP\tInterval_91008\tchr9\tchr9:69785823-69786828\t4\t19.7142\t8.68358\t12.6956\t5.79374\t0.0\t0.0\t0.0\t0.0\nEZH2_IP:Interval_95359\tEZH2_IP\tInterval_95359\tchr9\tchr9:139141819-139142364\t4\t7.2099\t5.68815\t6.29694\t5.89506\t0.0\t0.0\t0.0\t0.0\nFOXA1_IP:Interval_631\tFOXA1_IP\tInterval_631\tchr1\tchr1:33225035-33225356\t4\t0.0\t0.0\t0.0\t0.0\t45.7244\t34.0791\t34.3646\t38.1121\nFOXA1_IP:Interval_2795\tFOXA1_IP\tInterval_2795\tchr1\tchr1:156441278-156441791\t4\t0.0\t0.0\t0.0\t0.0\t32.0213\t32.5995\t44.0536\t40.863\nFOXA1_IP:Interval_7366\tFOXA1_IP\tInterval_7366\tchr10\tchr10:117204889-117205136\t4\t0.0\t0.0\t0.0\t0.0\t38.6388\t47.7272\t26.8977\t38.8526\nFOXA1_IP:Interval_10181\tFOXA1_IP\tInterval_10181\tchr12\tchr12:6344506-6345025\t4\t0.0\t0.0\t0.0\t0.0\t44.9081\t30.5597\t34.9101\t46.9838\nFOXA1_IP:Interval_13906\tFOXA1_IP\tInterval_13906\tchr13\tchr13:36538882-36539165\t4\t0.0\t0.0\t0.0\t0.0\t23.7952\t38.3573\t31.1429\t39.0532\nFOXA1_IP:Interval_16322\tFOXA1_IP\tInterval_16322\tchr14\tchr14:79791457-79791787\t4\t0.0\t0.0\t0.0\t0.0\t31.6456\t65.8914\t31.1517\t20.8401\nFOXA1_IP:Interval_19147\tFOXA1_IP\tInterval_19147\tchr16\tchr16:23336061-23336520\t4\t0.0\t0.0\t0.0\t0.0\t44.1845\t25.8395\t28.2075\t40.3406\nFOXA1_IP:Interval_21740\tFOXA1_IP\tInterval_21740\tchr17\tchr17:76417535-76417953\t4\t0.0\t0.0\t0.0\t0.0\t42.7394\t37.4553\t38.5013\t55.901\nFOXA1_IP:Interval_23955\tFOXA1_IP\tInterval_23955\tchr19\tchr19:47274217-47274554\t4\t0.0\t0.0\t0.0\t0.0\t33.297\t38.6283\t38.3743\t26.4946\nFOXA1_IP:Interval_26663\tFOXA1_IP\tInterval_26663\tchr2\tchr2:127984161-127984533\t4\t0.0\t0.0\t0.0\t0.0\t28.3273\t34.424\t26.3128\t43.4235\nFOXA1_IP:Interval_28834\tFOXA1_IP\tInterval_28834\tchr2\tchr2:225350048-225350424\t4\t0.0\t0.0\t0.0\t0.0\t34.034\t30.525\t24.3781\t50.8162\nFOXA1_IP:Interval_31755\tFOXA1_IP\tInterval_31755\tchr22\tchr22:29218883-29219255\t4\t0.0\t0.0\t0.0\t0.0\t37.9646\t24.283\t34.0934\t34.0809\nFOXA1_IP:Interval_33627\tFOXA1_IP\tInterval_33627\tchr3\tchr3:71244674-71244959\t4\t0.0\t0.0\t0.0\t0.0\t20.3758\t43.394\t27.2382\t55.7056\nFOXA1_IP:Interval_37224\tFOXA1_IP\tInterval_37224\tchr4\tchr4:41134251-41134752\t4\t0.0\t0.0\t0.0\t0.0\t21.4951\t48.7358\t26.1763\t36.3609\nFOXA1_IP:Interval_41512\tFOXA1_IP\tInterval_41512\tchr5\tchr5:101558527-101558849\t4\t0.0\t0.0\t0.0\t0.0\t26.8936\t40.824\t37.9083\t45.1187\nFOXA1_IP:Interval_45228\tFOXA1_IP\tInterval_45228\tchr6\tchr6:90650176-90650455\t4\t0.0\t0.0\t0.0\t0.0\t28.7896\t37.4414\t28.4575\t54.88\nFOXA1_IP:Interval_47625\tFOXA1_IP\tInterval_47625\tchr7\tchr7:42192171-42192581\t4\t0.0\t0.0\t0.0\t0.0\t39.5761\t36.7075\t21.3988\t30.8535\nFOXA1_IP:Interval_51725\tFOXA1_IP\tInterval_51725\tchr8\tchr8:101654516-101654959\t4\t0.0\t0.0\t0.0\t0.0\t27.3333\t35.8691\t24.0973\t55.901\nFOXA1_IP:Interval_53783\tFOXA1_IP\tInterval_53783\tchr9\tchr9:92460986-92461342\t4\t0.0\t0.0\t0.0\t0.0\t21.2803\t21.6342\t28.198\t59.2823\nFOXA1_IP:Interval_56489\tFOXA1_IP\tInterval_56489\tchrX\tchrX:139574331-139574832\t4\t0.0\t0.0\t0.0\t0.0\t39.3133\t67.9341\t28.794\t38.2812\n",
+          "id": "macs2_consensus_fc",
+          "mode": "peaks/consensus_signal",
+          "name": "Consensus fold enrichment",
+          "path_glob": "**/*.consensus_peaks.boolean.txt",
+          "rawYaml": "id: macs2_consensus_fc\nname: Consensus fold enrichment\nmode: peaks/consensus_signal\ndescription: >-\n  Fold enrichment of the most strongly bound consensus intervals, one numeric\n  column per sample, ready to cluster. Intervals a sample did not call are 0,\n  so blocks of contrast-specific binding stand out.\nfind:\n  path_glob: \"**/*.consensus_peaks.boolean.txt\"\nrecipe: macs2/consensus_fc.py\nfixture: consensus_fc.tsv\nrenders_as:\n  - { id: consensus_signal_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: region} }\n  - { component: card, column: peak_id, aggregation: count, secondary_layout: top_n, breakdown_col: consensus_set, top_n_count: 3 }\n  - { component: card, column: support, aggregation: count, secondary_layout: donut, breakdown_col: support }\n  - { component: table }\n",
+          "recipe": "macs2/consensus_fc.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "consensus_signal_heatmap",
+              "kind": "complex_heatmap",
+              "roles": {
+                "index": "region"
+              }
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "consensus_set",
+              "column": "peak_id",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "support",
+              "column": "support",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "donut"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "consensus_fc",
+          "yamlPath": "depictio/catalog/macs2/consensus_fc.yaml"
+        },
+        {
+          "columns": {},
+          "description": "One row per sample: how many peaks MACS2 called, the FRiP score, and the median, mean and maximum of peak width, fold enrichment and significance across those peaks.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*peak.summary.txt",
+            "path_glob_alt": []
+          },
+          "fixture": "peak_summary.tsv",
+          "fixtureContent": "sample\tnum_peaks\tfrip_score\twidth_median\twidth_mean\twidth_max\tfold_enrichment_median\tfold_enrichment_mean\tneg_log10_qvalue_median\tneg_log10_pvalue_median\nEZH2_IP_NTKO_R1\t19520\t0.0162115\t188.0\t378.098258196721\t18772.0\t3.94285\t4.42790146157787\t5.51498\t8.58201\nEZH2_IP_NTKO_R2\t66004\t0.0598853\t190.0\t340.998257681353\t19249.0\t3.21575\t3.56624311269014\t6.34177\t8.89262\nEZH2_IP_TKO_R1\t6858\t0.00407429\t153.0\t230.943715368912\t4815.0\t4.2559\t4.53813347331584\t4.6974\t8.58841\nEZH2_IP_TKO_R2\t54741\t0.0348679\t157.0\t232.877641986811\t8878.0\t2.98098\t3.16292492994282\t5.32436\t8.19318\nFOXA1_IP_E2_R1\t24628\t0.0738799\t185.0\t204.730753613773\t1362.0\t7.13855\t9.01450501339938\t7.73987\t11.068\nFOXA1_IP_E2_R2\t33464\t0.0808711\t167.0\t185.703083911069\t857.0\t7.16211\t9.11722153060005\t8.40982\t11.6383\nFOXA1_IP_VEH_R1\t25922\t0.0779591\t180.0\t202.108633593087\t1299.0\t6.42452\t8.21612435228763\t6.29373\t9.58349\nFOXA1_IP_VEH_R2\t27849\t0.0813165\t178.0\t194.955869151496\t1022.0\t7.4277\t9.79562028223635\t8.62023\t11.8957\n",
+          "id": "macs2_peak_summary",
+          "mode": "peaks/qc",
+          "name": "Peak QC summary",
+          "path_glob": "**/*peak.summary.txt",
+          "rawYaml": "id: macs2_peak_summary\nname: Peak QC summary\nmode: peaks/qc\ndescription: >-\n  One row per sample: how many peaks MACS2 called, the FRiP score, and the\n  median, mean and maximum of peak width, fold enrichment and significance\n  across those peaks.\n# The long summary table the peak-QC step writes next to the calls; the FRiP\n# score is joined on from the sibling MultiQC custom-content files.\nfind:\n  path_glob: \"**/*peak.summary.txt\"\nrecipe: macs2/peak_summary.py\nfixture: peak_summary.tsv\nrenders_as:\n  # Signal-to-noise per sample, then the yield behind it.\n  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: frip_score, color: sample, title: FRiP score per sample} }\n  - { component: card, column: num_peaks, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }\n  - { component: card, column: frip_score, aggregation: average, secondary_layout: gauge, coverage_max: 1.0 }\n  - { component: card, column: width_median, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: fold_enrichment_median, aggregation: average, secondary_layout: threshold, threshold_value: 5.0 }\n  - { component: table }\n",
+          "recipe": "macs2/peak_summary.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "sample",
+                "title": "FRiP score per sample",
+                "x": "sample",
+                "y": "frip_score"
+              },
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample",
+              "column": "num_peaks",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "frip_score",
+              "columns": [],
+              "component": "card",
+              "coverage_max": 1.0,
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "gauge"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "width_median",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "fold_enrichment_median",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "threshold",
+              "threshold_value": 5.0
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "peak_summary",
+          "yamlPath": "depictio/catalog/macs2/peak_summary.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Every MACS2 narrow peak of every sample in one table, with the summit position, the peak width and the fold enrichment, p-value and q-value MACS2 reported for it.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*_peaks.narrowPeak",
+            "path_glob_alt": []
+          },
+          "fixture": "peaks.tsv",
+          "fixtureContent": "sample\tpeak_id\tchr\tstart\tend\twidth\tsummit\tscore\tfold_enrichment\tneg_log10_pvalue\tneg_log10_qvalue\nEZH2_IP_NTKO_R1\tEZH2_IP_NTKO_R1_peak_1\tchr1\t805178\t805388\t210\t805314\t119\t5.57548\t15.4009\t11.95\nEZH2_IP_NTKO_R1\tEZH2_IP_NTKO_R1_peak_6641\tchr16\t85451728\t85452984\t1256\t85451919\t107\t5.51999\t14.1114\t10.7092\nEZH2_IP_NTKO_R1\tEZH2_IP_NTKO_R1_peak_13282\tchr20\t62732676\t62735044\t2368\t62733547\t695\t14.8164\t74.5855\t69.5606\nEZH2_IP_NTKO_R2\tEZH2_IP_NTKO_R2_peak_402\tchr1\t1955669\t1956163\t494\t1956095\t94\t4.09008\t12.1663\t9.45047\nEZH2_IP_NTKO_R2\tEZH2_IP_NTKO_R2_peak_7043\tchr1\t147064898\t147065024\t126\t147064959\t89\t2.48324\t11.6859\t8.99179\nEZH2_IP_NTKO_R2\tEZH2_IP_NTKO_R2_peak_13684\tchr11\t64393152\t64393320\t168\t64393207\t61\t3.28307\t8.72968\t6.18853\nEZH2_IP_NTKO_R2\tEZH2_IP_NTKO_R2_peak_20324\tchr16\t1107320\t1107749\t429\t1107615\t421\t6.62048\t45.9214\t42.1939\nEZH2_IP_NTKO_R2\tEZH2_IP_NTKO_R2_peak_26965\tchr17\t72370453\t72370674\t221\t72370571\t52\t2.79724\t7.70834\t5.23197\nEZH2_IP_NTKO_R2\tEZH2_IP_NTKO_R2_peak_33606\tchr19\t41883389\t41883535\t146\t41883434\t39\t2.70071\t6.34273\t3.9716\nEZH2_IP_NTKO_R2\tEZH2_IP_NTKO_R2_peak_40246\tchr20\t59989045\t59989379\t334\t59989284\t59\t3.19326\t8.42327\t5.90225\nEZH2_IP_NTKO_R2\tEZH2_IP_NTKO_R2_peak_46887\tchr3\t142839230\t142839534\t304\t142839402\t76\t2.67496\t10.2294\t7.60549\nEZH2_IP_NTKO_R2\tEZH2_IP_NTKO_R2_peak_53528\tchr6\t49886493\t49886639\t146\t49886595\t49\t3.53732\t7.41958\t4.96256\nEZH2_IP_NTKO_R2\tEZH2_IP_NTKO_R2_peak_60168\tchr8\t143207910\t143208132\t222\t143208023\t145\t5.47461\t17.4372\t14.5123\nEZH2_IP_TKO_R1\tEZH2_IP_TKO_R1_peak_805\tchr1\t21913241\t21913339\t98\t21913291\t49\t4.7227\t8.87786\t4.92379\nEZH2_IP_TKO_R2\tEZH2_IP_TKO_R2_peak_587\tchr1\t2422787\t2423782\t995\t2423689\t108\t3.59359\t14.1682\t10.8734\nEZH2_IP_TKO_R2\tEZH2_IP_TKO_R2_peak_7228\tchr1\t220702628\t220702799\t171\t220702704\t121\t2.99488\t15.53\t12.1663\nEZH2_IP_TKO_R2\tEZH2_IP_TKO_R2_peak_13869\tchr12\t68495726\t68495845\t119\t68495749\t32\t2.5426\t5.78352\t3.24226\nEZH2_IP_TKO_R2\tEZH2_IP_TKO_R2_peak_20509\tchr17\t47116\t48557\t1441\t48231\t274\t5.42705\t31.4095\t27.4229\nEZH2_IP_TKO_R2\tEZH2_IP_TKO_R2_peak_27150\tchr19\t45990888\t45991029\t141\t45990973\t155\t4.35141\t19.1251\t15.5937\nEZH2_IP_TKO_R2\tEZH2_IP_TKO_R2_peak_33791\tchr21\t32583400\t32583527\t127\t32583509\t36\t2.83353\t6.27657\t3.65148\nEZH2_IP_TKO_R2\tEZH2_IP_TKO_R2_peak_40431\tchr4\t181373883\t181374004\t121\t181373958\t81\t3.3748\t11.2971\t8.17607\nEZH2_IP_TKO_R2\tEZH2_IP_TKO_R2_peak_47072\tchr7\t117427300\t117427425\t125\t117427395\t67\t2.90968\t9.80067\t6.78806\nEZH2_IP_TKO_R2\tEZH2_IP_TKO_R2_peak_53713\tchr9\t139519552\t139520245\t693\t139519685\t132\t3.88694\t16.6191\t13.2017\nFOXA1_IP_E2_R1\tFOXA1_IP_E2_R1_peak_5612\tchr12\t113177592\t113177728\t136\t113177679\t63\t6.58333\t9.62006\t6.3949\nFOXA1_IP_E2_R1\tFOXA1_IP_E2_R1_peak_12253\tchr2\t164634906\t164635091\t185\t164635022\t88\t7.91348\t12.2541\t8.87022\nFOXA1_IP_E2_R1\tFOXA1_IP_E2_R1_peak_18894\tchr5\t171960410\t171960575\t165\t171960466\t127\t9.5534\t16.3294\t12.7422\nFOXA1_IP_E2_R2\tFOXA1_IP_E2_R2_peak_906\tchr1\t77447056\t77447264\t208\t77447161\t224\t12.8224\t26.1471\t22.4155\nFOXA1_IP_E2_R2\tFOXA1_IP_E2_R2_peak_7547\tchr12\t107879230\t107879395\t165\t107879324\t91\t7.67116\t12.4437\t9.18434\nFOXA1_IP_E2_R2\tFOXA1_IP_E2_R2_peak_14187\tchr19\t57587562\t57587742\t180\t57587672\t66\t6.55504\t9.7263\t6.60323\nFOXA1_IP_E2_R2\tFOXA1_IP_E2_R2_peak_20828\tchr3\t162304423\t162304686\t263\t162304551\t425\t17.7351\t46.7771\t42.5818\nFOXA1_IP_E2_R2\tFOXA1_IP_E2_R2_peak_27469\tchr7\t7232724\t7232843\t119\t7232787\t49\t5.72969\t7.9745\t4.9616\nFOXA1_IP_VEH_R1\tFOXA1_IP_VEH_R1_peak_645\tchr1\t74992587\t74992954\t367\t74992653\t28\t4.37702\t5.75682\t2.83543\nFOXA1_IP_VEH_R1\tFOXA1_IP_VEH_R1_peak_7286\tchr14\t68936126\t68936438\t312\t68936300\t554\t26.0075\t60.2782\t55.4681\nFOXA1_IP_VEH_R1\tFOXA1_IP_VEH_R1_peak_13927\tchr21\t24764621\t24764766\t145\t24764629\t35\t4.81839\t6.61099\t3.5723\nFOXA1_IP_VEH_R1\tFOXA1_IP_VEH_R1_peak_20567\tchr6\t88161613\t88161768\t155\t88161687\t47\t5.5799\t7.88349\t4.72973\nFOXA1_IP_VEH_R2\tFOXA1_IP_VEH_R2_peak_1286\tchr1\t120336643\t120336819\t176\t120336741\t74\t6.58728\t10.6776\t7.46615\nFOXA1_IP_VEH_R2\tFOXA1_IP_VEH_R2_peak_7927\tchr14\t72962458\t72962701\t243\t72962578\t360\t18.106\t40.0841\t36.0194\nFOXA1_IP_VEH_R2\tFOXA1_IP_VEH_R2_peak_14567\tchr20\t3613343\t3613476\t133\t3613363\t77\t7.27218\t10.9661\t7.73921\nFOXA1_IP_VEH_R2\tFOXA1_IP_VEH_R2_peak_21208\tchr5\t172521180\t172521397\t217\t172521285\t79\t7.13267\t11.2279\t7.99271\nFOXA1_IP_VEH_R2\tFOXA1_IP_VEH_R2_peak_27849\tchrY\t59019770\t59019943\t173\t59019861\t206\t11.4163\t24.3745\t20.675\n",
+          "id": "macs2_peaks",
+          "mode": "peaks/narrow",
+          "name": "Peak calls",
+          "path_glob": "**/*_peaks.narrowPeak",
+          "rawYaml": "id: macs2_peaks\nname: Peak calls\nmode: peaks/narrow\ndescription: >-\n  Every MACS2 narrow peak of every sample in one table, with the summit\n  position, the peak width and the fold enrichment, p-value and q-value MACS2\n  reported for it.\n# `--broad` writes *_peaks.broadPeak, a BED6+3 with no summit column: a\n# different schema, so it is not folded in here as an alternate glob.\nfind:\n  path_glob: \"**/*_peaks.narrowPeak\"\nrecipe: macs2/peaks.py\nfixture: peaks.tsv\nrenders_as:\n  # Significance along the genome, then how wide the calls are.\n  - { id: peak_significance, component: advanced_viz, kind: manhattan, roles: {chr: chr, pos: summit, score: neg_log10_qvalue} }\n  - { component: figure, visu_type: histogram, dict_kwargs: {x: width, color: sample, title: Peak width distribution} }\n  # How many peaks and where they concentrate, then the spread of width,\n  # enrichment and significance behind that count.\n  - { component: card, column: peak_id, aggregation: count, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }\n  - { component: card, column: width, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: fold_enrichment, aggregation: average, secondary_layout: histogram }\n  - { component: card, column: neg_log10_qvalue, aggregation: max, secondary_layout: threshold, threshold_value: 10.0 }\n  - { component: table, row_selection_enabled: true, row_selection_column: peak_id }\n",
+          "recipe": "macs2/peaks.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "peak_significance",
+              "kind": "manhattan",
+              "roles": {
+                "chr": "chr",
+                "pos": "summit",
+                "score": "neg_log10_qvalue"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "sample",
+                "title": "Peak width distribution",
+                "x": "width"
+              },
+              "roles": {},
+              "visu_type": "histogram"
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample",
+              "column": "peak_id",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "width",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "fold_enrichment",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "neg_log10_qvalue",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "threshold",
+              "threshold_value": 10.0
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {},
+              "row_selection_column": "peak_id",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "peaks",
+          "yamlPath": "depictio/catalog/macs2/peaks.yaml"
         }
       ]
     },
@@ -3601,6 +4091,40 @@
         },
         {
           "columns": {},
+          "description": "Signal enrichment across the genome \u2014 the plotFingerprint cumulative-coverage curve that separates an enriched ChIP from its input, from deepTools, via MultiQC.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+            "path_glob_alt": [
+              "**/multiqc/*_data/multiqc.parquet",
+              "**/multiqc/*/*_data/multiqc.parquet"
+            ]
+          },
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixtureContent": null,
+          "id": "multiqc_deeptools",
+          "mode": "deeptools",
+          "name": "Signal enrichment",
+          "origin_tool": "deepTools",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_deeptools\nname: Signal enrichment\norigin_tool: deepTools\nmode: deeptools\ndescription: Signal enrichment across the genome \u2014 the plotFingerprint cumulative-coverage curve that separates an enriched ChIP from its input, from deepTools, via MultiQC.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: deeptools }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "deeptools"
+            }
+          ],
+          "slug": "deeptools",
+          "yamlPath": "depictio/catalog/multiqc/deeptools.yaml"
+        },
+        {
+          "columns": {},
           "description": "Duplication rate as a function of expression, the curve that separates a natural high-expression duplicate from a library-preparation artefact, from dupRadar via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -4040,6 +4564,40 @@
           ],
           "slug": "picard",
           "yamlPath": "depictio/catalog/multiqc/picard.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Library complexity curve \u2014 how many additional unique molecules each extra million reads buys, from Preseq, via MultiQC.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+            "path_glob_alt": [
+              "**/multiqc/*_data/multiqc.parquet",
+              "**/multiqc/*/*_data/multiqc.parquet"
+            ]
+          },
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixtureContent": null,
+          "id": "multiqc_preseq",
+          "mode": "preseq",
+          "name": "Library complexity",
+          "origin_tool": "Preseq",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_preseq\nname: Library complexity\norigin_tool: Preseq\nmode: preseq\ndescription: Library complexity curve \u2014 how many additional unique molecules each extra million reads buys, from Preseq, via MultiQC.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: preseq }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "preseq"
+            }
+          ],
+          "slug": "preseq",
+          "yamlPath": "depictio/catalog/multiqc/preseq.yaml"
         },
         {
           "columns": {},
