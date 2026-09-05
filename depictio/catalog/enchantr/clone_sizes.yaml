@@ -1,0 +1,18 @@
+id: enchantr_clone_sizes
+name: Clone sizes
+mode: repertoire-analysis/clone-sizes
+description: >-
+  Every clone of every sample with its sequence count and frequency, its rank
+  within the sample (a rank-abundance curve) and its clonal-homeostasis size
+  class.
+find: { path_glob: "**/repertoire_analysis_report/tables/clone_sizes_table.tsv" }
+recipe: enchantr/clone_sizes.py
+fixture: clone_sizes.tsv
+renders_as:
+  - id: clone_composition
+    component: advanced_viz
+    kind: sunburst
+    roles: { ranks: [subject_id, sample_id, size_class], abundance: seq_count }
+  - { component: card, column: seq_count, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: clone_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: size_class, top_n_count: 5 }
+  - { component: table }

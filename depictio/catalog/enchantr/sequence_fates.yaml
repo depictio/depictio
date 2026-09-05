@@ -1,0 +1,18 @@
+id: enchantr_sequence_fates
+name: Sequence attrition flow
+mode: parsed-logs/fates
+description: >-
+  Where the reads of each sample go through the pRESTO and Change-O funnel, one
+  weighted row per loss point, shaped for a Sankey.
+find: { path_glob: "**/parsed_logs/Table_sequences_process.tsv" }
+recipe: enchantr/sequence_fates.py
+fixture: sequence_fates.tsv
+renders_as:
+  # Only the pRESTO milestones are bound: they exist on every fastq-mode run.
+  # The two Change-O ones ride in the collection for the depth slider to reach.
+  - id: attrition_sankey
+    component: advanced_viz
+    kind: sankey
+    roles:
+      steps: [input, quality, paired, consensus, assembled, representative]
+  - { component: table }

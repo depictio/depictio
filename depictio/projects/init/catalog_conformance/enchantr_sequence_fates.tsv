@@ -1,0 +1,49 @@
+sample_id	subject_id	input	quality	paired	consensus	assembled	representative	productive	collapsed	reads
+SRR1383451	M4	Input reads	Quality filtered	Paired	Lost	Lost	Lost	Lost	Lost	508365
+SRR1383451	M4	Input reads	Quality filtered	Paired	UMI consensus	Assembled	Lost	Lost	Lost	433319
+SRR1383451	M4	Input reads	Lost	Lost	Lost	Lost	Lost	Lost	Lost	168604
+SRR1383451	M4	Input reads	Quality filtered	Lost	Lost	Lost	Lost	Lost	Lost	116788
+SRR1383451	M4	Input reads	Quality filtered	Paired	UMI consensus	Assembled	Representative	Productive	Lost	44057
+SRR1383451	M4	Input reads	Quality filtered	Paired	UMI consensus	Assembled	Representative	Productive	Unique sequences	13436
+SRR1383451	M4	Input reads	Quality filtered	Paired	UMI consensus	Lost	Lost	Lost	Lost	6981
+SRR1383451	M4	Input reads	Quality filtered	Paired	UMI consensus	Assembled	Representative	Lost	Lost	1618
+SRR1383452	M4	Input reads	Quality filtered	Paired	UMI consensus	Assembled	Lost	Lost	Lost	420899
+SRR1383452	M4	Input reads	Quality filtered	Paired	Lost	Lost	Lost	Lost	Lost	397922
+SRR1383452	M4	Input reads	Lost	Lost	Lost	Lost	Lost	Lost	Lost	380545
+SRR1383452	M4	Input reads	Quality filtered	Lost	Lost	Lost	Lost	Lost	Lost	100519
+SRR1383452	M4	Input reads	Quality filtered	Paired	UMI consensus	Assembled	Representative	Productive	Lost	39977
+SRR1383452	M4	Input reads	Quality filtered	Paired	UMI consensus	Assembled	Representative	Productive	Unique sequences	12456
+SRR1383452	M4	Input reads	Quality filtered	Paired	UMI consensus	Lost	Lost	Lost	Lost	7258
+SRR1383452	M4	Input reads	Quality filtered	Paired	UMI consensus	Assembled	Representative	Lost	Lost	1418
+SRR1383453	M4	Input reads	Quality filtered	Paired	UMI consensus	Assembled	Lost	Lost	Lost	436621
+SRR1383453	M4	Input reads	Lost	Lost	Lost	Lost	Lost	Lost	Lost	253162
+SRR1383453	M4	Input reads	Quality filtered	Paired	Lost	Lost	Lost	Lost	Lost	240862
+SRR1383453	M4	Input reads	Quality filtered	Lost	Lost	Lost	Lost	Lost	Lost	71897
+SRR1383453	M4	Input reads	Quality filtered	Paired	UMI consensus	Assembled	Representative	Productive	Lost	37519
+SRR1383453	M4	Input reads	Quality filtered	Paired	UMI consensus	Assembled	Representative	Productive	Unique sequences	12329
+SRR1383453	M4	Input reads	Quality filtered	Paired	UMI consensus	Lost	Lost	Lost	Lost	6027
+SRR1383453	M4	Input reads	Quality filtered	Paired	UMI consensus	Assembled	Representative	Lost	Lost	1573
+SRR1383456	M4	Input reads	Quality filtered	Paired	Lost	Lost	Lost	Lost	Lost	38455
+SRR1383456	M4	Input reads	Lost	Lost	Lost	Lost	Lost	Lost	Lost	12084
+SRR1383456	M4	Input reads	Quality filtered	Lost	Lost	Lost	Lost	Lost	Lost	7053
+SRR1383456	M4	Input reads	Quality filtered	Paired	UMI consensus	Lost	Lost	Lost	Lost	3851
+SRR1383456	M4	Input reads	Quality filtered	Paired	UMI consensus	Assembled	Lost	Lost	Lost	1122
+SRR1383456	M4	Input reads	Quality filtered	Paired	UMI consensus	Assembled	Representative	Lost	Lost	450
+SRR1383456	M4	Input reads	Quality filtered	Paired	UMI consensus	Assembled	Representative	Productive	Lost	31
+SRR1383456	M4	Input reads	Quality filtered	Paired	UMI consensus	Assembled	Representative	Productive	Unique sequences	27
+SRR1383463	M5	Input reads	Quality filtered	Paired	UMI consensus	Assembled	Lost	Lost	Lost	877303
+SRR1383463	M5	Input reads	Lost	Lost	Lost	Lost	Lost	Lost	Lost	421872
+SRR1383463	M5	Input reads	Quality filtered	Paired	Lost	Lost	Lost	Lost	Lost	300306
+SRR1383463	M5	Input reads	Quality filtered	Lost	Lost	Lost	Lost	Lost	Lost	140667
+SRR1383463	M5	Input reads	Quality filtered	Paired	UMI consensus	Assembled	Representative	Productive	Lost	68152
+SRR1383463	M5	Input reads	Quality filtered	Paired	UMI consensus	Assembled	Representative	Productive	Unique sequences	33482
+SRR1383463	M5	Input reads	Quality filtered	Paired	UMI consensus	Lost	Lost	Lost	Lost	9091
+SRR1383463	M5	Input reads	Quality filtered	Paired	UMI consensus	Assembled	Representative	Lost	Lost	1788
+SRR1383464	M5	Input reads	Lost	Lost	Lost	Lost	Lost	Lost	Lost	667779
+SRR1383464	M5	Input reads	Quality filtered	Paired	UMI consensus	Assembled	Lost	Lost	Lost	639317
+SRR1383464	M5	Input reads	Quality filtered	Paired	Lost	Lost	Lost	Lost	Lost	167331
+SRR1383464	M5	Input reads	Quality filtered	Lost	Lost	Lost	Lost	Lost	Lost	96750
+SRR1383464	M5	Input reads	Quality filtered	Paired	UMI consensus	Assembled	Representative	Productive	Lost	46079
+SRR1383464	M5	Input reads	Quality filtered	Paired	UMI consensus	Assembled	Representative	Productive	Unique sequences	25056
+SRR1383464	M5	Input reads	Quality filtered	Paired	UMI consensus	Lost	Lost	Lost	Lost	5044
+SRR1383464	M5	Input reads	Quality filtered	Paired	UMI consensus	Assembled	Representative	Lost	Lost	742
