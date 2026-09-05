@@ -1,0 +1,23 @@
+id: ataqv_metrics
+name: ATAC quality metrics
+mode: qc/library
+description: >-
+  One row per ATAC library: TSS enrichment, the share of high-quality autosomal
+  alignments that fall inside peaks, mitochondrial and duplicate fractions, and
+  the peak statistics ataqv computed. These are the numbers an ATAC library is
+  accepted or rejected on, and MultiQC has no module that reports them.
+find:
+  path_glob: "**/*.ataqv.json"
+recipe: ataqv/metrics.py
+fixture: metrics.tsv
+renders_as:
+  # Signal (TSS enrichment) against specificity (reads inside peaks): the two
+  # axes an ATAC library is placed on.
+  - { component: figure, visu_type: scatter, dict_kwargs: {x: tss_enrichment, y: hqaa_overlapping_peaks_percent, color: sample, size: total_peaks, title: TSS enrichment against reads in peaks} }
+  # Signal, then yield, then the two ways an ATAC library wastes reads.
+  - { component: card, column: tss_enrichment, aggregation: average, secondary_layout: gauge, coverage_max: 10.0 }
+  - { component: card, column: total_peaks, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: mitochondrial_fraction, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: hqaa_overlapping_peaks_percent, aggregation: average, secondary_layout: threshold, threshold_value: 20.0, threshold_direction: min, threshold_warn: 10.0 }
+  - { component: card, column: duplicate_fraction, aggregation: average, secondary_layout: histogram }
+  - { component: table, row_selection_enabled: true, row_selection_column: sample }

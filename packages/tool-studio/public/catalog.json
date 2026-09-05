@@ -336,6 +336,418 @@
     },
     {
       "biotools_url": null,
+      "description": "",
+      "dir": "depictio/catalog/ataqv",
+      "homepage": "https://github.com/ParkerLab/ataqv",
+      "id": "ataqv",
+      "name": "ataqv",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/ataqv/ataqv",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "How each library's reads are spread over the reference sequences ataqv counted. One sequence carrying a disproportionate share, or a library whose profile does not match its peers, shows up here before any peak is called.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*.ataqv.json",
+            "path_glob_alt": []
+          },
+          "fixture": "chromosome_counts.tsv",
+          "fixtureContent": "sample\tchromosome\tread_count\tfraction_of_reads\tlog10_read_count\nGM12878_FAST_R1\tchr1\t710493\t0.09331914990867636\t5.851560414736544\nGM12878_FAST_R1\tchr14\t228335\t0.029990482797715975\t5.358574388795488\nGM12878_FAST_R1\tchr19\t194511\t0.025547895852438444\t5.288946399353358\nGM12878_FAST_R1\tchr2\t690902\t0.090745985266856\t5.839417078456968\nGM12878_FAST_R1\tchr21\t79407\t0.010429650590221528\t4.899864257853247\nGM12878_FAST_R1\tchr22\t112973\t0.014838350726372948\t5.052978505821748\nGM12878_FAST_R1\tchr3\t567622\t0.07455386965031703\t5.754059984690139\nGM12878_FAST_R1\tchr8\t385776\t0.05066944836215069\t5.586336331470533\nGM12878_FAST_R2\tchr1\t1195583\t0.0941939804337507\t6.077580094424949\nGM12878_FAST_R2\tchr14\t389161\t0.030660040850011127\t5.590130426673346\nGM12878_FAST_R2\tchr19\t354584\t0.02793589266334588\t5.549720359705349\nGM12878_FAST_R2\tchr2\t1121165\t0.08833095993586902\t6.04966991905946\nGM12878_FAST_R2\tchr21\t133242\t0.010497468047767333\t5.124644402379828\nGM12878_FAST_R2\tchr22\t214415\t0.016892681072499905\t5.331257189847425\nGM12878_FAST_R2\tchr3\t922039\t0.07264282239305432\t5.964749762054127\nGM12878_FAST_R2\tchr8\t627371\t0.04942741047564461\t5.7975251319631775\nGM12878_OMNI_R1\tchr1\t5509134\t0.09654470709453152\t6.741083414783322\nGM12878_OMNI_R1\tchr14\t1935553\t0.033919559308403416\t6.286805292201022\nGM12878_OMNI_R1\tchr19\t2197949\t0.03851791269076382\t6.342017808664777\nGM12878_OMNI_R1\tchr2\t4753575\t0.08330392871672529\t6.677020441785851\nGM12878_OMNI_R1\tchr21\t676753\t0.01185974422846594\t5.8304308313768525\nGM12878_OMNI_R1\tchr22\t1088963\t0.01908351001659831\t6.037013522676089\nGM12878_OMNI_R1\tchr3\t3868523\t0.06779385288567283\t6.587545295528693\nGM12878_OMNI_R1\tchr8\t2536085\t0.04444357016762252\t6.40416397661197\nGM12878_OMNI_R2\tchr1\t4518453\t0.09659070285201313\t6.654989865315852\nGM12878_OMNI_R2\tchr14\t1587456\t0.03393495313255341\t6.200701970237623\nGM12878_OMNI_R2\tchr19\t1831488\t0.0391516107802887\t6.262804314617463\nGM12878_OMNI_R2\tchr2\t3888851\t0.08313173809194299\t6.58982141529804\nGM12878_OMNI_R2\tchr21\t557443\t0.01191642607988503\t5.7462012453299804\nGM12878_OMNI_R2\tchr22\t905879\t0.019364921867922227\t5.957070671419109\nGM12878_OMNI_R2\tchr3\t3164180\t0.06764048893510298\t6.5002613183948235\nGM12878_OMNI_R2\tchr8\t2071379\t0.044279746515654826\t6.316259778644506\nGM12878_STD_R1\tchr1\t581814\t0.09150631689803251\t5.764784913771219\nGM12878_STD_R1\tchr14\t188108\t0.02958517715121173\t5.274409574693556\nGM12878_STD_R1\tchr19\t157138\t0.024714289488948417\t5.196283985057674\nGM12878_STD_R1\tchr2\t586777\t0.09228688568937295\t5.7684738225234735\nGM12878_STD_R1\tchr21\t71757\t0.011285769647433922\t4.8558703257848075\nGM12878_STD_R1\tchr22\t74684\t0.011746121219518025\t4.87323338533114\nGM12878_STD_R1\tchr3\t476050\t0.07487200747886504\t5.677653481779541\nGM12878_STD_R1\tchr8\t341484\t0.05370778826155393\t5.533371631706272\nGM12878_STD_R2\tchr1\t570532\t0.09344163329106722\t5.756280769356191\nGM12878_STD_R2\tchr14\t180631\t0.02958371425791851\t5.256794690564108\nGM12878_STD_R2\tchr19\t154341\t0.02527794255848332\t5.188484123640616\nGM12878_STD_R2\tchr2\t551423\t0.09031196454232218\t5.741485664273812\nGM12878_STD_R2\tchr21\t68436\t0.011208436364493974\t4.8352909635809\nGM12878_STD_R2\tchr22\t73760\t0.012080400173082524\t4.867826795946033\nGM12878_STD_R2\tchr3\t453807\t0.07432443277312989\t5.6568721476203825\nGM12878_STD_R2\tchr8\t326421\t0.05346117550024092\t5.513779421395\n",
+          "id": "ataqv_chromosome_counts",
+          "mode": "qc/read_distribution",
+          "name": "Reads per reference sequence",
+          "path_glob": "**/*.ataqv.json",
+          "rawYaml": "id: ataqv_chromosome_counts\nname: Reads per reference sequence\nmode: qc/read_distribution\ndescription: >-\n  How each library's reads are spread over the reference sequences ataqv\n  counted. One sequence carrying a disproportionate share, or a library whose\n  profile does not match its peers, shows up here before any peak is called.\nfind:\n  path_glob: \"**/*.ataqv.json\"\nrecipe: ataqv/chromosome_counts.py\nfixture: chromosome_counts.tsv\nrenders_as:\n  - { id: read_distribution, component: advanced_viz, kind: dot_plot, roles: {cluster: sample, gene: chromosome, mean_expression: log10_read_count, frac_expressing: fraction_of_reads} }\n  - { component: figure, visu_type: bar, dict_kwargs: {x: chromosome, y: fraction_of_reads, color: sample, title: Share of reads per reference sequence} }\n  - { component: card, column: read_count, aggregation: sum, secondary_layout: top_n, breakdown_col: chromosome, top_n_count: 3 }\n  - { component: card, column: fraction_of_reads, aggregation: max, secondary_layout: threshold, threshold_value: 0.12, threshold_direction: max, threshold_warn: 0.1 }\n  - { component: card, column: fraction_of_reads, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: table }\n",
+          "recipe": "ataqv/chromosome_counts.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "read_distribution",
+              "kind": "dot_plot",
+              "roles": {
+                "cluster": "sample",
+                "frac_expressing": "fraction_of_reads",
+                "gene": "chromosome",
+                "mean_expression": "log10_read_count"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "sample",
+                "title": "Share of reads per reference sequence",
+                "x": "chromosome",
+                "y": "fraction_of_reads"
+              },
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "chromosome",
+              "column": "read_count",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "fraction_of_reads",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "threshold",
+              "threshold_direction": "max",
+              "threshold_value": 0.12,
+              "threshold_warn": 0.1
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "fraction_of_reads",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "chromosome_counts",
+          "yamlPath": "depictio/catalog/ataqv/chromosome_counts.yaml"
+        },
+        {
+          "columns": {},
+          "description": "The fragment-length histogram of every library in long form. A good ATAC library shows a sub-nucleosomal peak below 100 bp followed by a decaying nucleosome ladder; a flat or ladder-free profile is a failed transposition.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*.ataqv.json",
+            "path_glob_alt": []
+          },
+          "fixture": "fragment_length.tsv",
+          "fixtureContent": "sample\tfragment_length\tread_count\tfraction_of_all_reads\tfragment_class\nGM12878_FAST_R1\t40\t94913\t0.00794046786625767\tsub-nucleosomal\nGM12878_FAST_R1\t80\t17644\t0.00147610564445598\tsub-nucleosomal\nGM12878_FAST_R1\t120\t6983\t0.000584201185402182\ttransitional\nGM12878_FAST_R1\t160\t40567\t0.00339385500332383\tmononucleosomal\nGM12878_FAST_R1\t200\t36559\t0.00305854376874099\tmononucleosomal\nGM12878_FAST_R1\t260\t4688\t0.000392200366198687\tmononucleosomal\nGM12878_FAST_R1\t400\t3187\t0.000266625974205464\tmulti-nucleosomal\nGM12878_FAST_R1\t600\t485\t0.0000405753365201286\tmulti-nucleosomal\nGM12878_FAST_R2\t40\t150372\t0.00716684344041657\tsub-nucleosomal\nGM12878_FAST_R2\t80\t25503\t0.00121549230083356\tsub-nucleosomal\nGM12878_FAST_R2\t120\t11125\t0.000530225928195637\ttransitional\nGM12878_FAST_R2\t160\t79419\t0.00378516970708938\tmononucleosomal\nGM12878_FAST_R2\t200\t62158\t0.0029624973703177\tmononucleosomal\nGM12878_FAST_R2\t260\t7966\t0.000379665594966872\tmononucleosomal\nGM12878_FAST_R2\t400\t5824\t0.000277576252207765\tmulti-nucleosomal\nGM12878_FAST_R2\t600\t903\t0.000043037664104329\tmulti-nucleosomal\nGM12878_OMNI_R1\t40\t460833\t0.00618965618116213\tsub-nucleosomal\nGM12878_OMNI_R1\t80\t180618\t0.00242596194310985\tsub-nucleosomal\nGM12878_OMNI_R1\t120\t77227\t0.00103727072041848\ttransitional\nGM12878_OMNI_R1\t160\t91583\t0.00123009264102044\tmononucleosomal\nGM12878_OMNI_R1\t200\t211403\t0.00283944918368741\tmononucleosomal\nGM12878_OMNI_R1\t260\t79925\t0.00107350877710447\tmononucleosomal\nGM12878_OMNI_R1\t400\t70941\t0.000952840615033695\tmulti-nucleosomal\nGM12878_OMNI_R1\t600\t23169\t0.000311193304432073\tmulti-nucleosomal\nGM12878_OMNI_R2\t40\t407465\t0.00661780536478398\tsub-nucleosomal\nGM12878_OMNI_R2\t80\t154769\t0.00251366649528733\tsub-nucleosomal\nGM12878_OMNI_R2\t120\t64030\t0.00103993736273574\ttransitional\nGM12878_OMNI_R2\t160\t75224\t0.001221743685373\tmononucleosomal\nGM12878_OMNI_R2\t200\t170221\t0.00276462873375356\tmononucleosomal\nGM12878_OMNI_R2\t260\t63739\t0.00103521111296913\tmononucleosomal\nGM12878_OMNI_R2\t400\t55516\t0.00090165801389407\tmulti-nucleosomal\nGM12878_OMNI_R2\t600\t17599\t0.000285832541727101\tmulti-nucleosomal\nGM12878_STD_R1\t40\t53959\t0.000858612673249719\tsub-nucleosomal\nGM12878_STD_R1\t80\t19261\t0.00030648712354682\tsub-nucleosomal\nGM12878_STD_R1\t120\t7496\t0.000119278722709463\ttransitional\nGM12878_STD_R1\t160\t26425\t0.000420482957256877\tmononucleosomal\nGM12878_STD_R1\t200\t35841\t0.000570313327191816\tmononucleosomal\nGM12878_STD_R1\t260\t7116\t0.000113232042529421\tmononucleosomal\nGM12878_STD_R1\t400\t4890\t0.0000778112265273843\tmulti-nucleosomal\nGM12878_STD_R1\t600\t0\t0.0\tmulti-nucleosomal\nGM12878_STD_R2\t40\t45271\t0.000760012749532427\tsub-nucleosomal\nGM12878_STD_R2\t80\t19236\t0.000322935328356029\tsub-nucleosomal\nGM12878_STD_R2\t120\t7584\t0.000127320728335003\ttransitional\nGM12878_STD_R2\t160\t24168\t0.000405734093143507\tmononucleosomal\nGM12878_STD_R2\t200\t32949\t0.000553150142129486\tmononucleosomal\nGM12878_STD_R2\t260\t7289\t0.000122368247472816\tmononucleosomal\nGM12878_STD_R2\t400\t5329\t0.0000894636288630316\tmulti-nucleosomal\nGM12878_STD_R2\t600\t0\t0.0\tmulti-nucleosomal\n",
+          "id": "ataqv_fragment_length",
+          "mode": "qc/fragment_length",
+          "name": "Fragment length distribution",
+          "path_glob": "**/*.ataqv.json",
+          "rawYaml": "id: ataqv_fragment_length\nname: Fragment length distribution\nmode: qc/fragment_length\ndescription: >-\n  The fragment-length histogram of every library in long form. A good ATAC\n  library shows a sub-nucleosomal peak below 100 bp followed by a decaying\n  nucleosome ladder; a flat or ladder-free profile is a failed transposition.\nfind:\n  path_glob: \"**/*.ataqv.json\"\nrecipe: ataqv/fragment_length.py\nfixture: fragment_length.tsv\nrenders_as:\n  # The ladder itself, then how much of the library sits in each window.\n  - { component: figure, visu_type: line, dict_kwargs: {x: fragment_length, y: fraction_of_all_reads, color: sample, title: Fragment length distribution} }\n  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: read_count, color: fragment_class, title: Reads per fragment class} }\n  - { component: card, column: read_count, aggregation: sum, secondary_layout: top_n, breakdown_col: fragment_class, top_n_count: 4 }\n  - { component: card, column: fragment_class, aggregation: count, secondary_layout: donut, breakdown_col: fragment_class }\n  - { component: card, column: fragment_length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: read_count, aggregation: nunique, secondary_layout: composition, breakdown_col: fragment_class }\n  - { component: table }\n",
+          "recipe": "ataqv/fragment_length.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "sample",
+                "title": "Fragment length distribution",
+                "x": "fragment_length",
+                "y": "fraction_of_all_reads"
+              },
+              "roles": {},
+              "visu_type": "line"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "fragment_class",
+                "title": "Reads per fragment class",
+                "x": "sample",
+                "y": "read_count"
+              },
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "fragment_class",
+              "column": "read_count",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 4
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "fragment_class",
+              "column": "fragment_class",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "donut"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "fragment_length",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "fragment_class",
+              "column": "read_count",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "composition"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "fragment_length",
+          "yamlPath": "depictio/catalog/ataqv/fragment_length.yaml"
+        },
+        {
+          "columns": {},
+          "description": "One row per ATAC library: TSS enrichment, the share of high-quality autosomal alignments that fall inside peaks, mitochondrial and duplicate fractions, and the peak statistics ataqv computed. These are the numbers an ATAC library is accepted or rejected on, and MultiQC has no module that reports them.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*.ataqv.json",
+            "path_glob_alt": []
+          },
+          "fixture": "metrics.tsv",
+          "fixtureContent": "sample\ttss_enrichment\ttotal_reads\thqaa\thqaa_fraction\thqaa_in_peaks\thqaa_overlapping_peaks_percent\ttotal_autosomal_reads\ttotal_mitochondrial_reads\tmitochondrial_fraction\tduplicate_fraction\tduplicate_fraction_in_peaks\tduplicate_fraction_not_in_peaks\tpeak_duplicate_ratio\ttotal_peaks\ttotal_peak_territory\thqaa_tf_count\thqaa_mononucleosomal_count\tshort_mononucleosomal_ratio\tmax_fraction_reads_from_single_autosome\tmedian_mapq\tproperly_paired_fraction\tmaximum_proper_pair_fragment_size\tataqv_version\nGM12878_FAST_R1\t2.47213358749884\t11953074\t7613582\t0.6369559830383381\t93843\t1.23257357706268\t10300862\t363718\t0.03042882525449102\t0.24196336440316524\t0.218745618737372\t0.246582210884959\t1.12725554142873\t3192\t980638\t1517794\t2178997\t0.696556259600174\t0.0933191499086764\t60.0\t0.9289520837903288\t622\t1.1.1\nGM12878_FAST_R2\t2.37738222391205\t20981622\t12692775\t0.60494727242727\t354103\t2.78979970888951\t18150527\t647708\t0.030870253977504696\t0.28425671761696975\t0.258120705047024\t0.287844765510299\t1.11515566121617\t9159\t3305569\t2231465\t3985180\t0.559940830778033\t0.0941939804337507\t60.0\t0.9314309446619523\t614\t1.1.1\nGM12878_OMNI_R1\t4.12162753606452\t74452116\t57063035\t0.7664393984450355\t27633678\t48.4265829884443\t66072806\t1227235\t0.01648354762677262\t0.12947587681725528\t0.133539333054177\t0.114156284050469\t0.854851386775722\t83309\t68765775\t12238631\t7877022\t1.55371293872227\t0.0965447070945315\t60.0\t0.9307163277938266\t1001\t1.1.1\nGM12878_OMNI_R2\t4.26647078765751\t61571016\t46779378\t0.7597629702910863\t22459821\t48.0122266696235\t54440963\t1145742\t0.01860846343675732\t0.1341316180327445\t0.136423588639763\t0.120082094459579\t0.880215039472867\t80417\t63065743\t10537173\t6438768\t1.63652006098061\t0.0965907028520131\t60.0\t0.9294079701397164\t929\t1.1.1\nGM12878_STD_R1\t7.27084220122805\t62844402\t6358184\t0.10117343466805524\t851572\t13.3933211118143\t7797894\t45148677\t0.7184200272921684\t0.8080982614807919\t0.090624777805016\t0.174700182668423\t1.92773088000613\t20723\t7966187\t1328708\t1729338\t0.768333315985655\t0.0922868856893729\t60.0\t0.8479070100786383\t432\t1.1.1\nGM12878_STD_R2\t7.53007383861144\t59566106\t6105758\t0.10250389709879643\t854966\t14.002618511903\t7371108\t43237867\t0.7258803689467296\t0.8034485920566975\t0.0799298885017571\t0.161480857908281\t2.02028128570117\t20842\t8237811\t1305584\t1575544\t0.828656007068035\t0.0934416332910672\t60.0\t0.854932383862729\t454\t1.1.1\n",
+          "id": "ataqv_metrics",
+          "mode": "qc/library",
+          "name": "ATAC quality metrics",
+          "path_glob": "**/*.ataqv.json",
+          "rawYaml": "id: ataqv_metrics\nname: ATAC quality metrics\nmode: qc/library\ndescription: >-\n  One row per ATAC library: TSS enrichment, the share of high-quality autosomal\n  alignments that fall inside peaks, mitochondrial and duplicate fractions, and\n  the peak statistics ataqv computed. These are the numbers an ATAC library is\n  accepted or rejected on, and MultiQC has no module that reports them.\nfind:\n  path_glob: \"**/*.ataqv.json\"\nrecipe: ataqv/metrics.py\nfixture: metrics.tsv\nrenders_as:\n  # Signal (TSS enrichment) against specificity (reads inside peaks): the two\n  # axes an ATAC library is placed on.\n  - { component: figure, visu_type: scatter, dict_kwargs: {x: tss_enrichment, y: hqaa_overlapping_peaks_percent, color: sample, size: total_peaks, title: TSS enrichment against reads in peaks} }\n  # Signal, then yield, then the two ways an ATAC library wastes reads.\n  - { component: card, column: tss_enrichment, aggregation: average, secondary_layout: gauge, coverage_max: 10.0 }\n  - { component: card, column: total_peaks, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }\n  - { component: card, column: mitochondrial_fraction, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: hqaa_overlapping_peaks_percent, aggregation: average, secondary_layout: threshold, threshold_value: 20.0, threshold_direction: min, threshold_warn: 10.0 }\n  - { component: card, column: duplicate_fraction, aggregation: average, secondary_layout: histogram }\n  - { component: table, row_selection_enabled: true, row_selection_column: sample }\n",
+          "recipe": "ataqv/metrics.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "sample",
+                "size": "total_peaks",
+                "title": "TSS enrichment against reads in peaks",
+                "x": "tss_enrichment",
+                "y": "hqaa_overlapping_peaks_percent"
+              },
+              "roles": {},
+              "visu_type": "scatter"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "tss_enrichment",
+              "columns": [],
+              "component": "card",
+              "coverage_max": 10.0,
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "gauge"
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample",
+              "column": "total_peaks",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "mitochondrial_fraction",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "hqaa_overlapping_peaks_percent",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "threshold",
+              "threshold_direction": "min",
+              "threshold_value": 20.0,
+              "threshold_warn": 10.0
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "duplicate_fraction",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {},
+              "row_selection_column": "sample",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "metrics",
+          "yamlPath": "depictio/catalog/ataqv/metrics.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Aggregate read coverage in a window centred on every transcription start site, recentred so 0 is the TSS. The height of the central spike over the flanks is the TSS enrichment score; the shape says whether that enrichment is a sharp signal or a broad shoulder.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*.ataqv.json",
+            "path_glob_alt": []
+          },
+          "fixture": "tss_coverage.tsv",
+          "fixtureContent": "sample\tposition\tcoverage\nGM12878_FAST_R1\t-1000\t0.849429087381451\nGM12878_FAST_R1\t-500\t1.29391110212049\nGM12878_FAST_R1\t-200\t1.97109925596051\nGM12878_FAST_R1\t-50\t2.39081194656618\nGM12878_FAST_R1\t0\t2.47213358749884\nGM12878_FAST_R1\t50\t2.43872637685696\nGM12878_FAST_R1\t200\t2.21163117258202\nGM12878_FAST_R1\t500\t1.67054510231835\nGM12878_FAST_R2\t-1000\t0.861917645313796\nGM12878_FAST_R2\t-500\t1.32475496308118\nGM12878_FAST_R2\t-200\t1.95019095790722\nGM12878_FAST_R2\t-50\t2.29063126329305\nGM12878_FAST_R2\t0\t2.37738222391205\nGM12878_FAST_R2\t50\t2.36399606274137\nGM12878_FAST_R2\t200\t2.20293031704259\nGM12878_FAST_R2\t500\t1.67126222215889\nGM12878_OMNI_R1\t-1000\t0.795852672999664\nGM12878_OMNI_R1\t-500\t1.75487713014215\nGM12878_OMNI_R1\t-200\t3.08234325572379\nGM12878_OMNI_R1\t-50\t4.03350523256357\nGM12878_OMNI_R1\t0\t4.12162753606452\nGM12878_OMNI_R1\t50\t3.9363433516528\nGM12878_OMNI_R1\t200\t3.28337148086859\nGM12878_OMNI_R1\t500\t2.07555830361579\nGM12878_OMNI_R2\t-1000\t0.793605460864504\nGM12878_OMNI_R2\t-500\t1.77153749334119\nGM12878_OMNI_R2\t-200\t3.16439296202086\nGM12878_OMNI_R2\t-50\t4.19122421756164\nGM12878_OMNI_R2\t0\t4.26647078765751\nGM12878_OMNI_R2\t50\t4.04311471554569\nGM12878_OMNI_R2\t200\t3.31763112465226\nGM12878_OMNI_R2\t500\t2.07874407696107\nGM12878_STD_R1\t-1000\t0.87545734197311\nGM12878_STD_R1\t-500\t1.99939007659447\nGM12878_STD_R1\t-200\t5.03150600388323\nGM12878_STD_R1\t-50\t7.35380144015951\nGM12878_STD_R1\t0\t7.27084220122805\nGM12878_STD_R1\t50\t6.54778524580798\nGM12878_STD_R1\t200\t4.65533292725416\nGM12878_STD_R1\t500\t2.19049404600496\nGM12878_STD_R2\t-1000\t0.860029954795709\nGM12878_STD_R2\t-500\t2.04741788940734\nGM12878_STD_R2\t-200\t5.14605463809157\nGM12878_STD_R2\t-50\t7.57689071141239\nGM12878_STD_R2\t0\t7.53007383861144\nGM12878_STD_R2\t50\t6.82618015532798\nGM12878_STD_R2\t200\t4.87815808817498\nGM12878_STD_R2\t500\t2.23100405386101\n",
+          "id": "ataqv_tss_coverage",
+          "mode": "qc/tss_profile",
+          "name": "TSS coverage profile",
+          "path_glob": "**/*.ataqv.json",
+          "rawYaml": "id: ataqv_tss_coverage\nname: TSS coverage profile\nmode: qc/tss_profile\ndescription: >-\n  Aggregate read coverage in a window centred on every transcription start site,\n  recentred so 0 is the TSS. The height of the central spike over the flanks is\n  the TSS enrichment score; the shape says whether that enrichment is a sharp\n  signal or a broad shoulder.\nfind:\n  path_glob: \"**/*.ataqv.json\"\nrecipe: ataqv/tss_coverage.py\nfixture: tss_coverage.tsv\nrenders_as:\n  - { component: figure, visu_type: line, dict_kwargs: {x: position, y: coverage, color: sample, title: Coverage around transcription start sites} }\n  - { component: card, column: coverage, aggregation: max, secondary_layout: threshold, threshold_value: 5.0, threshold_direction: min, threshold_warn: 3.0 }\n  - { component: card, column: coverage, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: position, aggregation: nunique, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }\n  - { component: table }\n",
+          "recipe": "ataqv/tss_coverage.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "sample",
+                "title": "Coverage around transcription start sites",
+                "x": "position",
+                "y": "coverage"
+              },
+              "roles": {},
+              "visu_type": "line"
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "coverage",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "threshold",
+              "threshold_direction": "min",
+              "threshold_value": 5.0,
+              "threshold_warn": 3.0
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "coverage",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample",
+              "column": "position",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "tss_coverage",
+          "yamlPath": "depictio/catalog/ataqv/tss_coverage.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": null,
       "description": "Aggregates the biosynthetic gene cluster predictions of antiSMASH, DeepBGC and GECCO into one table per sample plus a run-level summary, with the region coordinates, product class, CDS count and PFAM domains normalised across the three callers.",
       "dir": "depictio/catalog/combgc",
       "homepage": "https://nf-co.re/funcscan",
@@ -3919,6 +4331,40 @@
       "name": "MultiQC",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/multiqc",
       "outputs": [
+        {
+          "columns": {},
+          "description": "ATAC-specific library quality, from ataqv, via MultiQC. The fragment-length ladder, the peak-enrichment percentiles, the MAPQ spread and the per-chromosome read distribution.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+            "path_glob_alt": [
+              "**/multiqc/*_data/multiqc.parquet",
+              "**/multiqc/*/*_data/multiqc.parquet"
+            ]
+          },
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixtureContent": null,
+          "id": "multiqc_ataqv",
+          "mode": "ataqv",
+          "name": "ATAC library quality",
+          "origin_tool": "ataqv",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_ataqv\nname: ATAC library quality\norigin_tool: ataqv\nmode: ataqv\ndescription: ATAC-specific library quality, from ataqv, via MultiQC. The fragment-length ladder, the peak-enrichment percentiles, the MAPQ spread and the per-chromosome read distribution.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: ataqv }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "ataqv"
+            }
+          ],
+          "slug": "ataqv",
+          "yamlPath": "depictio/catalog/multiqc/ataqv.yaml"
+        },
         {
           "columns": {},
           "description": "Variant-call statistics (substitution types, indel lengths, variant-quality counts) \u2014 bcftools stats, via MultiQC.",
