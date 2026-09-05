@@ -1,0 +1,27 @@
+id: seacr_peaks
+name: Peak calls
+mode: peaks/seacr
+description: >-
+  Every SEACR region of every sample in one table, with the total and the
+  maximum fragment coverage over the region, its width and where inside it the
+  maximum was reached.
+# SEACR reports no p-value and no fold enrichment, so significance is read off
+# the coverage itself: `log10_total_signal` is the height of the genome track
+# and `signal_density` the coverage per base.
+find:
+  path_glob: "**/*.seacr.peaks.*.bed"
+recipe: seacr/peaks.py
+fixture: peaks.tsv
+renders_as:
+  # Where the signal is, then how the two coverage measures relate and how wide
+  # the calls are behind them.
+  - { id: seacr_peak_signal, component: advanced_viz, kind: manhattan, roles: {chr: chr, pos: summit, score: log10_total_signal} }
+  - { id: seacr_signal_scatter, component: figure, visu_type: scatter, dict_kwargs: {x: total_signal, y: max_signal, color: sample, title: Total against maximum signal} }
+  - { id: seacr_width_hist, component: figure, visu_type: histogram, dict_kwargs: {x: width, color: sample, title: Peak width distribution} }
+  # How many regions and where they concentrate, then the spread of width,
+  # total coverage and coverage per base behind that count.
+  - { component: card, column: peak_id, aggregation: count, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: width, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: total_signal, aggregation: sum, secondary_layout: histogram }
+  - { component: card, column: signal_density, aggregation: average, secondary_layout: threshold, threshold_value: 50.0 }
+  - { component: table, row_selection_enabled: true, row_selection_column: peak_id }

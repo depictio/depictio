@@ -1,0 +1,21 @@
+id: seacr_peak_summary
+name: Peak QC summary
+mode: peaks/qc
+description: >-
+  One row per sample: how many regions SEACR called, how much of the genome
+  they cover and the median width, total coverage and coverage per base across
+  them.
+# SEACR writes no FRiP score, so the signal-to-noise proxy here is the coverage
+# the calls carry: a target that worked has far more of it than an IgG control
+# taken through the same thresholding.
+find:
+  path_glob: "**/*.seacr.peaks.*.bed"
+recipe: seacr/peak_summary.py
+fixture: peak_summary.tsv
+renders_as:
+  - { id: seacr_summary_bar, component: figure, visu_type: bar, dict_kwargs: {x: sample, y: num_peaks, color: sample, title: Regions called per sample} }
+  - { component: card, column: num_peaks, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: width_median, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: total_bp, aggregation: sum, secondary_layout: histogram }
+  - { component: card, column: signal_density_median, aggregation: average, secondary_layout: threshold, threshold_value: 50.0 }
+  - { component: table }
