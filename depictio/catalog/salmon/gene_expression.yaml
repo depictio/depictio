@@ -1,0 +1,16 @@
+id: salmon_gene_expression
+name: Gene expression (long)
+mode: expression/long
+description: >-
+  The merged Salmon TPMs unpivoted to one row per gene and sample, restricted to
+  the genes expressed in at least one sample, with the sample's condition
+  attached. The shape a gene explorer filters and groups on.
+find: { path_glob: "**/salmon.merged.gene_tpm.tsv" }
+recipe: salmon/gene_expression_long.py
+fixture: gene_expression.tsv
+renders_as:
+  - { component: figure, visu_type: box, dict_kwargs: {x: group, y: log2_tpm, color: group} }
+  - { component: card, column: tpm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: gene_name, aggregation: nunique, secondary_layout: donut, breakdown_col: group }
+  - { component: interactive, interactive_type: MultiSelect, column_name: gene_name }
+  - { component: table, row_selection_enabled: true, row_selection_column: gene_name }

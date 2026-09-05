@@ -3433,6 +3433,40 @@
         },
         {
           "columns": {},
+          "description": "Duplication rate as a function of expression, the curve that separates a natural high-expression duplicate from a library-preparation artefact, from dupRadar via MultiQC.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+            "path_glob_alt": [
+              "**/multiqc/*_data/multiqc.parquet",
+              "**/multiqc/*/*_data/multiqc.parquet"
+            ]
+          },
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixtureContent": null,
+          "id": "multiqc_dupradar",
+          "mode": "dupradar",
+          "name": "Duplication vs expression",
+          "origin_tool": "dupRadar",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_dupradar\nname: Duplication vs expression\norigin_tool: dupRadar\nmode: dupradar\ndescription: Duplication rate as a function of expression, the curve that separates a natural high-expression duplicate from a library-preparation artefact, from dupRadar via MultiQC.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled catalog-conformance MultiQC parquet (its sections are\n# synthesised by scripts/multiqc_stubs.py); `section` selects this module's\n# plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: dupradar }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "dupradar"
+            }
+          ],
+          "slug": "dupradar",
+          "yamlPath": "depictio/catalog/multiqc/dupradar.yaml"
+        },
+        {
+          "columns": {},
           "description": "Read pre-processing QC (quality/adapter filtering, insert size, GC/N content) \u2014 fastp, via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -3498,6 +3532,40 @@
           ],
           "slug": "fastqc",
           "yamlPath": "depictio/catalog/multiqc/fastqc.yaml"
+        },
+        {
+          "columns": {},
+          "description": "How many reads were assigned to a feature and why the rest were not (no feature, ambiguity, multimapping), from featureCounts (Subread) via MultiQC.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+            "path_glob_alt": [
+              "**/multiqc/*_data/multiqc.parquet",
+              "**/multiqc/*/*_data/multiqc.parquet"
+            ]
+          },
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixtureContent": null,
+          "id": "multiqc_featurecounts",
+          "mode": "featurecounts",
+          "name": "Read assignment",
+          "origin_tool": "featureCounts",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_featurecounts\nname: Read assignment\norigin_tool: featureCounts\nmode: featurecounts\ndescription: How many reads were assigned to a feature and why the rest were not (no feature, ambiguity, multimapping), from featureCounts (Subread) via MultiQC.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled catalog-conformance MultiQC parquet (its sections are\n# synthesised by scripts/multiqc_stubs.py); `section` selects this module's\n# plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: featurecounts }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "featurecounts"
+            }
+          ],
+          "slug": "featurecounts",
+          "yamlPath": "depictio/catalog/multiqc/featurecounts.yaml"
         },
         {
           "columns": {},
@@ -3671,6 +3739,40 @@
         },
         {
           "columns": {},
+          "description": "Genomic origin of the reads (exonic, intronic, intergenic) and the 5' to 3' gene-body coverage profile, from Qualimap via MultiQC.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+            "path_glob_alt": [
+              "**/multiqc/*_data/multiqc.parquet",
+              "**/multiqc/*/*_data/multiqc.parquet"
+            ]
+          },
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixtureContent": null,
+          "id": "multiqc_qualimap",
+          "mode": "qualimap",
+          "name": "Transcript coverage",
+          "origin_tool": "Qualimap",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_qualimap\nname: Transcript coverage\norigin_tool: Qualimap\nmode: qualimap\ndescription: Genomic origin of the reads (exonic, intronic, intergenic) and the 5' to 3' gene-body coverage profile, from Qualimap via MultiQC.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled catalog-conformance MultiQC parquet (its sections are\n# synthesised by scripts/multiqc_stubs.py); `section` selects this module's\n# plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: qualimap }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "qualimap"
+            }
+          ],
+          "slug": "qualimap",
+          "yamlPath": "depictio/catalog/multiqc/qualimap.yaml"
+        },
+        {
+          "columns": {},
           "description": "Genome-assembly quality metrics (contig counts, lengths) \u2014 QUAST, surfaced via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -3702,6 +3804,74 @@
           ],
           "slug": "quast",
           "yamlPath": "depictio/catalog/multiqc/quast.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Where the reads land on the transcriptome (read distribution, inner distance, junction annotation and saturation, strand inference), from RSeQC via MultiQC.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+            "path_glob_alt": [
+              "**/multiqc/*_data/multiqc.parquet",
+              "**/multiqc/*/*_data/multiqc.parquet"
+            ]
+          },
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixtureContent": null,
+          "id": "multiqc_rseqc",
+          "mode": "rseqc",
+          "name": "RNA-seq read QC",
+          "origin_tool": "RSeQC",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_rseqc\nname: RNA-seq read QC\norigin_tool: RSeQC\nmode: rseqc\ndescription: Where the reads land on the transcriptome (read distribution, inner distance, junction annotation and saturation, strand inference), from RSeQC via MultiQC.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled catalog-conformance MultiQC parquet (its sections are\n# synthesised by scripts/multiqc_stubs.py); `section` selects this module's\n# plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: rseqc }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "rseqc"
+            }
+          ],
+          "slug": "rseqc",
+          "yamlPath": "depictio/catalog/multiqc/rseqc.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Selective-alignment quantification summary (library type, fragment-length distribution, mapping rate), from Salmon via MultiQC.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+            "path_glob_alt": [
+              "**/multiqc/*_data/multiqc.parquet",
+              "**/multiqc/*/*_data/multiqc.parquet"
+            ]
+          },
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixtureContent": null,
+          "id": "multiqc_salmon",
+          "mode": "salmon",
+          "name": "Transcript quantification",
+          "origin_tool": "Salmon",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_salmon\nname: Transcript quantification\norigin_tool: Salmon\nmode: salmon\ndescription: Selective-alignment quantification summary (library type, fragment-length distribution, mapping rate), from Salmon via MultiQC.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled catalog-conformance MultiQC parquet (its sections are\n# synthesised by scripts/multiqc_stubs.py); `section` selects this module's\n# plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: salmon }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "salmon"
+            }
+          ],
+          "slug": "salmon",
+          "yamlPath": "depictio/catalog/multiqc/salmon.yaml"
         },
         {
           "columns": {},
@@ -4859,6 +5029,262 @@
           ],
           "slug": "vcfeval_summary",
           "yamlPath": "depictio/catalog/rtgtools/vcfeval_summary.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": "https://bio.tools/salmon",
+      "description": "",
+      "dir": "depictio/catalog/salmon",
+      "homepage": null,
+      "id": "salmon",
+      "name": "Salmon",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/salmon/quant",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "The 500 most variable genes of the merged Salmon TPM matrix on the log2(TPM + 1) scale, wide (genes x samples), with the experimental factors as column annotations.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/salmon.merged.gene_tpm.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "expression_heatmap.tsv",
+          "fixtureContent": "gene_name\tGM12878_REP1\tGM12878_REP2\tH1_REP1\tH1_REP2\tK562_REP1\tK562_REP2\tMCF7_REP1\tMCF7_REP2\t_col_annotations_json\nIGLV2-23\t13.0292\t13.4556\t0.0\t0.0\t1.5712\t0.917\t0.0\t0.0\t\"{\"\"condition\"\": {\"\"values\"\": [\"\"GM12878\"\", \"\"GM12878\"\", \"\"H1\"\", \"\"H1\"\", \"\"K562\"\", \"\"K562\"\", \"\"MCF7\"\", \"\"MCF7\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"GM12878\"\": \"\"#636EFA\"\", \"\"H1\"\": \"\"#EF553B\"\", \"\"K562\"\": \"\"#00CC96\"\", \"\"MCF7\"\": \"\"#AB63FA\"\"}}}\"\nIGLC2\t12.9473\t13.155\t0.0\t0.0472\t0.7154\t1.1636\t0.0\t0.0443\t\"{\"\"condition\"\": {\"\"values\"\": [\"\"GM12878\"\", \"\"GM12878\"\", \"\"H1\"\", \"\"H1\"\", \"\"K562\"\", \"\"K562\"\", \"\"MCF7\"\", \"\"MCF7\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"GM12878\"\": \"\"#636EFA\"\", \"\"H1\"\": \"\"#EF553B\"\", \"\"K562\"\": \"\"#00CC96\"\", \"\"MCF7\"\": \"\"#AB63FA\"\"}}}\"\nHBG2\t1.5306\t0.2733\t1.6905\t0.8022\t13.615\t13.3882\t0.1344\t0.5171\t\"{\"\"condition\"\": {\"\"values\"\": [\"\"GM12878\"\", \"\"GM12878\"\", \"\"H1\"\", \"\"H1\"\", \"\"K562\"\", \"\"K562\"\", \"\"MCF7\"\", \"\"MCF7\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"GM12878\"\": \"\"#636EFA\"\", \"\"H1\"\": \"\"#EF553B\"\", \"\"K562\"\": \"\"#00CC96\"\", \"\"MCF7\"\": \"\"#AB63FA\"\"}}}\"\nMIR302B\t0.0\t0.0\t12.396\t11.1907\t0.0\t0.0\t0.0\t0.0\t\"{\"\"condition\"\": {\"\"values\"\": [\"\"GM12878\"\", \"\"GM12878\"\", \"\"H1\"\", \"\"H1\"\", \"\"K562\"\", \"\"K562\"\", \"\"MCF7\"\", \"\"MCF7\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"GM12878\"\": \"\"#636EFA\"\", \"\"H1\"\": \"\"#EF553B\"\", \"\"K562\"\": \"\"#00CC96\"\", \"\"MCF7\"\": \"\"#AB63FA\"\"}}}\"\nHBG1\t1.4598\t0.0\t0.2094\t0.2637\t11.9728\t11.861\t0.0\t0.0339\t\"{\"\"condition\"\": {\"\"values\"\": [\"\"GM12878\"\", \"\"GM12878\"\", \"\"H1\"\", \"\"H1\"\", \"\"K562\"\", \"\"K562\"\", \"\"MCF7\"\", \"\"MCF7\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"GM12878\"\": \"\"#636EFA\"\", \"\"H1\"\": \"\"#EF553B\"\", \"\"K562\"\": \"\"#00CC96\"\", \"\"MCF7\"\": \"\"#AB63FA\"\"}}}\"\nRPS26P6\t0.2276\t1.2216\t11.6595\t11.3095\t0.6892\t1.8254\t9.1914\t9.9648\t\"{\"\"condition\"\": {\"\"values\"\": [\"\"GM12878\"\", \"\"GM12878\"\", \"\"H1\"\", \"\"H1\"\", \"\"K562\"\", \"\"K562\"\", \"\"MCF7\"\", \"\"MCF7\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"GM12878\"\": \"\"#636EFA\"\", \"\"H1\"\": \"\"#EF553B\"\", \"\"K562\"\": \"\"#00CC96\"\", \"\"MCF7\"\": \"\"#AB63FA\"\"}}}\"\nIGHV3-21\t10.9826\t11.5633\t0.0\t0.0\t0.6815\t0.1015\t0.0\t0.0\t\"{\"\"condition\"\": {\"\"values\"\": [\"\"GM12878\"\", \"\"GM12878\"\", \"\"H1\"\", \"\"H1\"\", \"\"K562\"\", \"\"K562\"\", \"\"MCF7\"\", \"\"MCF7\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"GM12878\"\": \"\"#636EFA\"\", \"\"H1\"\": \"\"#EF553B\"\", \"\"K562\"\": \"\"#00CC96\"\", \"\"MCF7\"\": \"\"#AB63FA\"\"}}}\"\nIGHA1\t10.9042\t11.6378\t0.0\t0.0\t0.7067\t0.4373\t0.0\t0.0996\t\"{\"\"condition\"\": {\"\"values\"\": [\"\"GM12878\"\", \"\"GM12878\"\", \"\"H1\"\", \"\"H1\"\", \"\"K562\"\", \"\"K562\"\", \"\"MCF7\"\", \"\"MCF7\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"GM12878\"\": \"\"#636EFA\"\", \"\"H1\"\": \"\"#EF553B\"\", \"\"K562\"\": \"\"#00CC96\"\", \"\"MCF7\"\": \"\"#AB63FA\"\"}}}\"\nCD74\t11.2642\t11.8998\t5.6539\t5.6205\t1.2006\t0.2749\t0.0667\t0.0434\t\"{\"\"condition\"\": {\"\"values\"\": [\"\"GM12878\"\", \"\"GM12878\"\", \"\"H1\"\", \"\"H1\"\", \"\"K562\"\", \"\"K562\"\", \"\"MCF7\"\", \"\"MCF7\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"GM12878\"\": \"\"#636EFA\"\", \"\"H1\"\": \"\"#EF553B\"\", \"\"K562\"\": \"\"#00CC96\"\", \"\"MCF7\"\": \"\"#AB63FA\"\"}}}\"\nCLU\t0.4002\t0.8781\t9.9987\t10.1999\t0.3998\t0.3736\t8.5469\t9.6342\t\"{\"\"condition\"\": {\"\"values\"\": [\"\"GM12878\"\", \"\"GM12878\"\", \"\"H1\"\", \"\"H1\"\", \"\"K562\"\", \"\"K562\"\", \"\"MCF7\"\", \"\"MCF7\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"GM12878\"\": \"\"#636EFA\"\", \"\"H1\"\": \"\"#EF553B\"\", \"\"K562\"\": \"\"#00CC96\"\", \"\"MCF7\"\": \"\"#AB63FA\"\"}}}\"\nGPX1\t9.5275\t9.6113\t8.7806\t9.1032\t0.0799\t0.1802\t0.2574\t0.1918\t\"{\"\"condition\"\": {\"\"values\"\": [\"\"GM12878\"\", \"\"GM12878\"\", \"\"H1\"\", \"\"H1\"\", \"\"K562\"\", \"\"K562\"\", \"\"MCF7\"\", \"\"MCF7\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"GM12878\"\": \"\"#636EFA\"\", \"\"H1\"\": \"\"#EF553B\"\", \"\"K562\"\": \"\"#00CC96\"\", \"\"MCF7\"\": \"\"#AB63FA\"\"}}}\"\nTHY1\t2.7377\t1.6876\t11.0221\t10.6633\t0.0\t0.0\t0.0091\t0.0565\t\"{\"\"condition\"\": {\"\"values\"\": [\"\"GM12878\"\", \"\"GM12878\"\", \"\"H1\"\", \"\"H1\"\", \"\"K562\"\", \"\"K562\"\", \"\"MCF7\"\", \"\"MCF7\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"GM12878\"\": \"\"#636EFA\"\", \"\"H1\"\": \"\"#EF553B\"\", \"\"K562\"\": \"\"#00CC96\"\", \"\"MCF7\"\": \"\"#AB63FA\"\"}}}\"\nGSTP1\t9.5364\t9.6939\t10.9674\t11.1649\t10.0594\t9.9985\t0.086\t0.0729\t\"{\"\"condition\"\": {\"\"values\"\": [\"\"GM12878\"\", \"\"GM12878\"\", \"\"H1\"\", \"\"H1\"\", \"\"K562\"\", \"\"K562\"\", \"\"MCF7\"\", \"\"MCF7\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"GM12878\"\": \"\"#636EFA\"\", \"\"H1\"\": \"\"#EF553B\"\", \"\"K562\"\": \"\"#00CC96\"\", \"\"MCF7\"\": \"\"#AB63FA\"\"}}}\"\nTFF1\t0.0\t0.2536\t0.0\t0.0\t0.0\t0.0\t9.9905\t10.4942\t\"{\"\"condition\"\": {\"\"values\"\": [\"\"GM12878\"\", \"\"GM12878\"\", \"\"H1\"\", \"\"H1\"\", \"\"K562\"\", \"\"K562\"\", \"\"MCF7\"\", \"\"MCF7\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"GM12878\"\": \"\"#636EFA\"\", \"\"H1\"\": \"\"#EF553B\"\", \"\"K562\"\": \"\"#00CC96\"\", \"\"MCF7\"\": \"\"#AB63FA\"\"}}}\"\nHBE1\t0.773\t0.0\t0.4359\t0.2568\t10.4054\t10.3757\t0.0\t0.0904\t\"{\"\"condition\"\": {\"\"values\"\": [\"\"GM12878\"\", \"\"GM12878\"\", \"\"H1\"\", \"\"H1\"\", \"\"K562\"\", \"\"K562\"\", \"\"MCF7\"\", \"\"MCF7\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"GM12878\"\": \"\"#636EFA\"\", \"\"H1\"\": \"\"#EF553B\"\", \"\"K562\"\": \"\"#00CC96\"\", \"\"MCF7\"\": \"\"#AB63FA\"\"}}}\"\nHLA-DRA\t11.1712\t11.0869\t2.4786\t1.9929\t0.6895\t0.388\t0.9616\t0.4272\t\"{\"\"condition\"\": {\"\"values\"\": [\"\"GM12878\"\", \"\"GM12878\"\", \"\"H1\"\", \"\"H1\"\", \"\"K562\"\", \"\"K562\"\", \"\"MCF7\"\", \"\"MCF7\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"GM12878\"\": \"\"#636EFA\"\", \"\"H1\"\": \"\"#EF553B\"\", \"\"K562\"\": \"\"#00CC96\"\", \"\"MCF7\"\": \"\"#AB63FA\"\"}}}\"\nPRAME\t0.7365\t0.3766\t0.2231\t0.3071\t10.4106\t10.2422\t0.1795\t0.2059\t\"{\"\"condition\"\": {\"\"values\"\": [\"\"GM12878\"\", \"\"GM12878\"\", \"\"H1\"\", \"\"H1\"\", \"\"K562\"\", \"\"K562\"\", \"\"MCF7\"\", \"\"MCF7\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"GM12878\"\": \"\"#636EFA\"\", \"\"H1\"\": \"\"#EF553B\"\", \"\"K562\"\": \"\"#00CC96\"\", \"\"MCF7\"\": \"\"#AB63FA\"\"}}}\"\nAGR2\t0.0\t0.0\t0.0\t0.0\t0.0\t0.0\t9.6469\t10.215\t\"{\"\"condition\"\": {\"\"values\"\": [\"\"GM12878\"\", \"\"GM12878\"\", \"\"H1\"\", \"\"H1\"\", \"\"K562\"\", \"\"K562\"\", \"\"MCF7\"\", \"\"MCF7\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"GM12878\"\": \"\"#636EFA\"\", \"\"H1\"\": \"\"#EF553B\"\", \"\"K562\"\": \"\"#00CC96\"\", \"\"MCF7\"\": \"\"#AB63FA\"\"}}}\"\nKRT8\t0.4309\t0.5288\t7.8598\t8.1101\t8.5257\t8.6118\t11.9138\t12.5787\t\"{\"\"condition\"\": {\"\"values\"\": [\"\"GM12878\"\", \"\"GM12878\"\", \"\"H1\"\", \"\"H1\"\", \"\"K562\"\", \"\"K562\"\", \"\"MCF7\"\", \"\"MCF7\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"GM12878\"\": \"\"#636EFA\"\", \"\"H1\"\": \"\"#EF553B\"\", \"\"K562\"\": \"\"#00CC96\"\", \"\"MCF7\"\": \"\"#AB63FA\"\"}}}\"\nIGLC3\t9.8823\t9.905\t0.0\t0.0472\t0.2355\t0.0\t0.0\t0.0443\t\"{\"\"condition\"\": {\"\"values\"\": [\"\"GM12878\"\", \"\"GM12878\"\", \"\"H1\"\", \"\"H1\"\", \"\"K562\"\", \"\"K562\"\", \"\"MCF7\"\", \"\"MCF7\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"GM12878\"\": \"\"#636EFA\"\", \"\"H1\"\": \"\"#EF553B\"\", \"\"K562\"\": \"\"#00CC96\"\", \"\"MCF7\"\": \"\"#AB63FA\"\"}}}\"\nFXYD3\t0.0\t0.0\t0.3242\t0.3784\t0.0\t0.0\t9.8263\t9.8569\t\"{\"\"condition\"\": {\"\"values\"\": [\"\"GM12878\"\", \"\"GM12878\"\", \"\"H1\"\", \"\"H1\"\", \"\"K562\"\", \"\"K562\"\", \"\"MCF7\"\", \"\"MCF7\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"GM12878\"\": \"\"#636EFA\"\", \"\"H1\"\": \"\"#EF553B\"\", \"\"K562\"\": \"\"#00CC96\"\", \"\"MCF7\"\": \"\"#AB63FA\"\"}}}\"\nIGLV4-69\t9.6894\t9.8253\t0.0\t0.0\t0.126\t0.2081\t0.0\t0.0\t\"{\"\"condition\"\": {\"\"values\"\": [\"\"GM12878\"\", \"\"GM12878\"\", \"\"H1\"\", \"\"H1\"\", \"\"K562\"\", \"\"K562\"\", \"\"MCF7\"\", \"\"MCF7\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"GM12878\"\": \"\"#636EFA\"\", \"\"H1\"\": \"\"#EF553B\"\", \"\"K562\"\": \"\"#00CC96\"\", \"\"MCF7\"\": \"\"#AB63FA\"\"}}}\"\nESRG\t0.0\t0.0\t9.5314\t9.8078\t0.0\t0.0\t0.0\t0.0\t\"{\"\"condition\"\": {\"\"values\"\": [\"\"GM12878\"\", \"\"GM12878\"\", \"\"H1\"\", \"\"H1\"\", \"\"K562\"\", \"\"K562\"\", \"\"MCF7\"\", \"\"MCF7\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"GM12878\"\": \"\"#636EFA\"\", \"\"H1\"\": \"\"#EF553B\"\", \"\"K562\"\": \"\"#00CC96\"\", \"\"MCF7\"\": \"\"#AB63FA\"\"}}}\"\nCLDN6\t0.0\t0.0\t9.6318\t9.9641\t0.205\t0.3066\t0.169\t0.1637\t\"{\"\"condition\"\": {\"\"values\"\": [\"\"GM12878\"\", \"\"GM12878\"\", \"\"H1\"\", \"\"H1\"\", \"\"K562\"\", \"\"K562\"\", \"\"MCF7\"\", \"\"MCF7\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"GM12878\"\": \"\"#636EFA\"\", \"\"H1\"\": \"\"#EF553B\"\", \"\"K562\"\": \"\"#00CC96\"\", \"\"MCF7\"\": \"\"#AB63FA\"\"}}}\"\nSRGN\t9.4372\t9.1836\t0.0807\t0.0362\t7.3202\t7.1337\t0.1015\t0.0895\t\"{\"\"condition\"\": {\"\"values\"\": [\"\"GM12878\"\", \"\"GM12878\"\", \"\"H1\"\", \"\"H1\"\", \"\"K562\"\", \"\"K562\"\", \"\"MCF7\"\", \"\"MCF7\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"GM12878\"\": \"\"#636EFA\"\", \"\"H1\"\": \"\"#EF553B\"\", \"\"K562\"\": \"\"#00CC96\"\", \"\"MCF7\"\": \"\"#AB63FA\"\"}}}\"\nHLA-DPA1\t10.376\t10.4471\t3.5199\t3.0168\t0.4641\t0.5532\t0.0\t0.0574\t\"{\"\"condition\"\": {\"\"values\"\": [\"\"GM12878\"\", \"\"GM12878\"\", \"\"H1\"\", \"\"H1\"\", \"\"K562\"\", \"\"K562\"\", \"\"MCF7\"\", \"\"MCF7\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"GM12878\"\": \"\"#636EFA\"\", \"\"H1\"\": \"\"#EF553B\"\", \"\"K562\"\": \"\"#00CC96\"\", \"\"MCF7\"\": \"\"#AB63FA\"\"}}}\"\nDSCAM-AS1\t0.0\t0.0\t0.0\t0.0\t0.0\t0.0\t9.331\t9.8001\t\"{\"\"condition\"\": {\"\"values\"\": [\"\"GM12878\"\", \"\"GM12878\"\", \"\"H1\"\", \"\"H1\"\", \"\"K562\"\", \"\"K562\"\", \"\"MCF7\"\", \"\"MCF7\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"GM12878\"\": \"\"#636EFA\"\", \"\"H1\"\": \"\"#EF553B\"\", \"\"K562\"\": \"\"#00CC96\"\", \"\"MCF7\"\": \"\"#AB63FA\"\"}}}\"\nSNURF\t5.5445\t5.1917\t9.7812\t9.9138\t0.0\t0.0\t0.0\t0.0\t\"{\"\"condition\"\": {\"\"values\"\": [\"\"GM12878\"\", \"\"GM12878\"\", \"\"H1\"\", \"\"H1\"\", \"\"K562\"\", \"\"K562\"\", \"\"MCF7\"\", \"\"MCF7\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"GM12878\"\": \"\"#636EFA\"\", \"\"H1\"\": \"\"#EF553B\"\", \"\"K562\"\": \"\"#00CC96\"\", \"\"MCF7\"\": \"\"#AB63FA\"\"}}}\"\nTDGF1\t0.0\t0.0\t9.3501\t9.6673\t0.0\t0.0\t0.0\t0.0115\t\"{\"\"condition\"\": {\"\"values\"\": [\"\"GM12878\"\", \"\"GM12878\"\", \"\"H1\"\", \"\"H1\"\", \"\"K562\"\", \"\"K562\"\", \"\"MCF7\"\", \"\"MCF7\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"GM12878\"\": \"\"#636EFA\"\", \"\"H1\"\": \"\"#EF553B\"\", \"\"K562\"\": \"\"#00CC96\"\", \"\"MCF7\"\": \"\"#AB63FA\"\"}}}\"\nNGFRAP1\t0.0\t0.0\t8.108\t7.7078\t0.0\t0.2436\t8.728\t8.4007\t\"{\"\"condition\"\": {\"\"values\"\": [\"\"GM12878\"\", \"\"GM12878\"\", \"\"H1\"\", \"\"H1\"\", \"\"K562\"\", \"\"K562\"\", \"\"MCF7\"\", \"\"MCF7\"\"], \"\"type\"\": \"\"categorical\"\", \"\"colors\"\": {\"\"GM12878\"\": \"\"#636EFA\"\", \"\"H1\"\": \"\"#EF553B\"\", \"\"K562\"\": \"\"#00CC96\"\", \"\"MCF7\"\": \"\"#AB63FA\"\"}}}\"\n",
+          "id": "salmon_expression_heatmap",
+          "mode": "expression/heatmap",
+          "name": "Top variable genes",
+          "path_glob": "**/salmon.merged.gene_tpm.tsv",
+          "rawYaml": "id: salmon_expression_heatmap\nname: Top variable genes\nmode: expression/heatmap\ndescription: >-\n  The 500 most variable genes of the merged Salmon TPM matrix on the\n  log2(TPM + 1) scale, wide (genes x samples), with the experimental factors as\n  column annotations.\nfind: { path_glob: \"**/salmon.merged.gene_tpm.tsv\" }\nrecipe: salmon/top_variable_genes.py\nfixture: expression_heatmap.tsv\nrenders_as:\n  # `index` is not optional in practice: ComplexHeatmapConfig.index_column falls\n  # back to the literal \"sample_id\", which this matrix does not have.\n  - { id: top_variable_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: gene_name} }\n  - { component: table }\n",
+          "recipe": "salmon/top_variable_genes.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "top_variable_heatmap",
+              "kind": "complex_heatmap",
+              "roles": {
+                "index": "gene_name"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "expression_heatmap",
+          "yamlPath": "depictio/catalog/salmon/expression_heatmap.yaml"
+        },
+        {
+          "columns": {},
+          "description": "The merged Salmon TPMs unpivoted to one row per gene and sample, restricted to the genes expressed in at least one sample, with the sample's condition attached. The shape a gene explorer filters and groups on.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/salmon.merged.gene_tpm.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "gene_expression.tsv",
+          "fixtureContent": "gene_id\tgene_name\tsample\ttpm\tlog2_tpm\tgroup\nENSG00000000003\tTSPAN6\tGM12878_REP1\t0.0654\t0.0914\tGM12878\nENSG00000000419\tDPM1\tGM12878_REP1\t79.3448\t6.3281\tGM12878\nENSG00000000457\tSCYL3\tGM12878_REP1\t10.566\t3.5318\tGM12878\nENSG00000000460\tC1orf112\tGM12878_REP1\t17.2077\t4.1865\tGM12878\nENSG00000000938\tFGR\tGM12878_REP1\t87.8515\t6.4733\tGM12878\nENSG00000000971\tCFH\tGM12878_REP1\t0.0618\t0.0866\tGM12878\nENSG00000000003\tTSPAN6\tGM12878_REP2\t0.0\t0.0\tGM12878\nENSG00000000419\tDPM1\tGM12878_REP2\t69.2839\t6.1351\tGM12878\nENSG00000000457\tSCYL3\tGM12878_REP2\t7.6923\t3.1197\tGM12878\nENSG00000000460\tC1orf112\tGM12878_REP2\t13.6387\t3.8717\tGM12878\nENSG00000000938\tFGR\tGM12878_REP2\t103.0837\t6.7016\tGM12878\nENSG00000000971\tCFH\tGM12878_REP2\t0.0\t0.0\tGM12878\nENSG00000000003\tTSPAN6\tH1_REP1\t49.505\t5.6584\tH1\nENSG00000000419\tDPM1\tH1_REP1\t33.4058\t5.1046\tH1\nENSG00000000457\tSCYL3\tH1_REP1\t2.2407\t1.6963\tH1\nENSG00000000460\tC1orf112\tH1_REP1\t16.328\t4.115\tH1\nENSG00000000938\tFGR\tH1_REP1\t0.7201\t0.7825\tH1\nENSG00000000971\tCFH\tH1_REP1\t0.0\t0.0\tH1\nENSG00000000003\tTSPAN6\tH1_REP2\t29.1167\t4.9125\tH1\nENSG00000000419\tDPM1\tH1_REP2\t16.5249\t4.1313\tH1\nENSG00000000457\tSCYL3\tH1_REP2\t1.9516\t1.5615\tH1\nENSG00000000460\tC1orf112\tH1_REP2\t9.6616\t3.4143\tH1\nENSG00000000938\tFGR\tH1_REP2\t0.6089\t0.686\tH1\nENSG00000000971\tCFH\tH1_REP2\t0.003\t0.0044\tH1\nENSG00000000003\tTSPAN6\tK562_REP1\t0.0264\t0.0376\tK562\nENSG00000000419\tDPM1\tK562_REP1\t130.0488\t7.034\tK562\nENSG00000000457\tSCYL3\tK562_REP1\t4.0112\t2.3252\tK562\nENSG00000000460\tC1orf112\tK562_REP1\t32.9051\t5.0834\tK562\nENSG00000000938\tFGR\tK562_REP1\t0.0315\t0.0448\tK562\nENSG00000000971\tCFH\tK562_REP1\t38.3666\t5.2989\tK562\nENSG00000000003\tTSPAN6\tK562_REP2\t0.0136\t0.0194\tK562\nENSG00000000419\tDPM1\tK562_REP2\t141.3981\t7.1538\tK562\nENSG00000000457\tSCYL3\tK562_REP2\t6.8882\t2.9797\tK562\nENSG00000000460\tC1orf112\tK562_REP2\t27.4118\t4.8284\tK562\nENSG00000000938\tFGR\tK562_REP2\t0.0498\t0.0701\tK562\nENSG00000000971\tCFH\tK562_REP2\t33.8122\t5.1215\tK562\nENSG00000000003\tTSPAN6\tMCF7_REP1\t47.1023\t5.588\tMCF7\nENSG00000000419\tDPM1\tMCF7_REP1\t184.7617\t7.5373\tMCF7\nENSG00000000457\tSCYL3\tMCF7_REP1\t9.4403\t3.3841\tMCF7\nENSG00000000460\tC1orf112\tMCF7_REP1\t27.0205\t4.8084\tMCF7\nENSG00000000938\tFGR\tMCF7_REP1\t0.0\t0.0\tMCF7\nENSG00000000971\tCFH\tMCF7_REP1\t0.0509\t0.0716\tMCF7\nENSG00000000003\tTSPAN6\tMCF7_REP2\t25.8929\t4.7492\tMCF7\nENSG00000000419\tDPM1\tMCF7_REP2\t155.9724\t7.2944\tMCF7\nENSG00000000457\tSCYL3\tMCF7_REP2\t9.2218\t3.3536\tMCF7\nENSG00000000460\tC1orf112\tMCF7_REP2\t19.5706\t4.3625\tMCF7\nENSG00000000938\tFGR\tMCF7_REP2\t0.0243\t0.0347\tMCF7\nENSG00000000971\tCFH\tMCF7_REP2\t0.0805\t0.1116\tMCF7\n",
+          "id": "salmon_gene_expression",
+          "mode": "expression/long",
+          "name": "Gene expression (long)",
+          "path_glob": "**/salmon.merged.gene_tpm.tsv",
+          "rawYaml": "id: salmon_gene_expression\nname: Gene expression (long)\nmode: expression/long\ndescription: >-\n  The merged Salmon TPMs unpivoted to one row per gene and sample, restricted to\n  the genes expressed in at least one sample, with the sample's condition\n  attached. The shape a gene explorer filters and groups on.\nfind: { path_glob: \"**/salmon.merged.gene_tpm.tsv\" }\nrecipe: salmon/gene_expression_long.py\nfixture: gene_expression.tsv\nrenders_as:\n  - { component: figure, visu_type: box, dict_kwargs: {x: group, y: log2_tpm, color: group} }\n  - { component: card, column: tpm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: gene_name, aggregation: nunique, secondary_layout: donut, breakdown_col: group }\n  - { component: interactive, interactive_type: MultiSelect, column_name: gene_name }\n  - { component: table, row_selection_enabled: true, row_selection_column: gene_name }\n",
+          "recipe": "salmon/gene_expression_long.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "group",
+                "x": "group",
+                "y": "log2_tpm"
+              },
+              "roles": {},
+              "visu_type": "box"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "tpm",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "group",
+              "column": "gene_name",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "donut"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "gene_name",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {},
+              "row_selection_column": "gene_name",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "gene_expression",
+          "yamlPath": "depictio/catalog/salmon/gene_expression.yaml"
+        },
+        {
+          "columns": {},
+          "description": "The raw merged gene-level count matrix (gene_id, gene_name and one estimated count column per sample) tximport writes next to the TPM matrix. Shown as rows: it is the input a differential-expression tool is handed, so the value a dashboard adds is letting someone read and search it, not replot it.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/salmon.merged.gene_counts.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "merged_gene_counts.tsv",
+          "fixtureContent": "gene_id\tgene_name\tGM12878_REP1\tGM12878_REP2\tH1_REP1\tH1_REP2\tK562_REP1\tK562_REP2\tMCF7_REP1\tMCF7_REP2\nENSG00000000003\tTSPAN6\t8.0\t0.0\t8508.0\t4507.0\t3.0\t2.0\t6588.0\t4103.001\nENSG00000000005\tTNMD\t0.0\t0.0\t70.0\t30.0\t0.0\t0.0\t3.0\t0.0\nENSG00000000419\tDPM1\t4166.0\t3647.0\t1993.001\t857.0\t6370.999\t8874.001\t10982.0\t10579.001\nENSG00000000457\tSCYL3\t1999.001\t1637.999\t633.0\t434.0\t995.0\t1494.999\t2069.999\t2138.0\nENSG00000000460\tC1orf112\t1873.999\t1664.0\t3706.999\t1776.999\t2876.001\t2995.0\t4209.002\t3501.001\nENSG00000000938\tFGR\t9870.0\t11004.0\t140.0\t108.0\t1.0\t2.0\t0.0\t4.0\nENSG00000000971\tCFH\t2.0\t0.0\t0.0\t1.0\t6889.001\t7771.0\t14.447\t9.999\nENSG00000001036\tFUCA2\t2132.0\t2125.0\t3350.0\t1757.0\t6692.0\t7740.0\t5875.0\t7536.0\nENSG00000001084\tGCLC\t1754.999\t1786.0\t3116.001\t1870.001\t737.001\t1469.0\t6223.0\t5977.001\nENSG00000001167\tNFYA\t3326.0\t3731.0\t2459.0\t1908.0\t3076.0\t3386.0\t3385.0\t2651.0\nENSG00000001460\tSTPG1\t29.0\t20.0\t1712.999\t1356.0\t538.001\t511.0\t482.0\t407.0\nENSG00000001461\tNIPAL3\t433.0\t552.999\t1499.999\t1188.999\t2383.999\t2778.999\t1979.999\t1814.0\nENSG00000001497\tLAS1L\t7048.0\t6638.0\t6217.0\t6716.0\t10898.0\t14763.0\t5853.0\t7584.0\nENSG00000001561\tENPP4\t871.0\t650.0\t620.0\t299.0\t0.0\t0.0\t1262.0\t1376.0\nENSG00000001617\tSEMA3F\t0.0\t1.0\t4501.998\t6676.001\t135.0\t152.0\t3001.0\t4139.999\nENSG00000001626\tCFTR\t7.0\t2.0\t288.0\t68.0\t0.0\t0.0\t1.0\t2.0\nENSG00000001629\tANKIB1\t4522.0\t3844.0\t5542.0\t3129.0\t2837.0\t3025.0\t18162.0\t17443.0\nENSG00000001630\tCYP51A1\t7310.85\t6075.994\t2140.962\t1927.999\t8714.996\t10898.952\t5739.426\t6010.735\nENSG00000001631\tKRIT1\t3153.703\t2355.76\t1492.802\t801.827\t4622.932\t5730.168\t5223.081\t5025.897\nENSG00000002016\tRAD52\t598.001\t682.999\t1416.01\t914.002\t832.001\t787.0\t866.011\t895.149\nENSG00000002079\tMYH16\t4.0\t1.0\t1.0\t0.0\t1.0\t8.0\t34.0\t32.0\nENSG00000002330\tBAD\t1886.0\t2508.0\t1802.0\t1636.001\t1272.001\t1342.999\t596.0\t914.0\nENSG00000002549\tLAP3\t12174.0\t10642.0\t3245.999\t1787.0\t6994.001\t8780.0\t5640.995\t6737.998\nENSG00000002586\tCD99\t10165.0\t10046.999\t2072.0\t2638.999\t1796.001\t1963.999\t1709.001\t3383.0\nENSG00000002587\tHS3ST1\t46.0\t27.0\t177.0\t163.0\t0.0\t0.0\t22.0\t14.0\nENSG00000002726\tAOC1\t0.0\t0.0\t27.0\t28.0\t0.0\t0.0\t0.0\t2.0\nENSG00000002745\tWNT16\t3.0\t0.0\t13.0\t35.0\t0.0\t0.0\t63.0\t45.0\nENSG00000002746\tHECW1\t15.0\t0.0\t494.999\t592.001\t6.0\t0.0\t16.0\t25.0\nENSG00000002822\tMAD1L1\t2242.0\t2671.0\t2501.001\t2820.99\t1854.001\t2442.0\t1408.996\t2447.001\nENSG00000002834\tLASP1\t15531.001\t16665.0\t18736.0\t22601.0\t12287.0\t17477.999\t8337.001\t10335.001\n",
+          "id": "salmon_merged_gene_counts",
+          "mode": "quantification/counts",
+          "name": "Merged gene counts",
+          "path_glob": "**/salmon.merged.gene_counts.tsv",
+          "rawYaml": "id: salmon_merged_gene_counts\nname: Merged gene counts\nmode: quantification/counts\ndescription: >-\n  The raw merged gene-level count matrix (gene_id, gene_name and one estimated\n  count column per sample) tximport writes next to the TPM matrix. Shown as\n  rows: it is the input a differential-expression tool is handed, so the value a\n  dashboard adds is letting someone read and search it, not replot it.\nfind: { path_glob: \"**/salmon.merged.gene_counts.tsv\" }\nfixture: merged_gene_counts.tsv\nrenders_as:\n  - { component: table }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "merged_gene_counts",
+          "yamlPath": "depictio/catalog/salmon/merged_gene_counts.yaml"
+        },
+        {
+          "columns": {},
+          "description": "One row per sample: principal components of the log2(TPM + 1) matrix over its most variable genes, plus how many genes the sample detects and expresses and the median TPM of the genes it detects.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/salmon.merged.gene_tpm.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "sample_pca.tsv",
+          "fixtureContent": "sample_id\tdim_1\tdim_2\tdim_3\tgroup\tgenes_detected\tgenes_expressed\tmedian_tpm\tstrandedness\nGM12878_REP1\t-68.3453\t-36.5001\t4.1897\tGM12878\t20444\t12949\t4.2481\treverse\nGM12878_REP2\t-68.2283\t-37.3049\t4.0012\tGM12878\t20585\t12882\t3.9694\treverse\nH1_REP1\t48.4115\t-26.4933\t-37.852\tH1\t25584\t14313\t1.8413\treverse\nH1_REP2\t49.2915\t-26.1627\t-39.2772\tH1\t24571\t14110\t2.002\treverse\nK562_REP1\t-20.2188\t63.256\t-14.3096\tK562\t18843\t12835\t5.6492\treverse\nK562_REP2\t-19.1645\t62.8172\t-13.4033\tK562\t19866\t12749\t4.3991\treverse\nMCF7_REP1\t39.1627\t-0.2898\t48.1769\tMCF7\t25537\t13925\t1.6638\treverse\nMCF7_REP2\t39.0912\t0.6776\t48.4743\tMCF7\t24432\t13616\t1.9112\treverse\n",
+          "id": "salmon_sample_pca",
+          "mode": "expression/pca",
+          "name": "Sample overview",
+          "path_glob": "**/salmon.merged.gene_tpm.tsv",
+          "rawYaml": "id: salmon_sample_pca\nname: Sample overview\nmode: expression/pca\ndescription: >-\n  One row per sample: principal components of the log2(TPM + 1) matrix over its\n  most variable genes, plus how many genes the sample detects and expresses and\n  the median TPM of the genes it detects.\nfind: { path_glob: \"**/salmon.merged.gene_tpm.tsv\" }\nrecipe: salmon/sample_pca.py\nfixture: sample_pca.tsv\nrenders_as:\n  - { id: pca, component: advanced_viz, kind: embedding, roles: {sample_id: sample_id, dim_1: dim_1, dim_2: dim_2} }\n  - { component: card, column: sample_id, aggregation: nunique, secondary_layout: donut, breakdown_col: group }\n  - { component: card, column: median_tpm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  # A library that expresses far fewer genes than its peers is the classic\n  # under-sequenced / degraded sample; 10k is the usual floor for a bulk\n  # human RNA-seq library, and the dashboard tile can retune it per run.\n  - { component: card, column: genes_expressed, aggregation: average, secondary_layout: threshold, threshold_value: 10000, threshold_direction: min, threshold_warn: 8000 }\n  - { component: card, column: genes_detected, aggregation: average, secondary_layout: histogram }\n  - { component: table }\n",
+          "recipe": "salmon/sample_pca.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "pca",
+              "kind": "embedding",
+              "roles": {
+                "dim_1": "dim_1",
+                "dim_2": "dim_2",
+                "sample_id": "sample_id"
+              }
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "group",
+              "column": "sample_id",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "donut"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "median_tpm",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "genes_expressed",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "threshold",
+              "threshold_direction": "min",
+              "threshold_value": 10000.0,
+              "threshold_warn": 8000.0
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "genes_detected",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "sample_pca",
+          "yamlPath": "depictio/catalog/salmon/sample_pca.yaml"
         }
       ]
     },

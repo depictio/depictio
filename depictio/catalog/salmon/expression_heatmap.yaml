@@ -1,0 +1,15 @@
+id: salmon_expression_heatmap
+name: Top variable genes
+mode: expression/heatmap
+description: >-
+  The 500 most variable genes of the merged Salmon TPM matrix on the
+  log2(TPM + 1) scale, wide (genes x samples), with the experimental factors as
+  column annotations.
+find: { path_glob: "**/salmon.merged.gene_tpm.tsv" }
+recipe: salmon/top_variable_genes.py
+fixture: expression_heatmap.tsv
+renders_as:
+  # `index` is not optional in practice: ComplexHeatmapConfig.index_column falls
+  # back to the literal "sample_id", which this matrix does not have.
+  - { id: top_variable_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: gene_name} }
+  - { component: table }

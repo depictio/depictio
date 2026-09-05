@@ -63,6 +63,9 @@
     "qiime2_taxonomy_composition": "05f969cd3e8e71e3f5f44e03",
     "qiime2_taxonomy_heatmap": "91160b8b0941b0eabd936b82",
     "rtgtools_vcfeval_summary": "66c445ba5533899d4a79f912",
+    "salmon_gene_expression": "da6655fbb8a7a51586f2b38d",
+    "salmon_sample_pca": "ed98a326561e8c6ddcfd723c",
+    "salmon_expression_heatmap": "cdf044d1a7ebb8c408327ce3",
     "sompy_regions": "b6cadfd2d7681afe6f2a40df",
     "sompy_summary": "18c6df01271b54827815a327",
     "starfusion_fusions": "b0a8a881d06a3a7a9e364cb8",
@@ -71,6 +74,7 @@
     "wittyer_summary": "38b53c76db4df0bb7c781007",
     "metaphlan_profile": "1a4e0ceb9acb74eb0809fde7",
     "mosdepth_amplicon_coverage": "514e95803abf5b1bcbc9f60d",
+    "salmon_merged_gene_counts": "be9b8656f7e0e94a58645458",
     "multiqc_report": "7a60dd03a5c6749cc2bfea48"
   },
   "dashboards": {
