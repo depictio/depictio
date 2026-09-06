@@ -211,7 +211,9 @@ catalog. Note this one collides with a standing policy: `test_compositions_stay_
 keeps cross-set compositions dashboard-side, so it needs a decision before it needs code.
 
 **3. `scatter_xy`: numeric against numeric, with size, colour and a selection key.**
-Twelve code-mode figures, in every template of the lot. `dot_plot` is the closest kind and
+BUILT. Twenty-eight code-mode figures across ten pipelines and thirteen template versions,
+counted rather than estimated; the "twelve" below was the count over the original nine
+templates of the lot. `dot_plot` is the closest kind and
 cannot express them: its two axis roles are `cluster` and `gene`, both String, so it draws
 a categorical grid, not a plane. This is the largest single group of fallbacks in the lot
 and the cheapest to specify, whether it lands as a kind or as size and `custom_data`
@@ -261,6 +263,63 @@ nothing else in sight.
   sample annotation strip in both heatmap recipes and the `advanced_viz` renderer ignores
   it; only the legacy `visu_type: heatmap` path reads it. An existing kind under-powered,
   not a missing one.
+
+### Where the boundary with JBrowse sits
+
+Depictio already carries a `jbrowse2` data-collection type whose allowed formats are BAM,
+CRAM, BigWig, BED, GFF3, VCF and their indices, plus a JBrowse component in the React
+viewer. That is the line, and it is worth stating because two of the kinds in this lot sit
+right on it:
+
+- **Anything that needs per-base signal, read alignments or a gene model over genomic
+  coordinates belongs in JBrowse.** It already ingests the file types those come in, and
+  an `advanced_viz` kind reading the same thing out of a Delta table would be a worse
+  genome browser bolted onto a plotting library.
+- **Anything that is an aggregate table belongs in `advanced_viz`,** whatever the x axis
+  happens to mean.
+
+Applied to `sashimi`: the arcs are an aggregate junction table, which is why the kind
+exists at all, but a full sashimi plot is arcs drawn over per-base coverage with the
+transcript model underneath, and those two halves are BigWig and GFF3. The kind therefore
+ships as the junction-arc half and the coverage and exon-model halves are deferred to
+JBrowse rather than reimplemented. `coverage_track` and `gene_arrow_track` are the same
+case and should not be extended toward browser features either.
+
+### What MultiQC parses but never publishes as data
+
+The catalog policy is that a tool MultiQC already parses stays a `use: multiqc/<module>`
+panel, and `_index/multiqc_modules.txt` lists which those are. That index is advisory, not
+prohibitive, and always was: `ataqv`, `homer` and `macs2` are all in it and all have full
+catalog tools. What the policy is really protecting against is a second copy of a panel
+that already exists, not a dedicated tool as such.
+
+The line that actually holds is narrower and worth writing down: **a dedicated tool is
+justified when nf-core publishes a table that the MultiQC panel does not render, or
+renders without the columns that carry the reading.** Three cases in the ChIP family meet
+it, and all three shipped:
+
+- **`preseq`.** MultiQC plots `EXPECTED_DISTINCT` on its own and drops `LOWER_0.95CI` and
+  `UPPER_0.95CI`, so the width of the extrapolation, which is what says whether
+  "sequence deeper" is advice or a guess, never reaches a dashboard. The
+  `preseq/complexity_curve` output keeps both bounds and binds them to `profile`'s
+  optional `lower` / `upper` roles, the only output in the catalog that exercises them.
+- **`deeptools`.** The MultiQC module draws the fingerprint curve but not the per-sample
+  quality metrics beside it, and it has no plot at all for the `plotProfile` matrix, the
+  `plotPCA` loadings or the `plotCorrelation` matrix. nf-core publishes all four as plain
+  tab-separated files next to the PDFs. They became `fingerprint_metrics` (`scatter_xy`),
+  `plot_profile` (`profile`), `sample_pca` (`embedding`) and `correlation_matrix`
+  (`complex_heatmap`).
+- **`homer`.** Not a MultiQC overlap at all, but the same shape of gap: the distance to
+  the nearest TSS was drawn by a hand-written `px.histogram` in both chipseq and atacseq.
+  `homer/tss_distance_profile` bins it in the recipe, which lets `profile` own the marker
+  at the start site, the shaded promoter window and the log axis.
+
+None of this needed a new viz kind: the four bindings are `profile`, `scatter_xy`,
+`embedding` and `complex_heatmap`, all of which already existed.
+
+What is left in the ChIP family after that is genuinely browser work, not table work:
+per-base coverage tracks (`bigwig/`), the aligned reads and the peak intervals as
+features. That is the JBrowse boundary above, and nothing in it should become a kind.
 
 ### Still missing, for pipelines outside this lot
 
