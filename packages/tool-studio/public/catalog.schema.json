@@ -27,6 +27,13 @@
           ],
           "default": null,
           "title": "Path Glob"
+        },
+        "path_glob_alt": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Path Glob Alt",
+          "type": "array"
         }
       },
       "title": "CatalogFind",

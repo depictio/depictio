@@ -1,0 +1,50 @@
+# Megatest manifest for nf-core/variantbenchmarking 1.4.0 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the benchmark
+# tables the template recipes read (rtg-tools vcfeval, hap.py, som.py). Fetch with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline variantbenchmarking --version 1.4.0 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing
+#
+# Keys are fnmatch globs relative to run_root (the prefix root) and are mirrored
+# 1:1 below the destination, which becomes the template DATA_ROOT.
+pipeline: variantbenchmarking
+version: "1.4.0"
+# Pinned on purpose to the 1.5.0 release run (tag_sha 8b21c017...): it is the
+# only public megatest covering both the germline `small/` and somatic `indel/`
+# categories. The 1.4.0 release run (results-68a3209895196664b42b5ea0bbf434b30ec33848)
+# holds `small/` only. `fetch` warns about the release mismatch and keeps the pin.
+results_sha: "8b21c01749c4447b285d242a198127736f3ffe51"
+run_root: ""
+multiqc:
+  # The pinned run has no multiqc/ directory and the template declares no MultiQC DC.
+  version: null
+  parquet: null
+  reprocess: false
+keys:
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  # Germline (small/): rtg-tools vcfeval aggregated summary.
+  - small/summary/tables/*
+  # Germline (small/): per-sample hap.py summaries + SNP ROC sweep (optional DCs).
+  # Sample dir / truth-set names vary (test1.HG002.giab_v1 ...), hence the globs.
+  - small/*/benchmarks/happy/*.summary.csv
+  - small/*/benchmarks/happy/*.roc.Locations.SNP.PASS.csv.gz
+  # Somatic (indel/): rtg-tools vcfeval + som.py aggregated summaries.
+  - indel/summary/tables/*
+prefix_keys: []
+renames: {}
+post_fetch_help: |
+  === Quick test commands ===
+
+  # 1. Test individual recipes against the downloaded data
+  depictio dev recipe run rtgtools/vcfeval_summary.py -d {dest}
+  depictio dev recipe run happy/summary.py -d {dest}
+  depictio dev recipe run sompy/summary.py -d {dest}
+  depictio dev recipe run sompy/regions.py -d {dest}
+
+  # 2. Dry run (validate the template without a server; --deep checks file headers)
+  depictio run --template nf-core/variantbenchmarking/1.4.0 --data-root {dest} --dry-run --deep
+
+  # 3. Full template run (requires a running depictio server)
+  depictio run --template nf-core/variantbenchmarking/1.4.0 --data-root {dest}
