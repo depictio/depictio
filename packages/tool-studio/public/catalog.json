@@ -1370,6 +1370,324 @@
       ]
     },
     {
+      "biotools_url": null,
+      "description": "",
+      "dir": "depictio/catalog/deeptools",
+      "homepage": "https://deeptools.readthedocs.io/",
+      "id": "deeptools",
+      "name": "deepTools",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/deeptools/plotfingerprint",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "Pairwise correlation of the genome-wide bin counts, square (samples x samples). Replicates of one target correlate with each other and with nothing else; a block that spans two targets is a swap or a contamination.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*.plotCorrelation.mat.tab",
+            "path_glob_alt": []
+          },
+          "fixture": "correlation_matrix.tsv",
+          "fixtureContent": "sample\th3k27me3_R2\th3k27me3_R1\tigg_ctrl_R1\tigg_ctrl_R2\th3k4me3_R1\th3k4me3_R2\nh3k27me3_R1\t0.6835\t1.0\t0.0321\t0.0315\t-0.0231\t-0.0306\nh3k27me3_R2\t1.0\t0.6835\t0.0677\t0.0675\t-0.0357\t-0.0462\nh3k4me3_R1\t-0.0357\t-0.0231\t0.0705\t0.0602\t1.0\t0.8976\nh3k4me3_R2\t-0.0462\t-0.0306\t0.1466\t0.1384\t0.8976\t1.0\nigg_ctrl_R1\t0.0677\t0.0321\t1.0\t0.963\t0.0705\t0.1466\nigg_ctrl_R2\t0.0675\t0.0315\t0.963\t1.0\t0.0602\t0.1384\n",
+          "id": "deeptools_correlation_matrix",
+          "mode": "exploratory/correlation",
+          "name": "Sample correlation matrix",
+          "path_glob": "**/*.plotCorrelation.mat.tab",
+          "rawYaml": "id: deeptools_correlation_matrix\nname: Sample correlation matrix\nmode: exploratory/correlation\ndescription: >-\n  Pairwise correlation of the genome-wide bin counts, square (samples x\n  samples). Replicates of one target correlate with each other and with nothing\n  else; a block that spans two targets is a swap or a contamination.\nfind:\n  path_glob: \"**/*.plotCorrelation.mat.tab\"\nrecipe: deeptools/correlation_matrix.py\nfixture: correlation_matrix.tsv\nrenders_as:\n  # `index` is not optional in practice: ComplexHeatmapConfig.index_column falls\n  # back to the literal \"sample_id\", which this matrix does not have.\n  - { id: correlation_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: sample} }\n  - { component: table }\n",
+          "recipe": "deeptools/correlation_matrix.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "correlation_heatmap",
+              "kind": "complex_heatmap",
+              "roles": {
+                "index": "sample"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "correlation_matrix",
+          "yamlPath": "depictio/catalog/deeptools/correlation_matrix.yaml"
+        },
+        {
+          "columns": {},
+          "description": "How concentrated each library's coverage is, as the quality metrics plotFingerprint writes beside its curve: the area under the observed cumulative-coverage curve, the same area for a perfectly uniform library of that depth, and the divergence between the two. Enriched targets sit far from the uniform reference, inputs and failed enrichments sit on top of it.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*.plotFingerprint.qcmetrics.txt",
+            "path_glob_alt": []
+          },
+          "fixture": "fingerprint_metrics.tsv",
+          "fixtureContent": "sample\tauc\tsynthetic_auc\tauc_ratio\tx_intercept\tsynthetic_x_intercept\telbow_point\tsynthetic_elbow_point\tsynthetic_js_distance\tjs_distance\tpercent_genome_enriched\tdiff_enrichment\tchance_divergence\nEZH2_IP_NTKO_R1\t0.3593085398475343\t0.4977051377923968\t0.7219305419294454\t0.002854460177069539\t0.0\t0.5638344988861184\t0.5041132837649006\t0.21435600111019684\t0.030238932766554795\t34.311541408495614\t6.497579283508836\t0.05520523473153858\nEZH2_IP_NTKO_R2\t0.2910236672759344\t0.4978050301016831\t0.5846137537350498\t0.00407430395460188\t0.0\t0.6218057279659515\t0.49802233513076305\t0.3182016316026108\t0.06571623821843191\t26.246231601347755\t7.874415747854618\t0.06691818107231737\nEZH2_IP_TKO_R1\t0.35221231424929117\t0.49731937685638894\t0.7082215788085\t0.0042476252517665205\t0.0\t0.5647502498277241\t0.5034483300859374\t0.22162490992192888\t0.01763128279686583\t39.010349847444445\t7.045832103356081\t0.060327112301980484\nEZH2_IP_TKO_R2\t0.29108014745340544\t0.4978294209952405\t0.5846985637600319\t0.0041381297515348985\t0.0\t0.6185539818693618\t0.5021622433104189\t0.3164898224811871\t0.03828186031537438\t31.425626703903184\t5.608402349288988\t0.048275792144450866\nFOXA1_IP_E2_R1\t0.1669322295151907\t0.4902808609291947\t0.3404828595568994\t0.38716004668568677\t6.001930549522223e-90\t0.6931851865574864\t0.49644248002471486\t0.3361276027105036\t0.09759060933870951\t41.85524658194079\t41.61129393102361\t0.39939363682639867\nFOXA1_IP_E2_R2\t0.20910993659225008\t0.49239724202362534\t0.42467731080877363\t0.20926635589746523\t8.579675567440157e-148\t0.6356612425048379\t0.5040537028798883\t0.35257774405403164\t0.07688021092270256\t36.481539737466754\t25.732895865072237\t0.23186226265152057\nFOXA1_IP_VEH_R1\t0.1556027799860972\t0.489532646284101\t0.31785986321286713\t0.4318511258726875\t2.122586202741469e-77\t0.6070371580335644\t0.4974017032515458\t0.3330499994240092\t0.07737511444121144\t39.52908151536051\t42.38495814340002\t0.4095943621622966\nFOXA1_IP_VEH_R2\t0.17923134113700245\t0.4912943378510716\t0.3648145873631739\t0.321644303638734\t2.0886088461263775e-112\t0.6692275113747406\t0.49849328986076336\t0.3506534871898848\t0.08923344096524737\t31.035592350117238\t32.96492037880541\t0.29163238296834537\nINPUT_E2_R1\t0.3030051771448319\t0.4943715303694031\t0.61290984316678\t0.02391020415724925\t6.610946330001928e-271\t0.5929475897587906\t0.501747983080147\t0.28134513683093715\t\t\t\t\nINPUT_E2_R2\t0.24540090349355415\t0.4947686737370078\t0.49599119046893414\t0.07009466068006978\t0.0\t0.63233429614589\t0.501062811678417\t0.3528710181515008\t\t\t\t\nINPUT_NTKO_R1\t0.37169555113145436\t0.4980841853011759\t0.7462504574536968\t0.001485913715138604\t0.0\t0.5499054418544912\t0.5014325231226872\t0.19639595747109234\t\t\t\t\nINPUT_NTKO_R2\t0.3249608382093238\t0.4980762802921508\t0.6524318685055939\t0.0015760773186735237\t0.0\t0.5919334101791097\t0.49833896106560477\t0.26549494014792774\t\t\t\t\nINPUT_TKO_R1\t0.3625474593289061\t0.4979620574061078\t0.7280624174810054\t0.0014513273551940902\t0.0\t0.5639237687536975\t0.5036764948243829\t0.2090516522925826\t\t\t\t\nINPUT_TKO_R2\t0.31232666847209506\t0.49812795311489455\t0.6270008870593458\t0.0017332712724693574\t0.0\t0.6061041292639138\t0.4995631881692186\t0.28443883175273194\t\t\t\t\nINPUT_VEH_R1\t0.27111756007411225\t0.4946281653420093\t0.5481239829653629\t0.04091618570547025\t1.4314434575873286e-297\t0.6100306121214322\t0.5094048642676279\t0.3246472582375094\t\t\t\t\nINPUT_VEH_R2\t0.277375209605159\t0.49467714387554784\t0.5607196795713322\t0.0327862258575123\t4.252018169649848e-303\t0.6093217271150629\t0.4981085952596577\t0.3178021335376746\t\t\t\t\n",
+          "id": "deeptools_fingerprint_metrics",
+          "mode": "signal/fingerprint",
+          "name": "Fingerprint metrics",
+          "path_glob": "**/*.plotFingerprint.qcmetrics.txt",
+          "rawYaml": "id: deeptools_fingerprint_metrics\nname: Fingerprint metrics\nmode: signal/fingerprint\ndescription: >-\n  How concentrated each library's coverage is, as the quality metrics\n  plotFingerprint writes beside its curve: the area under the observed\n  cumulative-coverage curve, the same area for a perfectly uniform library of\n  that depth, and the divergence between the two. Enriched targets sit far from\n  the uniform reference, inputs and failed enrichments sit on top of it.\nfind:\n  path_glob: \"**/*.plotFingerprint.qcmetrics.txt\"\nrecipe: deeptools/fingerprint_metrics.py\nfixture: fingerprint_metrics.tsv\nrenders_as:\n  # Enrichment against divergence from uniform: the two axes disagree only for a\n  # library whose curve is odd, so a point off the trend is the one to look at.\n  # MultiQC draws the fingerprint curve itself but never this table, so the\n  # per-sample numbers are only readable here.\n  - { id: fingerprint_scatter, component: advanced_viz, kind: scatter_xy, roles: {x: auc, y: synthetic_js_distance, label: sample} }\n  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: auc_ratio, title: Coverage concentration relative to a uniform library} }\n  - { component: card, column: auc_ratio, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: auc_ratio, aggregation: max, secondary_layout: threshold, threshold_value: 0.85, threshold_direction: max, threshold_warn: 0.95 }\n  - { component: card, column: synthetic_js_distance, aggregation: average, aggregations: [box_plot_stats], secondary_layout: histogram }\n  - { component: card, column: x_intercept, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: table }\n",
+          "recipe": "deeptools/fingerprint_metrics.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "fingerprint_scatter",
+              "kind": "scatter_xy",
+              "roles": {
+                "label": "sample",
+                "x": "auc",
+                "y": "synthetic_js_distance"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "title": "Coverage concentration relative to a uniform library",
+                "x": "sample",
+                "y": "auc_ratio"
+              },
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "auc_ratio",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "auc_ratio",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "threshold",
+              "threshold_direction": "max",
+              "threshold_value": 0.85,
+              "threshold_warn": 0.95
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "synthetic_js_distance",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "x_intercept",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "fingerprint_metrics",
+          "yamlPath": "depictio/catalog/deeptools/fingerprint_metrics.yaml"
+        },
+        {
+          "columns": {},
+          "description": "The mean signal of every library across the plotted window, one row per bin. With `computeMatrix scale-regions` the window is the flanking region plus a gene body stretched to a fixed number of bins; with `reference-point` it is a window centred on one anchor. `bin_label` carries deepTools' own anchors, so the marker can be placed without hard-coding the window.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*.plotProfile.tab",
+            "path_glob_alt": []
+          },
+          "fixture": "plot_profile.tsv",
+          "fixtureContent": "sample\tgroup\tbin\tbin_label\tsignal\nEZH2_IP_NTKO_R1\tgenes\t1\t-3.0Kb\t0.085442623567293\nEZH2_IP_NTKO_R1\tgenes\t2\t\t0.0854682944757689\nEZH2_IP_NTKO_R1\tgenes\t3\t\t0.08544401043589703\nEZH2_IP_NTKO_R1\tgenes\t4\t\t0.08542907262295828\nEZH2_IP_NTKO_R1\tgenes\t5\t\t0.08548707410748037\nEZH2_IP_NTKO_R1\tgenes\t6\t\t0.08548320737630218\nEZH2_IP_NTKO_R1\tgenes\t7\t\t0.08545882571628519\nEZH2_IP_NTKO_R1\tgenes\t8\t\t0.08559602844787757\nEZH2_IP_NTKO_R1\tgenes\t9\t\t0.08572303126218077\nEZH2_IP_NTKO_R1\tgenes\t10\t\t0.08567257006664154\nEZH2_IP_NTKO_R1\tgenes\t11\t\t0.08576815753959333\nEZH2_IP_NTKO_R1\tgenes\t12\t\t0.08580850587560519\nEZH2_IP_NTKO_R1\tgenes\t13\t\t0.08578296583195719\nEZH2_IP_NTKO_R1\tgenes\t14\t\t0.08579772817863962\nEZH2_IP_NTKO_R1\tgenes\t15\t\t0.08579380486455232\nEZH2_IP_NTKO_R1\tgenes\t16\t\t0.08582377373924634\nEZH2_IP_NTKO_R1\tgenes\t17\t\t0.08597434926622179\nEZH2_IP_NTKO_R1\tgenes\t18\t\t0.08592447873061138\nEZH2_IP_NTKO_R1\tgenes\t19\t\t0.08595745060805292\nEZH2_IP_NTKO_R1\tgenes\t20\t\t0.08588919694516549\nEZH2_IP_NTKO_R1\tgenes\t21\t\t0.08589649880082066\nEZH2_IP_NTKO_R1\tgenes\t22\t\t0.08595210307863636\nEZH2_IP_NTKO_R1\tgenes\t23\t\t0.08605286040651634\nEZH2_IP_NTKO_R1\tgenes\t24\t\t0.0860418394343203\nEZH2_IP_NTKO_R2\tgenes\t1\t-3.0Kb\t0.1075820940761526\nEZH2_IP_NTKO_R2\tgenes\t2\t\t0.10759301256103816\nEZH2_IP_NTKO_R2\tgenes\t3\t\t0.10777063961934029\nEZH2_IP_NTKO_R2\tgenes\t4\t\t0.10787011211015497\nEZH2_IP_NTKO_R2\tgenes\t5\t\t0.10790175776100058\nEZH2_IP_NTKO_R2\tgenes\t6\t\t0.10797079502004263\nEZH2_IP_NTKO_R2\tgenes\t7\t\t0.10786745354735779\nEZH2_IP_NTKO_R2\tgenes\t8\t\t0.10780257919667008\nEZH2_IP_NTKO_R2\tgenes\t9\t\t0.10777921272337343\nEZH2_IP_NTKO_R2\tgenes\t10\t\t0.1078800534927941\nEZH2_IP_NTKO_R2\tgenes\t11\t\t0.10783555973964289\nEZH2_IP_NTKO_R2\tgenes\t12\t\t0.10782229223163795\nEZH2_IP_NTKO_R2\tgenes\t13\t\t0.10775271060094531\nEZH2_IP_NTKO_R2\tgenes\t14\t\t0.10770177906298822\nEZH2_IP_NTKO_R2\tgenes\t15\t\t0.10763650996896176\nEZH2_IP_NTKO_R2\tgenes\t16\t\t0.10760734294164771\nEZH2_IP_NTKO_R2\tgenes\t17\t\t0.10747750345661168\nEZH2_IP_NTKO_R2\tgenes\t18\t\t0.10736277883475095\nEZH2_IP_NTKO_R2\tgenes\t19\t\t0.10741194939082205\nEZH2_IP_NTKO_R2\tgenes\t20\t\t0.10744050485336482\nEZH2_IP_NTKO_R2\tgenes\t21\t\t0.10748032409626482\nEZH2_IP_NTKO_R2\tgenes\t22\t\t0.10758389641077516\nEZH2_IP_NTKO_R2\tgenes\t23\t\t0.10750827641344868\nEZH2_IP_NTKO_R2\tgenes\t24\t\t0.10738590001875252\n",
+          "id": "deeptools_plot_profile",
+          "mode": "signal/metagene",
+          "name": "Metagene signal profile",
+          "path_glob": "**/*.plotProfile.tab",
+          "rawYaml": "id: deeptools_plot_profile\nname: Metagene signal profile\nmode: signal/metagene\ndescription: >-\n  The mean signal of every library across the plotted window, one row per bin.\n  With `computeMatrix scale-regions` the window is the flanking region plus a\n  gene body stretched to a fixed number of bins; with `reference-point` it is a\n  window centred on one anchor. `bin_label` carries deepTools' own anchors, so\n  the marker can be placed without hard-coding the window.\nfind:\n  path_glob: \"**/*.plotProfile.tab\"\nrecipe: deeptools/plot_profile.py\nfixture: plot_profile.tsv\nrenders_as:\n  # MultiQC's deeptools module has no plot for this matrix at all: nf-core\n  # publishes it as a plain table beside the PDF, and this is what reads it.\n  - { id: metagene_profile, component: advanced_viz, kind: profile, roles: {series: sample, x: bin, y: signal} }\n  - { component: figure, visu_type: line, dict_kwargs: {x: bin, y: signal, color: sample, title: Mean signal across the plotted window} }\n  - { component: card, column: signal, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }\n  - { component: card, column: signal, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: signal, aggregation: sum, secondary_layout: composition, breakdown_col: sample }\n  - { component: table }\n",
+          "recipe": "deeptools/plot_profile.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "metagene_profile",
+              "kind": "profile",
+              "roles": {
+                "series": "sample",
+                "x": "bin",
+                "y": "signal"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "sample",
+                "title": "Mean signal across the plotted window",
+                "x": "bin",
+                "y": "signal"
+              },
+              "roles": {},
+              "visu_type": "line"
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample",
+              "column": "signal",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "signal",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample",
+              "column": "signal",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "composition"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "plot_profile",
+          "yamlPath": "depictio/catalog/deeptools/plot_profile.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Where each library sits on the first components of a PCA over the genome-wide bin counts, with the share of variance each component explains. Replicates of one target cluster; a library that lands with the controls did not enrich.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*.plotPCA.tab",
+            "path_glob_alt": []
+          },
+          "fixture": "sample_pca.tsv",
+          "fixtureContent": "sample\tpc1\tpc2\tpc3\tpc1_variance\tpc2_variance\nh3k27me3_R1\t-0.41127580683351017\t-0.3716147952228641\t0.521466786404476\t0.4594701213566809\t0.3451665624717494\nh3k27me3_R2\t-0.5439473694714885\t-0.15829866741067417\t0.3724792466066537\t0.4594701213566809\t0.3451665624717494\nh3k4me3_R1\t0.3200425203376855\t0.39274215788819766\t0.5798762922798242\t0.4594701213566809\t0.3451665624717494\nh3k4me3_R2\t0.009191625734442321\t0.604734634596956\t0.3642928731691832\t0.4594701213566809\t0.3451665624717494\nigg_ctrl_R1\t-0.46529382948413106\t0.3981315661347371\t-0.2431307393874177\t0.4594701213566809\t0.3451665624717494\nigg_ctrl_R2\t-0.4647186475651111\t0.39797594280406356\t-0.24749390557991802\t0.4594701213566809\t0.3451665624717494\n",
+          "id": "deeptools_sample_pca",
+          "mode": "exploratory/pca",
+          "name": "Sample PCA",
+          "path_glob": "**/*.plotPCA.tab",
+          "rawYaml": "id: deeptools_sample_pca\nname: Sample PCA\nmode: exploratory/pca\ndescription: >-\n  Where each library sits on the first components of a PCA over the genome-wide\n  bin counts, with the share of variance each component explains. Replicates of\n  one target cluster; a library that lands with the controls did not enrich.\nfind:\n  path_glob: \"**/*.plotPCA.tab\"\nrecipe: deeptools/sample_pca.py\nfixture: sample_pca.tsv\nrenders_as:\n  - { id: pca_embedding, component: advanced_viz, kind: embedding, roles: {sample_id: sample, dim_1: pc1, dim_2: pc2, dim_3: pc3} }\n  - { component: figure, visu_type: scatter, dict_kwargs: {x: pc1, y: pc2, color: sample, title: Sample PCA over genome-wide bin counts} }\n  - { component: table }\n",
+          "recipe": "deeptools/sample_pca.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "pca_embedding",
+              "kind": "embedding",
+              "roles": {
+                "dim_1": "pc1",
+                "dim_2": "pc2",
+                "dim_3": "pc3",
+                "sample_id": "sample"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "sample",
+                "title": "Sample PCA over genome-wide bin counts",
+                "x": "pc1",
+                "y": "pc2"
+              },
+              "roles": {},
+              "visu_type": "scatter"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "sample_pca",
+          "yamlPath": "depictio/catalog/deeptools/sample_pca.yaml"
+        }
+      ]
+    },
+    {
       "biotools_url": "https://bio.tools/deseq2",
       "description": "",
       "dir": "depictio/catalog/deseq2",
@@ -3510,6 +3828,102 @@
           ],
           "slug": "annotated_peaks",
           "yamlPath": "depictio/catalog/homer/annotate_peaks.yaml"
+        },
+        {
+          "columns": {},
+          "description": "How each sample's peaks are distributed around the nearest transcription start site, counted in 250 bp bins across a 20 kb window. A sharp central spike means the peaks are promoter-bound; a flat curve means they sit across gene bodies and intergenic space.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*.annotatePeaks.txt",
+            "path_glob_alt": []
+          },
+          "fixture": "tss_distance_profile.tsv",
+          "fixtureContent": "sample\tdistance_to_tss\tpeak_count\tfraction\nEZH2_IP_NTKO_R1\t-9875\t4540\t0.23258196721311475\nEZH2_IP_NTKO_R1\t-9625\t51\t0.002612704918032787\nEZH2_IP_NTKO_R1\t-9375\t54\t0.0027663934426229507\nEZH2_IP_NTKO_R1\t-9125\t50\t0.0025614754098360654\nEZH2_IP_NTKO_R1\t-8875\t53\t0.0027151639344262296\nEZH2_IP_NTKO_R1\t-8625\t46\t0.0023565573770491805\nEZH2_IP_NTKO_R1\t-8375\t37\t0.0018954918032786886\nEZH2_IP_NTKO_R1\t-8125\t58\t0.002971311475409836\nEZH2_IP_NTKO_R1\t-7875\t53\t0.0027151639344262296\nEZH2_IP_NTKO_R1\t-7625\t58\t0.002971311475409836\nEZH2_IP_NTKO_R1\t-7375\t60\t0.0030737704918032786\nEZH2_IP_NTKO_R1\t-7125\t58\t0.002971311475409836\nEZH2_IP_NTKO_R1\t-6875\t44\t0.002254098360655738\nEZH2_IP_NTKO_R1\t-6625\t68\t0.0034836065573770492\nEZH2_IP_NTKO_R1\t-6375\t72\t0.0036885245901639345\nEZH2_IP_NTKO_R1\t-6125\t55\t0.0028176229508196722\nEZH2_IP_NTKO_R1\t-5875\t77\t0.003944672131147541\nEZH2_IP_NTKO_R1\t-5625\t56\t0.0028688524590163933\nEZH2_IP_NTKO_R1\t-5375\t68\t0.0034836065573770492\nEZH2_IP_NTKO_R1\t-5125\t73\t0.0037397540983606556\nEZH2_IP_NTKO_R1\t-4875\t63\t0.003227459016393443\nEZH2_IP_NTKO_R1\t-4625\t73\t0.0037397540983606556\nEZH2_IP_NTKO_R1\t-4375\t71\t0.003637295081967213\nEZH2_IP_NTKO_R1\t-4125\t98\t0.0050204918032786885\nEZH2_IP_NTKO_R2\t-9875\t18064\t0.27368038300709047\nEZH2_IP_NTKO_R2\t-9625\t143\t0.0021665353614932427\nEZH2_IP_NTKO_R2\t-9375\t168\t0.0025453002848312223\nEZH2_IP_NTKO_R2\t-9125\t142\t0.002151384764559724\nEZH2_IP_NTKO_R2\t-8875\t151\t0.002287740136961396\nEZH2_IP_NTKO_R2\t-8625\t159\t0.0024089449124295496\nEZH2_IP_NTKO_R2\t-8375\t169\t0.0025604508817647417\nEZH2_IP_NTKO_R2\t-8125\t154\t0.0023331919277619537\nEZH2_IP_NTKO_R2\t-7875\t177\t0.002681655657232895\nEZH2_IP_NTKO_R2\t-7625\t186\t0.0028180110296345674\nEZH2_IP_NTKO_R2\t-7375\t179\t0.0027119568510999333\nEZH2_IP_NTKO_R2\t-7125\t146\t0.0022119871522938003\nEZH2_IP_NTKO_R2\t-6875\t191\t0.0028937640143021637\nEZH2_IP_NTKO_R2\t-6625\t159\t0.0024089449124295496\nEZH2_IP_NTKO_R2\t-6375\t206\t0.003121022968304951\nEZH2_IP_NTKO_R2\t-6125\t173\t0.002621053269498818\nEZH2_IP_NTKO_R2\t-5875\t187\t0.0028331616265680868\nEZH2_IP_NTKO_R2\t-5625\t198\t0.0029998181928367978\nEZH2_IP_NTKO_R2\t-5375\t203\t0.0030755711775043936\nEZH2_IP_NTKO_R2\t-5125\t218\t0.0033028301315071815\nEZH2_IP_NTKO_R2\t-4875\t211\t0.003196775952972547\nEZH2_IP_NTKO_R2\t-4625\t209\t0.0031664747591055088\nEZH2_IP_NTKO_R2\t-4375\t237\t0.003590691473244046\nEZH2_IP_NTKO_R2\t-4125\t240\t0.0036361432640446036\n",
+          "id": "homer_tss_distance_profile",
+          "mode": "peaks/tss_distance",
+          "name": "Distance to nearest TSS",
+          "path_glob": "**/*.annotatePeaks.txt",
+          "rawYaml": "id: homer_tss_distance_profile\nname: Distance to nearest TSS\nmode: peaks/tss_distance\ndescription: >-\n  How each sample's peaks are distributed around the nearest transcription start\n  site, counted in 250 bp bins across a 20 kb window. A sharp central spike\n  means the peaks are promoter-bound; a flat curve means they sit across gene\n  bodies and intergenic space.\nfind:\n  path_glob: \"**/*.annotatePeaks.txt\"\nrecipe: homer/tss_distance_profile.py\nfixture: tss_distance_profile.tsv\nrenders_as:\n  # The `profile` kind rather than a histogram figure: it owns the marker at the\n  # start site, the shaded promoter window and the log axis in the tile's own\n  # Settings, which is what the code-mode TSS histograms were written to get.\n  - { id: tss_distance, component: advanced_viz, kind: profile, roles: {series: sample, x: distance_to_tss, y: fraction} }\n  - { component: figure, visu_type: line, dict_kwargs: {x: distance_to_tss, y: fraction, color: sample, title: Peak distribution around the nearest TSS} }\n  - { component: card, column: peak_count, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }\n  - { component: card, column: fraction, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: peak_count, aggregation: sum, secondary_layout: composition, breakdown_col: sample }\n  - { component: table }\n",
+          "recipe": "homer/tss_distance_profile.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "tss_distance",
+              "kind": "profile",
+              "roles": {
+                "series": "sample",
+                "x": "distance_to_tss",
+                "y": "fraction"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "sample",
+                "title": "Peak distribution around the nearest TSS",
+                "x": "distance_to_tss",
+                "y": "fraction"
+              },
+              "roles": {},
+              "visu_type": "line"
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample",
+              "column": "peak_count",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "fraction",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample",
+              "column": "peak_count",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "composition"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "tss_distance_profile",
+          "yamlPath": "depictio/catalog/homer/tss_distance_profile.yaml"
         }
       ]
     },
@@ -5586,6 +6000,128 @@
           ],
           "slug": "report",
           "yamlPath": "depictio/catalog/pangolin/report.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": null,
+      "description": "",
+      "dir": "depictio/catalog/preseq",
+      "homepage": "https://github.com/smithlabcode/preseq",
+      "id": "preseq",
+      "name": "Preseq",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/preseq/lcextrap",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "How many distinct molecules each library would yield at a given sequencing depth, with the 95% interval preseq puts around that extrapolation. A curve still climbing at the depth already sequenced means resequencing buys new material; one that has flattened means the library is exhausted.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*.ccurve.txt",
+            "path_glob_alt": []
+          },
+          "fixture": "complexity_curve.tsv",
+          "fixtureContent": "sample\ttotal_reads\texpected_distinct\tlower_ci\tupper_ci\tci_width\nEZH2_IP_NTKO_R1\t0.0\t0.0\t0.0\t0.0\t0.0\nEZH2_IP_NTKO_R1\t6000000.0\t5745463.0\t5741810.0\t5749536.5\t7726.5\nEZH2_IP_NTKO_R1\t12000000.0\t11260813.5\t11253432.4\t11268644.9\t15212.5\nEZH2_IP_NTKO_R1\t18000000.0\t16583963.5\t16572879.1\t16595217.7\t22338.599999999627\nEZH2_IP_NTKO_R1\t24000000.0\t21728682.5\t21714176.3\t21743079.6\t28903.300000000745\nEZH2_IP_NTKO_R1\t30000000.0\t26705360.0\t26687544.5\t26722587.2\t35042.699999999255\nEZH2_IP_NTKO_R1\t36000000.0\t31522569.0\t31501587.1\t31542472.0\t40884.89999999851\nEZH2_IP_NTKO_R1\t42000000.0\t36187852.0\t36164056.8\t36210278.6\t46221.80000000447\nEZH2_IP_NTKO_R1\t48000000.0\t40708297.5\t40681792.9\t40733080.0\t51287.10000000149\nEZH2_IP_NTKO_R1\t54000000.0\t45090239.5\t45061328.6\t45117300.7\t55972.10000000149\nEZH2_IP_NTKO_R1\t60000000.0\t49339837.0\t49308576.0\t49368962.2\t60386.20000000298\nEZH2_IP_NTKO_R1\t66000000.0\t53462712.0\t53429219.1\t53493721.2\t64502.10000000149\nEZH2_IP_NTKO_R1\t72000000.0\t57464075.0\t57428603.2\t57496962.0\t68358.79999999702\nEZH2_IP_NTKO_R1\t78000000.0\t61349031.0\t61311723.9\t61383656.0\t71932.10000000149\nEZH2_IP_NTKO_R1\t84000000.0\t65122227.5\t65083232.5\t65158507.6\t75275.10000000149\nEZH2_IP_NTKO_R1\t90000000.0\t68788233.5\t68747602.3\t68826002.8\t78400.5\nEZH2_IP_NTKO_R1\t96000000.0\t72351213.5\t72309114.1\t72390424.9\t81310.80000001192\nEZH2_IP_NTKO_R1\t102000000.0\t75815225.0\t75771759.0\t75855771.2\t84012.20000000298\nEZH2_IP_NTKO_R1\t108000000.0\t79184177.0\t79139347.5\t79225877.7\t86530.20000000298\nEZH2_IP_NTKO_R1\t114000000.0\t82461597.5\t82415513.2\t82504375.2\t88862.0\nEZH2_IP_NTKO_R1\t120000000.0\t85650947.0\t85603691.5\t85694728.0\t91036.5\nEZH2_IP_NTKO_R1\t126000000.0\t88755521.5\t88707173.8\t88800224.8\t93051.0\nEZH2_IP_NTKO_R1\t132000000.0\t91778440.5\t91729068.3\t91823984.6\t94916.29999999702\nEZH2_IP_NTKO_R1\t138000000.0\t94722691.5\t94672362.5\t94769022.4\t96659.90000000596\nEZH2_IP_NTKO_R2\t0.0\t0.0\t0.0\t0.0\t0.0\nEZH2_IP_NTKO_R2\t6000000.0\t5692322.0\t5687852.9\t5697258.3\t9405.399999999441\nEZH2_IP_NTKO_R2\t12000000.0\t11148599.0\t11139898.8\t11158221.3\t18322.5\nEZH2_IP_NTKO_R2\t18000000.0\t16413063.0\t16400328.0\t16427164.7\t26836.699999999255\nEZH2_IP_NTKO_R2\t24000000.0\t21504256.5\t21487823.3\t21522615.8\t34792.5\nEZH2_IP_NTKO_R2\t30000000.0\t26435883.0\t26415999.2\t26458233.3\t42234.10000000149\nEZH2_IP_NTKO_R2\t36000000.0\t31219251.0\t31195929.4\t31245308.1\t49378.70000000298\nEZH2_IP_NTKO_R2\t42000000.0\t35863971.0\t35837463.5\t35893580.1\t56116.60000000149\nEZH2_IP_NTKO_R2\t48000000.0\t40378613.0\t40348966.5\t40411501.9\t62535.39999999851\nEZH2_IP_NTKO_R2\t54000000.0\t44770750.0\t44738170.5\t44806860.0\t68689.5\nEZH2_IP_NTKO_R2\t60000000.0\t49047349.0\t49011941.6\t49086491.2\t74549.60000000149\nEZH2_IP_NTKO_R2\t66000000.0\t53214639.0\t53176539.8\t53256699.2\t80159.40000000596\nEZH2_IP_NTKO_R2\t72000000.0\t57278323.0\t57237691.0\t57323265.2\t85574.20000000298\nEZH2_IP_NTKO_R2\t78000000.0\t61243782.5\t61200646.2\t61291395.5\t90749.29999999702\nEZH2_IP_NTKO_R2\t84000000.0\t65115810.0\t65070288.3\t65165991.5\t95703.20000000298\nEZH2_IP_NTKO_R2\t90000000.0\t68898758.5\t68851077.1\t68951510.5\t100433.40000000596\nEZH2_IP_NTKO_R2\t96000000.0\t72596901.5\t72547168.0\t72652215.9\t105047.90000000596\nEZH2_IP_NTKO_R2\t102000000.0\t76214110.0\t76162443.7\t76271866.9\t109423.20000000298\nEZH2_IP_NTKO_R2\t108000000.0\t79753994.0\t79700417.5\t79814100.9\t113683.40000000596\nEZH2_IP_NTKO_R2\t114000000.0\t83219853.0\t83164500.9\t83282275.6\t117774.69999998808\nEZH2_IP_NTKO_R2\t120000000.0\t86614870.0\t86557791.4\t86679525.6\t121734.19999998808\nEZH2_IP_NTKO_R2\t126000000.0\t89941970.0\t89883237.7\t90008783.3\t125545.59999999404\nEZH2_IP_NTKO_R2\t132000000.0\t93203889.5\t93143586.8\t93272813.9\t129227.10000000894\nEZH2_IP_NTKO_R2\t138000000.0\t96403218.0\t96341387.7\t96474185.9\t132798.20000000298\n",
+          "id": "preseq_complexity_curve",
+          "mode": "complexity-curve",
+          "name": "Library complexity curve",
+          "path_glob": "**/*.ccurve.txt",
+          "rawYaml": "id: preseq_complexity_curve\nname: Library complexity curve\nmode: complexity-curve\ndescription: >-\n  How many distinct molecules each library would yield at a given sequencing\n  depth, with the 95% interval preseq puts around that extrapolation. A curve\n  still climbing at the depth already sequenced means resequencing buys new\n  material; one that has flattened means the library is exhausted.\nfind:\n  path_glob: \"**/*.ccurve.txt\"\nrecipe: preseq/complexity_curve.py\nfixture: complexity_curve.tsv\nrenders_as:\n  # The curve with its interval as a ribbon. This is the whole reason the tool\n  # has an entry of its own: MultiQC's preseq panel plots expected_distinct\n  # alone and drops the two CI columns, so the width of the extrapolation is\n  # only readable here.\n  - { id: complexity_ribbon, component: advanced_viz, kind: profile, roles: {series: sample, x: total_reads, y: expected_distinct, lower: lower_ci, upper: upper_ci} }\n  - { component: figure, visu_type: line, dict_kwargs: {x: total_reads, y: expected_distinct, color: sample, title: Expected distinct molecules by sequencing depth} }\n  - { component: card, column: expected_distinct, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }\n  - { component: card, column: expected_distinct, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: ci_width, aggregation: average, aggregations: [box_plot_stats], secondary_layout: histogram }\n  - { component: card, column: expected_distinct, aggregation: sum, secondary_layout: composition, breakdown_col: sample }\n  - { component: table }\n",
+          "recipe": "preseq/complexity_curve.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "complexity_ribbon",
+              "kind": "profile",
+              "roles": {
+                "lower": "lower_ci",
+                "series": "sample",
+                "upper": "upper_ci",
+                "x": "total_reads",
+                "y": "expected_distinct"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "sample",
+                "title": "Expected distinct molecules by sequencing depth",
+                "x": "total_reads",
+                "y": "expected_distinct"
+              },
+              "roles": {},
+              "visu_type": "line"
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample",
+              "column": "expected_distinct",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "expected_distinct",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "ci_width",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample",
+              "column": "expected_distinct",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "composition"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "complexity_curve",
+          "yamlPath": "depictio/catalog/preseq/complexity_curve.yaml"
         }
       ]
     },

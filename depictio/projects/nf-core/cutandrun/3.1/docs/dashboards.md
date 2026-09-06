@@ -72,7 +72,13 @@ target alignment looks fine.
 
 `Enrichment over the control` is the tab's point: the deepTools fingerprint curve and its
 quality metrics, which separate an enriched target from a flat IgG control, then the sample
-PCA and the sample correlation matrix.
+PCA and the sample correlation matrix. Those four panels are pictures MultiQC redraws from
+its own parquet; nf-core also publishes the three tables behind them, and three tiles below
+read those instead. `use: deeptools/fingerprint_scatter` puts every library on one plane,
+coverage concentration against divergence from a uniform library, so the targets separate
+from the IgG controls; `use: deeptools/pca_embedding` reads the `plotPCA` loadings with the
+variance each component explains; and `use: deeptools/correlation_heatmap` reads the
+correlation matrix itself, where a block spanning two targets is a swap or a contamination.
 
 `Fragment lengths` closes the tab with the nucleosomal ladder: four cards on the
 fragment-length table, a code-mode distribution figure and its cumulative twin. For H3K4me3

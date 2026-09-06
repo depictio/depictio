@@ -1,0 +1,25 @@
+id: deeptools_fingerprint_metrics
+name: Fingerprint metrics
+mode: signal/fingerprint
+description: >-
+  How concentrated each library's coverage is, as the quality metrics
+  plotFingerprint writes beside its curve: the area under the observed
+  cumulative-coverage curve, the same area for a perfectly uniform library of
+  that depth, and the divergence between the two. Enriched targets sit far from
+  the uniform reference, inputs and failed enrichments sit on top of it.
+find:
+  path_glob: "**/*.plotFingerprint.qcmetrics.txt"
+recipe: deeptools/fingerprint_metrics.py
+fixture: fingerprint_metrics.tsv
+renders_as:
+  # Enrichment against divergence from uniform: the two axes disagree only for a
+  # library whose curve is odd, so a point off the trend is the one to look at.
+  # MultiQC draws the fingerprint curve itself but never this table, so the
+  # per-sample numbers are only readable here.
+  - { id: fingerprint_scatter, component: advanced_viz, kind: scatter_xy, roles: {x: auc, y: synthetic_js_distance, label: sample} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: auc_ratio, title: Coverage concentration relative to a uniform library} }
+  - { component: card, column: auc_ratio, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: auc_ratio, aggregation: max, secondary_layout: threshold, threshold_value: 0.85, threshold_direction: max, threshold_warn: 0.95 }
+  - { component: card, column: synthetic_js_distance, aggregation: average, aggregations: [box_plot_stats], secondary_layout: histogram }
+  - { component: card, column: x_intercept, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }
