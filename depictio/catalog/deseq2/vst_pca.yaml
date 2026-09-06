@@ -1,0 +1,14 @@
+id: deseq2_vst_pca
+name: Sample PCA
+mode: exploratory/pca
+description: >-
+  Principal components of the variance-stabilised expression matrix, one point
+  per sample, computed on the most variable features the way DESeq2 plotPCA does.
+find: { path_glob: "**/all.vst.tsv" }
+recipe: deseq2/vst_pca.py
+fixture: vst_pca.tsv
+renders_as:
+  - { id: pca, component: advanced_viz, kind: embedding, roles: {sample_id: sample_id, dim_1: dim_1, dim_2: dim_2} }
+  - { component: card, column: sample_id, aggregation: nunique, secondary_layout: donut, breakdown_col: group }
+  - { component: card, column: dim_1, aggregation: range, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }
