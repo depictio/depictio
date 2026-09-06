@@ -1,0 +1,112 @@
+# GSEA running enrichment score — one tab of the advanced-visualisation showcase.
+#
+# Regenerate the seed after editing:
+#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one. They carry a
+# `gsea-rs-` prefix rather than a bare `gsea-` one because the Pathway
+# enrichment tab already owns `gsea-text` / `gsea-dotplot` / `gsea-f-*`, and
+# every index in this project is unique across its tabs.
+title: 'GSEA running score'
+subtitle: 'The weighted KS walk along a ranked list of 800 genes, five Hallmark sets at once. Curve, hit rug and ranked metric on one rank axis.'
+icon: 'mdi:chart-timeline-variant'
+icon_color: 'violet'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8d74'
+is_main_tab: false
+tab_order: 32
+parent_dashboard_tag: volcano
+tab_icon: 'mdi:chart-line-variant'
+tab_icon_color: 'violet'
+
+# Left-panel filter section. Deliberately not `persistent`: the 23 tabs of
+# this family read different collections whose column names collide while their
+# value domains do not overlap, so a control fanned out from one tab would show
+# up everywhere and bite on nothing.
+filter_sections:
+  - name: 'Curve scope'
+    icon: 'mdi:filter-variant'
+    color: 'violet'
+    description: 'Restricts which gene sets are drawn and how much of the ranked list'
+
+grid_sections:
+  - name: 'Running enrichment'
+    icon: 'mdi:chart-timeline-variant'
+    color: 'violet'
+    description: 'The enrichment score walked along the ranked gene list'
+
+components:
+  - tag: text-gsea_running_score
+    index: gsea-rs-text
+    component_type: text
+    title: 'GSEA running enrichment score'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Running enrichment'
+    body: >
+      Three panels share one rank axis. The top one walks the enrichment score along the ranked
+      gene list, stepping up at every set member and down at every other gene, so it leaves zero
+      and comes back to it at the last rank; its extremum is the enrichment score. The middle
+      rug marks where the members actually sit. The bottom panel is the metric the list was
+      ranked by. Shaded is the leading edge — the stretch between the extremum and the enriched
+      end of the list, the members carrying the signal. A set with no signal wanders near zero.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: viz-gsea_running_score
+    index: 'gsea-rs-curve'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'gsea_running_score_demo'
+    title: 'Running enrichment score'
+    description: 'Five Hallmark-style sets over one 800-gene ranked list: two enriched at the top, two at the bottom, one flat. Top-N sets, leading-edge shading, overlay/facet layout, hit rug and ranked-metric panel all live in the Settings ⚙ popover.'
+    section: 'Running enrichment'
+    viz_kind: 'gsea_running_score'
+    config:
+      viz_kind: "gsea_running_score"
+      gene_set_col: "gene_set"
+      rank_col: "rank"
+      running_es_col: "running_es"
+      member_col: "member"
+      metric_col: "metric"
+      show_leading_edge: true
+      top_n_sets: 5
+    layout: { x: 0, y: 2, w: 8, h: 11 }
+
+  - tag: filter-gsea_running_score-set
+    index: gsea-rs-f-set
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'gsea_running_score_demo'
+    interactive_component_type: MultiSelect
+    column_name: 'gene_set'
+    column_type: 'object'
+    title: 'Gene set'
+    placement: left
+    section: 'Curve scope'
+    group: 'Curve filters'
+    display:
+      title_size: md
+      custom_color: '#7B1FA2'
+      icon_name: 'mdi:set-merge'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-gsea_running_score-rank
+    index: gsea-rs-f-rank
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'gsea_running_score_demo'
+    interactive_component_type: RangeSlider
+    column_name: 'rank'
+    column_type: 'int64'
+    title: 'Rank window'
+    placement: left
+    section: 'Curve scope'
+    group: 'Curve filters'
+    display:
+      title_size: md
+      custom_color: '#45B8AC'
+      icon_name: 'mdi:counter'
+    layout: { x: 0, y: 3, w: 1, h: 3 }

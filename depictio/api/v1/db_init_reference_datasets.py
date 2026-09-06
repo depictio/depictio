@@ -184,6 +184,20 @@ STATIC_IDS = {
             # never registered here, so seeded deploys 404'd on these tiles.
             "coverage_track_demo": "646b0f3c1e4a2d7f8e5b8d50",
             "categorical_flow_demo": "646b0f3c1e4a2d7f8e5b8d51",
+            # Same omission as the two above, for the benchmark family. Their
+            # four tabs ship YAML with no `dashboard_id` and are not boot-seeded,
+            # but project.yaml declares the DCs, and every declared DC has to be
+            # registered here or the seed build cannot resolve the project.
+            "benchmark_demo": "646b0f3c1e4a2d7f8e5b8d60",
+            "roc_curve_demo": "646b0f3c1e4a2d7f8e5b8d61",
+            # Life-science kinds added with the nf-core template lot: each one
+            # exists because a template had to fall back to figure code mode.
+            "profile_demo": "646b0f3c1e4a2d7f8e5b8d80",
+            "signal_matrix_demo": "646b0f3c1e4a2d7f8e5b8d81",
+            "fusion_structure_demo": "646b0f3c1e4a2d7f8e5b8d82",
+            "gene_arrow_track_demo": "646b0f3c1e4a2d7f8e5b8d83",
+            "gsea_running_score_demo": "646b0f3c1e4a2d7f8e5b8d84",
+            "sashimi_demo": "646b0f3c1e4a2d7f8e5b8d85",
         },
         "dashboards": {
             # Main tab reuses the project_id so get_child_tabs(main_id) finds
@@ -215,6 +229,12 @@ STATIC_IDS = {
             "advanced_viz_oncoplot": "646b0f3c1e4a2d7f8e5b8d45",
             "advanced_viz_coverage_track": "646b0f3c1e4a2d7f8e5b8d46",
             "advanced_viz_categorical_flow": "646b0f3c1e4a2d7f8e5b8d47",
+            "advanced_viz_profile": "646b0f3c1e4a2d7f8e5b8d70",
+            "advanced_viz_signal_matrix": "646b0f3c1e4a2d7f8e5b8d71",
+            "advanced_viz_fusion_structure": "646b0f3c1e4a2d7f8e5b8d72",
+            "advanced_viz_gene_arrow_track": "646b0f3c1e4a2d7f8e5b8d73",
+            "advanced_viz_gsea_running_score": "646b0f3c1e4a2d7f8e5b8d74",
+            "advanced_viz_sashimi": "646b0f3c1e4a2d7f8e5b8d75",
         },
     },
     # nf-core/viralrecon 3.0.0 viral-genome analysis template — five-tab
