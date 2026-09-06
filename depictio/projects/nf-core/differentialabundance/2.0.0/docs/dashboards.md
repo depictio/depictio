@@ -57,9 +57,10 @@ Is the experiment sound before any contrast is read?
   distance matrix with dendrograms on both axes. Lassoing the PCA carries those samples to
   the distance matrix through the PCA's own outgoing link.
 
-![Samples tab, cohort cards](screenshots/samples-overview.png)
+![Samples](screenshots/samples.png)
 
-![Sample PCA and sample-to-sample distance](screenshots/samples-pca-distance.png)
+
+
 
 ### 2. Differential expression
 
@@ -75,9 +76,10 @@ Is the experiment sound before any contrast is read?
 * **Gene table**: the annotated calls with row selection on `gene_id`, the other half of
   the selection pair.
 
-![Differential expression, call cards](screenshots/differential-expression-overview.png)
+![Differential expression](screenshots/differential-expression.png)
 
-![Volcano and MA](screenshots/volcano-ma.png)
+
+
 
 ### 3. Expression
 
@@ -92,7 +94,9 @@ Is the experiment sound before any contrast is read?
   contrast, one panel per contrast, so the null contrast reads as an empty panel) beside a
   UI-mode box plot of effect size within each biotype.
 
-![Top variable features heatmap](screenshots/expression-heatmap.png)
+![Expression](screenshots/expression.png)
+
+
 
 ### 4. Genome view
 
@@ -104,9 +108,10 @@ Is the experiment sound before any contrast is read?
   time (pick a few chromosomes in the left panel to keep it readable), beside the volcano
   redrawn with gene symbols and coloured by biotype.
 
-![Genome view, placement cards](screenshots/genome-view-overview.png)
+![Genome view](screenshots/genome-view.png)
 
-![Significance along the genome](screenshots/manhattan.png)
+
+
 
 ### Reference tables (pinned, every tab)
 
