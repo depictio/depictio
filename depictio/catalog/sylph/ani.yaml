@@ -1,0 +1,55 @@
+id: sylph_ani
+name: Containment ANI
+mode: profile
+description: >-
+  One row per reference genome sylph detected in a sample: the adjusted ANI of
+  the containment match next to the taxonomic and sequence abundances and the
+  effective coverage. ANI against abundance separates confident calls from
+  divergent relatives, which read-count profilers cannot express.
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/sylph/profile
+find: { filename: "*.sylph.tsv" }
+recipe: sylph/ani.py
+fixture: ani.tsv
+renders_as:
+  - {
+      id: ani_dot_plot,
+      component: advanced_viz,
+      kind: dot_plot,
+      roles:
+        {
+          cluster: sample,
+          gene: genome,
+          mean_expression: adjusted_ani,
+          frac_expressing: abundance_frac,
+        },
+    }
+  - {
+      component: figure,
+      visu_type: scatter,
+      dict_kwargs:
+        { x: taxonomic_abundance, y: adjusted_ani, color: sample, size: eff_cov },
+    }
+  - {
+      component: card,
+      column: adjusted_ani,
+      aggregation: median,
+      aggregations: [box_plot_stats],
+      secondary_layout: box_plot,
+    }
+  - {
+      component: card,
+      column: genome,
+      aggregation: nunique,
+      secondary_layout: top_n,
+      breakdown_col: sample,
+      top_n_count: 3,
+    }
+  - {
+      component: card,
+      column: eff_cov,
+      aggregation: median,
+      secondary_layout: threshold,
+      threshold_value: 1,
+      threshold_direction: min,
+    }
+  - { component: table }
