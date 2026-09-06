@@ -847,6 +847,47 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: da6655fbb8a7a51586f2b38d
+    data_collection_tag: salmon_gene_expression
+    description: Gene expression (long) — recipe output (salmon/gene_expression_long.py), seeded from
+      the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: salmon/gene_expression_long.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: ed98a326561e8c6ddcfd723c
+    data_collection_tag: salmon_sample_pca
+    description: Sample overview — recipe output (salmon/sample_pca.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: salmon/sample_pca.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: cdf044d1a7ebb8c408327ce3
+    data_collection_tag: salmon_expression_heatmap
+    description: Top variable genes — recipe output (salmon/top_variable_genes.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: salmon/top_variable_genes.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: b6cadfd2d7681afe6f2a40df
     data_collection_tag: sompy_regions
     description: som.py allele-fraction strata — recipe output (sompy/regions.py), seeded from the catalog
@@ -970,6 +1011,21 @@ workflows:
           region: String
           coverage: Float64
           sample: String
+  - id: be9b8656f7e0e94a58645458
+    data_collection_tag: salmon_merged_gene_counts
+    description: Merged gene counts — raw Salmon output, recognised by find
+    config:
+      type: Table
+      metatype: Aggregate
+      scan:
+        mode: recursive
+        scan_parameters:
+          regex_config:
+            pattern: salmon\.merged\.gene_counts\.tsv
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: 7a60dd03a5c6749cc2bfea48
     data_collection_tag: multiqc_report
     description: Synthetic MultiQC report carrying every section the catalog declares
@@ -986,15 +1042,20 @@ workflows:
         - bcftools
         - bowtie2
         - cutadapt
+        - dupradar
         - fastp
         - fastqc
+        - featurecounts
         - happy
         - iVar
         - kraken
         - mosdepth
         - multiqc_software_versions
         - picard
+        - qualimap
         - quast
+        - rseqc
+        - salmon
         - samtools
         - snpeff
         - sompy
@@ -1009,6 +1070,8 @@ workflows:
           cutadapt:
           - Filtered Reads
           - Trimmed Sequence Lengths (3')
+          dupradar:
+          - dupradar-section
           fastp:
           - Filtered Reads
           fastqc:
@@ -1016,6 +1079,8 @@ workflows:
           - Sequence Quality Histograms
           - Per Sequence Quality Scores
           - Status Checks
+          featurecounts:
+          - Assignments
           happy:
           - INDEL
           - SNP
@@ -1031,9 +1096,21 @@ workflows:
           - Mark Duplicates
           - RnaSeqMetrics Assignment
           - Gene Coverage
+          qualimap:
+          - Genomic origin of reads
+          - Gene Coverage Profile
           quast:
           - Assembly Statistics
           - Number of Contigs
+          rseqc:
+          - Read Distribution
+          - Inner Distance
+          - Junction Annotation
+          - Junction Saturation
+          - Infer experiment
+          - Bam Stat
+          salmon:
+          - salmon-section-1
           samtools:
           - Percent mapped
           - Alignment stats

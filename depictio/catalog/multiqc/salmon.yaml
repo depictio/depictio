@@ -1,0 +1,16 @@
+id: multiqc_salmon
+name: Transcript quantification
+origin_tool: Salmon
+mode: salmon
+description: Selective-alignment quantification summary (library type, fragment-length distribution, mapping rate), from Salmon via MultiQC.
+find:
+  path_glob: "**/multiqc/multiqc_data/multiqc.parquet"
+  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/
+    - "**/multiqc/*_data/multiqc.parquet"
+    - "**/multiqc/*/*_data/multiqc.parquet"
+# reuse the bundled catalog-conformance MultiQC parquet (its sections are
+# synthesised by scripts/multiqc_stubs.py); `section` selects this module's
+# plot anchors out of the shared report.
+fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
+renders_as:
+  - { component: multiqc, section: salmon }

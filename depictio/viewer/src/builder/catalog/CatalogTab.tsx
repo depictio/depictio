@@ -25,6 +25,7 @@ import {
   fetchAdvancedVizKinds,
   fetchCatalogCompose,
   fetchMultiQCBuilderOptions,
+  fetchSpecs,
   upsertComponent,
 } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
@@ -42,11 +43,34 @@ interface CatalogTabProps {
   projectId: string;
 }
 
+/** The polars dtype of one column of a data collection, or null.
+ *
+ *  `/deltatables/specs` answers in either of the two shapes StepData and
+ *  StepDesign already normalise: a list of column specs, or a name-keyed map.
+ *  Both are accepted here for the same reason they are there. A failed fetch is
+ *  not fatal — the component still lands, and the Design step re-resolves it. */
+async function columnTypeFor(dcId: string, column: string): Promise<string | null> {
+  try {
+    const specs = await fetchSpecs(dcId);
+    if (Array.isArray(specs)) {
+      const hit = (specs as Array<{ name?: string; type?: string }>).find(
+        (c) => c?.name === column,
+      );
+      return hit?.type ? String(hit.type) : null;
+    }
+    const info = (specs as Record<string, { type?: string } | undefined>)?.[column];
+    return info?.type ? String(info.type) : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Translate one catalog render into the builder-store config the component
  *  type expects.
  *
- *  Async because a MultiQC render names a module but not a plot, and only the
- *  collection itself knows which plots its report carries. */
+ *  Async because two component types need the collection itself: a MultiQC
+ *  render names a module but not a plot, and an interactive render names a
+ *  column but not its type. */
 async function buildConfigFromRender(
   render: CatalogRender,
   dcId: string,
@@ -102,9 +126,16 @@ async function buildConfigFromRender(
     };
   }
   if (render.component === 'interactive') {
+    // `column_type` is not decoration: InteractiveBuilder derives the allowed
+    // variants from it, and an unknown type yields an empty variant list, whose
+    // reset effect then nulls `interactive_component_type`. Seeding the type the
+    // catalog never states is what keeps the declared MultiSelect alive.
     return {
       interactive_component_type: render.interactive_type ?? null,
       column_name: render.column_name ?? null,
+      column_type: render.column_name
+        ? await columnTypeFor(dcId, render.column_name)
+        : null,
     };
   }
   if (render.component === 'table') {
