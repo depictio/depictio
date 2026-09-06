@@ -1719,8 +1719,9 @@ def generate_scatter_xy_demo() -> None:
 
     for i in range(900):
         gene = f"ENSG{i:05d}"
-        # log2 CPM, roughly the shape of a real expression distribution: most
-        # genes low, a long right tail.
+        # CPM on a linear scale, roughly the shape of a real expression
+        # distribution: most genes low, a long right tail. Left untransformed
+        # on purpose, because the tab showcases the renderer's log axes.
         base = max(0.05, R.lognormvariate(1.1, 0.9))
         # Technical noise shrinks as expression rises, which is the reason the
         # cloud is a funnel around the diagonal rather than a band.
