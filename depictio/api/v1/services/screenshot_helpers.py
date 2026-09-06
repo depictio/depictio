@@ -133,6 +133,40 @@ async def wait_for_plotly_drawn(page: Page, timeout_ms: int = 3000) -> bool:
         return False
 
 
+async def wait_for_panels_settled(page: Page, timeout_ms: int = 120_000) -> bool:
+    """Block until no panel in view is still loading, or the timeout elapses.
+
+    `wait_for_plotly_drawn` answers a structural question: has every Plotly div
+    currently in the DOM painted. A MultiQC panel is not a Plotly div while it
+    waits on the backend to prepare its figures, which is 30-75 s on a cold data
+    collection, so that check returns true over a page of grey placeholders.
+    `DashboardLoadIndicator` counts panels rather than canvases, which is the
+    thing a capture actually wants to wait on.
+
+    It is read rather than merely waited out of the DOM: it unmounts only when
+    every panel in view succeeded, so one failed panel would hold this for the
+    whole timeout on a tab that is in fact as loaded as it will ever be. Its
+    `aria-valuenow`/`aria-valuemax` give ready and total, and every renderer
+    marks a failure with `.dashboard-error`, so the two together settle a
+    partly-broken tab as soon as it stops moving.
+    """
+    try:
+        await page.wait_for_function(
+            """() => {
+                const ind = document.querySelector('[data-tour-id="dashboard-load-indicator"]');
+                if (!ind) return true;
+                const ready = Number(ind.getAttribute('aria-valuenow') || 0);
+                const total = Number(ind.getAttribute('aria-valuemax') || 0);
+                const failed = document.querySelectorAll('.dashboard-error').length;
+                return total > 0 && ready + failed >= total;
+            }""",
+            timeout=timeout_ms,
+        )
+        return True
+    except Exception:
+        return False
+
+
 async def hide_ui_chrome(page: Page) -> None:
     """Hide navbar, header, Dash debug menu, walkthrough overlays, and zero out AppShell padding.
 
