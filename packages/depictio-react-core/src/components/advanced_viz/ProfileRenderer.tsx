@@ -593,7 +593,7 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
         decimalScale={1}
       />
       {bandCols ? (
-        <Stack gap={2}>
+        <Stack gap={4}>
           <Text size="xs" fw={500}>
             Band opacity
           </Text>
