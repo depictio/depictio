@@ -11,6 +11,10 @@ find:
 recipe: hamronization/report.py
 fixture: report.tsv
 renders_as:
+  # The resistance genes as strand-aware arrows along their contig, one lane
+  # per contig. Where several ARGs sit head to tail on one contig, that is a
+  # resistance island, and no aggregate over drug classes can show it.
+  - { id: arg_island_track, component: advanced_viz, kind: gene_arrow_track, roles: {contig: contig, feature_id: gene_symbol, start: start, end: stop, strand: strand} }
   # Screen -> drug class -> gene: which tool contributes which part of the
   # resistome. hAMRonization does not normalise the drug-class vocabulary
   # across tools, so the tool ring keeps the three vocabularies apart.
