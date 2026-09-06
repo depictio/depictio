@@ -1329,7 +1329,7 @@ tabs:
     title: Volcano
     description: -log10(padj) against log2 fold change. The dashed lines are padj 0.05 and a two-fold change.
     title_size: h3
-    layout: {x: 0, y: 1, w: 4, h: 7}
+    layout: {x: 0, y: 1, w: 8, h: 7}
   - component_type: advanced_viz
     tag: cs-db-av-ma
     index: cs-db-av-ma
@@ -1347,7 +1347,7 @@ tabs:
     title: MA plot
     description: log2 fold change against log2 mean normalised count. Low-count intervals fan out on the left.
     title_size: h3
-    layout: {x: 4, y: 1, w: 4, h: 7}
+    layout: {x: 0, y: 8, w: 8, h: 7}
 
   - component_type: text
     tag: cs-db-qq-intro
@@ -1377,7 +1377,7 @@ tabs:
     title: QQ plot
     description: Observed against expected p-value quantiles for the contrast in view.
     title_size: h3
-    layout: {x: 0, y: 1, w: 4, h: 7}
+    layout: {x: 0, y: 1, w: 8, h: 7}
   - component_type: advanced_viz
     tag: cs-db-av-dabar
     index: cs-db-av-dabar
@@ -1392,7 +1392,7 @@ tabs:
     title: Strongest differential intervals
     description: The 25 intervals with the largest significant effect, signed by direction.
     title_size: h3
-    layout: {x: 4, y: 1, w: 4, h: 7}
+    layout: {x: 0, y: 8, w: 8, h: 7}
 
   - component_type: text
     tag: cs-db-tables-intro
