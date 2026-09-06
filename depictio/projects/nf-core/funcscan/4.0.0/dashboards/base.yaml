@@ -641,7 +641,7 @@ tabs:
     title: Resistome hierarchy
     description: Arc size is the hit count; the rings are tool, drug class and gene symbol.
     title_size: h3
-    layout: {x: 0, y: 1, w: 4, h: 8}
+    layout: {x: 0, y: 1, w: 8, h: 8}
   - component_type: advanced_viz
     tag: arg-av-heatmap
     index: arg-heatmap
@@ -652,7 +652,7 @@ tabs:
     title: Gene by sample hit matrix
     description: Rows are resistance genes, columns samples, the right-hand strip the gene's drug class.
     title_size: h3
-    layout: {x: 4, y: 1, w: 4, h: 8}
+    layout: {x: 0, y: 9, w: 8, h: 8}
 
   - component_type: text
     tag: arg-conc-intro
@@ -965,7 +965,7 @@ tabs:
     title: Charge against hydrophobicity
     description: One point per candidate; colour is the best tool probability, size the peptide length.
     title_size: h3
-    layout: {x: 0, y: 1, w: 4, h: 6}
+    layout: {x: 0, y: 1, w: 8, h: 6}
   - component_type: advanced_viz
     tag: amp-av-embedding
     index: amp-embedding
@@ -977,7 +977,7 @@ tabs:
     title: Physicochemistry PCA
     description: Two components over weight, pI, hydrophobicity and the three structure fractions.
     title_size: h3
-    layout: {x: 4, y: 1, w: 4, h: 6}
+    layout: {x: 0, y: 7, w: 8, h: 6}
   - component_type: table
     tag: amp-table-candidates
     section: Property space
@@ -989,7 +989,7 @@ tabs:
     title: AMP candidates
     description: Selecting rows narrows the property scatter to the same peptides.
     title_size: h3
-    layout: {x: 0, y: 7, w: 8, h: 5}
+    layout: {x: 0, y: 13, w: 8, h: 5}
 
   - component_type: text
     tag: amp-cluster-intro
@@ -1240,7 +1240,7 @@ tabs:
     title: Regions per sample
     description: Stacked by predicted product class.
     title_size: h3
-    layout: {x: 0, y: 1, w: 4, h: 6}
+    layout: {x: 0, y: 1, w: 8, h: 6}
   - component_type: advanced_viz
     tag: bgc-av-sunburst
     index: bgc-sunburst
@@ -1251,7 +1251,7 @@ tabs:
     title: Caller to product class
     description: Inner ring is the prediction tool, outer ring the product class it called.
     title_size: h3
-    layout: {x: 4, y: 1, w: 4, h: 6}
+    layout: {x: 0, y: 7, w: 8, h: 6}
   - component_type: table
     tag: bgc-table-regions
     section: Product classes
@@ -1263,7 +1263,7 @@ tabs:
     title: BGC regions
     description: One row per predicted region, with its coordinates and PFAM domains.
     title_size: h3
-    layout: {x: 0, y: 7, w: 8, h: 5}
+    layout: {x: 0, y: 13, w: 8, h: 5}
 
   - component_type: text
     tag: bgc-conc-intro
@@ -1486,7 +1486,7 @@ tabs:
     title: CAZyme hierarchy
     description: Rings are CAZy class, family and predicted substrate; arc size is the gene count.
     title_size: h3
-    layout: {x: 0, y: 1, w: 4, h: 8}
+    layout: {x: 0, y: 1, w: 8, h: 8}
   - component_type: figure
     tag: caz-fig-classes
     index: caz-classes
@@ -1503,7 +1503,7 @@ tabs:
     title: Class split per sample
     description: Stacked by CAZy class, so the bar height is the sample's total CAZyme count.
     title_size: h3
-    layout: {x: 4, y: 1, w: 4, h: 8}
+    layout: {x: 0, y: 9, w: 8, h: 8}
 
   - component_type: text
     tag: caz-sub-intro
