@@ -408,6 +408,15 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
       });
     }
 
+    // Plotly places shapes and annotations on a log axis in log10 units, while
+    // trace data on that same axis is passed untransformed. A raw value here
+    // therefore lands at 10^value: the showcase diagonal ends at 45, which
+    // stretched both axes out to 10^45 and squeezed all 900 points into the
+    // bottom-left corner. Non-positive values have no place on a log axis, so
+    // they drop out rather than becoming -Infinity.
+    const axisCoord = (v: number, log: boolean): number | null =>
+      !log ? v : v > 0 ? Math.log10(v) : null;
+
     // Labels for the most notable points. Ranked by the size column when one is
     // bound, because that is what the reader is being asked to look at;
     // otherwise by distance from the y origin, which is the volcano convention.
@@ -418,9 +427,12 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
       );
       for (const p of ranked.slice(0, topN)) {
         if (!p.label) continue;
+        const ax = axisCoord(p.x, logX);
+        const ay = axisCoord(p.y, logY);
+        if (ax === null || ay === null) continue;
         annotations.push({
-          x: p.x,
-          y: p.y,
+          x: ax,
+          y: ay,
           text: p.label,
           showarrow: false,
           yshift: 10,
@@ -434,15 +446,31 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
     const shapes: Record<string, unknown>[] = [];
     const guide = { color: themeColors.zeroLineColor, width: 1, dash: 'dash' as const };
     if (refLine === 'diagonal') {
-      const lo = Math.min(...points.map((p) => Math.min(p.x, p.y)));
-      const hi = Math.max(...points.map((p) => Math.max(p.x, p.y)));
-      shapes.push({ type: 'line', x0: lo, y0: lo, x1: hi, y1: hi, line: guide });
+      // One shared range drives both ends, so under either log axis the line
+      // can only span the points whose coordinates are both drawable.
+      const spanning = logX || logY ? points.filter((p) => p.x > 0 && p.y > 0) : points;
+      if (spanning.length > 0) {
+        const lo = Math.min(...spanning.map((p) => Math.min(p.x, p.y)));
+        const hi = Math.max(...spanning.map((p) => Math.max(p.x, p.y)));
+        shapes.push({
+          type: 'line',
+          x0: axisCoord(lo, logX),
+          y0: axisCoord(lo, logY),
+          x1: axisCoord(hi, logX),
+          y1: axisCoord(hi, logY),
+          line: guide,
+        });
+      }
     } else if (refLine === 'horizontal' && config.reference_value !== null) {
-      const v = config.reference_value ?? 0;
-      shapes.push({ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: v, y1: v, line: guide });
+      const v = axisCoord(config.reference_value ?? 0, logY);
+      if (v !== null) {
+        shapes.push({ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: v, y1: v, line: guide });
+      }
     } else if (refLine === 'vertical' && config.reference_value !== null) {
-      const v = config.reference_value ?? 0;
-      shapes.push({ type: 'line', yref: 'paper', y0: 0, y1: 1, x0: v, x1: v, line: guide });
+      const v = axisCoord(config.reference_value ?? 0, logX);
+      if (v !== null) {
+        shapes.push({ type: 'line', yref: 'paper', y0: 0, y1: 1, x0: v, x1: v, line: guide });
+      }
     }
 
     const layout: Record<string, unknown> = {
