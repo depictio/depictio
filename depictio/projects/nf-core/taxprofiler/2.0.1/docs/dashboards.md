@@ -95,6 +95,8 @@ sequencing depth actually covered, which is the ceiling on everything downstream
 it: kraken2, bracken, centrifuge, kaiju, metaphlan, plus MALT's mappability. These are the
 per-classifier view; the cross-classifier view starts on the next tab.
 
+![Read QC](screenshots/read-qc.png)
+
 ## Profiles
 
 `Composition` is the tab's centre: one stacked taxonomy panel over the whole hub, switchable
@@ -115,6 +117,8 @@ genes instead of reads. A copy-number community and a read-count community diffe
 size, so a large-genome organism that looks dominant by reads can be a minority by copies.
 Melon's sample identifier lives only in its output path, so these rows are pooled across the
 long-read samples rather than shown per sample.
+
+![Profiles](screenshots/profiles.png)
 
 ## Concordance
 
@@ -137,6 +141,8 @@ is the normal shape, and its length is the interesting number.
 with the rank as a row annotation and the profiler and platform as column strips. It is the
 same disagreement the ordination summarises, read taxon by taxon.
 
+![Concordance](screenshots/concordance.png)
+
 ## Confidence
 
 `Containment identity` is where a call gets qualified. sylph reports, for every reference genome
@@ -156,6 +162,8 @@ appears once per classifier, and the fan between those curves is the classifier'
 to the shape.
 
 ---
+
+![Confidence](screenshots/confidence.png)
 
 ## Catalog modules
 
