@@ -1,0 +1,19 @@
+id: enchantr_repertoire_summary
+name: Repertoire summary
+mode: repertoire-analysis/summary
+description: >-
+  One row per sample: sequences that entered clonal assignment, the clones they
+  collapsed into, the clone-size spread, and the rarefied Hill numbers with
+  their confidence bounds.
+find: { path_glob: "**/repertoire_analysis_report/tables/num_clones_table.tsv" }
+recipe: enchantr/repertoire_summary.py
+fixture: repertoire_summary.tsv
+renders_as:
+  - { component: card, column: number_of_clones, aggregation: sum, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: sequences_per_clone, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: shannon, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: evenness, aggregation: median, secondary_layout: threshold, threshold_value: 0.9, threshold_direction: min, threshold_warn: 0.85 }
+  - component: figure
+    visu_type: scatter
+    dict_kwargs: { x: sequences, y: number_of_clones, color: subject_id, size: sequences_per_clone, log_x: "True", log_y: "True" }
+  - { component: table, row_selection_enabled: true, row_selection_column: sample_id }

@@ -1,0 +1,549 @@
+# nf-core/airrflow Template v5.1.0 - B and T cell repertoire (AIRR) analysis
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/airrflow/5.1.0 --data-root /path/to/your/data
+#
+# Tested against the nf-core/airrflow AWS megatest run:
+#   s3://nf-core-awsmegatests/airrflow/results-e69d49e3f23f11a3391755b5fb7aa4283c0a2471
+# (release 5.1.0; 5.1.1 has no megatest run). The exact file subset the template
+# needs is listed in megatest.yaml next to this file.
+# ============================================================================
+#
+# Everything the template reads comes from the run itself: the validated
+# samplesheet the pipeline writes under pipeline_info/ is the hub data
+# collection, so no external metadata file is needed.
+#
+# airrflow's route flags are NOT auto-detected from params.json yet (the CLI's
+# _introspect_pipeline_params only knows the ampliseq and viralrecon flags), so a
+# run that skipped a step needs the matching --var. The conditionals below list
+# which params.json field each flag mirrors.
+template:
+  template_id: "nf-core/airrflow/5.1.0"
+  description: "nf-core/airrflow adaptive immune receptor repertoire template: sequence processing, repertoire composition and clonal analysis"
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory containing airrflow pipeline output (multiqc/, clonal_analysis/, repertoire_comparison/, parsed_logs/)"
+      required: true
+    - name: "SAMPLESHEET_FILE"
+      description: "Path to the validated samplesheet. Defaults to {DATA_ROOT}/pipeline_info/samplesheet.valid.tsv, which every airrflow run writes."
+      required: false
+    - name: "SKIP_CLONAL_ANALYSIS"
+      description: "Set when the run used --skip_clonal_analysis (params.json skip_clonal_analysis). Prunes every clonal_analysis/ derived DC."
+      required: false
+    - name: "SKIP_REPORT"
+      description: "Set when the run used --skip_report (params.json skip_report). Prunes the repertoire_comparison/ derived DCs."
+      required: false
+    - name: "SKIP_THRESHOLD_REPORT"
+      description: "Set when the run used --skip_report_threshold, or an explicit --clonal_threshold instead of 'auto'. Prunes the threshold summary DC."
+      required: false
+    - name: "SKIP_MULTIQC"
+      description: "Set when the run used --skip_multiqc (params.json skip_multiqc). Prunes the MultiQC DC and the Quality control tab."
+      required: false
+    - name: "ASSEMBLED_MODE"
+      description: "Set when the run used --mode assembled (params.json mode). Prunes the pRESTO log DCs: assembled input skips read pre-processing entirely."
+      required: false
+  # Variables used when materialising the bundled reference/demo dataset.
+  #
+  # There is deliberately no GROUP_COL here. The dashboard groups on the columns
+  # airrflow's own samplesheet schema guarantees (subject_id, tissue, sex), and
+  # the CLI has no template-level default mechanism: an unset {GROUP_COL} falls
+  # back to the `__no_group__` sentinel (templates.py), which on this template
+  # would bind a filter to a column that does not exist, because the samplesheet
+  # DC is present on every route and no conditional prunes it.
+  reference:
+    vars:
+      SAMPLESHEET_FILE: "{DATA_ROOT}/pipeline_info/samplesheet.valid.tsv"
+  # How this pipeline's run provenance (parameters, thresholds, tool versions) is
+  # collected at ingest, surfaced in the project's ingestion report and the
+  # dashboard Settings drawer. Keys not matched by a group rule land in 'Other';
+  # only exclude_keys are ever omitted.
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "*_ref_databases*"   # bundled reference-DB catalogs, pure noise
+          - "hook_url"           # nf-core runs put a live Slack webhook here
+          - "email*"             # submitter address
+          - "report_logo*"       # absolute paths inside the Nextflow asset clone
+          - "report_css"
+          - "report_rmd"
+          - "miairr"
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Library preparation"
+        key_patterns: ["library_generation_method", "umi_*", "cprimer*", "vprimer*", "primer_*", "primer*", "race_linker", "index_file", "adapter_fasta", "cregion_*", "align_cregion", "internal_cregion_sequences", "maskprimers_*", "assemblepairs_sequential", "buildconsensus_*", "cluster_sets", "filterseq_q", "trim_fastq", "save_trimmed", "clip_r*", "three_prime_clip_r*", "trim_nextseq"]
+      - group: "V(D)J annotation"
+        key_patterns: ["reference_igblast", "reference_fasta", "reference_10x", "fetch_germlines", "save_germlines", "productive_only", "remove_chimeric", "detect_contamination", "reassign", "novel_allele_inference", "genotyping*", "genotypeby", "translate"]
+      - group: "Clonal analysis"
+        key_patterns: ["clonal_threshold", "cloneby", "crossby", "collapseby", "singlecell", "single_clone_representative", "lineage_tree*", "lineage_trees"]
+      - group: "Single cell and TRUST4"
+        key_patterns: ["trust4_*", "mode", "embeddings", "embedding_chain"]
+      - group: "Reporting"
+        key_patterns: ["report_*", "multiqc_*", "max_multiqc_email_size", "monochrome_logs", "plaintext_email", "miairr"]
+      - group: "Run context"
+        key_patterns: ["input*", "outdir", "genomes", "igenomes*", "config_profile_*", "custom_config_*", "publish_dir_mode", "trace_report_suffix", "pipelines_testdata_base_path", "validate_params", "help*", "show_hidden", "version", "use_gpu"]
+      - group: "Skipped steps"
+        key_patterns: ["skip_*"]
+    highlight:
+      - "library_generation_method"
+      - "clonal_threshold"
+      - "cloneby"
+      - "umi_length"
+      - "umi_position"
+      - "filterseq_q"
+      - "productive_only"
+      - "lineage_tree_builder"
+      - "reference_igblast"
+  dashboards:
+    - "dashboards/base.yaml"
+  conditional:
+    # A user-supplied samplesheet path overrides the pipeline's own copy.
+    - if_var_present: "SAMPLESHEET_FILE"
+      override_dcs:
+        - data_collection_tag: "samplesheet"
+          scan_filename: "{SAMPLESHEET_FILE}"
+    # --skip_clonal_analysis: clonal_analysis/ is never written, so every DC
+    # derived from the repertoire analysis and find-threshold reports goes.
+    - if_var_present: "SKIP_CLONAL_ANALYSIS"
+      remove_dc_tags:
+        ["repertoire_summary", "clonal_diversity", "clone_sizes", "clone_sets",
+         "clonal_overlap", "threshold_summary"]
+      dashboards: ["dashboards/base.yaml"]
+    # --skip_report: repertoire_comparison/ is absent, which also removes the
+    # Change-O half of the sequence funnel (sequence_counts falls back to the
+    # pRESTO columns on its own, its second source is optional).
+    - if_var_present: "SKIP_REPORT"
+      remove_dc_tags: ["v_gene_usage", "v_gene_matrix"]
+      dashboards: ["dashboards/base.yaml"]
+    # --skip_report_threshold, or an explicit --clonal_threshold: no fit, so no
+    # find_threshold report.
+    - if_var_present: "SKIP_THRESHOLD_REPORT"
+      remove_dc_tags: ["threshold_summary"]
+      dashboards: ["dashboards/base.yaml"]
+    # --skip_multiqc: no report to read.
+    - if_var_present: "SKIP_MULTIQC"
+      remove_dc_tags: ["multiqc_data"]
+      dashboards: ["dashboards/base.yaml"]
+    # --mode assembled: the input is already annotated rearrangements, so pRESTO
+    # never runs and parsed_logs/ does not exist.
+    - if_var_present: "ASSEMBLED_MODE"
+      remove_dc_tags: ["sequence_counts", "sequence_fates"]
+      dashboards: ["dashboards/base.yaml"]
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Airrflow Immune Repertoire Analysis"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "airrflow"
+    version: "5.1.0"
+    engine:
+      name: "nextflow"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/airrflow"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report data (fastp trimming plus FastQC on raw and post-assembly reads)"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "multiqc/multiqc_data/multiqc\\.parquet"
+          dc_specific_properties:
+            # airrflow runs FastQC twice (raw reads and post-assembly), so
+            # MultiQC anchors the second instance as 'fastqc-1'. Both spellings
+            # are listed so a single-FastQC run resolves too.
+            modules:
+              - "fastp"
+              - "fastqc"
+              - "fastqc-1"
+            plots:
+              fastp:
+                - "Filtered Reads"
+                - "Insert Sizes"
+                - "Sequence Quality":
+                    - "Read 1: Before filtering"
+                    - "Read 1: After filtering"
+                    - "Read 2: Before filtering"
+                    - "Read 2: After filtering"
+                - "GC Content":
+                    - "Read 1: Before filtering"
+                    - "Read 1: After filtering"
+                - "N content":
+                    - "Read 1: Before filtering"
+                    - "Read 1: After filtering"
+              fastqc:
+                - "Sequence Counts"
+                - "Sequence Quality Histograms"
+                - "Per Sequence Quality Scores"
+                - "Per Sequence GC Content":
+                    - "Percentages"
+                    - "Counts"
+                - "Per Base N Content"
+                - "Sequence Length Distribution"
+                - "Sequence Duplication Levels"
+                - "Overrepresented sequences by sample"
+                - "Top overrepresented sequences"
+                - "Adapter Content"
+                - "Status Checks"
+              fastqc-1:
+                - "Sequence Counts"
+                - "Sequence Quality Histograms"
+                - "Per Sequence Quality Scores"
+                - "Per Sequence GC Content":
+                    - "Percentages"
+                    - "Counts"
+                - "Per Base N Content"
+                - "Sequence Length Distribution"
+                - "Sequence Duplication Levels"
+                - "Overrepresented sequences by sample"
+                - "Top overrepresented sequences"
+                - "Adapter Content"
+                - "Status Checks"
+
+      - data_collection_tag: "samplesheet"
+        description: "Validated AIRR samplesheet written by the pipeline (hub collection for cross-DC filtering)"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{DATA_ROOT}/pipeline_info/samplesheet.valid.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "sample_id": "Sample identifier (used for cross-DC filtering via links)"
+              "subject_id": "Donor or subject the sample came from; airrflow defines clones within this group"
+              "species": "Species the repertoire was sequenced from"
+              "pcr_target_locus": "Targeted receptor locus (IG or TR)"
+              "tissue": "Tissue the sample was taken from"
+              "sex": "Subject sex"
+              "age": "Subject age"
+
+      # ----------------------------------------------------------------
+      # Recipe-transformed data collections (enchantR catalog tool).
+      # These read the raw report tables and reshape them at ingest.
+      # ----------------------------------------------------------------
+
+      - data_collection_tag: "sequence_counts"
+        description: "Sequences left after every pRESTO and Change-O step, one row per sample"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "enchantr/sequence_counts.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample identifier"
+              "subject_id": "Donor the sample came from"
+              "sequences": "Raw read pairs entering the pipeline"
+              "representative": "UMI consensus sequences seen at least twice"
+              "collapsed": "Unique annotated sequences after duplicate collapse"
+              "retention": "Fraction of raw reads still represented at the last stage"
+
+      - data_collection_tag: "sequence_fates"
+        description: "Read fates through the pre-processing funnel, one weighted row per loss point"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "enchantr/sequence_fates.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample identifier"
+              "input": "First funnel level (always 'Input reads')"
+              "collapsed": "Last funnel level, or 'Lost' when the reads stopped earlier"
+              "reads": "How many reads followed this exact path"
+
+      - data_collection_tag: "repertoire_summary"
+        description: "Per-sample clone counts, clone-size spread and rarefied Hill numbers with confidence bounds"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "enchantr/repertoire_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample identifier"
+              "subject_id": "Donor the sample came from"
+              "sequences": "Sequences that entered clonal assignment"
+              "number_of_clones": "Clones those sequences collapsed into"
+              "sequences_per_clone": "Mean clone size"
+              "richness": "Hill number at q=0, rarefied to a common depth"
+              "shannon": "Hill number at q=1 (exponential Shannon)"
+              "simpson": "Hill number at q=2 (inverse Simpson)"
+              "evenness": "Shannon Hill number divided by richness"
+
+      - data_collection_tag: "clonal_diversity"
+        description: "alakazam Hill diversity profile per sample, one row per sample and diversity order"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "enchantr/clonal_diversity.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample identifier"
+              "q": "Diversity order (0 = richness, 1 = Shannon, 2 = Simpson)"
+              "d": "Bootstrapped Hill number at this order"
+              "d_lower": "Lower bound of the bootstrap confidence interval"
+              "d_upper": "Upper bound of the bootstrap confidence interval"
+              "e": "Evenness at this order"
+
+      - data_collection_tag: "clone_sizes"
+        description: "Every clone with its size, within-sample abundance rank and homeostasis size class"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "enchantr/clone_sizes.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample identifier"
+              "clone_id": "Clone identifier, unique within the subject"
+              "seq_count": "Sequences assigned to the clone"
+              "seq_freq": "Share of the sample's sequences in this clone"
+              "rank": "Abundance rank within the sample, 1 being the largest clone"
+              "size_class": "Clonal-homeostasis bin, rare through hyperexpanded"
+
+      - data_collection_tag: "clone_sets"
+        description: "Clone by sample presence matrix (0/1) for set-intersection analysis"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "enchantr/clone_sets.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "clone": "Clone key, '<subject>:<clone_id>'"
+              "n_samples": "How many samples the clone was observed in"
+              "total_sequences": "Sequences in the clone across all samples"
+
+      - data_collection_tag: "clonal_overlap"
+        description: "Sample by sample matrix of shared clones (zero diagonal, zero across subjects)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "enchantr/clonal_overlap.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Row sample; every other column is a sample and holds the shared clone count"
+              "subject_id": "Donor the row sample came from"
+
+      - data_collection_tag: "v_gene_usage"
+        description: "V gene usage per sample at family and gene resolution, long format"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "enchantr/v_gene_usage.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample identifier"
+              "locus": "Receptor locus the genes belong to"
+              "rank": "Resolution of the row, 'V family' or 'V gene'"
+              "taxon": "The V family or V gene name"
+              "v_family": "V family, also filled in on gene rows"
+              "seq_freq": "Share of the sample's sequences using this gene or family"
+
+      - data_collection_tag: "v_gene_matrix"
+        description: "Sample by V gene matrix of sequence fractions, ready for clustering"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "enchantr/v_gene_matrix.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "row_id": "Heatmap row label (sample, or sample and locus on a multi-locus run)"
+              "sample_id": "Sample identifier"
+              "subject_id": "Donor the sample came from"
+
+      - data_collection_tag: "threshold_summary"
+        # Only written when the run used --clonal_threshold auto; an explicit
+        # threshold means shazam had nothing to fit.
+        optional: true
+        description: "shazam nearest-neighbour distance threshold fitted per subject"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "enchantr/threshold_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "subject_id": "Donor the threshold was fitted for"
+              "model": "Distance model shazam fitted"
+              "threshold": "Distance below which two sequences are called clonally related"
+              "sensitivity": "Sensitivity the fitted threshold achieves"
+              "specificity": "Specificity the fitted threshold achieves"
+
+# ============================================================================
+# CROSS-COLLECTION LINKS
+# The samplesheet is the hub: every other collection is keyed by sample_id, so a
+# sample filter picked anywhere narrows the whole dashboard.
+# ============================================================================
+links:
+  - source_dc_tag: "samplesheet"
+    source_column: "sample_id"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+    description: "Filter the MultiQC panels by samplesheet samples"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample_id"
+    target_dc_tag: "sequence_counts"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the sequence processing counts by samplesheet samples"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample_id"
+    target_dc_tag: "sequence_fates"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the attrition flow by samplesheet samples"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample_id"
+    target_dc_tag: "repertoire_summary"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the repertoire summary by samplesheet samples"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample_id"
+    target_dc_tag: "clonal_diversity"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the diversity profiles by samplesheet samples"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample_id"
+    target_dc_tag: "clone_sizes"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the clone size table by samplesheet samples"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample_id"
+    target_dc_tag: "v_gene_usage"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the V gene usage by samplesheet samples"
+    enabled: true
+
+  # clonal_overlap is wide: one row per sample AND one column per sample, so the
+  # filter has to reach both. `sample_id` narrows the rows the normal way, and
+  # `_narrow_wide_matrix_columns` (api/v1/celery_tasks.py) mirrors the same
+  # filter onto the COLUMN set by matching its values against the column names,
+  # so the matrix stays square. v_gene_matrix below is wide in its columns only
+  # (they are V gene names), so there the link is an ordinary row filter.
+  - source_dc_tag: "samplesheet"
+    source_column: "sample_id"
+    target_dc_tag: "clonal_overlap"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the clonal overlap matrix by samplesheet samples"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample_id"
+    target_dc_tag: "v_gene_matrix"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the V gene matrix by samplesheet samples"
+    enabled: true
+
+  # The repertoire summary is the per-sample hub of the clonal tabs: a row
+  # selected there (or a card filter picked on it) narrows the clone-level and
+  # profile collections that sit next to it.
+  - source_dc_tag: "repertoire_summary"
+    source_column: "sample_id"
+    target_dc_tag: "clone_sizes"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the clone size table by the repertoire summary selection"
+    enabled: true
+
+  - source_dc_tag: "repertoire_summary"
+    source_column: "sample_id"
+    target_dc_tag: "clonal_diversity"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the diversity profiles by the repertoire summary selection"
+    enabled: true
+
+  - source_dc_tag: "repertoire_summary"
+    source_column: "sample_id"
+    target_dc_tag: "clonal_overlap"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the clonal overlap matrix by the repertoire summary selection"
+    enabled: true
+
+  # clone_sets is keyed by clone, not by sample: its sample columns are the set
+  # membership flags, so a row filter would have nothing to match. Left unlinked.
+  # threshold_summary is per subject (two rows here) and carries no sample_id.
