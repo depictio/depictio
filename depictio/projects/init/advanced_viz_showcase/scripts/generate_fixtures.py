@@ -1589,24 +1589,33 @@ generate_gsea_running_score_demo()
 SASHIMI_CHROM = "chr12"
 
 # (exon start, exon end) — locus A, the cassette-exon gene. E3 is the cassette.
+#
+# The intron lengths matter as much as the exons. An earlier draft spaced the
+# exons evenly, every intron between 3.7 and 6.2 kb, and the panel came out as a
+# picket fence of near-identical arcs, which is the one thing a real locus never
+# looks like: the 50 junctions in `depictio/catalog/ctatsplicing/introns.tsv`
+# run from 81 bp to 86.6 kb around a 4.4 kb median. These introns span 780 bp to
+# 15.2 kb, a twentyfold range, with the cassette event deliberately sitting in
+# the mid-length part of the gene so the skipping arc is still readable at
+# whole-locus zoom.
 _SASHIMI_EXONS_A = [
-    (6530000, 6530420),
-    (6534100, 6534320),
-    (6538900, 6539050),  # E3, skipped in the knockdown
-    (6543700, 6543980),
-    (6549200, 6549410),
-    (6555600, 6555880),
-    (6561300, 6561540),
-    (6566800, 6567240),
+    (6530000, 6530420),  # E1
+    (6545620, 6545807),  # E2, donor of both the inclusion and the skipping junction
+    (6549207, 6549319),  # E3, the cassette, skipped in the knockdown
+    (6552219, 6552483),  # E4, acceptor of the skipping junction
+    (6553263, 6553418),  # E5, 780 bp downstream of E4 — the shortest intron here
+    (6563018, 6563221),  # E6
+    (6564471, 6564612),  # E7
+    (6568712, 6569101),  # E8
 ]
 
 # (exon start, exon end) — locus B, 45.7 Mb downstream.
 _SASHIMI_EXONS_B = [
     (52300000, 52300380),
-    (52304200, 52304460),
-    (52308900, 52309120),
-    (52313500, 52313760),
-    (52318200, 52318640),
+    (52301480, 52301672),
+    (52308472, 52308650),
+    (52310950, 52311174),
+    (52311604, 52311998),
 ]
 
 # Two conditions, two replicates each. The knockdown is where E3 is skipped.
@@ -1618,12 +1627,22 @@ _SASHIMI_SAMPLES = [
 ]
 
 
+# Constitutive read support per junction, in exon order, for locus A then B.
+# Not one shared value: junction depth inside a single gene tracks local
+# coverage, so a real lane has arcs of visibly different weight and a flat
+# baseline reads as synthetic the moment the widths are scaled by count. The two
+# entries flanking the cassette (indices 1 and 2 of locus A) are overridden with
+# the inclusion contrast below and are only placeholders here.
+_SASHIMI_BASELINE_A = (244.0, 0.0, 0.0, 96.0, 218.0, 61.0, 142.0)
+_SASHIMI_BASELINE_B = (71.0, 38.0, 84.0, 52.0)
+
+
 def _sashimi_junctions() -> list[tuple[int, int, str, dict[str, float]]]:
     """(start, end, annotation, {condition: mean read support}) per junction.
 
     The mean is per condition so the exon-skipping contrast is authored rather
-    than sampled: inclusion junctions are ~190 reads in control and ~34 in the
-    knockdown, and the skipping junction runs the other way, 4 vs 165.
+    than sampled: the two inclusion junctions drop from ~180 reads in control to
+    ~30 in the knockdown, and the skipping junction runs the other way, 5 vs 158.
     """
     a = _SASHIMI_EXONS_A
     b = _SASHIMI_EXONS_B
@@ -1631,14 +1650,15 @@ def _sashimi_junctions() -> list[tuple[int, int, str, dict[str, float]]]:
 
     # Locus A, consecutive-exon (known) junctions. The two that flank the
     # cassette exon carry the inclusion signal; the rest are constitutive.
+    inclusion = {1: {"ctrl": 186.0, "kd": 31.0}, 2: {"ctrl": 173.0, "kd": 27.0}}
     for i in range(len(a) - 1):
         donor, acceptor = a[i][1], a[i + 1][0]
-        flanks_cassette = i in (1, 2)  # E2->E3 and E3->E4
-        means = {"ctrl": 190.0, "kd": 34.0} if flanks_cassette else {"ctrl": 212.0, "kd": 205.0}
+        base = _SASHIMI_BASELINE_A[i]
+        means = inclusion.get(i) or {"ctrl": base, "kd": base * 0.96}
         junctions.append((donor, acceptor, "known", means))
 
     # The exon-skipping junction: E2 donor straight to E4 acceptor.
-    junctions.append((a[1][1], a[3][0], "novel", {"ctrl": 4.0, "kd": 165.0}))
+    junctions.append((a[1][1], a[3][0], "novel", {"ctrl": 5.0, "kd": 158.0}))
     # Two low-support novel sites for texture: an alternative donor inside E5
     # and an alternative acceptor inside E7.
     junctions.append((a[4][1] - 80, a[5][0], "novel", {"ctrl": 12.0, "kd": 11.0}))
@@ -1646,7 +1666,8 @@ def _sashimi_junctions() -> list[tuple[int, int, str, dict[str, float]]]:
 
     # Locus B: constitutive splicing at a lower depth, no condition effect.
     for i in range(len(b) - 1):
-        junctions.append((b[i][1], b[i + 1][0], "known", {"ctrl": 56.0, "kd": 54.0}))
+        base = _SASHIMI_BASELINE_B[i]
+        junctions.append((b[i][1], b[i + 1][0], "known", {"ctrl": base, "kd": base * 0.97}))
     junctions.append((b[1][1], b[3][0], "novel", {"ctrl": 7.0, "kd": 6.0}))
     junctions.append((b[2][1], b[3][0] + 120, "novel", {"ctrl": 5.0, "kd": 5.0}))
 
@@ -1672,3 +1693,62 @@ def generate_sashimi_demo() -> None:
 
 
 generate_sashimi_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN. Scatter (X/Y): replicate concordance for 900 genes.
+# columns: gene, rep_a, rep_b, mean_expression, regulation
+# ---------------------------------------------------------------------------
+# Chosen because it is the one shape the other showcase tabs cannot show. A
+# volcano puts effect against significance and an MA puts mean against effect;
+# both fix what the axes mean. Here the two axes are the same measurement made
+# twice, which is what makes the identity diagonal the reading: a well-behaved
+# replicate pair hugs it, and the points that leave it are the regulated genes.
+#
+# It also exercises every optional role at once: `gene` labels the points and
+# carries the cross-filter, `regulation` colours them, and `mean_expression`
+# sizes them, so a reader can see at a glance that the genes furthest off the
+# diagonal are not the faintly expressed ones.
+_SCATTER_REGULATION = ("unchanged", "up in B", "down in B")
+
+
+def generate_scatter_xy_demo() -> None:
+    """Write scatter_xy_demo.tsv — 900 genes measured in two replicates."""
+    header = ["gene", "rep_a", "rep_b", "mean_expression", "regulation"]
+    rows: list[list] = []
+
+    for i in range(900):
+        gene = f"ENSG{i:05d}"
+        # log2 CPM, roughly the shape of a real expression distribution: most
+        # genes low, a long right tail.
+        base = max(0.05, R.lognormvariate(1.1, 0.9))
+        # Technical noise shrinks as expression rises, which is the reason the
+        # cloud is a funnel around the diagonal rather than a band.
+        noise = 0.55 / (1.0 + base) + 0.03
+        rep_a = base * R.gauss(1.0, noise)
+
+        roll = R.random()
+        if roll < 0.055:
+            fold, regulation = R.uniform(1.8, 5.0), "up in B"
+        elif roll < 0.105:
+            fold, regulation = 1.0 / R.uniform(1.8, 5.0), "down in B"
+        else:
+            fold, regulation = 1.0, "unchanged"
+        rep_b = base * fold * R.gauss(1.0, noise)
+
+        rep_a = max(0.02, rep_a)
+        rep_b = max(0.02, rep_b)
+        rows.append(
+            [
+                gene,
+                round(rep_a, 4),
+                round(rep_b, 4),
+                round((rep_a + rep_b) / 2.0, 4),
+                regulation,
+            ]
+        )
+
+    write_tsv(OUT / "scatter_xy_demo.tsv", header, rows)
+
+
+generate_scatter_xy_demo()

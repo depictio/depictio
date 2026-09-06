@@ -30,6 +30,7 @@ import FusionStructureRenderer from './FusionStructureRenderer';
 import GeneArrowTrackRenderer from './GeneArrowTrackRenderer';
 import GseaRunningScoreRenderer from './GseaRunningScoreRenderer';
 import SashimiRenderer from './SashimiRenderer';
+import ScatterXyRenderer from './ScatterXyRenderer';
 import {
   AdvancedVizDataPopover,
   AdvancedVizExtrasProvider,
@@ -101,6 +102,7 @@ const RENDERERS: Record<string, React.ComponentType<any>> = {
   gene_arrow_track: GeneArrowTrackRenderer,
   gsea_running_score: GseaRunningScoreRenderer,
   sashimi: SashimiRenderer,
+  scatter_xy: ScatterXyRenderer,
 };
 
 /**

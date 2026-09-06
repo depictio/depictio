@@ -198,6 +198,7 @@ STATIC_IDS = {
             "gene_arrow_track_demo": "646b0f3c1e4a2d7f8e5b8d83",
             "gsea_running_score_demo": "646b0f3c1e4a2d7f8e5b8d84",
             "sashimi_demo": "646b0f3c1e4a2d7f8e5b8d85",
+            "scatter_xy_demo": "646b0f3c1e4a2d7f8e5b8d86",
         },
         "dashboards": {
             # Main tab reuses the project_id so get_child_tabs(main_id) finds
@@ -235,6 +236,7 @@ STATIC_IDS = {
             "advanced_viz_gene_arrow_track": "646b0f3c1e4a2d7f8e5b8d73",
             "advanced_viz_gsea_running_score": "646b0f3c1e4a2d7f8e5b8d74",
             "advanced_viz_sashimi": "646b0f3c1e4a2d7f8e5b8d75",
+            "advanced_viz_scatter_xy": "646b0f3c1e4a2d7f8e5b8d76",
         },
     },
     # nf-core/viralrecon 3.0.0 viral-genome analysis template — five-tab

@@ -43,6 +43,10 @@ KIND_SAMPLING_POLICY: dict[AdvancedVizKind, SamplingPolicy] = {
     "qq": "hash",
     "lollipop": "hash",
     "coverage_track": "hash",
+    # A plain plane: a uniform subset of a cloud is a lower-resolution cloud, and
+    # unlike volcano/ma there is no distinguished tail to preserve, because the
+    # axes carry no fixed meaning.
+    "scatter_xy": "hash",
     # Tail-carrying point clouds.
     "volcano": "tail",
     "ma": "tail",

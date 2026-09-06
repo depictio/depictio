@@ -1,0 +1,304 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d76"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d76"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "sxy-text",
+      "component_type": "text",
+      "title": "Scatter (X/Y)",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Replicate concordance",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Both axes are the same measurement, taken in two replicates, so the dashed identity line is the reading: a well-behaved pair hugs it and the points that leave it are the regulated genes. Marker size is mean expression, which is what shows the off-diagonal points are not simply the faint ones. Click or box-select to filter the rest of the dashboard by gene.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "sxy-plane",
+      "component_type": "advanced_viz",
+      "title": "Replicate concordance",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "scatter_xy_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d86"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Replicate concordance for 900 genes: the same measurement made twice, with a tenth of the genes moved off the identity diagonal",
+        "data_collection_tag": "scatter_xy_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d86"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "One point per gene, replicate A against replicate B, sized by mean expression and coloured by the regulation call. Log axes, the reference line, marker size, opacity and top-N labels all live in the Settings \u2699 popover.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Replicate concordance",
+      "viz_kind": "scatter_xy",
+      "config": {
+        "viz_kind": "scatter_xy",
+        "x_col": "rep_a",
+        "y_col": "rep_b",
+        "label_col": "gene",
+        "color_col": "regulation",
+        "size_col": "mean_expression",
+        "log_x": true,
+        "log_y": true,
+        "x_title": "Replicate A (log2 CPM)",
+        "y_title": "Replicate B (log2 CPM)",
+        "reference_line": "diagonal",
+        "reference_value": null,
+        "min_size": 4.0,
+        "max_size": 20.0,
+        "marker_size": 7.0,
+        "opacity": 0.75,
+        "marker_outline": true,
+        "top_n_labels": 6,
+        "color_scale": "Viridis",
+        "legend_pos": "right",
+        "selection_enabled": true,
+        "selection_column": "gene"
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "sxy-f-regulation",
+      "component_type": "interactive",
+      "title": "Regulation",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "scatter_xy_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d86"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Replicate concordance for 900 genes: the same measurement made twice, with a tenth of the genes moved off the identity diagonal",
+        "data_collection_tag": "scatter_xy_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d86"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Point scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "regulation",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Point filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#228BE6",
+      "icon_name": "mdi:swap-vertical",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "sxy-f-expression",
+      "component_type": "interactive",
+      "title": "Mean expression",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "scatter_xy_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d86"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Replicate concordance for 900 genes: the same measurement made twice, with a tenth of the genes moved off the identity diagonal",
+        "data_collection_tag": "scatter_xy_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d86"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Point scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "mean_expression",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Point filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#15AABF",
+      "icon_name": "mdi:chart-bell-curve-cumulative",
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-sxy-f-regulation",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-sxy-f-expression",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-sxy-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-sxy-plane",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Scatter (X/Y)",
+  "subtitle": "Numeric against numeric: replicate concordance for 900 genes, sized by expression, coloured by regulation, against the identity diagonal.",
+  "icon": "mdi:chart-scatter-plot",
+  "icon_color": "blue",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 34,
+  "main_tab_name": null,
+  "tab_icon": "mdi:chart-scatter-plot",
+  "tab_icon_color": "blue",
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Point scope",
+      "icon": "mdi:filter-variant",
+      "color": "blue",
+      "description": "Restricts which genes are drawn, by regulation call and by expression",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Replicate concordance",
+      "icon": "mdi:chart-scatter-plot",
+      "color": "blue",
+      "description": "The same measurement made twice, against the identity diagonal",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
+}

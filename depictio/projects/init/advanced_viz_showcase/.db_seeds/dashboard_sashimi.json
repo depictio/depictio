@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Each intron is an arc from its donor to its acceptor, drawn thicker the more reads support it, one lane per sample. The novel arc bridging exon 2 straight to exon 4 is a handful of reads in the controls and the strongest junction in the knockdowns: that exon is being skipped.\n",
+      "body": "Each intron is an arc from its donor to its acceptor, drawn thicker the more reads support it, one lane per sample. Introns here run from 430 bp to 15 kb, so the arcs are deliberately uneven: a real locus never splices on a regular pitch. Follow the novel arc that bridges exon 2 straight to exon 4. It is a handful of reads in the controls and carries as much support as a constitutive junction in the knockdowns, while the two arcs into and out of exon 3 collapse. That exon is being skipped.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -240,7 +240,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 1,
+      "h": 2,
       "static": false,
       "resizeHandles": [
         "se",
@@ -253,7 +253,7 @@
     {
       "i": "box-sash-arcs",
       "x": 0,
-      "y": 1,
+      "y": 2,
       "w": 8,
       "h": 8,
       "static": false,

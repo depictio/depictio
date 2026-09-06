@@ -109,7 +109,8 @@
                 "fusion_structure",
                 "gene_arrow_track",
                 "gsea_running_score",
-                "sashimi"
+                "sashimi",
+                "scatter_xy"
               ],
               "type": "string"
             },
