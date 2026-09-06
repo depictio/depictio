@@ -82,21 +82,23 @@ export function isMapSelectionEnabled(metadata: StoredMetadata, hasHandler: bool
  * The DC column an advanced_viz component emits its selection on, or
  * `undefined` when it cannot emit one at all.
  *
- * Only two viz kinds draw one marker per source row and therefore have a
- * per-row identity to select on; every other kind aggregates (bins, taxa,
- * intersections) and would emit an envelope pointing at nothing. Both are
- * opt-in per component, so a shipped dashboard keeps the drag behaviour it has
- * today until its YAML asks for the lasso.
+ * Only a few viz kinds carry a per-row (or per-curve) identity to select on;
+ * every other kind aggregates (bins, taxa, intersections) and would emit an
+ * envelope pointing at nothing. Each is opt-in per component, so a shipped
+ * dashboard keeps the drag behaviour it has today until its YAML asks for the
+ * lasso.
  *
  * Embedding falls back to `sample_id_col` because that is already the value it
- * writes into every point's customdata. Manhattan has no defensible fallback:
- * one point there is a row of a long variant table keyed by (sample,
- * chromosome, position), so selecting on the sample column and selecting on a
- * per-variant label are two different questions and only the dashboard knows
- * which one it is asking.
+ * writes into every point's customdata, and profile falls back to `series_col`
+ * for the same reason: a profile point belongs to a curve, and the curve is
+ * what the reader is picking. Manhattan has no defensible fallback: one point
+ * there is a row of a long variant table keyed by (sample, chromosome,
+ * position), so selecting on the sample column and selecting on a per-variant
+ * label are two different questions and only the dashboard knows which one it
+ * is asking.
  *
- * This is the single source of truth for the capability: the two renderers
- * gate their Plotly handlers on it and `supportsSelectionGrouping` gates the
+ * This is the single source of truth for the capability: the renderers gate
+ * their Plotly handlers on it and `supportsSelectionGrouping` gates the
  * chrome's marker on it, so the affordance and the behaviour cannot disagree.
  */
 export function advancedVizSelectionColumn(metadata: StoredMetadata): string | undefined {
@@ -116,6 +118,13 @@ export function advancedVizSelectionColumn(metadata: StoredMetadata): string | u
     }
     case 'manhattan':
       return named;
+    case 'profile': {
+      const seriesCol =
+        typeof config.series_col === 'string' && config.series_col
+          ? config.series_col
+          : undefined;
+      return named ?? seriesCol;
+    }
     default:
       return undefined;
   }

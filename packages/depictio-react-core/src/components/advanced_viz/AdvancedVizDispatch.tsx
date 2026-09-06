@@ -24,6 +24,12 @@ import PrBenchmarkRenderer from './PrBenchmarkRenderer';
 import RocPrCurveRenderer from './RocPrCurveRenderer';
 import ConfusionMatrixRenderer from './ConfusionMatrixRenderer';
 import MetricCiBarsRenderer from './MetricCiBarsRenderer';
+import ProfileRenderer from './ProfileRenderer';
+import SignalMatrixRenderer from './SignalMatrixRenderer';
+import FusionStructureRenderer from './FusionStructureRenderer';
+import GeneArrowTrackRenderer from './GeneArrowTrackRenderer';
+import GseaRunningScoreRenderer from './GseaRunningScoreRenderer';
+import SashimiRenderer from './SashimiRenderer';
 import {
   AdvancedVizDataPopover,
   AdvancedVizExtrasProvider,
@@ -89,6 +95,12 @@ const RENDERERS: Record<string, React.ComponentType<any>> = {
   roc_pr_curve: RocPrCurveRenderer,
   confusion_matrix: ConfusionMatrixRenderer,
   metric_ci_bars: MetricCiBarsRenderer,
+  profile: ProfileRenderer,
+  signal_matrix: SignalMatrixRenderer,
+  fusion_structure: FusionStructureRenderer,
+  gene_arrow_track: GeneArrowTrackRenderer,
+  gsea_running_score: GseaRunningScoreRenderer,
+  sashimi: SashimiRenderer,
 };
 
 /**

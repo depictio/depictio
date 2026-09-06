@@ -49,6 +49,15 @@ AdvancedVizKind = Literal[
     "roc_pr_curve",
     "confusion_matrix",
     "metric_ci_bars",
+    # Life-science kinds whose shape no existing kind can express. `profile` and
+    # `signal_matrix` are the metagene pair, the rest are one figure each that a
+    # pipeline in the nf-core lot had to fall back to code mode for.
+    "profile",
+    "signal_matrix",
+    "fusion_structure",
+    "gene_arrow_track",
+    "gsea_running_score",
+    "sashimi",
 ]
 
 # Map visualization types
