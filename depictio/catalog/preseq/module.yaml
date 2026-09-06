@@ -1,0 +1,16 @@
+# Preseq — one output here (the lc_extrap complexity curve), but a folder
+# because c_curve and bound_pop land next to it the day a pipeline publishes
+# them. Lightweight: identity comes from the nf-core meta.yml `nf_core_url`
+# points at.
+#
+# MultiQC has a preseq module and every ChIP-family template already shows its
+# panel. This tool is not a second copy of that panel: MultiQC plots the
+# expected-distinct curve alone and drops the two 95% confidence columns preseq
+# writes beside it, so the width of the extrapolation — the part that says
+# whether "sequence deeper" is a safe recommendation — never reaches a
+# dashboard through the report. The recipe keeps them, and the `profile` kind
+# draws them as a ribbon.
+id: preseq
+name: Preseq
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/preseq/lcextrap
+homepage: https://github.com/smithlabcode/preseq
