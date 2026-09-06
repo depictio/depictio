@@ -752,6 +752,21 @@ tabs:
     description: Selecting rows narrows the scatter to the same genes.
     title_size: h3
     layout: {x: 4, y: 1, w: 4, h: 6}
+  - component_type: advanced_viz
+    tag: arg-av-island-track
+    index: arg-island-track
+    section: Gene detail
+    workflow_tag: funcscan
+    data_collection_tag: hamronization_report
+    use: hamronization/arg_island_track
+    config:
+      class_col: drug_class
+      label_col: gene_symbol
+      show_labels: true
+    title: Resistance genes along their contig
+    description: One lane per contig, one arrow per ARG hit pointing the way the gene is read. Genes packed head to tail on a single contig are a resistance island, which an aggregate over drug classes cannot show.
+    title_size: h3
+    layout: {x: 0, y: 7, w: 8, h: 6}
 
 # ============================================================================
 # Tab 2: AMPs
