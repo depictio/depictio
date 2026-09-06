@@ -387,7 +387,7 @@ non-SARS pathogen (no lineage DBs) + metagenomic protocol (no ivar/amplicon mosd
 | Scenario | Flags | Expected effect |
 |---|---|---|
 | narrowPeak default (validated) | none | all 10 DCs populated |
-| broad peaks | `--broad_peak` | `macs/broadPeak/*_peaks.broadPeak` is BED6+3 with no summit column: `macs2_peaks` finds nothing. Needs a dedicated `macs2/broad_peaks` output, deferred |
+| broad peaks | `--broad_peak` | `macs/broadPeak/*_peaks.broadPeak` is BED6+3 with no summit column, so `macs2_peaks` finds nothing and `macs2_broad_peaks` reads it instead. Both outputs ship, one glob each, so a run matches exactly one |
 | single replicate per antibody | design with one replicate | no consensus peak set is built; `macs2_consensus_*` and both `deseq2_*` DCs empty |
 | single condition per antibody | design with one group | consensus built, DESeq2 not run; both `deseq2_*` DCs empty |
 | `--skip_peak_annotation` | flag | `homer_annotated_peaks` and `homer_tss_distance_profile` empty; the Peaks tab loses its annotation section |

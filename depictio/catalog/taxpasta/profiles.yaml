@@ -50,3 +50,7 @@ renders_as:
   - { component: interactive, interactive_type: MultiSelect, column_name: profiler }
   - { component: interactive, interactive_type: MultiSelect, column_name: sample }
   - { component: table }
+  # Metric cards and the row-level table behind them: the readings the
+  # nf-core dashboards were already computing off this output by hand.
+  - { component: card, column: rank, aggregation: nunique, secondary_layout: composition, breakdown_col: rank }
+  - { component: card, column: rel_abundance, aggregation: max, secondary_layout: gauge, coverage_max: 1 }

@@ -691,6 +691,19 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: 556ba42754f15c8bf0db5401
+    data_collection_tag: macs2_broad_peaks
+    description: Broad peak calls — recipe output (macs2/broad_peaks.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: macs2/broad_peaks.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: 4d046a7978f7b050a09579be
     data_collection_tag: macs2_consensus_boolean
     description: Consensus peak overlap — recipe output (macs2/consensus_boolean.py), seeded from the
@@ -968,6 +981,20 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: fef32565ee13c15167a1348c
+    data_collection_tag: qiime2_alpha_rarefaction_summary
+    description: Rarefaction summary — recipe output (qiime2/alpha_rarefaction_summary.py), seeded from
+      the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: qiime2/alpha_rarefaction_summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: a66102058930b45a0d14e53a
     data_collection_tag: qiime2_ancombc
     description: Differential abundance — recipe output (qiime2/ancombc.py), seeded from the catalog fixture
@@ -1160,6 +1187,34 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: 243757de8c3af75e2b47fa63
+    data_collection_tag: sidle_reconstructed
+    description: Reconstructed features — recipe output (sidle/reconstructed.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: sidle/reconstructed.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 2cdcbb18f2fef3d3c5a4de7d
+    data_collection_tag: sidle_reconstruction_qc
+    description: Reconstruction confidence — recipe output (sidle/reconstruction_qc.py), seeded from the
+      catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: sidle/reconstruction_qc.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: b6cadfd2d7681afe6f2a40df
     data_collection_tag: sompy_regions
     description: som.py allele-fraction strata — recipe output (sompy/regions.py), seeded from the catalog
@@ -1323,6 +1378,20 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: 9620c72d2bb2e54b7a1aff85
+    data_collection_tag: vsearch_sintax_abundance
+    description: SINTAX composition — recipe output (vsearch/sintax_abundance.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: vsearch/sintax_abundance.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: 38b53c76db4df0bb7c781007
     data_collection_tag: wittyer_summary
     description: Wittyer CNV summary — recipe output (wittyer/summary.py), seeded from the catalog fixture
@@ -1421,6 +1490,7 @@ workflows:
         - iVar
         - kaiju
         - kraken
+        - malt
         - metaphlan
         - mosdepth
         - multiqc_software_versions
@@ -1478,6 +1548,8 @@ workflows:
           - Top taxa
           kraken:
           - Top taxa
+          malt:
+          - Metagenomic Mappability
           metaphlan:
           - Top taxa
           mosdepth:

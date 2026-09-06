@@ -14,3 +14,7 @@ renders_as:
   - { component: card, column: gene_name, aggregation: nunique, secondary_layout: donut, breakdown_col: group }
   - { component: interactive, interactive_type: MultiSelect, column_name: gene_name }
   - { component: table, row_selection_enabled: true, row_selection_column: gene_name }
+  # Metric cards and the row-level table behind them: the readings the
+  # nf-core dashboards were already computing off this output by hand.
+  - { component: card, column: sample, aggregation: nunique, secondary_layout: top_n, breakdown_col: group, top_n_count: 4 }
+  - { component: card, column: log2_tpm, aggregation: average, secondary_layout: histogram }

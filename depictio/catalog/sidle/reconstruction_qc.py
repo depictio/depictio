@@ -1,9 +1,19 @@
-"""Per-reconstructed-feature SIDLE reconstruction confidence (route-specific QC).
+"""Per-reconstructed-feature SIDLE reconstruction confidence.
 
-`reconstruction_summary/metadata.tsv` reports, for each reconstructed feature, how many
-of the amplified regions mapped and the kmer support. It is a QIIME2 metadata export, so
-its second row is a `#q2:types` type-declaration line that must be dropped before casting.
-No standard-route equivalent.
+``reconstruction_summary/metadata.tsv`` reports, for each reconstructed
+feature, how many of the amplified regions mapped to it and how much kmer
+support stood behind them — the two numbers that say whether a cross-region
+feature is real or an artefact of one region. It is a QIIME 2 metadata export,
+so its second row is a ``#q2:types`` type-declaration line that has to go
+before anything is cast.
+
+Output schema:
+    feature_id : Utf8                 reconstructed feature
+    num_regions : Int64               amplified regions that mapped to it
+    total_kmers_mapped : Int64        kmer support summed over those regions
+    mean_kmer_per_region : Float64    mean support per mapped region
+    stdv_kmer_per_region : Float64    spread of that support
+    mapped_asvs : Utf8                the per-region ASVs behind the feature
 """
 
 import polars as pl

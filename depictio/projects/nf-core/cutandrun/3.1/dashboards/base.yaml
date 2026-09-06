@@ -504,6 +504,7 @@ main_dashboard:
     section: Fragment lengths
     workflow_tag: cutandrun
     data_collection_tag: seacr_fragment_lengths
+    use: seacr/fragment_lengths
     mode: code
     visu_type: line
     code_content: |
@@ -822,6 +823,7 @@ tabs:
     section: Signal along the genome
     workflow_tag: cutandrun
     data_collection_tag: seacr_peaks
+    use: seacr/peaks
     mode: code
     visu_type: scatter
     code_content: |
@@ -1495,6 +1497,7 @@ tabs:
     section: How reproducible
     workflow_tag: cutandrun
     data_collection_tag: seacr_consensus_peaks
+    use: seacr/consensus_peaks
     mode: code
     visu_type: bar
     code_content: |

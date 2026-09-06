@@ -12,3 +12,10 @@ renders_as:
   - { id: volcano, component: advanced_viz, kind: volcano, roles: {feature_id: id, effect_size: lfc, significance: q_val} }
   - { id: da_barplot, component: advanced_viz, kind: da_barplot, roles: {feature_id: id, contrast: contrast, lfc: lfc} }
   - { id: qq, component: advanced_viz, kind: qq, roles: {p_value: p_val} }
+  # Metric cards and the row-level table behind them: the readings the
+  # nf-core dashboards were already computing off this output by hand.
+  - { component: card, column: id, aggregation: nunique, secondary_layout: top_n, breakdown_col: Phylum, top_n_count: 3 }
+  - { component: card, column: id, aggregation: nunique, secondary_layout: donut, breakdown_col: Phylum, top_n_count: 3 }
+  - { component: card, column: q_val, aggregation: median, secondary_layout: threshold, top_n_count: 3, threshold_value: 0.05, threshold_direction: max, threshold_warn: 0.1 }
+  - { component: card, column: lfc, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }
