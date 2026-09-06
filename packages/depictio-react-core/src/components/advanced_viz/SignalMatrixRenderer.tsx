@@ -551,18 +551,37 @@ const SignalMatrixRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
 
     const layout: Record<string, unknown> = {
       ...plotlyThemeFragment(isDark, theme),
-      margin: { l: leftMargin, r: 16, t: annotations.length > 0 ? 22 : 12, b: 46 },
+      // `b` leaves room for the tick labels, the axis title and, when the panels
+      // are grouped, the legend that sits under them.
+      margin: {
+        l: leftMargin,
+        r: 16,
+        t: annotations.length > 0 ? 22 : 12,
+        b: grouped ? 78 : 46,
+      },
       xaxis: {
         ...plotlyAxisOverrides(isDark, theme),
         title: { text: positionCol, standoff: 8 },
-        anchor: 'y' as const,
+        // Anchored to the LAST panel, which is the bottom band: anchoring to
+        // `y` (the first panel, drawn topmost) put the ticks and the title in
+        // the gap under the top matrix, where they collided with the next
+        // panel's title and left the figure with no axis at its foot.
+        anchor: axisRef(panels.length - 1),
         zeroline: false,
         showgrid: false,
       },
       shapes,
       annotations,
       showlegend: grouped,
-      legend: { orientation: 'h' as const, y: -0.22 },
+      // Below the axis rather than above it: the top band is the mean profile,
+      // whose reference label already sits at the top of the paper.
+      legend: {
+        orientation: 'h' as const,
+        x: 0,
+        y: -0.06,
+        yanchor: 'top' as const,
+        font: { size: 10 },
+      },
       hovermode: 'closest' as const,
       autosize: true,
     };

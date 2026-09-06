@@ -962,3 +962,713 @@ def generate_categorical_flow_demo() -> None:
 
 
 generate_categorical_flow_demo()
+
+
+# 14. Signal profile: TSS enrichment, the canonical use of the `profile` kind.
+#     One curve per ATAC library over distance to the transcription start site,
+#     with a bootstrap confidence ribbon. Two of the eight libraries are
+#     deliberately flat — a low TSS enrichment score is *the* ATAC-seq QC
+#     failure, and a demo where every curve passes shows nothing.
+# columns: series, x, y, lower, upper
+# ---------------------------------------------------------------------------
+PROFILE_X_MIN = -2000
+PROFILE_X_MAX = 2000
+PROFILE_X_STEP = 25
+
+# (series, is_good). One failing library per condition, so the flat curves read
+# as a per-library problem rather than a treatment effect.
+PROFILE_LIBRARIES = [
+    ("CTRL_rep1", True),
+    ("CTRL_rep2", True),
+    ("CTRL_rep3", True),
+    ("CTRL_rep4", False),
+    ("TREAT_rep1", True),
+    ("TREAT_rep2", True),
+    ("TREAT_rep3", False),
+    ("TREAT_rep4", True),
+]
+
+
+def generate_profile_demo() -> None:
+    """Write profile_demo.tsv: 8 TSS enrichment curves with confidence ribbons.
+
+    The curve is the usual sum of three components on a background of 1.0
+    (enrichment is a ratio to the flanking signal, so 1.0 is "no enrichment"):
+    a sharp core at the TSS, a broad promoter shoulder, and the +1 / -1
+    nucleosome bumps that a well-fragmented library resolves at roughly
+    ±190 bp. Failing libraries get the same components with a core three times
+    as wide and a fraction of the amplitude, which is what under-digested or
+    high-background ATAC actually looks like.
+    """
+    header = ["series", "x", "y", "lower", "upper"]
+    rows: list[list] = []
+    xs = np.arange(PROFILE_X_MIN, PROFILE_X_MAX + 1, PROFILE_X_STEP, dtype=float)
+
+    for series, is_good in PROFILE_LIBRARIES:
+        if is_good:
+            peak = R.uniform(9.5, 14.5)  # TSS enrichment score
+            core_sd = R.uniform(100.0, 130.0)
+            nucleosome = R.uniform(0.14, 0.22)
+            depth = R.uniform(0.90, 1.20)  # usable-read factor -> ribbon width
+        else:
+            peak = R.uniform(2.2, 3.1)
+            core_sd = R.uniform(290.0, 360.0)
+            nucleosome = R.uniform(0.02, 0.05)
+            depth = R.uniform(0.35, 0.50)
+
+        core = np.exp(-0.5 * (xs / core_sd) ** 2)
+        broad = 0.30 * np.exp(-0.5 * (xs / 650.0) ** 2)
+        nuc = nucleosome * (
+            np.exp(-0.5 * ((xs - 190.0) / 80.0) ** 2)
+            + 0.78 * np.exp(-0.5 * ((xs + 190.0) / 80.0) ** 2)
+            + 0.48 * np.exp(-0.5 * ((xs - 380.0) / 95.0) ** 2)
+            + 0.36 * np.exp(-0.5 * ((xs + 380.0) / 95.0) ** 2)
+        )
+        shape = core + broad + nuc
+        # Normalise on the value at x=0 so `peak` really is the enrichment the
+        # curve reaches at the TSS, whatever the shoulder terms contribute.
+        amp = (peak - 1.0) / float(shape[len(shape) // 2])
+        smooth = 1.0 + amp * shape
+
+        # Bootstrap standard error: grows with the signal and shrinks with
+        # depth, so the two failing libraries carry visibly fatter ribbons.
+        se = (0.06 / depth) * smooth**0.75 + 0.02 / depth
+        noisy = smooth + NP_RNG.normal(0.0, 0.55, size=xs.size) * se
+        noisy = np.maximum(noisy, 0.05)
+        lower = np.maximum(noisy - 1.96 * se, 0.0)
+        upper = noisy + 1.96 * se
+
+        for x, y, lo, hi in zip(xs, noisy, lower, upper):
+            rows.append(
+                [series, int(x), round(float(y), 4), round(float(lo), 4), round(float(hi), 4)]
+            )
+
+    write_tsv(OUT / "profile_demo.tsv", header, rows)
+
+
+generate_profile_demo()
+
+
+# NN. Signal matrix: an ATAC-seq signal matrix around peak summits — the
+#     canonical deepTools `computeMatrix reference-point` output, in the long
+#     form the renderer reads (one row per region × offset, not one column
+#     per bin).
+# columns: region_id, position, value, group
+# ---------------------------------------------------------------------------
+# Offsets from the summit, in the 50 bp bins a real matrix is computed in.
+SIGNAL_MATRIX_FLANK = 1000
+SIGNAL_MATRIX_BIN = 50
+
+# The three classes the demo is built to separate, and how many peaks each
+# gets. The shapes matter more than the counts: a promoter-like peak is a
+# narrow spike with nucleosome shoulders either side, an enhancer-like peak is
+# a broad low mound, and the background class is essentially flat. Sorting by
+# total signal inside each panel is then what produces the banding.
+SIGNAL_MATRIX_CLASSES = [
+    ("promoter", 110),
+    ("enhancer", 120),
+    ("background", 70),
+]
+
+
+def _signal_matrix_profile(group: str, offsets: np.ndarray) -> np.ndarray:
+    """One region's mean signal at every offset, before noise.
+
+    Returns a vector the same length as ``offsets``; the caller adds the
+    per-bin noise so the drawn matrix is grainy rather than analytic.
+    """
+    if group == "promoter":
+        # Sharp summit (sigma 90-160 bp, so 4-6 of the 50 bp bins carry it)
+        # plus the +1/-1 nucleosome shoulders at ~190 bp that give an ATAC
+        # promoter its three-band look.
+        amplitude = float(np.exp(NP_RNG.normal(2.3, 0.45)))
+        width = float(NP_RNG.uniform(90.0, 160.0))
+        shoulder = amplitude * float(NP_RNG.uniform(0.12, 0.28))
+        curve = amplitude * np.exp(-0.5 * (offsets / width) ** 2)
+        for centre in (-190.0, 190.0):
+            curve = curve + shoulder * np.exp(-0.5 * ((offsets - centre) / 95.0) ** 2)
+        return curve
+    if group == "enhancer":
+        # Broad mound (sigma 320-520 bp), lower and slightly off-centre: an
+        # enhancer summit is called less precisely than a TSS.
+        amplitude = float(np.exp(NP_RNG.normal(1.3, 0.5)))
+        width = float(NP_RNG.uniform(320.0, 520.0))
+        shift = float(NP_RNG.normal(0.0, 90.0))
+        return amplitude * np.exp(-0.5 * ((offsets - shift) / width) ** 2)
+    # Background: a very wide, very low bump — visually flat, which is the
+    # point. It is what the colour scale's low end has to stay useful for.
+    amplitude = float(NP_RNG.uniform(0.2, 1.0))
+    width = float(NP_RNG.uniform(700.0, 1200.0))
+    return amplitude * np.exp(-0.5 * (offsets / width) ** 2)
+
+
+def generate_signal_matrix_demo() -> None:
+    header = ["region_id", "position", "value", "group"]
+    offsets = np.arange(-SIGNAL_MATRIX_FLANK, SIGNAL_MATRIX_FLANK + 1, SIGNAL_MATRIX_BIN)
+
+    # Peaks are numbered along the genome and classified afterwards, so the
+    # class does not correlate with the id — the panels have to come from the
+    # `group` column rather than from a lucky row order.
+    labels = [group for group, count in SIGNAL_MATRIX_CLASSES for _ in range(count)]
+    order = NP_RNG.permutation(len(labels))
+    groups = [labels[i] for i in order]
+
+    rows: list[list] = []
+    for i, group in enumerate(groups, start=1):
+        region_id = f"PEAK_{i:04d}"
+        # Baseline open chromatin plus Poisson-flavoured per-bin noise: the
+        # spread grows with the signal, so the spike bins are the grainy ones.
+        curve = _signal_matrix_profile(group, offsets) + 0.25
+        noise = NP_RNG.normal(0.0, 1.0, size=offsets.size) * (0.12 + 0.18 * np.sqrt(curve))
+        values = np.clip(curve + noise, 0.0, None)
+        for position, value in zip(offsets, values):
+            rows.append([region_id, int(position), round(float(value), 3), group])
+
+    write_tsv(OUT / "signal_matrix_demo.tsv", header, rows)
+
+
+generate_signal_matrix_demo()
+
+
+# NN. Fusion structure: six well-known oncogenic gene fusions with their real
+# protein-domain composition.
+# columns: fusion_id, partner, feature, start, end, breakpoint, retained,
+#          domain_class
+# ---------------------------------------------------------------------------
+# Curated rather than sampled: the point of this fixture is that a life
+# scientist recognises the fusions and the domains, so there is nothing here
+# for ``R`` to randomise. Each entry is
+# ``(fusion_id, [(5' partner, [(domain, retained, class), ...]),
+#                (3' partner, [...])])``, listed 5' partner first and, within a
+# partner, N- to C-terminus.
+#
+# ``retained`` is the fraction of the domain that survives the fusion, in
+# [0, 1]: 1.0 for a domain the breakpoint leaves whole, 0.0 for one the
+# breakpoint removes entirely (the renderer still draws its outline, so the
+# picture shows what was lost as well as what was kept), and a fraction for a
+# domain the breakpoint cuts through.
+FUSION_STRUCTURES: list[tuple[str, list[tuple[str, list[tuple[str, float, str]]]]]] = [
+    # CML / Ph+ ALL. p210 breaks in the major breakpoint cluster region, so BCR
+    # keeps its oligomerisation coiled coil (which is what dimerises and thereby
+    # activates the ABL1 kinase) and loses the C2 / RacGAP end.
+    (
+        "BCR--ABL1",
+        [
+            (
+                "BCR",
+                [
+                    ("Coiled-coil oligomerisation", 1.0, "Oligomerisation"),
+                    ("Ser/Thr kinase", 1.0, "Kinase"),
+                    ("RhoGEF (DH)", 1.0, "Signalling"),
+                    ("PH", 1.0, "Signalling"),
+                    ("C2 (CalB)", 0.0, "Signalling"),
+                    ("Rac GTPase-activating", 0.0, "Signalling"),
+                ],
+            ),
+            (
+                "ABL1",
+                [
+                    ("N-terminal cap (myristoyl)", 0.0, "Regulatory"),
+                    ("SH3", 1.0, "Adaptor"),
+                    ("SH2", 1.0, "Adaptor"),
+                    ("Protein tyrosine kinase", 1.0, "Kinase"),
+                    ("F-actin binding", 1.0, "Cytoskeletal"),
+                ],
+            ),
+        ],
+    ),
+    # NSCLC, variant 1 (EML4 exon 13 :: ALK exon 20). The breakpoint cuts the
+    # HELP domain and shears off most of the WD40 propeller.
+    (
+        "EML4--ALK",
+        [
+            (
+                "EML4",
+                [
+                    ("Coiled-coil trimerisation", 1.0, "Oligomerisation"),
+                    ("Basic region", 1.0, "Regulatory"),
+                    ("HELP", 0.62, "Cytoskeletal"),
+                    ("WD40 repeats", 0.18, "Adaptor"),
+                ],
+            ),
+            (
+                "ALK",
+                [
+                    ("MAM", 0.0, "Receptor ectodomain"),
+                    ("Glycine-rich region", 0.0, "Receptor ectodomain"),
+                    ("Protein tyrosine kinase", 1.0, "Kinase"),
+                ],
+            ),
+        ],
+    ),
+    # Prostate cancer, T1/E4. TMPRSS2 contributes its androgen-responsive first
+    # exon and no protein at all: every one of its domains is lost, which is why
+    # its lane is drawn as three empty outlines.
+    (
+        "TMPRSS2--ERG",
+        [
+            (
+                "TMPRSS2",
+                [
+                    ("LDL-receptor class A", 0.0, "Receptor ectodomain"),
+                    ("SRCR", 0.0, "Receptor ectodomain"),
+                    ("Peptidase S1", 0.0, "Peptidase"),
+                ],
+            ),
+            (
+                "ERG",
+                [
+                    ("PNT (SAM/Pointed)", 0.55, "Oligomerisation"),
+                    ("ETS DNA-binding", 1.0, "DNA binding"),
+                    ("C-terminal transactivation", 1.0, "Transactivation"),
+                ],
+            ),
+        ],
+    ),
+    # Ewing sarcoma, type 1 (EWSR1 exon 7 :: FLI1 exon 6). EWSR1 donates its
+    # SYGQ-rich transactivation domain to the FLI1 DNA-binding domain; the
+    # EWSR1 RNA-binding end and the FLI1 PNT domain are both left behind.
+    (
+        "EWSR1--FLI1",
+        [
+            (
+                "EWSR1",
+                [
+                    ("SYGQ-rich transactivation", 1.0, "Transactivation"),
+                    ("IQ motif", 0.42, "Regulatory"),
+                    ("RRM", 0.0, "RNA binding"),
+                    ("RanBP2-type zinc finger", 0.0, "RNA binding"),
+                ],
+            ),
+            (
+                "FLI1",
+                [
+                    ("PNT (SAM/Pointed)", 0.0, "Oligomerisation"),
+                    ("ETS DNA-binding", 1.0, "DNA binding"),
+                    ("C-terminal transactivation", 1.0, "Transactivation"),
+                ],
+            ),
+        ],
+    ),
+    # Papillary thyroid carcinoma, RET/PTC1. The CCDC6 coiled coil replaces the
+    # whole RET ectodomain, so the receptor dimerises without a ligand.
+    (
+        "CCDC6--RET",
+        [
+            (
+                "CCDC6",
+                [
+                    ("Coiled-coil dimerisation", 1.0, "Oligomerisation"),
+                    ("C-terminal domain", 0.0, "Regulatory"),
+                ],
+            ),
+            (
+                "RET",
+                [
+                    ("Cadherin-like repeats", 0.0, "Receptor ectodomain"),
+                    ("Cysteine-rich domain", 0.0, "Receptor ectodomain"),
+                    ("Protein tyrosine kinase", 1.0, "Kinase"),
+                ],
+            ),
+        ],
+    ),
+    # Lung adenocarcinoma. Same 3' partner as CCDC6--RET and the same
+    # consequence, reached through a different oligomerising 5' partner — the
+    # comparison the small multiples are for.
+    (
+        "KIF5B--RET",
+        [
+            (
+                "KIF5B",
+                [
+                    ("Kinesin motor", 1.0, "Cytoskeletal"),
+                    ("Coiled-coil stalk", 0.68, "Oligomerisation"),
+                    ("Cargo-binding tail", 0.0, "Adaptor"),
+                ],
+            ),
+            (
+                "RET",
+                [
+                    ("Cadherin-like repeats", 0.0, "Receptor ectodomain"),
+                    ("Cysteine-rich domain", 0.0, "Receptor ectodomain"),
+                    ("Protein tyrosine kinase", 1.0, "Kinase"),
+                ],
+            ),
+        ],
+    ),
+]
+
+
+def generate_fusion_structure_demo() -> None:
+    """Write fusion_structure_demo.tsv: six oncogenic fusions, domain by domain.
+
+    Coordinates are the end-to-end *slot* layout the renderer expects, not
+    amino-acid positions: the domains of a fusion are laid out in listed order,
+    one unit slot each, 5' partner first, so slot ``k`` becomes
+    ``start = k, end = k + 1``. The 5' lane therefore occupies ``[0, n5)`` and
+    the 3' lane ``[n5, n5 + n3)``, which puts the two partners genuinely end to
+    end and makes ``breakpoint = n5`` a single seam between the lanes. This is
+    the same convention the arriba ``fusion_domains`` recipe uses, because
+    arriba reports which domains survive but never where they are.
+    """
+    header = [
+        "fusion_id",
+        "partner",
+        "feature",
+        "start",
+        "end",
+        "breakpoint",
+        "retained",
+        "domain_class",
+    ]
+    rows: list[list] = []
+    for fusion_id, partners in FUSION_STRUCTURES:
+        n5 = len(partners[0][1])
+        slot = 0
+        for partner, domains in partners:
+            for feature, retained, domain_class in domains:
+                rows.append(
+                    [
+                        fusion_id,
+                        partner,
+                        feature,
+                        slot,
+                        slot + 1,
+                        n5,
+                        round(retained, 2),
+                        domain_class,
+                    ]
+                )
+                slot += 1
+    write_tsv(OUT / "fusion_structure_demo.tsv", header, rows)
+
+
+generate_fusion_structure_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN. Gene arrow track: biosynthetic gene clusters on five bacterial contigs.
+#     One antiSMASH-style BGC region per contig (its core biosynthetic genes
+#     plus tailoring / transport / regulatory genes) with unrelated flanking
+#     genes either side of the region boundary. That contrast is the point of
+#     the kind: the coloured core reads as the cluster only because the grey
+#     `flanking` neighbourhood is drawn next to it.
+# columns: contig, feature_id, start, end, strand, gene_class, label,
+#          region_start, region_end
+# ---------------------------------------------------------------------------
+# `core` genes are the ones antiSMASH would call as the cluster's backbone:
+# long (2.7-4.5 kb) and worth a label under the arrow. `accessory` genes sit
+# inside the region but are tailoring / transport / regulation, so they are
+# shorter. Everything outside the region is `flanking` and carries only its
+# locus-tag ordinal as a label.
+BGC_CLUSTERS: list[dict] = [
+    {
+        "contig": "CTG1",
+        "product": "NRPS",
+        "core": ["nrpsA", "nrpsB", "nrpsC"],
+        "accessory": ["mbtH", "thioE", "abcT1", "abcT2", "luxR", "cyp450", "mfsT", "gcnA"],
+    },
+    {
+        "contig": "CTG2",
+        "product": "T1PKS",
+        "core": ["pksA", "pksB", "pksC"],
+        "accessory": ["acpP", "ketoR", "atII", "tetR", "cyp112", "mfsY", "glcD", "oxyB"],
+    },
+    {
+        "contig": "CTG3",
+        "product": "terpene",
+        "core": ["sqhC", "crtE"],
+        "accessory": ["crtB", "crtI", "idi", "hmgR", "ispA", "marR", "cyp51", "dxs"],
+    },
+    {
+        "contig": "CTG4",
+        "product": "RiPP-like",
+        "core": ["lanM", "lanB"],
+        "accessory": ["lanA", "lanC", "lanT", "immA", "abcT3", "rgrA", "pepP", "nisP"],
+    },
+    {
+        "contig": "CTG5",
+        "product": "betalactone",
+        "core": ["lctC", "lctB"],
+        "accessory": ["fabH", "acpS", "adhE", "amtB", "estA", "araC", "cyp71", "sdrA"],
+    },
+]
+
+
+def generate_gene_arrow_track_demo() -> None:
+    """Write gene_arrow_track_demo.tsv: five BGC loci with their neighbourhood.
+
+    Genes are laid out head-to-tail along each contig with small intergenic
+    gaps, CDS-sized (lengths are multiples of 3, 300-4500 bp) and grouped into
+    operon-like same-strand runs. The region band is padded past the outermost
+    region gene the way antiSMASH pads a called region, and every row of a
+    contig carries that contig's band so the lane can draw it.
+    """
+    header = [
+        "contig",
+        "feature_id",
+        "start",
+        "end",
+        "strand",
+        "gene_class",
+        "label",
+        "region_start",
+        "region_end",
+    ]
+    rows: list[list] = []
+
+    for cluster in BGC_CLUSTERS:
+        contig = cluster["contig"]
+        product = cluster["product"]
+        core_names: list[str] = list(cluster["core"])
+        accessory: list[str] = list(cluster["accessory"])
+        R.shuffle(accessory)
+
+        n_left = R.randint(5, 8)
+        n_region = R.randint(8, 12)
+        n_right = R.randint(5, 8)
+
+        cursor = R.randint(400, 1800)
+        ordinal = 5
+        strand = R.choice(["+", "-"])
+        genes: list[list] = []
+
+        for slot in range(n_left + n_region + n_right):
+            in_region = n_left <= slot < n_left + n_region
+            # Operon-like runs: the strand holds for a few genes, then flips.
+            if R.random() < 0.28:
+                strand = "-" if strand == "+" else "+"
+
+            region_slot = slot - n_left
+            if in_region and region_slot < len(core_names):
+                label = core_names[region_slot]
+                length = 3 * R.randint(900, 1500)  # 2.7-4.5 kb backbone gene
+            elif in_region:
+                label = accessory[(region_slot - len(core_names)) % len(accessory)]
+                length = 3 * R.randint(200, 700)  # 0.6-2.1 kb tailoring gene
+            else:
+                label = f"{ordinal:05d}"
+                length = 3 * R.randint(100, 600)  # 0.3-1.8 kb neighbour
+
+            start = cursor
+            end = start + length - 1
+            genes.append(
+                [
+                    contig,
+                    f"{contig}_{ordinal:05d}",
+                    start,
+                    end,
+                    strand,
+                    product if in_region else "flanking",
+                    label,
+                ]
+            )
+            cursor = end + R.randint(18, 260)  # intergenic gap
+            ordinal += 5
+
+        # The band edges land in the intergenic space on either side of the
+        # region rather than a fixed pad: a pad wide enough to be visible on a
+        # 40 kb lane would reach past the first flanking gene, and a grey arrow
+        # sitting inside the shaded band is exactly the reading this fixture is
+        # meant to teach against.
+        region_genes = genes[n_left : n_left + n_region]
+        region_start = (genes[n_left - 1][3] + region_genes[0][2]) // 2
+        region_end = (region_genes[-1][3] + genes[n_left + n_region][2]) // 2
+        rows.extend(gene + [region_start, region_end] for gene in genes)
+
+    write_tsv(OUT / "gene_arrow_track_demo.tsv", header, rows)
+
+
+generate_gene_arrow_track_demo()
+
+
+# NN. GSEA running enrichment score: the weighted Kolmogorov-Smirnov walk over
+#     a ranked list of 800 genes, for 5 Hallmark-style gene sets with
+#     deliberately different enrichment behaviour.
+# columns: gene_set, rank, running_es, member, metric
+# ---------------------------------------------------------------------------
+# (gene set, size, profile). `profile` shapes where the members sit in the
+# ranked list, which is what makes the four curves tell four different stories:
+#   "top"    — members crowd the positive tail   -> large positive ES
+#   "bottom" — members crowd the negative tail   -> large negative ES
+#   "flat"   — members spread uniformly          -> curve wanders around zero
+GSEA_SETS: list[tuple[str, int, str, float]] = [
+    ("HALLMARK_INTERFERON_ALPHA_RESPONSE", 95, "top", 9.0),
+    ("HALLMARK_E2F_TARGETS", 130, "top", 3.5),
+    ("HALLMARK_MYC_TARGETS_V1", 110, "bottom", 7.0),
+    ("HALLMARK_TNFA_SIGNALING_VIA_NFKB", 85, "bottom", 2.5),
+    ("HALLMARK_APOPTOSIS", 75, "flat", 0.0),
+]
+
+
+def generate_gsea_running_score_demo() -> None:
+    """Write gsea_running_score_demo.tsv — one row per (gene set, rank).
+
+    The running score is *computed*, not sketched: the weighted KS walk GSEA
+    itself runs (``p = 1``, i.e. the ``weighted`` scoring scheme), so the curve
+    starts at zero, returns to zero at the last rank, and its extremum is the
+    enrichment score. Faking the curve would put the peak, the leading-edge
+    shading and the hit rug out of register with one another.
+    """
+    n_genes = 800
+    header = ["gene_set", "rank", "running_es", "member", "metric"]
+
+    # A dedicated child of NP_RNG. `spawn` derives it from the module seed
+    # without consuming draws from the parent, so this TSV comes out identical
+    # whether the function runs on its own or after every generator above it.
+    rng = NP_RNG.spawn(1)[0]
+
+    # Ranking metric: a signed, slightly convex ramp from ~+3 to ~-3 with a
+    # little jitter, sorted descending so `rank` really is the rank order.
+    x = np.linspace(1.0, -1.0, n_genes)
+    metric = 3.0 * np.sign(x) * np.abs(x) ** 1.6 + rng.normal(0.0, 0.03, n_genes)
+    metric = np.sort(metric)[::-1]
+    abs_metric = np.abs(metric)
+
+    rows: list[list] = []
+    for name, size, profile, strength in GSEA_SETS:
+        # Membership weights over the ranked list. An exponential preference
+        # for one tail concentrates the hits there; `flat` is uniform.
+        frac = np.arange(n_genes) / (n_genes - 1)
+        if profile == "top":
+            weights = np.exp(-strength * frac)
+        elif profile == "bottom":
+            weights = np.exp(-strength * (1.0 - frac))
+        else:
+            weights = np.ones(n_genes)
+        weights /= weights.sum()
+
+        member_idx = rng.choice(n_genes, size=size, replace=False, p=weights)
+        is_member = np.zeros(n_genes, dtype=bool)
+        is_member[member_idx] = True
+
+        # Weighted Kolmogorov-Smirnov walk (p = 1):
+        #   hit  at rank i: += |metric_i| / sum(|metric| over hits)
+        #   miss at rank i: -= 1 / (N - Nh)
+        n_hits = int(is_member.sum())
+        norm_hit = float(abs_metric[is_member].sum())
+        miss_step = 1.0 / (n_genes - n_hits)
+        running = 0.0
+        for i in range(n_genes):
+            if is_member[i]:
+                running += abs_metric[i] / norm_hit
+            else:
+                running -= miss_step
+            value = round(running, 6)
+            if value == 0:  # normalise a rounded -0.0
+                value = 0.0
+            rows.append(
+                [
+                    name,
+                    i + 1,
+                    value,
+                    "true" if is_member[i] else "false",
+                    round(float(metric[i]), 4),
+                ]
+            )
+
+    write_tsv(OUT / "gsea_running_score_demo.tsv", header, rows)
+
+
+generate_gsea_running_score_demo()
+
+
+# NN. Sashimi: splice junctions across an exon-skipping event.
+# columns: chrom, start, end, count, sample, annotation
+# --------------------------------------------------------------------------
+# Two loci on one chromosome, ~45.7 Mb apart, so the renderer's 1 Mb-gap locus
+# clustering resolves two regions and opens on the busier one instead of
+# drawing both as hairline spikes across a whole chromosome.
+#
+# Locus A is the story: an 8-exon gene whose third exon is a cassette. The two
+# junctions that splice *into* and *out of* E3 (the inclusion pair) collapse in
+# the knockdown samples while the junction that bridges E2 straight to E4 (the
+# skipping junction, novel) goes from a handful of reads to the strongest arc
+# in the lane. Locus B is ordinary constitutive splicing at a lower depth — it
+# exists to give the locus picker a second entry.
+SASHIMI_CHROM = "chr12"
+
+# (exon start, exon end) — locus A, the cassette-exon gene. E3 is the cassette.
+_SASHIMI_EXONS_A = [
+    (6530000, 6530420),
+    (6534100, 6534320),
+    (6538900, 6539050),  # E3, skipped in the knockdown
+    (6543700, 6543980),
+    (6549200, 6549410),
+    (6555600, 6555880),
+    (6561300, 6561540),
+    (6566800, 6567240),
+]
+
+# (exon start, exon end) — locus B, 45.7 Mb downstream.
+_SASHIMI_EXONS_B = [
+    (52300000, 52300380),
+    (52304200, 52304460),
+    (52308900, 52309120),
+    (52313500, 52313760),
+    (52318200, 52318640),
+]
+
+# Two conditions, two replicates each. The knockdown is where E3 is skipped.
+_SASHIMI_SAMPLES = [
+    ("CTRL_rep1", "ctrl"),
+    ("CTRL_rep2", "ctrl"),
+    ("KD_rep1", "kd"),
+    ("KD_rep2", "kd"),
+]
+
+
+def _sashimi_junctions() -> list[tuple[int, int, str, dict[str, float]]]:
+    """(start, end, annotation, {condition: mean read support}) per junction.
+
+    The mean is per condition so the exon-skipping contrast is authored rather
+    than sampled: inclusion junctions are ~190 reads in control and ~34 in the
+    knockdown, and the skipping junction runs the other way, 4 vs 165.
+    """
+    a = _SASHIMI_EXONS_A
+    b = _SASHIMI_EXONS_B
+    junctions: list[tuple[int, int, str, dict[str, float]]] = []
+
+    # Locus A, consecutive-exon (known) junctions. The two that flank the
+    # cassette exon carry the inclusion signal; the rest are constitutive.
+    for i in range(len(a) - 1):
+        donor, acceptor = a[i][1], a[i + 1][0]
+        flanks_cassette = i in (1, 2)  # E2->E3 and E3->E4
+        means = {"ctrl": 190.0, "kd": 34.0} if flanks_cassette else {"ctrl": 212.0, "kd": 205.0}
+        junctions.append((donor, acceptor, "known", means))
+
+    # The exon-skipping junction: E2 donor straight to E4 acceptor.
+    junctions.append((a[1][1], a[3][0], "novel", {"ctrl": 4.0, "kd": 165.0}))
+    # Two low-support novel sites for texture: an alternative donor inside E5
+    # and an alternative acceptor inside E7.
+    junctions.append((a[4][1] - 80, a[5][0], "novel", {"ctrl": 12.0, "kd": 11.0}))
+    junctions.append((a[5][1], a[6][0] + 110, "novel", {"ctrl": 9.0, "kd": 8.0}))
+
+    # Locus B: constitutive splicing at a lower depth, no condition effect.
+    for i in range(len(b) - 1):
+        junctions.append((b[i][1], b[i + 1][0], "known", {"ctrl": 56.0, "kd": 54.0}))
+    junctions.append((b[1][1], b[3][0], "novel", {"ctrl": 7.0, "kd": 6.0}))
+    junctions.append((b[2][1], b[3][0] + 120, "novel", {"ctrl": 5.0, "kd": 5.0}))
+
+    return junctions
+
+
+def generate_sashimi_demo() -> None:
+    """Write sashimi_demo.tsv — 64 junction rows over two loci on one chromosome."""
+    header = ["chrom", "start", "end", "count", "sample", "annotation"]
+    rows: list[list] = []
+
+    # Per-sample library depth, so replicates differ in scale without blurring
+    # the condition contrast.
+    depth = {name: R.uniform(0.85, 1.2) for name, _ in _SASHIMI_SAMPLES}
+
+    for start, end, annotation, means in _sashimi_junctions():
+        for sample, condition in _SASHIMI_SAMPLES:
+            mean = means[condition] * depth[sample]
+            count = max(1, int(round(mean * R.gauss(1.0, 0.12))))
+            rows.append([SASHIMI_CHROM, start, end, count, sample, annotation])
+
+    write_tsv(OUT / "sashimi_demo.tsv", header, rows)
+
+
+generate_sashimi_demo()

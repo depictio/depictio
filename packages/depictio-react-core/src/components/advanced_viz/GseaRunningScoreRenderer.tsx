@@ -297,7 +297,7 @@ const GseaRunningScoreRenderer: React.FC<Props> = ({ metadata, filters, refreshT
   const setNames = useMemo(() => allSeries.map((s) => s.name), [allSeries]);
   const colourMap = useMemo(
     () => stableColorMap(setNames, palette),
-    [setNames.join(' '), palette],
+    [setNames.join('\u0000'), palette],
   );
 
   /** rank → ranking metric, deduplicated: the metric repeats once per gene set. */

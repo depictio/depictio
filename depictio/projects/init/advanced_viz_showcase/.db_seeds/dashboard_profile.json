@@ -1,0 +1,309 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d70"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d70"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "prof-text",
+      "component_type": "text",
+      "title": "Signal profile",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Signal profile",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Enrichment against distance to the TSS, one curve per ATAC library, ribbon width set by read depth. A good library spikes on the dotted line at zero; CTRL_rep4 and TREAT_rep3 stay near 3\u00d7 background under a ribbon twice as fat. Click a curve to cross-filter.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "prof-curve",
+      "component_type": "advanced_viz",
+      "title": "TSS enrichment profile",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "profile_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d80"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "TSS enrichment profiles for 8 synthetic ATAC libraries across two conditions (+/-2 kb, 25 bp bins) with bootstrap confidence ribbons; two libraries are deliberately low-enrichment QC failures",
+        "data_collection_tag": "profile_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d80"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Normalised enrichment over \u00b12 kb around the TSS, 25 bp bins, 8 libraries across two conditions. Ribbon opacity, line width, log axes and legend placement live in the Settings \u2699 popover.",
+      "section": "Signal profile",
+      "viz_kind": "profile",
+      "config": {
+        "viz_kind": "profile",
+        "series_col": "series",
+        "x_col": "x",
+        "y_col": "y",
+        "lower_col": "lower",
+        "upper_col": "upper",
+        "reference_x": 0,
+        "reference_label": "TSS",
+        "shaded_bands": [
+          [
+            -330,
+            -110,
+            "-1 nucleosome"
+          ],
+          [
+            110,
+            330,
+            "+1 nucleosome"
+          ]
+        ],
+        "log_x": false,
+        "log_y": false,
+        "band_opacity": 0.2,
+        "line_width": 2.0,
+        "x_title": "Distance to TSS (bp)",
+        "y_title": "Normalised enrichment",
+        "legend_pos": "right",
+        "selection_enabled": true,
+        "selection_column": "series"
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "prof-f-series",
+      "component_type": "interactive",
+      "title": "Library",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "profile_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d80"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "TSS enrichment profiles for 8 synthetic ATAC libraries across two conditions (+/-2 kb, 25 bp bins) with bootstrap confidence ribbons; two libraries are deliberately low-enrichment QC failures",
+        "data_collection_tag": "profile_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d80"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Profile scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "series",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Profile filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#12B886",
+      "icon_name": "mdi:flask",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "prof-f-distance",
+      "component_type": "interactive",
+      "title": "Distance to TSS",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "profile_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d80"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "TSS enrichment profiles for 8 synthetic ATAC libraries across two conditions (+/-2 kb, 25 bp bins) with bootstrap confidence ribbons; two libraries are deliberately low-enrichment QC failures",
+        "data_collection_tag": "profile_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d80"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Profile scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "x",
+      "column_type": "int64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Profile filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#20C997",
+      "icon_name": "mdi:map-marker-path",
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-prof-f-series",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-prof-f-distance",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-prof-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-prof-curve",
+      "x": 0,
+      "y": 1,
+      "w": 8,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Signal profile",
+  "subtitle": "TSS enrichment: one curve per ATAC library over distance to the transcription start site, with bootstrap confidence ribbons.",
+  "icon": "mdi:chart-bell-curve",
+  "icon_color": "teal",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 28,
+  "main_tab_name": null,
+  "tab_icon": "mdi:waveform",
+  "tab_icon_color": "green",
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Profile scope",
+      "icon": "mdi:filter-variant",
+      "color": "teal",
+      "description": "Restricts which curves are drawn and over what window",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Signal profile",
+      "icon": "mdi:chart-line",
+      "color": "teal",
+      "description": "Enrichment against distance to the transcription start site",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
+}
