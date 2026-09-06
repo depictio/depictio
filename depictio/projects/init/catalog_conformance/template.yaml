@@ -1023,6 +1023,60 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: c8bdfc1712ad272fa712b6b8
+    data_collection_tag: seacr_consensus_peaks
+    description: Consensus peak overlap — recipe output (seacr/consensus_peaks.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: seacr/consensus_peaks.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: b798cb41516ff2a9a2fb699e
+    data_collection_tag: seacr_fragment_lengths
+    description: Fragment length distribution — recipe output (seacr/fragment_lengths.py), seeded from
+      the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: seacr/fragment_lengths.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 3b043b0d7527c88994189d9d
+    data_collection_tag: seacr_peak_summary
+    description: Peak QC summary — recipe output (seacr/peak_summary.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: seacr/peak_summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 21e70608e547a3e43d025cb3
+    data_collection_tag: seacr_peaks
+    description: Peak calls — recipe output (seacr/peaks.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: seacr/peaks.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: b6cadfd2d7681afe6f2a40df
     data_collection_tag: sompy_regions
     description: som.py allele-fraction strata — recipe output (sompy/regions.py), seeded from the catalog

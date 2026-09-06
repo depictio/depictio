@@ -6597,6 +6597,449 @@
       ]
     },
     {
+      "biotools_url": "https://bio.tools/SEACR",
+      "description": "",
+      "dir": "depictio/catalog/seacr",
+      "homepage": null,
+      "id": "seacr",
+      "name": "SEACR",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/seacr/callpeak",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "Merged consensus intervals per target against the replicates that called a peak on them, as one 0/1 column per replicate. The intersections say how reproducible the peak set is between replicates.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*.consensus.peak_counts.bed",
+            "path_glob_alt": []
+          },
+          "fixture": "consensus_peaks.tsv",
+          "fixtureContent": "peak_id\ttarget\tcaller\tchr\tstart\tend\twidth\tnum_peaks\tnum_samples\tsupport\ttotal_signal\tmax_signal\th3k27me3_R1\th3k27me3_R2\th3k4me3_R1\th3k4me3_R2\nh3k27me3:chr1:175742-175882\th3k27me3\tseacr\tchr1\t175742\t175882\t140\t1\t1\t1\t14581.0\t111.732\t1\t0\t0\t0\nh3k27me3:chr1:590956-591717\th3k27me3\tseacr\tchr1\t590956\t591717\t761\t2\t2\t2\t126653.2\t279.33\t1\t1\t0\t0\nh3k27me3:chr1:622787-623793\th3k27me3\tseacr\tchr1\t622787\t623793\t1006\t1\t1\t1\t79217.9\t223.464\t1\t0\t0\t0\nh3k27me3:chr1:628646-634504\th3k27me3\tseacr\tchr1\t628646\t634504\t5858\t2\t2\t2\t1806530.2000000002\t1117.32\t1\t1\t0\t0\nh3k27me3:chr1:637818-638209\th3k27me3\tseacr\tchr1\t637818\t638209\t391\t1\t1\t1\t32234.7\t111.732\t1\t0\t0\t0\nh3k27me3:chr1:640265-640697\th3k27me3\tseacr\tchr1\t640265\t640697\t432\t1\t1\t1\t16174.1\t79.1557\t0\t1\t0\t0\nh3k27me3:chr1:834655-835146\th3k27me3\tseacr\tchr1\t834655\t835146\t491\t1\t1\t1\t16253.3\t52.7704\t0\t1\t0\t0\nh3k27me3:chr1:862565-863420\th3k27me3\tseacr\tchr1\t862565\t863420\t855\t1\t1\t1\t57262.6\t111.732\t1\t0\t0\t0\nh3k27me3:chr1:863605-866099\th3k27me3\tseacr\tchr1\t863605\t866099\t2494\t2\t2\t2\t445978.7\t446.927\t1\t1\t0\t0\nh3k27me3:chr1:866113-866479\th3k27me3\tseacr\tchr1\t866113\t866479\t366\t1\t1\t1\t22569.8\t111.732\t1\t0\t0\t0\nh3k27me3:chr1:869647-870159\th3k27me3\tseacr\tchr1\t869647\t870159\t512\t1\t1\t1\t13535.6\t52.7704\t0\t1\t0\t0\nh3k27me3:chr1:873078-875008\th3k27me3\tseacr\tchr1\t873078\t875008\t1930\t2\t2\t2\t125635.2\t167.598\t1\t1\t0\t0\nh3k27me3:chr1:878145-878591\th3k27me3\tseacr\tchr1\t878145\t878591\t446\t1\t1\t1\t20580.5\t52.7704\t0\t1\t0\t0\nh3k27me3:chr1:880468-880833\th3k27me3\tseacr\tchr1\t880468\t880833\t365\t1\t1\t1\t44972.1\t167.598\t1\t0\t0\t0\nh3k27me3:chr1:882762-883445\th3k27me3\tseacr\tchr1\t882762\t883445\t683\t2\t2\t2\t134691.1\t223.464\t1\t1\t0\t0\nh3k27me3:chr1:885853-887156\th3k27me3\tseacr\tchr1\t885853\t887156\t1303\t2\t2\t2\t238506.5\t223.464\t1\t1\t0\t0\nh3k27me3:chr1:888528-890472\th3k27me3\tseacr\tchr1\t888528\t890472\t1944\t2\t2\t2\t418452.6\t391.061\t1\t1\t0\t0\nh3k27me3:chr1:890560-891013\th3k27me3\tseacr\tchr1\t890560\t891013\t453\t2\t2\t2\t88684.6\t279.33\t1\t1\t0\t0\nh3k27me3:chr1:891845-892421\th3k27me3\tseacr\tchr1\t891845\t892421\t576\t2\t2\t2\t56569.5\t167.598\t1\t1\t0\t0\nh3k27me3:chr1:894569-896032\th3k27me3\tseacr\tchr1\t894569\t896032\t1463\t2\t2\t2\t247878.9\t335.196\t1\t1\t0\t0\nh3k4me3:chr1:137571-139927\th3k4me3\tseacr\tchr1\t137571\t139927\t2356\t1\t1\t1\t26907.5\t29.2569\t0\t0\t0\t1\nh3k4me3:chr1:777130-780131\th3k4me3\tseacr\tchr1\t777130\t780131\t3001\t2\t2\t2\t1228964.2\t1858.74\t0\t0\t1\t1\nh3k4me3:chr1:825599-828937\th3k4me3\tseacr\tchr1\t825599\t828937\t3338\t1\t1\t1\t75354.0\t81.9193\t0\t0\t0\t1\nh3k4me3:chr1:957128-962070\th3k4me3\tseacr\tchr1\t957128\t962070\t4942\t2\t2\t2\t2579230.3\t2527.88\t0\t0\t1\t1\nh3k4me3:chr1:998383-1002259\th3k4me3\tseacr\tchr1\t998383\t1002259\t3876\t1\t1\t1\t52469.3\t32.1826\t0\t0\t0\t1\nh3k4me3:chr1:1019063-1022153\th3k4me3\tseacr\tchr1\t1019063\t1022153\t3090\t1\t1\t1\t64529.0\t61.4394\t0\t0\t0\t1\nh3k4me3:chr1:1115211-1116903\th3k4me3\tseacr\tchr1\t1115211\t1116903\t1692\t1\t1\t1\t41691.1\t73.1422\t0\t0\t0\t1\nh3k4me3:chr1:1230201-1233257\th3k4me3\tseacr\tchr1\t1230201\t1233257\t3056\t2\t2\t2\t2157405.0\t3717.47\t0\t0\t1\t1\nh3k4me3:chr1:1271778-1275764\th3k4me3\tseacr\tchr1\t1271778\t1275764\t3986\t2\t2\t2\t3015286.0\t3345.72\t0\t0\t1\t1\nh3k4me3:chr1:1305020-1310749\th3k4me3\tseacr\tchr1\t1305020\t1310749\t5729\t2\t2\t2\t2781315.0\t2267.66\t0\t0\t1\t1\nh3k4me3:chr1:1323673-1326301\th3k4me3\tseacr\tchr1\t1323673\t1326301\t2628\t2\t2\t2\t2444141.0\t2936.8\t0\t0\t1\t1\nh3k4me3:chr1:1347010-1350010\th3k4me3\tseacr\tchr1\t1347010\t1350010\t3000\t2\t2\t2\t5501886.0\t4758.36\t0\t0\t1\t1\nh3k4me3:chr1:1372772-1376818\th3k4me3\tseacr\tchr1\t1372772\t1376818\t4046\t2\t2\t2\t3020451.0\t3531.6\t0\t0\t1\t1\nh3k4me3:chr1:1397369-1401725\th3k4me3\tseacr\tchr1\t1397369\t1401725\t4356\t2\t2\t2\t5225265.0\t3420.07\t0\t0\t1\t1\nh3k4me3:chr1:1405327-1408434\th3k4me3\tseacr\tchr1\t1405327\t1408434\t3107\t2\t2\t2\t5847394.0\t5873.61\t0\t0\t1\t1\nh3k4me3:chr1:1657622-1659902\th3k4me3\tseacr\tchr1\t1657622\t1659902\t2280\t1\t1\t1\t35830.9\t40.9596\t0\t0\t0\t1\nh3k4me3:chr1:1692201-1693524\th3k4me3\tseacr\tchr1\t1692201\t1693524\t1323\t1\t1\t1\t41135.2\t96.5477\t0\t0\t0\t1\nh3k4me3:chr1:1745216-1746738\th3k4me3\tseacr\tchr1\t1745216\t1746738\t1522\t1\t1\t1\t23753.7\t46.811\t0\t0\t0\t1\nh3k4me3:chr1:1908137-1909485\th3k4me3\tseacr\tchr1\t1908137\t1909485\t1348\t1\t1\t1\t19207.1\t35.1082\t0\t0\t0\t1\nh3k4me3:chr1:2193306-2195545\th3k4me3\tseacr\tchr1\t2193306\t2195545\t2239\t1\t1\t1\t45433.0\t52.6624\t0\t0\t0\t1\n",
+          "id": "seacr_consensus_peaks",
+          "mode": "peaks/consensus",
+          "name": "Consensus peak overlap",
+          "path_glob": "**/*.consensus.peak_counts.bed",
+          "rawYaml": "id: seacr_consensus_peaks\nname: Consensus peak overlap\nmode: peaks/consensus\ndescription: >-\n  Merged consensus intervals per target against the replicates that called a\n  peak on them, as one 0/1 column per replicate. The intersections say how\n  reproducible the peak set is between replicates.\n# The CUT&RUN-family pipelines write this table for whichever caller ran; the\n# member file names carry both the replicate and the caller, which is where the\n# `caller` column and the set columns come from.\nfind:\n  path_glob: \"**/*.consensus.peak_counts.bed\"\nrecipe: seacr/consensus_peaks.py\nfixture: consensus_peaks.tsv\nrenders_as:\n  # The renderer enumerates the binary replicate columns itself, so the upset\n  # render binds no role.\n  - { id: seacr_consensus_upset, component: advanced_viz, kind: upset_plot }\n  - { id: seacr_consensus_width_hist, component: figure, visu_type: histogram, dict_kwargs: {x: width, color: support, title: Consensus interval width by replicate support} }\n  - { component: card, column: peak_id, aggregation: count, secondary_layout: top_n, breakdown_col: target, top_n_count: 3 }\n  - { component: card, column: num_samples, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: support, aggregation: count, secondary_layout: donut, breakdown_col: support }\n  - { component: card, column: total_signal, aggregation: average, secondary_layout: histogram }\n  - { component: table, row_selection_enabled: true, row_selection_column: peak_id }\n",
+          "recipe": "seacr/consensus_peaks.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "seacr_consensus_upset",
+              "kind": "upset_plot",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "support",
+                "title": "Consensus interval width by replicate support",
+                "x": "width"
+              },
+              "id": "seacr_consensus_width_hist",
+              "roles": {},
+              "visu_type": "histogram"
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "target",
+              "column": "peak_id",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "num_samples",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "support",
+              "column": "support",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "donut"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "total_signal",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {},
+              "row_selection_column": "peak_id",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "consensus_peaks",
+          "yamlPath": "depictio/catalog/seacr/consensus_peaks.yaml"
+        },
+        {
+          "columns": {},
+          "description": "How long the sequenced fragments were, per sample: the count and the fraction of fragments at every length, plus the running fraction at most that long.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*.frags.len.txt",
+            "path_glob_alt": []
+          },
+          "fixture": "fragment_lengths.tsv",
+          "fixtureContent": "sample\ttarget\tfragment_length\tcount\tfraction\tcumulative_fraction\nh3k27me3_R1\th3k27me3\t50\t3078\t0.001339973705519229\t0.017056150035262466\nh3k27me3_R1\th3k27me3\t80\t1029\t0.00044796391909658433\t0.05316970388235398\nh3k27me3_R1\th3k27me3\t100\t433\t0.00018850182407076873\t0.06044726737655961\nh3k27me3_R1\th3k27me3\t120\t317\t0.00013800249013956972\t0.06369663831158089\nh3k27me3_R1\th3k27me3\t150\t2149\t0.0009355436949840231\t0.07556746449809751\nh3k27me3_R1\th3k27me3\t180\t11415\t0.004969395662281351\t0.17637371248465422\nh3k27me3_R1\th3k27me3\t200\t17999\t0.007835668201962508\t0.3130788921490949\nh3k27me3_R1\th3k27me3\t250\t5855\t0.0025489103462687087\t0.6015545958747268\nh3k27me3_R1\th3k27me3\t300\t625\t0.00027208692850861537\t0.6432818472308084\nh3k27me3_R1\th3k27me3\t400\t7186\t0.003128346669220656\t0.8089544896519915\nh3k27me3_R2\th3k27me3\t50\t3382\t0.0016405514037822909\t0.01729661188783712\nh3k27me3_R2\th3k27me3\t80\t2231\t0.0010822206333052308\t0.07029049692893823\nh3k27me3_R2\th3k27me3\t100\t1575\t0.0007640060499577492\t0.09069358167006389\nh3k27me3_R2\th3k27me3\t120\t1322\t0.000641279998758187\t0.10569817540802776\nh3k27me3_R2\th3k27me3\t150\t3106\t0.0015066684388373138\t0.13538429746854477\nh3k27me3_R2\th3k27me3\t180\t11054\t0.005362109762687594\t0.2520303157600623\nh3k27me3_R2\th3k27me3\t200\t15472\t0.007505207368219871\t0.3871143467238935\nh3k27me3_R2\th3k27me3\t250\t5548\t0.002691241628676567\t0.6681225630632425\nh3k27me3_R2\th3k27me3\t300\t1061\t0.0005146732819080457\t0.724555202953963\nh3k27me3_R2\th3k27me3\t400\t4512\t0.0021886954269265805\t0.861374376546809\nh3k4me3_R1\th3k4me3\t50\t2244\t0.0017454803415665452\t0.020510949699985844\nh3k4me3_R1\th3k4me3\t80\t1099\t0.000854849775125505\t0.07979272032022251\nh3k4me3_R1\th3k4me3\t100\t742\t0.0005771597207853728\t0.09897978074153353\nh3k4me3_R1\th3k4me3\t120\t554\t0.0004309251823653592\t0.11081933345052832\nh3k4me3_R1\th3k4me3\t150\t1196\t0.0009303005742039163\t0.12890574561724188\nh3k4me3_R1\th3k4me3\t180\t3673\t0.0028570184022165424\t0.195028647968351\nh3k4me3_R1\th3k4me3\t200\t5832\t0.004536382064178294\t0.2749784926330461\nh3k4me3_R1\th3k4me3\t250\t4274\t0.0033245022191869048\t0.4884529163678451\nh3k4me3_R1\th3k4me3\t300\t1615\t0.0012562169124910743\t0.5767054603043231\nh3k4me3_R1\th3k4me3\t400\t2630\t0.002045727851301254\t0.7609780912659085\nh3k4me3_R2\th3k4me3\t50\t2238\t0.0015905991185607565\t0.01763518138018233\nh3k4me3_R2\th3k4me3\t80\t1274\t0.0009054616966248454\t0.07023013936576462\nh3k4me3_R2\th3k4me3\t100\t1098\t0.0007803743664788698\t0.0963328801286694\nh3k4me3_R2\th3k4me3\t120\t1135\t0.0008066711347481943\t0.11658992037765004\nh3k4me3_R2\th3k4me3\t150\t1693\t0.0012032548291882757\t0.14684612908017458\nh3k4me3_R2\th3k4me3\t180\t4010\t0.0028500011016213737\t0.21849131886821554\nh3k4me3_R2\th3k4me3\t200\t5607\t0.003985026478002754\t0.2928983800480022\nh3k4me3_R2\th3k4me3\t250\t4289\t0.003048292948841414\t0.47969853953434805\nh3k4me3_R2\th3k4me3\t300\t2243\t0.001594152735894449\t0.5745929153663384\nh3k4me3_R2\th3k4me3\t400\t2638\t0.0018748885052561554\t0.755776938018516\n",
+          "id": "seacr_fragment_lengths",
+          "mode": "qc/fragments",
+          "name": "Fragment length distribution",
+          "path_glob": "**/*.frags.len.txt",
+          "rawYaml": "id: seacr_fragment_lengths\nname: Fragment length distribution\nmode: qc/fragments\ndescription: >-\n  How long the sequenced fragments were, per sample: the count and the fraction\n  of fragments at every length, plus the running fraction at most that long.\n# The signature CUT&RUN QC figure. MNase cuts around nucleosomes, so a working\n# experiment shows a sharp sub-nucleosomal peak below about 120 bp next to a\n# mononucleosomal shoulder around 180 bp; a flat curve is a failed digestion.\nfind:\n  path_glob: \"**/*.frags.len.txt\"\nrecipe: seacr/fragment_lengths.py\nfixture: fragment_lengths.tsv\nrenders_as:\n  - { id: seacr_fragment_curve, component: figure, visu_type: line, dict_kwargs: {x: fragment_length, y: fraction, color: sample, title: Fragment length distribution} }\n  - { id: seacr_fragment_cumulative, component: figure, visu_type: line, dict_kwargs: {x: fragment_length, y: cumulative_fraction, color: sample, title: Cumulative fragment length} }\n  - { component: card, column: count, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }\n  - { component: card, column: fragment_length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: fraction, aggregation: max, secondary_layout: histogram }\n  - { component: card, column: target, aggregation: count, secondary_layout: donut, breakdown_col: target }\n  - { component: table }\n",
+          "recipe": "seacr/fragment_lengths.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "sample",
+                "title": "Fragment length distribution",
+                "x": "fragment_length",
+                "y": "fraction"
+              },
+              "id": "seacr_fragment_curve",
+              "roles": {},
+              "visu_type": "line"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "sample",
+                "title": "Cumulative fragment length",
+                "x": "fragment_length",
+                "y": "cumulative_fraction"
+              },
+              "id": "seacr_fragment_cumulative",
+              "roles": {},
+              "visu_type": "line"
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample",
+              "column": "count",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "fragment_length",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "fraction",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "target",
+              "column": "target",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "donut"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "fragment_lengths",
+          "yamlPath": "depictio/catalog/seacr/fragment_lengths.yaml"
+        },
+        {
+          "columns": {},
+          "description": "One row per sample: how many regions SEACR called, how much of the genome they cover and the median width, total coverage and coverage per base across them.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*.seacr.peaks.*.bed",
+            "path_glob_alt": []
+          },
+          "fixture": "peak_summary.tsv",
+          "fixtureContent": "sample\tthreshold_mode\tnum_peaks\ttotal_bp\twidth_median\twidth_mean\twidth_max\ttotal_signal_sum\ttotal_signal_median\tmax_signal_median\tsignal_density_median\nh3k27me3_R1\tstringent\t200144\t190915880\t608.0\t953.8925973299224\t44050\t30851392836.9\t55698.4\t167.598\t96.3290017769294\nh3k27me3_R2\tstringent\t219674\t175408665\t613.0\t798.4953385471198\t40479\t9251065703.4\t25910.3\t79.1557\t43.80345864661654\nh3k4me3_R1\tstringent\t3999\t11246454\t2622.0\t2812.3165791447864\t16569\t10702700630.0\t2064910.0\t2490.71\t827.2914285714286\nh3k4me3_R2\tstringent\t9812\t26406382\t2454.0\t2691.2333876885446\t13955\t969507879.1\t75239.9\t84.8449\t30.751391402714933\n",
+          "id": "seacr_peak_summary",
+          "mode": "peaks/qc",
+          "name": "Peak QC summary",
+          "path_glob": "**/*.seacr.peaks.*.bed",
+          "rawYaml": "id: seacr_peak_summary\nname: Peak QC summary\nmode: peaks/qc\ndescription: >-\n  One row per sample: how many regions SEACR called, how much of the genome\n  they cover and the median width, total coverage and coverage per base across\n  them.\n# SEACR writes no FRiP score, so the signal-to-noise proxy here is the coverage\n# the calls carry: a target that worked has far more of it than an IgG control\n# taken through the same thresholding.\nfind:\n  path_glob: \"**/*.seacr.peaks.*.bed\"\nrecipe: seacr/peak_summary.py\nfixture: peak_summary.tsv\nrenders_as:\n  - { id: seacr_summary_bar, component: figure, visu_type: bar, dict_kwargs: {x: sample, y: num_peaks, color: sample, title: Regions called per sample} }\n  - { component: card, column: num_peaks, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }\n  - { component: card, column: width_median, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: total_bp, aggregation: sum, secondary_layout: histogram }\n  - { component: card, column: signal_density_median, aggregation: average, secondary_layout: threshold, threshold_value: 50.0 }\n  - { component: table }\n",
+          "recipe": "seacr/peak_summary.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "sample",
+                "title": "Regions called per sample",
+                "x": "sample",
+                "y": "num_peaks"
+              },
+              "id": "seacr_summary_bar",
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample",
+              "column": "num_peaks",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "width_median",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "total_bp",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "signal_density_median",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "threshold",
+              "threshold_value": 50.0
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "peak_summary",
+          "yamlPath": "depictio/catalog/seacr/peak_summary.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Every SEACR region of every sample in one table, with the total and the maximum fragment coverage over the region, its width and where inside it the maximum was reached.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*.seacr.peaks.*.bed",
+            "path_glob_alt": []
+          },
+          "fixture": "peaks.tsv",
+          "fixtureContent": "sample\tpeak_id\tthreshold_mode\tchr\tstart\tend\twidth\tsummit\ttotal_signal\tmax_signal\tsignal_density\tlog10_total_signal\nh3k27me3_R1\th3k27me3_R1:chr16:84828818-84856872\tstringent\tchr16\t84828818\t84856872\t28054\t84842981\t16364392.0\t2011.17\t583.3176017680188\t7.21389990077512\nh3k27me3_R1\th3k27me3_R1:chr21:36691390-36711211\tstringent\tchr21\t36691390\t36711211\t19821\t36709441\t19004900.0\t3128.49\t958.8264971494879\t7.278865611625746\nh3k27me3_R1\th3k27me3_R1:chr22:19592188-19626403\tstringent\tchr22\t19592188\t19626403\t34215\t19607561\t23995937.0\t4022.35\t701.3279848019874\t7.380137731149536\nh3k27me3_R1\th3k27me3_R1:chr5:154470660-154487096\tstringent\tchr5\t154470660\t154487096\t16436\t154474257\t17237601.0\t3296.09\t1048.7710513506936\t7.236476849040677\nh3k27me3_R1\th3k27me3_R1:chr7:155639-190193\tstringent\tchr7\t155639\t190193\t34554\t158063\t20887700.0\t2234.64\t604.4944145395613\t7.319890642088562\nh3k27me3_R1\th3k27me3_R1:chr9:130899101-130943151\tstringent\tchr9\t130899101\t130943151\t44050\t130917759\t135487732.0\t11676.0\t3075.7714415437003\t8.131899976158198\nh3k27me3_R1\th3k27me3_R1:chr9:130972569-130994968\tstringent\tchr9\t130972569\t130994968\t22399\t130982793\t34963700.0\t5642.46\t1560.9491495156033\t7.543617397612388\nh3k27me3_R1\th3k27me3_R1:chr9:131006460-131045801\tstringent\tchr9\t131006460\t131045801\t39341\t131026437\t74258600.0\t7430.17\t1887.5625937317302\t7.87074676304657\nh3k27me3_R1\th3k27me3_R1:chr9:131059354-131100611\tstringent\tchr9\t131059354\t131100611\t41257\t131063372\t44149600.0\t4525.14\t1070.1117386140534\t7.644926783014804\nh3k27me3_R1\th3k27me3_R1:chr9:131103266-131122058\tstringent\tchr9\t131103266\t131122058\t18792\t131111754\t23693900.0\t5027.93\t1260.850361856109\t7.374636569515497\nh3k27me3_R2\th3k27me3_R2:chr22:19663095-19672475\tstringent\tchr22\t19663095\t19672475\t9380\t19666276\t1716460.0\t554.09\t182.99147121535182\t6.234633940195668\nh3k27me3_R2\th3k27me3_R2:chr22:23081791-23119007\tstringent\tchr22\t23081791\t23119007\t37216\t23103922\t7417020.0\t765.172\t199.29653912295788\t6.870229508642535\nh3k27me3_R2\th3k27me3_R2:chr22:23147696-23166026\tstringent\tchr22\t23147696\t23166026\t18330\t23153967\t4424410.0\t791.557\t241.37534097108565\t6.645855463400907\nh3k27me3_R2\th3k27me3_R2:chr9:130895346-130909668\tstringent\tchr9\t130895346\t130909668\t14322\t130906577\t4680980.0\t1108.18\t326.8384303868175\t6.670336878339169\nh3k27me3_R2\th3k27me3_R2:chr9:130909830-130945111\tstringent\tchr9\t130909830\t130945111\t35281\t130924409\t16052700.0\t1398.42\t454.9956067004903\t7.205548116535541\nh3k27me3_R2\th3k27me3_R2:chr9:130960854-130993977\tstringent\tchr9\t130960854\t130993977\t33123\t130982833\t9667973.0\t1134.56\t291.8809588503457\t6.985335473792738\nh3k27me3_R2\th3k27me3_R2:chr9:131006802-131043344\tstringent\tchr9\t131006802\t131043344\t36542\t131014043\t13775500.0\t1134.56\t376.9771769470746\t7.139107402629359\nh3k27me3_R2\th3k27me3_R2:chr9:131048100-131058836\tstringent\tchr9\t131048100\t131058836\t10736\t131050030\t2693720.0\t870.712\t250.9053651266766\t6.430352612012363\nh3k27me3_R2\th3k27me3_R2:chr9:131059309-131099788\tstringent\tchr9\t131059309\t131099788\t40479\t131063459\t12766000.0\t1187.34\t315.3734034931693\t7.106054874113405\nh3k27me3_R2\th3k27me3_R2:chr9:131102298-131121844\tstringent\tchr9\t131102298\t131121844\t19546\t131117493\t5539550.0\t1029.02\t283.41092806712373\t6.7434745650669115\nh3k4me3_R1\th3k4me3_R1:chr1:28504778-28511467\tstringent\tchr1\t28504778\t28511467\t6689\t28507829\t16276800.0\t8252.79\t2433.3682164748093\t7.211569053835481\nh3k4me3_R1\th3k4me3_R1:chr1:46300953-46306850\tstringent\tchr1\t46300953\t46306850\t5897\t46302855\t16085200.0\t8921.93\t2727.6920468034596\t7.206426492197606\nh3k4me3_R1\th3k4me3_R1:chr13:91347014-91351580\tstringent\tchr13\t91347014\t91351580\t4566\t91348242\t22591400.0\t18104.1\t4947.744196233027\t7.353943164417592\nh3k4me3_R1\th3k4me3_R1:chr22:20115635-20119388\tstringent\tchr22\t20115635\t20119388\t3753\t20117948\t16304000.0\t15539.0\t4344.25792699174\t7.2122941932996465\nh3k4me3_R1\th3k4me3_R1:chr22:20916173-20921108\tstringent\tchr22\t20916173\t20921108\t4935\t20918072\t25251000.0\t35427.5\t5116.717325227964\t7.40227859909466\nh3k4me3_R1\th3k4me3_R1:chr3:128482750-128493864\tstringent\tchr3\t128482750\t128493864\t11114\t128487094\t15856400.0\t4460.97\t1426.7050566852618\t7.20020462035797\nh3k4me3_R1\th3k4me3_R1:chr6:37169490-37175724\tstringent\tchr6\t37169490\t37175724\t6234\t37171123\t17503800.0\t14981.4\t2807.795957651588\t7.243132367205143\nh3k4me3_R1\th3k4me3_R1:chr6:67882059-67889478\tstringent\tchr6\t67882059\t67889478\t7419\t67886978\t18125100.0\t7026.02\t2443.065103113627\t7.258280435304848\nh3k4me3_R1\th3k4me3_R1:chr9:131272706-131278837\tstringent\tchr9\t131272706\t131278837\t6131\t131275853\t30779200.0\t16096.7\t5020.257706736258\t7.488257341752934\nh3k4me3_R1\th3k4me3_R1:chrM:0-16569\tstringent\tchrM\t0\t16569\t16569\t13069\t21300000.0\t3903.35\t1285.5332246967228\t7.328379623828149\nh3k4me3_R2\th3k4me3_R2:chr1:46300594-46307739\tstringent\tchr1\t46300594\t46307739\t7145\t46302855\t671264.0\t231.129\t93.94877536738979\t5.826894003503802\nh3k4me3_R2\th3k4me3_R2:chr13:91346694-91351564\tstringent\tchr13\t91346694\t91351564\t4870\t91348804\t1025630.0\t608.543\t210.60164271047228\t6.0109911390521535\nh3k4me3_R2\th3k4me3_R2:chr22:19477441-19481131\tstringent\tchr22\t19477441\t19481131\t3690\t19479202\t677929.0\t421.299\t183.72059620596207\t5.831184852888899\nh3k4me3_R2\th3k4me3_R2:chr22:20916273-20922872\tstringent\tchr22\t20916273\t20922872\t6599\t20918072\t1028040.0\t886.483\t155.7872404909835\t6.012010435397277\nh3k4me3_R2\th3k4me3_R2:chr3:150407290-150415877\tstringent\tchr3\t150407290\t150415877\t8587\t150411053\t707223.0\t225.278\t82.3597298241528\t5.849556990255451\nh3k4me3_R2\th3k4me3_R2:chr6:67881592-67889768\tstringent\tchr6\t67881592\t67889768\t8176\t67886545\t774497.0\t225.278\t94.72810665362036\t5.889020300610285\nh3k4me3_R2\th3k4me3_R2:chr7:105009202-105018149\tstringent\tchr7\t105009202\t105018149\t8947\t105014135\t767668.0\t403.745\t85.80172124734548\t5.88517400328658\nh3k4me3_R2\th3k4me3_R2:chr7:120987576-120996477\tstringent\tchr7\t120987576\t120996477\t8901\t120991028\t809348.0\t327.677\t90.92776092573868\t5.908135834455835\nh3k4me3_R2\th3k4me3_R2:chr9:131123939-131127364\tstringent\tchr9\t131123939\t131127364\t3425\t131125832\t809286.0\t819.193\t236.28788321167883\t5.908102564149366\nh3k4me3_R2\th3k4me3_R2:chr9:131272225-131280117\tstringent\tchr9\t131272225\t131280117\t7892\t131275454\t1462670.0\t555.881\t185.33578307146476\t6.165146650832943\n",
+          "id": "seacr_peaks",
+          "mode": "peaks/seacr",
+          "name": "Peak calls",
+          "path_glob": "**/*.seacr.peaks.*.bed",
+          "rawYaml": "id: seacr_peaks\nname: Peak calls\nmode: peaks/seacr\ndescription: >-\n  Every SEACR region of every sample in one table, with the total and the\n  maximum fragment coverage over the region, its width and where inside it the\n  maximum was reached.\n# SEACR reports no p-value and no fold enrichment, so significance is read off\n# the coverage itself: `log10_total_signal` is the height of the genome track\n# and `signal_density` the coverage per base.\nfind:\n  path_glob: \"**/*.seacr.peaks.*.bed\"\nrecipe: seacr/peaks.py\nfixture: peaks.tsv\nrenders_as:\n  # Where the signal is, then how the two coverage measures relate and how wide\n  # the calls are behind them.\n  - { id: seacr_peak_signal, component: advanced_viz, kind: manhattan, roles: {chr: chr, pos: summit, score: log10_total_signal} }\n  - { id: seacr_signal_scatter, component: figure, visu_type: scatter, dict_kwargs: {x: total_signal, y: max_signal, color: sample, title: Total against maximum signal} }\n  - { id: seacr_width_hist, component: figure, visu_type: histogram, dict_kwargs: {x: width, color: sample, title: Peak width distribution} }\n  # How many regions and where they concentrate, then the spread of width,\n  # total coverage and coverage per base behind that count.\n  - { component: card, column: peak_id, aggregation: count, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }\n  - { component: card, column: width, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: total_signal, aggregation: sum, secondary_layout: histogram }\n  - { component: card, column: signal_density, aggregation: average, secondary_layout: threshold, threshold_value: 50.0 }\n  - { component: table, row_selection_enabled: true, row_selection_column: peak_id }\n",
+          "recipe": "seacr/peaks.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "seacr_peak_signal",
+              "kind": "manhattan",
+              "roles": {
+                "chr": "chr",
+                "pos": "summit",
+                "score": "log10_total_signal"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "sample",
+                "title": "Total against maximum signal",
+                "x": "total_signal",
+                "y": "max_signal"
+              },
+              "id": "seacr_signal_scatter",
+              "roles": {},
+              "visu_type": "scatter"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "sample",
+                "title": "Peak width distribution",
+                "x": "width"
+              },
+              "id": "seacr_width_hist",
+              "roles": {},
+              "visu_type": "histogram"
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample",
+              "column": "peak_id",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "width",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "total_signal",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "signal_density",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "threshold",
+              "threshold_value": 50.0
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {},
+              "row_selection_column": "peak_id",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "peaks",
+          "yamlPath": "depictio/catalog/seacr/peaks.yaml"
+        }
+      ]
+    },
+    {
       "biotools_url": "https://bio.tools/hap.py",
       "description": "",
       "dir": "depictio/catalog/sompy",

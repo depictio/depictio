@@ -1,0 +1,117 @@
+# Megatest manifest for nf-core/cutandrun 3.1 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the tables-only
+# subset of it that the template recipes and MultiQC need. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline cutandrun --version 3.1 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing
+#
+# Keys are fnmatch globs relative to run_root (here the prefix root) and are
+# mirrored 1:1 below the destination, which becomes the template DATA_ROOT.
+#
+# 3.1 is deliberately not the newest release: every cutandrun 3.2.x prefix in the
+# bucket is an empty/failed run (pipeline_info plus zero-byte directory markers
+# only), so 3.1 is the newest release that actually published results.
+#
+# The run publishes its outputs under numbered stage directories
+# (01_prealign, 02_alignment, 03_peak_calling, 04_reporting) and ships no
+# pipeline_info/params.json: cutandrun 3.1 predates the params dump, so the
+# provenance the CLI introspects is pipeline_info/software_versions.yml. The
+# validated samplesheet is pipeline_info/samplesheet.valid.csv.
+#
+# MultiQC: the run wrote a MultiQC 1.14 report (multiqc_data.json, no parquet),
+# so the manifest fetches the raw MultiQC inputs and the parquet Depictio reads
+# is produced afterwards by
+#
+#   python -m depictio.dev_scripts.multiqc_reprocess --src <dest> --dest <dest>
+#
+# which writes <dest>/multiqc/multiqc_data/multiqc.parquet + REPROCESSED.json.
+# The reprocess tool skips every multiqc*/ directory when it re-parses inputs, so
+# the old 04_reporting/multiqc/ report is fetched for provenance only.
+#
+# Not fetched on purpose: the deeptools heatmap matrices under
+# 04_reporting/deeptools_heatmaps/ (3 MB to 940 MB each, 2.9 GB in total), the
+# BAM/bigWig/bedGraph signal tracks, and 04_reporting/igv/genome.fa (3.1 GB).
+pipeline: cutandrun
+version: "3.1"
+# s3://nf-core-awsmegatests/cutandrun/results-<results_sha>/ == the 3.1 release tag_sha.
+results_sha: "42502fb44975e930eec865353c5481f472bcf766"
+run_root: ""
+multiqc:
+  version: "1.14"
+  parquet: multiqc/multiqc_data/multiqc.parquet
+  reprocess: true
+keys:
+  # Validated samplesheet (target/control pairing) + software versions + trace.
+  - pipeline_info/samplesheet.valid.csv
+  - pipeline_info/software_versions.yml
+  - pipeline_info/local_versions.yml
+  - pipeline_info/execution_trace_*.txt
+  # Provenance of the original MultiQC 1.14 report (version banner, module list).
+  - 04_reporting/multiqc/multiqc_data/multiqc.log
+  # --- raw MultiQC inputs (re-parsed by MultiQC 1.35) ----------------------
+  # FastQC before and after trimming, plus the Trim Galore / cutadapt reports.
+  - 01_prealign/pretrim_fastqc/*_fastqc.zip
+  - 01_prealign/trimgalore/fastqc/*_fastqc.zip
+  - 01_prealign/trimgalore/*_trimming_report.txt
+  # Bowtie2 logs for the target genome and for the spike-in genome. The two sets
+  # carry different sample names (".spikein" suffix) so they do not collide.
+  - 02_alignment/bowtie2/target/log/*.bowtie2.log
+  - 02_alignment/bowtie2/spikein/log/*.spikein.bowtie2.log
+  # samtools stats/flagstat/idxstats of the marked-duplicate target BAMs. The
+  # dedup/ twin of the IgG controls is left out: MultiQC derives the sample name
+  # from the file stem, so igg_ctrl_R1.stats would appear twice.
+  - 02_alignment/bowtie2/target/markdup/*.stats
+  - 02_alignment/bowtie2/target/markdup/*.flagstat
+  - 02_alignment/bowtie2/target/markdup/*.idxstats
+  # deepTools QC: per-sample fingerprint (quality metrics + raw counts) and the
+  # cross-sample PCA / correlation matrices over the target BAMs.
+  - 04_reporting/deeptools_qc/*.plotFingerprint.qcmetrics.txt
+  - 04_reporting/deeptools_qc/*.plotFingerprint.raw.txt
+  - 04_reporting/deeptools_qc/all_target_bams.plotPCA.tab
+  - 04_reporting/deeptools_qc/all_target_bams.plotCorrelation.mat.tab
+  # --- peak calls ----------------------------------------------------------
+  # MACS2 narrow peaks (+ the xls MultiQC's macs2 module reads). h3k27me3_R2 has
+  # zero-byte narrowPeak/summits files: MACS2 called nothing for that sample and
+  # the template keeps that null result visible.
+  - 03_peak_calling/04_called_peaks/macs2/*.macs2_peaks.narrowPeak
+  - 03_peak_calling/04_called_peaks/macs2/*.macs2_peaks.xls
+  # SEACR stringent peaks, the CUT&RUN-specific caller (BED6 with total signal,
+  # max signal and the max-signal region).
+  - 03_peak_calling/04_called_peaks/seacr/*.seacr.peaks.stringent.bed
+  # Consensus peaks per target: merged intervals with the member peaks and the
+  # replicate files that supported them. consensus.peaks.awk.bed is a byte-equal
+  # intermediate of the same table, so only peak_counts.bed is fetched.
+  - 03_peak_calling/05_consensus_peaks/*.consensus.peak_counts.bed
+  # Fragment-length histograms, the signature CUT&RUN QC figure (5.8 KB each).
+  - 03_peak_calling/06_fragments_from_bams/*.frags.len.txt
+prefix_keys: []
+renames: {}
+post_fetch_help: |
+  === Drop the zero-byte peak files ===
+
+  MACS2 called nothing for h3k27me3_R2, so its narrowPeak and summits files are
+  published at 0 bytes. The recipe glob loader hands every matched file to
+  polars.read_csv, which raises `NoDataError: empty CSV` on a zero-byte file
+  before the "skip empty frames" guard downstream can see it, so one empty call
+  set fails the whole macs2_peaks collection. Remove them after fetching:
+
+  find {dest}/03_peak_calling -type f -size 0 -delete
+
+  The null result stays visible without them: MACS2's own *_peaks.xls is not
+  empty (MultiQC's macs module reports 0 peaks for that sample) and the
+  caller_agreement collection emits an n_peaks = 0 row for it.
+
+  === Reprocess MultiQC (the run wrote MultiQC 1.14, Depictio reads >= 1.31 parquet) ===
+
+  python -m depictio.dev_scripts.multiqc_reprocess --src {dest} --dest {dest} --dry-run
+  python -m depictio.dev_scripts.multiqc_reprocess --src {dest} --dest {dest}
+  # -> {dest}/multiqc/multiqc_data/multiqc.parquet + REPROCESSED.json
+
+  === Quick test commands ===
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli run --template nf-core/cutandrun/3.1 --data-root {dest} --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli run --template nf-core/cutandrun/3.1 --data-root {dest}
