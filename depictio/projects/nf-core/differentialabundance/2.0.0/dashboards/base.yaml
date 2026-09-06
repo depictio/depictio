@@ -173,7 +173,7 @@ main_dashboard:
     title: Sample PCA
     description: One point per sample, coloured by the sheet's leading factor. Lasso a cluster to filter the linked panels.
     title_size: h3
-    layout: {x: 0, y: 2, w: 4, h: 7}
+    layout: {x: 0, y: 2, w: 8, h: 7}
   - component_type: advanced_viz
     tag: da-av-distance
     index: da-av-distance
@@ -191,7 +191,7 @@ main_dashboard:
     title: Sample-to-sample distance
     description: Euclidean distance over the 500 most variable features; the dendrograms group replicates that behave alike.
     title_size: h3
-    layout: {x: 4, y: 2, w: 4, h: 7}
+    layout: {x: 0, y: 9, w: 8, h: 7}
 
   # -------------------------------------------------------- reference tables
   - component_type: text
@@ -431,7 +431,7 @@ tabs:
     title: Volcano
     description: -log10(padj) against log2 fold change. The dashed lines are the pipeline's own cut-offs, padj 0.05 and a two-fold change.
     title_size: h3
-    layout: {x: 0, y: 2, w: 4, h: 7}
+    layout: {x: 0, y: 2, w: 8, h: 7}
   - component_type: advanced_viz
     tag: da-av-ma
     index: da-av-ma
@@ -448,7 +448,7 @@ tabs:
     title: MA plot
     description: Fold change against mean expression. The funnel narrowing to the right is the shrinkage DESeq2 applies to low-count features.
     title_size: h3
-    layout: {x: 4, y: 2, w: 4, h: 7}
+    layout: {x: 0, y: 9, w: 8, h: 7}
 
   # ------------------------------------------------------- test diagnostics
   - component_type: text
@@ -482,7 +482,7 @@ tabs:
     title: QQ plot
     description: Observed against expected p-value quantiles, with the 95% null band. Filter to one contrast to read it.
     title_size: h3
-    layout: {x: 0, y: 2, w: 4, h: 6}
+    layout: {x: 0, y: 2, w: 8, h: 6}
   - component_type: figure
     tag: da-fig-contrast-vs-contrast
     index: da-contrast-vs-contrast
@@ -530,7 +530,7 @@ tabs:
     title: Contrast against contrast
     description: Effect sizes of the two contrasts, gene by gene. Points off the axes moved in both; select one to follow it into the annotated table.
     title_size: h3
-    layout: {x: 4, y: 2, w: 4, h: 6}
+    layout: {x: 0, y: 8, w: 8, h: 6}
 
   # ---------------------------------------------------------------- gene table
   - component_type: text
@@ -807,7 +807,7 @@ tabs:
     title: Strongest calls per contrast
     description: The 15 largest effect sizes in each contrast. An empty panel means the contrast returned no call above the threshold.
     title_size: h3
-    layout: {x: 0, y: 2, w: 4, h: 7}
+    layout: {x: 0, y: 2, w: 8, h: 7}
   - component_type: figure
     tag: da-fig-biotype-box
     index: da-biotype-box
@@ -819,7 +819,7 @@ tabs:
     title: Effect size by biotype
     description: Distribution of log2 fold change within each biotype, split by call direction.
     title_size: h3
-    layout: {x: 4, y: 2, w: 4, h: 7}
+    layout: {x: 0, y: 9, w: 8, h: 7}
 
   # --------------------------------------------------------------- left panel
   - component_type: interactive
@@ -1039,7 +1039,7 @@ tabs:
     title: Calls per chromosome
     description: One chromosome at a time, stems at the gene start coordinate, head size scaled by significance.
     title_size: h3
-    layout: {x: 0, y: 2, w: 4, h: 7}
+    layout: {x: 0, y: 2, w: 8, h: 7}
   - component_type: advanced_viz
     tag: da-av-annotated-volcano
     index: da-av-annotated-volcano
@@ -1057,7 +1057,7 @@ tabs:
     title: Volcano with gene symbols
     description: The annotated calls, laid out as a volcano and coloured by biotype rather than by direction.
     title_size: h3
-    layout: {x: 4, y: 2, w: 4, h: 7}
+    layout: {x: 0, y: 9, w: 8, h: 7}
 
   # --------------------------------------------------------------- left panel
   - component_type: interactive
