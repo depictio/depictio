@@ -1,0 +1,344 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d73"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d73"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "gat-text",
+      "component_type": "text",
+      "title": "Gene arrow track",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Gene arrow track",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "One lane per contig, one arrow per coding sequence. An arrow points right on the + strand and left on the -. The shaded band is the called BGC region: arrows inside it are coloured by product class, the grey flanking genes either side are the neighbourhood the cluster sits in.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gat-track",
+      "component_type": "advanced_viz",
+      "title": "Gene arrow track",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "gene_arrow_track_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d83"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Biosynthetic gene clusters on five bacterial contigs: one antiSMASH-style BGC region per contig with its flanking neighbourhood",
+        "data_collection_tag": "gene_arrow_track_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d83"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Biosynthetic gene clusters on five bacterial contigs. Arrow direction is the strand, colour is the antiSMASH-style product class, the band behind each lane is the called region. Feature labels, arrow height, lane count and lane ordering live in the Settings \u2699 popover.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Gene arrow track",
+      "viz_kind": "gene_arrow_track",
+      "config": {
+        "viz_kind": "gene_arrow_track",
+        "contig_col": "contig",
+        "feature_id_col": "feature_id",
+        "start_col": "start",
+        "end_col": "end",
+        "strand_col": "strand",
+        "class_col": "gene_class",
+        "label_col": "label",
+        "region_start_col": "region_start",
+        "region_end_col": "region_end",
+        "show_labels": true,
+        "arrow_height": 0.5
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gat-f-contig",
+      "component_type": "interactive",
+      "title": "Contig",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "gene_arrow_track_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d83"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Biosynthetic gene clusters on five bacterial contigs: one antiSMASH-style BGC region per contig with its flanking neighbourhood",
+        "data_collection_tag": "gene_arrow_track_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d83"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Locus scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "contig",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Locus filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#12B886",
+      "icon_name": "mdi:bacteria",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gat-f-class",
+      "component_type": "interactive",
+      "title": "Product class",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "gene_arrow_track_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d83"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Biosynthetic gene clusters on five bacterial contigs: one antiSMASH-style BGC region per contig with its flanking neighbourhood",
+        "data_collection_tag": "gene_arrow_track_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d83"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Locus scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "gene_class",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Locus filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#7950F2",
+      "icon_name": "mdi:dna",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gat-f-strand",
+      "component_type": "interactive",
+      "title": "Strand",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "gene_arrow_track_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d83"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Biosynthetic gene clusters on five bacterial contigs: one antiSMASH-style BGC region per contig with its flanking neighbourhood",
+        "data_collection_tag": "gene_arrow_track_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d83"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Locus scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "strand",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Locus filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#1976D2",
+      "icon_name": "mdi:vector-arrange-below",
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-gat-f-contig",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-gat-f-class",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-gat-f-strand",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-gat-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-gat-track",
+      "x": 0,
+      "y": 1,
+      "w": 8,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Gene arrow track",
+  "subtitle": "Locus map of five biosynthetic gene clusters: strand-aware arrows on a base-pair axis, one lane per contig, with the called BGC region shaded behind them.",
+  "icon": "mdi:dna",
+  "icon_color": "teal",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 31,
+  "main_tab_name": null,
+  "tab_icon": "mdi:dna",
+  "tab_icon_color": "lime",
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Locus scope",
+      "icon": "mdi:filter-variant",
+      "color": "teal",
+      "description": "Restricts which contigs, classes and strands are drawn",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Gene arrow track",
+      "icon": "mdi:dna",
+      "color": "teal",
+      "description": "Coding sequences along a contig, one lane per contig",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
+}

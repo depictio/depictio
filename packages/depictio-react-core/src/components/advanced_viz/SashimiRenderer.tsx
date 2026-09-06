@@ -591,23 +591,31 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
           value={topN}
           onChange={(v) => setTopN(Math.max(1, Number(v) || 1))}
         />
-        <Switch
-          size="xs"
-          checked={logWidth}
-          onChange={(e) => setLogWidth(e.currentTarget.checked)}
-          label="Log-scaled arc width"
-        />
-        <Switch
-          size="xs"
-          checked={showCounts}
-          onChange={(e) => setShowCounts(e.currentTarget.checked)}
-          label="Read count at each apex"
-        />
-        <Stack gap={2}>
+        <Stack gap={4}>
           <Text size="xs" fw={500}>
-            Thickest arc
+            Arc width
+          </Text>
+          <Switch
+            size="xs"
+            checked={logWidth}
+            onChange={(e) => setLogWidth(e.currentTarget.checked)}
+            label="Log-scaled arc width"
+          />
+          <Text size="xs" c="dimmed">
+            Thickest arc: {maxArcWidth} px
           </Text>
           <Slider size="xs" min={3} max={18} value={maxArcWidth} onChange={setMaxArcWidth} />
+        </Stack>
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            Annotations
+          </Text>
+          <Switch
+            size="xs"
+            checked={showCounts}
+            onChange={(e) => setShowCounts(e.currentTarget.checked)}
+            label="Read count at each apex"
+          />
         </Stack>
         {lanes.length > MAX_LANES_HINT ? (
           <Text size="xs" c="dimmed">

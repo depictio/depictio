@@ -1,0 +1,343 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d71"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d71"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "sigm-text",
+      "component_type": "text",
+      "title": "Signal matrix",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Signal matrix",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "One row per ATAC-seq peak, one column per 50 bp offset from the summit, cell colour is the normalised signal. Rows are ordered by total signal and split into a panel per peak class, so the banding is the reading: promoters give a narrow bright stripe with faint nucleosome shoulders either side, enhancers a broad low mound, background peaks almost nothing. Columns are positions and are never reordered; past the row budget rows are averaged into bins rather than truncated, so the weak half never disappears.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "sigm-matrix",
+      "component_type": "advanced_viz",
+      "title": "ATAC-seq signal around peak summits",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "signal_matrix_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d81"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ATAC-seq signal matrix around peak summits: 300 peaks x 41 offsets (-1000 to +1000 bp, 50 bp bins), classified as promoter / enhancer / background",
+        "data_collection_tag": "signal_matrix_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d81"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "300 peaks \u00d7 41 offsets (-1000 to +1000 bp, 50 bp bins), panelled on the peak class with the mean profile drawn above. Colour scale, row order, row budget and the profile toggle all live in the Settings \u2699 popover; the colour range is a robust 2nd-98th percentile so one saturated peak cannot flatten the rest.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Signal matrix",
+      "viz_kind": "signal_matrix",
+      "config": {
+        "viz_kind": "signal_matrix",
+        "region_id_col": "region_id",
+        "position_col": "position",
+        "value_col": "value",
+        "group_col": "group",
+        "reference_position": 0.0,
+        "reference_label": "Peak summit",
+        "sort_by": "signal",
+        "max_rows": 600,
+        "colour_scale": "Viridis",
+        "show_profile": true
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "sigm-f-group",
+      "component_type": "interactive",
+      "title": "Peak class",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "signal_matrix_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d81"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ATAC-seq signal matrix around peak summits: 300 peaks x 41 offsets (-1000 to +1000 bp, 50 bp bins), classified as promoter / enhancer / background",
+        "data_collection_tag": "signal_matrix_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d81"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Matrix scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "group",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Matrix filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#12B886",
+      "icon_name": "mdi:form-select",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "sigm-f-value",
+      "component_type": "interactive",
+      "title": "Signal",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "signal_matrix_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d81"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ATAC-seq signal matrix around peak summits: 300 peaks x 41 offsets (-1000 to +1000 bp, 50 bp bins), classified as promoter / enhancer / background",
+        "data_collection_tag": "signal_matrix_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d81"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Matrix scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "value",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Matrix filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#00BCD4",
+      "icon_name": "mdi:chart-line",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "sigm-f-position",
+      "component_type": "interactive",
+      "title": "Offset (bp)",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "signal_matrix_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d81"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ATAC-seq signal matrix around peak summits: 300 peaks x 41 offsets (-1000 to +1000 bp, 50 bp bins), classified as promoter / enhancer / background",
+        "data_collection_tag": "signal_matrix_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d81"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Matrix scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "position",
+      "column_type": "int64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Matrix filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#45B8AC",
+      "icon_name": "mdi:map-marker-path",
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-sigm-f-group",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-sigm-f-value",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-sigm-f-position",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-sigm-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-sigm-matrix",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 12,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Signal matrix",
+  "subtitle": "The heatmap half of a metagene plot: one row per ATAC-seq peak, one column per 50 bp offset from the summit, panelled by peak class.",
+  "icon": "mdi:grid",
+  "icon_color": "teal",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 29,
+  "main_tab_name": null,
+  "tab_icon": "mdi:blur-linear",
+  "tab_icon_color": "teal",
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Matrix scope",
+      "icon": "mdi:filter-variant",
+      "color": "teal",
+      "description": "Restricts which peaks and which part of the window are drawn",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Signal matrix",
+      "icon": "mdi:chart-box-outline",
+      "color": "teal",
+      "description": "Peaks down, offsets across, signal as colour",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
+}

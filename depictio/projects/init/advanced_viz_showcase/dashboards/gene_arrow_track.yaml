@@ -1,0 +1,129 @@
+# Gene arrow track — one tab of the advanced-visualisation showcase.
+#
+# Regenerate the seed after editing:
+#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'Gene arrow track'
+subtitle: 'Locus map of five biosynthetic gene clusters: strand-aware arrows on a base-pair axis, one lane per contig, with the called BGC region shaded behind them.'
+icon: 'mdi:dna'
+icon_color: 'teal'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8d73'
+is_main_tab: false
+tab_order: 31
+parent_dashboard_tag: volcano
+tab_icon: 'mdi:dna'
+tab_icon_color: 'lime'
+
+# Left-panel filter section. Deliberately not `persistent`: the 23 tabs of
+# this family read different collections whose column names collide while their
+# value domains do not overlap, so a control fanned out from one tab would show
+# up everywhere and bite on nothing.
+filter_sections:
+  - name: 'Locus scope'
+    icon: 'mdi:filter-variant'
+    color: 'teal'
+    description: 'Restricts which contigs, classes and strands are drawn'
+
+grid_sections:
+  - name: 'Gene arrow track'
+    icon: 'mdi:dna'
+    color: 'teal'
+    description: 'Coding sequences along a contig, one lane per contig'
+
+components:
+  - tag: text-gene_arrow_track
+    index: gat-text
+    component_type: text
+    title: 'Gene arrow track'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Gene arrow track'
+    body: >
+      One lane per contig, one arrow per coding sequence. An arrow points right on the +
+      strand and left on the -. The shaded band is the called BGC region: arrows inside it
+      are coloured by product class, the grey flanking genes either side are the
+      neighbourhood the cluster sits in.
+    layout: { x: 0, y: 0, w: 8, h: 1 }
+
+  - tag: viz-gene_arrow_track
+    index: 'gat-track'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'gene_arrow_track_demo'
+    title: 'Gene arrow track'
+    description: 'Biosynthetic gene clusters on five bacterial contigs. Arrow direction is the strand, colour is the antiSMASH-style product class, the band behind each lane is the called region. Feature labels, arrow height, lane count and lane ordering live in the Settings ⚙ popover.'
+    section: 'Gene arrow track'
+    viz_kind: 'gene_arrow_track'
+    config:
+      viz_kind: "gene_arrow_track"
+      contig_col: "contig"
+      feature_id_col: "feature_id"
+      start_col: "start"
+      end_col: "end"
+      strand_col: "strand"
+      class_col: "gene_class"
+      label_col: "label"
+      region_start_col: "region_start"
+      region_end_col: "region_end"
+      show_labels: true
+      arrow_height: 0.5
+    layout: { x: 0, y: 1, w: 8, h: 8 }
+
+  - tag: filter-gene_arrow_track-contig
+    index: gat-f-contig
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'gene_arrow_track_demo'
+    interactive_component_type: MultiSelect
+    column_name: 'contig'
+    column_type: 'object'
+    title: 'Contig'
+    placement: left
+    section: 'Locus scope'
+    group: 'Locus filters'
+    display:
+      title_size: md
+      custom_color: '#12B886'
+      icon_name: 'mdi:bacteria'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-gene_arrow_track-class
+    index: gat-f-class
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'gene_arrow_track_demo'
+    interactive_component_type: MultiSelect
+    column_name: 'gene_class'
+    column_type: 'object'
+    title: 'Product class'
+    placement: left
+    section: 'Locus scope'
+    group: 'Locus filters'
+    display:
+      title_size: md
+      custom_color: '#7950F2'
+      icon_name: 'mdi:dna'
+    layout: { x: 0, y: 3, w: 1, h: 3 }
+
+  - tag: filter-gene_arrow_track-strand
+    index: gat-f-strand
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'gene_arrow_track_demo'
+    interactive_component_type: MultiSelect
+    column_name: 'strand'
+    column_type: 'object'
+    title: 'Strand'
+    placement: left
+    section: 'Locus scope'
+    group: 'Locus filters'
+    display:
+      title_size: md
+      custom_color: '#1976D2'
+      icon_name: 'mdi:vector-arrange-below'
+    layout: { x: 0, y: 6, w: 1, h: 3 }
