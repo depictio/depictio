@@ -66,6 +66,15 @@ KIND_SAMPLING_POLICY: dict[AdvancedVizKind, SamplingPolicy] = {
     "roc_pr_curve": "none",
     "confusion_matrix": "none",
     "metric_ci_bars": "none",
+    # Curves, matrices and tracks all read the frame as an ordered whole: a
+    # uniform subset of a profile is a curve with holes, and a sampled matrix
+    # loses whole regions rather than resolution.
+    "profile": "none",
+    "signal_matrix": "none",
+    "fusion_structure": "none",
+    "gene_arrow_track": "none",
+    "gsea_running_score": "none",
+    "sashimi": "none",
 }
 
 #: The role whose tail a ``tail`` kind must keep, and whether the interesting
