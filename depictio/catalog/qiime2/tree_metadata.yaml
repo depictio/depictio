@@ -14,3 +14,8 @@ renders_as:
   - { component: card, column: taxon, aggregation: nunique, secondary_layout: uniqueness }
   - { component: card, column: confidence, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
   - { component: table }
+  # Metric cards and the row-level table behind them: the readings the
+  # nf-core dashboards were already computing off this output by hand.
+  - { component: card, column: taxon, aggregation: nunique, secondary_layout: top_n, breakdown_col: Phylum, top_n_count: 3 }
+  - { component: card, column: Genus, aggregation: count, secondary_layout: completeness, top_n_count: 3 }
+  - { component: card, column: Genus, aggregation: nunique, secondary_layout: concentration, breakdown_col: Genus, top_n_count: 3 }

@@ -182,8 +182,14 @@ def _multiqc_sections(dc_id: str) -> set[str] | None:
     # report (see the `multiqc.list_plots()` reimplementation in
     # `multiqc_processor.py`), so this branch should be rare going forward.
     plots_meta = metadata.get("plots") or {}
-    plottable = {multiqc_module(str(m).lower()) for m in plots_meta} | {"general_stats"}
-    return present & plottable
+    plottable = {multiqc_module(str(m).lower()) for m in plots_meta}
+    # The general-statistics table is not one of the report's modules: MultiQC
+    # assembles it from every module that ran, so it appears in neither
+    # `metadata.modules` nor `metadata.plots`, and an intersection could never
+    # keep it. It is also always present, and renders through its own stub path
+    # rather than through a plot anchor, so it is added to the answer instead of
+    # to the set being intersected.
+    return (present & plottable) | {multiqc_module("general_stats")}
 
 
 def _keep_present_multiqc_sections(

@@ -28,3 +28,7 @@ renders_as:
   - { component: card, column: neg_log10_padj, aggregation: max, secondary_layout: histogram, aggregations: [box_plot_stats] }
   - { component: figure, visu_type: histogram, dict_kwargs: {x: log2fc, color: direction} }
   - { component: table, row_selection_enabled: true, row_selection_column: gene_id }
+  # Metric cards and the row-level table behind them: the readings the
+  # nf-core dashboards were already computing off this output by hand.
+  - { component: card, column: direction, aggregation: count, secondary_layout: composition, breakdown_col: direction }
+  - { component: card, column: neg_log10_padj, aggregation: max, secondary_layout: gauge, coverage_max: 60 }

@@ -232,6 +232,7 @@ main_dashboard:
   - component_type: 'card'
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
+    use: multiqc/summary_metrics
     aggregation: nunique
     column_name: sample
     column_type: object
@@ -257,6 +258,7 @@ main_dashboard:
   - component_type: 'card'
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
+    use: multiqc/summary_metrics
     aggregation: average
     column_name: pct_reads_mapped
     column_type: float64
@@ -283,6 +285,7 @@ main_dashboard:
   - component_type: 'card'
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
+    use: multiqc/summary_metrics
     aggregation: average
     column_name: pct_genome_covered_10x
     column_type: float64
@@ -310,6 +313,7 @@ main_dashboard:
   - component_type: 'card'
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
+    use: multiqc/summary_metrics
     aggregation: nunique
     column_name: lineage
     column_type: object
@@ -351,6 +355,7 @@ main_dashboard:
   - component_type: multiqc
     workflow_tag: viralrecon
     data_collection_tag: multiqc_data
+    use: multiqc/general_stats
     selected_module: general_stats
     selected_plot: general_stats
     section: QC overview
@@ -830,6 +835,7 @@ tabs:
   - component_type: card
     workflow_tag: viralrecon
     data_collection_tag: mosdepth_amplicon_coverage
+    use: mosdepth/amplicon_coverage
     aggregation: nunique
     column_name: region
     column_type: object
@@ -852,6 +858,7 @@ tabs:
   - component_type: card
     workflow_tag: viralrecon
     data_collection_tag: mosdepth_amplicon_coverage
+    use: mosdepth/amplicon_coverage
     aggregation: average
     aggregations:
     - box_plot_stats
@@ -871,6 +878,7 @@ tabs:
   - component_type: card
     workflow_tag: viralrecon
     data_collection_tag: mosdepth_genome_coverage
+    use: mosdepth/genome_coverage
     aggregation: average
     aggregations:
     - box_plot_stats
@@ -890,6 +898,7 @@ tabs:
   - component_type: 'card'
     workflow_tag: viralrecon
     data_collection_tag: mosdepth_amplicon_coverage
+    use: mosdepth/amplicon_coverage
     aggregation: median
     column_name: coverage
     column_type: int64
@@ -1013,6 +1022,7 @@ tabs:
   - component_type: table
     workflow_tag: viralrecon
     data_collection_tag: mosdepth_amplicon_coverage
+    use: mosdepth/amplicon_coverage
     row_selection_enabled: true
     row_selection_column: sample
     section: Coverage tables
@@ -1159,6 +1169,7 @@ tabs:
   - component_type: card
     workflow_tag: viralrecon
     data_collection_tag: pangolin_lineages
+    use: pangolin/report
     aggregation: nunique
     column_name: lineage
     column_type: object
@@ -1182,6 +1193,7 @@ tabs:
   - component_type: card
     workflow_tag: viralrecon
     data_collection_tag: nextclade_results
+    use: nextclade/report
     aggregation: nunique
     column_name: clade
     column_type: object
@@ -1205,6 +1217,7 @@ tabs:
   - component_type: 'card'
     workflow_tag: viralrecon
     data_collection_tag: nextclade_results
+    use: nextclade/report
     aggregation: average
     column_name: coverage
     column_type: float64
@@ -1231,6 +1244,7 @@ tabs:
   - component_type: 'card'
     workflow_tag: viralrecon
     data_collection_tag: pangolin_lineages
+    use: pangolin/report
     aggregation: nunique
     column_name: qc_status
     column_type: object
@@ -1272,6 +1286,7 @@ tabs:
   - component_type: figure
     workflow_tag: viralrecon
     data_collection_tag: pangolin_lineages
+    use: pangolin/report
     visu_type: bar
     mode: code
     code_content: "df_modified = df.group_by('lineage').agg(pl.count().alias('count')).sort('count', descending=True)\n\
@@ -1292,6 +1307,7 @@ tabs:
   - component_type: figure
     workflow_tag: viralrecon
     data_collection_tag: nextclade_results
+    use: nextclade/report
     visu_type: bar
     mode: code
     code_content: "df_modified = df.group_by('clade').agg(pl.count().alias('count')).sort('count', descending=True)\n\
@@ -1399,6 +1415,7 @@ tabs:
   - component_type: table
     workflow_tag: viralrecon
     data_collection_tag: pangolin_lineages
+    use: pangolin/report
     row_selection_enabled: true
     row_selection_column: sample
     section: Typing tables
@@ -1414,6 +1431,7 @@ tabs:
   - component_type: table
     workflow_tag: viralrecon
     data_collection_tag: nextclade_results
+    use: nextclade/report
     row_selection_enabled: true
     row_selection_column: sample
     section: Typing tables
@@ -1545,6 +1563,7 @@ tabs:
   - component_type: card
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
+    use: multiqc/summary_metrics
     aggregation: average
     column_name: pct_genome_covered_10x
     column_type: float64
@@ -1568,6 +1587,7 @@ tabs:
   - component_type: card
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
+    use: multiqc/summary_metrics
     aggregation: median
     column_name: num_variants_total
     column_type: float64
@@ -1591,6 +1611,7 @@ tabs:
   - component_type: 'card'
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
+    use: multiqc/summary_metrics
     aggregation: average
     column_name: pct_reads_mapped
     column_type: float64
@@ -1617,6 +1638,7 @@ tabs:
   - component_type: 'card'
     workflow_tag: viralrecon
     data_collection_tag: nextclade_results
+    use: nextclade/report
     aggregation: median
     column_name: totalMissing
     column_type: int64
@@ -1659,6 +1681,7 @@ tabs:
   - component_type: figure
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
+    use: multiqc/summary_metrics
     visu_type: scatter
     mode: code
     code_content: "fig = px.scatter(df.to_pandas(), x='coverage_median', y='num_variants_total',\n   \
@@ -1682,6 +1705,7 @@ tabs:
   - component_type: figure
     workflow_tag: viralrecon
     data_collection_tag: nextclade_results
+    use: nextclade/report
     visu_type: scatter
     mode: code
     code_content: "fig = px.scatter(df.to_pandas(), x='totalSubstitutions', y='totalDeletions',\n    color='clade',\
@@ -1719,6 +1743,7 @@ tabs:
   - component_type: figure
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
+    use: multiqc/summary_metrics
     visu_type: bar
     mode: code
     code_content: "df_modified = df.sort('pct_genome_covered_10x', descending=True)\nfig = px.bar(df_modified.to_pandas(),\
@@ -1756,6 +1781,7 @@ tabs:
   - component_type: 'card'
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
+    use: multiqc/summary_metrics
     aggregation: nunique
     column_name: sample
     column_type: object
@@ -1781,6 +1807,7 @@ tabs:
   - component_type: 'card'
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
+    use: multiqc/summary_metrics
     aggregation: average
     column_name: num_reads_mapped
     column_type: float64
@@ -1809,6 +1836,7 @@ tabs:
   - component_type: 'card'
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
+    use: multiqc/summary_metrics
     aggregation: average
     column_name: pct_genome_covered_1x
     column_type: float64
@@ -1835,6 +1863,7 @@ tabs:
   - component_type: 'card'
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
+    use: multiqc/summary_metrics
     aggregation: nunique
     column_name: lineage
     column_type: object
@@ -1860,6 +1889,7 @@ tabs:
   - component_type: table
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
+    use: multiqc/summary_metrics
     # summary_metrics is the source DC of all 12 project links, so rows picked
     # here narrow every other tab through the link resolver.
     row_selection_enabled: true
@@ -2057,6 +2087,7 @@ tabs:
   - component_type: card
     workflow_tag: viralrecon
     data_collection_tag: variants_long
+    use: ivar/variants_long
     aggregation: count
     column_name: POS
     column_type: int64
@@ -2080,6 +2111,7 @@ tabs:
   - component_type: card
     workflow_tag: viralrecon
     data_collection_tag: variants_long
+    use: ivar/variants_long
     aggregation: nunique
     column_name: POS
     column_type: int64
@@ -2103,6 +2135,7 @@ tabs:
   - component_type: card
     workflow_tag: viralrecon
     data_collection_tag: variants_long
+    use: ivar/variants_long
     aggregation: nunique
     column_name: sample
     column_type: object
@@ -2125,6 +2158,7 @@ tabs:
   - component_type: card
     workflow_tag: viralrecon
     data_collection_tag: variants_long
+    use: ivar/variants_long
     aggregation: nunique
     column_name: AA
     column_type: object
@@ -2208,6 +2242,7 @@ tabs:
   - component_type: 'figure'
     workflow_tag: viralrecon
     data_collection_tag: variants_long
+    use: ivar/variants_long
     mode: code
     code_content: |
       df_modified = df.filter(pl.col('AF').is_not_null())
@@ -2234,6 +2269,7 @@ tabs:
   - component_type: 'figure'
     workflow_tag: viralrecon
     data_collection_tag: variants_long
+    use: ivar/variants_long
     mode: code
     code_content: |
       df_modified = df.filter(
@@ -2281,6 +2317,7 @@ tabs:
   - component_type: figure
     workflow_tag: viralrecon
     data_collection_tag: variants_long
+    use: ivar/variants_long
     visu_type: bar
     mode: code
     code_content: "df_modified = df.group_by(['GENE', 'FUNCLASS']).agg(pl.count().alias('count')).sort('count',\
@@ -2301,6 +2338,7 @@ tabs:
   - component_type: figure
     workflow_tag: viralrecon
     data_collection_tag: variants_long
+    use: ivar/variants_long
     visu_type: bar
     mode: code
     code_content: "df_modified = df.group_by(['sample', 'FUNCLASS']).agg(pl.count().alias('count')).sort('sample')\n\
@@ -2335,6 +2373,7 @@ tabs:
   - component_type: card
     workflow_tag: viralrecon
     data_collection_tag: oncoplot_canonical
+    use: ivar/oncoplot_matrix
     aggregation: nunique
     column_name: sample_id
     column_type: object
@@ -2357,6 +2396,7 @@ tabs:
   - component_type: card
     workflow_tag: viralrecon
     data_collection_tag: oncoplot_canonical
+    use: ivar/oncoplot_matrix
     aggregation: nunique
     column_name: gene
     column_type: object
@@ -2379,6 +2419,7 @@ tabs:
   - component_type: advanced_viz
     workflow_tag: viralrecon
     data_collection_tag: oncoplot_canonical
+    use: ivar/mutation_matrix
     viz_kind: oncoplot
     config:
       viz_kind: oncoplot
@@ -2446,6 +2487,7 @@ tabs:
   - component_type: table
     workflow_tag: viralrecon
     data_collection_tag: variants_long
+    use: ivar/variants_long
     row_selection_enabled: true
     row_selection_column: sample
     section: Variant table
