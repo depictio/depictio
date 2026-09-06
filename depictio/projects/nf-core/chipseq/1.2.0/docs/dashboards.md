@@ -80,6 +80,8 @@ titled "Reads mapped", which the API's general-stats payload collapses onto one 
 render answers 500. The panels above carry the same numbers. See `VALIDATION_REPORT.md`,
 CS-D3.
 
+![Sequencing QC](screenshots/sequencing-qc.png)
+
 ## Peaks
 
 `Peak yield` is a four-card strip on the peak table: peaks in view with a top-3 breakdown by
@@ -107,6 +109,8 @@ row selection on `peak_id`.
 The left panel adds a `Peak scope` group (q-value, fold enrichment and width range sliders)
 and a collapsed `Annotation scope` group (feature class, distance to TSS).
 
+![Peaks](screenshots/peaks.png)
+
 ## Consensus
 
 `Consensus at a glance`: intervals per consensus set with a top-3 breakdown, samples per
@@ -125,6 +129,8 @@ reads as a block rather than as scattered gaps.
 
 `Consensus tables` (collapsed) holds the boolean matrix and the fold-enrichment matrix, both
 with row selection on `peak_id`, linked to each other in both directions.
+
+![Consensus](screenshots/consensus.png)
 
 ## Differential binding
 
@@ -148,6 +154,8 @@ set, so `gene_id` identifies an interval only together with its contrast; the `C
 filter is a single-choice `Select` for that reason.
 
 ---
+
+![Differential binding](screenshots/differential-binding.png)
 
 ## Catalog modules
 
