@@ -64,6 +64,8 @@ genomic origin and gene body coverage, and dupRadar's duplication against expres
 that falls away at the 5' end is degraded RNA; duplication that rises with expression is
 normal, duplication that is flat and high is a library problem.
 
+![QC](screenshots/qc.png)
+
 ## Expression overview
 
 `Libraries at a glance` puts four different strips on one row: the library count with its
@@ -82,6 +84,8 @@ points in the PCA and picking rows in the table are the same act.
 expressed per library, coloured by condition. A library dominated by rRNA or by a single
 biotype explains a low gene count above it.
 
+![Expression overview](screenshots/expression-overview.png)
+
 ## Expression heatmap
 
 One panel, doing one thing. `Top variable genes` draws the 500 genes with the highest variance
@@ -93,6 +97,8 @@ it the replicates of one condition form a visible block.
 The `Heatmap scope` filter reads the samplesheet, so it narrows the matrix by **columns**: the
 sample ids are column names here, not row values. `Matrix rows` (collapsed) holds the same
 matrix as an ordinary table, one gene per row.
+
+![Expression heatmap](screenshots/expression-heatmap.png)
 
 ## Gene explorer
 
@@ -109,6 +115,8 @@ Start from the `Gene` filter. With no gene picked the panels describe all 153968
 rows, which is a distribution of the whole transcriptome rather than a comparison.
 
 ---
+
+![Gene explorer](screenshots/gene-explorer.png)
 
 ## Catalog module
 

@@ -628,7 +628,7 @@ tabs:
     title: Sample PCA on Salmon TPMs
     description: One point per library. Points far from their replicate are the ones to check on the QC tab.
     title_size: h3
-    layout: {x: 0, y: 2, w: 4, h: 6}
+    layout: {x: 0, y: 2, w: 8, h: 6}
   - component_type: multiqc
     tag: rna-ovw-deseq2-similarity
     section: Sample relationships
@@ -639,7 +639,7 @@ tabs:
     title: Sample correlation heatmap
     description: Pairwise sample distances on the regularised-log counts, as the pipeline's DESeq2 QC step computed them.
     title_size: h3
-    layout: {x: 4, y: 2, w: 4, h: 6}
+    layout: {x: 0, y: 8, w: 8, h: 6}
   - component_type: table
     tag: rna-ovw-table-samples
     section: Sample relationships
@@ -652,7 +652,7 @@ tabs:
     description: Select rows to narrow the heatmap and the gene explorer to those libraries.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 8, w: 8, h: 4}
+    layout: {x: 0, y: 14, w: 8, h: 4}
 
   - component_type: text
     tag: rna-ovw-composition-intro
