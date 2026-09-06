@@ -1159,9 +1159,12 @@ tabs:
     data_collection_tag: macs2_broad_peaks
     use: macs2/broad_peaks
     visu_type: histogram
-    dict_kwargs: {x: width, color: sample, nbins: 60}
+    # Log x: peak width is a long tail. On a linear axis the widest call
+    # sets the range, every bin but the first two is empty, and the panel
+    # reads as a single spike against 19 kb of white space.
+    dict_kwargs: {x: width, color: sample, nbins: 60, log_x: true}
     title: Peak width distribution
-    description: How wide the calls are, per library. Broad calling gives wider regions than a narrow-peak run would.
+    description: How wide the calls are, per library, on a log axis. Broad calling gives wider regions than a narrow-peak run would.
     title_size: h3
     layout: {x: 4, y: 8, w: 4, h: 6}
 
