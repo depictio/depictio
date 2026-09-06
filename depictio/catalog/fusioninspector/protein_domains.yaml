@@ -9,9 +9,14 @@ find: { path_glob: "**/fusioninspector/*/*.FusionInspector.fusions.abridged.tsv"
 recipe: fusioninspector/protein_domains.py
 fixture: protein_domains.tsv
 renders_as:
+  # The fusion protein drawn as its two partners end to end, each annotated
+  # domain placed along the partner that contributes it and the breakpoint
+  # marked between them. A domain the breakpoint truncated is short where the
+  # same domain kept whole on the other side is not.
+  - { id: fusion_domains, component: advanced_viz, kind: fusion_structure, roles: {fusion_id: fusion, partner: partner, feature: domain, start: domain_start, end: domain_end} }
   # Domain starts along the fusion protein, one lane per fusion, split by the
-  # partner that contributes the domain. This is the closest the catalog gets to
-  # a protein-domain track: it places each domain but cannot draw its extent.
+  # partner that contributes the domain. Kept beside the structure view: it
+  # ranks many fusions at a glance where the structure reads a handful closely.
   - { id: domain_lollipop, component: advanced_viz, kind: lollipop, roles: {feature_id: fusion, position: domain_start, category: partner} }
   # Domain extents as bars, so a domain the breakpoint truncated is visibly
   # shorter than the same domain kept whole on the other side.

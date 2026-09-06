@@ -146,9 +146,9 @@ the nine templates are the evidence for what is missing.
 | pipeline | kinds bound | code-mode figures | what a kind would replace |
 |---|---|---|---|
 | differentialabundance 2.0.0 | volcano x2, ma, qq, da_barplot, manhattan, lollipop, embedding, complex_heatmap x2 | 1 | nothing, the contrast-against-contrast scatter only wants UI-mode size and `custom_data` |
-| funcscan 4.0.0 | sunburst x3, upset_plot x3, complex_heatmap, dot_plot, embedding | 4 | nothing, all four are plain bars and scatters |
+| funcscan 4.0.0 | sunburst x3, upset_plot x3, complex_heatmap, dot_plot, embedding, gene_arrow_track | 4 | nothing, all four are plain bars and scatters |
 | airrflow 5.1.0 | complex_heatmap x2, rarefaction, sankey, stacked_taxonomy, sunburst, upset_plot, metric_ci_bars | 5 | diversity profile with confidence ribbons, rank abundance |
-| rnafusion 4.1.3 | dot_plot x5, lollipop x2, manhattan, upset_plot | 3 | protein-domain track |
+| rnafusion 4.1.3 | dot_plot x5, lollipop x2, manhattan, upset_plot, fusion_structure, sashimi | 2 | nothing left; the domain track is now `fusion_structure` |
 | rnaseq 3.26.0 | embedding, complex_heatmap | 1 | nothing, and the gene-body coverage profile stays a MultiQC panel |
 | taxprofiler 2.0.1 | stacked_taxonomy x2, sunburst, dot_plot x2, complex_heatmap, embedding, upset_plot | 1 | rank-abundance accumulation |
 | chipseq 1.2.0 | volcano, ma, qq, da_barplot, manhattan, complex_heatmap, upset_plot | 2 | nothing in the template, because the deepTools profile is left in MultiQC |
@@ -178,9 +178,12 @@ because its name and renderer assume an accumulation.
 
 #### Reusable well beyond these pipelines
 
-**1. `profile`: multi-series curve over an ordered axis.** Roles `series`, `x`, `y`, with
-optional `lower` and `upper` for a band; config for a reference marker at x = 0, shaded
-x-ranges and log axes. Six code-mode figures in four pipelines collapse into it:
+**1. `profile`: multi-series curve over an ordered axis.** BUILT, and bound in chipseq and
+atacseq through `preseq/complexity_ribbon`, `deeptools/metagene_profile`,
+`homer/tss_distance`, `ataqv/fragment_length` and `ataqv/tss_coverage`. Roles `series`,
+`x`, `y`, with optional `lower` and `upper` for a band; config for a reference marker at
+x = 0, shaded x-ranges and log axes. Six code-mode figures in four pipelines collapse
+into it:
 
 | figure | pipeline | x axis |
 |---|---|---|
@@ -221,7 +224,10 @@ support in the figure builder.
 
 #### Reusable across a family, not universal
 
-**3. `signal_matrix`: the metagene heatmap.** Rows are regions ordered by signal, columns
+**3. `signal_matrix`: the metagene heatmap.** BUILT, and bound nowhere in the lot: the
+kind needs one row per region, and every chromatin manifest fetches deepTools'
+`plotProfile.tab` summary rather than the `computeMatrix` matrix the rows live in. Binding
+it is a manifest and recipe job, not a viz one. Rows are regions ordered by signal, columns
 are position offsets, drawn under the profile curve of candidate 1. Wanted by all three
 chromatin templates, and the reason cutandrun leaves `04_reporting/deeptools_heatmaps/`
 (2.9 GB) unfetched. `complex_heatmap` can technically bind it, since it only requires
@@ -239,9 +245,10 @@ recurring template, not before.
 
 #### Pipeline-specific
 
-**5. Protein-domain track.** `rnaf-fi-domain-track`: one bar per Pfam hit along each
-partner protein with the breakpoint marked. rnafusion today, oncoanalyser when it lands,
-nothing else in sight.
+**5. Protein-domain track.** BUILT as `fusion_structure`, bound through
+`fusioninspector/fusion_domains`, and `rnaf-fi-domain-track` is now that kind rather than
+the code-mode bar chart it started as: one lane per partner, one bar per Pfam hit along it.
+rnafusion today, oncoanalyser when it lands, nothing else in sight.
 
 #### Asked for, but not actually a viz-kind gap
 
