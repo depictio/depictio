@@ -20,6 +20,12 @@ _HAS_HEATMAPGL = hasattr(go, "Heatmapgl")
 # WebGL auto-switch threshold (rows * cols) — only used on Plotly <6
 _WEBGL_THRESHOLD = 100_000
 
+# Vertical pixels a 9pt row tick label needs to itself before it overprints its
+# neighbour. Plotly draws every label it is handed whatever the row pitch, so
+# past this density the labels stop being labels and become a solid dark band
+# down the side of the map.
+_MIN_ROW_LABEL_PITCH_PX = 11
+
 
 class ComplexHeatmap:
     """Clustered heatmap with dendrograms, annotation tracks, and split support.
@@ -56,6 +62,9 @@ class ComplexHeatmap:
         Subtitle text displayed below the title.
     width / height:
         Figure size in pixels.
+    show_row_labels:
+        ``None`` (auto — draw them only where the row pitch leaves room),
+        ``True`` or ``False`` to force it either way.
     """
 
     def __init__(
@@ -80,6 +89,7 @@ class ComplexHeatmap:
         description: str = "",
         width: int = 900,
         height: int = 700,
+        show_row_labels: bool | None = None,
     ) -> None:
         arr, row_labels, col_labels = validate_data(data)
         self._raw = arr
@@ -104,8 +114,10 @@ class ComplexHeatmap:
         self.description = description
         self.width = width
         self.height = height
+        self.show_row_labels = show_row_labels
 
         # Computed during to_plotly()
+        self._row_labels_visible: bool = True
         self._row_dendro: DendrogramResult | None = None
         self._col_dendro: DendrogramResult | None = None
         self._row_order: NDArray[np.intp] | None = None
@@ -845,8 +857,37 @@ class ComplexHeatmap:
         if self.right_annotation:
             _apply_numeric_border(self.right_annotation, layout.right_anno_cells, "row")
 
+    def _resolve_row_label_visibility(self, layout: GridLayout) -> bool:
+        """Whether the row labels have the vertical room to be read.
+
+        Decided once for the whole figure, on the tallest group: labels shown
+        on one split panel and dropped from the next would read as a rendering
+        fault rather than as a density decision.
+        """
+        if self.show_row_labels is not None:
+            self._row_labels_visible = self.show_row_labels
+            return self._row_labels_visible
+
+        cells = layout.heatmap_cells or [(1, 1)]
+        if self._split_groups is not None and self._group_indices is not None:
+            sizes = [len(self._group_indices[g]) for g in self._split_groups]
+        else:
+            sizes = [len(self._row_labels)]
+
+        worst = 0.0
+        for cell, size in zip(cells, sizes):
+            if size <= 0:
+                continue
+            row_idx = cell[0] - 1
+            fraction = layout.row_heights[row_idx] if row_idx < len(layout.row_heights) else 1.0
+            pitch = (self.height * fraction) / size
+            worst = pitch if worst == 0.0 else min(worst, pitch)
+        self._row_labels_visible = worst >= _MIN_ROW_LABEL_PITCH_PX
+        return self._row_labels_visible
+
     def _place_row_labels(self, fig: go.Figure, layout: GridLayout, has_right_anno: bool) -> None:
         """Put row tick labels on the rightmost subplot column."""
+        visible = self._resolve_row_label_visibility(layout)
         if self._split_groups is not None:
             self._place_row_labels_split(fig, layout, has_right_anno)
             return
@@ -861,9 +902,9 @@ class ComplexHeatmap:
 
         yax = self._axis_name(fig, label_cell, "y")
         fig.layout[yax].update(
-            tickvals=list(range(n)),
-            ticktext=self._row_labels,
-            showticklabels=True,
+            tickvals=list(range(n)) if visible else [],
+            ticktext=self._row_labels if visible else [],
+            showticklabels=visible,
             side="right",
             range=y_range,
             autorange=False,
@@ -891,9 +932,9 @@ class ComplexHeatmap:
 
             yax = self._axis_name(fig, label_cell, "y")
             fig.layout[yax].update(
-                tickvals=list(range(gs)),
-                ticktext=rl,
-                showticklabels=True,
+                tickvals=list(range(gs)) if self._row_labels_visible else [],
+                ticktext=rl if self._row_labels_visible else [],
+                showticklabels=self._row_labels_visible,
                 side="right",
                 range=y_range,
                 autorange=False,
@@ -969,7 +1010,10 @@ class ComplexHeatmap:
         # the sans-serif stack; the constant covers the swatch, the gap after it
         # and the legend box's own padding + border.
         max_label_len = max((len(lbl) for lbl in self._row_labels), default=0)
-        label_px = max_label_len * 7 + 10
+        # Zero when the labels were dropped for density: the band would
+        # otherwise still be reserved and the map drawn narrow to make room
+        # for nothing.
+        label_px = (max_label_len * 7 + 10) if self._row_labels_visible else 0
         # Bar thickness 12 + xpad on both sides + room for the value tick labels.
         colorbar_px = 58
         legend_px = (max((len(t) for t in legend_texts), default=0) * 6 + 46) if has_legend else 0
