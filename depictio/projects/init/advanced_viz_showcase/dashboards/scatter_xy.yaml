@@ -67,8 +67,8 @@ components:
       label_col: "gene"
       color_col: "regulation"
       size_col: "mean_expression"
-      x_title: "Replicate A (log2 CPM)"
-      y_title: "Replicate B (log2 CPM)"
+      x_title: "Replicate A (CPM)"
+      y_title: "Replicate B (CPM)"
       log_x: true
       log_y: true
       reference_line: "diagonal"
