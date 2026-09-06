@@ -1677,7 +1677,13 @@ def compute_upset(payload: dict) -> dict:
                     }
                 annotations_spec[col] = spec
         else:
-            annotations_spec = None
+            # Empty, never None: `from_dataframe` reads None as "auto-detect",
+            # which turns EVERY non-set column into an annotation track. On a
+            # consensus peak table that means a categorical track keyed on
+            # `peak_id` — one category per row — and the task walks into its
+            # own soft time limit (measured: 0.2s against 69s on a 20k-row
+            # frame, and it degrades worse than linearly from there).
+            annotations_spec = {}
 
         upset = UpSetPlot.from_dataframe(
             pdf,

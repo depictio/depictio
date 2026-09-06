@@ -177,3 +177,38 @@ class TestMaterializeCategoricalStacked:
         anno = UpSetAnnotation(data=annotated_df, category="category")
         tracks = anno.materialize(indices, order)
         assert tracks[0].legend_items() == []
+
+
+class TestFromDataframeAnnotationDefaults:
+    """The three `annotations=` values a caller can pass, and what each means.
+
+    `None` and `{}` differ in a way that is easy to read backwards: `None` is
+    "decide for me", not "none". A caller that wants no tracks and passes
+    `None` gets one track per non-set column, which on a table with an id
+    column means one categorical track with a category per row.
+    """
+
+    def test_none_auto_detects_every_non_set_column(self, annotated_df: pd.DataFrame) -> None:
+        from plotly_upset import UpSetPlot
+
+        sets = ["SetA", "SetB", "SetC", "SetD"]
+        upset = UpSetPlot.from_dataframe(annotated_df, set_columns=sets, annotations=None)
+        assert upset.annotation is not None
+        assert {t.column for t in upset.annotation._track_specs} == {"score", "quality", "category"}
+
+    def test_empty_dict_means_no_tracks(self, annotated_df: pd.DataFrame) -> None:
+        from plotly_upset import UpSetPlot
+
+        sets = ["SetA", "SetB", "SetC", "SetD"]
+        upset = UpSetPlot.from_dataframe(annotated_df, set_columns=sets, annotations={})
+        assert upset.annotation is None
+
+    def test_explicit_dict_keeps_only_what_it_names(self, annotated_df: pd.DataFrame) -> None:
+        from plotly_upset import UpSetPlot
+
+        sets = ["SetA", "SetB", "SetC", "SetD"]
+        upset = UpSetPlot.from_dataframe(
+            annotated_df, set_columns=sets, annotations={"score": {"column": "score"}}
+        )
+        assert upset.annotation is not None
+        assert {t.column for t in upset.annotation._track_specs} == {"score"}
