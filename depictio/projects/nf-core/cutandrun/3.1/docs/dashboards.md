@@ -81,6 +81,8 @@ did not work.
 
 ---
 
+![Sequencing and enrichment QC](screenshots/sequencing-and-enrichment-qc.png)
+
 ## Peak calls
 
 `SEACR peak yield` counts the regions in view, their width distribution, the total coverage
@@ -100,6 +102,8 @@ enrichment at all, so its panel plots coverage while the MACS2 panel plots signi
 The left rail filters on region width and coverage per base.
 
 ---
+
+![Peak calls](screenshots/peak-calls.png)
 
 ## Caller agreement
 
@@ -126,6 +130,8 @@ caller present the comparison reads as complete agreement rather than as missing
 
 ---
 
+![Caller agreement](screenshots/caller-agreement.png)
+
 ## Consensus and reproducibility
 
 `Consensus at a glance` counts the merged intervals per target, the replicates per interval,
@@ -146,6 +152,8 @@ it.
 `Consensus table`, collapsed, holds the merged intervals with row selection on `peak_id`.
 
 ---
+
+![Consensus and reproducibility](screenshots/consensus-and-reproducibility.png)
 
 ## Reproducing
 
