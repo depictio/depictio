@@ -51,6 +51,9 @@ narrow GC and length range, so most FastQC warnings here are normal.
 A `Read QC scope` filter narrows the panels to selected report samples, independently of the
 persistent sample filter, because the MultiQC sample ids carry the `_ASSEMBLED` suffix.
 
+![Quality control](screenshots/quality-control.png)
+
+
 ## Sequence processing
 
 `Funnel at a glance` carries four cards: total input reads with an attrition strip across the
@@ -66,6 +69,9 @@ what matters. The depth control adds the Change-O steps after IgBLAST annotation
 `Per sample` plots the same funnel as one line per sample on a log axis, next to a retention bar
 chart. A sample whose line drops away from the rest at one step is the one to look at.
 
+![Sequence processing](screenshots/sequence-processing.png)
+
+
 ## Repertoire
 
 `Repertoire at a glance`: clone counts as a box plot, mean clone size against a threshold,
@@ -80,6 +86,9 @@ genes stay visible, annotated by subject. A stacked bar of the family level alon
 `Clones and depth` plots clones against sequencing depth on log axes, point size the mean clone
 size: a repertoire that is simply deeper sits along the diagonal, one that is genuinely more
 clonal sits below it. Selecting points, or rows in the table beside it, narrows the clonal tab.
+
+![Repertoire](screenshots/repertoire.png)
+
 
 ## Clonal analysis
 
@@ -104,6 +113,9 @@ the colour scale spans the real sharing rather than each sample's own repertoire
 samples from different subjects always read zero.
 
 ---
+
+![Clonal analysis](screenshots/clonal-analysis.png)
+
 
 ## Catalog module
 

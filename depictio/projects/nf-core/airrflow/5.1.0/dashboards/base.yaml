@@ -848,7 +848,7 @@ tabs:
     title: V gene composition
     description: Share of each sample's sequences per V family, switchable to gene resolution.
     title_size: h3
-    layout: {x: 0, y: 1, w: 4, h: 7}
+    layout: {x: 0, y: 1, w: 8, h: 7}
   - component_type: advanced_viz
     tag: airr-rep-v-heatmap
     index: airr-rep-v-heatmap
@@ -866,7 +866,7 @@ tabs:
     title: V gene usage heatmap
     description: Sample by V gene fractions, column standardised so rare genes stay visible.
     title_size: h3
-    layout: {x: 4, y: 1, w: 4, h: 7}
+    layout: {x: 0, y: 8, w: 8, h: 7}
   - component_type: figure
     tag: airr-rep-fig-family
     index: airr-rep-family-bars
@@ -889,7 +889,7 @@ tabs:
     title: V family composition
     description: The family level on its own, stacked to one per sample.
     title_size: h3
-    layout: {x: 0, y: 8, w: 8, h: 6}
+    layout: {x: 0, y: 15, w: 8, h: 6}
 
   - component_type: text
     tag: airr-rep-depth-intro
@@ -1136,7 +1136,7 @@ tabs:
     title: Hill diversity profile
     description: Diversity against order q, one line per sample, coloured by subject.
     title_size: h3
-    layout: {x: 0, y: 2, w: 4, h: 6}
+    layout: {x: 0, y: 2, w: 8, h: 6}
   - component_type: figure
     tag: airr-clone-fig-ribbons
     index: airr-clone-div-ribbons
@@ -1171,7 +1171,7 @@ tabs:
     title: Diversity profile with confidence ribbons
     description: The same curves with the bootstrap band alakazam computed, shaded per sample.
     title_size: h3
-    layout: {x: 4, y: 2, w: 4, h: 6}
+    layout: {x: 0, y: 8, w: 8, h: 6}
   - component_type: advanced_viz
     tag: airr-clone-div-cibars
     index: airr-clone-div-cibars
@@ -1186,7 +1186,7 @@ tabs:
     title: Diversity at one order, ranked
     description: Narrow the diversity order on the left to compare one Hill number per sample with its confidence interval.
     title_size: h3
-    layout: {x: 0, y: 8, w: 8, h: 5}
+    layout: {x: 0, y: 14, w: 8, h: 5}
 
   - component_type: text
     tag: airr-clone-abund-intro
@@ -1227,7 +1227,7 @@ tabs:
     title: Rank abundance
     description: Top 500 clones per sample. Select points to narrow the rest of the tab to those samples.
     title_size: h3
-    layout: {x: 0, y: 1, w: 4, h: 6}
+    layout: {x: 0, y: 1, w: 8, h: 6}
   - component_type: advanced_viz
     tag: airr-clone-sunburst
     index: airr-clone-sunburst
@@ -1245,7 +1245,7 @@ tabs:
     title: Clonal homeostasis
     description: Sequences per subject, sample and clone size class, from rare to hyperexpanded.
     title_size: h3
-    layout: {x: 4, y: 1, w: 4, h: 6}
+    layout: {x: 0, y: 7, w: 8, h: 6}
 
   - component_type: text
     tag: airr-clone-share-intro
@@ -1279,7 +1279,7 @@ tabs:
     title: Shared clones per sample pair
     description: Diagonal is zeroed so the colour scale spans the real sharing.
     title_size: h3
-    layout: {x: 0, y: 1, w: 4, h: 6}
+    layout: {x: 0, y: 1, w: 8, h: 6}
   - component_type: advanced_viz
     tag: airr-clone-upset
     index: airr-clone-upset
@@ -1298,7 +1298,7 @@ tabs:
     title: Clone set intersections
     description: Each bar is a set of samples and how many clones appear in exactly those.
     title_size: h3
-    layout: {x: 4, y: 1, w: 4, h: 6}
+    layout: {x: 0, y: 7, w: 8, h: 6}
 
   - component_type: interactive
     tag: airr-clone-filter-q
