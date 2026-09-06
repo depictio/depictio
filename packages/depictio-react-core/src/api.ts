@@ -976,7 +976,13 @@ export type AdvancedVizKind =
   | 'pr_benchmark'
   | 'roc_pr_curve'
   | 'confusion_matrix'
-  | 'metric_ci_bars';
+  | 'metric_ci_bars'
+  | 'profile'
+  | 'signal_matrix'
+  | 'fusion_structure'
+  | 'gene_arrow_track'
+  | 'gsea_running_score'
+  | 'sashimi';
 
 /** Accepted dtypes for one role, plus whether the role is required. Sourced
  *  from the backend canonical schema so the builder never duplicates the
