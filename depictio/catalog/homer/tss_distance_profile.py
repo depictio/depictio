@@ -89,7 +89,10 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             ((pl.col("distance_to_tss") // BIN_BP) * BIN_BP + BIN_BP // 2).alias("distance_to_tss")
         )
         .group_by(["sample", "distance_to_tss"])
-        .agg(pl.len().alias("peak_count"))
+        # `pl.len()` is UInt64; EXPECTED_SCHEMA says Int64, and the schema check
+        # is exact, so cast here rather than letting the recipe fail at ingest
+        # (a TSV fixture round-trips back to Int64 and hides this).
+        .agg(pl.len().cast(pl.Int64).alias("peak_count"))
     )
     return (
         binned.with_columns(
