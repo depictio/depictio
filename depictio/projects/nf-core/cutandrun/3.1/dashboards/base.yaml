@@ -1203,7 +1203,10 @@ tabs:
     title: Yield and agreement per sample and caller
     description: One dot per sample and caller. Colour is log10 of the peaks called, size the share of them the other caller also called.
     title_size: h3
-    layout: {x: 0, y: 1, w: 8, h: 7}
+    # Four rows, not seven: the y axis holds exactly two callers, and the
+    # renderer fills whatever tile it is given, so the extra height is spent
+    # spreading two rows of dots over half a screen.
+    layout: {x: 0, y: 1, w: 8, h: 4}
   - component_type: figure
     tag: cr-ca-fig-scatter
     index: cr-ca-fig-scatter
