@@ -46,6 +46,7 @@ from depictio.api.v1.services.screenshot_helpers import (  # noqa: E402
     build_localstorage_init_script,
     dismiss_notifications,
     wait_for_dashboard_content,
+    wait_for_panels_settled,
     wait_for_plotly_drawn,
 )
 
@@ -221,6 +222,10 @@ async def _run(
             await page.set_viewport_size({"width": width, "height": height})
             await page.goto(f"{viewer_url}/dashboard/{dash_id}", wait_until="networkidle")
             await wait_for_dashboard_content(page)
+            # An advanced-viz tile computes server-side on first open, and the
+            # skeleton it shows meanwhile is not a Plotly div, so the check
+            # below would pass over it. The load indicator counts the tile.
+            await wait_for_panels_settled(page, timeout_ms=120_000)
             await wait_for_plotly_drawn(page, timeout_ms=20_000)
             await dismiss_notifications(page)
             await grow_to_fit(page, width, max_height)
