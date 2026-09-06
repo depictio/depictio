@@ -1,0 +1,680 @@
+# nf-core/atacseq Template v1.2.2 - Chromatin accessibility (ATAC-seq)
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/atacseq/1.2.2 --data-root /path/to/your/data
+#
+# Tested against nf-core/atacseq AWS megatest results:
+#   s3://nf-core-awsmegatests/atacseq/results-f327c86324427c64716be09c98634ae0bc8165f6
+#   (6 GM12878 ATAC libraries: three transposition protocols, FAST / OMNI / STD,
+#    two biological replicates each. See megatest.yaml.)
+# ============================================================================
+#
+# WHY 1.2.2. Every atacseq release from 2.x on publishes an empty or truncated
+# megatest prefix, so 1.2.2 from 2022 is the newest complete run in the bucket
+# (see depictio/projects/nf-core/MEGATEST_STATUS.md).
+#
+# SCOPE: BROAD PEAKS, MERGED LIBRARY.
+# This run was called with `--narrow_peak false`, so the peak tree lives under
+# `bwa/mergedLibrary/macs/broadPeak/` and the calls are `*_peaks.broadPeak`
+# (BED6+3, no summit column). The narrowPeak route writes the same tree with
+# `*_peaks.narrowPeak` and is served by the catalog's `macs2/peaks.py`; the
+# broad route needs its own reader, which lives in `recipes/broad_peaks.py`
+# until the catalog gains a broadPeak output (see VALIDATION_REPORT.md).
+# atacseq also publishes the whole peak/consensus/DESeq2 tree a second time per
+# merged REPLICATE (`bwa/mergedReplicate/`, `.mRp.clN`). Only the merged-library
+# level is bound here: the recipes match on file name, so binding both would
+# concatenate two levels of the same analysis into one table.
+#
+# MULTIQC WAS REPROCESSED.
+# atacseq 1.2.2 is a DSL1 pipeline and this run shipped MultiQC 1.9, which
+# writes `multiqc_data.json` and no parquet, nested one level deeper
+# (`multiqc/broadPeak/multiqc_data/`). Depictio reads only the parquet
+# (MultiQC >= 1.31), so the report bound below is NOT the one the run
+# published: it is produced by re-running the pinned MultiQC 1.35 over the same
+# raw tool outputs,
+#
+#   python -m depictio.dev_scripts.multiqc_reprocess --src DATA_ROOT --dest DATA_ROOT
+#
+# which writes `multiqc/multiqc_data/multiqc.parquet` next to a `REPROCESSED.json`
+# recording both versions. `modules` / `plots` below are authored against the
+# 1.35 anchors. Two consequences worth knowing (see docs/dashboards.md):
+# MultiQC 1.35 gained an `ataqv` module the 1.9 report had no idea about, and
+# the samtools sections cover both filtering levels the run published
+# (`mLb.mkD` unfiltered, `mLb.clN` filtered), so each library appears twice.
+#
+# NO params.json. DSL1 wrote no `pipeline_info/params*.json`; the run's
+# parameters survive only inside `execution_report.html`. Provenance therefore
+# collects the tool versions from the tab-separated `software_versions.csv` and
+# nothing else, and no template variable is auto-set from pipeline parameters.
+#
+# SAMPLE NAMING. atacseq names the merged, filtered library `<sample>.mLb.clN`
+# and MACS2 stamps that string into every peak name, so the peak calls, the
+# HOMER annotation and the consensus matrix all speak `GM12878_FAST_R1.mLb.clN`
+# while the peak-QC summary, the ataqv reports and MultiQC speak
+# `GM12878_FAST_R1`. The hub collection carries both spellings and the links
+# below use whichever one the target collection uses.
+template:
+  template_id: "nf-core/atacseq/1.2.2"
+  description: "nf-core/atacseq template: ataqv library quality, MACS2 broad peaks, HOMER peak annotation, the consensus peak set and DESeq2 differential accessibility, on top of the reprocessed MultiQC report."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory containing atacseq output (bwa/, fastqc/, trim_galore/, multiqc/, pipeline_info/) plus the reprocessed multiqc/multiqc_data/multiqc.parquet."
+      required: true
+  # The bundled reference dataset needs no variable beyond DATA_ROOT: the design
+  # sheet is part of the run's own pipeline_info/ output.
+  reference:
+    vars: {}
+  # How this run's provenance is collected at ingest, surfaced in the ingestion
+  # report and the dashboard Settings drawer. Keys matched by no group rule land
+  # in 'Other'.
+  provenance:
+    sources:
+      # DSL1 software_versions.csv is a two-column "tool<TAB>version" table, not
+      # the YAML later releases write.
+      - name: "software_versions"
+        glob: "pipeline_info/software_versions.csv"
+        format: "tsv"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Software versions"
+        key_patterns: ["*"]
+  dashboards:
+    - "dashboards/base.yaml"
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "ATAC-seq Chromatin Accessibility"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "atacseq"
+    version: "1.2.2"
+    engine:
+      name: "nextflow"
+      version: "22.10.1"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/atacseq"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Hub: one row per ATAC sample, derived from the design sheet the
+      # pipeline re-published. Carries both spellings of the sample name
+      # (see the SAMPLE NAMING note above) so the links can reach every
+      # downstream collection.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "sample_design"
+        description: "Per-sample design: protocol group, replicate and the merged-library name every peak-level collection uses (the hub every filter starts from)"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/atacseq/sample_design.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Canonical sample name (<group>_R<replicate>); the key the QC collections are linked on"
+              "merged_library": "<sample>.mLb.clN, the merged filtered library the peak calls are named after"
+              "group": "Design group; the level the DESeq2 contrasts compare"
+              "replicate": "Biological replicate number inside the group"
+              "n_libraries": "Sequencing libraries merged into the sample"
+              "libraries": "Those library ids, comma separated"
+
+      - data_collection_tag: "design_reads"
+        description: "Library-level design sheet: one row per sequencing library and its FASTQ files"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "design_reads\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "sample_id": "Library identifier (<group>_R<replicate>_T<technical replicate>)"
+              "fastq_1": "Read 1 FASTQ"
+              "fastq_2": "Read 2 FASTQ, empty for single-end libraries"
+
+      # ----------------------------------------------------------------
+      # MultiQC. Reprocessed with MultiQC 1.35: the anchors below are the
+      # 1.35 ones, not the 1.9 ones the run itself published. The scan
+      # pattern pins the reprocessed path so it can never pick up the old
+      # report, which sits one level deeper under multiqc/broadPeak/.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report, re-generated with MultiQC 1.35 from the run's raw tool outputs (the run itself wrote MultiQC 1.9, which ships no parquet)"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "multiqc/multiqc_data/multiqc\\.parquet$"
+          dc_specific_properties:
+            s3_location: null
+            modules:
+              - "general_stats"
+              - "fastqc"
+              - "cutadapt"
+              - "picard"
+              - "samtools"
+              - "preseq"
+              - "deepTools"
+              - "ataqv"
+              - "macs"
+              - "featurecounts"
+              # Custom content the pipeline writes as *_mqc.tsv, all prefixed
+              # mlib_ because they describe the merged-library level.
+              - "mlib_frip_score"
+              - "mlib_peak_count"
+              - "mlib_peak_annotation"
+              - "mlib_deseq2_pca"
+              - "mlib_deseq2_clustering"
+            plots:
+              fastqc:
+                - "Sequence Counts"
+                - "Sequence Quality Histograms"
+                - "Per Sequence Quality Scores"
+                - "Per Sequence GC Content":
+                    - "Percentages"
+                    - "Counts"
+                - "Per Base N Content"
+                - "Sequence Length Distribution"
+                - "Sequence Duplication Levels"
+                - "Adapter Content"
+                - "Status Checks"
+              cutadapt:
+                - "Filtered Reads"
+                - "Trimmed Sequence Lengths (3')":
+                    - "Counts"
+                    - "Obs/Exp"
+              picard:
+                - "Alignment Summary":
+                    - "Aligned Reads"
+                    - "Aligned Bases"
+                - "Mean read length"
+                - "Base Distribution":
+                    - "% Adenine"
+                    - "% Cytosine"
+                    - "% Guanine"
+                    - "% Thymine"
+                    - "% Undetermined"
+                - "Insert Size":
+                    - "Counts"
+                    - "Percentages"
+                - "Mark Duplicates"
+                - "Mean Base Quality by Cycle"
+                - "Base Quality Distribution"
+              samtools:
+                - "Percent mapped"
+                - "Alignment stats"
+                - "Flagstat"
+                - "Flagstat: Percentage of total"
+                - "Insert size distribution"
+                - "XY counts"
+                - "Mapped reads per contig":
+                    - "Raw Counts"
+                    - "Normalised Counts"
+                    - "Observed over Expected Counts"
+              preseq:
+                - "Complexity curve (molecule count)"
+              deepTools:
+                - "Fingerprint plot"
+                - "Fingerprint quality metrics"
+                - "Read Distribution Profile after Annotation"
+              ataqv:
+                - "Fragment Length Distribution":
+                    - "Read Count"
+                    - "Percentage"
+                - "Peak percentiles":
+                    - "HQAA"
+                    - "Territory"
+                - "Mapping Quality Distribution"
+                - "Chromosome Distribution":
+                    - "Reads"
+                    - "Percentages"
+              featurecounts:
+                - "Assignments"
+              mlib_frip_score:
+                - "mlib_frip_score-section"
+              mlib_peak_count:
+                - "mlib_peak_count-section"
+              mlib_peak_annotation:
+                - "mlib_peak_annotation-section"
+              mlib_deseq2_pca:
+                - "mlib_deseq2_pca-section"
+              mlib_deseq2_clustering:
+                - "mlib_deseq2_clustering-section"
+
+      # ----------------------------------------------------------------
+      # ataqv: the ATAC-specific QC the pipeline runs on every library.
+      # MultiQC 1.35 renders three of its plots; what it does not carry is
+      # the per-library metric table (TSS enrichment, HQAA and duplicate
+      # fractions, peak statistics) or the TSS coverage profile, and none
+      # of its panels can be filtered, linked or read as a table.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "ataqv_metrics"
+        description: "Per-library ATAC quality metrics: TSS enrichment, reads in peaks, mitochondrial and duplicate fractions, peak statistics"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "ataqv/metrics.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library ataqv reported on"
+              "tss_enrichment": "Coverage at transcription start sites over the flanking background"
+              "total_reads": "Reads in the alignment ataqv read"
+              "hqaa": "High-quality autosomal alignments (the usable ATAC reads)"
+              "hqaa_fraction": "hqaa over total_reads"
+              "hqaa_in_peaks": "HQAA falling inside a called peak"
+              "hqaa_overlapping_peaks_percent": "Percent of HQAA inside peaks; the ATAC signal-to-noise measure"
+              "total_autosomal_reads": "Reads on autosomes"
+              "total_mitochondrial_reads": "Reads on the mitochondrial contig"
+              "mitochondrial_fraction": "Mitochondrial reads over total_reads; the classic ATAC waste"
+              "duplicate_fraction": "Duplicate reads over total_reads"
+              "duplicate_fraction_in_peaks": "Duplicate rate inside peaks"
+              "duplicate_fraction_not_in_peaks": "Duplicate rate outside peaks"
+              "peak_duplicate_ratio": "In-peak over out-of-peak duplicate rate"
+              "total_peaks": "Peaks ataqv was given for the library"
+              "total_peak_territory": "Bases covered by those peaks"
+              "hqaa_tf_count": "HQAA in sub-nucleosomal fragments (<= 100 bp)"
+              "hqaa_mononucleosomal_count": "HQAA in mononucleosomal fragments (150-324 bp)"
+              "short_mononucleosomal_ratio": "Sub-nucleosomal over mononucleosomal HQAA"
+              "max_fraction_reads_from_single_autosome": "Largest share of reads on any one autosome"
+              "median_mapq": "Median mapping quality"
+              "properly_paired_fraction": "Properly paired and mapped reads over total_reads"
+              "maximum_proper_pair_fragment_size": "Longest proper pair observed"
+              "ataqv_version": "ataqv version that wrote the report"
+
+      - data_collection_tag: "ataqv_fragment_length"
+        description: "Fragment-length histogram of every library, in long form, with the nucleosome window each length belongs to"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "ataqv/fragment_length.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library ataqv reported on"
+              "fragment_length": "Fragment length in bp"
+              "read_count": "Reads with that fragment length"
+              "fraction_of_all_reads": "read_count over all reads of the library"
+              "fragment_class": "sub-nucleosomal / transitional / mononucleosomal / multi-nucleosomal, on ataqv's own cut-offs"
+
+      - data_collection_tag: "ataqv_tss_coverage"
+        description: "Aggregate coverage in a 2 kb window centred on every transcription start site, one row per library and offset"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "ataqv/tss_coverage.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library ataqv reported on"
+              "position": "Signed distance from the transcription start site in bp"
+              "coverage": "Aggregate normalised coverage at that offset"
+
+      - data_collection_tag: "ataqv_chromosome_counts"
+        description: "Reads per reference sequence and library, with each sequence's share of the library"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "ataqv/chromosome_counts.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library ataqv reported on"
+              "chromosome": "Reference sequence name"
+              "read_count": "Reads aligned to it"
+              "fraction_of_reads": "read_count over the library's counted reads"
+              "log10_read_count": "log10(read_count + 1), the colour axis of the read-distribution matrix"
+
+      # ----------------------------------------------------------------
+      # Peak level. `source_overrides` repoint the catalog recipes at the
+      # atacseq file names: the ChIP-family pipelines write
+      # `<antibody>.consensus_peaks.boolean.txt` and `<x>peak.summary.txt`,
+      # atacseq writes `consensus_peaks.<merge level>.boolean.txt` and
+      # `macs_peak.<merge level>.summary.txt`.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "macs2_peak_summary"
+        description: "Per-sample peak QC: peak count, FRiP score and the spread of peak width, enrichment and significance"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "macs2/peak_summary.py"
+            source_overrides:
+              summary:
+                glob_pattern: "**/macs_peak*.summary.txt"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "ATAC sample"
+              "num_peaks": "Peaks MACS2 called for the sample"
+              "frip_score": "Fraction of mapped reads falling inside called peaks"
+              "width_median": "Median peak width (bp)"
+              "width_mean": "Mean peak width (bp)"
+              "width_max": "Widest peak (bp)"
+              "fold_enrichment_median": "Median fold enrichment over the background"
+              "fold_enrichment_mean": "Mean fold enrichment over the background"
+              "neg_log10_qvalue_median": "Median -log10 q-value"
+              "neg_log10_pvalue_median": "Median -log10 p-value"
+
+      - data_collection_tag: "macs2_broad_peaks"
+        description: "Every MACS2 broad peak of every merged library, with width, midpoint and the enrichment and significance MACS2 reported"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/atacseq/broad_peaks.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Merged library the peak was called in (<sample>.mLb.clN)"
+              "peak_id": "MACS2 peak name, unique across samples"
+              "chr": "Chromosome"
+              "start": "Peak start (0-based)"
+              "end": "Peak end"
+              "width": "Peak width in bp"
+              "midpoint": "Centre of the region; a broad call reports no summit"
+              "score": "MACS2 integer score"
+              "fold_enrichment": "Fold enrichment over the background"
+              "neg_log10_pvalue": "-log10 of the region p-value"
+              "neg_log10_qvalue": "-log10 of the region q-value (FDR)"
+
+      - data_collection_tag: "homer_annotated_peaks"
+        description: "HOMER annotation of every peak: genomic feature class, distance to the nearest TSS and the gene it belongs to"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "homer/annotate_peaks.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Merged library the peak was called in"
+              "peak_id": "Peak identifier, the same one macs2_broad_peaks uses"
+              "chr": "Chromosome"
+              "start": "Peak start"
+              "end": "Peak end"
+              "strand": "Peak strand as HOMER reports it (always + for MACS2 peaks)"
+              "peak_score": "Score carried over from the peak caller"
+              "annotation_class": "Coarse feature class: promoter-TSS, intron, exon, Intergenic, TTS"
+              "annotation": "Full HOMER annotation string, with the transcript detail"
+              "distance_to_tss": "Signed distance to the nearest transcription start site (bp)"
+              "nearest_promoter_id": "Identifier of the nearest promoter"
+              "gene_name": "Symbol of the nearest gene"
+              "gene_type": "Biotype of the nearest gene; empty when the run annotated against a plain GTF"
+
+      - data_collection_tag: "macs2_consensus_boolean"
+        description: "Consensus peak intervals against the samples that called them, as 0/1 set columns"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "macs2/consensus_boolean.py"
+            source_overrides:
+              boolean:
+                glob_pattern: "**/consensus_peaks*.boolean.txt"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "peak_id": "<consensus set>:<interval id>"
+              "consensus_set": "Which consensus table the interval came from, named after its samples"
+              "interval_id": "Interval id inside that table; the identifier DESeq2 scores"
+              "chr": "Chromosome"
+              "start": "Merged interval start"
+              "end": "Merged interval end"
+              "num_peaks": "Per-sample peaks merged into the interval"
+              "num_samples": "Samples calling a peak on the interval"
+
+      - data_collection_tag: "macs2_consensus_fc"
+        description: "Fold enrichment of the most strongly accessible consensus intervals, one numeric column per sample"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "macs2/consensus_fc.py"
+            source_overrides:
+              boolean:
+                glob_pattern: "**/consensus_peaks*.boolean.txt"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "peak_id": "<consensus set>:<interval id>"
+              "consensus_set": "Which consensus table the interval came from"
+              "interval_id": "Interval id inside that table"
+              "chr": "Chromosome"
+              "region": "chr:start-end, the heatmap row label"
+              "support": "How many samples call the peak, kept categorical"
+
+      # ----------------------------------------------------------------
+      # DESeq2 differential accessibility between transposition protocols.
+      # The raw collection exists so the tidy one can read it through
+      # `dc_ref`: the contrast id lives only in the FILE NAME, and only a
+      # scan carries the path (`include_file_paths`) into the frame.
+      # `infer_schema_length: 0` reads every column as text because DESeq2
+      # writes `NA` in numeric columns; the recipe recasts. The
+      # `*.deseq2.FDR0.0*.results.txt` subsets are deliberately not
+      # scanned: they are a filtered copy of the same rows.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "deseq2_results_raw"
+        description: "Raw per-contrast DESeq2 differential-accessibility tables (input of deseq2_results)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.deseq2\\.results\\.txt$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              null_values: ["NA", "NaN", ""]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "Geneid": "Consensus interval identifier"
+              "baseMean": "Mean of normalised counts across samples"
+              "log2FoldChange": "Effect size of the contrast"
+              "lfcSE": "Standard error of log2FoldChange"
+              "pvalue": "Raw Wald p-value"
+              "padj": "Benjamini-Hochberg adjusted p-value"
+              "source_path": "File the row came from; the contrast id is derived from it"
+
+      - data_collection_tag: "deseq2_results"
+        description: "DESeq2 differential accessibility per contrast and consensus interval, with the significance call and the MA abscissa precomputed"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "deseq2/results_long.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "contrast": "Contrast id, derived from the results file name"
+              "gene_id": "Consensus interval the row scores"
+              "base_mean": "Mean of normalised counts across samples"
+              "log2fc": "log2 fold change between the two protocols"
+              "lfc_se": "Standard error of log2fc"
+              "stat": "Wald statistic (log2fc / lfc_se)"
+              "pvalue": "Raw Wald p-value"
+              "padj": "Benjamini-Hochberg adjusted p-value"
+              "log2_base_mean": "log2(baseMean + 1), the A axis of the MA plot"
+              "neg_log10_padj": "-log10(padj)"
+              "significant": "padj < 0.05 and |log2fc| >= 1"
+              "direction": "up / down / not significant"
+
+links:
+  # Hub -> the collections that speak the short sample name.
+  - source_dc_tag: "sample_design"
+    source_column: "sample"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Filter the MultiQC panels by the samples picked in the left rail"
+    enabled: true
+
+  - source_dc_tag: "sample_design"
+    source_column: "sample"
+    target_dc_tag: "macs2_peak_summary"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the peak QC summary by the samples picked in the left rail"
+    enabled: true
+
+  - source_dc_tag: "sample_design"
+    source_column: "sample"
+    target_dc_tag: "ataqv_metrics"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the ataqv metric table by the samples picked in the left rail"
+    enabled: true
+
+  - source_dc_tag: "sample_design"
+    source_column: "sample"
+    target_dc_tag: "ataqv_fragment_length"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the fragment-length ladder by the samples picked in the left rail"
+    enabled: true
+
+  - source_dc_tag: "sample_design"
+    source_column: "sample"
+    target_dc_tag: "ataqv_tss_coverage"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the TSS coverage profiles by the samples picked in the left rail"
+    enabled: true
+
+  - source_dc_tag: "sample_design"
+    source_column: "sample"
+    target_dc_tag: "ataqv_chromosome_counts"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the read-distribution matrix by the samples picked in the left rail"
+    enabled: true
+
+  # Hub -> the collections named after the merged library.
+  - source_dc_tag: "sample_design"
+    source_column: "merged_library"
+    target_dc_tag: "macs2_broad_peaks"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the peak table by the samples picked in the left rail"
+    enabled: true
+
+  - source_dc_tag: "sample_design"
+    source_column: "merged_library"
+    target_dc_tag: "homer_annotated_peaks"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the peak annotation by the samples picked in the left rail"
+    enabled: true
+
+  # Peak-level selection: pick peaks on the MACS2 panels, read their annotation.
+  - source_dc_tag: "macs2_broad_peaks"
+    source_column: "peak_id"
+    target_dc_tag: "homer_annotated_peaks"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "peak_id"
+    description: "Carry a peak selected on the MACS2 panels over to its HOMER annotation"
+    enabled: true
+
+  - source_dc_tag: "homer_annotated_peaks"
+    source_column: "peak_id"
+    target_dc_tag: "macs2_broad_peaks"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "peak_id"
+    description: "Carry a peak selected in the annotation table back to the MACS2 panels"
+    enabled: true
+
+  # Consensus level: the interval the overlap matrix carries is the interval the
+  # signal heatmap ranks and the interval DESeq2 scores.
+  - source_dc_tag: "macs2_consensus_boolean"
+    source_column: "peak_id"
+    target_dc_tag: "macs2_consensus_fc"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "peak_id"
+    description: "Carry a consensus interval selected on the overlap panels over to the signal heatmap"
+    enabled: true
+
+  - source_dc_tag: "macs2_consensus_fc"
+    source_column: "peak_id"
+    target_dc_tag: "macs2_consensus_boolean"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "peak_id"
+    description: "Carry a consensus interval selected on the signal heatmap back to the overlap panels"
+    enabled: true
+
+  - source_dc_tag: "macs2_consensus_boolean"
+    source_column: "interval_id"
+    target_dc_tag: "deseq2_results"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "gene_id"
+    description: "Carry a consensus interval selected on the overlap panels over to its DESeq2 statistics"
+    enabled: true
+
+  - source_dc_tag: "deseq2_results"
+    source_column: "gene_id"
+    target_dc_tag: "macs2_consensus_boolean"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "interval_id"
+    description: "Carry an interval selected on the differential panels back to the consensus overlap matrix"
+    enabled: true

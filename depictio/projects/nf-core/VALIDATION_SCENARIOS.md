@@ -394,6 +394,38 @@ non-SARS pathogen (no lineage DBs) + metagenomic protocol (no ivar/amplicon mosd
 (samtools stats + flagstat both emit a "Reads mapped" column; the API general-stats payload
 collapses them and answers 500). See chipseq VALIDATION_REPORT.md CS-D3.
 
+---
+
+## atacseq 1.2.2
+
+**Megatest:** `s3://nf-core-awsmegatests/atacseq/results-f327c86324427c64716be09c98634ae0bc8165f6/`
+(tag 1.2.2, run_root `.`, manifest megatest.yaml)
+
+**MultiQC:** run wrote 1.9 -> reprocessed with 1.35
+
+**Template requirements:**
+- Always: `sample_design`, `design_reads`, `multiqc_data` (REPROCESSED parquet, pinned by a
+  literal scan regex so it cannot pick up the run's own 1.9 tree)
+- ataqv route: `ataqv_metrics`, `ataqv_fragment_length`, `ataqv_tss_coverage`,
+  `ataqv_chromosome_counts`
+- Peak route: `macs2_peak_summary`, `macs2_broad_peaks`, `homer_annotated_peaks`
+- Consensus route (>= 2 replicates per group): `macs2_consensus_boolean`, `macs2_consensus_fc`
+- Differential route (>= 2 conditions): `deseq2_results_raw` -> `deseq2_results` (dc_ref)
+
+### Further scenarios (analytical, not yet run)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| K1 | **MultiQC not reprocessed** | omit the reprocess step | No parquet at all, since 1.9 predates it | `multiqc_data` finds nothing and the whole QC tab is empty. This is the pipeline's normal state, so the reprocess is mandatory rather than optional. Highest stress. |
+| K2 | **narrowPeak route** | default, no `--narrow_peak false` | `macs2/narrowPeak/` instead of `broadPeak/`, and the file gains a summit column | `macs2_broad_peaks` finds nothing: the recipe reads the BED6+3 broad shape. Release 1.2.1 is the narrowPeak twin of this same run, so this is directly testable. The `broadPeak/` nesting also moves the MultiQC report, which the literal scan regex pins. |
+| K3 | **single replicate per group** | design with one replicate | No consensus peak set is built | `macs2_consensus_*` and both `deseq2_*` empty; the Consensus and Differential tabs lose their data. |
+| K4 | **single condition** | design with one group | Consensus built, DESeq2 not run | Both `deseq2_*` empty while the consensus tiles still render. |
+| K5 | **`--skip_peak_annotation`** | flag | No HOMER output | `homer_annotated_peaks` empty; the Peaks tab loses its annotation section. |
+| K6 | **ataqv not run** | older config or `--skip_ataqv` | No `ataqv/` tree | All four ataqv collections empty at once, which is the whole library-quality tab. They are declared required, so this is the second scenario that breaks a mandatory collection. |
+| K7 | **mitochondrial contig named differently** | a genome whose MT contig is not `chrM` | `ataqv_chromosome_counts` still populates but the MT fraction card keys on a name that is absent | Renders, reads as zero mitochondrial signal, which is wrong rather than empty. Worth a run. |
+
+**Ranking by template stress:** K1 > K6 > K2 > K3/K4 > K5 > K7
+
 ## Priority additions to `generate_validation_runs.sh`
 
 In order of value-per-effort:
