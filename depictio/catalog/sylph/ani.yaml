@@ -53,3 +53,6 @@ renders_as:
       threshold_direction: min,
     }
   - { component: table }
+  # Metric cards and the row-level table behind them: the readings the
+  # nf-core dashboards were already computing off this output by hand.
+  - { component: card, column: containment_frac, aggregation: average, secondary_layout: gauge, coverage_max: 1 }

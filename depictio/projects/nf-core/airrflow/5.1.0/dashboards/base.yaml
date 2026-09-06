@@ -79,6 +79,7 @@ main_dashboard:
     section: Read QC at a glance
     workflow_tag: airrflow
     data_collection_tag: multiqc_data
+    use: multiqc/general_stats
     selected_module: general_stats
     selected_plot: general_stats
     title: General statistics
@@ -639,6 +640,7 @@ tabs:
     section: Per sample
     workflow_tag: airrflow
     data_collection_tag: sequence_counts
+    use: enchantr/sequence_counts
     mode: code
     code_content: |
       stages = [c for c in ['sequences', 'quality_filtered', 'primers_masked', 'paired',
@@ -668,6 +670,7 @@ tabs:
     section: Per sample
     workflow_tag: airrflow
     data_collection_tag: sequence_counts
+    use: enchantr/sequence_counts
     visu_type: bar
     dict_kwargs: {x: sample_id, y: retention, color: subject_id}
     title: Retention per sample
@@ -873,6 +876,7 @@ tabs:
     section: V gene usage
     workflow_tag: airrflow
     data_collection_tag: v_gene_usage
+    use: enchantr/v_gene_usage
     mode: code
     code_content: |
       df_modified = df.filter(pl.col('rank') == 'V family').sort(['sample_id', 'v_family'])
@@ -912,6 +916,7 @@ tabs:
     section: Clones and depth
     workflow_tag: airrflow
     data_collection_tag: repertoire_summary
+    use: enchantr/repertoire_summary
     mode: code
     code_content: |
       fig = px.scatter(
@@ -1143,6 +1148,7 @@ tabs:
     section: Diversity profiles
     workflow_tag: airrflow
     data_collection_tag: clonal_diversity
+    use: enchantr/clonal_diversity
     mode: code
     code_content: |
       palette = px.colors.qualitative.D3
@@ -1209,6 +1215,7 @@ tabs:
     section: Clone abundance
     workflow_tag: airrflow
     data_collection_tag: clone_sizes
+    use: enchantr/clone_sizes
     mode: code
     code_content: |
       df_modified = df.filter(pl.col('rank') <= 500)

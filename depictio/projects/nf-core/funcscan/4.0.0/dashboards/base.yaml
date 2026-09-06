@@ -713,6 +713,7 @@ tabs:
     section: Gene detail
     workflow_tag: funcscan
     data_collection_tag: hamronization_report
+    use: hamronization/report
     mode: code
     code_content: |
       # only alignment-based tools report both axes; HMM screens report neither
@@ -937,6 +938,7 @@ tabs:
     section: Property space
     workflow_tag: funcscan
     data_collection_tag: ampcombi_summary
+    use: ampcombi/summary
     mode: code
     code_content: |
       # keep the physicochemistry complete so no point is silently dropped
@@ -1012,6 +1014,7 @@ tabs:
     section: Clusters
     workflow_tag: funcscan
     data_collection_tag: ampcombi_clusters
+    use: ampcombi/clusters
     visu_type: histogram
     mode: ui
     figure_params:
@@ -1230,6 +1233,7 @@ tabs:
     section: Product classes
     workflow_tag: funcscan
     data_collection_tag: combgc_summary
+    use: combgc/summary
     visu_type: bar
     mode: ui
     figure_params:
@@ -1493,6 +1497,7 @@ tabs:
     section: Family hierarchy
     workflow_tag: funcscan
     data_collection_tag: dbcan_overview
+    use: dbcan/overview
     visu_type: bar
     mode: ui
     figure_params:
@@ -1526,6 +1531,7 @@ tabs:
     section: Substrates
     workflow_tag: funcscan
     data_collection_tag: dbcan_substrates
+    use: dbcan/substrates
     visu_type: bar
     mode: ui
     figure_params:

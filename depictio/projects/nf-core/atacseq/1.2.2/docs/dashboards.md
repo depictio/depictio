@@ -24,9 +24,10 @@ each.
 > `VALIDATION_REPORT.md`.
 
 > **This is the broad-peak route.** The run was called with `--narrow_peak false`, so the
-> peak files are `*_peaks.broadPeak` (BED6+3, no summit column) and are read by the
-> template's own `recipes/broad_peaks.py` rather than by the catalog's `macs2/peaks`, which
-> reads the narrowPeak shape. Release 1.2.1 is the narrowPeak twin of the same run.
+> peak files are `*_peaks.broadPeak` (BED6+3, no summit column) and are read by the catalog's
+> `macs2/broad_peaks` rather than by `macs2/peaks`, which reads the narrowPeak shape. The two
+> outputs glob on different file names, so a run matches exactly one of them. Release 1.2.1 is
+> the narrowPeak twin of the same run.
 
 ---
 

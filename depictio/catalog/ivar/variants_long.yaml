@@ -10,3 +10,10 @@ renders_as:
   - { id: oncoplot, component: advanced_viz, kind: oncoplot, roles: {sample_id: sample, gene: GENE, mutation_type: EFFECT} }
   - { id: manhattan, component: advanced_viz, kind: manhattan, roles: {chr: CHROM, pos: POS, score: AF} }
   - { component: figure, visu_type: histogram, dict_kwargs: {x: AF, color: EFFECT} } # allele-frequency distribution
+  # Metric cards and the row-level table behind them: the readings the
+  # nf-core dashboards were already computing off this output by hand.
+  - { component: card, column: POS, aggregation: count, secondary_layout: top_n, breakdown_col: GENE, top_n_count: 3 }
+  - { component: card, column: POS, aggregation: nunique, secondary_layout: concentration, breakdown_col: GENE, top_n_count: 3 }
+  - { component: card, column: sample, aggregation: nunique, secondary_layout: top_n, breakdown_col: sample }
+  - { component: card, column: AA, aggregation: nunique, secondary_layout: composition, breakdown_col: EFFECT, top_n_count: 3 }
+  - { component: table, row_selection_enabled: true, row_selection_column: sample }

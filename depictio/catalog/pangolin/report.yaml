@@ -8,3 +8,7 @@ fixture: report.tsv
 renders_as:
   - { component: figure, visu_type: histogram, dict_kwargs: {x: lineage, color: qc_status} } # lineage calls
   - { component: table }
+  # Metric cards and the row-level table behind them: the readings the
+  # nf-core dashboards were already computing off this output by hand.
+  - { component: card, column: lineage, aggregation: nunique, secondary_layout: top_n, breakdown_col: lineage, top_n_count: 3 }
+  - { component: card, column: qc_status, aggregation: nunique, secondary_layout: donut, breakdown_col: qc_status }

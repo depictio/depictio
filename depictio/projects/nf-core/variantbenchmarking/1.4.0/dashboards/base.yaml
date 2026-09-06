@@ -53,6 +53,7 @@ main_dashboard:
     section: Germline at a glance
     workflow_tag: variantbenchmarking
     data_collection_tag: germline_vcfeval_summary
+    use: rtgtools/vcfeval_summary
     aggregation: nunique
     column_name: label
     column_type: object
@@ -69,6 +70,7 @@ main_dashboard:
     section: Germline at a glance
     workflow_tag: variantbenchmarking
     data_collection_tag: germline_vcfeval_summary
+    use: rtgtools/vcfeval_summary
     aggregation: median
     aggregations: [box_plot_stats]
     secondary_layout: box_plot
@@ -84,6 +86,7 @@ main_dashboard:
     section: Germline at a glance
     workflow_tag: variantbenchmarking
     data_collection_tag: germline_vcfeval_summary
+    use: rtgtools/vcfeval_summary
     aggregation: average
     column_name: precision
     column_type: float64
@@ -99,6 +102,7 @@ main_dashboard:
     section: Germline at a glance
     workflow_tag: variantbenchmarking
     data_collection_tag: germline_vcfeval_summary
+    use: rtgtools/vcfeval_summary
     aggregation: median
     column_name: recall
     column_type: float64
@@ -127,6 +131,7 @@ main_dashboard:
     section: Germline at a glance
     workflow_tag: variantbenchmarking
     data_collection_tag: germline_vcfeval_summary
+    use: rtgtools/vcfeval_summary
     visu_type: scatter
     dict_kwargs: {x: f1, y: label, color: f1, size: f1, size_max: 26, color_continuous_scale: Tealgrn}
     title: F1 by sample
@@ -155,6 +160,7 @@ main_dashboard:
     section: Somatic at a glance
     workflow_tag: variantbenchmarking
     data_collection_tag: somatic_sompy_summary
+    use: sompy/summary
     aggregation: nunique
     column_name: caller
     column_type: object
@@ -171,6 +177,7 @@ main_dashboard:
     section: Somatic at a glance
     workflow_tag: variantbenchmarking
     data_collection_tag: somatic_sompy_summary
+    use: sompy/summary
     aggregation: median
     aggregations: [box_plot_stats]
     secondary_layout: box_plot
@@ -186,6 +193,7 @@ main_dashboard:
     section: Somatic at a glance
     workflow_tag: variantbenchmarking
     data_collection_tag: somatic_sompy_summary
+    use: sompy/summary
     aggregation: average
     column_name: recall
     column_type: float64
@@ -201,6 +209,7 @@ main_dashboard:
     section: Somatic at a glance
     workflow_tag: variantbenchmarking
     data_collection_tag: somatic_sompy_summary
+    use: sompy/summary
     aggregation: median
     column_name: precision
     column_type: float64
@@ -229,6 +238,7 @@ main_dashboard:
     section: Somatic at a glance
     workflow_tag: variantbenchmarking
     data_collection_tag: somatic_sompy_summary
+    use: sompy/summary
     visu_type: scatter
     dict_kwargs: {x: f1, y: caller, color: f1, size: f1, size_max: 26, color_continuous_scale: Sunsetdark}
     title: F1 by caller
@@ -332,6 +342,7 @@ tabs:
     section: Germline counts
     workflow_tag: variantbenchmarking
     data_collection_tag: germline_vcfeval_summary
+    use: rtgtools/vcfeval_summary
     aggregation: sum
     aggregations: [min, max]
     secondary_layout: compact
@@ -347,6 +358,7 @@ tabs:
     section: Germline counts
     workflow_tag: variantbenchmarking
     data_collection_tag: germline_vcfeval_summary
+    use: rtgtools/vcfeval_summary
     aggregation: sum
     aggregations: [box_plot_stats]
     secondary_layout: box_plot
@@ -362,6 +374,7 @@ tabs:
     section: Germline counts
     workflow_tag: variantbenchmarking
     data_collection_tag: germline_vcfeval_summary
+    use: rtgtools/vcfeval_summary
     aggregation: sum
     column_name: fn
     column_type: int64
@@ -376,6 +389,7 @@ tabs:
     section: Germline counts
     workflow_tag: variantbenchmarking
     data_collection_tag: germline_vcfeval_summary
+    use: rtgtools/vcfeval_summary
     aggregation: max
     aggregations: [min, median, average, max]
     secondary_layout: grid
@@ -419,6 +433,7 @@ tabs:
     section: Error profile
     workflow_tag: variantbenchmarking
     data_collection_tag: germline_vcfeval_summary
+    use: rtgtools/vcfeval_summary
     visu_type: bar
     dict_kwargs: {x: label, y: fp, color: caller}
     title: False positives per callset
@@ -430,6 +445,7 @@ tabs:
     section: Error profile
     workflow_tag: variantbenchmarking
     data_collection_tag: germline_vcfeval_summary
+    use: rtgtools/vcfeval_summary
     visu_type: bar
     dict_kwargs: {x: label, y: fn, color: caller}
     title: False negatives per callset
@@ -459,6 +475,7 @@ tabs:
     section: hap.py stratification
     workflow_tag: variantbenchmarking
     data_collection_tag: germline_happy_summary
+    use: happy/summary
     visu_type: bar
     dict_kwargs: {x: variant_type, y: f1, color: filter, barmode: group}
     title: F1 by variant type
@@ -497,6 +514,7 @@ tabs:
     section: Reference tables
     workflow_tag: variantbenchmarking
     data_collection_tag: germline_vcfeval_summary
+    use: rtgtools/vcfeval_summary
     row_selection_enabled: false
     title: rtg-tools vcfeval summary
     description: Per-sample TP / FP / FN and precision / recall / F1.
@@ -508,6 +526,7 @@ tabs:
     section: Reference tables
     workflow_tag: variantbenchmarking
     data_collection_tag: germline_happy_summary
+    use: happy/summary
     row_selection_enabled: false
     title: hap.py pooled summary
     description: Variant type × filter, pooled across samples.
@@ -519,6 +538,7 @@ tabs:
     section: Reference tables
     workflow_tag: variantbenchmarking
     data_collection_tag: germline_happy_roc
+    use: happy/roc
     row_selection_enabled: false
     title: hap.py threshold sweep
     description: Precision / recall / F1 per quality threshold.
@@ -674,6 +694,7 @@ tabs:
     section: Somatic counts
     workflow_tag: variantbenchmarking
     data_collection_tag: somatic_sompy_summary
+    use: sompy/summary
     aggregation: sum
     aggregations: [min, max]
     secondary_layout: compact
@@ -689,6 +710,7 @@ tabs:
     section: Somatic counts
     workflow_tag: variantbenchmarking
     data_collection_tag: somatic_sompy_summary
+    use: sompy/summary
     aggregation: sum
     aggregations: [box_plot_stats]
     secondary_layout: box_plot
@@ -704,6 +726,7 @@ tabs:
     section: Somatic counts
     workflow_tag: variantbenchmarking
     data_collection_tag: somatic_sompy_summary
+    use: sompy/summary
     aggregation: sum
     column_name: fn
     column_type: int64
@@ -718,6 +741,7 @@ tabs:
     section: Somatic counts
     workflow_tag: variantbenchmarking
     data_collection_tag: somatic_sompy_summary
+    use: sompy/summary
     aggregation: max
     aggregations: [min, median, average, max]
     secondary_layout: grid
@@ -761,6 +785,7 @@ tabs:
     section: Error profile
     workflow_tag: variantbenchmarking
     data_collection_tag: somatic_sompy_summary
+    use: sompy/summary
     visu_type: bar
     dict_kwargs: {x: caller, y: fp, color: caller, log_y: true}
     title: False positives per caller (log scale)
@@ -772,6 +797,7 @@ tabs:
     section: Error profile
     workflow_tag: variantbenchmarking
     data_collection_tag: somatic_sompy_summary
+    use: sompy/summary
     visu_type: bar
     dict_kwargs: {x: caller, y: fn, color: caller}
     title: False negatives per caller
@@ -800,6 +826,7 @@ tabs:
     section: Allele-fraction strata
     workflow_tag: variantbenchmarking
     data_collection_tag: somatic_sompy_regions
+    use: sompy/regions
     visu_type: bar
     dict_kwargs: {x: af_bin, y: f1, color: caller, barmode: group}
     title: F1 across allele-fraction bins
@@ -811,6 +838,7 @@ tabs:
     section: Allele-fraction strata
     workflow_tag: variantbenchmarking
     data_collection_tag: somatic_sompy_regions
+    use: sompy/regions
     visu_type: bar
     dict_kwargs: {x: af_bin, y: recall, color: caller, barmode: group}
     title: Recall across allele-fraction bins
@@ -890,6 +918,7 @@ tabs:
     section: rtg-tools cross-check
     workflow_tag: variantbenchmarking
     data_collection_tag: somatic_vcfeval_summary
+    use: rtgtools/vcfeval_summary
     row_selection_enabled: false
     title: rtg-tools vcfeval summary
     description: Per-caller TP / FP / FN and precision / recall / F1.
@@ -917,6 +946,7 @@ tabs:
     section: Reference tables
     workflow_tag: variantbenchmarking
     data_collection_tag: somatic_sompy_summary
+    use: sompy/summary
     row_selection_enabled: false
     title: som.py summary
     description: Per-caller TP / FP / FN, precision / recall / F1 with 95% confidence intervals.
@@ -928,6 +958,7 @@ tabs:
     section: Reference tables
     workflow_tag: variantbenchmarking
     data_collection_tag: somatic_sompy_regions
+    use: sompy/regions
     row_selection_enabled: false
     title: som.py allele-fraction strata
     description: Caller × allele-fraction bin, with TP / FP / FN per bin.
@@ -1056,6 +1087,7 @@ tabs:
     section: SV benchmark
     workflow_tag: variantbenchmarking
     data_collection_tag: sv_truvari_summary
+    use: truvari/summary
     aggregation: nunique
     column_name: label
     column_type: object
@@ -1072,6 +1104,7 @@ tabs:
     section: SV benchmark
     workflow_tag: variantbenchmarking
     data_collection_tag: sv_truvari_summary
+    use: truvari/summary
     aggregation: median
     aggregations: [box_plot_stats]
     secondary_layout: box_plot
@@ -1087,6 +1120,7 @@ tabs:
     section: SV benchmark
     workflow_tag: variantbenchmarking
     data_collection_tag: sv_truvari_summary
+    use: truvari/summary
     aggregation: average
     column_name: precision
     column_type: float64
@@ -1102,6 +1136,7 @@ tabs:
     section: SV benchmark
     workflow_tag: variantbenchmarking
     data_collection_tag: sv_truvari_summary
+    use: truvari/summary
     aggregation: median
     column_name: recall
     column_type: float64
@@ -1129,6 +1164,7 @@ tabs:
     section: SV benchmark
     workflow_tag: variantbenchmarking
     data_collection_tag: sv_svbenchmark_summary
+    use: svanalyzer/svbenchmark
     visu_type: bar
     dict_kwargs: {x: label, y: f1, color: label}
     title: F1 by callset (SVanalyzer svbenchmark)
@@ -1157,6 +1193,7 @@ tabs:
     section: CNV by event type and size
     workflow_tag: variantbenchmarking
     data_collection_tag: cnv_wittyer_summary
+    use: wittyer/summary
     visu_type: bar
     dict_kwargs: {x: size_bin, y: f1, color: event_type, barmode: group}
     title: CNV F1 by size bin and event type (Wittyer)
@@ -1184,6 +1221,7 @@ tabs:
     section: Reference tables
     workflow_tag: variantbenchmarking
     data_collection_tag: sv_truvari_summary
+    use: truvari/summary
     row_selection_enabled: false
     title: Truvari summary
     description: Precision / recall / F1 per callset.
@@ -1195,6 +1233,7 @@ tabs:
     section: Reference tables
     workflow_tag: variantbenchmarking
     data_collection_tag: sv_svbenchmark_summary
+    use: svanalyzer/svbenchmark
     row_selection_enabled: false
     title: SVanalyzer svbenchmark summary
     description: Precision / recall / F1 per callset.
@@ -1206,6 +1245,7 @@ tabs:
     section: Reference tables
     workflow_tag: variantbenchmarking
     data_collection_tag: cnv_wittyer_summary
+    use: wittyer/summary
     row_selection_enabled: false
     title: Wittyer summary
     description: Precision / recall / F1 per callset × event type × size bin.

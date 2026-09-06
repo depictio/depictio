@@ -1,0 +1,24 @@
+id: macs2_broad_peaks
+name: Broad peak calls
+mode: peaks/broad
+description: >-
+  Every MACS2 broad peak of every sample in one table, with the region width,
+  its centre and the fold enrichment, p-value and q-value MACS2 reported for
+  it. A broad call has no summit, so the region centre stands in for it.
+# The narrow twin is `macs2_peaks` (*_peaks.narrowPeak, BED6+4 with a summit
+# column). A run calls one or the other, so the two globs never both match.
+find:
+  path_glob: "**/*_peaks.broadPeak"
+recipe: macs2/broad_peaks.py
+fixture: broad_peaks.tsv
+renders_as:
+  # Significance along the genome, then how wide the regions are.
+  - { id: broad_peak_significance, component: advanced_viz, kind: manhattan, roles: {chr: chr, pos: midpoint, score: neg_log10_qvalue} }
+  - { component: figure, visu_type: histogram, dict_kwargs: {x: width, color: sample, title: Peak width distribution} }
+  # How many regions and where they concentrate, then the spread of width,
+  # enrichment and significance behind that count.
+  - { component: card, column: peak_id, aggregation: count, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: width, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: fold_enrichment, aggregation: average, secondary_layout: histogram }
+  - { component: card, column: neg_log10_qvalue, aggregation: max, secondary_layout: threshold, threshold_value: 10.0, threshold_direction: min, threshold_warn: 5.0 }
+  - { component: table, row_selection_enabled: true, row_selection_column: peak_id }
