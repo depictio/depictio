@@ -1,0 +1,18 @@
+id: dbcan_overview
+name: CAZyme annotations
+mode: cazyme/genes
+description: >-
+  One row per predicted carbohydrate-active enzyme gene, with the family each
+  of the three run_dbCAN tools called, how many agree, the resolved family, its
+  CAZy class and the predicted substrate.
+find: { path_glob: "**/dbcan/cazyme_annotation/*/*_overview.tsv" }
+recipe: dbcan/overview.py
+fixture: overview.tsv
+renders_as:
+  - { id: cazyme_hierarchy, component: advanced_viz, kind: sunburst, roles: {ranks: [cazy_class, family, substrate], abundance: genes} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: genes, color: cazy_class, title: CAZyme classes per sample} }
+  - { component: card, column: genes, aggregation: sum, secondary_layout: donut, breakdown_col: cazy_class }
+  - { component: card, column: family, aggregation: nunique, secondary_layout: top_n, breakdown_col: cazy_class, top_n_count: 4 }
+  - { component: card, column: gene_id, aggregation: count, secondary_layout: composition, breakdown_col: substrate }
+  - { component: card, column: n_tools, aggregation: average, secondary_layout: gauge, coverage_max: 3.0 }
+  - { component: table, row_selection_enabled: true, row_selection_column: family }

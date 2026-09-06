@@ -1,0 +1,626 @@
+# nf-core/funcscan Template v4.0.0 - Functional Screening of Contigs
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/funcscan/4.0.0 --data-root /path/to/your/data
+#
+# Tested against nf-core/funcscan AWS megatest results:
+#   s3://nf-core-awsmegatests/funcscan/results-aee3dc965eb0c77267435544dda30da858763913
+#   (19 MGnify metagenome assemblies, all four screening arms enabled)
+# See megatest.yaml next to this file for the exact file subset and how to fetch it.
+# ============================================================================
+
+# funcscan runs up to four independent screens over the same assemblies:
+#   ARG    -> ABRicate / AMRFinderPlus / DeepARG / fARGene / RGI -> hAMRonization
+#   AMP    -> ampir / Macrel / AMPlify / HMMER                   -> AMPcombi
+#   BGC    -> antiSMASH / DeepBGC / GECCO / HMMER                -> comBGC
+#   CAZyme -> run_dbCAN (HMMER + dbCAN-sub + DIAMOND)
+# Each screen has its own aggregated report and nothing joins them, so this
+# template derives a per-sample hub collection (screening_summary) from
+# whichever screens ran, and every screen's data collections are optional: a
+# run with an arm switched off prunes that arm instead of failing to ingest.
+template:
+  template_id: "nf-core/funcscan/4.0.0"
+  description: "nf-core/funcscan template for screening assemblies for AMR genes, antimicrobial peptides, biosynthetic gene clusters and CAZymes"
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory containing funcscan pipeline output (reports/, cazyme/, multiqc/)"
+      required: true
+    - name: "SAMPLESHEET_FILE"
+      description: "Path to the funcscan samplesheet (sample,fasta). Auto-detected from {DATA_ROOT}/input/ when omitted. The AWS megatest does not publish it; see megatest.yaml post_fetch_help for the curl line."
+      required: false
+    - name: "SKIP_ARG"
+      description: "Set (--var SKIP_ARG=true) for a run without --run_arg_screening. Prunes the hAMRonization data collections and the Resistome tab."
+      required: false
+    - name: "SKIP_AMP"
+      description: "Set (--var SKIP_AMP=true) for a run without --run_amp_screening. Prunes the AMPcombi data collections and the AMPs tab."
+      required: false
+    - name: "SKIP_BGC"
+      description: "Set (--var SKIP_BGC=true) for a run without --run_bgc_screening. Prunes the comBGC data collections and the BGCs tab."
+      required: false
+    - name: "SKIP_CAZYME"
+      description: "Set (--var SKIP_CAZYME=true) for a run without --run_cazyme_screening. Prunes the run_dbCAN data collections and the CAZymes tab."
+      required: false
+  # Variables supplied when materialising the BUNDLED reference/demo dataset.
+  # The reference run is the AWS megatest: all four arms on, samplesheet curled
+  # into input/ next to the data.
+  reference:
+    vars:
+      SAMPLESHEET_FILE: "{DATA_ROOT}/input/samplesheet_full.csv"
+  # How this pipeline's run provenance (screening flags, tool thresholds, tool
+  # versions) is collected at ingest and surfaced in the project's ingestion
+  # report and the dashboard Settings drawer. Keys not matched by any group
+  # rule land in 'Other'; only exclude_keys are ever omitted.
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "*_ref_databases*"   # bundled reference-DB catalogs, pure noise
+          - "hook_url"           # nf-core runs put a live Slack webhook here
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Screens enabled"
+        key_patterns: ["run_*_screening", "run_protein_annotation", "run_taxa_classification"]
+      - group: "ARG screening"
+        key_patterns: ["arg_*"]
+      - group: "AMP screening"
+        key_patterns: ["amp_*"]
+      - group: "BGC screening"
+        key_patterns: ["bgc_*"]
+      - group: "CAZyme screening"
+        key_patterns: ["cazyme_*", "dbcan_*"]
+      - group: "Annotation"
+        key_patterns: ["annotation_*", "save_*", "protein_*"]
+      - group: "Taxonomic classification"
+        key_patterns: ["taxa_*", "mmseqs_*"]
+      - group: "Run context"
+        key_patterns: ["input*", "outdir", "version", "email*", "config_profile_*", "custom_config_*",
+                       "trace_report_suffix", "publish_dir_mode", "pipelines_testdata_base_path",
+                       "multiqc_*", "max_multiqc_email_size", "monochrome_logs", "validate_params",
+                       "help*", "show_hidden", "modules_testdata_base_path", "plaintext_email"]
+    highlight:
+      - "run_arg_screening"
+      - "run_amp_screening"
+      - "run_bgc_screening"
+      - "run_cazyme_screening"
+      - "annotation_tool"
+      - "arg_abricate_minid"
+      - "amp_ampcombi_parsetables_cutoff"
+      - "bgc_mincontiglength"
+      - "bgc_gecco_threshold"
+  dashboards:
+    - "dashboards/base.yaml"
+  conditional:
+    # A screen that did not run leaves no aggregated report. Its data
+    # collections are already optional (they prune themselves when the file is
+    # absent), but naming them here lets a caller prune them explicitly and
+    # keeps the intent readable in the ingestion report.
+    - if_var_present: "SKIP_ARG"
+      remove_dc_tags:
+        ["hamronization_report", "hamronization_gene_presence",
+         "hamronization_gene_matrix", "hamronization_tool_overlap"]
+      dashboards: ["dashboards/base.yaml"]
+    - if_var_present: "SKIP_AMP"
+      remove_dc_tags:
+        ["ampcombi_summary", "ampcombi_embedding", "ampcombi_clusters"]
+      dashboards: ["dashboards/base.yaml"]
+    - if_var_present: "SKIP_BGC"
+      remove_dc_tags: ["combgc_summary", "combgc_tool_overlap"]
+      dashboards: ["dashboards/base.yaml"]
+    - if_var_present: "SKIP_CAZYME"
+      remove_dc_tags: ["dbcan_overview", "dbcan_tool_overlap", "dbcan_substrates"]
+      dashboards: ["dashboards/base.yaml"]
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Funcscan Functional Screening"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "funcscan"
+    version: "4.0.0"
+    engine:
+      name: "nextflow"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/funcscan"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # MultiQC. funcscan feeds MultiQC nothing but the software-versions
+      # table, so the 4.0.0 megatest parquet holds a single run_metadata row
+      # with no general-stats and no module sections. The DC is kept (a future
+      # release may add modules) but optional, and no dashboard tab binds it, so
+      # the tool versions reach the UI through the provenance block above.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        optional: true
+        description: "MultiQC report data (funcscan writes a versions-only report)"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "multiqc/multiqc_data/multiqc\\.parquet"
+
+      - data_collection_tag: "samplesheet"
+        optional: true
+        description: "Funcscan samplesheet (sample,fasta). Not published with the AWS megatest results."
+        config:
+          type: "Table"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{SAMPLESHEET_FILE}"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "sample": "Sample identifier (matches every screening report)"
+              "fasta": "Assembly the screens were run on"
+
+      # ----------------------------------------------------------------
+      # ARG screen (hAMRonization summarize)
+      # ----------------------------------------------------------------
+      - data_collection_tag: "hamronization_report"
+        optional: true  # absent without --run_arg_screening
+        description: "ARG hits, one row per hit, normalised across every ARG tool"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "hamronization/report.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier, recovered from the per-tool input file name"
+              "gene_symbol": "Resistance gene symbol as the reporting tool spells it"
+              "gene_name": "Full gene name"
+              "drug_class": "Drug class or fARGene model the hit belongs to"
+              "antimicrobial_agent": "Specific agent, when the tool reports one"
+              "resistance_mechanism": "Resistance mechanism, when the tool reports one"
+              "tool": "ARG screening tool that reported the hit"
+              "database": "Reference database the tool matched against"
+              "coverage_pct": "Query coverage of the reference gene, in percent"
+              "identity_pct": "Sequence identity to the reference gene, in percent"
+              "contig": "Assembly contig carrying the hit"
+              "hits": "Always 1, so a card can sum hits"
+
+      - data_collection_tag: "hamronization_gene_presence"
+        optional: true
+        description: "Per sample and gene ARG support: hits, agreeing tools, mean identity"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "hamronization/gene_presence.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "gene_symbol": "Resistance gene symbol"
+              "drug_class": "Most frequent drug class across the gene's hits"
+              "hits": "Hits reported for the gene in the sample"
+              "n_tools": "Distinct ARG tools that flagged the gene in the sample"
+              "tool_frac": "n_tools divided by the tools present in the whole report"
+              "mean_identity": "Mean identity over the hits that report one"
+              "mean_coverage": "Mean coverage over the hits that report one"
+
+      - data_collection_tag: "hamronization_gene_matrix"
+        optional: true
+        description: "Resistance gene by sample hit-count matrix (wide, one column per sample)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "hamronization/gene_matrix.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "gene_symbol": "Row identifier (use as index_column)"
+              "drug_class": "Row annotation (use as row_annotation_cols)"
+
+      - data_collection_tag: "hamronization_tool_overlap"
+        optional: true
+        description: "Contig by ARG-tool binary membership matrix for the UpSet plot"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "hamronization/tool_overlap.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "contig": "Assembly contig with at least one ARG hit"
+              "sample": "Sample identifier"
+
+      # ----------------------------------------------------------------
+      # AMP screen (AMPcombi2)
+      # ----------------------------------------------------------------
+      - data_collection_tag: "ampcombi_summary"
+        optional: true  # absent without --run_amp_screening
+        description: "AMP candidates with per-tool probabilities and physicochemistry"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "ampcombi/summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "cds_id": "Predicted CDS the candidate peptide comes from"
+              "contig": "Assembly contig carrying the CDS"
+              "prob_ampir": "ampir probability"
+              "prob_macrel": "Macrel probability"
+              "prob_amplify": "AMPlify probability (null when AMPlify was skipped)"
+              "prob_max": "Best probability across the predictors that ran"
+              "n_tools": "Predictors that gave the candidate a non-zero probability"
+              "aa_length": "Peptide length in amino acids"
+              "molecular_weight": "Molecular weight in daltons"
+              "isoelectric_point": "Isoelectric point (pI)"
+              "hydrophobicity": "Hydrophobicity score"
+              "charge_class": "acidic / neutral / basic, binned from the isoelectric point"
+              "db_hit": "Reference AMP database accession, when the alignment found one"
+
+      - data_collection_tag: "ampcombi_embedding"
+        optional: true
+        description: "PCA of the AMP candidates over their physicochemical descriptors"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "ampcombi/embedding.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "cds_id": "Candidate identifier, prefixed with its sample"
+              "dim_1": "First principal component"
+              "dim_2": "Second principal component"
+              "sample": "Sample identifier (colour grouping)"
+              "charge_class": "acidic / neutral / basic"
+
+      - data_collection_tag: "ampcombi_clusters"
+        optional: true
+        description: "AMP sequence clusters built across the run with MMseqs2"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "ampcombi/clusters.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "cluster_id": "Cluster index"
+              "representative": "Representative sequence header"
+              "sample": "Sample that contributed the representative"
+              "members": "Sequences in the cluster"
+
+      # ----------------------------------------------------------------
+      # BGC screen (comBGC)
+      # ----------------------------------------------------------------
+      - data_collection_tag: "combgc_summary"
+        optional: true  # absent without --run_bgc_screening
+        description: "Predicted biosynthetic gene cluster regions, one row per region"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "combgc/summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "contig": "Assembly contig carrying the region"
+              "tool": "BGC prediction tool (antiSMASH / DeepBGC / GECCO)"
+              "product_class": "Predicted product class"
+              "probability": "Caller probability (GECCO and DeepBGC only)"
+              "complete": "Whether the region is complete on the contig (antiSMASH only)"
+              "length": "Region length in bases"
+              "cds_count": "Coding sequences inside the region"
+              "n_pfam": "PFAM domains annotated on the region's CDSs"
+              "regions": "Always 1, so a card can sum regions"
+
+      - data_collection_tag: "combgc_tool_overlap"
+        optional: true
+        description: "Contig by BGC-caller binary membership matrix for the UpSet plot"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "combgc/tool_overlap.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "contig": "Assembly contig with at least one predicted region"
+              "sample": "Sample identifier"
+
+      # ----------------------------------------------------------------
+      # CAZyme screen (run_dbCAN)
+      # ----------------------------------------------------------------
+      - data_collection_tag: "dbcan_overview"
+        optional: true  # absent without --run_cazyme_screening
+        description: "CAZyme gene annotations from HMMER, dbCAN-sub and DIAMOND"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "dbcan/overview.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier, read from the gene id prefix"
+              "gene_id": "Predicted gene the annotation belongs to"
+              "contig": "Assembly contig carrying the gene"
+              "hmmer": "Family called by HMMER against the dbCAN HMMs"
+              "dbcan_sub": "Family called by dbCAN-sub"
+              "diamond": "Family called by DIAMOND against CAZy"
+              "n_tools": "How many of the three tools called a family (1 to 3)"
+              "family": "Resolved CAZy family"
+              "cazy_class": "CAZy class the family belongs to"
+              "substrate": "Predicted substrate, or 'unassigned'"
+              "genes": "Always 1, so a card can sum genes"
+
+      - data_collection_tag: "dbcan_tool_overlap"
+        optional: true
+        description: "Gene by annotation-tool binary membership matrix for the UpSet plot"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "dbcan/tool_overlap.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "gene_id": "Predicted gene"
+              "sample": "Sample identifier"
+              "hmmer": "1 when HMMER called a family"
+              "dbcan_sub": "1 when dbCAN-sub called a family"
+              "diamond": "1 when DIAMOND called a family"
+
+      - data_collection_tag: "dbcan_substrates"
+        optional: true
+        description: "CAZyme gene cluster substrate predictions (dbCAN-PUL homology + dbCAN-sub vote)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "dbcan/substrates.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "cgc_id": "CAZyme gene cluster identifier (<contig>|CGC<n>)"
+              "contig": "Assembly contig carrying the cluster"
+              "pul_id": "Matched dbCAN-PUL polysaccharide utilisation locus"
+              "substrate": "Substrate predicted by dbCAN-PUL homology"
+              "bitscore": "Alignment bitscore of the dbCAN-PUL match"
+              "sub_substrate": "Substrate predicted by the dbCAN-sub majority vote"
+              "clusters": "Always 1, so a card can sum clusters"
+
+      # ----------------------------------------------------------------
+      # Hub: one row per sample with the headline count of every screen that
+      # ran. Joined from the four screening collections, so a persistent
+      # sample filter on this collection drives every tab. Declared LAST: the
+      # CLI reads a dc_ref source back from the referenced collection's Delta
+      # table, so every screen it joins has to be processed before it.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "screening_summary"
+        description: "Per-sample screening summary (ARG / AMP / BGC / CAZyme counts)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/funcscan/screening_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier (hub column for every link)"
+              "arg_hits": "Resistance-gene hits reported by all ARG tools together"
+              "arg_genes": "Distinct resistance gene symbols"
+              "arg_tools": "ARG screening tools that reported at least one hit"
+              "amp_candidates": "Antimicrobial-peptide candidates"
+              "amp_high_confidence": "AMP candidates whose best tool probability reaches 0.8"
+              "bgc_regions": "Predicted biosynthetic gene cluster regions"
+              "bgc_classes": "Distinct BGC product classes"
+              "cazymes": "Annotated carbohydrate-active enzyme genes"
+              "cazyme_families": "Distinct CAZy families"
+              "screens": "How many of the four screens produced a result for the sample"
+
+# ============================================================================
+# RUNTIME LINKS CONFIGURATION
+# ============================================================================
+# Every link starts at the screening_summary hub, so one persistent sample
+# filter narrows every screen. Links whose target DC was pruned (a screen that
+# did not run) are dropped automatically at instantiation.
+# ============================================================================
+
+links:
+  - source_dc_tag: "screening_summary"
+    source_column: "sample"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Filter MultiQC by the hub sample list"
+    enabled: true
+
+  - source_dc_tag: "screening_summary"
+    source_column: "sample"
+    target_dc_tag: "samplesheet"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the samplesheet by the hub sample list"
+    enabled: true
+
+  # --- ARG ---------------------------------------------------------------
+  - source_dc_tag: "screening_summary"
+    source_column: "sample"
+    target_dc_tag: "hamronization_report"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter ARG hits by the hub sample list"
+    enabled: true
+
+  - source_dc_tag: "screening_summary"
+    source_column: "sample"
+    target_dc_tag: "hamronization_gene_presence"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter ARG gene support by the hub sample list"
+    enabled: true
+
+  - source_dc_tag: "screening_summary"
+    source_column: "sample"
+    target_dc_tag: "hamronization_tool_overlap"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the ARG tool-overlap matrix by the hub sample list"
+    enabled: true
+
+  # hamronization_gene_matrix is wide (sample ids are columns, not rows), so the
+  # filter never matches a row. `_narrow_wide_matrix_columns` mirrors it as a
+  # COLUMN subset instead, matching the filter's VALUES against the column
+  # names, which is why the link still works and `target_field` here is
+  # nominal rather than load-bearing.
+  - source_dc_tag: "screening_summary"
+    source_column: "sample"
+    target_dc_tag: "hamronization_gene_matrix"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Narrow the ARG gene matrix to the hub sample list (column subset)"
+    enabled: true
+
+  # --- AMP ---------------------------------------------------------------
+  - source_dc_tag: "screening_summary"
+    source_column: "sample"
+    target_dc_tag: "ampcombi_summary"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter AMP candidates by the hub sample list"
+    enabled: true
+
+  - source_dc_tag: "screening_summary"
+    source_column: "sample"
+    target_dc_tag: "ampcombi_embedding"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the AMP property embedding by the hub sample list"
+    enabled: true
+
+  - source_dc_tag: "screening_summary"
+    source_column: "sample"
+    target_dc_tag: "ampcombi_clusters"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter AMP clusters by the sample that contributed the representative"
+    enabled: true
+
+  # --- BGC ---------------------------------------------------------------
+  - source_dc_tag: "screening_summary"
+    source_column: "sample"
+    target_dc_tag: "combgc_summary"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter BGC regions by the hub sample list"
+    enabled: true
+
+  - source_dc_tag: "screening_summary"
+    source_column: "sample"
+    target_dc_tag: "combgc_tool_overlap"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the BGC caller-overlap matrix by the hub sample list"
+    enabled: true
+
+  # --- CAZyme ------------------------------------------------------------
+  - source_dc_tag: "screening_summary"
+    source_column: "sample"
+    target_dc_tag: "dbcan_overview"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter CAZyme annotations by the hub sample list"
+    enabled: true
+
+  - source_dc_tag: "screening_summary"
+    source_column: "sample"
+    target_dc_tag: "dbcan_tool_overlap"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the CAZyme tool-overlap matrix by the hub sample list"
+    enabled: true
+
+  - source_dc_tag: "screening_summary"
+    source_column: "sample"
+    target_dc_tag: "dbcan_substrates"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter CGC substrate predictions by the hub sample list"
+    enabled: true
+
+  # Selection wiring: the AMP property scatter and the AMP candidate table both
+  # key on `cds_id`, so a lasso on the scatter narrows the table and a row
+  # selection narrows the scatter. Same collection on both ends, declared so
+  # the runtime resolves the pair.
+  - source_dc_tag: "ampcombi_summary"
+    source_column: "cds_id"
+    target_dc_tag: "ampcombi_embedding"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "cds_id"
+    description: "Carry an AMP candidate selection into the property embedding"
+    enabled: true
+
+  # The Resistome tab's gene selection (figure lasso / table row) narrows the
+  # gene-level collections that share the gene_symbol key.
+  - source_dc_tag: "hamronization_report"
+    source_column: "gene_symbol"
+    target_dc_tag: "hamronization_gene_presence"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "gene_symbol"
+    description: "Carry an ARG gene selection into the gene-support collection"
+    enabled: true

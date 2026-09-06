@@ -1,0 +1,15 @@
+id: ampcombi_clusters
+name: Peptide clusters
+mode: amp/clusters
+description: >-
+  One row per sequence cluster AMPcombi built across the run with MMseqs2, with
+  the representative sequence header, the sample that contributed it and the
+  number of members.
+find: { path_glob: "**/ampcombi2/Ampcombi_summary_cluster_representative_seq.tsv" }
+recipe: ampcombi/clusters.py
+fixture: clusters.tsv
+renders_as:
+  - { component: figure, visu_type: histogram, dict_kwargs: {x: members, title: Cluster size distribution} }
+  - { component: card, column: members, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 4 }
+  - { component: card, column: members, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }
