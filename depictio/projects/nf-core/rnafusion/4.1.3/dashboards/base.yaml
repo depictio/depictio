@@ -804,7 +804,7 @@ tabs:
     title: Arriba confidence and support
     description: Colour is log10 supporting reads, size is the share of the local coverage that supports the fusion.
     title_size: h3
-    layout: {x: 0, y: 1, w: 4, h: 6}
+    layout: {x: 0, y: 1, w: 8, h: 6}
   - component_type: advanced_viz
     tag: rnaf-ev-starfusion-dot
     index: rnaf-ev-starfusion-dot
@@ -820,7 +820,7 @@ tabs:
     title: STAR-Fusion splice type and abundance
     description: Colour is log10 fusion fragments per million, size is the share of the support that crosses the junction.
     title_size: h3
-    layout: {x: 4, y: 1, w: 4, h: 6}
+    layout: {x: 0, y: 7, w: 8, h: 6}
   - component_type: advanced_viz
     tag: rnaf-ev-fusioncatcher-dot
     index: rnaf-ev-fusioncatcher-dot
@@ -836,7 +836,7 @@ tabs:
     title: FusionCatcher predicted effect and support
     description: Colour is log10 supporting reads, size is the share of that support mapping uniquely.
     title_size: h3
-    layout: {x: 0, y: 7, w: 8, h: 6}
+    layout: {x: 0, y: 13, w: 8, h: 6}
 
   - component_type: table
     tag: rnaf-ev-table-arriba

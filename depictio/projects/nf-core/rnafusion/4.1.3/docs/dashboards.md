@@ -104,6 +104,8 @@ collection lists both spellings so a run with a single FastQC invocation still b
 [What a single sample costs](#what-a-single-sample-costs) for what that suffix does to the
 sample filter.
 
+![Quality control](screenshots/quality-control.png)
+
 ## Fusion calls
 
 What the run called, and how much agreement is behind each call.
@@ -122,6 +124,8 @@ height, coloured by agreement.
 
 `Ranked calls` is the consensus table itself, the hub: picking rows here drives every other
 tab.
+
+![Fusion calls](screenshots/fusion-calls.png)
 
 ## Evidence
 
@@ -146,6 +150,8 @@ report different things: Arriba clusters by its confidence class
 
 `Caller tables`, collapsed, holds the three raw caller tables, each row-selectable by
 fusion.
+
+![Evidence](screenshots/evidence.png)
 
 ## FusionInspector and splicing
 
@@ -176,6 +182,8 @@ genome (`use: ctatsplicing/intron_manhattan`, selectable by gene) and a per-gene
 coloured by strand.
 
 ---
+
+![FusionInspector and splicing](screenshots/fusioninspector-and-splicing.png)
 
 ## What a single sample costs
 
