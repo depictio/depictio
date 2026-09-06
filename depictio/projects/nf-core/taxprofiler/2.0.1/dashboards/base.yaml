@@ -663,7 +663,7 @@ tabs:
     title: Melon genome-copy hierarchy
     description: Ring size is the share of estimated genome copies; four ranks from the domain outwards.
     title_size: h3
-    layout: {x: 0, y: 1, w: 4, h: 8}
+    layout: {x: 0, y: 1, w: 8, h: 8}
   - component_type: figure
     tag: tp-fig-melon-copies
     section: Genome copies
@@ -674,7 +674,7 @@ tabs:
     title: Estimated copies per species
     description: The lineages melon estimated the most genome copies for.
     title_size: h3
-    layout: {x: 4, y: 1, w: 4, h: 8}
+    layout: {x: 0, y: 9, w: 8, h: 8}
   - component_type: table
     tag: tp-table-melon
     section: Genome copies
@@ -685,7 +685,7 @@ tabs:
     description: Seven ranks, the estimated copy number, the pooled share and the mean read identity.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 9, w: 8, h: 4}
+    layout: {x: 0, y: 17, w: 8, h: 4}
 
   - component_type: interactive
     tag: tp-filter-profiler
@@ -799,7 +799,7 @@ tabs:
     title: Bray-Curtis ordination
     description: Colour is the classifier; runs of the same community should sit together whatever profiled them.
     title_size: h3
-    layout: {x: 0, y: 1, w: 4, h: 7}
+    layout: {x: 0, y: 1, w: 8, h: 7}
   - component_type: figure
     tag: tp-fig-pcoa-select
     section: Ordination
@@ -818,7 +818,7 @@ tabs:
     title: Ordination with selection
     description: Same coordinates, with the point symbol carrying the platform. Box or lasso a set of runs to filter the tab.
     title_size: h3
-    layout: {x: 4, y: 1, w: 4, h: 7}
+    layout: {x: 0, y: 8, w: 8, h: 7}
 
   - component_type: text
     tag: tp-upset-intro
