@@ -210,6 +210,13 @@ scatter, and cutandrun's `caller_agreement` recipe lives in the pipeline rather 
 catalog. Note this one collides with a standing policy: `test_compositions_stay_out_of_the_catalog`
 keeps cross-set compositions dashboard-side, so it needs a decision before it needs code.
 
+**3. `scatter_xy`: numeric against numeric, with size, colour and a selection key.**
+Twelve code-mode figures, in every template of the lot. `dot_plot` is the closest kind and
+cannot express them: its two axis roles are `cluster` and `gene`, both String, so it draws
+a categorical grid, not a plane. This is the largest single group of fallbacks in the lot
+and the cheapest to specify, whether it lands as a kind or as size and `custom_data`
+support in the figure builder.
+
 #### Reusable across a family, not universal
 
 **3. `signal_matrix`: the metagene heatmap.** Rows are regions ordered by signal, columns
@@ -240,9 +247,8 @@ nothing else in sight.
   `vdj_annotation/02-make-db/*_db-pass.tsv`, so this is a data gap, not a viz gap. V-by-J
   is a contingency table that `complex_heatmap` already draws, and CDR3 length is
   candidate 1.
-- **The twelve code-mode scatter plots and seven bars.** They need a marker size column,
-  `custom_data` and a selection key in UI mode, not a new kind. Closing that in the figure
-  builder shrinks every template in the lot and is worth more than any kind on this list.
+- **The seven code-mode bars and boxes.** They need a grouping and a log axis in UI mode,
+  not a kind.
 - **The MultiQC sections nobody badged.** rnaseq strandedness, sample-relationships and
   biotype counts (RS-D5), chipseq `peak_count`, `peak_annotation` and four `deseq2_*`
   sections (CS-D6), atacseq `mlib_peak_annotation` and the two `mlib_deseq2_*` (AT-D9),
