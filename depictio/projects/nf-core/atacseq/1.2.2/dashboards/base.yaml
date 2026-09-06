@@ -282,6 +282,37 @@ main_dashboard:
 
   # ------------------------------------------------------ accessibility signal
   - component_type: text
+    tag: at-qc-complexity-intro
+    section: Alignment and library complexity
+    title: "How much new material is left in each library"
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The MultiQC panel above plots the expected-distinct curve alone. This one adds the 95% interval preseq puts around it: where the ribbon is narrow the extrapolation is safe, where it fans out, sequencing deeper is a guess.
+    workflow_tag: atacseq
+    data_collection_tag: preseq_complexity_curve
+    layout: {x: 0, y: 16, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: at-qc-av-complexity
+    index: at-qc-av-complexity
+    section: Alignment and library complexity
+    workflow_tag: atacseq
+    data_collection_tag: preseq_complexity_curve
+    use: preseq/complexity_ribbon
+    config:
+      log_x: true
+      band_opacity: 0.18
+      line_width: 2
+      x_title: Sequencing depth (reads)
+      y_title: Expected distinct molecules
+      legend_pos: right
+    title: "Library complexity with its confidence ribbon"
+    description: "One curve per library, extrapolated by preseq; the band is the 95% interval on that extrapolation."
+    title_size: h3
+    layout: {x: 0, y: 17, w: 8, h: 7}
+  - component_type: text
     tag: at-qc-signal-intro
     section: Accessibility signal
     title: Is the signal where it should be?
@@ -344,6 +375,70 @@ main_dashboard:
     layout: {x: 4, y: 6, w: 4, h: 5}
 
   # -------------------------------------------------------- reference tables
+  - component_type: text
+    tag: at-qc-fingerprint-intro
+    section: Accessibility signal
+    title: "The numbers under the fingerprint curve"
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      MultiQC draws the fingerprint curve; the per-sample metrics beside it never reach a panel. Each point is one library: up and to the left means the reads pile into a small share of the genome, which for ATAC is the open chromatin.
+    workflow_tag: atacseq
+    data_collection_tag: deeptools_fingerprint_metrics
+    layout: {x: 0, y: 11, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: at-qc-av-fingerprint
+    index: at-qc-av-fingerprint
+    section: Accessibility signal
+    workflow_tag: atacseq
+    data_collection_tag: deeptools_fingerprint_metrics
+    use: deeptools/fingerprint_scatter
+    config:
+      x_title: Area under the observed coverage curve
+      y_title: Divergence from a uniform library
+      marker_size: 12
+      opacity: 0.85
+      marker_outline: true
+      top_n_labels: 4
+      legend_pos: none
+    title: "Coverage concentration per library"
+    description: "plotFingerprint's own quality metrics: enrichment against divergence from a uniform library of the same depth."
+    title_size: h3
+    layout: {x: 0, y: 12, w: 8, h: 7}
+  - component_type: text
+    tag: at-qc-metagene-intro
+    section: Accessibility signal
+    title: "Where the signal sits along a gene"
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      deepTools writes this matrix as a plain table beside its PDF and MultiQC has no panel for it. Bins 1 to 300 are the 3 kb upstream of each gene, 300 to 400 the gene body scaled to a fixed length, 400 to 700 the 3 kb downstream.
+    workflow_tag: atacseq
+    data_collection_tag: deeptools_plot_profile
+    layout: {x: 0, y: 19, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: at-qc-av-metagene
+    index: at-qc-av-metagene
+    section: Accessibility signal
+    workflow_tag: atacseq
+    data_collection_tag: deeptools_plot_profile
+    use: deeptools/metagene_profile
+    config:
+      reference_x: 300
+      reference_label: TSS
+      shaded_bands:
+        - [300, 400, Gene body]
+      x_title: Bin along the plotted window
+      y_title: Mean signal
+      legend_pos: right
+    title: "Metagene signal profile"
+    description: "Mean accessibility of every library across the plotted window, with the transcription start site marked and the gene body shaded."
+    title_size: h3
+    layout: {x: 0, y: 20, w: 8, h: 7}
   - component_type: text
     tag: at-ref-intro
     section: Reference tables
@@ -1195,6 +1290,38 @@ tabs:
     layout: {x: 4, y: 3, w: 4, h: 6}
 
   # ------------------------------------------------------------- peak tables
+  - component_type: text
+    tag: at-pk-tss-intro
+    section: Where the peaks land
+    title: "The same distances, one curve per sample"
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The histogram above pools the samples and splits them by feature class. This one does the opposite: one curve per sample, as a share of that sample's peaks, so libraries of different depth can be compared directly.
+    workflow_tag: atacseq
+    data_collection_tag: homer_tss_distance_profile
+    layout: {x: 0, y: 9, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: at-pk-av-tss
+    index: at-pk-av-tss
+    section: Where the peaks land
+    workflow_tag: atacseq
+    data_collection_tag: homer_tss_distance_profile
+    use: homer/tss_distance
+    config:
+      reference_x: 0
+      reference_label: TSS
+      shaded_bands:
+        - [-1000, 1000, Promoter window]
+      x_title: Distance to the nearest TSS (bp)
+      y_title: Share of the sample's peaks
+      legend_pos: right
+    title: "Peak distribution around the nearest TSS"
+    description: "Peaks counted in 250 bp bins across a 20 kb window; the shaded band is the 1 kb promoter window either side of the start site."
+    title_size: h3
+    layout: {x: 0, y: 10, w: 8, h: 7}
   - component_type: text
     tag: at-pk-tables-intro
     section: Peak tables

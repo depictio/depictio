@@ -67,12 +67,20 @@ sample shows up once per library rather than once per sample.
 
 `Alignment and library complexity` pairs samtools percent mapped with Picard duplication, then
 the preseq complexity curve full width, then the featureCounts assignment bars that say how
-many reads fall inside the consensus peaks.
+many reads fall inside the consensus peaks. Below them, the same preseq curves again but
+read from the tool's own output rather than the report: `use: preseq/complexity_ribbon`
+adds the 95% confidence band MultiQC drops, so a library whose extrapolation is guesswork
+is visible as a ribbon that fans out rather than as a line that looks as certain as any
+other.
 
 `ChIP enrichment` is the tab's point: the deepTools fingerprint curve, which separates an
 enriched ChIP from a flat input, next to the FRiP scores, then the strand cross-correlation
 plot with the NSC and RSC coefficients derived from it, then the deepTools read-distribution
-profile around annotated genes.
+profile around annotated genes. Two tiles then read the deepTools tables the report has no
+panel for: `use: deeptools/fingerprint_scatter` puts every library on one plane, coverage
+concentration against divergence from a uniform library, so the IPs separate from their
+inputs in one glance; and `use: deeptools/metagene_profile` draws the `plotProfile` matrix
+as one curve per library with the TSS marked at bin 300 and the scaled gene body shaded.
 
 The MultiQC General Statistics table is **not** bound on this tab. chipseq runs `samtools
 stats` and `samtools flagstat` over the same BAMs and both contribute a general-stats column
@@ -101,7 +109,10 @@ transcription-factor profile from a broad histone mark.
 (histogram); a stacked bar of feature class per sample; and a code-mode histogram of the
 signed distance to the nearest TSS, clipped to a 10 kb window and split by feature class, with
 the TSS marked. The raw column runs to several hundred kb, so without the window the peak at
-zero flattens out.
+zero flattens out. Under it, `use: homer/tss_distance` reads the same distances pre-binned
+by the recipe, one curve per sample as a share of that sample's peaks: the histogram pools
+samples and splits by class, the profile does the opposite, and being a share rather than a
+count is what lets libraries of different depth be compared.
 
 `Peak tables` (collapsed) holds the HOMER annotation table and the MACS2 call table, both with
 row selection on `peak_id`.
@@ -162,7 +173,9 @@ filter is a single-choice `Select` for that reason.
 | Module | Outputs | Renders as |
 |---|---|---|
 | `depictio/catalog/macs2/` | `peaks`, `peak_summary`, `consensus_boolean`, `consensus_fc` | manhattan, UpSet, complex heatmap, 2 figures, 4 tables, 14 cards |
-| `depictio/catalog/homer/` | `annotate_peaks` | 2 figures, 4 cards, table with row selection |
+| `depictio/catalog/homer/` | `annotate_peaks`, `tss_distance_profile` | profile, 3 figures, 7 cards, table with row selection |
+| `depictio/catalog/preseq/` | `complexity_curve` | profile with a confidence ribbon, figure, 4 cards, table |
+| `depictio/catalog/deeptools/` | `fingerprint_metrics`, `plot_profile` | scatter (X/Y), profile, 2 figures, 7 cards, 2 tables |
 | `depictio/catalog/deseq2/` (reused) | `results` | volcano, MA, QQ, DA barplot, 4 cards, figure, table |
 
 `macs2` and `homer` both map to nf-core modules (`macs2/callpeak`, `homer/annotatepeaks`), so
@@ -171,6 +184,12 @@ their `module.yaml` carries `nf_core_url` and leaves the rest of the identity to
 
 The MultiQC modules this pipeline emits already have catalog entries: `fastqc`, `cutadapt`,
 `samtools`, `picard`, `featurecounts` existed, and `preseq` and `deeptools` were added here.
+`preseq` and `deeptools` have a standalone tool as well as a MultiQC entry, and the two do
+not overlap: the panels are the curves MultiQC redraws from its parquet, the tools read the
+tables nf-core publishes beside them, which carry the preseq confidence bounds and the
+per-sample fingerprint metrics the panels leave out. See `TEMPLATE_BOTTLENECKS.md`, "What
+MultiQC parses but never publishes as data".
+
 `macs` and `phantompeakqualtools` are parsed by MultiQC but expose no plot, only
 general-statistics columns, so they get no catalog entry and no tile. chipseq's own
 custom-content sections (FRiP, peak counts, NSC/RSC, strand cross-correlation, the DESeq2 PCA

@@ -285,6 +285,42 @@ ships as the junction-arc half and the coverage and exon-model halves are deferr
 JBrowse rather than reimplemented. `coverage_track` and `gene_arrow_track` are the same
 case and should not be extended toward browser features either.
 
+### What MultiQC parses but never publishes as data
+
+The catalog policy is that a tool MultiQC already parses stays a `use: multiqc/<module>`
+panel, and `_index/multiqc_modules.txt` lists which those are. That index is advisory, not
+prohibitive, and always was: `ataqv`, `homer` and `macs2` are all in it and all have full
+catalog tools. What the policy is really protecting against is a second copy of a panel
+that already exists, not a dedicated tool as such.
+
+The line that actually holds is narrower and worth writing down: **a dedicated tool is
+justified when nf-core publishes a table that the MultiQC panel does not render, or
+renders without the columns that carry the reading.** Three cases in the ChIP family meet
+it, and all three shipped:
+
+- **`preseq`.** MultiQC plots `EXPECTED_DISTINCT` on its own and drops `LOWER_0.95CI` and
+  `UPPER_0.95CI`, so the width of the extrapolation, which is what says whether
+  "sequence deeper" is advice or a guess, never reaches a dashboard. The
+  `preseq/complexity_curve` output keeps both bounds and binds them to `profile`'s
+  optional `lower` / `upper` roles, the only output in the catalog that exercises them.
+- **`deeptools`.** The MultiQC module draws the fingerprint curve but not the per-sample
+  quality metrics beside it, and it has no plot at all for the `plotProfile` matrix, the
+  `plotPCA` loadings or the `plotCorrelation` matrix. nf-core publishes all four as plain
+  tab-separated files next to the PDFs. They became `fingerprint_metrics` (`scatter_xy`),
+  `plot_profile` (`profile`), `sample_pca` (`embedding`) and `correlation_matrix`
+  (`complex_heatmap`).
+- **`homer`.** Not a MultiQC overlap at all, but the same shape of gap: the distance to
+  the nearest TSS was drawn by a hand-written `px.histogram` in both chipseq and atacseq.
+  `homer/tss_distance_profile` bins it in the recipe, which lets `profile` own the marker
+  at the start site, the shaded promoter window and the log axis.
+
+None of this needed a new viz kind: the four bindings are `profile`, `scatter_xy`,
+`embedding` and `complex_heatmap`, all of which already existed.
+
+What is left in the ChIP family after that is genuinely browser work, not table work:
+per-base coverage tracks (`bigwig/`), the aligned reads and the peak intervals as
+features. That is the JBrowse boundary above, and nothing in it should become a kind.
+
 ### Still missing, for pipelines outside this lot
 
 V-to-J pairing at scale (airrflow full rearrangement tables), 96-context mutational
