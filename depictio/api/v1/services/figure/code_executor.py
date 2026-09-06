@@ -94,6 +94,19 @@ class SimpleCodeExecutor:
             "list": list,
             "dict": dict,
             "tuple": tuple,
+            # RestrictedPython's `safe_builtins` ships `abs`, `round`, `sorted`
+            # and the numeric constructors but not these, which reads as an
+            # oversight rather than a boundary: they are pure, take no handle
+            # on anything, and are the obvious way to size an axis or a
+            # reference line. Their absence surfaces only at render time, as a
+            # bare `NameError` in the middle of a figure.
+            "max": max,
+            "min": min,
+            "sum": sum,
+            "any": any,
+            "all": all,
+            "set": set,
+            "reversed": reversed,
         }
 
     def _validate_no_df_assignment(self, code: str) -> Tuple[bool, str]:
