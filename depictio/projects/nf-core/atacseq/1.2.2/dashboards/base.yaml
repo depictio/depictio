@@ -1717,7 +1717,7 @@ tabs:
     title: Volcano
     description: -log10(padj) against log2 fold change. The dashed lines are padj 0.05 and a two-fold change.
     title_size: h3
-    layout: {x: 0, y: 1, w: 4, h: 7}
+    layout: {x: 0, y: 1, w: 8, h: 7}
   - component_type: advanced_viz
     tag: at-da-av-ma
     index: at-da-av-ma
@@ -1735,7 +1735,7 @@ tabs:
     title: MA plot
     description: log2 fold change against log2 mean normalised count. Low-count intervals fan out on the left.
     title_size: h3
-    layout: {x: 4, y: 1, w: 4, h: 7}
+    layout: {x: 0, y: 8, w: 8, h: 7}
 
   # ------------------------------------------------- calibration and direction
   - component_type: text
@@ -1766,7 +1766,7 @@ tabs:
     title: QQ plot
     description: Observed against expected p-value quantiles for the contrast in view.
     title_size: h3
-    layout: {x: 0, y: 1, w: 4, h: 7}
+    layout: {x: 0, y: 1, w: 8, h: 7}
   - component_type: advanced_viz
     tag: at-da-av-dabar
     index: at-da-av-dabar
@@ -1781,7 +1781,7 @@ tabs:
     title: Strongest differential intervals
     description: The 25 intervals with the largest significant effect, signed by direction.
     title_size: h3
-    layout: {x: 4, y: 1, w: 4, h: 7}
+    layout: {x: 0, y: 8, w: 8, h: 7}
   - component_type: figure
     tag: at-da-fig-counts
     index: at-da-fig-counts
@@ -1821,7 +1821,7 @@ tabs:
     title: Significant intervals per contrast
     description: How many intervals cleared padj 0.05 and a two-fold change in each protocol comparison, split by direction.
     title_size: h3
-    layout: {x: 0, y: 8, w: 8, h: 6}
+    layout: {x: 0, y: 15, w: 8, h: 6}
 
   # ----------------------------------------------------- differential tables
   - component_type: text
