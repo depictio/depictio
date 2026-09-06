@@ -72,6 +72,9 @@ Filters: sample multi-select, a screens-completed range and an ARG-hit range.
 
 ---
 
+![Screening overview](screenshots/screening-overview.png)
+
+
 ## Resistome
 
 Six sections. **Resistome at a glance**: hits, distinct gene symbols, sequence identity and
@@ -91,6 +94,9 @@ Filters: `ARG scope` (tool, drug class) and a collapsed `Hit quality`
 
 ---
 
+![Resistome](screenshots/resistome.png)
+
+
 ## AMPs
 
 **AMPs at a glance**: candidate count, ampir probability, peptide length and a
@@ -104,6 +110,9 @@ Filters: `Candidate scope` (charge class) and a collapsed `Peptide properties`
 (maximum tool probability, amino-acid length).
 
 ---
+
+![AMPs](screenshots/amps.png)
+
 
 ## BGCs
 
@@ -124,6 +133,9 @@ Filters: `Cluster scope` (tool, product class) and a collapsed `Region size`
 
 ---
 
+![BGCs](screenshots/bgcs.png)
+
+
 ## CAZymes
 
 **CAZymes at a glance**: annotated genes, families, substrate coverage and tools agreeing.
@@ -140,3 +152,5 @@ when the identifiers carry no prefix.
 
 Filters: `CAZyme scope` (class, substrate) and a collapsed `Call confidence`
 (tools agreeing).
+
+![CAZymes](screenshots/cazymes.png)
