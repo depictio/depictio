@@ -8,11 +8,14 @@ repos:
     rev: v6.0.0
     hooks:
     -   id: trailing-whitespace
-        # Bundled project data is generated, not written by hand: a TSV row whose
-        # last column is an empty value legitimately ends in a tab, and stripping
-        # it makes the committed file differ from what the generator emits — so
-        # every regeneration would come back as a diff the hook undoes again.
-        exclude: '^dev/|.bumpversion\.cfg$|^depictio/projects/.*\.(tsv|csv)$'
+        # Bundled project data and catalog fixtures are generated, not written
+        # by hand: a TSV row whose last column is an empty value legitimately
+        # ends in a tab, and stripping it makes the committed file differ from
+        # what the generator emits — so every regeneration would come back as a
+        # diff the hook undoes again. Worse, it makes the row ragged, and the
+        # fixture then fails to read at all (deeptools/fingerprint_metrics.tsv
+        # ends four optional columns wide on the input samples).
+        exclude: '^dev/|.bumpversion\.cfg$|^depictio/(projects|catalog)/.*\.(tsv|csv)$'
     -   id: end-of-file-fixer
         exclude: ^dev/
     -   id: check-yaml

@@ -18,3 +18,7 @@ renders_as:
   - { component: card, column: genes_expressed, aggregation: average, secondary_layout: threshold, threshold_value: 10000, threshold_direction: min, threshold_warn: 8000 }
   - { component: card, column: genes_detected, aggregation: average, secondary_layout: histogram }
   - { component: table }
+  # Metric cards and the row-level table behind them: the readings the
+  # nf-core dashboards were already computing off this output by hand.
+  - { component: card, column: sample_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: group, top_n_count: 4 }
+  - { component: card, column: genes_detected, aggregation: average, secondary_layout: gauge, coverage_max: 30000 }

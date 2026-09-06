@@ -1,0 +1,15 @@
+id: multiqc_malt
+name: Metagenomic alignment
+origin_tool: MALT
+mode: malt
+description: Metagenomic read alignment against a reference database, from MALT, via MultiQC. How many queries aligned at all, and how many of those got a taxonomic assignment.
+find:
+  path_glob: "**/multiqc/multiqc_data/multiqc.parquet"
+  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/
+    - "**/multiqc/*_data/multiqc.parquet"
+    - "**/multiqc/*/*_data/multiqc.parquet"
+# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);
+# `section` selects this module's plot anchors out of the shared report.
+fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
+renders_as:
+  - { component: multiqc, section: malt }

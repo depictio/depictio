@@ -1233,6 +1233,30 @@ def deeptools(sample: str) -> dict[str, str]:
     }
 
 
+def malt(sample: str) -> dict[str, str]:
+    """`malt-run` log. The first two lines are the search pattern, so they are
+    literal; the parser then reads a `+++++ Aligning file:` banner per sample and
+    takes each counter off the end of its own line, commas stripped.
+    """
+    queries = _vary(sample, 900_000, 1_100_000)
+    aligned = int(queries * _vary(sample, 60, 85) / 100)
+    assigned = int(aligned * _vary(sample, 70, 95) / 100)
+    body = "\n".join(
+        [
+            "MaltRun - Aligns sequences using MALT (MEGAN alignment tool)",
+            "Version   MALT (version 0.6.1, built 22 Mar 2023)",
+            f"+++++ Aligning file: {sample}.fastq.gz",
+            f"Total reads:      {queries:,}",
+            f"Num. of queries:  {queries:,}",
+            f"Aligned queries:  {aligned:,}",
+            f"Num. alignments:  {int(aligned * 1.4):,}",
+            f"Assig. Taxonomy:  {assigned:,}",
+            "Total time:  42s",
+        ]
+    )
+    return {f"{sample}.malt.log": body + "\n"}
+
+
 def preseq(sample: str) -> dict[str, str]:
     """`preseq lc_extrap` output. The header row is the search pattern *and* the
     unit switch: `TOTAL_READS` is parsed as reads, `TOTAL_BASES` as base pairs,
@@ -1265,6 +1289,7 @@ STUB_BUILDERS = {
     "ivar": ivar,
     "kaiju": kaiju,
     "kraken": kraken,
+    "malt": malt,
     "metaphlan": metaphlan,
     "mosdepth": mosdepth,
     "nanoq": nanoq,
@@ -1288,7 +1313,13 @@ def build_inputs(sections: list[str]) -> dict[str, str]:
     """Every stub file needed to make `sections` appear in one MultiQC report."""
     files: dict[str, str] = {}
     for section in sections:
-        builder = STUB_BUILDERS[section]
+        builder = STUB_BUILDERS.get(section)
+        if builder is None:
+            # Not every catalog section is a module with an input file of its
+            # own: MultiQC assembles the general-statistics table out of
+            # whatever modules ran, so it needs no stub and appears as soon as
+            # any other section does.
+            continue
         for sample in SAMPLES:
             files.update(builder(sample))
     return files

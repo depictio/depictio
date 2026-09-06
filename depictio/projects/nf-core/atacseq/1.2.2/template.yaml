@@ -478,7 +478,7 @@ workflows:
           metatype: "Aggregate"
           source: "transformed"
           transform:
-            recipe: "nf-core/atacseq/broad_peaks.py"
+            recipe: "macs2/broad_peaks.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:

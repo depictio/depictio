@@ -719,6 +719,7 @@ tabs:
     section: Significance along the genome
     workflow_tag: chipseq
     data_collection_tag: macs2_peaks
+    use: macs2/peaks
     mode: code
     visu_type: scatter
     code_content: |
@@ -839,6 +840,7 @@ tabs:
     section: Where the peaks land
     workflow_tag: chipseq
     data_collection_tag: homer_annotated_peaks
+    use: homer/annotated_peaks
     aggregation: average
     column_name: peak_score
     column_type: float64
@@ -866,6 +868,7 @@ tabs:
     section: Where the peaks land
     workflow_tag: chipseq
     data_collection_tag: homer_annotated_peaks
+    use: homer/annotated_peaks
     mode: code
     visu_type: histogram
     code_content: |

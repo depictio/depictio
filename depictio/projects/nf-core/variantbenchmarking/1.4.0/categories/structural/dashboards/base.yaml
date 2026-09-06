@@ -53,6 +53,7 @@ main_dashboard:
     section: Benchmark at a glance
     workflow_tag: variantbenchmarking
     data_collection_tag: multiqc_data
+    use: multiqc/general_stats
     selected_module: general_stats
     selected_plot: general_stats
     title: Benchmark statistics (truvari precision · recall · F1 · GT concordance)

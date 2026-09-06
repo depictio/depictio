@@ -87,6 +87,7 @@ main_dashboard:
     section: Alignment at a glance
     workflow_tag: rnafusion
     data_collection_tag: multiqc_data
+    use: multiqc/general_stats
     selected_module: general_stats
     selected_plot: general_stats
     title: General statistics
@@ -739,6 +740,7 @@ tabs:
     section: Support across callers
     workflow_tag: rnafusion
     data_collection_tag: caller_evidence
+    use: fusionreport/caller_evidence
     mode: code
     code_content: |
       # Pivot the long evidence table so the two split-read callers face each
@@ -1056,6 +1058,7 @@ tabs:
     section: Validated calls
     workflow_tag: rnafusion
     data_collection_tag: fusioninspector_fusions
+    use: fusioninspector/fusions
     mode: code
     code_content: |
       # Fusion allelic ratio, 5' against 3'. Both axes are log scaled, so a call
@@ -1106,6 +1109,7 @@ tabs:
     section: Fusion protein domains
     workflow_tag: rnafusion
     data_collection_tag: fusion_protein_domains
+    use: fusioninspector/protein_domains
     mode: code
     code_content: |
       # Interval track: one bar per Pfam domain, placed at its amino-acid start
@@ -1276,6 +1280,7 @@ tabs:
     section: Splice junctions
     workflow_tag: rnafusion
     data_collection_tag: splice_junctions
+    use: ctatsplicing/introns
     visu_type: bar
     dict_kwargs: {x: gene, y: uniq_mapped, color: strand}
     title: Junction support per gene

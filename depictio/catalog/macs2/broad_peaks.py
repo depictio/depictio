@@ -1,21 +1,20 @@
 """Concatenate MACS2 broadPeak calls into one tidy peak table.
 
-The catalog's ``macs2/peaks.py`` reads ``*_peaks.narrowPeak``, a BED6+4 whose
-tenth column is the summit offset. A ``--broad`` run writes ``*_peaks.broadPeak``
-instead: BED6+3, the same first nine columns and NO summit, because a broad
-region has no single summit to report. That is a different schema, not a
-different glob, so it cannot be reached with a ``source_overrides`` repointing
-of the narrow recipe and lives here until the catalog gains a broadPeak output
-of its own (see VALIDATION_REPORT.md).
+``macs2/peaks.py`` reads ``*_peaks.narrowPeak``, a BED6+4 whose tenth column is
+the summit offset. A ``--broad`` run writes ``*_peaks.broadPeak`` instead:
+BED6+3, the same first nine columns and NO summit, because a broad region has
+no single summit to report. That is a different schema, not a different glob,
+so it cannot be reached by repointing the narrow recipe and gets an output of
+its own.
 
-nf-core/atacseq calls peaks on the merged, filtered library, so MACS2 stamps
-``<sample>.mLb.clN`` into every peak name (``GM12878_FAST_R1.mLb.clN_peak_12``).
-The ``sample`` column keeps that spelling, which is the one the HOMER annotation
-and the consensus matrix also use; the dashboard hub carries it as
-``merged_library`` and links on it.
+The ChIP-family pipelines call peaks on the merged, filtered library, so MACS2
+stamps the library name into every peak name
+(``GM12878_FAST_R1.mLb.clN_peak_12``). The ``sample`` column keeps that
+spelling, which is the one the HOMER annotation and the consensus matrix also
+use, so the three tables join without a rewrite.
 
 Output schema:
-    sample : Utf8               merged library the peak was called in
+    sample : Utf8               library the peak was called in
     peak_id : Utf8              MACS2 peak name, unique across samples
     chr : Utf8                  chromosome
     start : Int64               peak start (0-based, as broadPeak reports it)
@@ -80,7 +79,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     df = sources["broadpeak"]
     missing = [c for c in _BROADPEAK_COLUMNS if c not in df.columns]
     if missing:
-        raise ValueError(f"atacseq broad_peaks: broadPeak input lacks columns {missing}")
+        raise ValueError(f"macs2 broad_peaks: broadPeak input lacks columns {missing}")
 
     df = df.with_columns(
         pl.col("chr").cast(pl.Utf8),
