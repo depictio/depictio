@@ -655,21 +655,26 @@ const GeneArrowTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
             />
           </Stack>
         ) : null}
-        {hasRegions ? (
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            Annotations
+          </Text>
+          {hasRegions ? (
+            <Switch
+              size="xs"
+              checked={showRegions}
+              onChange={(e) => setShowRegions(e.currentTarget.checked)}
+              label="Highlight region"
+            />
+          ) : null}
           <Switch
             size="xs"
-            checked={showRegions}
-            onChange={(e) => setShowRegions(e.currentTarget.checked)}
-            label="Highlight region"
+            checked={showLabels}
+            onChange={(e) => setShowLabels(e.currentTarget.checked)}
+            label="Feature labels"
           />
-        ) : null}
-        <Switch
-          size="xs"
-          checked={showLabels}
-          onChange={(e) => setShowLabels(e.currentTarget.checked)}
-          label="Feature labels"
-        />
-        <Stack gap={2}>
+        </Stack>
+        <Stack gap={4}>
           <Text size="xs" fw={500}>
             Arrow height
           </Text>
