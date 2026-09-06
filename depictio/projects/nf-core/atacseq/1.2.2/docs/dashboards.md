@@ -97,6 +97,8 @@ the API's general-stats payload collapses them. See `VALIDATION_REPORT.md`, AT-D
 
 ---
 
+![Library QC](screenshots/library-qc.png)
+
 ## ATAC signal
 
 The tab that exists because MultiQC 1.9 reported none of this and 1.35 only reports part of
@@ -125,6 +127,8 @@ share is the classic ATAC failure.
 
 ---
 
+![ATAC signal](screenshots/atac-signal.png)
+
 ## Peaks
 
 `Peaks at a glance` counts the calls in view, their width distribution as a Tukey box plot,
@@ -145,6 +149,8 @@ The left rail filters on peak significance, peak width and feature class.
 
 ---
 
+![Peaks](screenshots/peaks.png)
+
 ## Consensus
 
 `Consensus at a glance` counts the intervals in the merged set, how many libraries back each
@@ -163,6 +169,8 @@ the interval is in the top set and clears it otherwise.
 `peak_id`.
 
 ---
+
+![Consensus](screenshots/consensus.png)
 
 ## Differential accessibility
 
@@ -184,6 +192,8 @@ with the selected contrast.
 `Differential tables`, collapsed, holds the DESeq2 rows with row selection on `gene_id`.
 
 ---
+
+![Differential accessibility](screenshots/differential-accessibility.png)
 
 ## Reproducing
 
