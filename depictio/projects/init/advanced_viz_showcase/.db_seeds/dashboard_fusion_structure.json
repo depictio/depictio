@@ -1,0 +1,343 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d72"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d72"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "fus-text",
+      "component_type": "text",
+      "title": "Fusion structure",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Fusion structure",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Six oncogenic fusions, each drawn as its two partners end to end: one lane per partner, one bar per protein domain, a dotted seam at the breakpoint. Bar fill is the fraction of the domain the fusion keeps, so a lost domain is an empty outline. The x axis is an ordinal domain slot, not an amino-acid position.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "fus-struct",
+      "component_type": "advanced_viz",
+      "title": "Fusion structure \u2014 retained protein domains",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "fusion_structure_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d82"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Six oncogenic gene fusions with their real protein-domain composition, retained fraction and breakpoint slot",
+        "data_collection_tag": "fusion_structure_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d82"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "One facet per fusion, one lane per partner, one bar per domain coloured by domain class. The solid fill is the retained fraction; the outline is the domain's full extent. Facet count, breakpoint marking, bar height and domain labels live in the Settings \u2699 popover.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Fusion structure",
+      "viz_kind": "fusion_structure",
+      "config": {
+        "viz_kind": "fusion_structure",
+        "fusion_id_col": "fusion_id",
+        "partner_col": "partner",
+        "feature_col": "feature",
+        "start_col": "start",
+        "end_col": "end",
+        "breakpoint_col": "breakpoint",
+        "retained_col": "retained",
+        "colour_by_col": "domain_class",
+        "top_n": 6,
+        "show_breakpoint": true
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "fus-f-fusion",
+      "component_type": "interactive",
+      "title": "Fusion",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "fusion_structure_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d82"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Six oncogenic gene fusions with their real protein-domain composition, retained fraction and breakpoint slot",
+        "data_collection_tag": "fusion_structure_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d82"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Fusion scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "fusion_id",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Fusion filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#7950F2",
+      "icon_name": "mdi:dna",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "fus-f-class",
+      "component_type": "interactive",
+      "title": "Domain class",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "fusion_structure_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d82"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Six oncogenic gene fusions with their real protein-domain composition, retained fraction and breakpoint slot",
+        "data_collection_tag": "fusion_structure_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d82"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Fusion scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "domain_class",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Fusion filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#E64980",
+      "icon_name": "mdi:vector-arrange-below",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "fus-f-partner",
+      "component_type": "interactive",
+      "title": "Partner gene",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "fusion_structure_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d82"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Six oncogenic gene fusions with their real protein-domain composition, retained fraction and breakpoint slot",
+        "data_collection_tag": "fusion_structure_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d82"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Fusion scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "partner",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Fusion filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#15AABF",
+      "icon_name": "mdi:relation-many-to-many",
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-fus-f-fusion",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-fus-f-class",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-fus-f-partner",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-fus-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-fus-struct",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Fusion structure",
+  "subtitle": "Six oncogenic gene fusions as their two partners end to end, protein domains placed along each lane and the breakpoint marked.",
+  "icon": "mdi:set-merge",
+  "icon_color": "grape",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 30,
+  "main_tab_name": null,
+  "tab_icon": "mdi:call-merge",
+  "tab_icon_color": "grape",
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Fusion scope",
+      "icon": "mdi:filter-variant",
+      "color": "grape",
+      "description": "Restricts which fusions, partners and domain classes are drawn",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Fusion structure",
+      "icon": "mdi:set-merge",
+      "color": "grape",
+      "description": "Partner lanes with their annotated protein domains",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
+}

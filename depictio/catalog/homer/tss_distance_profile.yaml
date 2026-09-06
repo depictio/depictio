@@ -1,0 +1,22 @@
+id: homer_tss_distance_profile
+name: Distance to nearest TSS
+mode: peaks/tss_distance
+description: >-
+  How each sample's peaks are distributed around the nearest transcription start
+  site, counted in 250 bp bins across a 20 kb window. A sharp central spike
+  means the peaks are promoter-bound; a flat curve means they sit across gene
+  bodies and intergenic space.
+find:
+  path_glob: "**/*.annotatePeaks.txt"
+recipe: homer/tss_distance_profile.py
+fixture: tss_distance_profile.tsv
+renders_as:
+  # The `profile` kind rather than a histogram figure: it owns the marker at the
+  # start site, the shaded promoter window and the log axis in the tile's own
+  # Settings, which is what the code-mode TSS histograms were written to get.
+  - { id: tss_distance, component: advanced_viz, kind: profile, roles: {series: sample, x: distance_to_tss, y: fraction} }
+  - { component: figure, visu_type: line, dict_kwargs: {x: distance_to_tss, y: fraction, color: sample, title: Peak distribution around the nearest TSS} }
+  - { component: card, column: peak_count, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: fraction, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: peak_count, aggregation: sum, secondary_layout: composition, breakdown_col: sample }
+  - { component: table }

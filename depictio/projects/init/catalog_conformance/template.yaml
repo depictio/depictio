@@ -240,6 +240,61 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: 214f1f24ca1caaecc59a73c7
+    data_collection_tag: deeptools_correlation_matrix
+    description: Sample correlation matrix — recipe output (deeptools/correlation_matrix.py), seeded from
+      the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: deeptools/correlation_matrix.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: eba4f02f1831508a2d2e6528
+    data_collection_tag: deeptools_fingerprint_metrics
+    description: Fingerprint metrics — recipe output (deeptools/fingerprint_metrics.py), seeded from the
+      catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: deeptools/fingerprint_metrics.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: a3653ebbaf038b47c48eb9c9
+    data_collection_tag: deeptools_plot_profile
+    description: Metagene signal profile — recipe output (deeptools/plot_profile.py), seeded from the
+      catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: deeptools/plot_profile.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 166b264da35e97335ec3f6c5
+    data_collection_tag: deeptools_sample_pca
+    description: Sample PCA — recipe output (deeptools/sample_pca.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: deeptools/sample_pca.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: 10908a70f616f6a105ea4291
     data_collection_tag: deseq2_results_annotated
     description: Annotated results — recipe output (deseq2/results_annotated.py), seeded from the catalog
@@ -609,6 +664,20 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: 1232fdcf331fb33f9cb6e00f
+    data_collection_tag: homer_tss_distance_profile
+    description: Distance to nearest TSS — recipe output (homer/tss_distance_profile.py), seeded from
+      the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: homer/tss_distance_profile.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: f7cf57984ff91bc0a9c56aa2
     data_collection_tag: ivar_variants_long
     description: Variant calls — recipe output (ivar/variants_long.py), seeded from the catalog fixture
@@ -618,6 +687,19 @@ workflows:
       source: transformed
       transform:
         recipe: ivar/variants_long.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 556ba42754f15c8bf0db5401
+    data_collection_tag: macs2_broad_peaks
+    description: Broad peak calls — recipe output (macs2/broad_peaks.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: macs2/broad_peaks.py
       dc_specific_properties:
         format: TSV
         polars_kwargs:
@@ -857,6 +939,20 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: d5f5524c28407901e69df39b
+    data_collection_tag: preseq_complexity_curve
+    description: Library complexity curve — recipe output (preseq/complexity_curve.py), seeded from the
+      catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: preseq/complexity_curve.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: 5d8c077c82bf9cf520696a31
     data_collection_tag: qiime2_alpha_diversity
     description: Alpha diversity — recipe output (qiime2/alpha_diversity_multi_canonical.py), seeded from
@@ -881,6 +977,20 @@ workflows:
       source: transformed
       transform:
         recipe: qiime2/alpha_rarefaction.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: fef32565ee13c15167a1348c
+    data_collection_tag: qiime2_alpha_rarefaction_summary
+    description: Rarefaction summary — recipe output (qiime2/alpha_rarefaction_summary.py), seeded from
+      the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: qiime2/alpha_rarefaction_summary.py
       dc_specific_properties:
         format: TSV
         polars_kwargs:
@@ -1077,6 +1187,34 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: 243757de8c3af75e2b47fa63
+    data_collection_tag: sidle_reconstructed
+    description: Reconstructed features — recipe output (sidle/reconstructed.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: sidle/reconstructed.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 2cdcbb18f2fef3d3c5a4de7d
+    data_collection_tag: sidle_reconstruction_qc
+    description: Reconstruction confidence — recipe output (sidle/reconstruction_qc.py), seeded from the
+      catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: sidle/reconstruction_qc.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: b6cadfd2d7681afe6f2a40df
     data_collection_tag: sompy_regions
     description: som.py allele-fraction strata — recipe output (sompy/regions.py), seeded from the catalog
@@ -1240,6 +1378,20 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: 9620c72d2bb2e54b7a1aff85
+    data_collection_tag: vsearch_sintax_abundance
+    description: SINTAX composition — recipe output (vsearch/sintax_abundance.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: vsearch/sintax_abundance.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: 38b53c76db4df0bb7c781007
     data_collection_tag: wittyer_summary
     description: Wittyer CNV summary — recipe output (wittyer/summary.py), seeded from the catalog fixture
@@ -1338,6 +1490,7 @@ workflows:
         - iVar
         - kaiju
         - kraken
+        - malt
         - metaphlan
         - mosdepth
         - multiqc_software_versions
@@ -1395,6 +1548,8 @@ workflows:
           - Top taxa
           kraken:
           - Top taxa
+          malt:
+          - Metagenomic Mappability
           metaphlan:
           - Top taxa
           mosdepth:

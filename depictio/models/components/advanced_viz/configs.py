@@ -1164,8 +1164,218 @@ class MetricCiBarsConfig(_BaseVizConfig):
     colorscale: str = Field(default="Tealgrn", description="Continuous colour scale for the points")
 
 
+class ScatterXyConfig(_BaseVizConfig):
+    """Numeric against numeric: the plainest kind here, and the most asked for.
+
+    Twenty-eight figures across ten nf-core templates drop into code mode to draw
+    a scatter, and none of them does it for the shape. They do it for a marker
+    size column, a `custom_data` selection key, a reference diagonal or a log
+    axis, which is exactly the set below.
+    """
+
+    viz_kind: Literal["scatter_xy"] = "scatter_xy"
+
+    x_col: str = Field(default="x", description="Numeric column on the x axis")
+    y_col: str = Field(default="y", description="Numeric column on the y axis")
+    label_col: str | None = Field(
+        default=None, description="Column naming each point, used in hover and for labels"
+    )
+    color_col: str | None = Field(default=None, description="Column driving the marker colour")
+    size_col: str | None = Field(default=None, description="Numeric column driving marker size")
+
+    log_x: bool = Field(default=False, description="Log-scale the x axis")
+    log_y: bool = Field(default=False, description="Log-scale the y axis")
+    x_title: str | None = Field(default=None)
+    y_title: str | None = Field(default=None)
+
+    reference_line: Literal["none", "diagonal", "horizontal", "vertical"] = Field(
+        default="none",
+        description="Guide line: the identity diagonal, or a line at reference_value",
+    )
+    reference_value: float | None = Field(
+        default=None, description="Where a horizontal or vertical reference line sits"
+    )
+
+    min_size: float = Field(default=4.0, gt=0.0, description="Marker size at the smallest value")
+    max_size: float = Field(default=22.0, gt=0.0, description="Marker size at the largest value")
+    marker_size: float = Field(
+        default=7.0, gt=0.0, description="Marker size when no size column is bound"
+    )
+    opacity: float = Field(default=0.8, ge=0.05, le=1.0)
+    marker_outline: bool = Field(
+        default=True, description="Draw a thin outline so overlapping points stay separable"
+    )
+    top_n_labels: int = Field(
+        default=0, ge=0, description="Label this many points, the largest by size or by |y|"
+    )
+    color_scale: str = Field(
+        default="Viridis", description="Colourscale used when the colour column is numeric"
+    )
+    legend_pos: Literal["right", "bottom", "none"] = Field(default="right")
+    selection_enabled: bool = Field(default=False)
+    selection_column: str | None = Field(default=None)
+
+
+class ProfileConfig(_BaseVizConfig):
+    """One curve per series over an ordered numeric axis.
+
+    Named for the shape rather than a domain, because a TSS enrichment profile, a
+    fragment-length ladder, a Hill diversity curve and a rank-abundance curve are
+    the same three columns with different axis labels.
+    """
+
+    viz_kind: Literal["profile"] = "profile"
+
+    series_col: str = Field(default="series", description="Column that splits the curves")
+    x_col: str = Field(default="x", description="Ordered numeric axis")
+    y_col: str = Field(default="y", description="Value at each x")
+    lower_col: str | None = Field(
+        default=None, description="Optional lower edge of a confidence band"
+    )
+    upper_col: str | None = Field(
+        default=None, description="Optional upper edge of a confidence band"
+    )
+
+    reference_x: float | None = Field(
+        default=None,
+        description="Draw a marker at this x, e.g. 0 for a transcription start site",
+    )
+    reference_label: str | None = Field(default=None, description="Label for the marker")
+    shaded_bands: list[tuple[float, float, str]] = Field(
+        default_factory=list,
+        description="x ranges to shade, as (start, end, label); e.g. nucleosome windows",
+    )
+    log_x: bool = Field(default=False, description="Log-scale the x axis")
+    log_y: bool = Field(default=False, description="Log-scale the y axis")
+    band_opacity: float = Field(default=0.2, ge=0.0, le=1.0)
+    line_width: float = Field(default=2.0, gt=0.0)
+    x_title: str | None = Field(default=None)
+    y_title: str | None = Field(default=None)
+    legend_pos: Literal["right", "bottom", "none"] = Field(default="right")
+    selection_enabled: bool = Field(default=False)
+    selection_column: str | None = Field(default=None)
+
+
+class SignalMatrixConfig(_BaseVizConfig):
+    """Metagene heatmap: regions down, position offsets across, ordered by signal."""
+
+    viz_kind: Literal["signal_matrix"] = "signal_matrix"
+
+    region_id_col: str = Field(default="region_id", description="One row per region")
+    position_col: str = Field(
+        default="position", description="Signed offset from the reference point"
+    )
+    value_col: str = Field(default="value", description="Signal at that offset")
+    group_col: str | None = Field(
+        default=None, description="Optional column that splits the matrix into panels"
+    )
+
+    reference_position: float = Field(
+        default=0.0, description="Where the reference point sits on the position axis"
+    )
+    reference_label: str | None = Field(default=None)
+    sort_by: Literal["signal", "none"] = Field(
+        default="signal", description="Row order; positional columns are never reordered"
+    )
+    max_rows: int = Field(
+        default=2000,
+        ge=1,
+        description="Rows are binned to at most this many; a real matrix runs to 10^5",
+    )
+    colour_scale: ColourScale = Field(default="Viridis")
+    show_profile: bool = Field(
+        default=True, description="Draw the mean profile curve above the matrix"
+    )
+
+
+class FusionStructureConfig(_BaseVizConfig):
+    """A fusion drawn as its two partners with the protein domains laid along them."""
+
+    viz_kind: Literal["fusion_structure"] = "fusion_structure"
+
+    fusion_id_col: str = Field(default="fusion_id", description="One fusion per facet")
+    partner_col: str = Field(default="partner", description="Which side of the fusion")
+    feature_col: str = Field(default="feature", description="Domain or exon name")
+    start_col: str = Field(default="start", description="Feature start along the partner")
+    end_col: str = Field(default="end", description="Feature end along the partner")
+
+    breakpoint_col: str | None = Field(
+        default=None, description="Offset of the breakpoint along each partner"
+    )
+    retained_col: str | None = Field(
+        default=None, description="Fraction of the domain retained after the fusion"
+    )
+    colour_by_col: str | None = Field(default=None, description="Column driving the feature colour")
+    top_n: int = Field(default=6, ge=1, description="How many fusions to draw")
+    show_breakpoint: bool = Field(default=True)
+
+
+class GeneArrowTrackConfig(_BaseVizConfig):
+    """A locus map: one arrow per coding sequence along a contig."""
+
+    viz_kind: Literal["gene_arrow_track"] = "gene_arrow_track"
+
+    contig_col: str = Field(default="contig", description="Contig or scaffold identifier")
+    feature_id_col: str = Field(default="feature_id", description="Gene or CDS identifier")
+    start_col: str = Field(default="start")
+    end_col: str = Field(default="end")
+    strand_col: str = Field(default="strand", description="'+' or '-'; sets the arrow direction")
+
+    class_col: str | None = Field(default=None, description="Column driving the arrow colour")
+    label_col: str | None = Field(default=None, description="Column drawn above each arrow")
+    region_start_col: str | None = Field(
+        default=None, description="Start of a highlighted region, e.g. a BGC boundary"
+    )
+    region_end_col: str | None = Field(default=None)
+    show_labels: bool = Field(default=True)
+    arrow_height: float = Field(default=0.5, gt=0.0)
+
+
+class GseaRunningScoreConfig(_BaseVizConfig):
+    """The GSEA running enrichment score along the ranked gene list."""
+
+    viz_kind: Literal["gsea_running_score"] = "gsea_running_score"
+
+    gene_set_col: str = Field(default="gene_set", description="One curve per gene set")
+    rank_col: str = Field(default="rank", description="Position in the ranked list")
+    running_es_col: str = Field(default="running_es", description="Running enrichment score")
+
+    member_col: str | None = Field(
+        default=None, description="Boolean column marking the ranks that are set members"
+    )
+    metric_col: str | None = Field(
+        default=None, description="Ranking metric, drawn as a bar under the curve"
+    )
+    show_leading_edge: bool = Field(
+        default=True, description="Shade the ranks up to the peak of the score"
+    )
+    top_n_sets: int = Field(default=5, ge=1)
+
+
+class SashimiConfig(_BaseVizConfig):
+    """Splice junctions as arcs over a genomic interval, weighted by read support."""
+
+    viz_kind: Literal["sashimi"] = "sashimi"
+
+    chr_col: str = Field(default="chr")
+    start_col: str = Field(default="start", description="Donor coordinate")
+    end_col: str = Field(default="end", description="Acceptor coordinate")
+    count_col: str = Field(default="count", description="Reads supporting the junction")
+
+    sample_col: str | None = Field(default=None, description="Optional column splitting panels")
+    annotation_col: str | None = Field(
+        default=None, description="Known or novel, used to style the arc"
+    )
+    min_count: int = Field(default=1, ge=0, description="Hide junctions under this support")
+    top_n: int = Field(default=50, ge=1, description="Keep the strongest arcs")
+    log_width: bool = Field(
+        default=True, description="Scale arc width by log10(count) rather than count"
+    )
+
+
 VizConfig = Annotated[
-    VolcanoConfig
+    ScatterXyConfig
+    | VolcanoConfig
     | EmbeddingConfig
     | ManhattanConfig
     | StackedTaxonomyConfig
@@ -1186,6 +1396,12 @@ VizConfig = Annotated[
     | PrBenchmarkConfig
     | RocPrCurveConfig
     | ConfusionMatrixConfig
-    | MetricCiBarsConfig,
+    | MetricCiBarsConfig
+    | ProfileConfig
+    | SignalMatrixConfig
+    | FusionStructureConfig
+    | GeneArrowTrackConfig
+    | GseaRunningScoreConfig
+    | SashimiConfig,
     Field(discriminator="viz_kind"),
 ]

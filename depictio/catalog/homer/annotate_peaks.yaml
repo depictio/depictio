@@ -18,3 +18,6 @@ renders_as:
   - { component: card, column: gene_name, aggregation: nunique, secondary_layout: composition, breakdown_col: annotation_class }
   - { component: card, column: distance_to_tss, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
   - { component: table, row_selection_enabled: true, row_selection_column: peak_id }
+  # Metric cards and the row-level table behind them: the readings the
+  # nf-core dashboards were already computing off this output by hand.
+  - { component: card, column: peak_score, aggregation: average, secondary_layout: histogram }

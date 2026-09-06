@@ -274,7 +274,7 @@ def test_validate_one_recipe_skips_optional_dc_with_absent_source(
     )
     result = nfm._validate_one_recipe(
         "sidle_reconstructed",
-        "nf-core/ampliseq/sidle_reconstructed.py",
+        "sidle/reconstructed.py",
         module,
         {},
         {},
@@ -290,7 +290,7 @@ def test_validate_one_recipe_skips_optional_dc_with_absent_source(
     # Without the DC-level flag the same absence is a genuine failure.
     result = nfm._validate_one_recipe(
         "sidle_reconstructed",
-        "nf-core/ampliseq/sidle_reconstructed.py",
+        "sidle/reconstructed.py",
         module,
         {},
         {},

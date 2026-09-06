@@ -121,6 +121,7 @@ main_dashboard:
   - component_type: multiqc
     workflow_tag: ampliseq
     data_collection_tag: multiqc_data
+    use: multiqc/general_stats
     selected_module: general_stats
     selected_plot: general_stats
     title_size: sm
@@ -713,6 +714,7 @@ tabs:
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: alpha_diversity_multi_canonical
+    use: qiime2/alpha_diversity
     aggregation: nunique
     column_name: sample_id
     column_type: object
@@ -739,6 +741,7 @@ tabs:
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: alpha_diversity_multi_canonical
+    use: qiime2/alpha_diversity
     aggregation: median
     column_name: shannon
     column_type: float64
@@ -765,6 +768,7 @@ tabs:
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: alpha_diversity_multi_canonical
+    use: qiime2/alpha_diversity
     aggregation: median
     column_name: faith_pd
     column_type: float64
@@ -791,6 +795,7 @@ tabs:
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: alpha_diversity_multi_canonical
+    use: qiime2/alpha_diversity
     aggregation: median
     column_name: evenness
     column_type: float64
@@ -870,6 +875,7 @@ tabs:
   - component_type: figure
     workflow_tag: ampliseq
     data_collection_tag: alpha_diversity_multi_canonical
+    use: qiime2/alpha_diversity
     visu_type: box
     figure_params:
       title: Alpha diversity by Habitat (per metric)
@@ -907,6 +913,7 @@ tabs:
   - component_type: table
     workflow_tag: ampliseq
     data_collection_tag: alpha_diversity_multi_canonical
+    use: qiime2/alpha_diversity
     page_size: 12
     row_selection_enabled: false
     title_size: sm
@@ -1082,6 +1089,7 @@ tabs:
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: taxonomy_rel_abundance
+    use: qiime2/rel_abundance
     aggregation: median
     column_name: rel_abundance
     column_type: float64
@@ -1107,6 +1115,7 @@ tabs:
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: taxonomy_rel_abundance
+    use: qiime2/rel_abundance
     aggregation: nunique
     column_name: taxonomy
     column_type: object
@@ -1157,6 +1166,7 @@ tabs:
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: taxonomy_rel_abundance
+    use: qiime2/rel_abundance
     aggregation: nunique
     column_name: Phylum
     column_type: object
@@ -1198,6 +1208,7 @@ tabs:
   - component_type: figure
     workflow_tag: ampliseq
     data_collection_tag: taxonomy_rel_abundance
+    use: qiime2/rel_abundance
     visu_type: bar
     figure_params:
       color: Phylum
@@ -1377,6 +1388,7 @@ tabs:
   - component_type: table
     workflow_tag: ampliseq
     data_collection_tag: taxonomy_rel_abundance
+    use: qiime2/rel_abundance
     row_selection_enabled: false
     title_size: sm
     title_align: left
@@ -1501,6 +1513,7 @@ tabs:
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: embedding_pcoa
+    use: qiime2/embedding_pcoa
     aggregation: nunique
     column_name: sample_id
     column_type: object
@@ -1526,6 +1539,7 @@ tabs:
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: embedding_pcoa
+    use: qiime2/embedding_pcoa
     aggregation: nunique
     column_name: habitat
     column_type: object
@@ -1551,6 +1565,7 @@ tabs:
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: embedding_pcoa
+    use: qiime2/embedding_pcoa
     aggregation: median
     column_name: dim_1
     column_type: float64
@@ -1577,6 +1592,7 @@ tabs:
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: embedding_pcoa
+    use: qiime2/embedding_pcoa
     aggregation: median
     column_name: dim_2
     column_type: float64
@@ -1620,6 +1636,7 @@ tabs:
     workflow_tag: ampliseq
     viz_kind: embedding
     data_collection_tag: embedding_pcoa
+    use: qiime2/embedding
     config:
       viz_kind: embedding
       sample_id_col: sample_id
@@ -1902,6 +1919,7 @@ tabs:
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: ancombc_results
+    use: qiime2/ancombc
     aggregation: nunique
     column_name: id
     column_type: object
@@ -1928,6 +1946,7 @@ tabs:
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: ancombc_results
+    use: qiime2/ancombc
     aggregation: nunique
     column_name: id
     column_type: object
@@ -1955,6 +1974,7 @@ tabs:
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: ancombc_results
+    use: qiime2/ancombc
     aggregation: median
     column_name: q_val
     column_type: float64
@@ -1983,6 +2003,7 @@ tabs:
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: ancombc_results
+    use: qiime2/ancombc
     aggregation: median
     column_name: lfc
     column_type: float64
@@ -2080,6 +2101,7 @@ tabs:
   - component_type: table
     workflow_tag: ampliseq
     data_collection_tag: ancombc_results
+    use: qiime2/ancombc
     row_selection_enabled: false
     title_size: sm
     title_align: left
@@ -2184,6 +2206,7 @@ tabs:
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: phylogenetic_tree_metadata_canonical
+    use: qiime2/tree_metadata
     aggregation: nunique
     column_name: taxon
     column_type: object
@@ -2210,6 +2233,7 @@ tabs:
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: phylogenetic_tree_metadata_canonical
+    use: qiime2/tree_metadata
     aggregation: count
     column_name: Genus
     column_type: object
@@ -2235,6 +2259,7 @@ tabs:
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: phylogenetic_tree_metadata_canonical
+    use: qiime2/tree_metadata
     aggregation: average
     column_name: confidence
     column_type: float64
@@ -2261,6 +2286,7 @@ tabs:
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: phylogenetic_tree_metadata_canonical
+    use: qiime2/tree_metadata
     aggregation: nunique
     column_name: Genus
     column_type: object
@@ -2357,6 +2383,7 @@ tabs:
   - component_type: table
     workflow_tag: ampliseq
     data_collection_tag: phylogenetic_tree_metadata_canonical
+    use: qiime2/tree_metadata
     page_size: 12
     row_selection_enabled: false
     title_size: sm
@@ -2443,6 +2470,7 @@ tabs:
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: sidle_reconstructed
+    use: sidle/reconstructed
     aggregation: nunique
     column_name: feature_id
     column_type: object
@@ -2468,6 +2496,7 @@ tabs:
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: sidle_reconstructed
+    use: sidle/reconstructed
     aggregation: nunique
     column_name: sample
     column_type: object
@@ -2493,6 +2522,7 @@ tabs:
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: sidle_reconstructed
+    use: sidle/reconstructed
     aggregation: nunique
     column_name: Phylum
     column_type: object
@@ -2518,6 +2548,7 @@ tabs:
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: sidle_reconstruction_qc
+    use: sidle/reconstruction_qc
     aggregation: average
     column_name: num_regions
     column_type: int64
@@ -2560,6 +2591,7 @@ tabs:
   - component_type: figure
     workflow_tag: ampliseq
     data_collection_tag: sidle_reconstructed
+    use: sidle/reconstructed
     visu_type: bar
     figure_params:
       color: Phylum
@@ -2584,6 +2616,7 @@ tabs:
   - component_type: figure
     workflow_tag: ampliseq
     data_collection_tag: sidle_reconstructed
+    use: sidle/reconstructed
     visu_type: bar
     figure_params:
       color: Genus
@@ -2624,6 +2657,7 @@ tabs:
   - component_type: figure
     workflow_tag: ampliseq
     data_collection_tag: sidle_reconstruction_qc
+    use: sidle/reconstruction_qc
     visu_type: bar
     figure_params:
       labels:
@@ -2647,6 +2681,7 @@ tabs:
   - component_type: figure
     workflow_tag: ampliseq
     data_collection_tag: sidle_reconstruction_qc
+    use: sidle/reconstruction_qc
     visu_type: scatter
     figure_params:
       labels:
@@ -2686,6 +2721,7 @@ tabs:
   - component_type: table
     workflow_tag: ampliseq
     data_collection_tag: sidle_reconstructed
+    use: sidle/reconstructed
     row_selection_enabled: false
     title_size: sm
     title_align: left
@@ -2701,6 +2737,7 @@ tabs:
   - component_type: table
     workflow_tag: ampliseq
     data_collection_tag: sidle_reconstruction_qc
+    use: sidle/reconstruction_qc
     row_selection_enabled: false
     title_size: sm
     title_align: left

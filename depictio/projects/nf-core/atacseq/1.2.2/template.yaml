@@ -350,6 +350,96 @@ workflows:
               "log10_read_count": "log10(read_count + 1), the colour axis of the read-distribution matrix"
 
       # ----------------------------------------------------------------
+      # Signal-level QC the MultiQC report cannot show as data (tools
+      # `preseq` and `deeptools`). MultiQC draws the complexity and the
+      # fingerprint curves but not the numbers under them: the preseq
+      # confidence bounds and the per-sample fingerprint metrics never reach
+      # a panel, and the plotProfile matrix has no panel at all. The raw
+      # preseq collection exists so the tidy one can read it through
+      # `dc_ref`: the sample id lives only in the FILE NAME, and only a scan
+      # carries the path (`include_file_paths`) into the frame.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "preseq_ccurve_raw"
+        description: "Raw per-sample preseq complexity curves (input of preseq_complexity_curve)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.ccurve\\.txt$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              null_values: ["NA", "NaN", ""]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "TOTAL_READS": "Sequencing depth the row extrapolates to"
+              "EXPECTED_DISTINCT": "Unique molecules expected at that depth"
+              "LOWER_0.95CI": "Lower bound of the 95% interval on that extrapolation"
+              "UPPER_0.95CI": "Upper bound of the 95% interval"
+              "source_path": "File the row came from; the sample id is derived from it"
+
+      - data_collection_tag: "preseq_complexity_curve"
+        description: "Library complexity curve of every sample with its 95% confidence ribbon, clipped to a billion reads and thinned for plotting"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "preseq/complexity_curve.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library preseq ran on"
+              "total_reads": "Sequencing depth the row extrapolates to"
+              "expected_distinct": "Unique molecules expected at that depth"
+              "lower_ci": "Lower bound of the 95% interval"
+              "upper_ci": "Upper bound of the 95% interval"
+              "ci_width": "upper_ci - lower_ci, how wide the extrapolation is"
+
+      - data_collection_tag: "deeptools_fingerprint_metrics"
+        description: "Per-sample plotFingerprint quality metrics: how concentrated each library's coverage is against a uniform library of the same depth."
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "deeptools/fingerprint_metrics.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library plotFingerprint ran on"
+              "auc": "Area under the observed cumulative-coverage curve"
+              "synthetic_auc": "Same area for a perfectly uniform library of that depth"
+              "auc_ratio": "auc / synthetic_auc; 1.0 means coverage indistinguishable from uniform"
+              "x_intercept": "Share of genome bins with no reads at all"
+              "synthetic_x_intercept": "Same, for the uniform library"
+              "elbow_point": "Where the observed coverage curve turns"
+              "synthetic_elbow_point": "Same, for the uniform library"
+              "synthetic_js_distance": "Jensen-Shannon distance to the uniform library"
+
+      - data_collection_tag: "deeptools_plot_profile"
+        description: "Mean signal of every library across the plotted metagene window, one row per sample and bin"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "deeptools/plot_profile.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library plotProfile ran on"
+              "group": "Region group deepTools plotted (nf-core plots one, `genes`)"
+              "bin": "1-based bin index along the plotted window; 1 to 300 is the upstream flank, 300 to 400 the scaled gene body, 400 to 700 the downstream flank"
+              "bin_label": "deepTools' own anchor label at that bin (-3.0Kb, TSS, TES, 3.0Kb), empty in between"
+              "signal": "Mean signal in that bin"
+
+      # ----------------------------------------------------------------
       # Peak level. `source_overrides` repoint the catalog recipes at the
       # atacseq file names: the ChIP-family pipelines write
       # `<antibody>.consensus_peaks.boolean.txt` and `<x>peak.summary.txt`,
@@ -388,7 +478,7 @@ workflows:
           metatype: "Aggregate"
           source: "transformed"
           transform:
-            recipe: "nf-core/atacseq/broad_peaks.py"
+            recipe: "macs2/broad_peaks.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -428,6 +518,22 @@ workflows:
               "nearest_promoter_id": "Identifier of the nearest promoter"
               "gene_name": "Symbol of the nearest gene"
               "gene_type": "Biotype of the nearest gene; empty when the run annotated against a plain GTF"
+
+      - data_collection_tag: "homer_tss_distance_profile"
+        description: "Where each sample's peaks sit relative to the nearest TSS, counted in 250 bp bins across a 20 kb window"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "homer/tss_distance_profile.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the peaks were called in"
+              "distance_to_tss": "Centre of the bin, signed bp from the transcription start site"
+              "peak_count": "Peaks of that sample falling in the bin"
+              "fraction": "peak_count over the sample's peaks inside the window"
 
       - data_collection_tag: "macs2_consensus_boolean"
         description: "Consensus peak intervals against the samples that called them, as 0/1 set columns"
@@ -677,4 +783,45 @@ links:
       resolver: "direct"
       target_field: "interval_id"
     description: "Carry an interval selected on the differential panels back to the consensus overlap matrix"
+    enabled: true
+
+  # Signal-level QC, keyed on the canonical sample name like the ataqv collections.
+  - source_dc_tag: "sample_design"
+    source_column: "sample"
+    target_dc_tag: "preseq_complexity_curve"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the complexity curves by the samples picked on the design sheet"
+    enabled: true
+
+  - source_dc_tag: "sample_design"
+    source_column: "sample"
+    target_dc_tag: "deeptools_fingerprint_metrics"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the fingerprint metrics by the samples picked on the design sheet"
+    enabled: true
+
+  - source_dc_tag: "sample_design"
+    source_column: "sample"
+    target_dc_tag: "deeptools_plot_profile"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the metagene profiles by the samples picked on the design sheet"
+    enabled: true
+
+  - source_dc_tag: "sample_design"
+    source_column: "merged_library"
+    target_dc_tag: "homer_tss_distance_profile"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the TSS distance profiles by the samples picked on the design sheet"
     enabled: true

@@ -10,7 +10,11 @@ find:
 recipe: ataqv/fragment_length.py
 fixture: fragment_length.tsv
 renders_as:
-  # The ladder itself, then how much of the library sits in each window.
+  # The ladder itself, then how much of the library sits in each window. The
+  # `profile` kind draws the ladder with the sub-nucleosomal and mono-nucleosome
+  # windows as shaded bands, which is the reading; the plain line stays for
+  # dashboards that only want the curve.
+  - { id: fragment_ladder, component: advanced_viz, kind: profile, roles: {series: sample, x: fragment_length, y: fraction_of_all_reads} }
   - { component: figure, visu_type: line, dict_kwargs: {x: fragment_length, y: fraction_of_all_reads, color: sample, title: Fragment length distribution} }
   - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: read_count, color: fragment_class, title: Reads per fragment class} }
   - { component: card, column: read_count, aggregation: sum, secondary_layout: top_n, breakdown_col: fragment_class, top_n_count: 4 }

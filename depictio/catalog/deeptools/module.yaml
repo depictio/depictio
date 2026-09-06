@@ -1,0 +1,15 @@
+# deepTools — the signal-level QC of every ChIP-family pipeline: plotFingerprint
+# (how concentrated the coverage is), plotProfile (the metagene), plotPCA and
+# plotCorrelation (how the samples relate). Four outputs, so a folder.
+# Lightweight identity: the nf-core meta.yml `nf_core_url` points at carries it.
+#
+# MultiQC has a deeptools module and every ChIP-family template already shows
+# its panel. These outputs are the parts that panel cannot show: MultiQC renders
+# the fingerprint as the cumulative-coverage curve without the per-sample metric
+# table underneath it, and it has no plot at all for the plotProfile matrix, the
+# PCA table or the correlation matrix, which nf-core publishes as plain
+# tab-separated files beside the PDFs.
+id: deeptools
+name: deepTools
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/deeptools/plotfingerprint
+homepage: https://deeptools.readthedocs.io/

@@ -217,14 +217,15 @@ recipe `recipes/sample_design.py` turns it into the hub collection.
 The run was called with `--narrow_peak false`, so the peak tree lives under
 `bwa/mergedLibrary/macs/broadPeak/` and the calls are `*_peaks.broadPeak`: BED6+3, with no
 summit column. The catalog's `macs2/peaks` output reads the narrowPeak shape (BED6+4, summit
-offset last) and does not fit. The template therefore reads the broad calls through a
-pipeline-local recipe, `recipes/broad_peaks.py`, rather than through the catalog.
+offset last) and does not fit.
 
-That is the honest MVP answer, not the right long-term one: broadPeak is a MACS2 output
-shape, not an atacseq specific, and chipseq's own broadPeak twin (CS-D8) is deferred for the
-same reason. A `macs2/broad_peaks` catalog output would serve both and retire this recipe.
-Release 1.2.1 is the narrowPeak twin of this exact run, which makes the follow-up directly
-testable.
+This first shipped as a pipeline-local `recipes/broad_peaks.py`, which was the honest MVP
+answer but not the right one: broadPeak is a MACS2 output shape, not an atacseq specific,
+and chipseq's own broadPeak twin (CS-D8) would have needed the same recipe again. It is now
+`macs2/broad_peaks` in the catalog, globbing `**/*_peaks.broadPeak` where its narrow sibling
+globs `**/*_peaks.narrowPeak`, so a run matches exactly one of the two and both pipelines
+read the same output. Release 1.2.1 is the narrowPeak twin of this exact run, which makes
+the pairing directly testable.
 
 ### AT-D4: merged libraries only, merged replicates deferred
 

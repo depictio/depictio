@@ -1,0 +1,22 @@
+id: deeptools_plot_profile
+name: Metagene signal profile
+mode: signal/metagene
+description: >-
+  The mean signal of every library across the plotted window, one row per bin.
+  With `computeMatrix scale-regions` the window is the flanking region plus a
+  gene body stretched to a fixed number of bins; with `reference-point` it is a
+  window centred on one anchor. `bin_label` carries deepTools' own anchors, so
+  the marker can be placed without hard-coding the window.
+find:
+  path_glob: "**/*.plotProfile.tab"
+recipe: deeptools/plot_profile.py
+fixture: plot_profile.tsv
+renders_as:
+  # MultiQC's deeptools module has no plot for this matrix at all: nf-core
+  # publishes it as a plain table beside the PDF, and this is what reads it.
+  - { id: metagene_profile, component: advanced_viz, kind: profile, roles: {series: sample, x: bin, y: signal} }
+  - { component: figure, visu_type: line, dict_kwargs: {x: bin, y: signal, color: sample, title: Mean signal across the plotted window} }
+  - { component: card, column: signal, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: signal, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: signal, aggregation: sum, secondary_layout: composition, breakdown_col: sample }
+  - { component: table }

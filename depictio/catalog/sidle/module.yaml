@@ -1,0 +1,19 @@
+# q2-sidle: multi-output tool → a folder. module.yaml holds the tool fields;
+# each sibling *.yaml is one output.
+#
+# SIDLE (SMURF Implementation Done to acceLerate Efficiency) is a QIIME 2
+# plugin, not a QIIME 2 subcommand: it is maintained and versioned outside
+# QIIME 2, and amplicon pipelines call it through their own local modules
+# rather than an nf-core one. So identity cannot be derived from a meta.yml and
+# is declared in full here — the same documented exception as QIIME 2 itself
+# and enchantR.
+id: sidle
+name: q2-sidle
+description: >-
+  QIIME 2 plugin that reconstructs one feature table from several amplified
+  16S regions, so a multi-region run is read as a single community rather than
+  as one community per primer pair.
+homepage: https://q2-sidle.readthedocs.io
+edam_topics:
+  - http://edamontology.org/topic_3174 # Metagenomics
+  - http://edamontology.org/topic_0080 # Sequence analysis

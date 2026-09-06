@@ -1,0 +1,290 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d74"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d74"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "gsea-rs-text",
+      "component_type": "text",
+      "title": "GSEA running enrichment score",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Running enrichment",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Three panels share one rank axis. The top one walks the enrichment score along the ranked gene list, stepping up at every set member and down at every other gene, so it leaves zero and comes back to it at the last rank; its extremum is the enrichment score. The middle rug marks where the members actually sit. The bottom panel is the metric the list was ranked by. Shaded is the leading edge \u2014 the stretch between the extremum and the enriched end of the list, the members carrying the signal. A set with no signal wanders near zero.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gsea-rs-curve",
+      "component_type": "advanced_viz",
+      "title": "Running enrichment score",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "gsea_running_score_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d84"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "GSEA running enrichment score over a ranked list of 800 genes for 5 Hallmark-style sets: two positively enriched, two negatively enriched, one flat",
+        "data_collection_tag": "gsea_running_score_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d84"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Five Hallmark-style sets over one 800-gene ranked list: two enriched at the top, two at the bottom, one flat. Top-N sets, leading-edge shading, overlay/facet layout, hit rug and ranked-metric panel all live in the Settings \u2699 popover.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Running enrichment",
+      "viz_kind": "gsea_running_score",
+      "config": {
+        "viz_kind": "gsea_running_score",
+        "gene_set_col": "gene_set",
+        "rank_col": "rank",
+        "running_es_col": "running_es",
+        "member_col": "member",
+        "metric_col": "metric",
+        "show_leading_edge": true,
+        "top_n_sets": 5
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gsea-rs-f-set",
+      "component_type": "interactive",
+      "title": "Gene set",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "gsea_running_score_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d84"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "GSEA running enrichment score over a ranked list of 800 genes for 5 Hallmark-style sets: two positively enriched, two negatively enriched, one flat",
+        "data_collection_tag": "gsea_running_score_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d84"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Curve scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "gene_set",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Curve filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#7B1FA2",
+      "icon_name": "mdi:set-merge",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gsea-rs-f-rank",
+      "component_type": "interactive",
+      "title": "Rank window",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "gsea_running_score_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d84"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "GSEA running enrichment score over a ranked list of 800 genes for 5 Hallmark-style sets: two positively enriched, two negatively enriched, one flat",
+        "data_collection_tag": "gsea_running_score_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d84"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Curve scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "rank",
+      "column_type": "int64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Curve filters",
+      "timescale": null,
+      "show_marks": null,
+      "custom_color": "#45B8AC",
+      "icon_name": "mdi:counter",
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-gsea-rs-f-set",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-gsea-rs-f-rank",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-gsea-rs-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-gsea-rs-curve",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 11,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "GSEA running score",
+  "subtitle": "The weighted KS walk along a ranked list of 800 genes, five Hallmark sets at once. Curve, hit rug and ranked metric on one rank axis.",
+  "icon": "mdi:chart-timeline-variant",
+  "icon_color": "violet",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 32,
+  "main_tab_name": null,
+  "tab_icon": "mdi:chart-line-variant",
+  "tab_icon_color": "violet",
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Curve scope",
+      "icon": "mdi:filter-variant",
+      "color": "violet",
+      "description": "Restricts which gene sets are drawn and how much of the ranked list",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Running enrichment",
+      "icon": "mdi:chart-timeline-variant",
+      "color": "violet",
+      "description": "The enrichment score walked along the ranked gene list",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
+}

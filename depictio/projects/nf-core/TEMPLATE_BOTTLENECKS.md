@@ -146,9 +146,9 @@ the nine templates are the evidence for what is missing.
 | pipeline | kinds bound | code-mode figures | what a kind would replace |
 |---|---|---|---|
 | differentialabundance 2.0.0 | volcano x2, ma, qq, da_barplot, manhattan, lollipop, embedding, complex_heatmap x2 | 1 | nothing, the contrast-against-contrast scatter only wants UI-mode size and `custom_data` |
-| funcscan 4.0.0 | sunburst x3, upset_plot x3, complex_heatmap, dot_plot, embedding | 4 | nothing, all four are plain bars and scatters |
+| funcscan 4.0.0 | sunburst x3, upset_plot x3, complex_heatmap, dot_plot, embedding, gene_arrow_track | 4 | nothing, all four are plain bars and scatters |
 | airrflow 5.1.0 | complex_heatmap x2, rarefaction, sankey, stacked_taxonomy, sunburst, upset_plot, metric_ci_bars | 5 | diversity profile with confidence ribbons, rank abundance |
-| rnafusion 4.1.3 | dot_plot x5, lollipop x2, manhattan, upset_plot | 3 | protein-domain track |
+| rnafusion 4.1.3 | dot_plot x5, lollipop x2, manhattan, upset_plot, fusion_structure, sashimi | 2 | nothing left; the domain track is now `fusion_structure` |
 | rnaseq 3.26.0 | embedding, complex_heatmap | 1 | nothing, and the gene-body coverage profile stays a MultiQC panel |
 | taxprofiler 2.0.1 | stacked_taxonomy x2, sunburst, dot_plot x2, complex_heatmap, embedding, upset_plot | 1 | rank-abundance accumulation |
 | chipseq 1.2.0 | volcano, ma, qq, da_barplot, manhattan, complex_heatmap, upset_plot | 2 | nothing in the template, because the deepTools profile is left in MultiQC |
@@ -178,9 +178,12 @@ because its name and renderer assume an accumulation.
 
 #### Reusable well beyond these pipelines
 
-**1. `profile`: multi-series curve over an ordered axis.** Roles `series`, `x`, `y`, with
-optional `lower` and `upper` for a band; config for a reference marker at x = 0, shaded
-x-ranges and log axes. Six code-mode figures in four pipelines collapse into it:
+**1. `profile`: multi-series curve over an ordered axis.** BUILT, and bound in chipseq and
+atacseq through `preseq/complexity_ribbon`, `deeptools/metagene_profile`,
+`homer/tss_distance`, `ataqv/fragment_length` and `ataqv/tss_coverage`. Roles `series`,
+`x`, `y`, with optional `lower` and `upper` for a band; config for a reference marker at
+x = 0, shaded x-ranges and log axes. Six code-mode figures in four pipelines collapse
+into it:
 
 | figure | pipeline | x axis |
 |---|---|---|
@@ -211,7 +214,9 @@ catalog. Note this one collides with a standing policy: `test_compositions_stay_
 keeps cross-set compositions dashboard-side, so it needs a decision before it needs code.
 
 **3. `scatter_xy`: numeric against numeric, with size, colour and a selection key.**
-Twelve code-mode figures, in every template of the lot. `dot_plot` is the closest kind and
+BUILT. Twenty-eight code-mode figures across ten pipelines and thirteen template versions,
+counted rather than estimated; the "twelve" below was the count over the original nine
+templates of the lot. `dot_plot` is the closest kind and
 cannot express them: its two axis roles are `cluster` and `gene`, both String, so it draws
 a categorical grid, not a plane. This is the largest single group of fallbacks in the lot
 and the cheapest to specify, whether it lands as a kind or as size and `custom_data`
@@ -219,7 +224,10 @@ support in the figure builder.
 
 #### Reusable across a family, not universal
 
-**3. `signal_matrix`: the metagene heatmap.** Rows are regions ordered by signal, columns
+**3. `signal_matrix`: the metagene heatmap.** BUILT, and bound nowhere in the lot: the
+kind needs one row per region, and every chromatin manifest fetches deepTools'
+`plotProfile.tab` summary rather than the `computeMatrix` matrix the rows live in. Binding
+it is a manifest and recipe job, not a viz one. Rows are regions ordered by signal, columns
 are position offsets, drawn under the profile curve of candidate 1. Wanted by all three
 chromatin templates, and the reason cutandrun leaves `04_reporting/deeptools_heatmaps/`
 (2.9 GB) unfetched. `complex_heatmap` can technically bind it, since it only requires
@@ -237,9 +245,10 @@ recurring template, not before.
 
 #### Pipeline-specific
 
-**5. Protein-domain track.** `rnaf-fi-domain-track`: one bar per Pfam hit along each
-partner protein with the breakpoint marked. rnafusion today, oncoanalyser when it lands,
-nothing else in sight.
+**5. Protein-domain track.** BUILT as `fusion_structure`, bound through
+`fusioninspector/fusion_domains`, and `rnaf-fi-domain-track` is now that kind rather than
+the code-mode bar chart it started as: one lane per partner, one bar per Pfam hit along it.
+rnafusion today, oncoanalyser when it lands, nothing else in sight.
 
 #### Asked for, but not actually a viz-kind gap
 
@@ -262,6 +271,63 @@ nothing else in sight.
   it; only the legacy `visu_type: heatmap` path reads it. An existing kind under-powered,
   not a missing one.
 
+### Where the boundary with JBrowse sits
+
+Depictio already carries a `jbrowse2` data-collection type whose allowed formats are BAM,
+CRAM, BigWig, BED, GFF3, VCF and their indices, plus a JBrowse component in the React
+viewer. That is the line, and it is worth stating because two of the kinds in this lot sit
+right on it:
+
+- **Anything that needs per-base signal, read alignments or a gene model over genomic
+  coordinates belongs in JBrowse.** It already ingests the file types those come in, and
+  an `advanced_viz` kind reading the same thing out of a Delta table would be a worse
+  genome browser bolted onto a plotting library.
+- **Anything that is an aggregate table belongs in `advanced_viz`,** whatever the x axis
+  happens to mean.
+
+Applied to `sashimi`: the arcs are an aggregate junction table, which is why the kind
+exists at all, but a full sashimi plot is arcs drawn over per-base coverage with the
+transcript model underneath, and those two halves are BigWig and GFF3. The kind therefore
+ships as the junction-arc half and the coverage and exon-model halves are deferred to
+JBrowse rather than reimplemented. `coverage_track` and `gene_arrow_track` are the same
+case and should not be extended toward browser features either.
+
+### What MultiQC parses but never publishes as data
+
+The catalog policy is that a tool MultiQC already parses stays a `use: multiqc/<module>`
+panel, and `_index/multiqc_modules.txt` lists which those are. That index is advisory, not
+prohibitive, and always was: `ataqv`, `homer` and `macs2` are all in it and all have full
+catalog tools. What the policy is really protecting against is a second copy of a panel
+that already exists, not a dedicated tool as such.
+
+The line that actually holds is narrower and worth writing down: **a dedicated tool is
+justified when nf-core publishes a table that the MultiQC panel does not render, or
+renders without the columns that carry the reading.** Three cases in the ChIP family meet
+it, and all three shipped:
+
+- **`preseq`.** MultiQC plots `EXPECTED_DISTINCT` on its own and drops `LOWER_0.95CI` and
+  `UPPER_0.95CI`, so the width of the extrapolation, which is what says whether
+  "sequence deeper" is advice or a guess, never reaches a dashboard. The
+  `preseq/complexity_curve` output keeps both bounds and binds them to `profile`'s
+  optional `lower` / `upper` roles, the only output in the catalog that exercises them.
+- **`deeptools`.** The MultiQC module draws the fingerprint curve but not the per-sample
+  quality metrics beside it, and it has no plot at all for the `plotProfile` matrix, the
+  `plotPCA` loadings or the `plotCorrelation` matrix. nf-core publishes all four as plain
+  tab-separated files next to the PDFs. They became `fingerprint_metrics` (`scatter_xy`),
+  `plot_profile` (`profile`), `sample_pca` (`embedding`) and `correlation_matrix`
+  (`complex_heatmap`).
+- **`homer`.** Not a MultiQC overlap at all, but the same shape of gap: the distance to
+  the nearest TSS was drawn by a hand-written `px.histogram` in both chipseq and atacseq.
+  `homer/tss_distance_profile` bins it in the recipe, which lets `profile` own the marker
+  at the start site, the shaded promoter window and the log axis.
+
+None of this needed a new viz kind: the four bindings are `profile`, `scatter_xy`,
+`embedding` and `complex_heatmap`, all of which already existed.
+
+What is left in the ChIP family after that is genuinely browser work, not table work:
+per-base coverage tracks (`bigwig/`), the aligned reads and the peak intervals as
+features. That is the JBrowse boundary above, and nothing in it should become a kind.
+
 ### Still missing, for pipelines outside this lot
 
 V-to-J pairing at scale (airrflow full rearrangement tables), 96-context mutational
@@ -271,6 +337,49 @@ jplace reader (phyloplace), assembly graph (bacass).
 Also: the `phylogenetic` kind has no catalog output binding it, and `upset_plot` and
 `sankey` can only be bound through a dashboard `config:` block because their roles are
 list-valued rather than required.
+
+## 10b. What is still not a catalog tool, and why
+
+A sweep of the 16 shipped dashboards asked, of every card, table, figure, MultiQC panel
+and advanced-viz tile, whether the data collection under it is one the catalog
+recognises. 275 tiles were reading a catalog output without saying so and now carry a
+`use:` handle. What remains unbound is not an oversight, and splits three ways.
+
+### Pipeline input, not tool output
+
+`samplesheet`, `metadata`, `samples`, `sample_design`, `design`, `database_sheet`: the
+files the user hands the pipeline, parsed so the dashboard has a hub to link on. A
+catalog entry describes what a tool *emits*; the run's own inputs have no producing tool
+and no glob that generalises past one pipeline, so they stay template-local.
+
+### Dashboard compositions, not module outputs
+
+`screening_summary` (funcscan, one row per sample per screening workflow),
+`caller_agreement` (cutandrun, SEACR against MACS2), and the `*_canonical` reshapes
+(sankey, upset, variant feature matrix) all read *several* outputs and answer a question
+about the run rather than about a tool. `test_compositions_stay_out_of_the_catalog`
+pins that boundary deliberately.
+
+### MultiQC custom content
+
+Fourteen MultiQC panels stay unbound: FRiP score and peak count (chipseq, atacseq),
+strand cross-correlation and the NSC/RSC coefficients (chipseq), strandedness inference,
+the DESeq2 sample-relationship plots and the biotype composition (rnaseq), SURVIVOR and
+the variant-calling summary (variantbenchmarking), and the fail-mapped-samples table
+(viralrecon). These are `*_mqc.tsv` sections a *pipeline* writes into its own MultiQC
+config, not modules MultiQC ships. A catalog output keys on the module that owns a plot
+anchor (`multiqc_module()` takes the anchor's leading token), so binding them would mean
+outputs called `strand`, `nsc`, `rsc`, `mlib` and `fail` — names that describe one
+pipeline's config, not a tool. The numbers behind them are real (phantompeakqualtools,
+SURVIVOR), but until nf-core publishes them as module output rather than as report
+decoration there is nothing tool-shaped to point a `find` rule at.
+
+The general-statistics table is the one section that *is* universal, and it is now
+`multiqc/general_stats`. It needed a small fix to be reachable: MultiQC assembles it out
+of whatever modules ran, so it appears in neither the report's module list nor its plot
+registry, and the compose endpoint's `present & plottable` intersection could never keep
+it. `_multiqc_sections` now adds it to the answer rather than to the set being
+intersected.
 
 ## 11. List-valued render roles were never actually validated
 

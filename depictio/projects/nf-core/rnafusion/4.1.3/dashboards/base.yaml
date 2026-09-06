@@ -87,6 +87,7 @@ main_dashboard:
     section: Alignment at a glance
     workflow_tag: rnafusion
     data_collection_tag: multiqc_data
+    use: multiqc/general_stats
     selected_module: general_stats
     selected_plot: general_stats
     title: General statistics
@@ -739,6 +740,7 @@ tabs:
     section: Support across callers
     workflow_tag: rnafusion
     data_collection_tag: caller_evidence
+    use: fusionreport/caller_evidence
     mode: code
     code_content: |
       # Pivot the long evidence table so the two split-read callers face each
@@ -1056,6 +1058,7 @@ tabs:
     section: Validated calls
     workflow_tag: rnafusion
     data_collection_tag: fusioninspector_fusions
+    use: fusioninspector/fusions
     mode: code
     code_content: |
       # Fusion allelic ratio, 5' against 3'. Both axes are log scaled, so a call
@@ -1097,49 +1100,22 @@ tabs:
     alignment: left
     body: >
       Pfam hits on each partner, in amino-acid coordinates. A PARTIAL suffix
-      means the breakpoint cuts through the domain. Depictio has no domain-track
-      kind yet, so the track below is drawn in code from the same rows.
+      means the breakpoint cuts through the domain, which the structure below
+      draws as a domain that stops where the partner does.
     layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: figure
+  - component_type: advanced_viz
     tag: rnaf-fi-domain-track
     index: rnaf-fi-domain-track
     section: Fusion protein domains
     workflow_tag: rnafusion
     data_collection_tag: fusion_protein_domains
-    mode: code
-    code_content: |
-      # Interval track: one bar per Pfam domain, placed at its amino-acid start
-      # and as wide as the domain. Pfam clans report many overlapping hits, so
-      # the bars are drawn translucent and overlaid rather than stacked.
-      busiest = (
-          df.group_by('fusion').agg(pl.len().alias('n'))
-          .sort('n', descending=True).head(6)
-      )
-      data = df.join(busiest.select('fusion'), on='fusion', how='inner')
-      colours = {'5p': '#3F51B5', '3p': '#F2A93B'}
-      fig = go.Figure()
-      for partner in ('5p', '3p'):
-          part = data.filter(pl.col('partner') == partner).sort('domain_start')
-          if part.height == 0:
-              continue
-          fig.add_bar(
-              x=part['domain_length'].to_list(),
-              y=part['fusion'].to_list(),
-              base=part['domain_start'].to_list(),
-              orientation='h', name=partner, opacity=0.7,
-              marker_color=colours[partner],
-              text=part['domain'].to_list(),
-              customdata=list(zip(part['domain_start'].to_list(), part['domain_end'].to_list())),
-              hovertemplate='%{text}<br>%{customdata[0]} to %{customdata[1]} aa<extra></extra>',
-          )
-      fig.update_layout(
-          barmode='overlay', bargap=0.35,
-          xaxis_title='Amino-acid position on the partner protein',
-          yaxis_title='', legend_title_text='Partner',
-          margin={'t': 24, 'l': 150, 'r': 16, 'b': 48},
-      )
-    title: Protein-domain track
-    description: The six fusions with the most annotated domains. Each bar spans one Pfam hit on the partner protein; overlapping bars are the nested hits of one Pfam clan.
+    use: fusioninspector/fusion_domains
+    config:
+      colour_by_col: partner
+      top_n: 6
+      show_breakpoint: true
+    title: Fusion protein structure
+    description: The six fusions with the most annotated domains, each drawn as its two partners end to end with a lane per partner. A domain that stops where the partner does is one the breakpoint truncates.
     title_size: h3
     layout: {x: 0, y: 1, w: 8, h: 6}
   - component_type: advanced_viz
@@ -1271,17 +1247,33 @@ tabs:
     description: One point per splice junction, positioned at its start and raised by the number of uniquely mapping reads crossing it. Selecting points narrows the junction table.
     title_size: h3
     layout: {x: 0, y: 3, w: 8, h: 6}
+  - component_type: advanced_viz
+    tag: rnaf-splice-sashimi
+    index: rnaf-splice-sashimi
+    section: Splice junctions
+    workflow_tag: rnafusion
+    data_collection_tag: splice_junctions
+    use: ctatsplicing/junction_arcs
+    config:
+      min_count: 2
+      top_n: 40
+      log_width: true
+    title: Junction arcs over the busiest loci
+    description: Each arc is one splice junction, drawn from donor to acceptor and thickened by the reads crossing it. The locus picker opens on the busiest cluster; junctions under two reads are hidden.
+    title_size: h3
+    layout: {x: 0, y: 9, w: 8, h: 7}
   - component_type: figure
     tag: rnaf-splice-gene-bar
     section: Splice junctions
     workflow_tag: rnafusion
     data_collection_tag: splice_junctions
+    use: ctatsplicing/introns
     visu_type: bar
     dict_kwargs: {x: gene, y: uniq_mapped, color: strand}
     title: Junction support per gene
     description: Uniquely mapping reads summed per gene, split by strand.
     title_size: h3
-    layout: {x: 0, y: 9, w: 8, h: 5}
+    layout: {x: 0, y: 16, w: 8, h: 5}
   - component_type: interactive
     tag: rnaf-filter-prot
     index: rnaf-prot-filter

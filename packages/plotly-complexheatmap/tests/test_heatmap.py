@@ -121,3 +121,53 @@ class TestNormalization:
         z = np.array(fig.data[0].z)
         for col_idx in range(z.shape[1]):
             assert abs(np.nanmean(z[:, col_idx])) < 1e-10
+
+
+class TestRowLabelDensity:
+    """Row tick labels are dropped where the row pitch leaves no room."""
+
+    @staticmethod
+    def _frame(n_rows: int) -> pd.DataFrame:
+        rng = np.random.default_rng(0)
+        return pd.DataFrame(
+            rng.standard_normal((n_rows, 4)),
+            index=[f"interval_{i}" for i in range(n_rows)],
+            columns=[f"sample_{j}" for j in range(4)],
+        )
+
+    def test_sparse_rows_keep_their_labels(self) -> None:
+        hm = ComplexHeatmap(self._frame(12), height=700)
+        hm.to_plotly()
+        assert hm._row_labels_visible is True
+
+    def test_dense_rows_drop_their_labels(self) -> None:
+        hm = ComplexHeatmap(self._frame(250), height=700)
+        fig = hm.to_plotly()
+        assert hm._row_labels_visible is False
+        assert not any(
+            fig.layout[ax].showticklabels
+            for ax in fig.layout
+            if ax.startswith("yaxis") and fig.layout[ax].showticklabels
+        )
+
+    def test_dropping_the_labels_gives_the_map_their_margin(self) -> None:
+        sparse = ComplexHeatmap(self._frame(12), height=700)
+        dense = ComplexHeatmap(self._frame(250), height=700)
+        assert dense.to_plotly().layout.margin.r < sparse.to_plotly().layout.margin.r
+
+    def test_show_row_labels_overrides_the_density_rule(self) -> None:
+        forced_on = ComplexHeatmap(self._frame(250), height=700, show_row_labels=True)
+        forced_on.to_plotly()
+        assert forced_on._row_labels_visible is True
+
+        forced_off = ComplexHeatmap(self._frame(12), height=700, show_row_labels=False)
+        forced_off.to_plotly()
+        assert forced_off._row_labels_visible is False
+
+    def test_a_taller_figure_fits_more_labels(self) -> None:
+        short = ComplexHeatmap(self._frame(60), height=300)
+        tall = ComplexHeatmap(self._frame(60), height=2000)
+        short.to_plotly()
+        tall.to_plotly()
+        assert short._row_labels_visible is False
+        assert tall._row_labels_visible is True

@@ -317,6 +317,14 @@ def generate(project_key: str) -> int:
         raise FileNotFoundError(f"no dashboard YAML under {yaml_dir}")
 
     raws = {p.stem: yaml.safe_load(p.read_text()) for p in yaml_files}
+    # A tab with no `dashboard_id` is deliberately not boot-seeded: its id would
+    # have to be in STATIC_IDS and its slug in `db_init.dashboards_config`, and
+    # the benchmark tabs are in neither. Skipping is what lets such a tab ship
+    # its YAML without breaking the seed build for every other tab.
+    unseeded = sorted(slug for slug, raw in raws.items() if not raw.get("dashboard_id"))
+    for slug in unseeded:
+        print(f"  {slug}: no dashboard_id, not seeded")
+        raws.pop(slug)
     dashboards = {slug: raw["dashboard_id"] for slug, raw in raws.items()}
     duplicates = [i for i in dashboards.values() if list(dashboards.values()).count(i) > 1]
     if duplicates:

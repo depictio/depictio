@@ -267,6 +267,37 @@ main_dashboard:
 
   # --------------------------------------------------------- ChIP enrichment
   - component_type: text
+    tag: cs-qc-complexity-intro
+    section: Alignment and library complexity
+    title: "How much new material is left in each library"
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The MultiQC panel above plots the expected-distinct curve alone. This one adds the 95% interval preseq puts around it: where the ribbon is narrow the extrapolation is safe, where it fans out, sequencing deeper is a guess.
+    workflow_tag: chipseq
+    data_collection_tag: preseq_complexity_curve
+    layout: {x: 0, y: 15, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: cs-qc-av-complexity
+    index: cs-qc-av-complexity
+    section: Alignment and library complexity
+    workflow_tag: chipseq
+    data_collection_tag: preseq_complexity_curve
+    use: preseq/complexity_ribbon
+    config:
+      log_x: true
+      band_opacity: 0.18
+      line_width: 2
+      x_title: Sequencing depth (reads)
+      y_title: Expected distinct molecules
+      legend_pos: right
+    title: "Library complexity with its confidence ribbon"
+    description: "One curve per library, extrapolated by preseq; the band is the 95% interval on that extrapolation."
+    title_size: h3
+    layout: {x: 0, y: 16, w: 8, h: 7}
+  - component_type: text
     tag: cs-qc-enrich-intro
     section: ChIP enrichment
     title: Is the ChIP enriched over its input?
@@ -358,6 +389,70 @@ main_dashboard:
     layout: {x: 4, y: 11, w: 4, h: 5}
 
   # -------------------------------------------------------- reference tables
+  - component_type: text
+    tag: cs-qc-fingerprint-intro
+    section: ChIP enrichment
+    title: "The numbers under the fingerprint curve"
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      MultiQC draws the fingerprint curve; the per-sample metrics beside it never reach a panel. Each point is one library: up and to the left means the reads pile into a small share of the genome, down and to the right means the coverage is as flat as an input.
+    workflow_tag: chipseq
+    data_collection_tag: deeptools_fingerprint_metrics
+    layout: {x: 0, y: 16, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: cs-qc-av-fingerprint
+    index: cs-qc-av-fingerprint
+    section: ChIP enrichment
+    workflow_tag: chipseq
+    data_collection_tag: deeptools_fingerprint_metrics
+    use: deeptools/fingerprint_scatter
+    config:
+      x_title: Area under the observed coverage curve
+      y_title: Divergence from a uniform library
+      marker_size: 12
+      opacity: 0.85
+      marker_outline: true
+      top_n_labels: 4
+      legend_pos: none
+    title: "Coverage concentration per library"
+    description: "plotFingerprint's own quality metrics: enrichment against divergence from a uniform library of the same depth."
+    title_size: h3
+    layout: {x: 0, y: 17, w: 8, h: 7}
+  - component_type: text
+    tag: cs-qc-metagene-intro
+    section: ChIP enrichment
+    title: "Where the signal sits along a gene"
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      deepTools writes this matrix as a plain table beside its PDF and MultiQC has no panel for it. Bins 1 to 300 are the 3 kb upstream of each gene, 300 to 400 the gene body scaled to a fixed length, 400 to 700 the 3 kb downstream.
+    workflow_tag: chipseq
+    data_collection_tag: deeptools_plot_profile
+    layout: {x: 0, y: 24, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: cs-qc-av-metagene
+    index: cs-qc-av-metagene
+    section: ChIP enrichment
+    workflow_tag: chipseq
+    data_collection_tag: deeptools_plot_profile
+    use: deeptools/metagene_profile
+    config:
+      reference_x: 300
+      reference_label: TSS
+      shaded_bands:
+        - [300, 400, Gene body]
+      x_title: Bin along the plotted window
+      y_title: Mean signal
+      legend_pos: right
+    title: "Metagene signal profile"
+    description: "Mean signal of every library across the plotted window, with the transcription start site marked and the gene body shaded."
+    title_size: h3
+    layout: {x: 0, y: 25, w: 8, h: 7}
   - component_type: text
     tag: cs-ref-intro
     section: Reference tables
@@ -624,6 +719,7 @@ tabs:
     section: Significance along the genome
     workflow_tag: chipseq
     data_collection_tag: macs2_peaks
+    use: macs2/peaks
     mode: code
     visu_type: scatter
     code_content: |
@@ -665,9 +761,12 @@ tabs:
     data_collection_tag: macs2_peaks
     use: macs2/peaks
     visu_type: histogram
-    dict_kwargs: {x: width, color: sample, nbins: 60}
+    # Log x: peak width is a long tail. On a linear axis the widest call
+    # sets the range, every bin but the first two is empty, and the panel
+    # reads as a single spike against 19 kb of white space.
+    dict_kwargs: {x: width, color: sample, nbins: 60, log_x: true}
     title: Peak width distribution
-    description: How wide the calls are, per sample. A histone mark gives broader peaks than a transcription factor.
+    description: How wide the calls are, per sample, on a log axis. A histone mark gives broader peaks than a transcription factor.
     title_size: h3
     layout: {x: 4, y: 8, w: 4, h: 6}
 
@@ -744,6 +843,7 @@ tabs:
     section: Where the peaks land
     workflow_tag: chipseq
     data_collection_tag: homer_annotated_peaks
+    use: homer/annotated_peaks
     aggregation: average
     column_name: peak_score
     column_type: float64
@@ -771,6 +871,7 @@ tabs:
     section: Where the peaks land
     workflow_tag: chipseq
     data_collection_tag: homer_annotated_peaks
+    use: homer/annotated_peaks
     mode: code
     visu_type: histogram
     code_content: |
@@ -803,6 +904,38 @@ tabs:
     layout: {x: 4, y: 3, w: 4, h: 6}
 
   # ------------------------------------------------------------ peak tables
+  - component_type: text
+    tag: cs-pk-tss-intro
+    section: Where the peaks land
+    title: "The same distances, one curve per sample"
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The histogram above pools the samples and splits them by feature class. This one does the opposite: one curve per sample, as a share of that sample's peaks, so libraries of different depth can be compared directly.
+    workflow_tag: chipseq
+    data_collection_tag: homer_tss_distance_profile
+    layout: {x: 0, y: 9, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: cs-pk-av-tss
+    index: cs-pk-av-tss
+    section: Where the peaks land
+    workflow_tag: chipseq
+    data_collection_tag: homer_tss_distance_profile
+    use: homer/tss_distance
+    config:
+      reference_x: 0
+      reference_label: TSS
+      shaded_bands:
+        - [-1000, 1000, Promoter window]
+      x_title: Distance to the nearest TSS (bp)
+      y_title: Share of the sample's peaks
+      legend_pos: right
+    title: "Peak distribution around the nearest TSS"
+    description: "Peaks counted in 250 bp bins across a 20 kb window; the shaded band is the 1 kb promoter window either side of the start site."
+    title_size: h3
+    layout: {x: 0, y: 10, w: 8, h: 7}
   - component_type: text
     tag: cs-pk-tables-intro
     section: Peak tables

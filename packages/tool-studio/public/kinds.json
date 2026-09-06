@@ -587,6 +587,407 @@
     },
     {
       "category": "plot",
+      "description": "A gene fusion as its two partners end to end, one lane each, with protein domains placed along them and the breakpoint marked.",
+      "heavy": false,
+      "icon": "tabler:arrows-join-2",
+      "label": "Fusion structure",
+      "required_roles": [
+        "fusion_id",
+        "partner",
+        "feature",
+        "start",
+        "end"
+      ],
+      "role_names": {
+        "end": [
+          "aa_end",
+          "domain_end",
+          "end",
+          "stop",
+          "to"
+        ],
+        "feature": [
+          "domain",
+          "domain_name",
+          "feature",
+          "name",
+          "pfam"
+        ],
+        "fusion_id": [
+          "fusion",
+          "fusion_id",
+          "fusion_name",
+          "id",
+          "name"
+        ],
+        "partner": [
+          "gene",
+          "gene_name",
+          "partner",
+          "partner_gene",
+          "side"
+        ],
+        "start": [
+          "aa_start",
+          "begin",
+          "domain_start",
+          "from",
+          "start"
+        ]
+      },
+      "roles": {
+        "breakpoint": {
+          "description": "Optional fusion breakpoint, marked on the lane.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "colour_by": {
+          "description": "Optional column driving the feature colour.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "end": {
+          "description": "Feature end along the partner.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "feature": {
+          "description": "Annotated feature drawn along the partner, e.g. a protein domain.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "fusion_id": {
+          "description": "One small multiple per fusion (e.g. GENE1--GENE2).",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "partner": {
+          "description": "Which partner gene the feature sits on: one lane each.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "retained": {
+          "description": "Optional retained fraction of the feature, in [0, 1] or a 0/1 flag.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "start": {
+          "description": "Feature start along the partner.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "fusion_structure"
+    },
+    {
+      "category": "plot",
+      "description": "Strand-aware arrows on a base-pair axis, one lane per contig: biosynthetic gene clusters, resistance islands, prophage regions.",
+      "heavy": false,
+      "icon": "tabler:arrow-big-right-lines",
+      "label": "Gene arrow track",
+      "required_roles": [
+        "contig",
+        "feature_id",
+        "start",
+        "end",
+        "strand"
+      ],
+      "role_names": {
+        "contig": [
+          "chr",
+          "chrom",
+          "chromosome",
+          "contig",
+          "scaffold",
+          "seqid"
+        ],
+        "end": [
+          "end",
+          "feature_end",
+          "stop",
+          "to"
+        ],
+        "feature_id": [
+          "feature_id",
+          "gene",
+          "gene_id",
+          "id",
+          "locus_tag",
+          "name"
+        ],
+        "start": [
+          "begin",
+          "feature_start",
+          "from",
+          "start"
+        ],
+        "strand": [
+          "direction",
+          "orientation",
+          "sense",
+          "strand"
+        ]
+      },
+      "roles": {
+        "class": {
+          "description": "Optional feature class driving the arrow colour.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "contig": {
+          "description": "One lane per contig / scaffold.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "end": {
+          "description": "End coordinate of the interval.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "feature_id": {
+          "description": "Identifier of the gene or CDS drawn as an arrow.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "label": {
+          "description": "Optional text label for points.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "region_end": {
+          "description": "Optional end of the neighbourhood band behind the arrows.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "region_start": {
+          "description": "Optional start of the neighbourhood band behind the arrows.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "start": {
+          "description": "Start coordinate of the interval.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "strand": {
+          "description": "Arrow direction: '+' points right, '-' points left.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "gene_arrow_track"
+    },
+    {
+      "category": "plot",
+      "description": "The enrichment-score curve over the ranked list, its hit rug and the ranked metric, with the leading edge shaded.",
+      "heavy": false,
+      "icon": "tabler:chart-area-line",
+      "label": "GSEA running score",
+      "required_roles": [
+        "gene_set",
+        "rank",
+        "running_es"
+      ],
+      "role_names": {
+        "gene_set": [
+          "gene_set",
+          "geneset",
+          "id",
+          "pathway",
+          "set",
+          "term"
+        ],
+        "rank": [
+          "index",
+          "order",
+          "position",
+          "rank",
+          "rank_in_list"
+        ],
+        "running_es": [
+          "enrichment_score",
+          "es",
+          "res",
+          "running_es",
+          "running_score"
+        ]
+      },
+      "roles": {
+        "gene_set": {
+          "description": "Gene set / pathway the running score belongs to.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "member": {
+          "description": "Optional flag marking the ranks that are set members.",
+          "dtypes": [
+            "Boolean",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "metric": {
+          "description": "Optional ranking metric, drawn as bars under the curve.",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": false
+        },
+        "rank": {
+          "description": "Position in the ranked gene list.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "running_es": {
+          "description": "Running enrichment score at that rank.",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "gsea_running_score"
+    },
+    {
+      "category": "plot",
       "description": "Variant tracks along genes: vertical stems coloured by consequence, marker size = effect.",
       "heavy": false,
       "icon": "tabler:chart-arcs",
@@ -1101,6 +1502,105 @@
     },
     {
       "category": "plot",
+      "description": "Multi-series curve over a shared axis, with optional confidence ribbons and a reference line: metagene / TSS enrichment, fragment-length and insert-size distributions.",
+      "heavy": false,
+      "icon": "tabler:chart-line",
+      "label": "Signal profile",
+      "required_roles": [
+        "series",
+        "x",
+        "y"
+      ],
+      "role_names": {
+        "series": [
+          "curve",
+          "group",
+          "sample",
+          "sample_id",
+          "series",
+          "track"
+        ],
+        "x": [
+          "bin",
+          "depth",
+          "distance",
+          "offset",
+          "position",
+          "tss_distance",
+          "x"
+        ],
+        "y": [
+          "coverage",
+          "enrichment",
+          "mean",
+          "score",
+          "signal",
+          "value",
+          "y"
+        ]
+      },
+      "roles": {
+        "lower": {
+          "description": "Optional lower bound of the confidence ribbon.",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": false
+        },
+        "series": {
+          "description": "One curve per distinct value (sample, group, target).",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "upper": {
+          "description": "Optional upper bound of the confidence ribbon.",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": false
+        },
+        "x": {
+          "description": "Shared x-axis: distance to a reference point, bin, or length.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "y": {
+          "description": "Curve height: signal, coverage, or frequency.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "profile"
+    },
+    {
+      "category": "plot",
       "description": "Quantile-quantile of -log10(p) vs uniform null \u2014 standard p-value distribution QC.",
       "heavy": false,
       "icon": "tabler:chart-line",
@@ -1321,6 +1821,328 @@
       "role_names": {},
       "roles": {},
       "viz_kind": "sankey"
+    },
+    {
+      "category": "plot",
+      "description": "Junction arcs on a base-pair axis, arc width scaled by supporting reads: splicing evidence per locus.",
+      "heavy": false,
+      "icon": "tabler:chart-arcs",
+      "label": "Splice junctions",
+      "required_roles": [
+        "chr",
+        "start",
+        "end",
+        "count"
+      ],
+      "role_names": {
+        "chr": [
+          "chr",
+          "chrom",
+          "chromosome",
+          "contig",
+          "reference",
+          "seqid"
+        ],
+        "count": [
+          "count",
+          "depth",
+          "n_reads",
+          "reads",
+          "support",
+          "unique_reads"
+        ],
+        "end": [
+          "acceptor",
+          "end",
+          "intron_end",
+          "junction_end",
+          "stop"
+        ],
+        "start": [
+          "begin",
+          "donor",
+          "intron_start",
+          "junction_start",
+          "start"
+        ]
+      },
+      "roles": {
+        "annotation": {
+          "description": "Optional junction annotation (known / novel, gene).",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "chr": {
+          "description": "Chromosome / contig name.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "count": {
+          "description": "Reads supporting the junction, driving the arc width.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "end": {
+          "description": "Junction acceptor position.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "sample": {
+          "description": "Optional sample column for faceting.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "start": {
+          "description": "Junction donor position.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "sashimi"
+    },
+    {
+      "category": "plot",
+      "description": "Numeric against numeric, with optional colour, marker size, point labels and a reference line.",
+      "heavy": false,
+      "icon": "tabler:chart-dots",
+      "label": "Scatter (X/Y)",
+      "required_roles": [
+        "x",
+        "y"
+      ],
+      "role_names": {
+        "color": [
+          "category",
+          "class",
+          "color",
+          "colour",
+          "condition",
+          "group"
+        ],
+        "label": [
+          "feature_id",
+          "id",
+          "label",
+          "name",
+          "sample",
+          "sample_id"
+        ],
+        "size": [
+          "count",
+          "magnitude",
+          "n",
+          "size",
+          "weight"
+        ],
+        "x": [
+          "value_x",
+          "x",
+          "x_value"
+        ],
+        "y": [
+          "value_y",
+          "y",
+          "y_value"
+        ]
+      },
+      "roles": {
+        "color": {
+          "description": "Optional column mapped to point colour.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "label": {
+          "description": "Optional text label for points.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "size": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "x": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "y": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "scatter_xy"
+    },
+    {
+      "category": "plot",
+      "description": "One row per region, one column per offset: the heatmap half of a metagene plot, rows binned by mean rather than truncated.",
+      "heavy": false,
+      "icon": "tabler:grid-pattern",
+      "label": "Signal matrix",
+      "required_roles": [
+        "region_id",
+        "position",
+        "value"
+      ],
+      "role_names": {
+        "position": [
+          "bin",
+          "distance",
+          "offset",
+          "position",
+          "tss_distance",
+          "x"
+        ],
+        "region_id": [
+          "id",
+          "interval_id",
+          "name",
+          "peak_id",
+          "region",
+          "region_id"
+        ],
+        "value": [
+          "count",
+          "coverage",
+          "enrichment",
+          "score",
+          "signal",
+          "value"
+        ]
+      },
+      "roles": {
+        "group": {
+          "description": "Grouping column for colouring / faceting.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "position": {
+          "description": "Offset from the reference point, one matrix column each.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "region_id": {
+          "description": "One matrix row per region (peak, gene, interval).",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "value": {
+          "description": "Signal at that region and offset, drawn as the cell colour.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "signal_matrix"
     },
     {
       "category": "plot",

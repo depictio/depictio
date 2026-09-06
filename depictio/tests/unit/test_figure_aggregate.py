@@ -406,3 +406,93 @@ def test_decimation_is_a_noop_below_the_cap():
 def test_series_types_use_ordered_decimation_not_random_sampling():
     assert _ORDERED_PLOT_TYPES <= _SAMPLABLE_PLOT_TYPES
     assert "line" in _ORDERED_PLOT_TYPES and "area" in _ORDERED_PLOT_TYPES
+
+
+# --------------------------------------------------------------------------- #
+# Axis-shaping style on the graph_objects paths
+# --------------------------------------------------------------------------- #
+
+
+@pytest.fixture
+def long_tail() -> pl.DataFrame:
+    """A peak-width-shaped distribution: most values small, a long right tail."""
+    rng = np.random.default_rng(0)
+    return pl.DataFrame(
+        {
+            "width": np.exp(rng.normal(6.5, 0.8, 20_000)),
+            "sample": ["a"] * 10_000 + ["b"] * 10_000,
+        }
+    )
+
+
+def test_log_x_histogram_bins_in_log_space(long_tail):
+    """`log_x` must reach the drawn axis, and the bins must follow it.
+
+    Plotly bins in the axis's own coordinates, so linear bins under a log axis
+    would put nearly everything in the first bar. That is the shape a log axis
+    is asked for to avoid, and for a long time it was silently what came back.
+    """
+    plan = plan_aggregation("histogram", {"x": "width", "nbins": 60, "log_x": True})
+    fig = build_aggregated_figure(long_tail.lazy(), plan, "light", {})
+    assert fig is not None
+    assert fig.layout.xaxis.type == "log"
+
+    centres = list(fig.data[0].x)
+    assert len(centres) == 60
+    # Geometric, not arithmetic: every consecutive ratio is the same.
+    ratios = [b / a for a, b in zip(centres, centres[1:])]
+    assert ratios[0] == pytest.approx(ratios[-1])
+    assert ratios[0] > 1
+
+    # No bar holds the bulk of the frame any more.
+    counts = list(fig.data[0].y)
+    assert sum(counts) == long_tail.height
+    assert max(counts) < long_tail.height / 4
+
+
+def test_log_x_histogram_leaves_the_bar_width_to_plotly(long_tail):
+    """Bar width is read in the axis's coordinates, so a linear one is wrong."""
+    log_plan = plan_aggregation("histogram", {"x": "width", "nbins": 60, "log_x": True})
+    log_fig = build_aggregated_figure(long_tail.lazy(), log_plan, "light", {})
+    assert log_fig.data[0].width is None
+
+    plan = plan_aggregation("histogram", {"x": "width", "nbins": 60})
+    fig = build_aggregated_figure(long_tail.lazy(), plan, "light", {})
+    assert fig.layout.xaxis.type is None
+    assert fig.data[0].width == pytest.approx(
+        (long_tail["width"].max() - long_tail["width"].min()) / 60
+    )
+
+
+def test_log_x_histogram_drops_the_values_a_log_axis_cannot_place():
+    frame = pl.DataFrame({"v": [-2.0, 0.0, 1.0, 10.0, 100.0]})
+    plan = plan_aggregation("histogram", {"x": "v", "nbins": 4, "log_x": True})
+    fig = build_aggregated_figure(frame.lazy(), plan, "light", {})
+    assert fig is not None
+    assert sum(fig.data[0].y) == 3
+
+
+def test_log_y_reaches_the_count_axis(long_tail):
+    plan = plan_aggregation("histogram", {"x": "width", "log_y": True})
+    fig = build_aggregated_figure(long_tail.lazy(), plan, "light", {})
+    assert fig.layout.yaxis.type == "log"
+    # The counts themselves stay untransformed; Plotly takes the log.
+    assert sum(fig.data[0].y) == long_tail.height
+
+
+def test_a_range_on_a_log_axis_is_given_in_log10_units(long_tail):
+    plan = plan_aggregation("histogram", {"x": "width", "log_x": True, "range_x": [100, 10_000]})
+    fig = build_aggregated_figure(long_tail.lazy(), plan, "light", {})
+    assert tuple(fig.layout.xaxis.range) == pytest.approx((2.0, 4.0))
+
+    linear = plan_aggregation("histogram", {"x": "width", "range_x": [100, 10_000]})
+    fig = build_aggregated_figure(long_tail.lazy(), linear, "light", {})
+    assert tuple(fig.layout.xaxis.range) == pytest.approx((100.0, 10_000.0))
+
+
+def test_density_with_a_log_axis_goes_back_to_px(frame):
+    """The grid is binned here in linear space; px would bin it in log space."""
+    assert plan_aggregation("density_heatmap", {"x": "v", "y": "w", "log_x": True}) is None
+    assert plan_aggregation("density_contour", {"x": "v", "y": "w", "log_y": True}) is None
+    # Without the log axis it still plans.
+    assert plan_aggregation("density_heatmap", {"x": "v", "y": "w"}) is not None

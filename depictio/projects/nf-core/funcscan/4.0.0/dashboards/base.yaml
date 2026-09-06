@@ -713,6 +713,7 @@ tabs:
     section: Gene detail
     workflow_tag: funcscan
     data_collection_tag: hamronization_report
+    use: hamronization/report
     mode: code
     code_content: |
       # only alignment-based tools report both axes; HMM screens report neither
@@ -751,6 +752,21 @@ tabs:
     description: Selecting rows narrows the scatter to the same genes.
     title_size: h3
     layout: {x: 4, y: 1, w: 4, h: 6}
+  - component_type: advanced_viz
+    tag: arg-av-island-track
+    index: arg-island-track
+    section: Gene detail
+    workflow_tag: funcscan
+    data_collection_tag: hamronization_report
+    use: hamronization/arg_island_track
+    config:
+      class_col: drug_class
+      label_col: gene_symbol
+      show_labels: true
+    title: Resistance genes along their contig
+    description: One lane per contig, one arrow per ARG hit pointing the way the gene is read. Genes packed head to tail on a single contig are a resistance island, which an aggregate over drug classes cannot show.
+    title_size: h3
+    layout: {x: 0, y: 7, w: 8, h: 6}
 
 # ============================================================================
 # Tab 2: AMPs
@@ -937,6 +953,7 @@ tabs:
     section: Property space
     workflow_tag: funcscan
     data_collection_tag: ampcombi_summary
+    use: ampcombi/summary
     mode: code
     code_content: |
       # keep the physicochemistry complete so no point is silently dropped
@@ -1012,6 +1029,7 @@ tabs:
     section: Clusters
     workflow_tag: funcscan
     data_collection_tag: ampcombi_clusters
+    use: ampcombi/clusters
     visu_type: histogram
     mode: ui
     figure_params:
@@ -1230,6 +1248,7 @@ tabs:
     section: Product classes
     workflow_tag: funcscan
     data_collection_tag: combgc_summary
+    use: combgc/summary
     visu_type: bar
     mode: ui
     figure_params:
@@ -1493,6 +1512,7 @@ tabs:
     section: Family hierarchy
     workflow_tag: funcscan
     data_collection_tag: dbcan_overview
+    use: dbcan/overview
     visu_type: bar
     mode: ui
     figure_params:
@@ -1526,6 +1546,7 @@ tabs:
     section: Substrates
     workflow_tag: funcscan
     data_collection_tag: dbcan_substrates
+    use: dbcan/substrates
     visu_type: bar
     mode: ui
     figure_params:

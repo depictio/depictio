@@ -374,7 +374,11 @@ non-SARS pathogen (no lineage DBs) + metagenomic protocol (no ivar/amplicon mosd
 
 **Template requirements:**
 - Always: `design`, `design_reads`, `multiqc_data` (REPROCESSED parquet), `macs2_peaks`,
-  `macs2_peak_summary`, `homer_annotated_peaks`
+  `macs2_peak_summary`, `homer_annotated_peaks`, `homer_tss_distance_profile` (dc_ref on
+  `homer_annotated_peaks`)
+- Signal QC route (present in every default run): `preseq_ccurve_raw` ->
+  `preseq_complexity_curve` (dc_ref), `deeptools_fingerprint_metrics`,
+  `deeptools_plot_profile`
 - Consensus route (>= 2 replicates per antibody): `macs2_consensus_boolean`, `macs2_consensus_fc`
 - Differential route (>= 2 conditions per antibody): `deseq2_results_raw` -> `deseq2_results` (dc_ref)
 
@@ -383,10 +387,12 @@ non-SARS pathogen (no lineage DBs) + metagenomic protocol (no ivar/amplicon mosd
 | Scenario | Flags | Expected effect |
 |---|---|---|
 | narrowPeak default (validated) | none | all 10 DCs populated |
-| broad peaks | `--broad_peak` | `macs/broadPeak/*_peaks.broadPeak` is BED6+3 with no summit column: `macs2_peaks` finds nothing. Needs a dedicated `macs2/broad_peaks` output, deferred |
+| broad peaks | `--broad_peak` | `macs/broadPeak/*_peaks.broadPeak` is BED6+3 with no summit column, so `macs2_peaks` finds nothing and `macs2_broad_peaks` reads it instead. Both outputs ship, one glob each, so a run matches exactly one |
 | single replicate per antibody | design with one replicate | no consensus peak set is built; `macs2_consensus_*` and both `deseq2_*` DCs empty |
 | single condition per antibody | design with one group | consensus built, DESeq2 not run; both `deseq2_*` DCs empty |
-| `--skip_peak_annotation` | flag | `homer_annotated_peaks` empty; the Peaks tab loses its annotation section |
+| `--skip_peak_annotation` | flag | `homer_annotated_peaks` and `homer_tss_distance_profile` empty; the Peaks tab loses its annotation section |
+| `--skip_preseq` | flag | `preseq_ccurve_raw` finds nothing, so `preseq_complexity_curve` is empty and the complexity ribbon tile has no data. The MultiQC preseq panel goes with it |
+| `--skip_plot_profile` / `--skip_plot_fingerprint` | flags | `deeptools_plot_profile` / `deeptools_fingerprint_metrics` empty; the two ChIP-enrichment tiles below the MultiQC panels lose their data |
 | `--skip_consensus_peaks` / `--skip_diff_analysis` | flags | Consensus and Differential binding tabs lose their data |
 | MultiQC not reprocessed | (omit the reprocess step) | `multiqc_data` finds no parquet; the whole QC tab is empty. This is the pipeline's normal state: the reprocess is mandatory, not optional |
 
@@ -408,7 +414,11 @@ collapses them and answers 500). See chipseq VALIDATION_REPORT.md CS-D3.
   literal scan regex so it cannot pick up the run's own 1.9 tree)
 - ataqv route: `ataqv_metrics`, `ataqv_fragment_length`, `ataqv_tss_coverage`,
   `ataqv_chromosome_counts`
-- Peak route: `macs2_peak_summary`, `macs2_broad_peaks`, `homer_annotated_peaks`
+- Signal QC route (present in every default run): `preseq_ccurve_raw` ->
+  `preseq_complexity_curve` (dc_ref), `deeptools_fingerprint_metrics`,
+  `deeptools_plot_profile`
+- Peak route: `macs2_peak_summary`, `macs2_broad_peaks`, `homer_annotated_peaks`,
+  `homer_tss_distance_profile` (dc_ref on `homer_annotated_peaks`)
 - Consensus route (>= 2 replicates per group): `macs2_consensus_boolean`, `macs2_consensus_fc`
 - Differential route (>= 2 conditions): `deseq2_results_raw` -> `deseq2_results` (dc_ref)
 
@@ -420,7 +430,8 @@ collapses them and answers 500). See chipseq VALIDATION_REPORT.md CS-D3.
 | K2 | **narrowPeak route** | default, no `--narrow_peak false` | `macs2/narrowPeak/` instead of `broadPeak/`, and the file gains a summit column | `macs2_broad_peaks` finds nothing: the recipe reads the BED6+3 broad shape. Release 1.2.1 is the narrowPeak twin of this same run, so this is directly testable. The `broadPeak/` nesting also moves the MultiQC report, which the literal scan regex pins. |
 | K3 | **single replicate per group** | design with one replicate | No consensus peak set is built | `macs2_consensus_*` and both `deseq2_*` empty; the Consensus and Differential tabs lose their data. |
 | K4 | **single condition** | design with one group | Consensus built, DESeq2 not run | Both `deseq2_*` empty while the consensus tiles still render. |
-| K5 | **`--skip_peak_annotation`** | flag | No HOMER output | `homer_annotated_peaks` empty; the Peaks tab loses its annotation section. |
+| K5 | **`--skip_peak_annotation`** | flag | No HOMER output | `homer_annotated_peaks` and `homer_tss_distance_profile` empty; the Peaks tab loses its annotation section. |
+| K8 | **`--skip_preseq` / `--skip_plot_profile` / `--skip_plot_fingerprint`** | flags | The signal-QC tables are not written | `preseq_complexity_curve`, `deeptools_plot_profile` and `deeptools_fingerprint_metrics` empty one for one; each loses exactly its own tile, the MultiQC panels above them go at the same time. |
 | K6 | **ataqv not run** | older config or `--skip_ataqv` | No `ataqv/` tree | All four ataqv collections empty at once, which is the whole library-quality tab. They are declared required, so this is the second scenario that breaks a mandatory collection. |
 | K7 | **mitochondrial contig named differently** | a genome whose MT contig is not `chrM` | `ataqv_chromosome_counts` still populates but the MT fraction card keys on a name that is absent | Renders, reads as zero mitochondrial signal, which is wrong rather than empty. Worth a run. |
 
@@ -437,6 +448,8 @@ collapses them and answers 500). See chipseq VALIDATION_REPORT.md CS-D3.
 
 **Template requirements:**
 - Always: `samples`, `samplesheet`, `multiqc_data` (REPROCESSED parquet)
+- deepTools QC route (present in every default run): `deeptools_fingerprint_metrics`,
+  `deeptools_sample_pca`, `deeptools_correlation_matrix`
 - SEACR route: `seacr_peaks_raw` -> `seacr_peaks` (dc_ref), `seacr_peak_summary`,
   `seacr_consensus_peaks`, `seacr_fragment_lengths_raw` -> `seacr_fragment_lengths` (dc_ref)
 - `caller_agreement` joins the two callers per sample, so it needs both

@@ -1189,7 +1189,13 @@ def test_short_names_are_unique_within_a_tool():
 
 # MultiQC is an aggregator: its outputs are other tools' numbers, so each one
 # names its producer. The two exceptions are pipeline-generated custom content.
-_MULTIQC_WITHOUT_ORIGIN = {"multiqc_summary", "multiqc_summary_metrics"}
+_MULTIQC_WITHOUT_ORIGIN = {
+    "multiqc_summary",
+    "multiqc_summary_metrics",
+    # Assembled by MultiQC from every module that ran, so there is no
+    # single producing tool to name.
+    "multiqc_general_stats",
+}
 
 
 def test_multiqc_outputs_name_their_origin_tool():

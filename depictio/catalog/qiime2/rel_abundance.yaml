@@ -16,3 +16,9 @@ renders_as:
   # clustered heatmap is offered by `qiime2_clustered_heatmap`, which binds the
   # canonical taxon × sample matrix the same reshape produces.
   - { id: sunburst, component: advanced_viz, kind: sunburst, roles: {abundance: rel_abundance} }
+  # Metric cards and the row-level table behind them: the readings the
+  # nf-core dashboards were already computing off this output by hand.
+  - { component: card, column: rel_abundance, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: taxonomy, aggregation: nunique, secondary_layout: top_n, breakdown_col: Phylum, top_n_count: 3 }
+  - { component: card, column: Phylum, aggregation: nunique, secondary_layout: composition, breakdown_col: Kingdom }
+  - { component: table }

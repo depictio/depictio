@@ -13,3 +13,7 @@ fixture: embedding_pcoa.tsv
 renders_as:
   - { id: embedding, component: advanced_viz, kind: embedding, roles: {sample_id: sample_id, dim_1: dim_1, dim_2: dim_2} }
   - { component: table }
+  # Metric cards and the row-level table behind them: the readings the
+  # nf-core dashboards were already computing off this output by hand.
+  - { component: card, column: dim_1, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: dim_2, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }

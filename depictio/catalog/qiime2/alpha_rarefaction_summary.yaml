@@ -1,0 +1,23 @@
+id: qiime2_alpha_rarefaction_summary
+name: Rarefaction summary
+mode: alpha-rarefaction
+description: >-
+  The alpha-rarefaction curves collapsed over the iteration axis: one row per
+  sample and depth carrying the median estimate, the interquartile spread that
+  median hides, and the sample metadata joined on. Two orders of magnitude
+  smaller than the raw table, and groupable, which the raw table is not.
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/diversityalphararefaction
+# Same file the raw `qiime2_alpha_rarefaction` output reads: this is the
+# collapsed view of it, computed once at ingest rather than in every render.
+find: { path_glob: "**/qiime2/alpha-rarefaction/*.csv" }
+recipe: qiime2/alpha_rarefaction_summary.py
+fixture: alpha_rarefaction_summary.tsv
+renders_as:
+  # The curve itself, with the iteration spread drawn as a band around it —
+  # the reading the raw table can only suggest.
+  - { id: rarefaction_band, component: advanced_viz, kind: profile, roles: {series: sample, x: depth, y: faith_pd} }
+  - { id: rarefaction_curve, component: advanced_viz, kind: rarefaction, roles: {sample_id: sample, depth: depth, metric: faith_pd} }
+  - { component: figure, visu_type: line, dict_kwargs: {x: depth, y: faith_pd, color: sample, title: Rarefaction curves} }
+  - { component: card, column: faith_pd, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: depth, aggregation: max, secondary_layout: histogram }
+  - { component: table }

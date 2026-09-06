@@ -1,0 +1,43 @@
+fusion_id	partner	feature	start	end	breakpoint	retained	domain_class
+BCR--ABL1	BCR	Coiled-coil oligomerisation	0	1	6	1.0	Oligomerisation
+BCR--ABL1	BCR	Ser/Thr kinase	1	2	6	1.0	Kinase
+BCR--ABL1	BCR	RhoGEF (DH)	2	3	6	1.0	Signalling
+BCR--ABL1	BCR	PH	3	4	6	1.0	Signalling
+BCR--ABL1	BCR	C2 (CalB)	4	5	6	0.0	Signalling
+BCR--ABL1	BCR	Rac GTPase-activating	5	6	6	0.0	Signalling
+BCR--ABL1	ABL1	N-terminal cap (myristoyl)	6	7	6	0.0	Regulatory
+BCR--ABL1	ABL1	SH3	7	8	6	1.0	Adaptor
+BCR--ABL1	ABL1	SH2	8	9	6	1.0	Adaptor
+BCR--ABL1	ABL1	Protein tyrosine kinase	9	10	6	1.0	Kinase
+BCR--ABL1	ABL1	F-actin binding	10	11	6	1.0	Cytoskeletal
+EML4--ALK	EML4	Coiled-coil trimerisation	0	1	4	1.0	Oligomerisation
+EML4--ALK	EML4	Basic region	1	2	4	1.0	Regulatory
+EML4--ALK	EML4	HELP	2	3	4	0.62	Cytoskeletal
+EML4--ALK	EML4	WD40 repeats	3	4	4	0.18	Adaptor
+EML4--ALK	ALK	MAM	4	5	4	0.0	Receptor ectodomain
+EML4--ALK	ALK	Glycine-rich region	5	6	4	0.0	Receptor ectodomain
+EML4--ALK	ALK	Protein tyrosine kinase	6	7	4	1.0	Kinase
+TMPRSS2--ERG	TMPRSS2	LDL-receptor class A	0	1	3	0.0	Receptor ectodomain
+TMPRSS2--ERG	TMPRSS2	SRCR	1	2	3	0.0	Receptor ectodomain
+TMPRSS2--ERG	TMPRSS2	Peptidase S1	2	3	3	0.0	Peptidase
+TMPRSS2--ERG	ERG	PNT (SAM/Pointed)	3	4	3	0.55	Oligomerisation
+TMPRSS2--ERG	ERG	ETS DNA-binding	4	5	3	1.0	DNA binding
+TMPRSS2--ERG	ERG	C-terminal transactivation	5	6	3	1.0	Transactivation
+EWSR1--FLI1	EWSR1	SYGQ-rich transactivation	0	1	4	1.0	Transactivation
+EWSR1--FLI1	EWSR1	IQ motif	1	2	4	0.42	Regulatory
+EWSR1--FLI1	EWSR1	RRM	2	3	4	0.0	RNA binding
+EWSR1--FLI1	EWSR1	RanBP2-type zinc finger	3	4	4	0.0	RNA binding
+EWSR1--FLI1	FLI1	PNT (SAM/Pointed)	4	5	4	0.0	Oligomerisation
+EWSR1--FLI1	FLI1	ETS DNA-binding	5	6	4	1.0	DNA binding
+EWSR1--FLI1	FLI1	C-terminal transactivation	6	7	4	1.0	Transactivation
+CCDC6--RET	CCDC6	Coiled-coil dimerisation	0	1	2	1.0	Oligomerisation
+CCDC6--RET	CCDC6	C-terminal domain	1	2	2	0.0	Regulatory
+CCDC6--RET	RET	Cadherin-like repeats	2	3	2	0.0	Receptor ectodomain
+CCDC6--RET	RET	Cysteine-rich domain	3	4	2	0.0	Receptor ectodomain
+CCDC6--RET	RET	Protein tyrosine kinase	4	5	2	1.0	Kinase
+KIF5B--RET	KIF5B	Kinesin motor	0	1	3	1.0	Cytoskeletal
+KIF5B--RET	KIF5B	Coiled-coil stalk	1	2	3	0.68	Oligomerisation
+KIF5B--RET	KIF5B	Cargo-binding tail	2	3	3	0.0	Adaptor
+KIF5B--RET	RET	Cadherin-like repeats	3	4	3	0.0	Receptor ectodomain
+KIF5B--RET	RET	Cysteine-rich domain	4	5	3	0.0	Receptor ectodomain
+KIF5B--RET	RET	Protein tyrosine kinase	5	6	3	1.0	Kinase

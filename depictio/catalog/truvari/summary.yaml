@@ -10,3 +10,9 @@ fixture: summary.tsv
 renders_as:
   - { id: pr_scatter, component: advanced_viz, kind: pr_benchmark, roles: {label: label, recall: recall, precision: precision, f1: f1} } # precision-recall benchmark
   - { component: table }
+  # Metric cards and the row-level table behind them: the readings the
+  # nf-core dashboards were already computing off this output by hand.
+  - { component: card, column: label, aggregation: nunique, secondary_layout: top_n, breakdown_col: label, top_n_count: 3 }
+  - { component: card, column: f1, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: precision, aggregation: average, secondary_layout: gauge, coverage_max: 1 }
+  - { component: card, column: recall, aggregation: median, secondary_layout: threshold, threshold_value: 0.8, threshold_direction: min, threshold_warn: 0.6 }
