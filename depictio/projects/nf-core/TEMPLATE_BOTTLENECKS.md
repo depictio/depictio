@@ -167,43 +167,98 @@ the nine templates are the evidence for what is missing.
 - **1 protein-domain track** (rnafusion FusionInspector) and **1 log-scale stage line**
   (airrflow attrition, which the sankey beside it already tells).
 
-### Ranked candidates
+### Candidates, split by how far they travel
 
-**1. A multi-series profile curve.** One curve per sample over an ordered numeric axis,
-with an optional reference marker at zero, optional shaded x-bands and an optional
-confidence ribbon. This one kind covers six code-mode figures in five pipelines:
+The useful axis is not "which pipeline asked for it" but how much of the kind is shape and
+how much is domain. Depictio already mixes the two, and it shows: `dot_plot` carries scRNA
+role names (`cluster`, `gene`, `mean_expression`, `frac_expressing`) yet is bound nine
+times in this lot and not once for scRNA, while `rarefaction` has exactly the shape of a
+multi-series curve (`sample_id`, `depth`, `metric`) and cannot be reused for a TSS profile
+because its name and renderer assume an accumulation.
+
+#### Reusable well beyond these pipelines
+
+**1. `profile`: multi-series curve over an ordered axis.** Roles `series`, `x`, `y`, with
+optional `lower` and `upper` for a band; config for a reference marker at x = 0, shaded
+x-ranges and log axes. Six code-mode figures in four pipelines collapse into it:
 
 | figure | pipeline | x axis |
 |---|---|---|
 | `at-sig-fig-tss` | atacseq | signed offset from a TSS |
-| `at-sig-fig-ladder` | atacseq | fragment length, with sub-nucleosomal bands |
-| `cr-qc-fig-fragments` | cutandrun | fragment length, with the same bands |
-| `airr-clone-fig-ribbons` | airrflow | diversity order q, with a bootstrap band |
+| `at-sig-fig-ladder` | atacseq | fragment length, sub-nucleosomal bands |
+| `cr-qc-fig-fragments` | cutandrun | fragment length, same bands |
+| `airr-clone-fig-ribbons` | airrflow | diversity order q, bootstrap band |
 | `airr-clone-fig-rank` | airrflow | clone rank, log-log |
 | `tp-fig-accumulation` | taxprofiler | taxon rank, cumulative |
 
-It also reaches outputs this lot never plotted: cutandrun
-`04_reporting/deeptools_heatmaps/*/*.plotHeatmap.mat.tab`, chipseq deepTools
-`plotProfile`, and rnaseq RSeQC gene body coverage. `coverage_track` is the closest
-existing kind and does not fit: it requires a `chromosome` column, treats `position` as an
-absolute coordinate rather than a signed offset from a reference point, and stacks one
-subplot per sample where these figures need the samples overlaid to be read at all.
+It also unlocks data already on disk that nothing reads: rnaseq `rseqc/inner_distance/`
+and gene body coverage, chipseq and atacseq deepTools `plotProfile`, and airrflow
+`clonal_abundance.tsv` (AF-D1), whose absence is why the rank-abundance panel plots a point
+estimate with no ribbon. `rarefaction` becomes a special case of it. Outside genomics the
+same shape covers any timecourse, dose response or sweep, which is what makes this the one
+clear win.
 
-The metagene variant additionally wants the classic paired heatmap of every region sorted
-by signal. That pairing, and the reference-point axis with its labelled marker and
-scaled-body ticks, are what justify a kind rather than a `px.line`.
+The cheap fallback, if the kind is not built: add optional `lower` and `upper` roles to
+`rarefaction`. That alone retires `airr-clone-fig-ribbons`.
 
-**2. Confidence ribbons on `rarefaction`.** The narrowest change on this list: airrflow's
-alakazam output already carries `lower` and `upper` columns and the kind already draws one
-curve per group. Optional ribbon roles would retire `airr-clone-fig-ribbons` on their own,
-and the same roles serve any bootstrapped curve.
+**2. `agreement_matrix`: pairwise concordance between tools.** Takes (item, tool, called)
+and draws the Jaccard matrix plus the per-sample agreement scatter against the diagonal.
+Recurs everywhere: cutandrun MACS2 against SEACR, rnafusion across three callers,
+funcscan across three ARG tools, taxprofiler across ten profilers, and variantbenchmarking
+outside this lot. Today each one is an `upset_plot` for membership plus a code-mode
+scatter, and cutandrun's `caller_agreement` recipe lives in the pipeline rather than the
+catalog. Note this one collides with a standing policy: `test_compositions_stay_out_of_the_catalog`
+keeps cross-set compositions dashboard-side, so it needs a decision before it needs code.
 
-**3. Protein-domain track.** rnafusion FusionInspector today, oncoanalyser when it lands.
-One bar per Pfam hit along a partner protein, with the breakpoint marked.
+#### Reusable across a family, not universal
+
+**3. `signal_matrix`: the metagene heatmap.** Rows are regions ordered by signal, columns
+are position offsets, drawn under the profile curve of candidate 1. Wanted by all three
+chromatin templates, and the reason cutandrun leaves `04_reporting/deeptools_heatmaps/`
+(2.9 GB) unfetched. `complex_heatmap` can technically bind it, since it only requires
+`index`, but the column order is positional and must survive clustering, there is no
+marker at 0, and the row count runs to 10^5 so the kind has to bin. Travels to any
+pipeline with signal over a reference point: chipseq, atacseq, cutandrun, cuttag,
+methylseq, nascent, and rnaseq gene bodies.
+
+**4. `feature_distance`: signed distance to the nearest annotated feature, split by
+class.** Behind `cs-pk-fig-tss` and `at-pk-fig-tss`, both reading HOMER `annotatePeaks`.
+The MultiQC `peak_annotation` sections that CS-D6 and AT-D9 leave unbound are the same
+data. It is close to a plain histogram, so the value is only the zero marker, the class
+stacking and the standard promoter and distal binning. Worth it if peak annotation stays a
+recurring template, not before.
+
+#### Pipeline-specific
+
+**5. Protein-domain track.** `rnaf-fi-domain-track`: one bar per Pfam hit along each
+partner protein with the breakpoint marked. rnafusion today, oncoanalyser when it lands,
+nothing else in sight.
+
+#### Asked for, but not actually a viz-kind gap
+
+- **V-by-J pairing and CDR3 spectratype (airrflow).** AF-D8 skips
+  `vdj_annotation/02-make-db/*_db-pass.tsv`, so this is a data gap, not a viz gap. V-by-J
+  is a contingency table that `complex_heatmap` already draws, and CDR3 length is
+  candidate 1.
+- **The twelve code-mode scatter plots and seven bars.** They need a marker size column,
+  `custom_data` and a selection key in UI mode, not a new kind. Closing that in the figure
+  builder shrinks every template in the lot and is worth more than any kind on this list.
+- **The MultiQC sections nobody badged.** rnaseq strandedness, sample-relationships and
+  biotype counts (RS-D5), chipseq `peak_count`, `peak_annotation` and four `deseq2_*`
+  sections (CS-D6), atacseq `mlib_peak_annotation` and the two `mlib_deseq2_*` (AT-D9),
+  taxprofiler MALT (TP-D6). Each is one catalog YAML plus a stub, no renderer work.
+- **The General Statistics tile.** Missing from three of nine templates for two different
+  server bugs: a duplicate `Reads mapped` display title (CS-D3, AT-D8) and a DataFrame
+  truth-value error, with rnaseq simply going without (RS-C5). This is the widest QC table
+  in every report and no new kind recovers it.
+- **`_col_annotations_json` on `complex_heatmap`.** differentialabundance computes the
+  sample annotation strip in both heatmap recipes and the `advanced_viz` renderer ignores
+  it; only the legacy `visu_type: heatmap` path reads it. An existing kind under-powered,
+  not a missing one.
 
 ### Still missing, for pipelines outside this lot
 
-V-to-J pairing heatmap (airrflow full rearrangement tables), 96-context mutational
+V-to-J pairing at scale (airrflow full rearrangement tables), 96-context mutational
 signature and circos (oncoanalyser), knee plot (scrnaseq), isomiR ladder (smrnaseq),
 jplace reader (phyloplace), assembly graph (bacass).
 
