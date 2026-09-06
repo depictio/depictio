@@ -43,6 +43,7 @@ from depictio.api.v1.services.screenshot_helpers import (  # noqa: E402
     build_localstorage_init_script,
     dismiss_notifications,
     wait_for_dashboard_content,
+    wait_for_panels_settled,
     wait_for_plotly_drawn,
 )
 
@@ -115,7 +116,13 @@ def shrink_png(path: Path) -> None:
 
 
 async def shoot_tabs(
-    page: Page, out_dir: Path, width: int, height_hint: int, max_height: int, settle_ms: int
+    page: Page,
+    out_dir: Path,
+    width: int,
+    height_hint: int,
+    max_height: int,
+    settle_ms: int,
+    panel_timeout_ms: int,
 ) -> list[Path]:
     """One capture per tab, in the order the tab bar shows them."""
     written: list[Path] = []
@@ -138,6 +145,10 @@ async def shoot_tabs(
                 await tab.dispatch_event("click")
             await page.wait_for_timeout(settle_ms)
         await wait_for_dashboard_content(page)
+        # Before the Plotly check, not after: a MultiQC panel that is still
+        # preparing has no Plotly div for that check to wait on, and the
+        # capture would show its "Preparing MultiQC figures…" placeholder.
+        await wait_for_panels_settled(page, timeout_ms=panel_timeout_ms)
         await wait_for_plotly_drawn(page, timeout_ms=8_000)
         await dismiss_notifications(page)
         # The page itself never scrolls: `[data-testid="dashboard-content"]` is the
@@ -158,6 +169,9 @@ async def shoot_tabs(
                 break
             await page.set_viewport_size({"width": width, "height": grown})
             await page.wait_for_timeout(1_200)
+        # Growing the viewport brings panels into view that the indicator was
+        # not counting, so it remounts and has to settle a second time.
+        await wait_for_panels_settled(page, timeout_ms=panel_timeout_ms)
         await wait_for_plotly_drawn(page, timeout_ms=6_000)
         await page.evaluate(
             "() => { const e = document.querySelector('[data-testid=\"dashboard-content\"]');"
@@ -184,6 +198,7 @@ async def run_one(
     height: int,
     max_height: int,
     settle_ms: int,
+    panel_timeout_ms: int,
     headless: bool,
 ) -> None:
     version_dir = PROJECTS_DIR / template
@@ -205,7 +220,7 @@ async def run_one(
         page = await context.new_page()
         await page.goto(f"{viewer_url}/dashboard/{dashboard_id}", wait_until="domcontentloaded")
         await page.wait_for_timeout(settle_ms * 2)
-        await shoot_tabs(page, out_dir, width, height, max_height, settle_ms)
+        await shoot_tabs(page, out_dir, width, height, max_height, settle_ms, panel_timeout_ms)
         await browser.close()
 
 
@@ -220,6 +235,9 @@ def main(
     height: int = typer.Option(1250),
     max_height: int = typer.Option(3200, help="clip taller tabs to this many pixels"),
     settle_ms: int = typer.Option(3500, help="pause after navigation and each tab click"),
+    panel_timeout_ms: int = typer.Option(
+        120_000, help="how long to let a tab's panels finish loading before capturing"
+    ),
     headless: bool = typer.Option(True, "--headless/--headed"),
 ) -> None:
     names = templates_with_docs() if every else list(template)
@@ -230,7 +248,16 @@ def main(
         try:
             asyncio.run(
                 run_one(
-                    name, viewer_url, api_url, theme, width, height, max_height, settle_ms, headless
+                    name,
+                    viewer_url,
+                    api_url,
+                    theme,
+                    width,
+                    height,
+                    max_height,
+                    settle_ms,
+                    panel_timeout_ms,
+                    headless,
                 )
             )
         except Exception as exc:  # one bad template must not sink the batch
