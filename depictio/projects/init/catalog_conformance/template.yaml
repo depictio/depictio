@@ -541,6 +541,19 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: 82f223a5c7b53ddf6a7cfec1
+    data_collection_tag: homer_annotated_peaks
+    description: Peak annotation — recipe output (homer/annotate_peaks.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: homer/annotate_peaks.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: f7cf57984ff91bc0a9c56aa2
     data_collection_tag: ivar_variants_long
     description: Variant calls — recipe output (ivar/variants_long.py), seeded from the catalog fixture
@@ -550,6 +563,60 @@ workflows:
       source: transformed
       transform:
         recipe: ivar/variants_long.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 4d046a7978f7b050a09579be
+    data_collection_tag: macs2_consensus_boolean
+    description: Consensus peak overlap — recipe output (macs2/consensus_boolean.py), seeded from the
+      catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: macs2/consensus_boolean.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: ce09f3486f71cd658f6f20fa
+    data_collection_tag: macs2_consensus_fc
+    description: Consensus fold enrichment — recipe output (macs2/consensus_fc.py), seeded from the catalog
+      fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: macs2/consensus_fc.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 18e1b8d2599b3eb208ebef74
+    data_collection_tag: macs2_peak_summary
+    description: Peak QC summary — recipe output (macs2/peak_summary.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: macs2/peak_summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: b11ed0eb520af6dc3f8d13c8
+    data_collection_tag: macs2_peaks
+    description: Peak calls — recipe output (macs2/peaks.py), seeded from the catalog fixture
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: macs2/peaks.py
       dc_specific_properties:
         format: TSV
         polars_kwargs:
@@ -1152,6 +1219,7 @@ workflows:
         - bracken
         - centrifuge
         - cutadapt
+        - deepTools
         - dupradar
         - fastp
         - fastqc
@@ -1166,6 +1234,7 @@ workflows:
         - nanoq
         - nonpareil
         - picard
+        - preseq
         - qualimap
         - quast
         - rseqc
@@ -1188,6 +1257,9 @@ workflows:
           cutadapt:
           - Filtered Reads
           - Trimmed Sequence Lengths (3')
+          deepTools:
+          - Fingerprint plot
+          - Fingerprint quality metrics
           dupradar:
           - dupradar-section
           fastp:
@@ -1225,6 +1297,8 @@ workflows:
           - Mark Duplicates
           - RnaSeqMetrics Assignment
           - Gene Coverage
+          preseq:
+          - Complexity curve (molecule count)
           qualimap:
           - Genomic origin of reads
           - Gene Coverage Profile
