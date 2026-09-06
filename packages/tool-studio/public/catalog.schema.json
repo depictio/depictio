@@ -239,7 +239,13 @@
                 "pr_benchmark",
                 "roc_pr_curve",
                 "confusion_matrix",
-                "metric_ci_bars"
+                "metric_ci_bars",
+                "profile",
+                "signal_matrix",
+                "fusion_structure",
+                "gene_arrow_track",
+                "gsea_running_score",
+                "sashimi"
               ],
               "type": "string"
             },

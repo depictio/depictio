@@ -37,8 +37,60 @@ _INT = frozenset({"Int8", "Int16", "Int32", "Int64", "UInt8", "UInt16", "UInt32"
 _FLOAT = frozenset({"Float32", "Float64"})
 _NUMERIC = _INT | _FLOAT
 _STRING = frozenset({"String", "Utf8"})
+# A membership flag. Recipes that cannot emit a real Boolean write 0/1, so the
+# integer types are accepted alongside it rather than rejected as a mismatch.
+_BOOLEAN = frozenset({"Boolean"}) | _INT
 
 CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
+    # One curve per series over an ordered numeric axis. Deliberately named for
+    # the shape, not a domain: a TSS enrichment profile, a fragment-length
+    # ladder, a Hill diversity curve and a rank-abundance curve are the same
+    # three columns. `rarefaction` is this shape with ecology role names.
+    "profile": {
+        "series": _STRING,
+        "x": _NUMERIC,
+        "y": _NUMERIC,
+    },
+    # The metagene heatmap that sits under a `profile`: one row per region, one
+    # column per position offset, rows ordered by signal. Long format, because a
+    # wide frame would need one column per bin.
+    "signal_matrix": {
+        "region_id": _STRING,
+        "position": _NUMERIC,
+        "value": _NUMERIC,
+    },
+    # A fusion drawn as its two partners with the retained protein domains laid
+    # along them. One row per domain, plus the breakpoint offset per partner.
+    "fusion_structure": {
+        "fusion_id": _STRING,
+        "partner": _STRING,
+        "feature": _STRING,
+        "start": _NUMERIC,
+        "end": _NUMERIC,
+    },
+    # A locus map: arrow glyphs per coding sequence along a contig, which is how
+    # a biosynthetic gene cluster or a resistance cassette is read.
+    "gene_arrow_track": {
+        "contig": _STRING,
+        "feature_id": _STRING,
+        "start": _NUMERIC,
+        "end": _NUMERIC,
+        "strand": _STRING,
+    },
+    # The GSEA running enrichment score along the ranked gene list, with the set
+    # members as a rug underneath.
+    "gsea_running_score": {
+        "gene_set": _STRING,
+        "rank": _NUMERIC,
+        "running_es": _FLOAT,
+    },
+    # Splice junctions as arcs over a genomic interval, weighted by read support.
+    "sashimi": {
+        "chr": _STRING,
+        "start": _NUMERIC,
+        "end": _NUMERIC,
+        "count": _NUMERIC,
+    },
     "volcano": {
         "feature_id": _STRING,
         "effect_size": _FLOAT,
@@ -418,6 +470,41 @@ ROLE_NAMES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "lower": frozenset({"lower", "ci_lower", "recall_lower", "precision_lower"}),
         "upper": frozenset({"upper", "ci_upper", "recall_upper", "precision_upper"}),
     },
+    "profile": {
+        "series": frozenset({"series", "sample", "sample_id", "group", "curve", "track"}),
+        "x": frozenset({"x", "position", "distance", "offset", "bin", "depth", "tss_distance"}),
+        "y": frozenset({"y", "value", "signal", "score", "coverage", "mean", "enrichment"}),
+    },
+    "signal_matrix": {
+        "region_id": frozenset({"region_id", "peak_id", "region", "interval_id", "id", "name"}),
+        "position": frozenset({"position", "offset", "bin", "distance", "tss_distance", "x"}),
+        "value": frozenset({"value", "signal", "score", "coverage", "count", "enrichment"}),
+    },
+    "fusion_structure": {
+        "fusion_id": frozenset({"fusion_id", "fusion", "fusion_name", "name", "id"}),
+        "partner": frozenset({"partner", "gene", "gene_name", "side", "partner_gene"}),
+        "feature": frozenset({"feature", "domain", "domain_name", "pfam", "name"}),
+        "start": frozenset({"start", "begin", "from", "aa_start", "domain_start"}),
+        "end": frozenset({"end", "stop", "to", "aa_end", "domain_end"}),
+    },
+    "gene_arrow_track": {
+        "contig": frozenset({"contig", "chr", "chrom", "chromosome", "scaffold", "seqid"}),
+        "feature_id": frozenset({"feature_id", "gene_id", "locus_tag", "id", "name", "gene"}),
+        "start": frozenset({"start", "begin", "from", "feature_start"}),
+        "end": frozenset({"end", "stop", "to", "feature_end"}),
+        "strand": frozenset({"strand", "sense", "orientation", "direction"}),
+    },
+    "gsea_running_score": {
+        "gene_set": frozenset({"gene_set", "geneset", "pathway", "term", "set", "id"}),
+        "rank": frozenset({"rank", "rank_in_list", "position", "index", "order"}),
+        "running_es": frozenset({"running_es", "running_score", "res", "enrichment_score", "es"}),
+    },
+    "sashimi": {
+        "chr": frozenset({"chr", "chrom", "chromosome", "contig", "seqid", "reference"}),
+        "start": frozenset({"start", "begin", "donor", "intron_start", "junction_start"}),
+        "end": frozenset({"end", "stop", "acceptor", "intron_end", "junction_end"}),
+        "count": frozenset({"count", "reads", "n_reads", "unique_reads", "support", "depth"}),
+    },
 }
 
 
@@ -486,6 +573,37 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "tn": _NUMERIC,
     },
     "metric_ci_bars": {},
+    "profile": {
+        "lower": _FLOAT,
+        "upper": _FLOAT,
+    },
+    "signal_matrix": {
+        "group": _STRING,
+    },
+    "fusion_structure": {
+        "breakpoint": _NUMERIC,
+        # A retention fraction in [0, 1], but a 0/1 flag is just as common.
+        "retained": _NUMERIC,
+        "colour_by": _STRING,
+    },
+    "gene_arrow_track": {
+        "class": _STRING,
+        "label": _STRING,
+        # The neighbourhood window each feature belongs to, when the frame
+        # carries one; without it the lane spans the features it holds.
+        "region_start": _NUMERIC,
+        "region_end": _NUMERIC,
+    },
+    "gsea_running_score": {
+        # `member_col` marks which ranks are set members: the hit rug reads it
+        # as a flag, not as a label.
+        "member": _BOOLEAN,
+        "metric": _FLOAT,
+    },
+    "sashimi": {
+        "sample": _STRING,
+        "annotation": _STRING,
+    },
 }
 
 
@@ -909,8 +1027,64 @@ _ROLE_DESCRIPTIONS: dict[str, str] = {
     "group": "Grouping column for colouring / faceting.",
     "source": "Source / database of the term.",
     "end": "End coordinate of the interval.",
+    "start": "Start coordinate of the interval.",
     "sample": "Optional sample column for faceting.",
 }
+
+# Per-kind overrides for roles whose meaning is not the one the flat map above
+# assumes. Role names are shared across kinds, so `rank` reads as a taxonomic
+# level for stacked_taxonomy and as a position in a ranked gene list for GSEA;
+# a single description cannot be right for both. Consulted before the flat map.
+_KIND_ROLE_DESCRIPTIONS: dict[AdvancedVizKind, dict[str, str]] = {
+    "profile": {
+        "series": "One curve per distinct value (sample, group, target).",
+        "x": "Shared x-axis: distance to a reference point, bin, or length.",
+        "y": "Curve height: signal, coverage, or frequency.",
+        "lower": "Optional lower bound of the confidence ribbon.",
+        "upper": "Optional upper bound of the confidence ribbon.",
+    },
+    "signal_matrix": {
+        "region_id": "One matrix row per region (peak, gene, interval).",
+        "position": "Offset from the reference point, one matrix column each.",
+        "value": "Signal at that region and offset, drawn as the cell colour.",
+    },
+    "fusion_structure": {
+        "fusion_id": "One small multiple per fusion (e.g. GENE1--GENE2).",
+        "partner": "Which partner gene the feature sits on: one lane each.",
+        "feature": "Annotated feature drawn along the partner, e.g. a protein domain.",
+        "start": "Feature start along the partner.",
+        "end": "Feature end along the partner.",
+        "breakpoint": "Optional fusion breakpoint, marked on the lane.",
+        "retained": "Optional retained fraction of the feature, in [0, 1] or a 0/1 flag.",
+        "colour_by": "Optional column driving the feature colour.",
+    },
+    "gene_arrow_track": {
+        "contig": "One lane per contig / scaffold.",
+        "feature_id": "Identifier of the gene or CDS drawn as an arrow.",
+        "strand": "Arrow direction: '+' points right, '-' points left.",
+        "class": "Optional feature class driving the arrow colour.",
+        "region_start": "Optional start of the neighbourhood band behind the arrows.",
+        "region_end": "Optional end of the neighbourhood band behind the arrows.",
+    },
+    "gsea_running_score": {
+        "gene_set": "Gene set / pathway the running score belongs to.",
+        "rank": "Position in the ranked gene list.",
+        "running_es": "Running enrichment score at that rank.",
+        "member": "Optional flag marking the ranks that are set members.",
+        "metric": "Optional ranking metric, drawn as bars under the curve.",
+    },
+    "sashimi": {
+        "start": "Junction donor position.",
+        "end": "Junction acceptor position.",
+        "count": "Reads supporting the junction, driving the arc width.",
+        "annotation": "Optional junction annotation (known / novel, gene).",
+    },
+}
+
+
+def _role_description(kind: AdvancedVizKind, role: str) -> str:
+    """The tooltip for one role of one kind, kind-specific text winning."""
+    return _KIND_ROLE_DESCRIPTIONS.get(kind, {}).get(role) or _ROLE_DESCRIPTIONS.get(role, "")
 
 
 def role_dtype_specs(kind: AdvancedVizKind) -> dict[str, dict[str, object]]:
@@ -926,13 +1100,13 @@ def role_dtype_specs(kind: AdvancedVizKind) -> dict[str, dict[str, object]]:
         specs[role] = {
             "required": True,
             "dtypes": sorted(accepted),
-            "description": _ROLE_DESCRIPTIONS.get(role, ""),
+            "description": _role_description(kind, role),
         }
     for role, accepted in _OPTIONAL_ROLES.get(kind, {}).items():
         specs[role] = {
             "required": False,
             "dtypes": sorted(accepted),
-            "description": _ROLE_DESCRIPTIONS.get(role, ""),
+            "description": _role_description(kind, role),
         }
     return specs
 
@@ -1083,6 +1257,55 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         "label": "Metric bars with CI",
         "description": "Precision / recall / F1 bars with 95% confidence-interval whiskers.",
         "icon": "tabler:chart-bar",
+    },
+    "profile": {
+        "label": "Signal profile",
+        "description": (
+            "Multi-series curve over a shared axis, with optional confidence "
+            "ribbons and a reference line: metagene / TSS enrichment, "
+            "fragment-length and insert-size distributions."
+        ),
+        "icon": "tabler:chart-line",
+    },
+    "signal_matrix": {
+        "label": "Signal matrix",
+        "description": (
+            "One row per region, one column per offset: the heatmap half of a "
+            "metagene plot, rows binned by mean rather than truncated."
+        ),
+        "icon": "tabler:grid-pattern",
+    },
+    "fusion_structure": {
+        "label": "Fusion structure",
+        "description": (
+            "A gene fusion as its two partners end to end, one lane each, with "
+            "protein domains placed along them and the breakpoint marked."
+        ),
+        "icon": "tabler:arrows-join-2",
+    },
+    "gene_arrow_track": {
+        "label": "Gene arrow track",
+        "description": (
+            "Strand-aware arrows on a base-pair axis, one lane per contig: "
+            "biosynthetic gene clusters, resistance islands, prophage regions."
+        ),
+        "icon": "tabler:arrow-big-right-lines",
+    },
+    "gsea_running_score": {
+        "label": "GSEA running score",
+        "description": (
+            "The enrichment-score curve over the ranked list, its hit rug and "
+            "the ranked metric, with the leading edge shaded."
+        ),
+        "icon": "tabler:chart-area-line",
+    },
+    "sashimi": {
+        "label": "Splice junctions",
+        "description": (
+            "Junction arcs on a base-pair axis, arc width scaled by supporting "
+            "reads: splicing evidence per locus."
+        ),
+        "icon": "tabler:chart-arcs",
     },
 }
 
