@@ -9,6 +9,10 @@ find: { path_glob: "**/ctatsplicing/*.introns" }
 recipe: ctatsplicing/introns.py
 fixture: introns.tsv
 renders_as:
+  # The junctions as arcs over the locus, arc width scaled by the reads that
+  # support each one. This is the shape the file is: a junction is a span with
+  # a read count, not a point, and a manhattan plot draws only where it starts.
+  - { id: junction_arcs, component: advanced_viz, kind: sashimi, roles: {chr: chrom, start: start, end: end, count: uniq_mapped} }
   - { id: intron_manhattan, component: advanced_viz, kind: manhattan, roles: {chr: chrom, pos: start, score: score} }
   - { component: figure, visu_type: bar, dict_kwargs: {x: gene, y: uniq_mapped, color: strand} }
   - { component: card, column: uniq_mapped, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
