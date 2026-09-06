@@ -1,0 +1,18 @@
+id: ctatsplicing_introns
+name: Splice junctions
+mode: introns
+description: >-
+  One row per splice junction CTAT-SPLICING read from the STAR alignment, with
+  the junction coordinate split into chromosome and position, the gene it falls
+  in and how many uniquely and multi mapped reads support it.
+find: { path_glob: "**/ctatsplicing/*.introns" }
+recipe: ctatsplicing/introns.py
+fixture: introns.tsv
+renders_as:
+  - { id: intron_manhattan, component: advanced_viz, kind: manhattan, roles: {chr: chrom, pos: start, score: score} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: gene, y: uniq_mapped, color: strand} }
+  - { component: card, column: uniq_mapped, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: intron, aggregation: nunique, secondary_layout: top_n, breakdown_col: gene, top_n_count: 5 }
+  - { component: card, column: total_mapped, aggregation: sum, secondary_layout: donut, breakdown_col: chrom }
+  - { component: card, column: intron_length, aggregation: average, secondary_layout: histogram }
+  - { component: table, row_selection_enabled: true, row_selection_column: gene }
