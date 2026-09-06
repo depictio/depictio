@@ -226,6 +226,7 @@ main_dashboard:
     section: Reference tables
     workflow_tag: differentialabundance
     data_collection_tag: deseq2_results
+    use: deseq2/results
     row_selection_enabled: true
     row_selection_column: gene_id
     title: DESeq2 results
@@ -337,6 +338,7 @@ tabs:
     section: Calls at a glance
     workflow_tag: differentialabundance
     data_collection_tag: deseq2_results
+    use: deseq2/results
     aggregation: nunique
     column_name: gene_id
     column_type: object
@@ -353,6 +355,7 @@ tabs:
     section: Calls at a glance
     workflow_tag: differentialabundance
     data_collection_tag: deseq2_results
+    use: deseq2/results
     aggregation: median
     aggregations: [box_plot_stats]
     secondary_layout: box_plot
@@ -368,6 +371,7 @@ tabs:
     section: Calls at a glance
     workflow_tag: differentialabundance
     data_collection_tag: deseq2_results
+    use: deseq2/results
     aggregation: count
     column_name: direction
     column_type: object
@@ -383,6 +387,7 @@ tabs:
     section: Calls at a glance
     workflow_tag: differentialabundance
     data_collection_tag: deseq2_results
+    use: deseq2/results
     aggregation: max
     column_name: neg_log10_padj
     column_type: float64
@@ -489,6 +494,7 @@ tabs:
     section: Test diagnostics
     workflow_tag: differentialabundance
     data_collection_tag: deseq2_results
+    use: deseq2/results
     mode: code
     code_content: |
       # One point per gene: its effect size in the first contrast against the
@@ -553,6 +559,7 @@ tabs:
     section: Gene table
     workflow_tag: differentialabundance
     data_collection_tag: deseq2_results_annotated
+    use: deseq2/results_annotated
     row_selection_enabled: true
     row_selection_column: gene_id
     title: Annotated DESeq2 results
@@ -681,6 +688,7 @@ tabs:
     section: Annotation at a glance
     workflow_tag: differentialabundance
     data_collection_tag: deseq2_results_annotated
+    use: deseq2/results_annotated
     aggregation: nunique
     column_name: gene_biotype
     column_type: object
@@ -696,6 +704,7 @@ tabs:
     section: Annotation at a glance
     workflow_tag: differentialabundance
     data_collection_tag: deseq2_results_annotated
+    use: deseq2/results_annotated
     aggregation: nunique
     column_name: gene_name
     column_type: object
@@ -711,6 +720,7 @@ tabs:
     section: Annotation at a glance
     workflow_tag: differentialabundance
     data_collection_tag: deseq2_results_annotated
+    use: deseq2/results_annotated
     aggregation: median
     aggregations: [box_plot_stats]
     secondary_layout: box_plot
@@ -726,6 +736,7 @@ tabs:
     section: Annotation at a glance
     workflow_tag: differentialabundance
     data_collection_tag: deseq2_results_annotated
+    use: deseq2/results_annotated
     aggregation: average
     column_name: neg_log10_padj
     column_type: float64
@@ -814,6 +825,7 @@ tabs:
     section: Effect by biotype
     workflow_tag: differentialabundance
     data_collection_tag: deseq2_results_annotated
+    use: deseq2/results_annotated
     visu_type: box
     dict_kwargs: {x: gene_biotype, y: log2fc, color: direction}
     title: Effect size by biotype
@@ -904,6 +916,7 @@ tabs:
     section: Calls on the genome
     workflow_tag: differentialabundance
     data_collection_tag: deseq2_results_annotated
+    use: deseq2/results_annotated
     aggregation: nunique
     column_name: gene_name
     column_type: object
@@ -919,6 +932,7 @@ tabs:
     section: Calls on the genome
     workflow_tag: differentialabundance
     data_collection_tag: deseq2_results_annotated
+    use: deseq2/results_annotated
     aggregation: nunique
     column_name: chromosome
     column_type: object
@@ -935,6 +949,7 @@ tabs:
     section: Calls on the genome
     workflow_tag: differentialabundance
     data_collection_tag: deseq2_results_annotated
+    use: deseq2/results_annotated
     aggregation: median
     aggregations: [box_plot_stats]
     secondary_layout: box_plot
@@ -950,6 +965,7 @@ tabs:
     section: Calls on the genome
     workflow_tag: differentialabundance
     data_collection_tag: deseq2_results_annotated
+    use: deseq2/results_annotated
     aggregation: min
     column_name: padj
     column_type: float64

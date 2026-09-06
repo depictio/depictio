@@ -17,3 +17,12 @@ renders_as:
   - { component: card, column: log2fc, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
   - { component: figure, visu_type: bar, dict_kwargs: {x: gene_biotype, y: neg_log10_padj, color: direction} }
   - { component: table, row_selection_enabled: true, row_selection_column: gene_id }
+  # Metric cards and the row-level table behind them: the readings the
+  # nf-core dashboards were already computing off this output by hand.
+  - { component: card, column: gene_biotype, aggregation: nunique, secondary_layout: concentration, breakdown_col: gene_biotype }
+  - { component: card, column: gene_name, aggregation: nunique, secondary_layout: donut, breakdown_col: direction }
+  - { component: card, column: base_mean, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: neg_log10_padj, aggregation: average, secondary_layout: coverage, coverage_max: 1.301 }
+  - { component: card, column: chromosome, aggregation: nunique, secondary_layout: top_n, breakdown_col: chromosome, top_n_count: 3 }
+  - { component: card, column: neg_log10_padj, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: padj, aggregation: min, secondary_layout: threshold, threshold_value: 0.05, threshold_direction: max, threshold_warn: 0.1 }

@@ -1,10 +1,21 @@
 """Melt the SIDLE cross-region reconstructed feature table to long per-sample taxonomy.
 
-The multiregion/SIDLE sub-workflow reconstructs one feature table from per-region ASVs.
-`reconstructed_merged.tsv` carries one row per reconstructed feature with its taxonomy
-and per-sample counts (ID, Taxon, <sample columns…>). Melting it to the canonical
-sample/taxonomy/count long shape lets the dashboard render composition (stacked bar /
-table) the same way the standard route renders qiime2/barplot.
+SIDLE reconstructs one feature table from per-region ASVs.
+``reconstructed_merged.tsv`` carries one row per reconstructed feature with its
+taxonomy and one count column per sample (ID, Taxon, <sample columns...>).
+Melting it to the canonical sample / taxonomy / count long shape lets a
+dashboard render the multi-region composition with the same components it uses
+for a single-region barplot.
+
+Output schema:
+    feature_id : Utf8   reconstructed feature the count belongs to
+    sample : Utf8       sample the count came from
+    count : Float64     reconstructed count, zeros dropped
+    taxonomy : Utf8     the full Greengenes-style lineage string
+    Kingdom : Utf8      rank column, ``Unclassified`` when unresolved
+    Phylum : Utf8       rank column, ``Unclassified`` when unresolved
+    Class : Utf8        rank column, ``Unclassified`` when unresolved
+    Genus : Utf8        rank column, ``Unclassified`` when unresolved
 """
 
 import polars as pl

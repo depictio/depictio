@@ -1,0 +1,30 @@
+id: vsearch_sintax_abundance
+name: SINTAX composition
+mode: sintax
+description: >-
+  Per-sample Phylum-level relative abundance, built by joining the SINTAX
+  per-ASV taxonomy to the DADA2 ASV count table written beside it. The
+  classifier publishes taxonomy only, so the counts have to come from the
+  denoiser's table.
+# The reference-DB tag is part of the file name (`unite-fungi_8_2`), so the
+# glob ends on the version digit. The `.raw.tsv` variant has `raw` immediately
+# before the extension and is therefore never matched.
+find:
+  path_glob: "**/sintax/ASV_tax_sintax.*[0-9].tsv"
+recipe: vsearch/sintax_abundance.py
+fixture: sintax_abundance.tsv
+renders_as:
+  # Wide per-rank columns (Kingdom/Phylum), so the nested view is a sunburst;
+  # `stacked_taxonomy` needs the single long rank column this table lacks, the
+  # same reason `qiime2_rel_abundance` stops at a sunburst.
+  - { id: sintax_sunburst, component: advanced_viz, kind: sunburst, roles: {abundance: rel_abundance} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: Phylum, y: rel_abundance, color: Phylum, title: Relative abundance by phylum} }
+  # How many samples were classified, how many phyla they resolve to, and how
+  # unevenly the abundance sits across them.
+  - { component: card, column: sample, aggregation: nunique, secondary_layout: top_n, breakdown_col: Phylum, top_n_count: 3 }
+  - { component: card, column: Phylum, aggregation: nunique, secondary_layout: composition, breakdown_col: Phylum }
+  - { component: card, column: rel_abundance, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  # The ranks are the axes a reader narrows on before reading any of the above.
+  - { component: interactive, interactive_type: MultiSelect, column_name: Kingdom }
+  - { component: interactive, interactive_type: MultiSelect, column_name: Phylum }
+  - { component: table }

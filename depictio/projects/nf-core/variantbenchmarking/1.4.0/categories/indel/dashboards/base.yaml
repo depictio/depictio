@@ -85,6 +85,7 @@ main_dashboard:
     section: Benchmark at a glance
     workflow_tag: variantbenchmarking
     data_collection_tag: sompy_summary
+    use: sompy/summary
     aggregation: nunique
     column_name: caller
     column_type: object
@@ -101,6 +102,7 @@ main_dashboard:
     section: Benchmark at a glance
     workflow_tag: variantbenchmarking
     data_collection_tag: sompy_summary
+    use: sompy/summary
     aggregation: median
     aggregations: [box_plot_stats]
     secondary_layout: box_plot
@@ -116,6 +118,7 @@ main_dashboard:
     section: Benchmark at a glance
     workflow_tag: variantbenchmarking
     data_collection_tag: sompy_summary
+    use: sompy/summary
     aggregation: average
     column_name: recall
     column_type: float64
@@ -131,6 +134,7 @@ main_dashboard:
     section: Benchmark at a glance
     workflow_tag: variantbenchmarking
     data_collection_tag: sompy_summary
+    use: sompy/summary
     aggregation: median
     column_name: precision
     column_type: float64
@@ -176,6 +180,7 @@ main_dashboard:
     section: Precision vs recall
     workflow_tag: variantbenchmarking
     data_collection_tag: sompy_summary
+    use: sompy/summary
     visu_type: scatter
     dict_kwargs: {x: f1, y: caller, color: f1, size: f1, size_max: 26, color_continuous_scale: Sunsetdark}
     title: F1 by caller
@@ -215,6 +220,7 @@ main_dashboard:
     section: Error profile
     workflow_tag: variantbenchmarking
     data_collection_tag: sompy_summary
+    use: sompy/summary
     visu_type: bar
     dict_kwargs: {x: caller, y: fp, color: caller, log_y: true}
     title: False positives per caller (log scale)
@@ -226,6 +232,7 @@ main_dashboard:
     section: Error profile
     workflow_tag: variantbenchmarking
     data_collection_tag: sompy_summary
+    use: sompy/summary
     visu_type: bar
     dict_kwargs: {x: caller, y: fn, color: caller}
     title: False negatives per caller
@@ -254,6 +261,7 @@ main_dashboard:
     section: Allele-fraction strata
     workflow_tag: variantbenchmarking
     data_collection_tag: sompy_regions
+    use: sompy/regions
     visu_type: bar
     dict_kwargs: {x: af_bin, y: f1, color: caller, barmode: group}
     title: F1 across allele-fraction bins
@@ -265,6 +273,7 @@ main_dashboard:
     section: Allele-fraction strata
     workflow_tag: variantbenchmarking
     data_collection_tag: sompy_regions
+    use: sompy/regions
     visu_type: bar
     dict_kwargs: {x: af_bin, y: recall, color: caller, barmode: group}
     title: Recall across allele-fraction bins
@@ -344,6 +353,7 @@ main_dashboard:
     section: rtg-tools cross-check
     workflow_tag: variantbenchmarking
     data_collection_tag: vcfeval_summary
+    use: rtgtools/vcfeval_summary
     row_selection_enabled: false
     title: rtg-tools vcfeval summary
     description: Per-caller TP / FP / FN and precision / recall / F1.
@@ -371,6 +381,7 @@ main_dashboard:
     section: Reference tables
     workflow_tag: variantbenchmarking
     data_collection_tag: sompy_summary
+    use: sompy/summary
     row_selection_enabled: false
     title: som.py summary
     description: Per-caller TP / FP / FN, precision / recall / F1 with 95% confidence intervals.
@@ -382,6 +393,7 @@ main_dashboard:
     section: Reference tables
     workflow_tag: variantbenchmarking
     data_collection_tag: sompy_regions
+    use: sompy/regions
     row_selection_enabled: false
     title: som.py allele-fraction strata
     description: Caller × allele-fraction bin, with TP / FP / FN per bin.
@@ -522,6 +534,7 @@ tabs:
     section: Report at a glance
     workflow_tag: variantbenchmarking
     data_collection_tag: multiqc_data
+    use: multiqc/general_stats
     selected_module: general_stats
     selected_plot: general_stats
     title: General statistics

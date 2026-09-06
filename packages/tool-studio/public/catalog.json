@@ -1713,7 +1713,7 @@
           "mode": "differential",
           "name": "Differential results",
           "path_glob": "**/*.deseq2.results.tsv",
-          "rawYaml": "id: deseq2_results\nname: Differential results\nmode: differential\ndescription: >-\n  Per-contrast DESeq2 statistics concatenated into one tidy table, one row per\n  contrast and feature, with the significance call and the MA abscissa\n  precomputed.\n# A plain run writes tables/differential/<contrast>.deseq2.results.tsv; the\n# megatest adds a parameter-set directory in between, and chipseq writes\n# consensus/<antibody>/deseq2/<contrast>/<contrast>.deseq2.results.txt. The\n# canonical glob matches a .tsv at any depth, since `**/` spans zero or more\n# directories; the alternate only adds chipseq's .txt under a deseq2/ dir.\nfind:\n  path_glob: \"**/*.deseq2.results.tsv\"\n  path_glob_alt: [\"**/deseq2/**/*.deseq2.results.txt\"]\nrecipe: deseq2/results_long.py\nfixture: results.tsv\nrenders_as:\n  - { id: volcano, component: advanced_viz, kind: volcano, roles: {feature_id: gene_id, effect_size: log2fc, significance: padj} }\n  - { id: ma, component: advanced_viz, kind: ma, roles: {feature_id: gene_id, avg_log_intensity: log2_base_mean, log2_fold_change: log2fc} }\n  - { id: qq, component: advanced_viz, kind: qq, roles: {p_value: pvalue} }\n  - { id: da_barplot, component: advanced_viz, kind: da_barplot, roles: {feature_id: gene_id, contrast: contrast, lfc: log2fc} }\n  # Effect-size spread, then the up/down/not-significant split, then how many\n  # features cleared the padj cut-off and how strong the top calls are.\n  - { component: card, column: log2fc, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: gene_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: direction, top_n_count: 3 }\n  - { component: card, column: direction, aggregation: count, secondary_layout: donut, breakdown_col: direction }\n  - { component: card, column: neg_log10_padj, aggregation: max, secondary_layout: histogram, aggregations: [box_plot_stats] }\n  - { component: figure, visu_type: histogram, dict_kwargs: {x: log2fc, color: direction} }\n  - { component: table, row_selection_enabled: true, row_selection_column: gene_id }\n",
+          "rawYaml": "id: deseq2_results\nname: Differential results\nmode: differential\ndescription: >-\n  Per-contrast DESeq2 statistics concatenated into one tidy table, one row per\n  contrast and feature, with the significance call and the MA abscissa\n  precomputed.\n# A plain run writes tables/differential/<contrast>.deseq2.results.tsv; the\n# megatest adds a parameter-set directory in between, and chipseq writes\n# consensus/<antibody>/deseq2/<contrast>/<contrast>.deseq2.results.txt. The\n# canonical glob matches a .tsv at any depth, since `**/` spans zero or more\n# directories; the alternate only adds chipseq's .txt under a deseq2/ dir.\nfind:\n  path_glob: \"**/*.deseq2.results.tsv\"\n  path_glob_alt: [\"**/deseq2/**/*.deseq2.results.txt\"]\nrecipe: deseq2/results_long.py\nfixture: results.tsv\nrenders_as:\n  - { id: volcano, component: advanced_viz, kind: volcano, roles: {feature_id: gene_id, effect_size: log2fc, significance: padj} }\n  - { id: ma, component: advanced_viz, kind: ma, roles: {feature_id: gene_id, avg_log_intensity: log2_base_mean, log2_fold_change: log2fc} }\n  - { id: qq, component: advanced_viz, kind: qq, roles: {p_value: pvalue} }\n  - { id: da_barplot, component: advanced_viz, kind: da_barplot, roles: {feature_id: gene_id, contrast: contrast, lfc: log2fc} }\n  # Effect-size spread, then the up/down/not-significant split, then how many\n  # features cleared the padj cut-off and how strong the top calls are.\n  - { component: card, column: log2fc, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: gene_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: direction, top_n_count: 3 }\n  - { component: card, column: direction, aggregation: count, secondary_layout: donut, breakdown_col: direction }\n  - { component: card, column: neg_log10_padj, aggregation: max, secondary_layout: histogram, aggregations: [box_plot_stats] }\n  - { component: figure, visu_type: histogram, dict_kwargs: {x: log2fc, color: direction} }\n  - { component: table, row_selection_enabled: true, row_selection_column: gene_id }\n  # Metric cards and the row-level table behind them: the readings the\n  # nf-core dashboards were already computing off this output by hand.\n  - { component: card, column: direction, aggregation: count, secondary_layout: composition, breakdown_col: direction }\n  - { component: card, column: neg_log10_padj, aggregation: max, secondary_layout: gauge, coverage_max: 60 }\n",
           "recipe": "deseq2/results_long.py",
           "renders_as": [
             {
@@ -1842,6 +1842,30 @@
               "roles": {},
               "row_selection_column": "gene_id",
               "row_selection_enabled": true
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "direction",
+              "column": "direction",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "composition"
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "neg_log10_padj",
+              "columns": [],
+              "component": "card",
+              "coverage_max": 60.0,
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "gauge"
             }
           ],
           "slug": "results",
@@ -1862,7 +1886,7 @@
           "mode": "differential/annotated",
           "name": "Annotated results",
           "path_glob": "**/*_deseq2.annotated.tsv",
-          "rawYaml": "id: deseq2_results_annotated\nname: Annotated results\nmode: differential/annotated\ndescription: >-\n  The same DESeq2 statistics joined to the GTF gene annotation: symbol,\n  chromosome, coordinates and biotype, so the calls can be placed on the genome.\nfind: { path_glob: \"**/*_deseq2.annotated.tsv\" }\nrecipe: deseq2/results_annotated.py\nfixture: results_annotated.tsv\nrenders_as:\n  - { id: manhattan, component: advanced_viz, kind: manhattan, roles: {chr: chromosome, pos: start, score: neg_log10_padj} }\n  - { id: annotated_volcano, component: advanced_viz, kind: volcano, roles: {feature_id: gene_name, effect_size: log2fc, significance: padj} }\n  - { id: annotated_da_barplot, component: advanced_viz, kind: da_barplot, roles: {feature_id: gene_name, contrast: contrast, lfc: log2fc} }\n  - { id: chromosome_lollipop, component: advanced_viz, kind: lollipop, roles: {feature_id: chromosome, position: start, category: direction} }\n  - { component: card, column: gene_name, aggregation: nunique, secondary_layout: top_n, breakdown_col: gene_biotype, top_n_count: 3 }\n  - { component: card, column: chromosome, aggregation: nunique, secondary_layout: composition, breakdown_col: chromosome }\n  - { component: card, column: log2fc, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: figure, visu_type: bar, dict_kwargs: {x: gene_biotype, y: neg_log10_padj, color: direction} }\n  - { component: table, row_selection_enabled: true, row_selection_column: gene_id }\n",
+          "rawYaml": "id: deseq2_results_annotated\nname: Annotated results\nmode: differential/annotated\ndescription: >-\n  The same DESeq2 statistics joined to the GTF gene annotation: symbol,\n  chromosome, coordinates and biotype, so the calls can be placed on the genome.\nfind: { path_glob: \"**/*_deseq2.annotated.tsv\" }\nrecipe: deseq2/results_annotated.py\nfixture: results_annotated.tsv\nrenders_as:\n  - { id: manhattan, component: advanced_viz, kind: manhattan, roles: {chr: chromosome, pos: start, score: neg_log10_padj} }\n  - { id: annotated_volcano, component: advanced_viz, kind: volcano, roles: {feature_id: gene_name, effect_size: log2fc, significance: padj} }\n  - { id: annotated_da_barplot, component: advanced_viz, kind: da_barplot, roles: {feature_id: gene_name, contrast: contrast, lfc: log2fc} }\n  - { id: chromosome_lollipop, component: advanced_viz, kind: lollipop, roles: {feature_id: chromosome, position: start, category: direction} }\n  - { component: card, column: gene_name, aggregation: nunique, secondary_layout: top_n, breakdown_col: gene_biotype, top_n_count: 3 }\n  - { component: card, column: chromosome, aggregation: nunique, secondary_layout: composition, breakdown_col: chromosome }\n  - { component: card, column: log2fc, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: figure, visu_type: bar, dict_kwargs: {x: gene_biotype, y: neg_log10_padj, color: direction} }\n  - { component: table, row_selection_enabled: true, row_selection_column: gene_id }\n  # Metric cards and the row-level table behind them: the readings the\n  # nf-core dashboards were already computing off this output by hand.\n  - { component: card, column: gene_biotype, aggregation: nunique, secondary_layout: concentration, breakdown_col: gene_biotype }\n  - { component: card, column: gene_name, aggregation: nunique, secondary_layout: donut, breakdown_col: direction }\n  - { component: card, column: base_mean, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: neg_log10_padj, aggregation: average, secondary_layout: coverage, coverage_max: 1.301 }\n  - { component: card, column: chromosome, aggregation: nunique, secondary_layout: top_n, breakdown_col: chromosome, top_n_count: 3 }\n  - { component: card, column: neg_log10_padj, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: padj, aggregation: min, secondary_layout: threshold, threshold_value: 0.05, threshold_direction: max, threshold_warn: 0.1 }\n",
           "recipe": "deseq2/results_annotated.py",
           "renders_as": [
             {
@@ -1981,6 +2005,95 @@
               "roles": {},
               "row_selection_column": "gene_id",
               "row_selection_enabled": true
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "gene_biotype",
+              "column": "gene_biotype",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "concentration"
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "direction",
+              "column": "gene_name",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "donut"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "base_mean",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "neg_log10_padj",
+              "columns": [],
+              "component": "card",
+              "coverage_max": 1.301,
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "coverage"
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "chromosome",
+              "column": "chromosome",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "neg_log10_padj",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "min",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "padj",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "threshold",
+              "threshold_direction": "max",
+              "threshold_value": 0.05,
+              "threshold_warn": 0.1
             }
           ],
           "slug": "results_annotated",
@@ -3736,7 +3849,7 @@
           "mode": "peaks/annotation",
           "name": "Peak annotation",
           "path_glob": "**/*.annotatePeaks.txt",
-          "rawYaml": "id: homer_annotated_peaks\nname: Peak annotation\nmode: peaks/annotation\ndescription: >-\n  One row per annotated peak: the genomic feature class HOMER assigned it, the\n  signed distance to the nearest transcription start site and the gene that\n  start site belongs to.\nfind:\n  path_glob: \"**/*.annotatePeaks.txt\"\nrecipe: homer/annotate_peaks.py\nfixture: annotate_peaks.tsv\nrenders_as:\n  # Where the peaks land relative to genes, then how far from the TSS.\n  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, color: annotation_class, title: Peak annotation per sample} }\n  - { component: figure, visu_type: histogram, dict_kwargs: {x: distance_to_tss, color: annotation_class, title: Distance to nearest TSS} }\n  - { component: card, column: peak_id, aggregation: count, secondary_layout: top_n, breakdown_col: annotation_class, top_n_count: 3 }\n  - { component: card, column: annotation_class, aggregation: count, secondary_layout: donut, breakdown_col: annotation_class }\n  - { component: card, column: gene_name, aggregation: nunique, secondary_layout: composition, breakdown_col: annotation_class }\n  - { component: card, column: distance_to_tss, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: table, row_selection_enabled: true, row_selection_column: peak_id }\n",
+          "rawYaml": "id: homer_annotated_peaks\nname: Peak annotation\nmode: peaks/annotation\ndescription: >-\n  One row per annotated peak: the genomic feature class HOMER assigned it, the\n  signed distance to the nearest transcription start site and the gene that\n  start site belongs to.\nfind:\n  path_glob: \"**/*.annotatePeaks.txt\"\nrecipe: homer/annotate_peaks.py\nfixture: annotate_peaks.tsv\nrenders_as:\n  # Where the peaks land relative to genes, then how far from the TSS.\n  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, color: annotation_class, title: Peak annotation per sample} }\n  - { component: figure, visu_type: histogram, dict_kwargs: {x: distance_to_tss, color: annotation_class, title: Distance to nearest TSS} }\n  - { component: card, column: peak_id, aggregation: count, secondary_layout: top_n, breakdown_col: annotation_class, top_n_count: 3 }\n  - { component: card, column: annotation_class, aggregation: count, secondary_layout: donut, breakdown_col: annotation_class }\n  - { component: card, column: gene_name, aggregation: nunique, secondary_layout: composition, breakdown_col: annotation_class }\n  - { component: card, column: distance_to_tss, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: table, row_selection_enabled: true, row_selection_column: peak_id }\n  # Metric cards and the row-level table behind them: the readings the\n  # nf-core dashboards were already computing off this output by hand.\n  - { component: card, column: peak_score, aggregation: average, secondary_layout: histogram }\n",
           "recipe": "homer/annotate_peaks.py",
           "renders_as": [
             {
@@ -3824,6 +3937,17 @@
               "roles": {},
               "row_selection_column": "peak_id",
               "row_selection_enabled": true
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "peak_score",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
             }
           ],
           "slug": "annotated_peaks",
@@ -3951,7 +4075,7 @@
           "mode": "variants/matrix",
           "name": "Mutation matrix",
           "path_glob": null,
-          "rawYaml": "id: ivar_oncoplot_matrix\nname: Mutation matrix\nmode: variants/matrix\ndescription: >-\n  Sample by gene mutation matrix derived from the long variant table, one row\n  per observed sample/gene/effect combination.\nfind: { filename: \"variants_long_table.csv\" } # same raw file as the long table\nrecipe: nf-core/viralrecon/oncoplot_canonical.py\nfixture: oncoplot_matrix.tsv\nrenders_as:\n  - { id: mutation_matrix, component: advanced_viz, kind: oncoplot, roles: {sample_id: sample_id, gene: gene, mutation_type: mutation_type} }\n  # Both breakdown columns are required by the recipe schema, so the strips\n  # cannot fall back to an empty bar on a run that omits an optional column.\n  - { component: card, column: sample_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: gene, top_n_count: 3 }\n  - { component: card, column: gene, aggregation: nunique, secondary_layout: top_n, breakdown_col: mutation_type, top_n_count: 3 }\n  - { component: table }\n",
+          "rawYaml": "id: ivar_oncoplot_matrix\nname: Mutation matrix\nmode: variants/matrix\ndescription: >-\n  Sample by gene mutation matrix derived from the long variant table, one row\n  per observed sample/gene/effect combination.\nfind: { filename: \"variants_long_table.csv\" } # same raw file as the long table\nrecipe: nf-core/viralrecon/oncoplot_canonical.py\nfixture: oncoplot_matrix.tsv\nrenders_as:\n  - { id: mutation_matrix, component: advanced_viz, kind: oncoplot, roles: {sample_id: sample_id, gene: gene, mutation_type: mutation_type} }\n  # Both breakdown columns are required by the recipe schema, so the strips\n  # cannot fall back to an empty bar on a run that omits an optional column.\n  - { component: card, column: sample_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: gene, top_n_count: 3 }\n  - { component: card, column: gene, aggregation: nunique, secondary_layout: top_n, breakdown_col: mutation_type, top_n_count: 3 }\n  - { component: table }\n  # Metric cards and the row-level table behind them: the readings the\n  # nf-core dashboards were already computing off this output by hand.\n  - { component: card, column: gene, aggregation: nunique, secondary_layout: composition, breakdown_col: mutation_type }\n",
           "recipe": "nf-core/viralrecon/oncoplot_canonical.py",
           "renders_as": [
             {
@@ -4001,6 +4125,18 @@
               "component": "table",
               "dict_kwargs": {},
               "roles": {}
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "mutation_type",
+              "column": "gene",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "composition"
             }
           ],
           "slug": "oncoplot_matrix",
@@ -4021,7 +4157,7 @@
           "mode": "variants",
           "name": "Variant calls",
           "path_glob": null,
-          "rawYaml": "id: ivar_variants_long\nname: Variant calls\nmode: variants\ndescription: Per-sample annotated variant calls (long table).\nfind: { filename: \"variants_long_table.csv\" } # raw nf-core file\nrecipe: ivar/variants_long.py # owns the output columns\nfixture: variants_long.tsv # co-located bindable sample\nrenders_as:\n  - { id: lollipop, component: advanced_viz, kind: lollipop, roles: {feature_id: GENE, position: POS, category: EFFECT} }\n  - { id: oncoplot, component: advanced_viz, kind: oncoplot, roles: {sample_id: sample, gene: GENE, mutation_type: EFFECT} }\n  - { id: manhattan, component: advanced_viz, kind: manhattan, roles: {chr: CHROM, pos: POS, score: AF} }\n  - { component: figure, visu_type: histogram, dict_kwargs: {x: AF, color: EFFECT} } # allele-frequency distribution\n",
+          "rawYaml": "id: ivar_variants_long\nname: Variant calls\nmode: variants\ndescription: Per-sample annotated variant calls (long table).\nfind: { filename: \"variants_long_table.csv\" } # raw nf-core file\nrecipe: ivar/variants_long.py # owns the output columns\nfixture: variants_long.tsv # co-located bindable sample\nrenders_as:\n  - { id: lollipop, component: advanced_viz, kind: lollipop, roles: {feature_id: GENE, position: POS, category: EFFECT} }\n  - { id: oncoplot, component: advanced_viz, kind: oncoplot, roles: {sample_id: sample, gene: GENE, mutation_type: EFFECT} }\n  - { id: manhattan, component: advanced_viz, kind: manhattan, roles: {chr: CHROM, pos: POS, score: AF} }\n  - { component: figure, visu_type: histogram, dict_kwargs: {x: AF, color: EFFECT} } # allele-frequency distribution\n  # Metric cards and the row-level table behind them: the readings the\n  # nf-core dashboards were already computing off this output by hand.\n  - { component: card, column: POS, aggregation: count, secondary_layout: top_n, breakdown_col: GENE, top_n_count: 3 }\n  - { component: card, column: POS, aggregation: nunique, secondary_layout: concentration, breakdown_col: GENE, top_n_count: 3 }\n  - { component: card, column: sample, aggregation: nunique, secondary_layout: top_n, breakdown_col: sample }\n  - { component: card, column: AA, aggregation: nunique, secondary_layout: composition, breakdown_col: EFFECT, top_n_count: 3 }\n  - { component: table, row_selection_enabled: true, row_selection_column: sample }\n",
           "recipe": "ivar/variants_long.py",
           "renders_as": [
             {
@@ -4077,6 +4213,67 @@
               },
               "roles": {},
               "visu_type": "histogram"
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "GENE",
+              "column": "POS",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "GENE",
+              "column": "POS",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "concentration",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample",
+              "column": "sample",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n"
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "EFFECT",
+              "column": "AA",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "composition",
+              "top_n_count": 3
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {},
+              "row_selection_column": "sample",
+              "row_selection_enabled": true
             }
           ],
           "slug": "variants_long",
@@ -4093,6 +4290,116 @@
       "name": "MACS2",
       "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/macs2/callpeak",
       "outputs": [
+        {
+          "columns": {},
+          "description": "Every MACS2 broad peak of every sample in one table, with the region width, its centre and the fold enrichment, p-value and q-value MACS2 reported for it. A broad call has no summit, so the region centre stands in for it.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*_peaks.broadPeak",
+            "path_glob_alt": []
+          },
+          "fixture": "broad_peaks.tsv",
+          "fixtureContent": "sample\tpeak_id\tchr\tstart\tend\twidth\tmidpoint\tscore\tfold_enrichment\tneg_log10_pvalue\tneg_log10_qvalue\nGM12878_FAST_R1.mLb.clN\tGM12878_FAST_R1.mLb.clN_peak_1\tchr1\t762667\t762873\t206\t762771\t16\t4.426\t5.61366\t1.63478\nGM12878_FAST_R1.mLb.clN\tGM12878_FAST_R1.mLb.clN_peak_2\tchr1\t1051282\t1051774\t492\t1051529\t13\t4.13814\t5.10098\t1.34802\nGM12878_FAST_R1.mLb.clN\tGM12878_FAST_R1.mLb.clN_peak_3\tchr1\t1550673\t1551185\t512\t1550930\t11\t3.96866\t4.81062\t1.19298\nGM12878_FAST_R1.mLb.clN\tGM12878_FAST_R1.mLb.clN_peak_4\tchr1\t1623975\t1624302\t327\t1624139\t17\t4.55804\t5.85436\t1.77225\nGM12878_FAST_R1.mLb.clN\tGM12878_FAST_R1.mLb.clN_peak_5\tchr1\t1710323\t1710641\t318\t1710483\t10\t3.5852\t4.53413\t1.02394\nGM12878_FAST_R1.mLb.clN\tGM12878_FAST_R1.mLb.clN_peak_6\tchr1\t2221892\t2222049\t157\t2221971\t16\t4.48246\t5.69252\t1.67116\nGM12878_FAST_R2.mLb.clN\tGM12878_FAST_R2.mLb.clN_peak_1\tchr1\t535685\t535878\t193\t535782\t15\t4.08977\t5.12263\t1.51908\nGM12878_FAST_R2.mLb.clN\tGM12878_FAST_R2.mLb.clN_peak_2\tchr1\t714142\t714340\t198\t714242\t19\t4.5702\t5.84438\t1.98253\nGM12878_FAST_R2.mLb.clN\tGM12878_FAST_R2.mLb.clN_peak_3\tchr1\t762465\t762971\t506\t762719\t12\t3.83761\t4.5627\t1.23859\nGM12878_FAST_R2.mLb.clN\tGM12878_FAST_R2.mLb.clN_peak_4\tchr1\t948789\t949041\t252\t948916\t11\t3.72307\t4.58406\t1.19445\nGM12878_FAST_R2.mLb.clN\tGM12878_FAST_R2.mLb.clN_peak_5\tchr1\t968250\t968812\t562\t968532\t12\t3.42325\t4.69623\t1.27018\nGM12878_FAST_R2.mLb.clN\tGM12878_FAST_R2.mLb.clN_peak_6\tchr1\t1051623\t1052027\t404\t1051826\t13\t3.74059\t4.77361\t1.3242\nGM12878_OMNI_R1.mLb.clN\tGM12878_OMNI_R1.mLb.clN_peak_1\tchr1\t10037\t10466\t429\t10252\t215\t9.16522\t24.0507\t21.5573\nGM12878_OMNI_R1.mLb.clN\tGM12878_OMNI_R1.mLb.clN_peak_2\tchr1\t28885\t29387\t502\t29137\t98\t6.04496\t11.9969\t9.8246\nGM12878_OMNI_R1.mLb.clN\tGM12878_OMNI_R1.mLb.clN_peak_3\tchr1\t235622\t235997\t375\t235810\t25\t3.1597\t4.37171\t2.53791\nGM12878_OMNI_R1.mLb.clN\tGM12878_OMNI_R1.mLb.clN_peak_4\tchr1\t540584\t541023\t439\t540804\t23\t3.17335\t4.16812\t2.34517\nGM12878_OMNI_R1.mLb.clN\tGM12878_OMNI_R1.mLb.clN_peak_5\tchr1\t578351\t578579\t228\t578466\t34\t3.69413\t5.367\t3.46363\nGM12878_OMNI_R1.mLb.clN\tGM12878_OMNI_R1.mLb.clN_peak_6\tchr1\t713752\t714738\t986\t714246\t423\t5.9025\t45.3505\t42.3215\nGM12878_OMNI_R2.mLb.clN\tGM12878_OMNI_R2.mLb.clN_peak_1\tchr1\t10038\t10507\t469\t10273\t140\t7.47293\t16.4394\t14.0718\nGM12878_OMNI_R2.mLb.clN\tGM12878_OMNI_R2.mLb.clN_peak_2\tchr1\t28895\t29402\t507\t29149\t49\t4.56456\t7.03813\t4.99678\nGM12878_OMNI_R2.mLb.clN\tGM12878_OMNI_R2.mLb.clN_peak_3\tchr1\t235622\t235949\t327\t235786\t43\t3.94224\t6.36601\t4.35746\nGM12878_OMNI_R2.mLb.clN\tGM12878_OMNI_R2.mLb.clN_peak_4\tchr1\t540618\t540982\t364\t540801\t20\t3.16813\t3.85879\t2.00821\nGM12878_OMNI_R2.mLb.clN\tGM12878_OMNI_R2.mLb.clN_peak_5\tchr1\t713741\t714829\t1088\t714286\t350\t5.71356\t38.0525\t35.0152\nGM12878_OMNI_R2.mLb.clN\tGM12878_OMNI_R2.mLb.clN_peak_6\tchr1\t739862\t740878\t1016\t740371\t69\t4.67796\t9.01352\t6.93072\nGM12878_STD_R1.mLb.clN\tGM12878_STD_R1.mLb.clN_peak_1\tchr1\t713912\t714345\t433\t714129\t33\t4.85984\t6.52176\t3.33885\nGM12878_STD_R1.mLb.clN\tGM12878_STD_R1.mLb.clN_peak_2\tchr1\t762355\t763067\t712\t762712\t25\t4.36196\t5.57243\t2.57511\nGM12878_STD_R1.mLb.clN\tGM12878_STD_R1.mLb.clN_peak_3\tchr1\t839787\t840794\t1007\t840291\t18\t3.85383\t4.64242\t1.81589\nGM12878_STD_R1.mLb.clN\tGM12878_STD_R1.mLb.clN_peak_4\tchr1\t894587\t894783\t196\t894686\t48\t5.73991\t8.38392\t4.87984\nGM12878_STD_R1.mLb.clN\tGM12878_STD_R1.mLb.clN_peak_5\tchr1\t954800\t955197\t397\t954999\t18\t3.77937\t4.68241\t1.82878\nGM12878_STD_R1.mLb.clN\tGM12878_STD_R1.mLb.clN_peak_6\tchr1\t968086\t968732\t646\t968410\t36\t4.87397\t6.86282\t3.65192\nGM12878_STD_R2.mLb.clN\tGM12878_STD_R2.mLb.clN_peak_1\tchr1\t10250\t10429\t179\t10340\t15\t3.36647\t4.34702\t1.51285\nGM12878_STD_R2.mLb.clN\tGM12878_STD_R2.mLb.clN_peak_2\tchr1\t713968\t714413\t445\t714191\t39\t5.24182\t7.17837\t3.92787\nGM12878_STD_R2.mLb.clN\tGM12878_STD_R2.mLb.clN_peak_3\tchr1\t762641\t763198\t557\t762920\t29\t4.67754\t6.0599\t2.96181\nGM12878_STD_R2.mLb.clN\tGM12878_STD_R2.mLb.clN_peak_4\tchr1\t948801\t949134\t333\t948968\t17\t3.81868\t4.57481\t1.76111\nGM12878_STD_R2.mLb.clN\tGM12878_STD_R2.mLb.clN_peak_5\tchr1\t954821\t955607\t786\t955215\t22\t4.07673\t5.19941\t2.25861\nGM12878_STD_R2.mLb.clN\tGM12878_STD_R2.mLb.clN_peak_6\tchr1\t968284\t968730\t446\t968508\t43\t5.42821\t7.70536\t4.38282\n",
+          "id": "macs2_broad_peaks",
+          "mode": "peaks/broad",
+          "name": "Broad peak calls",
+          "path_glob": "**/*_peaks.broadPeak",
+          "rawYaml": "id: macs2_broad_peaks\nname: Broad peak calls\nmode: peaks/broad\ndescription: >-\n  Every MACS2 broad peak of every sample in one table, with the region width,\n  its centre and the fold enrichment, p-value and q-value MACS2 reported for\n  it. A broad call has no summit, so the region centre stands in for it.\n# The narrow twin is `macs2_peaks` (*_peaks.narrowPeak, BED6+4 with a summit\n# column). A run calls one or the other, so the two globs never both match.\nfind:\n  path_glob: \"**/*_peaks.broadPeak\"\nrecipe: macs2/broad_peaks.py\nfixture: broad_peaks.tsv\nrenders_as:\n  # Significance along the genome, then how wide the regions are.\n  - { id: broad_peak_significance, component: advanced_viz, kind: manhattan, roles: {chr: chr, pos: midpoint, score: neg_log10_qvalue} }\n  - { component: figure, visu_type: histogram, dict_kwargs: {x: width, color: sample, title: Peak width distribution} }\n  # How many regions and where they concentrate, then the spread of width,\n  # enrichment and significance behind that count.\n  - { component: card, column: peak_id, aggregation: count, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }\n  - { component: card, column: width, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: fold_enrichment, aggregation: average, secondary_layout: histogram }\n  - { component: card, column: neg_log10_qvalue, aggregation: max, secondary_layout: threshold, threshold_value: 10.0, threshold_direction: min, threshold_warn: 5.0 }\n  - { component: table, row_selection_enabled: true, row_selection_column: peak_id }\n",
+          "recipe": "macs2/broad_peaks.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "broad_peak_significance",
+              "kind": "manhattan",
+              "roles": {
+                "chr": "chr",
+                "pos": "midpoint",
+                "score": "neg_log10_qvalue"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "sample",
+                "title": "Peak width distribution",
+                "x": "width"
+              },
+              "roles": {},
+              "visu_type": "histogram"
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample",
+              "column": "peak_id",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "width",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "fold_enrichment",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "neg_log10_qvalue",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "threshold",
+              "threshold_direction": "min",
+              "threshold_value": 10.0,
+              "threshold_warn": 5.0
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {},
+              "row_selection_column": "peak_id",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "broad_peaks",
+          "yamlPath": "depictio/catalog/macs2/broad_peaks.yaml"
+        },
         {
           "columns": {},
           "description": "Merged consensus intervals against the samples that called a peak on them, as one 0/1 column per sample. The intersections say how reproducible the peak set is between replicates and between conditions.",
@@ -5149,6 +5456,39 @@
         },
         {
           "columns": {},
+          "description": "The one table every MultiQC report has: one row per sample, one column per headline metric each module contributed. Not a module's own output, which is why it names no producing tool \u2014 MultiQC assembles it from all of them.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+            "path_glob_alt": [
+              "**/multiqc/*_data/multiqc.parquet",
+              "**/multiqc/*/*_data/multiqc.parquet"
+            ]
+          },
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixtureContent": null,
+          "id": "multiqc_general_stats",
+          "mode": "general_stats",
+          "name": "General statistics",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_general_stats\nname: General statistics\nmode: general_stats\ndescription: >-\n  The one table every MultiQC report has: one row per sample, one column per\n  headline metric each module contributed. Not a module's own output, which is\n  why it names no producing tool \u2014 MultiQC assembles it from all of them.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  # `general`, not `general_stats`: a section is the anchor's leading token\n  # (`multiqc_module`), and MultiQC anchors this table `general_stats_table`.\n  - { component: multiqc, section: general }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "general"
+            }
+          ],
+          "slug": "general_stats",
+          "yamlPath": "depictio/catalog/multiqc/general_stats.yaml"
+        },
+        {
+          "columns": {},
           "description": "Germline small-variant accuracy per callset (SNP / INDEL precision, recall, F1) as hap.py reports it through MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -5282,6 +5622,40 @@
           ],
           "slug": "kraken",
           "yamlPath": "depictio/catalog/multiqc/kraken.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Metagenomic read alignment against a reference database, from MALT, via MultiQC. How many queries aligned at all, and how many of those got a taxonomic assignment.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+            "path_glob_alt": [
+              "**/multiqc/*_data/multiqc.parquet",
+              "**/multiqc/*/*_data/multiqc.parquet"
+            ]
+          },
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixtureContent": null,
+          "id": "multiqc_malt",
+          "mode": "malt",
+          "name": "Metagenomic alignment",
+          "origin_tool": "MALT",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_malt\nname: Metagenomic alignment\norigin_tool: MALT\nmode: malt\ndescription: Metagenomic read alignment against a reference database, from MALT, via MultiQC. How many queries aligned at all, and how many of those got a taxonomic assignment.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: malt }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "malt"
+            }
+          ],
+          "slug": "malt",
+          "yamlPath": "depictio/catalog/multiqc/malt.yaml"
         },
         {
           "columns": {},
@@ -5807,7 +6181,7 @@
           "mode": "summary-variants-metrics",
           "name": "Variant-calling summary",
           "path_glob": "**/multiqc/summary_variants_metrics_mqc.csv",
-          "rawYaml": "id: multiqc_summary_metrics\nname: Variant-calling summary\nmode: summary-variants-metrics\ndescription: >-\n  Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total\n  variant counts, lineage) parsed from MultiQC's summary_variants_metrics table.\nfind: { path_glob: \"**/multiqc/summary_variants_metrics_mqc.csv\" }\nrecipe: multiqc/summary_metrics.py\nfixture: summary_metrics.tsv\nrenders_as:\n  - { component: card, column: pct_genome_covered_10x, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot } # \u226510\u00d7 breadth\n  - { component: card, column: num_variants_total, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot } # variant load\n  - { component: table }\n",
+          "rawYaml": "id: multiqc_summary_metrics\nname: Variant-calling summary\nmode: summary-variants-metrics\ndescription: >-\n  Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total\n  variant counts, lineage) parsed from MultiQC's summary_variants_metrics table.\nfind: { path_glob: \"**/multiqc/summary_variants_metrics_mqc.csv\" }\nrecipe: multiqc/summary_metrics.py\nfixture: summary_metrics.tsv\nrenders_as:\n  - { component: card, column: pct_genome_covered_10x, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot } # \u226510\u00d7 breadth\n  - { component: card, column: num_variants_total, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot } # variant load\n  - { component: table }\n  # Metric cards and the row-level table behind them: the readings the\n  # nf-core dashboards were already computing off this output by hand.\n  - { component: card, column: sample, aggregation: nunique, secondary_layout: top_n, breakdown_col: lineage }\n  - { component: card, column: pct_reads_mapped, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: pct_genome_covered_10x, aggregation: average, secondary_layout: threshold, threshold_value: 80, threshold_direction: min, threshold_warn: 90 }\n  - { component: card, column: lineage, aggregation: nunique, secondary_layout: donut, breakdown_col: lineage }\n  - { component: card, column: pct_genome_covered_1x, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }\n",
           "recipe": "multiqc/summary_metrics.py",
           "renders_as": [
             {
@@ -5843,6 +6217,70 @@
               "component": "table",
               "dict_kwargs": {},
               "roles": {}
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "lineage",
+              "column": "sample",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "pct_reads_mapped",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "pct_genome_covered_10x",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "threshold",
+              "threshold_direction": "min",
+              "threshold_value": 80.0,
+              "threshold_warn": 90.0
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "lineage",
+              "column": "lineage",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "donut"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "pct_genome_covered_1x",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
             }
           ],
           "slug": "summary_metrics",
@@ -5908,7 +6346,7 @@
           "mode": "run",
           "name": "Clade assignment",
           "path_glob": "**/nextclade/*.csv",
-          "rawYaml": "id: nextclade_report\nname: Clade assignment\nmode: run\ndescription: Per-sample clade assignment + sequence QC.\nfind: { path_glob: \"**/nextclade/*.csv\" }\nrecipe: nextclade/nextclade_results.py\nfixture: report.tsv\nrenders_as:\n  - { component: figure, visu_type: histogram, dict_kwargs: {x: clade, color: qc_overallStatus} } # clade calls\n  - { component: card, column: coverage, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot } # genome coverage\n  - { component: table }\n",
+          "rawYaml": "id: nextclade_report\nname: Clade assignment\nmode: run\ndescription: Per-sample clade assignment + sequence QC.\nfind: { path_glob: \"**/nextclade/*.csv\" }\nrecipe: nextclade/nextclade_results.py\nfixture: report.tsv\nrenders_as:\n  - { component: figure, visu_type: histogram, dict_kwargs: {x: clade, color: qc_overallStatus} } # clade calls\n  - { component: card, column: coverage, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot } # genome coverage\n  - { component: table }\n  # Metric cards and the row-level table behind them: the readings the\n  # nf-core dashboards were already computing off this output by hand.\n  - { component: card, column: clade, aggregation: nunique, secondary_layout: top_n, breakdown_col: clade, top_n_count: 3 }\n  - { component: card, column: totalMissing, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n",
           "recipe": "nextclade/nextclade_results.py",
           "renders_as": [
             {
@@ -5943,6 +6381,32 @@
               "component": "table",
               "dict_kwargs": {},
               "roles": {}
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "clade",
+              "column": "clade",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "totalMissing",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
             }
           ],
           "slug": "report",
@@ -5974,7 +6438,7 @@
           "mode": "run",
           "name": "Lineage report",
           "path_glob": null,
-          "rawYaml": "id: pangolin_report\nname: Lineage report\nmode: run\ndescription: Per-sample PANGO lineage report.\nfind: { filename: \"*.pangolin.csv\" }\nrecipe: pangolin/pangolin_lineages.py\nfixture: report.tsv\nrenders_as:\n  - { component: figure, visu_type: histogram, dict_kwargs: {x: lineage, color: qc_status} } # lineage calls\n  - { component: table }\n",
+          "rawYaml": "id: pangolin_report\nname: Lineage report\nmode: run\ndescription: Per-sample PANGO lineage report.\nfind: { filename: \"*.pangolin.csv\" }\nrecipe: pangolin/pangolin_lineages.py\nfixture: report.tsv\nrenders_as:\n  - { component: figure, visu_type: histogram, dict_kwargs: {x: lineage, color: qc_status} } # lineage calls\n  - { component: table }\n  # Metric cards and the row-level table behind them: the readings the\n  # nf-core dashboards were already computing off this output by hand.\n  - { component: card, column: lineage, aggregation: nunique, secondary_layout: top_n, breakdown_col: lineage, top_n_count: 3 }\n  - { component: card, column: qc_status, aggregation: nunique, secondary_layout: donut, breakdown_col: qc_status }\n",
           "recipe": "pangolin/pangolin_lineages.py",
           "renders_as": [
             {
@@ -5996,6 +6460,31 @@
               "component": "table",
               "dict_kwargs": {},
               "roles": {}
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "lineage",
+              "column": "lineage",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "qc_status",
+              "column": "qc_status",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "donut"
             }
           ],
           "slug": "report",
@@ -6265,6 +6754,103 @@
         },
         {
           "columns": {},
+          "description": "The alpha-rarefaction curves collapsed over the iteration axis: one row per sample and depth carrying the median estimate, the interquartile spread that median hides, and the sample metadata joined on. Two orders of magnitude smaller than the raw table, and groupable, which the raw table is not.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/qiime2/alpha-rarefaction/*.csv",
+            "path_glob_alt": []
+          },
+          "fixture": "alpha_rarefaction_summary.tsv",
+          "fixtureContent": "sample\tdepth\tfaith_pd\tfaith_pd_iqr\titerations\nSRR10070130\t1\t0.7657576253455285\t0.6556908622092648\t10\nSRR10070130\t302\t14.354179064191024\t1.407853348082309\t10\nSRR10070130\t603\t19.024602075416773\t1.9644488177669324\t10\nSRR10070131\t1\t0.4325089892824909\t0.10106882235713988\t10\nSRR10070131\t302\t13.752396873869671\t1.3281507235256296\t10\nSRR10070131\t603\t18.920598516494202\t1.7182947612374697\t10\nSRR10070132\t1\t0.49607081277289855\t0.78301632957425\t10\nSRR10070132\t302\t12.065394546695416\t1.4393301578540303\t10\nSRR10070132\t603\t16.06965084585383\t0.8483509697160709\t10\nSRR10070133\t1\t0.5789816694094698\t0.9402561634092197\t10\nSRR10070133\t302\t11.58460422144248\t1.461849435663101\t10\nSRR10070133\t603\t15.37309163052662\t1.118322783798039\t10\nSRR10070134\t1\t0.443698904910064\t0.10739775591619638\t10\nSRR10070134\t302\t13.677165857857275\t1.166460250464171\t10\nSRR10070134\t603\t18.924610382095373\t1.6748615629621817\t10\nSRR10070141\t1\t0.460770258725228\t0.692848502541892\t10\nSRR10070141\t302\t11.4494944498609\t0.8350315328139697\t10\nSRR10070141\t603\t15.60109432615554\t0.8768754412977913\t10\nSRR10070149\t1\t0.36972579630611463\t0.08736391452714798\t10\nSRR10070149\t302\t20.475156434226054\t0.6164740588938677\t10\nSRR10070149\t603\t27.593137933927224\t0.86195404766179\t10\nSRR10070150\t1\t0.36520335437955165\t0.07637368900476188\t10\nSRR10070150\t302\t20.020835310185014\t1.2324267755891007\t10\nSRR10070150\t603\t28.643915948246523\t0.8710338783501399\t10\nSRR10070151\t1\t0.40751442443806174\t0.1368368722836708\t10\nSRR10070151\t302\t19.93428824569585\t0.43691718324182105\t10\nSRR10070151\t603\t27.77446162298302\t1.113837734127781\t10\nSRR10102392\t1\t0.4142885576555082\t0.15424577380185095\t10\nSRR10102392\t302\t14.701685047109276\t0.9126709539551108\t10\nSRR10102392\t603\t20.18520703157304\t0.5773638508127199\t10\nSRR10102393\t1\t0.36166411474399607\t0.9774907871556555\t10\nSRR10102393\t302\t14.939296887063126\t0.8582591564107602\t10\nSRR10102393\t603\t20.075359534972065\t0.6020401770734303\t10\nSRR10102394\t1\t0.36795127576907927\t0.5296609797364167\t10\nSRR10102394\t302\t15.225633133097075\t0.95371540801324\t10\nSRR10102394\t603\t19.868128940367125\t0.8050171947114109\t10\n",
+          "id": "qiime2_alpha_rarefaction_summary",
+          "mode": "alpha-rarefaction",
+          "name": "Rarefaction summary",
+          "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/diversityalphararefaction",
+          "path_glob": "**/qiime2/alpha-rarefaction/*.csv",
+          "rawYaml": "id: qiime2_alpha_rarefaction_summary\nname: Rarefaction summary\nmode: alpha-rarefaction\ndescription: >-\n  The alpha-rarefaction curves collapsed over the iteration axis: one row per\n  sample and depth carrying the median estimate, the interquartile spread that\n  median hides, and the sample metadata joined on. Two orders of magnitude\n  smaller than the raw table, and groupable, which the raw table is not.\nnf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/diversityalphararefaction\n# Same file the raw `qiime2_alpha_rarefaction` output reads: this is the\n# collapsed view of it, computed once at ingest rather than in every render.\nfind: { path_glob: \"**/qiime2/alpha-rarefaction/*.csv\" }\nrecipe: qiime2/alpha_rarefaction_summary.py\nfixture: alpha_rarefaction_summary.tsv\nrenders_as:\n  # The curve itself, with the iteration spread drawn as a band around it \u2014\n  # the reading the raw table can only suggest.\n  - { id: rarefaction_band, component: advanced_viz, kind: profile, roles: {series: sample, x: depth, y: faith_pd} }\n  - { id: rarefaction_curve, component: advanced_viz, kind: rarefaction, roles: {sample_id: sample, depth: depth, metric: faith_pd} }\n  - { component: figure, visu_type: line, dict_kwargs: {x: depth, y: faith_pd, color: sample, title: Rarefaction curves} }\n  - { component: card, column: faith_pd, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: depth, aggregation: max, secondary_layout: histogram }\n  - { component: table }\n",
+          "recipe": "qiime2/alpha_rarefaction_summary.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "rarefaction_band",
+              "kind": "profile",
+              "roles": {
+                "series": "sample",
+                "x": "depth",
+                "y": "faith_pd"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "rarefaction_curve",
+              "kind": "rarefaction",
+              "roles": {
+                "depth": "depth",
+                "metric": "faith_pd",
+                "sample_id": "sample"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "sample",
+                "title": "Rarefaction curves",
+                "x": "depth",
+                "y": "faith_pd"
+              },
+              "roles": {},
+              "visu_type": "line"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "faith_pd",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "depth",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "alpha_rarefaction_summary",
+          "yamlPath": "depictio/catalog/qiime2/alpha_rarefaction_summary.yaml"
+        },
+        {
+          "columns": {},
           "description": "ANCOM-BC differential-abundance results. The tool writes one CSV per statistic per contrast; the recipe joins + melts them into a long table.",
           "edam_formats": [],
           "edam_operations": [],
@@ -6279,7 +6865,7 @@
           "name": "Differential abundance",
           "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/ancombc",
           "path_glob": "**/qiime2/ancombc/differentials/*/lfc_slice.csv",
-          "rawYaml": "id: qiime2_ancombc\nname: Differential abundance\nmode: composition/ancombc\ndescription: >-\n  ANCOM-BC differential-abundance results. The tool writes one CSV per statistic\n  per contrast; the recipe joins + melts them into a long table.\nnf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/ancombc\nfind: { path_glob: \"**/qiime2/ancombc/differentials/*/lfc_slice.csv\" }\nrecipe: qiime2/ancombc.py\nfixture: ancombc.tsv\nrenders_as:\n  - { id: volcano, component: advanced_viz, kind: volcano, roles: {feature_id: id, effect_size: lfc, significance: q_val} }\n  - { id: da_barplot, component: advanced_viz, kind: da_barplot, roles: {feature_id: id, contrast: contrast, lfc: lfc} }\n  - { id: qq, component: advanced_viz, kind: qq, roles: {p_value: p_val} }\n",
+          "rawYaml": "id: qiime2_ancombc\nname: Differential abundance\nmode: composition/ancombc\ndescription: >-\n  ANCOM-BC differential-abundance results. The tool writes one CSV per statistic\n  per contrast; the recipe joins + melts them into a long table.\nnf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/ancombc\nfind: { path_glob: \"**/qiime2/ancombc/differentials/*/lfc_slice.csv\" }\nrecipe: qiime2/ancombc.py\nfixture: ancombc.tsv\nrenders_as:\n  - { id: volcano, component: advanced_viz, kind: volcano, roles: {feature_id: id, effect_size: lfc, significance: q_val} }\n  - { id: da_barplot, component: advanced_viz, kind: da_barplot, roles: {feature_id: id, contrast: contrast, lfc: lfc} }\n  - { id: qq, component: advanced_viz, kind: qq, roles: {p_value: p_val} }\n  # Metric cards and the row-level table behind them: the readings the\n  # nf-core dashboards were already computing off this output by hand.\n  - { component: card, column: id, aggregation: nunique, secondary_layout: top_n, breakdown_col: Phylum, top_n_count: 3 }\n  - { component: card, column: id, aggregation: nunique, secondary_layout: donut, breakdown_col: Phylum, top_n_count: 3 }\n  - { component: card, column: q_val, aggregation: median, secondary_layout: threshold, top_n_count: 3, threshold_value: 0.05, threshold_direction: max, threshold_warn: 0.1 }\n  - { component: card, column: lfc, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: table }\n",
           "recipe": "qiime2/ancombc.py",
           "renders_as": [
             {
@@ -6321,6 +6907,68 @@
               "roles": {
                 "p_value": "p_val"
               }
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "Phylum",
+              "column": "id",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "Phylum",
+              "column": "id",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "donut",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "q_val",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "threshold",
+              "threshold_direction": "max",
+              "threshold_value": 0.05,
+              "threshold_warn": 0.1,
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "lfc",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
             }
           ],
           "slug": "ancombc",
@@ -6420,7 +7068,7 @@
           "name": "Beta-diversity ordination",
           "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/diversitycore",
           "path_glob": "**/qiime2/rel_abundance_tables/rel-table-*.tsv",
-          "rawYaml": "id: qiime2_embedding_pcoa\nname: Beta-diversity ordination\nmode: diversity/beta\ndescription: >-\n  Two-dimensional PCoA ordination of the samples, computed from the\n  relative-abundance table. One point per sample.\nnf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/diversitycore\n# The recipe chains off the abundance matrix rather than reading a QIIME 2\n# artefact directly, so `find` names the raw table at the head of that chain.\nfind: { path_glob: \"**/qiime2/rel_abundance_tables/rel-table-*.tsv\" }\nrecipe: qiime2/embedding_pcoa.py\nfixture: embedding_pcoa.tsv\nrenders_as:\n  - { id: embedding, component: advanced_viz, kind: embedding, roles: {sample_id: sample_id, dim_1: dim_1, dim_2: dim_2} }\n  - { component: table }\n",
+          "rawYaml": "id: qiime2_embedding_pcoa\nname: Beta-diversity ordination\nmode: diversity/beta\ndescription: >-\n  Two-dimensional PCoA ordination of the samples, computed from the\n  relative-abundance table. One point per sample.\nnf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/diversitycore\n# The recipe chains off the abundance matrix rather than reading a QIIME 2\n# artefact directly, so `find` names the raw table at the head of that chain.\nfind: { path_glob: \"**/qiime2/rel_abundance_tables/rel-table-*.tsv\" }\nrecipe: qiime2/embedding_pcoa.py\nfixture: embedding_pcoa.tsv\nrenders_as:\n  - { id: embedding, component: advanced_viz, kind: embedding, roles: {sample_id: sample_id, dim_1: dim_1, dim_2: dim_2} }\n  - { component: table }\n  # Metric cards and the row-level table behind them: the readings the\n  # nf-core dashboards were already computing off this output by hand.\n  - { component: card, column: dim_1, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: dim_2, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n",
           "recipe": "qiime2/embedding_pcoa.py",
           "renders_as": [
             {
@@ -6444,6 +7092,32 @@
               "component": "table",
               "dict_kwargs": {},
               "roles": {}
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "dim_1",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "dim_2",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
             }
           ],
           "slug": "embedding_pcoa",
@@ -6547,7 +7221,7 @@
           "name": "Relative abundance",
           "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/relativeabundancetables",
           "path_glob": "**/qiime2/rel_abundance_tables/rel-table-*.tsv",
-          "rawYaml": "id: qiime2_rel_abundance\nname: Relative abundance\nmode: rel-abundance\ndescription: Per-sample relative-abundance table with taxonomy ranks.\nnf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/relativeabundancetables\nfind: { path_glob: \"**/qiime2/rel_abundance_tables/rel-table-*.tsv\" }\nrecipe: nf-core/ampliseq/taxonomy_rel_abundance.py\nfixture: rel_abundance.tsv\nrenders_as:\n  # wide per-rank columns (Kingdom/Phylum) \u2192 sunburst fits; stacked_taxonomy\n  # needs a single long-format rank column this table lacks.\n  #\n  # No complex_heatmap here: this table is long (one row per sample \u00d7 taxon) and\n  # the server's heatmap reads a wide matrix off `index_column` with no pivot\n  # step, so it can only ever plot the single `rel_abundance` column. The\n  # clustered heatmap is offered by `qiime2_clustered_heatmap`, which binds the\n  # canonical taxon \u00d7 sample matrix the same reshape produces.\n  - { id: sunburst, component: advanced_viz, kind: sunburst, roles: {abundance: rel_abundance} }\n",
+          "rawYaml": "id: qiime2_rel_abundance\nname: Relative abundance\nmode: rel-abundance\ndescription: Per-sample relative-abundance table with taxonomy ranks.\nnf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/relativeabundancetables\nfind: { path_glob: \"**/qiime2/rel_abundance_tables/rel-table-*.tsv\" }\nrecipe: nf-core/ampliseq/taxonomy_rel_abundance.py\nfixture: rel_abundance.tsv\nrenders_as:\n  # wide per-rank columns (Kingdom/Phylum) \u2192 sunburst fits; stacked_taxonomy\n  # needs a single long-format rank column this table lacks.\n  #\n  # No complex_heatmap here: this table is long (one row per sample \u00d7 taxon) and\n  # the server's heatmap reads a wide matrix off `index_column` with no pivot\n  # step, so it can only ever plot the single `rel_abundance` column. The\n  # clustered heatmap is offered by `qiime2_clustered_heatmap`, which binds the\n  # canonical taxon \u00d7 sample matrix the same reshape produces.\n  - { id: sunburst, component: advanced_viz, kind: sunburst, roles: {abundance: rel_abundance} }\n  # Metric cards and the row-level table behind them: the readings the\n  # nf-core dashboards were already computing off this output by hand.\n  - { component: card, column: rel_abundance, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: taxonomy, aggregation: nunique, secondary_layout: top_n, breakdown_col: Phylum, top_n_count: 3 }\n  - { component: card, column: Phylum, aggregation: nunique, secondary_layout: composition, breakdown_col: Kingdom }\n  - { component: table }\n",
           "recipe": "nf-core/ampliseq/taxonomy_rel_abundance.py",
           "renders_as": [
             {
@@ -6561,6 +7235,52 @@
               "roles": {
                 "abundance": "rel_abundance"
               }
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "rel_abundance",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "Phylum",
+              "column": "taxonomy",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "Kingdom",
+              "column": "Phylum",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "composition"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
             }
           ],
           "slug": "rel_abundance",
@@ -6767,7 +7487,7 @@
           "mode": "taxonomy/classify",
           "name": "ASV taxonomy table",
           "path_glob": "**/qiime2/taxonomy/taxonomy.tsv",
-          "rawYaml": "id: qiime2_tree_metadata\nname: ASV taxonomy table\nmode: taxonomy/classify\ndescription: >-\n  Per-ASV classification: the assigned taxon, its rank columns and the\n  classifier confidence. Annotates the phylogenetic tree, and stands on its own\n  as the taxonomy assignment table.\nfind: { path_glob: \"**/qiime2/taxonomy/taxonomy.tsv\" }\nrecipe: nf-core/ampliseq/tree_metadata_canonical.py\nfixture: tree_metadata.tsv\nrenders_as:\n  # `uniqueness` needs no second column, so it survives a run whose taxonomy\n  # table carries no rank columns (they are optional in the recipe schema).\n  - { component: card, column: taxon, aggregation: nunique, secondary_layout: uniqueness }\n  - { component: card, column: confidence, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: table }\n",
+          "rawYaml": "id: qiime2_tree_metadata\nname: ASV taxonomy table\nmode: taxonomy/classify\ndescription: >-\n  Per-ASV classification: the assigned taxon, its rank columns and the\n  classifier confidence. Annotates the phylogenetic tree, and stands on its own\n  as the taxonomy assignment table.\nfind: { path_glob: \"**/qiime2/taxonomy/taxonomy.tsv\" }\nrecipe: nf-core/ampliseq/tree_metadata_canonical.py\nfixture: tree_metadata.tsv\nrenders_as:\n  # `uniqueness` needs no second column, so it survives a run whose taxonomy\n  # table carries no rank columns (they are optional in the recipe schema).\n  - { component: card, column: taxon, aggregation: nunique, secondary_layout: uniqueness }\n  - { component: card, column: confidence, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: table }\n  # Metric cards and the row-level table behind them: the readings the\n  # nf-core dashboards were already computing off this output by hand.\n  - { component: card, column: taxon, aggregation: nunique, secondary_layout: top_n, breakdown_col: Phylum, top_n_count: 3 }\n  - { component: card, column: Genus, aggregation: count, secondary_layout: completeness, top_n_count: 3 }\n  - { component: card, column: Genus, aggregation: nunique, secondary_layout: concentration, breakdown_col: Genus, top_n_count: 3 }\n",
           "recipe": "nf-core/ampliseq/tree_metadata_canonical.py",
           "renders_as": [
             {
@@ -6801,6 +7521,44 @@
               "component": "table",
               "dict_kwargs": {},
               "roles": {}
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "Phylum",
+              "column": "taxon",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "Genus",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "completeness",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "Genus",
+              "column": "Genus",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "concentration",
+              "top_n_count": 3
             }
           ],
           "slug": "tree_metadata",
@@ -6832,7 +7590,7 @@
           "mode": "benchmark-summary",
           "name": "vcfeval benchmark summary",
           "path_glob": "**/summary/tables/rtgtools/rtgtools.summary.csv",
-          "rawYaml": "id: rtgtools_vcfeval_summary\nname: vcfeval benchmark summary\nmode: benchmark-summary\ndescription: >-\n  Per-sample / per-caller variant-calling accuracy (TP/FP/FN, precision, recall,\n  F1) from rtg-tools vcfeval's aggregated summary. Serves both germline (small/)\n  and somatic (indel/) categories.\nfind: { path_glob: \"**/summary/tables/rtgtools/rtgtools.summary.csv\" }\nrecipe: rtgtools/vcfeval_summary.py\nfixture: vcfeval_summary.tsv\nrenders_as:\n  - { id: pr_scatter, component: advanced_viz, kind: pr_benchmark, roles: {label: label, recall: recall, precision: precision, f1: f1} } # precision-recall benchmark (F1 iso-contours)\n  - { id: confusion, component: advanced_viz, kind: confusion_matrix, roles: {label: label, tp: tp_comp, fp: fp, fn: fn} } # TP/FP/FN matrix\n  - { component: figure, visu_type: bar, dict_kwargs: {x: label, y: f1} } # f1_by_tool\n  - { component: card, column: f1, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot } # best F1\n  - { component: table }\n",
+          "rawYaml": "id: rtgtools_vcfeval_summary\nname: vcfeval benchmark summary\nmode: benchmark-summary\ndescription: >-\n  Per-sample / per-caller variant-calling accuracy (TP/FP/FN, precision, recall,\n  F1) from rtg-tools vcfeval's aggregated summary. Serves both germline (small/)\n  and somatic (indel/) categories.\nfind: { path_glob: \"**/summary/tables/rtgtools/rtgtools.summary.csv\" }\nrecipe: rtgtools/vcfeval_summary.py\nfixture: vcfeval_summary.tsv\nrenders_as:\n  - { id: pr_scatter, component: advanced_viz, kind: pr_benchmark, roles: {label: label, recall: recall, precision: precision, f1: f1} } # precision-recall benchmark (F1 iso-contours)\n  - { id: confusion, component: advanced_viz, kind: confusion_matrix, roles: {label: label, tp: tp_comp, fp: fp, fn: fn} } # TP/FP/FN matrix\n  - { component: figure, visu_type: bar, dict_kwargs: {x: label, y: f1} } # f1_by_tool\n  - { component: card, column: f1, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot } # best F1\n  - { component: table }\n  # Metric cards and the row-level table behind them: the readings the\n  # nf-core dashboards were already computing off this output by hand.\n  - { component: card, column: label, aggregation: nunique, secondary_layout: donut, breakdown_col: caller, top_n_count: 3 }\n  - { component: card, column: f1, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: precision, aggregation: average, secondary_layout: gauge, coverage_max: 1 }\n  - { component: card, column: recall, aggregation: median, secondary_layout: threshold, threshold_value: 0.9, threshold_direction: min, threshold_warn: 0.8 }\n  - { component: card, column: fp, aggregation: sum, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: fn, aggregation: sum, secondary_layout: histogram }\n  - { component: card, column: f1, aggregation: max, aggregations: [min, median, average, max], secondary_layout: grid }\n",
           "recipe": "rtgtools/vcfeval_summary.py",
           "renders_as": [
             {
@@ -6897,6 +7655,98 @@
               "component": "table",
               "dict_kwargs": {},
               "roles": {}
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "caller",
+              "column": "label",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "donut",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "f1",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "precision",
+              "columns": [],
+              "component": "card",
+              "coverage_max": 1.0,
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "gauge"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "recall",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "threshold",
+              "threshold_direction": "min",
+              "threshold_value": 0.9,
+              "threshold_warn": 0.8
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "fp",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "fn",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [
+                "min",
+                "median",
+                "average",
+                "max"
+              ],
+              "attrition_cols": [],
+              "column": "f1",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "grid"
             }
           ],
           "slug": "vcfeval_summary",
@@ -6970,7 +7820,7 @@
           "mode": "expression/long",
           "name": "Gene expression (long)",
           "path_glob": "**/salmon.merged.gene_tpm.tsv",
-          "rawYaml": "id: salmon_gene_expression\nname: Gene expression (long)\nmode: expression/long\ndescription: >-\n  The merged Salmon TPMs unpivoted to one row per gene and sample, restricted to\n  the genes expressed in at least one sample, with the sample's condition\n  attached. The shape a gene explorer filters and groups on.\nfind: { path_glob: \"**/salmon.merged.gene_tpm.tsv\" }\nrecipe: salmon/gene_expression_long.py\nfixture: gene_expression.tsv\nrenders_as:\n  - { component: figure, visu_type: box, dict_kwargs: {x: group, y: log2_tpm, color: group} }\n  - { component: card, column: tpm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: gene_name, aggregation: nunique, secondary_layout: donut, breakdown_col: group }\n  - { component: interactive, interactive_type: MultiSelect, column_name: gene_name }\n  - { component: table, row_selection_enabled: true, row_selection_column: gene_name }\n",
+          "rawYaml": "id: salmon_gene_expression\nname: Gene expression (long)\nmode: expression/long\ndescription: >-\n  The merged Salmon TPMs unpivoted to one row per gene and sample, restricted to\n  the genes expressed in at least one sample, with the sample's condition\n  attached. The shape a gene explorer filters and groups on.\nfind: { path_glob: \"**/salmon.merged.gene_tpm.tsv\" }\nrecipe: salmon/gene_expression_long.py\nfixture: gene_expression.tsv\nrenders_as:\n  - { component: figure, visu_type: box, dict_kwargs: {x: group, y: log2_tpm, color: group} }\n  - { component: card, column: tpm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: gene_name, aggregation: nunique, secondary_layout: donut, breakdown_col: group }\n  - { component: interactive, interactive_type: MultiSelect, column_name: gene_name }\n  - { component: table, row_selection_enabled: true, row_selection_column: gene_name }\n  # Metric cards and the row-level table behind them: the readings the\n  # nf-core dashboards were already computing off this output by hand.\n  - { component: card, column: sample, aggregation: nunique, secondary_layout: top_n, breakdown_col: group, top_n_count: 4 }\n  - { component: card, column: log2_tpm, aggregation: average, secondary_layout: histogram }\n",
           "recipe": "salmon/gene_expression_long.py",
           "renders_as": [
             {
@@ -7030,6 +7880,30 @@
               "roles": {},
               "row_selection_column": "gene_name",
               "row_selection_enabled": true
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "group",
+              "column": "sample",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 4
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "log2_tpm",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
             }
           ],
           "slug": "gene_expression",
@@ -7079,7 +7953,7 @@
           "mode": "expression/pca",
           "name": "Sample overview",
           "path_glob": "**/salmon.merged.gene_tpm.tsv",
-          "rawYaml": "id: salmon_sample_pca\nname: Sample overview\nmode: expression/pca\ndescription: >-\n  One row per sample: principal components of the log2(TPM + 1) matrix over its\n  most variable genes, plus how many genes the sample detects and expresses and\n  the median TPM of the genes it detects.\nfind: { path_glob: \"**/salmon.merged.gene_tpm.tsv\" }\nrecipe: salmon/sample_pca.py\nfixture: sample_pca.tsv\nrenders_as:\n  - { id: pca, component: advanced_viz, kind: embedding, roles: {sample_id: sample_id, dim_1: dim_1, dim_2: dim_2} }\n  - { component: card, column: sample_id, aggregation: nunique, secondary_layout: donut, breakdown_col: group }\n  - { component: card, column: median_tpm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  # A library that expresses far fewer genes than its peers is the classic\n  # under-sequenced / degraded sample; 10k is the usual floor for a bulk\n  # human RNA-seq library, and the dashboard tile can retune it per run.\n  - { component: card, column: genes_expressed, aggregation: average, secondary_layout: threshold, threshold_value: 10000, threshold_direction: min, threshold_warn: 8000 }\n  - { component: card, column: genes_detected, aggregation: average, secondary_layout: histogram }\n  - { component: table }\n",
+          "rawYaml": "id: salmon_sample_pca\nname: Sample overview\nmode: expression/pca\ndescription: >-\n  One row per sample: principal components of the log2(TPM + 1) matrix over its\n  most variable genes, plus how many genes the sample detects and expresses and\n  the median TPM of the genes it detects.\nfind: { path_glob: \"**/salmon.merged.gene_tpm.tsv\" }\nrecipe: salmon/sample_pca.py\nfixture: sample_pca.tsv\nrenders_as:\n  - { id: pca, component: advanced_viz, kind: embedding, roles: {sample_id: sample_id, dim_1: dim_1, dim_2: dim_2} }\n  - { component: card, column: sample_id, aggregation: nunique, secondary_layout: donut, breakdown_col: group }\n  - { component: card, column: median_tpm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  # A library that expresses far fewer genes than its peers is the classic\n  # under-sequenced / degraded sample; 10k is the usual floor for a bulk\n  # human RNA-seq library, and the dashboard tile can retune it per run.\n  - { component: card, column: genes_expressed, aggregation: average, secondary_layout: threshold, threshold_value: 10000, threshold_direction: min, threshold_warn: 8000 }\n  - { component: card, column: genes_detected, aggregation: average, secondary_layout: histogram }\n  - { component: table }\n  # Metric cards and the row-level table behind them: the readings the\n  # nf-core dashboards were already computing off this output by hand.\n  - { component: card, column: sample_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: group, top_n_count: 4 }\n  - { component: card, column: genes_detected, aggregation: average, secondary_layout: gauge, coverage_max: 30000 }\n",
           "recipe": "salmon/sample_pca.py",
           "renders_as": [
             {
@@ -7153,6 +8027,31 @@
               "component": "table",
               "dict_kwargs": {},
               "roles": {}
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "group",
+              "column": "sample_id",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 4
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "genes_detected",
+              "columns": [],
+              "component": "card",
+              "coverage_max": 30000.0,
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "gauge"
             }
           ],
           "slug": "sample_pca",
@@ -7604,6 +8503,227 @@
       ]
     },
     {
+      "biotools_url": null,
+      "description": "QIIME 2 plugin that reconstructs one feature table from several amplified 16S regions, so a multi-region run is read as a single community rather than as one community per primer pair.",
+      "dir": "depictio/catalog/sidle",
+      "homepage": "https://q2-sidle.readthedocs.io",
+      "id": "sidle",
+      "name": "q2-sidle",
+      "nf_core_url": null,
+      "outputs": [
+        {
+          "columns": {},
+          "description": "The cross-region reconstructed feature table melted to one row per feature and sample, with the Greengenes lineage split into rank columns. This is the community a multi-region run actually resolves, as opposed to the per-primer tables it starts from.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/sidle/reconstructed/reconstructed_merged.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "reconstructed.tsv",
+          "fixtureContent": "feature_id\tsample\tcount\ttaxonomy\tKingdom\tPhylum\tClass\tGenus\n173921\tset1\t328.0\tk__Bacteria; p__Firmicutes; c__Clostridia; o__Clostridiales; f__Clostridiaceae; f__Clostridiaceae; f__Clostridiaceae\tBacteria\tFirmicutes\tClostridia\tUnclassified\n183870|336012\tset1\t986.0\tk__Bacteria; p__Bacteroidetes; c__Bacteroidia; o__Bacteroidales; f__Bacteroidaceae; g__Bacteroides; s__uniformis\tBacteria\tBacteroidetes\tBacteroidia\tBacteroides\n297503\tset1\t491.0\tk__Bacteria; p__Firmicutes; c__Clostridia; o__Clostridiales; o__Clostridiales; o__Clostridiales; o__Clostridiales\tBacteria\tFirmicutes\tClostridia\tUnclassified\n301089\tset1\t980.0\tk__Bacteria; p__Firmicutes; c__Clostridia; o__Clostridiales; o__Clostridiales; o__Clostridiales; o__Clostridiales\tBacteria\tFirmicutes\tClostridia\tUnclassified\n313701\tset1\t489.0\tk__Bacteria; p__Firmicutes; c__Clostridia; o__Clostridiales; o__Clostridiales; o__Clostridiales; o__Clostridiales\tBacteria\tFirmicutes\tClostridia\tUnclassified\n332718\tset1\t246.0\tk__Bacteria; p__Firmicutes; c__Bacilli; o__Lactobacillales; f__Lactobacillaceae; g__Lactobacillus; g__Lactobacillus\tBacteria\tFirmicutes\tBacilli\tLactobacillus\n356760\tset1\t980.0\tk__Bacteria; p__Firmicutes; c__Erysipelotrichi; o__Erysipelotrichales; f__Erysipelotrichaceae; f__Erysipelotrichaceae; f__Erysipelotrichaceae\tBacteria\tFirmicutes\tErysipelotrichi\tUnclassified\n366386\tset1\t654.0\tk__Bacteria; p__Firmicutes; c__Clostridia; o__Clostridiales; f__Veillonellaceae; f__Veillonellaceae; f__Veillonellaceae\tBacteria\tFirmicutes\tClostridia\tUnclassified\n3682570\tset1\t491.0\tk__Bacteria; p__Firmicutes; c__Clostridia; o__Clostridiales; o__Clostridiales; o__Clostridiales; o__Clostridiales\tBacteria\tFirmicutes\tClostridia\tUnclassified\n173921\tset2\t326.0\tk__Bacteria; p__Firmicutes; c__Clostridia; o__Clostridiales; f__Clostridiaceae; f__Clostridiaceae; f__Clostridiaceae\tBacteria\tFirmicutes\tClostridia\tUnclassified\n183870|336012\tset2\t975.0\tk__Bacteria; p__Bacteroidetes; c__Bacteroidia; o__Bacteroidales; f__Bacteroidaceae; g__Bacteroides; s__uniformis\tBacteria\tBacteroidetes\tBacteroidia\tBacteroides\n297503\tset2\t492.0\tk__Bacteria; p__Firmicutes; c__Clostridia; o__Clostridiales; o__Clostridiales; o__Clostridiales; o__Clostridiales\tBacteria\tFirmicutes\tClostridia\tUnclassified\n301089\tset2\t980.0\tk__Bacteria; p__Firmicutes; c__Clostridia; o__Clostridiales; o__Clostridiales; o__Clostridiales; o__Clostridiales\tBacteria\tFirmicutes\tClostridia\tUnclassified\n313701\tset2\t490.0\tk__Bacteria; p__Firmicutes; c__Clostridia; o__Clostridiales; o__Clostridiales; o__Clostridiales; o__Clostridiales\tBacteria\tFirmicutes\tClostridia\tUnclassified\n332718\tset2\t246.0\tk__Bacteria; p__Firmicutes; c__Bacilli; o__Lactobacillales; f__Lactobacillaceae; g__Lactobacillus; g__Lactobacillus\tBacteria\tFirmicutes\tBacilli\tLactobacillus\n356760\tset2\t982.0\tk__Bacteria; p__Firmicutes; c__Erysipelotrichi; o__Erysipelotrichales; f__Erysipelotrichaceae; f__Erysipelotrichaceae; f__Erysipelotrichaceae\tBacteria\tFirmicutes\tErysipelotrichi\tUnclassified\n366386\tset2\t656.0\tk__Bacteria; p__Firmicutes; c__Clostridia; o__Clostridiales; f__Veillonellaceae; f__Veillonellaceae; f__Veillonellaceae\tBacteria\tFirmicutes\tClostridia\tUnclassified\n3682570\tset2\t492.0\tk__Bacteria; p__Firmicutes; c__Clostridia; o__Clostridiales; o__Clostridiales; o__Clostridiales; o__Clostridiales\tBacteria\tFirmicutes\tClostridia\tUnclassified\n173921\tset3\t327.0\tk__Bacteria; p__Firmicutes; c__Clostridia; o__Clostridiales; f__Clostridiaceae; f__Clostridiaceae; f__Clostridiaceae\tBacteria\tFirmicutes\tClostridia\tUnclassified\n183870|336012\tset3\t981.0\tk__Bacteria; p__Bacteroidetes; c__Bacteroidia; o__Bacteroidales; f__Bacteroidaceae; g__Bacteroides; s__uniformis\tBacteria\tBacteroidetes\tBacteroidia\tBacteroides\n297503\tset3\t489.0\tk__Bacteria; p__Firmicutes; c__Clostridia; o__Clostridiales; o__Clostridiales; o__Clostridiales; o__Clostridiales\tBacteria\tFirmicutes\tClostridia\tUnclassified\n301089\tset3\t974.0\tk__Bacteria; p__Firmicutes; c__Clostridia; o__Clostridiales; o__Clostridiales; o__Clostridiales; o__Clostridiales\tBacteria\tFirmicutes\tClostridia\tUnclassified\n313701\tset3\t493.0\tk__Bacteria; p__Firmicutes; c__Clostridia; o__Clostridiales; o__Clostridiales; o__Clostridiales; o__Clostridiales\tBacteria\tFirmicutes\tClostridia\tUnclassified\n332718\tset3\t246.0\tk__Bacteria; p__Firmicutes; c__Bacilli; o__Lactobacillales; f__Lactobacillaceae; g__Lactobacillus; g__Lactobacillus\tBacteria\tFirmicutes\tBacilli\tLactobacillus\n356760\tset3\t983.0\tk__Bacteria; p__Firmicutes; c__Erysipelotrichi; o__Erysipelotrichales; f__Erysipelotrichaceae; f__Erysipelotrichaceae; f__Erysipelotrichaceae\tBacteria\tFirmicutes\tErysipelotrichi\tUnclassified\n366386\tset3\t656.0\tk__Bacteria; p__Firmicutes; c__Clostridia; o__Clostridiales; f__Veillonellaceae; f__Veillonellaceae; f__Veillonellaceae\tBacteria\tFirmicutes\tClostridia\tUnclassified\n3682570\tset3\t491.0\tk__Bacteria; p__Firmicutes; c__Clostridia; o__Clostridiales; o__Clostridiales; o__Clostridiales; o__Clostridiales\tBacteria\tFirmicutes\tClostridia\tUnclassified\n",
+          "id": "sidle_reconstructed",
+          "mode": "reconstructed",
+          "name": "Reconstructed features",
+          "path_glob": "**/sidle/reconstructed/reconstructed_merged.tsv",
+          "rawYaml": "id: sidle_reconstructed\nname: Reconstructed features\nmode: reconstructed\ndescription: >-\n  The cross-region reconstructed feature table melted to one row per feature\n  and sample, with the Greengenes lineage split into rank columns. This is the\n  community a multi-region run actually resolves, as opposed to the per-primer\n  tables it starts from.\nfind:\n  path_glob: \"**/sidle/reconstructed/reconstructed_merged.tsv\"\nrecipe: sidle/reconstructed.py\nfixture: reconstructed.tsv\nrenders_as:\n  # Wide per-rank columns, so the nested view is a sunburst; `stacked_taxonomy`\n  # needs the single long rank column this table lacks.\n  - { id: reconstructed_sunburst, component: advanced_viz, kind: sunburst, roles: {abundance: count} }\n  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: count, color: Phylum, title: Composition by phylum} }\n  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: count, color: Genus, title: Composition by genus} }\n  # How much was reconstructed, from how many samples, across how many phyla.\n  - { component: card, column: feature_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: Phylum, top_n_count: 3 }\n  - { component: card, column: sample, aggregation: nunique, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }\n  - { component: card, column: Phylum, aggregation: nunique, secondary_layout: composition, breakdown_col: Phylum }\n  - { component: interactive, interactive_type: MultiSelect, column_name: Phylum }\n  - { component: table }\n",
+          "recipe": "sidle/reconstructed.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "reconstructed_sunburst",
+              "kind": "sunburst",
+              "roles": {
+                "abundance": "count"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "Phylum",
+                "title": "Composition by phylum",
+                "x": "sample",
+                "y": "count"
+              },
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "Genus",
+                "title": "Composition by genus",
+                "x": "sample",
+                "y": "count"
+              },
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "Phylum",
+              "column": "feature_id",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample",
+              "column": "sample",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "Phylum",
+              "column": "Phylum",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "composition"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "Phylum",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "reconstructed",
+          "yamlPath": "depictio/catalog/sidle/reconstructed.yaml"
+        },
+        {
+          "columns": {},
+          "description": "How many amplified regions mapped to each reconstructed feature and how much kmer support stood behind them. A feature carried by one region is a different claim from one carried by all of them, and this is the table that separates the two.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/sidle/**/reconstruction_summary/metadata.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "reconstruction_qc.tsv",
+          "fixtureContent": "feature_id\tnum_regions\ttotal_kmers_mapped\tmean_kmer_per_region\tstdv_kmer_per_region\tmapped_asvs\n173921\t3\t3\t1.0\t0.0\tad73af2a96118df5bd652d8c852c9d6a\n174154\t3\t3\t1.0\t0.0\t4fa0b34f03bce3580cc8c5f4f719949a\n183249\t2\t2\t1.0\t0.0\t4fa0b34f03bce3580cc8c5f4f719949a\n183870|336012\t1\t2\t2.0\t0.0\t0c9186cf6c5675a1415aaca927130f00\n186510\t2\t2\t1.0\t0.0\t4fa0b34f03bce3580cc8c5f4f719949a\n187980\t3\t3\t1.0\t0.0\t6146bbcbe9fac352a82a13f34e94bf1d\n294709\t2\t2\t1.0\t0.0\t4fa0b34f03bce3580cc8c5f4f719949a\n297503\t2\t2\t1.0\t0.0\t89ddf936bdf5f5a6dad023b697b8abf1\n301089\t1\t1\t1.0\t0.0\t4fa0b34f03bce3580cc8c5f4f719949a\n309206\t2\t2\t1.0\t0.0\t5fb6d9e0db0469d54c89d47939b8070c\n313701\t2\t2\t1.0\t0.0\t2620613eebbeea32cec4d803dd9640ad\n332718\t4\t4\t1.0\t0.0\td3364174e4e253c1e7f6d7145f6256db\n356760\t3\t3\t1.0\t0.0\t879c3e5d828839d45e72745268ae0d75|5a0f3f353d7b9c2bb09cd1acdfc58b42|201277fb058a31e8706d906ddc307c12\n366386\t3\t3\t1.0\t0.0\tb18dd4799350af6a69da6ca5d6341e3e|d42cb3aa14f8313ac1c3e12d5039fed8\n3682570\t4\t4\t1.0\t0.0\t5fb6d9e0db0469d54c89d47939b8070c|6146bbcbe9fac352a82a13f34e94bf1d\n532232\t4\t4\t1.0\t0.0\t2620613eebbeea32cec4d803dd9640ad\n590519\t3\t3\t1.0\t0.0\t4fa0b34f03bce3580cc8c5f4f719949a\n",
+          "id": "sidle_reconstruction_qc",
+          "mode": "reconstruction-summary",
+          "name": "Reconstruction confidence",
+          "path_glob": "**/sidle/**/reconstruction_summary/metadata.tsv",
+          "rawYaml": "id: sidle_reconstruction_qc\nname: Reconstruction confidence\nmode: reconstruction-summary\ndescription: >-\n  How many amplified regions mapped to each reconstructed feature and how much\n  kmer support stood behind them. A feature carried by one region is a\n  different claim from one carried by all of them, and this is the table that\n  separates the two.\nfind:\n  path_glob: \"**/sidle/**/reconstruction_summary/metadata.tsv\"\nrecipe: sidle/reconstruction_qc.py\nfixture: reconstruction_qc.tsv\nrenders_as:\n  # Support against coverage: the two axes that qualify a reconstructed feature.\n  - { id: reconstruction_support, component: advanced_viz, kind: scatter_xy, roles: {x: num_regions, y: total_kmers_mapped, size: mean_kmer_per_region, label: feature_id} }\n  - { component: figure, visu_type: histogram, dict_kwargs: {x: num_regions, title: Features by regions mapped} }\n  - { component: card, column: num_regions, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: total_kmers_mapped, aggregation: median, secondary_layout: histogram }\n  - { component: card, column: mean_kmer_per_region, aggregation: average, secondary_layout: histogram }\n  - { component: table }\n",
+          "recipe": "sidle/reconstruction_qc.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "reconstruction_support",
+              "kind": "scatter_xy",
+              "roles": {
+                "label": "feature_id",
+                "size": "mean_kmer_per_region",
+                "x": "num_regions",
+                "y": "total_kmers_mapped"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "title": "Features by regions mapped",
+                "x": "num_regions"
+              },
+              "roles": {},
+              "visu_type": "histogram"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "num_regions",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "total_kmers_mapped",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "mean_kmer_per_region",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "reconstruction_qc",
+          "yamlPath": "depictio/catalog/sidle/reconstruction_qc.yaml"
+        }
+      ]
+    },
+    {
       "biotools_url": "https://bio.tools/hap.py",
       "description": "",
       "dir": "depictio/catalog/sompy",
@@ -7670,7 +8790,7 @@
           "mode": "benchmark-summary",
           "name": "som.py benchmark summary",
           "path_glob": "**/summary/tables/sompy/sompy.summary.csv",
-          "rawYaml": "id: sompy_summary\nname: som.py benchmark summary\nmode: benchmark-summary\ndescription: >-\n  Somatic small-variant accuracy from som.py: precision/recall/F1 per caller with\n  binomial confidence intervals.\nfind: { path_glob: \"**/summary/tables/sompy/sompy.summary.csv\" }\nrecipe: sompy/summary.py\nfixture: summary.tsv\nrenders_as:\n  - { id: pr_scatter, component: advanced_viz, kind: pr_benchmark, roles: {label: caller, recall: recall, precision: precision, f1: f1} } # precision-recall benchmark\n  - { id: confusion, component: advanced_viz, kind: confusion_matrix, roles: {label: caller, tp: tp, fp: fp, fn: fn} } # TP/FP/FN matrix\n  - { id: precision_ci, component: advanced_viz, kind: metric_ci_bars, roles: {label: caller, value: precision, lower: precision_lower, upper: precision_upper} } # precision \u00b1 95% CI\n  - { id: recall_ci, component: advanced_viz, kind: metric_ci_bars, roles: {label: caller, value: recall, lower: recall_lower, upper: recall_upper} } # recall \u00b1 95% CI\n  - { component: figure, visu_type: bar, dict_kwargs: {x: caller, y: f1} } # f1 by caller\n  - { component: card, column: f1, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot } # best F1\n  - { component: table }\n",
+          "rawYaml": "id: sompy_summary\nname: som.py benchmark summary\nmode: benchmark-summary\ndescription: >-\n  Somatic small-variant accuracy from som.py: precision/recall/F1 per caller with\n  binomial confidence intervals.\nfind: { path_glob: \"**/summary/tables/sompy/sompy.summary.csv\" }\nrecipe: sompy/summary.py\nfixture: summary.tsv\nrenders_as:\n  - { id: pr_scatter, component: advanced_viz, kind: pr_benchmark, roles: {label: caller, recall: recall, precision: precision, f1: f1} } # precision-recall benchmark\n  - { id: confusion, component: advanced_viz, kind: confusion_matrix, roles: {label: caller, tp: tp, fp: fp, fn: fn} } # TP/FP/FN matrix\n  - { id: precision_ci, component: advanced_viz, kind: metric_ci_bars, roles: {label: caller, value: precision, lower: precision_lower, upper: precision_upper} } # precision \u00b1 95% CI\n  - { id: recall_ci, component: advanced_viz, kind: metric_ci_bars, roles: {label: caller, value: recall, lower: recall_lower, upper: recall_upper} } # recall \u00b1 95% CI\n  - { component: figure, visu_type: bar, dict_kwargs: {x: caller, y: f1} } # f1 by caller\n  - { component: card, column: f1, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot } # best F1\n  - { component: table }\n  # Metric cards and the row-level table behind them: the readings the\n  # nf-core dashboards were already computing off this output by hand.\n  - { component: card, column: caller, aggregation: nunique, secondary_layout: donut, breakdown_col: variant_type, top_n_count: 3 }\n  - { component: card, column: f1, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: recall, aggregation: average, secondary_layout: gauge, coverage_max: 1 }\n  - { component: card, column: precision, aggregation: median, secondary_layout: threshold, threshold_value: 0.5, threshold_direction: min, threshold_warn: 0.25 }\n  - { component: card, column: fp, aggregation: sum, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: fn, aggregation: sum, secondary_layout: histogram }\n  - { component: card, column: f1, aggregation: max, aggregations: [min, median, average, max], secondary_layout: grid }\n",
           "recipe": "sompy/summary.py",
           "renders_as": [
             {
@@ -7765,6 +8885,98 @@
               "component": "table",
               "dict_kwargs": {},
               "roles": {}
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "variant_type",
+              "column": "caller",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "donut",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "f1",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "recall",
+              "columns": [],
+              "component": "card",
+              "coverage_max": 1.0,
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "gauge"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "precision",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "threshold",
+              "threshold_direction": "min",
+              "threshold_value": 0.5,
+              "threshold_warn": 0.25
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "fp",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "fn",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [
+                "min",
+                "median",
+                "average",
+                "max"
+              ],
+              "attrition_cols": [],
+              "column": "f1",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "grid"
             }
           ],
           "slug": "summary",
@@ -7970,7 +9182,7 @@
           "name": "Containment ANI",
           "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/sylph/profile",
           "path_glob": null,
-          "rawYaml": "id: sylph_ani\nname: Containment ANI\nmode: profile\ndescription: >-\n  One row per reference genome sylph detected in a sample: the adjusted ANI of\n  the containment match next to the taxonomic and sequence abundances and the\n  effective coverage. ANI against abundance separates confident calls from\n  divergent relatives, which read-count profilers cannot express.\nnf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/sylph/profile\nfind: { filename: \"*.sylph.tsv\" }\nrecipe: sylph/ani.py\nfixture: ani.tsv\nrenders_as:\n  - {\n      id: ani_dot_plot,\n      component: advanced_viz,\n      kind: dot_plot,\n      roles:\n        {\n          cluster: sample,\n          gene: genome,\n          mean_expression: adjusted_ani,\n          frac_expressing: abundance_frac,\n        },\n    }\n  - {\n      component: figure,\n      visu_type: scatter,\n      dict_kwargs:\n        { x: taxonomic_abundance, y: adjusted_ani, color: sample, size: eff_cov },\n    }\n  - {\n      component: card,\n      column: adjusted_ani,\n      aggregation: median,\n      aggregations: [box_plot_stats],\n      secondary_layout: box_plot,\n    }\n  - {\n      component: card,\n      column: genome,\n      aggregation: nunique,\n      secondary_layout: top_n,\n      breakdown_col: sample,\n      top_n_count: 3,\n    }\n  - {\n      component: card,\n      column: eff_cov,\n      aggregation: median,\n      secondary_layout: threshold,\n      threshold_value: 1,\n      threshold_direction: min,\n    }\n  - { component: table }\n",
+          "rawYaml": "id: sylph_ani\nname: Containment ANI\nmode: profile\ndescription: >-\n  One row per reference genome sylph detected in a sample: the adjusted ANI of\n  the containment match next to the taxonomic and sequence abundances and the\n  effective coverage. ANI against abundance separates confident calls from\n  divergent relatives, which read-count profilers cannot express.\nnf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/sylph/profile\nfind: { filename: \"*.sylph.tsv\" }\nrecipe: sylph/ani.py\nfixture: ani.tsv\nrenders_as:\n  - {\n      id: ani_dot_plot,\n      component: advanced_viz,\n      kind: dot_plot,\n      roles:\n        {\n          cluster: sample,\n          gene: genome,\n          mean_expression: adjusted_ani,\n          frac_expressing: abundance_frac,\n        },\n    }\n  - {\n      component: figure,\n      visu_type: scatter,\n      dict_kwargs:\n        { x: taxonomic_abundance, y: adjusted_ani, color: sample, size: eff_cov },\n    }\n  - {\n      component: card,\n      column: adjusted_ani,\n      aggregation: median,\n      aggregations: [box_plot_stats],\n      secondary_layout: box_plot,\n    }\n  - {\n      component: card,\n      column: genome,\n      aggregation: nunique,\n      secondary_layout: top_n,\n      breakdown_col: sample,\n      top_n_count: 3,\n    }\n  - {\n      component: card,\n      column: eff_cov,\n      aggregation: median,\n      secondary_layout: threshold,\n      threshold_value: 1,\n      threshold_direction: min,\n    }\n  - { component: table }\n  # Metric cards and the row-level table behind them: the readings the\n  # nf-core dashboards were already computing off this output by hand.\n  - { component: card, column: containment_frac, aggregation: average, secondary_layout: gauge, coverage_max: 1 }\n",
           "recipe": "sylph/ani.py",
           "renders_as": [
             {
@@ -8048,6 +9260,18 @@
               "component": "table",
               "dict_kwargs": {},
               "roles": {}
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "containment_frac",
+              "columns": [],
+              "component": "card",
+              "coverage_max": 1.0,
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "gauge"
             }
           ],
           "slug": "ani",
@@ -8139,7 +9363,7 @@
           "name": "Profiler ordination",
           "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/taxpasta/merge",
           "path_glob": "**/taxpasta/*.tsv",
-          "rawYaml": "id: taxpasta_embedding\nname: Profiler ordination\nmode: merge/ordination\ndescription: >-\n  Bray-Curtis PCoA over every profiling run. One point per sample, profiler and\n  database, so runs that agree on the community land together and the spread\n  reads as profiler disagreement rather than as biological distance.\nnf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/taxpasta/merge\nfind: { path_glob: \"**/taxpasta/*.tsv\" }\nrecipe: taxpasta/embedding.py\nfixture: embedding.tsv\nrenders_as:\n  - {\n      id: profiler_embedding,\n      component: advanced_viz,\n      kind: embedding,\n      roles: { sample_id: sample_id, dim_1: dim_1, dim_2: dim_2 },\n    }\n  - { component: table }\n",
+          "rawYaml": "id: taxpasta_embedding\nname: Profiler ordination\nmode: merge/ordination\ndescription: >-\n  Bray-Curtis PCoA over every profiling run. One point per sample, profiler and\n  database, so runs that agree on the community land together and the spread\n  reads as profiler disagreement rather than as biological distance.\nnf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/taxpasta/merge\nfind: { path_glob: \"**/taxpasta/*.tsv\" }\nrecipe: taxpasta/embedding.py\nfixture: embedding.tsv\nrenders_as:\n  - {\n      id: profiler_embedding,\n      component: advanced_viz,\n      kind: embedding,\n      roles: { sample_id: sample_id, dim_1: dim_1, dim_2: dim_2 },\n    }\n  - { component: table }\n  # Metric cards and the row-level table behind them: the readings the\n  # nf-core dashboards were already computing off this output by hand.\n  - { component: card, column: sample_id, aggregation: nunique, secondary_layout: donut, breakdown_col: platform }\n",
           "recipe": "taxpasta/embedding.py",
           "renders_as": [
             {
@@ -8163,6 +9387,18 @@
               "component": "table",
               "dict_kwargs": {},
               "roles": {}
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "platform",
+              "column": "sample_id",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "donut"
             }
           ],
           "slug": "embedding",
@@ -8227,7 +9463,7 @@
           "name": "Profiler detection overlap",
           "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/taxpasta/merge",
           "path_glob": "**/taxpasta/*.tsv",
-          "rawYaml": "id: taxpasta_presence\nname: Profiler detection overlap\nmode: merge/presence\ndescription: >-\n  Per sample and taxon, a 0/1 membership column for every profiler in the run.\n  The intersections show how much of the community the classifiers agree on and\n  how long each profiler's private tail is.\nnf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/taxpasta/merge\nfind: { path_glob: \"**/taxpasta/*.tsv\" }\nrecipe: taxpasta/presence.py\nfixture: presence.tsv\nrenders_as:\n  # upset_plot binds no canonical role: the set columns are the run's profilers,\n  # so they are named in the tile's config rather than in a role.\n  - { id: profiler_upset, component: advanced_viz, kind: upset_plot }\n  - {\n      component: card,\n      column: n_profilers,\n      aggregation: median,\n      aggregations: [box_plot_stats],\n      secondary_layout: box_plot,\n    }\n  - { component: table }\n",
+          "rawYaml": "id: taxpasta_presence\nname: Profiler detection overlap\nmode: merge/presence\ndescription: >-\n  Per sample and taxon, a 0/1 membership column for every profiler in the run.\n  The intersections show how much of the community the classifiers agree on and\n  how long each profiler's private tail is.\nnf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/taxpasta/merge\nfind: { path_glob: \"**/taxpasta/*.tsv\" }\nrecipe: taxpasta/presence.py\nfixture: presence.tsv\nrenders_as:\n  # upset_plot binds no canonical role: the set columns are the run's profilers,\n  # so they are named in the tile's config rather than in a role.\n  - { id: profiler_upset, component: advanced_viz, kind: upset_plot }\n  - {\n      component: card,\n      column: n_profilers,\n      aggregation: median,\n      aggregations: [box_plot_stats],\n      secondary_layout: box_plot,\n    }\n  - { component: table }\n  # Metric cards and the row-level table behind them: the readings the\n  # nf-core dashboards were already computing off this output by hand.\n  - { component: card, column: taxon, aggregation: nunique, secondary_layout: top_n, breakdown_col: rank, top_n_count: 4 }\n  - { component: card, column: n_profilers, aggregation: max, secondary_layout: gauge, coverage_max: 12 }\n",
           "recipe": "taxpasta/presence.py",
           "renders_as": [
             {
@@ -8260,6 +9496,31 @@
               "component": "table",
               "dict_kwargs": {},
               "roles": {}
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "rank",
+              "column": "taxon",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 4
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "n_profilers",
+              "columns": [],
+              "component": "card",
+              "coverage_max": 12.0,
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "gauge"
             }
           ],
           "slug": "presence",
@@ -8281,7 +9542,7 @@
           "name": "Cross-profiler abundances",
           "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/taxpasta/merge",
           "path_glob": "**/taxpasta/*.tsv",
-          "rawYaml": "id: taxpasta_profiles\nname: Cross-profiler abundances\nmode: merge\ndescription: >-\n  Every standardised taxpasta table melted into one long frame: one row per\n  profiler, database, sample and taxon, with the raw count and the within-run\n  relative abundance. The hub every cross-profiler comparison is computed from.\nnf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/taxpasta/merge\nfind: { path_glob: \"**/taxpasta/*.tsv\" }\nrecipe: taxpasta/profiles.py\nfixture: profiles.tsv\nrenders_as:\n  # long format (sample x rank x taxon x abundance) -> stacked_taxonomy fits; a\n  # sunburst would need the wide per-rank columns this frame does not carry.\n  - {\n      id: stacked_taxonomy,\n      component: advanced_viz,\n      kind: stacked_taxonomy,\n      roles: { sample_id: sample, taxon: name, rank: rank, abundance: rel_abundance },\n    }\n  - {\n      component: card,\n      column: name,\n      aggregation: nunique,\n      secondary_layout: uniqueness,\n    }\n  - {\n      component: card,\n      column: count,\n      aggregation: median,\n      aggregations: [box_plot_stats],\n      secondary_layout: box_plot,\n    }\n  - {\n      component: card,\n      column: sample,\n      aggregation: nunique,\n      secondary_layout: donut,\n      breakdown_col: profiler,\n    }\n  - {\n      component: card,\n      column: rel_abundance,\n      aggregation: max,\n      secondary_layout: threshold,\n      threshold_value: 0.5,\n      threshold_direction: max,\n      threshold_warn: 0.3,\n    }\n  - { component: interactive, interactive_type: MultiSelect, column_name: profiler }\n  - { component: interactive, interactive_type: MultiSelect, column_name: sample }\n  - { component: table }\n",
+          "rawYaml": "id: taxpasta_profiles\nname: Cross-profiler abundances\nmode: merge\ndescription: >-\n  Every standardised taxpasta table melted into one long frame: one row per\n  profiler, database, sample and taxon, with the raw count and the within-run\n  relative abundance. The hub every cross-profiler comparison is computed from.\nnf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/taxpasta/merge\nfind: { path_glob: \"**/taxpasta/*.tsv\" }\nrecipe: taxpasta/profiles.py\nfixture: profiles.tsv\nrenders_as:\n  # long format (sample x rank x taxon x abundance) -> stacked_taxonomy fits; a\n  # sunburst would need the wide per-rank columns this frame does not carry.\n  - {\n      id: stacked_taxonomy,\n      component: advanced_viz,\n      kind: stacked_taxonomy,\n      roles: { sample_id: sample, taxon: name, rank: rank, abundance: rel_abundance },\n    }\n  - {\n      component: card,\n      column: name,\n      aggregation: nunique,\n      secondary_layout: uniqueness,\n    }\n  - {\n      component: card,\n      column: count,\n      aggregation: median,\n      aggregations: [box_plot_stats],\n      secondary_layout: box_plot,\n    }\n  - {\n      component: card,\n      column: sample,\n      aggregation: nunique,\n      secondary_layout: donut,\n      breakdown_col: profiler,\n    }\n  - {\n      component: card,\n      column: rel_abundance,\n      aggregation: max,\n      secondary_layout: threshold,\n      threshold_value: 0.5,\n      threshold_direction: max,\n      threshold_warn: 0.3,\n    }\n  - { component: interactive, interactive_type: MultiSelect, column_name: profiler }\n  - { component: interactive, interactive_type: MultiSelect, column_name: sample }\n  - { component: table }\n  # Metric cards and the row-level table behind them: the readings the\n  # nf-core dashboards were already computing off this output by hand.\n  - { component: card, column: rank, aggregation: nunique, secondary_layout: composition, breakdown_col: rank }\n  - { component: card, column: rel_abundance, aggregation: max, secondary_layout: gauge, coverage_max: 1 }\n",
           "recipe": "taxpasta/profiles.py",
           "renders_as": [
             {
@@ -8376,6 +9637,30 @@
               "component": "table",
               "dict_kwargs": {},
               "roles": {}
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "rank",
+              "column": "rank",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "composition"
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "rel_abundance",
+              "columns": [],
+              "component": "card",
+              "coverage_max": 1.0,
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "gauge"
             }
           ],
           "slug": "profiles",
@@ -8519,7 +9804,7 @@
           "mode": "benchmark-summary",
           "name": "Truvari SV summary",
           "path_glob": "**/summary/tables/truvari/truvari.summary.csv",
-          "rawYaml": "id: truvari_summary\nname: Truvari SV summary\nmode: benchmark-summary\ndescription: >-\n  Structural-variant accuracy from Truvari (precision/recall/F1). Optional \u2014 not\n  produced by the public megatest; recipe uses tolerant column matching.\nfind: { path_glob: \"**/summary/tables/truvari/truvari.summary.csv\" }\nrecipe: truvari/summary.py\nfixture: summary.tsv\nrenders_as:\n  - { id: pr_scatter, component: advanced_viz, kind: pr_benchmark, roles: {label: label, recall: recall, precision: precision, f1: f1} } # precision-recall benchmark\n  - { component: table }\n",
+          "rawYaml": "id: truvari_summary\nname: Truvari SV summary\nmode: benchmark-summary\ndescription: >-\n  Structural-variant accuracy from Truvari (precision/recall/F1). Optional \u2014 not\n  produced by the public megatest; recipe uses tolerant column matching.\nfind: { path_glob: \"**/summary/tables/truvari/truvari.summary.csv\" }\nrecipe: truvari/summary.py\nfixture: summary.tsv\nrenders_as:\n  - { id: pr_scatter, component: advanced_viz, kind: pr_benchmark, roles: {label: label, recall: recall, precision: precision, f1: f1} } # precision-recall benchmark\n  - { component: table }\n  # Metric cards and the row-level table behind them: the readings the\n  # nf-core dashboards were already computing off this output by hand.\n  - { component: card, column: label, aggregation: nunique, secondary_layout: top_n, breakdown_col: label, top_n_count: 3 }\n  - { component: card, column: f1, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: precision, aggregation: average, secondary_layout: gauge, coverage_max: 1 }\n  - { component: card, column: recall, aggregation: median, secondary_layout: threshold, threshold_value: 0.8, threshold_direction: min, threshold_warn: 0.6 }\n",
           "recipe": "truvari/summary.py",
           "renders_as": [
             {
@@ -8544,10 +9829,187 @@
               "component": "table",
               "dict_kwargs": {},
               "roles": {}
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "label",
+              "column": "label",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "f1",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "precision",
+              "columns": [],
+              "component": "card",
+              "coverage_max": 1.0,
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "gauge"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "recall",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "threshold",
+              "threshold_direction": "min",
+              "threshold_value": 0.8,
+              "threshold_warn": 0.6
             }
           ],
           "slug": "summary",
           "yamlPath": "depictio/catalog/truvari/summary.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": "https://bio.tools/vsearch",
+      "description": "",
+      "dir": "depictio/catalog/vsearch",
+      "homepage": null,
+      "id": "vsearch",
+      "name": "VSEARCH",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/vsearch/sintax",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "Per-sample Phylum-level relative abundance, built by joining the SINTAX per-ASV taxonomy to the DADA2 ASV count table written beside it. The classifier publishes taxonomy only, so the counts have to come from the denoiser's table.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/sintax/ASV_tax_sintax.*[0-9].tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "sintax_abundance.tsv",
+          "fixtureContent": "sample\ttaxonomy\trel_abundance\tKingdom\tPhylum\npb1\tFungi;Ascomycota\t0.6202849958088852\tFungi\tAscomycota\npb1\tFungi;Basidiomycota\t0.37468566638725903\tFungi\tBasidiomycota\npb1\tFungi;Mortierellomycota\t0.005029337803855826\tFungi\tMortierellomycota\npb2\tFungi;Ascomycota\t0.43139097744360905\tFungi\tAscomycota\npb2\tFungi;Basidiomycota\t0.568609022556391\tFungi\tBasidiomycota\npb3\tFungi;Ascomycota\t0.9766355140186916\tFungi\tAscomycota\npb3\tFungi;Basidiomycota\t0.02336448598130841\tFungi\tBasidiomycota\n",
+          "id": "vsearch_sintax_abundance",
+          "mode": "sintax",
+          "name": "SINTAX composition",
+          "path_glob": "**/sintax/ASV_tax_sintax.*[0-9].tsv",
+          "rawYaml": "id: vsearch_sintax_abundance\nname: SINTAX composition\nmode: sintax\ndescription: >-\n  Per-sample Phylum-level relative abundance, built by joining the SINTAX\n  per-ASV taxonomy to the DADA2 ASV count table written beside it. The\n  classifier publishes taxonomy only, so the counts have to come from the\n  denoiser's table.\n# The reference-DB tag is part of the file name (`unite-fungi_8_2`), so the\n# glob ends on the version digit. The `.raw.tsv` variant has `raw` immediately\n# before the extension and is therefore never matched.\nfind:\n  path_glob: \"**/sintax/ASV_tax_sintax.*[0-9].tsv\"\nrecipe: vsearch/sintax_abundance.py\nfixture: sintax_abundance.tsv\nrenders_as:\n  # Wide per-rank columns (Kingdom/Phylum), so the nested view is a sunburst;\n  # `stacked_taxonomy` needs the single long rank column this table lacks, the\n  # same reason `qiime2_rel_abundance` stops at a sunburst.\n  - { id: sintax_sunburst, component: advanced_viz, kind: sunburst, roles: {abundance: rel_abundance} }\n  - { component: figure, visu_type: bar, dict_kwargs: {x: Phylum, y: rel_abundance, color: Phylum, title: Relative abundance by phylum} }\n  # How many samples were classified, how many phyla they resolve to, and how\n  # unevenly the abundance sits across them.\n  - { component: card, column: sample, aggregation: nunique, secondary_layout: top_n, breakdown_col: Phylum, top_n_count: 3 }\n  - { component: card, column: Phylum, aggregation: nunique, secondary_layout: composition, breakdown_col: Phylum }\n  - { component: card, column: rel_abundance, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  # The ranks are the axes a reader narrows on before reading any of the above.\n  - { component: interactive, interactive_type: MultiSelect, column_name: Kingdom }\n  - { component: interactive, interactive_type: MultiSelect, column_name: Phylum }\n  - { component: table }\n",
+          "recipe": "vsearch/sintax_abundance.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "sintax_sunburst",
+              "kind": "sunburst",
+              "roles": {
+                "abundance": "rel_abundance"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "Phylum",
+                "title": "Relative abundance by phylum",
+                "x": "Phylum",
+                "y": "rel_abundance"
+              },
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "Phylum",
+              "column": "sample",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "Phylum",
+              "column": "Phylum",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "composition"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "rel_abundance",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "Kingdom",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "Phylum",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "sintax_abundance",
+          "yamlPath": "depictio/catalog/vsearch/sintax_abundance.yaml"
         }
       ]
     },

@@ -331,6 +331,49 @@ Also: the `phylogenetic` kind has no catalog output binding it, and `upset_plot`
 `sankey` can only be bound through a dashboard `config:` block because their roles are
 list-valued rather than required.
 
+## 10b. What is still not a catalog tool, and why
+
+A sweep of the 16 shipped dashboards asked, of every card, table, figure, MultiQC panel
+and advanced-viz tile, whether the data collection under it is one the catalog
+recognises. 275 tiles were reading a catalog output without saying so and now carry a
+`use:` handle. What remains unbound is not an oversight, and splits three ways.
+
+### Pipeline input, not tool output
+
+`samplesheet`, `metadata`, `samples`, `sample_design`, `design`, `database_sheet`: the
+files the user hands the pipeline, parsed so the dashboard has a hub to link on. A
+catalog entry describes what a tool *emits*; the run's own inputs have no producing tool
+and no glob that generalises past one pipeline, so they stay template-local.
+
+### Dashboard compositions, not module outputs
+
+`screening_summary` (funcscan, one row per sample per screening workflow),
+`caller_agreement` (cutandrun, SEACR against MACS2), and the `*_canonical` reshapes
+(sankey, upset, variant feature matrix) all read *several* outputs and answer a question
+about the run rather than about a tool. `test_compositions_stay_out_of_the_catalog`
+pins that boundary deliberately.
+
+### MultiQC custom content
+
+Fourteen MultiQC panels stay unbound: FRiP score and peak count (chipseq, atacseq),
+strand cross-correlation and the NSC/RSC coefficients (chipseq), strandedness inference,
+the DESeq2 sample-relationship plots and the biotype composition (rnaseq), SURVIVOR and
+the variant-calling summary (variantbenchmarking), and the fail-mapped-samples table
+(viralrecon). These are `*_mqc.tsv` sections a *pipeline* writes into its own MultiQC
+config, not modules MultiQC ships. A catalog output keys on the module that owns a plot
+anchor (`multiqc_module()` takes the anchor's leading token), so binding them would mean
+outputs called `strand`, `nsc`, `rsc`, `mlib` and `fail` — names that describe one
+pipeline's config, not a tool. The numbers behind them are real (phantompeakqualtools,
+SURVIVOR), but until nf-core publishes them as module output rather than as report
+decoration there is nothing tool-shaped to point a `find` rule at.
+
+The general-statistics table is the one section that *is* universal, and it is now
+`multiqc/general_stats`. It needed a small fix to be reachable: MultiQC assembles it out
+of whatever modules ran, so it appears in neither the report's module list nor its plot
+registry, and the compose endpoint's `present & plottable` intersection could never keep
+it. `_multiqc_sections` now adds it to the answer rather than to the set being
+intersected.
+
 ## 11. List-valued render roles were never actually validated
 
 `test_all_recipe_output_roles_resolve_against_the_recipe` did `set(r.roles.values())`,

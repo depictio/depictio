@@ -180,6 +180,9 @@ The recipes ship as three catalog modules.
 | `sylph` | `sylph_profile` | The sylph-tax merged report as long sample x rank x taxon composition | Stacked taxonomy, card, table |
 | `melon` | `melon_ranks` | Genome-copy composition, seven ranks wide, pooled over the long-read samples | Sunburst, 3 cards, table |
 
+The MultiQC side gained one entry too: `multiqc/malt` binds the MALT mappability and
+taxonomic-assignment panels, which had no catalog output and therefore no `use:` handle.
+
 One recipe is project-local rather than catalog: taxprofiler runs taxpasta with
 `--add-name false`, so the standardised tables identify taxa by NCBI id only.
 `depictio/projects/nf-core/taxprofiler/recipes/taxon_names.py` reads the names and ranks back

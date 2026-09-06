@@ -1,16 +1,24 @@
-"""Per-sample Phylum-level relative abundance from sintax (--skip_qiime) outputs.
+"""Per-sample Phylum-level relative abundance from a SINTAX classification.
 
-ITS / PacBio / IonTorrent runs use sintax (``--skip_qiime``) and produce NO QIIME2
-relative-abundance table. They DO produce a DADA2 ASV count table
-(``dada2/ASV_table.tsv``, ASV_ID + one count column per sample) and a sintax
-per-ASV taxonomy table (``sintax/ASV_tax_sintax.<ref-db>.tsv``). Joining the two
-and aggregating to Phylum level yields the same canonical schema as the QIIME2
-``taxonomy_rel_abundance`` DC, so the Community & Diversity tab can render for
-skip_qiime runs instead of degrading to MultiQC-only.
+VSEARCH's ``--sintax`` classifier is the route amplicon pipelines take when
+QIIME 2 is skipped (ITS, PacBio, IonTorrent), and it publishes a per-ASV
+taxonomy table only: no abundance table of its own. The counts live in the
+DADA2 ASV table written beside it, one column per sample. Joining the two and
+aggregating to Phylum level yields the same ``sample`` / ``taxonomy`` /
+``rel_abundance`` shape a QIIME 2 relative-abundance table has, so a dashboard
+renders the SINTAX route with the components it already uses for the QIIME 2
+one instead of degrading to MultiQC panels.
 
-When a metadata DC is present, all metadata columns are joined generically (so
-the parameterised dashboard's ``{GROUP_COL}`` faceting works just like the
-QIIME2 path). Without metadata only the core columns are returned.
+When a metadata data collection is present, its columns are joined generically,
+so a grouped or facetted figure works on this table exactly as it does on the
+QIIME 2 one. Without metadata only the core columns are returned.
+
+Output schema:
+    sample : Utf8               sample the counts came from
+    taxonomy : Utf8             ``Kingdom;Phylum``, the joined lineage
+    rel_abundance : Float64     share of the sample's classified counts
+    Kingdom : Utf8              rank column, ``Unclassified`` when unresolved
+    Phylum : Utf8               rank column, ``Unclassified`` when unresolved
 """
 
 import polars as pl
