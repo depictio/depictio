@@ -115,7 +115,7 @@ class FeatureFlags(_StrictBase):
     external_s3: bool = Field(
         description=(
             "True when object storage is outside the deployment's own network, i.e. "
-            "something other than the bundled MinIO. A boolean only — the endpoint "
+            "something other than the bundled object store. A boolean only — the endpoint "
             "and bucket name are never sent."
         ),
     )

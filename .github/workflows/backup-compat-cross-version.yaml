@@ -3,7 +3,7 @@
 # The fast `quality` job already validates committed backup fixtures against the
 # current Pydantic models on every PR (Mongo-document level, 1-many over all
 # supported versions). This job adds the *real* end-to-end integration that the
-# fixtures can't: a backup produced by a PREVIOUS released image (real MinIO /
+# fixtures can't: a backup produced by a PREVIOUS released image (real S3 store /
 # Delta data included) is restored by an image built from the CURRENT code, and
 # the restored state is verified.
 #
@@ -101,7 +101,7 @@ jobs:
           echo "✅ .env written"
 
       # ---------------------------------------------------------------------
-      # PHASE 1 — OLD release creates a backup (real Mongo + MinIO/Delta data)
+      # PHASE 1 — OLD release creates a backup (real Mongo + S3/Delta data)
       # ---------------------------------------------------------------------
       - name: "Phase 1 (old ${{ steps.resolve.outputs.source_version }}): boot + seed + create backup"
         if: steps.verify.outputs.skip != 'true'

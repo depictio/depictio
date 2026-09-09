@@ -34,11 +34,13 @@ Then visit:
 {{- end }}
 
 {{- if .Values.minio.enabled }}
-The MinIO service is deployed and can be accessed at:
+The bundled S3 store (SeaweedFS) is deployed and can be accessed at:
   kubectl port-forward svc/{{ $minioSvc }} 9000:{{ .Values.minio.service.httpPort }}
-  kubectl port-forward svc/{{ $minioSvc }} 9001:{{ .Values.minio.service.consolePort }}
+{{- if .Values.minio.adminUI.enabled }}
+  kubectl port-forward svc/{{ $minioSvc }} {{ .Values.minio.service.adminPort }}:{{ .Values.minio.service.adminPort }}   # admin UI
+{{- end }}
 
-MinIO credentials:
+S3 credentials:
   Username: {{ default .Release.Name .Values.secrets.minioRootUser }}
   Password: {{ default "(random)" .Values.secrets.minioRootPassword }}
 {{- end }}

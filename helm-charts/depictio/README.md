@@ -80,8 +80,8 @@ helm uninstall depictio
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `secrets.minioRootUser` | MinIO root username | `"minio"` |
-| `secrets.minioRootPassword` | MinIO root password | `"minio123"` |
+| `secrets.minioRootUser` | S3 root access key (bundled store) | `"minio"` |
+| `secrets.minioRootPassword` | S3 root secret key (bundled store) | `"minio123"` |
 
 These credentials are also stored in the Kubernetes Secret named `<release-name>-depictio-secrets`. Override them only if custom values are required.
 
@@ -98,24 +98,31 @@ These credentials are also stored in the Kubernetes Secret named `<release-name>
 | `mongo.service.port` | MongoDB service port | `27018` |
 | `mongo.args` | MongoDB container arguments | `["mongod", "--dbpath", "/data/depictioDB", "--port", "27018"]` |
 
-### MinIO parameters
+### Bundled S3 store parameters (`minio.*`)
+
+The bundled object store is [SeaweedFS](https://github.com/seaweedfs/seaweedfs)
+(`weed mini`). The `minio.*` key and the `-minio` resource names are kept for
+compatibility with existing values files; set `minio.enabled: false` plus
+`minio.env.DEPICTIO_MINIO_PUBLIC_URL` to use any external S3 endpoint instead.
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `minio.enabled` | Enable MinIO deployment | `true` |
-| `minio.image.repository` | MinIO image repository | `minio/minio` |
-| `minio.image.tag` | MinIO image tag | `latest` |
-| `minio.image.pullPolicy` | MinIO image pull policy | `IfNotPresent` |
-| `minio.resources` | MinIO resource requests and limits | Check `values.yaml` |
-| `minio.service.type` | MinIO service type | `ClusterIP` |
-| `minio.service.httpPort` | MinIO HTTP service port | `9000` |
-| `minio.service.consolePort` | MinIO console service port | `9001` |
+| `minio.enabled` | Deploy the bundled S3 store | `true` |
+| `minio.image.repository` | Object store image repository | `chrislusf/seaweedfs` |
+| `minio.image.tag` | Object store image tag | `4.46` |
+| `minio.image.pullPolicy` | Image pull policy | `IfNotPresent` |
+| `minio.resources` | Resource requests and limits | Check `values.yaml` |
+| `minio.service.type` | Service type | `ClusterIP` |
+| `minio.service.httpPort` | S3 API port | `9000` |
+| `minio.service.adminPort` | SeaweedFS admin UI port (only when `adminUI.enabled`) | `23646` |
+| `minio.adminUI.enabled` | Expose the admin UI (guarded by the root credentials) | `false` |
+| `minio.s3ExternalUrl` | Public S3 URL for signature verification behind a proxy without `X-Forwarded-*` headers | `""` |
+| `minio.extraArgs` | Extra `weed mini` flags | `[]` |
 | `minio.ingress.separateRoute` | Split MinIO out of the shared ingress so `/` auth settings do not affect it | `false` |
 | `minio.ingress.annotations` | MinIO-specific ingress annotations; falls back to `ingress.annotations` | `{}` |
 | `minio.ingress.labels` | MinIO-specific ingress labels; falls back to `ingress.labels` | `{}` |
 | `minio.ingress.hosts` | Optional explicit host rules for the dedicated MinIO ingress | `[]` |
 | `minio.ingress.tls` | Optional TLS entries for the dedicated MinIO ingress; falls back to `ingress.tls` | `[]` |
-| `minio.args` | MinIO container arguments | `["server", "/data", "--console-address", ":9001"]` |
 
 ### Backend parameters
 

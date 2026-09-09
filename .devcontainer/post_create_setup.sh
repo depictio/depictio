@@ -123,8 +123,8 @@ wait_for_service mongo 27018 "MongoDB"
 # Wait for Redis
 wait_for_service redis 6379 "Redis"
 
-# Wait for MinIO
-wait_for_service minio 9000 "MinIO"
+# Wait for the bundled S3 store (SeaweedFS, service `minio`)
+wait_for_service minio 9000 "S3 (SeaweedFS)"
 
 # Wait for backend
 wait_for_service depictio-backend 8058 "FastAPI backend"
@@ -230,7 +230,7 @@ echo ""
 echo "🔌 Internal Service URLs (container-to-container):"
 echo "   MongoDB:      mongo:27018"
 echo "   Redis:        redis:6379"
-echo "   MinIO:        minio:9000"
+echo "   S3 (SeaweedFS): minio:9000"
 echo "   FastAPI:      depictio-backend:8058"
 echo "   Viewer:       depictio-viewer-dev:5173"
 echo ""
@@ -241,7 +241,7 @@ echo "   │  SERVICE          PORT    ADD TO VS CODE PORTS PANEL    │"
 echo "   ├─────────────────────────────────────────────────────────┤"
 echo "   │  Viewer (Vite)    ${VIEWER_DEV_PORT:-5173}                                     │"
 echo "   │  FastAPI Backend  ${FASTAPI_PORT:-8058}                                     │"
-echo "   │  MinIO Console    ${MINIO_CONSOLE_PORT:-9001}                                     │"
+echo "   │  S3 admin UI      ${MINIO_CONSOLE_PORT:-9001}                                     │"
 echo "   └─────────────────────────────────────────────────────────┘"
 echo ""
 echo "   📋 In Codespaces: Add ports above to the PORTS panel,"

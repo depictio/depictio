@@ -5,7 +5,7 @@
 # Port allocation for git worktree-based multi-instance dev setups.
 #
 # Strategy: scan offsets 100..250 and pick the first one whose 7-port window
-# (mongo, redis, fastapi, minio-api, minio-console, viewer-dev, flower) is
+# (mongo, redis, fastapi, s3-api, s3-admin-ui, viewer-dev, flower) is
 # entirely free on the host. No persistence — every `source` re-allocates,
 # so ports may shift between runs if neighbours boot first. Acceptable for
 # pure dev worktrees; if you need stable URLs, pin them by hand.
@@ -145,8 +145,8 @@ echo "🔌 Port Assignments:"
 echo "   MongoDB:      ${MONGO_PORT}"
 echo "   Redis:        ${REDIS_PORT}"
 echo "   FastAPI:      ${FASTAPI_PORT}"
-echo "   MinIO API:    ${MINIO_PORT}"
-echo "   MinIO Console: ${MINIO_CONSOLE_PORT}"
+echo "   S3 API:       ${MINIO_PORT}"
+echo "   S3 admin UI:  ${MINIO_CONSOLE_PORT}"
 echo "   Viewer (Vite HMR): ${VIEWER_DEV_PORT}"
 echo "   Flower:       ${FLOWER_PORT}"
 echo ""
@@ -164,7 +164,7 @@ echo ""
 # caller has explicitly opted out by exporting DEPICTIO_AUTH_SINGLE_USER_MODE=false.
 DEPICTIO_AUTH_SINGLE_USER_MODE=${DEPICTIO_AUTH_SINGLE_USER_MODE:-true}
 
-# MinIO credentials: single source of truth is docker-compose/.env (committed).
+# S3 credentials: single source of truth is docker-compose/.env (committed).
 # Read them here so the generated .env.instance — which feeds docker compose
 # ${VAR} interpolation for the `minio` container — matches what the backend
 # loads via `env_file: docker-compose/.env`. Hardcoding minio/minio123 here had
@@ -214,7 +214,7 @@ DEPICTIO_MINIO_EXTERNAL_PORT=${MINIO_PORT}
 DEPICTIO_MINIO_EXTERNAL_HOST=localhost
 DEPICTIO_FASTAPI_EXTERNAL_HOST=localhost
 
-# MinIO credentials — single source of truth: docker-compose/.env (read above).
+# S3 credentials — single source of truth: docker-compose/.env (read above).
 # These MUST equal what the backend loads via env_file: docker-compose/.env.
 DEPICTIO_MINIO_ROOT_USER=${DEPICTIO_MINIO_ROOT_USER}
 DEPICTIO_MINIO_ROOT_PASSWORD=${DEPICTIO_MINIO_ROOT_PASSWORD}
@@ -296,7 +296,7 @@ export DATA_DIR="data/${COMPOSE_PROJECT_NAME}"
 export DEPICTIO_DEV_MODE=true
 export DEPICTIO_AUTH_SINGLE_USER_MODE
 export DEPICTIO_MONGODB_WIPE="${MONGODB_WIPE}"
-# MinIO creds (sourced from docker-compose/.env above) — export so the `minio`
+# S3 creds (sourced from docker-compose/.env above) — export so the `minio`
 # container's ${DEPICTIO_MINIO_ROOT_USER} interpolation resolves to the same
 # value the backend loads via env_file, regardless of whether compose reads the
 # sourced shell or .env.instance for interpolation.

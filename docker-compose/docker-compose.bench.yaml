@@ -43,7 +43,7 @@
 #      sits on the RENDER hot path — it is what load_ms reads from on a cache hit.
 #
 # ⚠️ DESTRUCTIVE: switching to named volumes hides the current bind-mounted data
-# (MinIO bucket + Mongo DB). Both move together, so the stack stays coherent —
+# (S3 bucket + Mongo DB). Both move together, so the stack stays coherent —
 # but it comes up EMPTY and every benchmark dataset must be re-ingested. The old
 # data is untouched under ./${DATA_DIR}/ and comes back if you drop this overlay.
 #

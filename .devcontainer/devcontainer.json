@@ -33,13 +33,13 @@
   // Port forwarding - ports are dynamically assigned based on branch name.
   // forward-ports.sh (postStartCommand) creates socat listeners inside this
   // container so Codespaces auto-detects them; the ranges below cover the
-  // bases allocated in allocate-ports.sh (viewer 5500+, minio console 9500+).
+  // bases allocated in allocate-ports.sh (viewer 5500+, S3 admin UI 9500+).
   // The viewer opens in the browser automatically once it is forwarded.
   "portsAttributes": {
     "5500-5700": {"label": "Depictio Viewer", "onAutoForward": "openBrowser"},
     "8000-8200": {"label": "FastAPI Backend", "onAutoForward": "notify"},
-    "9000-9200": {"label": "MinIO API", "onAutoForward": "silent"},
-    "9500-9700": {"label": "MinIO Console", "onAutoForward": "silent"},
+    "9000-9200": {"label": "S3 API (SeaweedFS)", "onAutoForward": "silent"},
+    "9500-9700": {"label": "S3 admin UI", "onAutoForward": "silent"},
     "27000-27200": {"label": "MongoDB", "onAutoForward": "silent"},
     "6000-6200": {"label": "Redis", "onAutoForward": "silent"}
   },

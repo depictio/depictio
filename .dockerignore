@@ -19,6 +19,8 @@ depictio-example-data/
 jbrowse2_sessions/
 jbrowse-watcher-plugin/
 minio_data/
+seaweedfs_data/
+seaweedfs_backup_data/
 
 # -----------------------------
 # Exclude Common Development Directories

@@ -74,9 +74,11 @@ def create_s3_bucket(s3_client: S3Client, bucket_name: str) -> BucketResponse:
         return BucketResponse(message="Bucket created successfully", bucket_name=bucket_name)
     except ClientError as e:
         error_code = e.response.get("Error", {}).get("Code")
-        # BucketAlreadyOwnedByYou means we already own this bucket - treat as success
-        # This can happen in race conditions during initialization with multiple workers
-        if error_code == "BucketAlreadyOwnedByYou":
+        # BucketAlreadyOwnedByYou / BucketAlreadyExists mean the bucket is already
+        # there - treat as success. Happens in race conditions during initialization
+        # with multiple workers, and on every boot with the bundled SeaweedFS
+        # (S3_BUCKET pre-creates the bucket at container start).
+        if error_code in ("BucketAlreadyOwnedByYou", "BucketAlreadyExists"):
             logger.info(f"Bucket '{bucket_name}' already exists and is owned by us")
             return BucketResponse(message="Bucket already exists", bucket_name=bucket_name)
         logger.error(f"Failed to create bucket '{bucket_name}': {error_code}")
@@ -88,7 +90,7 @@ def create_s3_bucket(s3_client: S3Client, bucket_name: str) -> BucketResponse:
 
 def create_bucket(current_user: UserBeanie) -> BucketResponse:
     """
-    Create a bucket in the MinIO server if it doesn't exist.
+    Create the configured bucket in the S3 store if it doesn't exist.
 
     Args:
         current_user: The user requesting bucket creation, must be an admin
