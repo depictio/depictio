@@ -39,18 +39,27 @@ services:
     restart: unless-stopped
 
   minio:
-    image: minio/minio:RELEASE.2025-01-20T14-49-07Z
+    # Bundled local object storage = SeaweedFS (`weed mini`), S3 API on :9000.
+    # The service is still named `minio` so the DEPICTIO_MINIO_* config contract,
+    # `http://minio:9000` and generated CLI configs keep working unchanged.
+    # Internal-only, no host port. For external S3, point DEPICTIO_MINIO_* at
+    # your endpoint and `docker compose up -d --scale minio=0`.
+    image: chrislusf/seaweedfs:4.46
     container_name: minio
-    # Bundled local object storage (internal-only, no host port). For external
-    # S3, point DEPICTIO_MINIO_* at your endpoint and `docker compose up -d --scale minio=0`.
     volumes:
-      - minio_data:/data
+      # New volume name: a pre-existing `minio_data` volume holds MinIO's own
+      # on-disk layout and cannot be reused — see docs/migrate-minio-to-seaweedfs.md.
+      - seaweedfs_data:/data
     environment:
-      MINIO_ROOT_USER: ${DEPICTIO_MINIO_ROOT_USER:-minio}
-      MINIO_ROOT_PASSWORD: ${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}
-    command: server /data --console-address :9001
+      # Static admin identity re-applied on every start (rotate via .env + restart).
+      AWS_ACCESS_KEY_ID: ${DEPICTIO_MINIO_ROOT_USER:-minio}
+      AWS_SECRET_ACCESS_KEY: ${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}
+      # Bucket is created at boot (idempotent) so the API's create_bucket() is a no-op.
+      S3_BUCKET: ${DEPICTIO_MINIO_BUCKET:-depictio-bucket}
+    # Admin UI (unauthenticated upstream by default) and WebDAV are switched off.
+    command: ["mini", "-dir=/data", "-s3.port=9000", "-admin.ui=false", "-webdav=false"]
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:9000/minio/health/live || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:9000/healthz || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -164,7 +173,7 @@ volumes:
     driver: local
   redis_data:
     driver: local
-  minio_data:
+  seaweedfs_data:
     driver: local
   depictio_keys:
     driver: local

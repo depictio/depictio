@@ -247,7 +247,7 @@ jobs:
           echo "🔍 Waiting for workloads to be created..."
           timeout=180  # 3 minutes total timeout
           elapsed=0
-          expected_deployments=4  # minio, backend, viewer, celery-worker
+          expected_deployments=4  # minio (SeaweedFS), backend, viewer, celery-worker
           expected_statefulsets=2  # mongo (self-managed StatefulSet, useOperator: false in CI), redis
 
           while [ $elapsed -lt $timeout ]; do

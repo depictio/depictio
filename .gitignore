@@ -283,8 +283,10 @@ depictio/api/static/branding/**
 depictio/tests/dash/screenshots/
 
 # Cloud Storage
-## S3/MinIO
+## S3 (bundled SeaweedFS; legacy MinIO dir kept ignored)
 minio_data/
+seaweedfs_data/
+seaweedfs_backup_data/
 delta_dev/
 
 # Software Specific

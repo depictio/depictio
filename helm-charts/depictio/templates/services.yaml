@@ -70,9 +70,11 @@ spec:
     - port: {{ .Values.minio.service.httpPort }}
       name: http
       targetPort: {{ .Values.minio.service.httpPort }}
-    - port: {{ .Values.minio.service.consolePort }}
-      name: console
-      targetPort: {{ .Values.minio.service.consolePort }}
+    {{- if .Values.minio.adminUI.enabled }}
+    - port: {{ .Values.minio.service.adminPort }}
+      name: admin
+      targetPort: {{ .Values.minio.service.adminPort }}
+    {{- end }}
   selector:
     release: {{ .Release.Name }}
     app: minio

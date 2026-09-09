@@ -30,7 +30,7 @@ mkdir -p "$LOG_DIR"
 echo "🔌 Starting port forwarding..."
 echo "   Viewer (Vite HMR): $VIEWER_DEV_PORT -> depictio-viewer-dev:5173"
 echo "   FastAPI:           $FASTAPI_PORT -> depictio-backend:8058"
-echo "   MinIO Console:     $MINIO_CONSOLE_PORT -> minio:9001"
+echo "   S3 admin UI:       $MINIO_CONSOLE_PORT -> minio:9001"
 
 # Check if socat is installed
 if ! command -v socat &> /dev/null; then

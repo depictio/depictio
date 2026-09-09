@@ -225,7 +225,7 @@ jobs:
           echo "🔍 Verifying infrastructure commands are available..."
           pixi run mongod --version || echo "MongoDB binary available"
           pixi run redis-server --version || echo "Redis binary available"
-          pixi run minio --version || echo "MinIO binary available"
+          pixi run weed version || echo "SeaweedFS (weed) binary available"
           echo "✅ All infrastructure binaries available via pixi"
 
   docker-build:
@@ -275,8 +275,8 @@ jobs:
       - name: Setup directories
         run: |
           cp .env.example .env
-          mkdir -p data/depictioDB data/minio_data
-          chmod 777 data data/depictioDB data/minio_data
+          mkdir -p data/depictioDB data/seaweedfs_data
+          chmod 777 data data/depictioDB data/seaweedfs_data
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -480,8 +480,8 @@ jobs:
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
           cp .env.example .env
-          mkdir -p data/depictioDB data/minio_data data/prof_files data/cache data/redis
-          chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache data/redis
+          mkdir -p data/depictioDB data/seaweedfs_data data/prof_files data/cache data/redis
+          chmod 777 data data/depictioDB data/seaweedfs_data data/prof_files data/cache data/redis
 
       - name: Start services
         run: |
@@ -612,14 +612,14 @@ jobs:
             sleep 2
           done
 
-          # Wait for MinIO
-          echo "Waiting for MinIO..."
+          # Wait for the bundled S3 store (SeaweedFS)
+          echo "Waiting for S3 (SeaweedFS)..."
           for i in {1..30}; do
-            if curl -f http://localhost:9000/minio/health/ready &>/dev/null; then
-              echo "✅ MinIO ready"
+            if curl -f http://localhost:9000/healthz &>/dev/null; then
+              echo "✅ S3 (SeaweedFS) ready"
               break
             fi
-            echo "MinIO not ready yet, attempt $i/30..."
+            echo "S3 not ready yet, attempt $i/30..."
             sleep 2
           done
 
@@ -1007,8 +1007,8 @@ jobs:
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
           cp .env.example .env
-          mkdir -p data/depictioDB data/minio_data data/prof_files data/cache data/redis
-          chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache data/redis
+          mkdir -p data/depictioDB data/seaweedfs_data data/prof_files data/cache data/redis
+          chmod 777 data data/depictioDB data/seaweedfs_data data/prof_files data/cache data/redis
 
       - name: Log in and start services
         run: |
@@ -1054,14 +1054,14 @@ jobs:
             sleep 2
           done
 
-          # Wait for MinIO
-          echo "Waiting for MinIO..."
+          # Wait for the bundled S3 store (SeaweedFS)
+          echo "Waiting for S3 (SeaweedFS)..."
           for i in {1..30}; do
-            if curl -f http://localhost:9000/minio/health/ready &>/dev/null; then
-              echo "✅ MinIO ready"
+            if curl -f http://localhost:9000/healthz &>/dev/null; then
+              echo "✅ S3 (SeaweedFS) ready"
               break
             fi
-            echo "MinIO not ready yet, attempt $i/30..."
+            echo "S3 not ready yet, attempt $i/30..."
             sleep 2
           done
 
@@ -1470,7 +1470,13 @@ jobs:
 
           # Verify images were uploaded to S3
           echo "📊 Checking S3 for uploaded images..."
-          IMAGE_COUNT=$(docker compose exec -T minio mc ls depictio/depictio-bucket/image_demo/ 2>/dev/null | grep -c "\.png" || true)
+          # SeaweedFS ships no `mc`; count objects through the backend's S3 client.
+          IMAGE_COUNT=$(docker compose exec -T depictio-backend python -c "
+          from depictio.api.v1.configs.config import settings
+          from depictio.api.v1.s3 import s3_client
+          pages = s3_client.get_paginator('list_objects_v2').paginate(Bucket=settings.minio.bucket, Prefix='image_demo/')
+          print(sum(1 for page in pages for o in page.get('Contents', []) if o['Key'].endswith('.png')))
+          " 2>/dev/null | tail -1 || true)
           IMAGE_COUNT=${IMAGE_COUNT:-0}
           [ "$IMAGE_COUNT" -eq 0 ] && echo "⚠️  Warning: No images found in S3, but continuing..." || echo "✅ Found $IMAGE_COUNT images in S3"
 
@@ -1822,11 +1828,11 @@ jobs:
           grep "DEPICTIO_BACKUP" docker-compose/.env || echo "❌ No DEPICTIO_BACKUP vars found!"
 
           echo "📂 Creating required directories..."
-          mkdir -p data/depictioDB data/minio_data data/minio_backup_data data/redis
-          chmod 777 data data/depictioDB data/minio_data data/minio_backup_data data/redis
+          mkdir -p data/depictioDB data/seaweedfs_data data/seaweedfs_backup_data data/redis
+          chmod 777 data data/depictioDB data/seaweedfs_data data/seaweedfs_backup_data data/redis
           # Ensure MongoDB can create additional directories
           chmod -R 777 data/depictioDB 2>/dev/null || echo "Directory permissions already set"
-          ls -la data/depictioDB data/minio_data data/minio_backup_data
+          ls -la data/depictioDB data/seaweedfs_data data/seaweedfs_backup_data
           echo "✅ Directories created and permissions set"
 
       - name: Log in and start services for ${{ matrix.strategy_name }}
@@ -1879,10 +1885,10 @@ jobs:
           echo "🔍 Checking individual container status..."
           echo "--- Depictio Backend ---"
           docker compose logs --tail=10 depictio-backend || echo "❌ Backend logs not available"
-          echo "--- Main MinIO ---"
-          docker compose logs --tail=5 minio || echo "❌ MinIO logs not available"
-          echo "--- Backup MinIO ---"
-          docker compose logs --tail=5 minio-backup || echo "❌ Backup MinIO logs not available"
+          echo "--- Main S3 (SeaweedFS) ---"
+          docker compose logs --tail=5 minio || echo "❌ S3 logs not available"
+          echo "--- Backup S3 (SeaweedFS) ---"
+          docker compose logs --tail=5 minio-backup || echo "❌ Backup S3 logs not available"
           echo "--- MongoDB ---"
           docker compose logs --tail=10 mongo || echo "❌ MongoDB logs not available"
 
@@ -2747,8 +2753,8 @@ jobs:
           # `multiqc_prerender` is bind-mounted into the backend and the worker,
           # both of which run as $UID:$GID. Left to Docker to create, it lands
           # root-owned and every MultiQC render 500s on the cache write.
-          mkdir -p data/depictioDB data/minio_data data/prof_files data/cache data/redis data/multiqc_prerender
-          chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache data/redis data/multiqc_prerender
+          mkdir -p data/depictioDB data/seaweedfs_data data/prof_files data/cache data/redis data/multiqc_prerender
+          chmod 777 data data/depictioDB data/seaweedfs_data data/prof_files data/cache data/redis data/multiqc_prerender
 
       - name: Log in and start services
         run: |
