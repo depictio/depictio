@@ -18,7 +18,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-latest?style=flat-square&logo=fastapi&color=66C2B2)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-latest?style=flat-square&logo=react&logoColor=61DAFB&color=20232A)](https://react.dev/)
 [![MongoDB](https://img.shields.io/badge/MongoDB-latest?style=flat-square&logo=mongodb&color=8FCA82)](https://www.mongodb.com/)
-[![MinIO](https://img.shields.io/badge/MinIO-latest?style=flat-square&logo=minio&color=E88A97)](https://min.io/)
+[![SeaweedFS](https://img.shields.io/badge/SeaweedFS-S3-blue?style=flat-square)](https://github.com/seaweedfs/seaweedfs)
 [![Pydantic](https://img.shields.io/badge/Pydantic-latest?style=flat-square&logo=pydantic&color=F18AAF)](https://pydantic-docs.helpmanual.io/)
 [![Polars](https://img.shields.io/badge/Polars-latest?style=flat-square&logo=polars&color=EDBB85)](https://pola-rs.github.io/polars-book/)
 

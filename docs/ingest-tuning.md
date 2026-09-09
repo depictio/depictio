@@ -64,7 +64,7 @@ cold Redis and a cold disk store took **40–60 ms**, against a 30–75 s cold
 `parse_logs` + `get_plot` build. The first request after an API process starts
 additionally pays a one-time ~3.8 s fsspec S3 filesystem initialisation.
 
-These are single-run numbers from one dev stack (one uvicorn worker, MinIO on the
+These are single-run numbers from one dev stack (one uvicorn worker, the bundled S3 store on the
 same host); treat them as an order of magnitude, not a benchmark.
 
 Invalidating a collection's caches (append / replace / clear) also deletes its S3

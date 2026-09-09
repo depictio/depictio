@@ -73,7 +73,7 @@ cd depictio/projects/test/adapt_feedb_ms
 
 The realistic path: a **virtual-microscopy acquisition simulator** (SVLT) produces a
 live `PhenoBase` table of segmented cells with image patches, and the `svltx-depictio`
-extension exports each acquisition to MinIO as a Delta table and notifies the API —
+extension exports each acquisition to S3 as a Delta table and notifies the API —
 exactly what a real instrument feed would do.
 
 > Needs the SVLT project (`svlt-core` + an experiment script), which lives outside this
@@ -112,7 +112,7 @@ SVLT_EXP_ROOT=/path/to/your/svlt/experiment \
   ./run_simulation.sh
 ```
 
-Every value has a default targeting a stock local stack (FastAPI `:8058`, MinIO `:9000`,
+Every value has a default targeting a stock local stack (FastAPI `:8058`, S3 `:9000`,
 DC `750a1b2c3d4e5f6a7b8c9d10`); override any by exporting it first. The essentials:
 
 | Var | Default | Purpose |
@@ -127,7 +127,7 @@ DC `750a1b2c3d4e5f6a7b8c9d10`); override any by exporting it first. The essentia
 Outside a checkout the script reads the token from your `~/.depictio/CLI.yaml`
 (from §2) and uses the stock defaults for everything else — so once the CLI config
 is in place, `SVLT_EXP_ROOT` is the only thing you must set. In a worktree it
-additionally auto-derives ports + MinIO creds from `.env.instance` (and can fall
+additionally auto-derives ports + S3 creds from `.env.instance` (and can fall
 back to the checkout's `admin_config.yaml` for the token).
 
 Open `http://localhost:5080/dashboard/750a1b2c3d4e5f6a7b8c9d20` and watch acquisitions land

@@ -1,17 +1,22 @@
 """
 Integration tests for S3 backup utilities using testcontainers.
 
-This module provides real integration testing with MinIO containers,
+This module provides real integration testing against a throwaway S3-compatible
+container (SeaweedFS ``weed mini``, the same store bundled in docker-compose),
 avoiding complex mocking and providing more realistic test scenarios.
 """
 
+import os
+import time
+import urllib.error
+import urllib.request
 from unittest.mock import patch
 
 import pytest
 
 # Check if testcontainers is available
 try:
-    from testcontainers.minio import MinioContainer
+    from testcontainers.core.container import DockerContainer
 
     testcontainers_available = True
 except ImportError:
@@ -22,31 +27,63 @@ from depictio.api.v1.backup_strategy_manager import (
     create_backup_with_strategy,
 )
 
+# Keep in sync with the `minio` service image in docker-compose.yaml.
+S3_TEST_IMAGE = os.environ.get("DEPICTIO_TEST_S3_IMAGE", "chrislusf/seaweedfs:4.46")
+S3_TEST_ACCESS_KEY = "testkey"
+S3_TEST_SECRET_KEY = "testsecret_12345"
+S3_TEST_PORT = 8333
+
+
+def _wait_http_ok(url: str, timeout: float = 90.0) -> None:
+    """Poll ``url`` until it answers 2xx (SeaweedFS exposes ``/healthz`` on the S3 port)."""
+    deadline = time.monotonic() + timeout
+    last_error: Exception | None = None
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen(url, timeout=2) as resp:  # noqa: S310 - local test URL
+                if 200 <= resp.status < 300:
+                    return
+        except (urllib.error.URLError, OSError, ValueError) as exc:  # container still booting
+            last_error = exc
+        time.sleep(1)
+    raise RuntimeError(f"S3 test container never became healthy at {url}: {last_error}")
+
 
 @pytest.mark.skipif(not testcontainers_available, reason="testcontainers not available")
 class TestS3BackupIntegration:
-    """Integration tests using real MinIO containers."""
+    """Integration tests using a real S3-compatible container."""
 
     @pytest.fixture
-    def minio_container(self):
-        """Start MinIO container for testing."""
-        with MinioContainer() as minio:
-            yield minio
+    def s3_container(self):
+        """Start a SeaweedFS ``weed mini`` container for testing."""
+        container = (
+            DockerContainer(S3_TEST_IMAGE)
+            .with_env("AWS_ACCESS_KEY_ID", S3_TEST_ACCESS_KEY)
+            .with_env("AWS_SECRET_ACCESS_KEY", S3_TEST_SECRET_KEY)
+            .with_exposed_ports(S3_TEST_PORT)
+            .with_command("mini -dir=/data -admin.ui=false -webdav=false")
+        )
+        with container:
+            endpoint = (
+                f"http://{container.get_container_host_ip()}:"
+                f"{container.get_exposed_port(S3_TEST_PORT)}"
+            )
+            _wait_http_ok(f"{endpoint}/healthz")
+            yield endpoint
 
     @pytest.fixture
-    def s3_config(self, minio_container):
-        """Create S3 config from running MinIO container."""
-        config = minio_container.get_config()
+    def s3_config(self, s3_container):
+        """Create S3 config from the running container."""
         return {
-            "endpoint_url": f"http://{config['endpoint']}",
-            "aws_access_key_id": config["access_key"],
-            "aws_secret_access_key": config["secret_key"],
+            "endpoint_url": s3_container,
+            "aws_access_key_id": S3_TEST_ACCESS_KEY,
+            "aws_secret_access_key": S3_TEST_SECRET_KEY,
             "region_name": "us-east-1",
         }
 
     @pytest.fixture
-    def s3_manager_with_real_minio(self, s3_config):
-        """Create S3 backup manager with real MinIO container."""
+    def s3_manager_with_real_s3(self, s3_config):
+        """Create S3 backup manager backed by the real container."""
         import boto3
 
         # Create source bucket and add test data
@@ -88,9 +125,9 @@ class TestS3BackupIntegration:
             yield manager, source_client
 
     @pytest.mark.asyncio
-    async def test_real_s3_backup_success(self, s3_manager_with_real_minio):
-        """Test successful backup with real MinIO containers."""
-        manager, source_client = s3_manager_with_real_minio
+    async def test_real_s3_backup_success(self, s3_manager_with_real_s3):
+        """Test successful backup with a real S3 container."""
+        manager, source_client = s3_manager_with_real_s3
 
         deltatable_locations = ["data/project_123/deltatable_456/"]
 
@@ -120,9 +157,9 @@ class TestS3BackupIntegration:
             assert len(backup_content) > 0
 
     @pytest.mark.asyncio
-    async def test_real_s3_backup_dry_run(self, s3_manager_with_real_minio):
-        """Test dry run with real MinIO containers."""
-        manager, source_client = s3_manager_with_real_minio
+    async def test_real_s3_backup_dry_run(self, s3_manager_with_real_s3):
+        """Test dry run with a real S3 container."""
+        manager, source_client = s3_manager_with_real_s3
 
         deltatable_locations = ["data/project_123/deltatable_456/"]
 
@@ -146,7 +183,7 @@ class TestS3BackupIntegration:
 
     @pytest.mark.asyncio
     async def test_real_create_backup_with_strategy(self, s3_config):
-        """Test the create_backup_with_strategy function with real MinIO."""
+        """Test the create_backup_with_strategy function against the real container."""
         import boto3
 
         # Setup source bucket with test data
@@ -168,7 +205,7 @@ class TestS3BackupIntegration:
         backup_config = s3_config.copy()
 
         with patch("depictio.api.v1.backup_strategy_manager.settings") as mock_settings:
-            # Mock minio settings (source)
+            # Mock source S3 settings (attribute is still named `minio` for config compat)
             mock_settings.minio.bucket = "test-bucket"
             mock_settings.minio.endpoint_url = s3_config["endpoint_url"]
             mock_settings.minio.aws_access_key_id = s3_config["aws_access_key_id"]
@@ -208,6 +245,6 @@ if not testcontainers_available:
         """Provide information about installing testcontainers for better testing."""
         # Type: ignore because pytest.skip is a valid function but type checker might not recognize it
         pytest.skip(  # type: ignore[misc]
-            "testcontainers not available. Install with: pip install testcontainers[minio] "
-            "for better S3 backup integration testing with real MinIO containers"
+            "testcontainers not available. Install with: pip install testcontainers "
+            "for S3 backup integration testing against a real S3 container"
         )

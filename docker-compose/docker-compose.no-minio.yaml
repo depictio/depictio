@@ -1,6 +1,6 @@
-# Depictio — external S3 / no bundled MinIO.
+# Depictio — external S3 / no bundled object store (SeaweedFS).
 # Same stack as the root docker-compose.yaml but the `minio` service is dropped;
-# point Depictio at your own S3 / MinIO endpoint via the .env vars below.
+# point Depictio at your own S3-compatible endpoint (AWS, NetApp, MinIO, …) via the .env vars below.
 #
 # Run:  docker compose -f docker-compose/docker-compose.no-minio.yaml up -d
 #
@@ -134,7 +134,7 @@ volumes:
     driver: local
   redis_data:
     driver: local
-  # No minio_data volume — storage is external.
+  # No seaweedfs_data volume — storage is external.
   depictio_keys:
     driver: local
   depictio_screenshots:

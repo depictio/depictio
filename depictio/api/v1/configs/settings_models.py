@@ -32,7 +32,9 @@ _WEAK_PASSWORDS: frozenset[str] = frozenset(
 )
 # "changeme" / "change_me" are intentionally NOT in _WEAK_PASSWORDS so they
 # remain usable as a dev/default admin password for quick local starts.
-_WEAK_PASSWORDS_MINIO: frozenset[str] = _WEAK_PASSWORDS | frozenset({"changeme", "change_me"})
+_WEAK_PASSWORDS_MINIO: frozenset[str] = _WEAK_PASSWORDS | frozenset(
+    {"changeme", "change_me", "seaweedfs", "seaweed", "secret"}
+)
 _MIN_SECRET_LEN = 8
 
 
@@ -226,19 +228,25 @@ class MongoDBConfig(ServiceConfig):
 
 
 class S3DepictioCLIConfig(ServiceConfig):
-    """S3/MinIO object storage configuration."""
+    """S3-compatible object storage configuration.
+
+    The bundled store is SeaweedFS (``weed mini``, compose service ``minio``);
+    any S3 endpoint (AWS, NetApp, MinIO, …) works via ``DEPICTIO_MINIO_PUBLIC_URL``
+    + ``DEPICTIO_MINIO_EXTERNAL_SERVICE``. The ``minio`` attribute name and the
+    ``DEPICTIO_MINIO_`` env prefix are kept for configuration compatibility.
+    """
 
     service_name: str = Field(default="minio")
     service_port: int = Field(default=9000)
     external_port: int = Field(default=9000)
     root_user: str = Field(
         default="minio",
-        description="MinIO/S3 root access key (not a secret on its own).",
+        description="S3 access key (not a secret on its own).",
     )
     root_password: SecretStr = Field(
         default=SecretStr(""),
         description=(
-            "MinIO/S3 root secret key. REQUIRED in server context — set via "
+            "S3 secret key. REQUIRED in server context — set via "
             "DEPICTIO_MINIO_ROOT_PASSWORD. The server refuses to start when this is unset, "
             "shorter than 8 characters, or matches a well-known default."
         ),
@@ -249,8 +257,8 @@ class S3DepictioCLIConfig(ServiceConfig):
     verify_tls: bool = Field(
         default=True,
         description=(
-            "Verify TLS certificates when talking to S3/MinIO. Only set to false for local "
-            "development against self-signed dev MinIO instances."
+            "Verify TLS certificates when talking to S3. Only set to false for local "
+            "development against self-signed dev S3 instances."
         ),
     )
 

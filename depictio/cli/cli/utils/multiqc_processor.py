@@ -266,10 +266,11 @@ def _iter_module_plots(entries: Any):
 
 
 def _make_s3_client(storage_options):
-    """boto3 S3 client configured for MinIO (path-style addressing + s3v4).
+    """boto3 S3 client configured for S3-compatible stores (path-style + s3v4).
 
-    Shared by the report-upload loop and the offline figure prerender so the
-    MinIO-compat config lives in one place.
+    Works against the bundled SeaweedFS as well as MinIO / AWS / NetApp. Shared
+    by the report-upload loop and the offline figure prerender so the S3-compat
+    config lives in one place.
     """
     import boto3
     from botocore.config import Config as BotoConfig
@@ -705,7 +706,7 @@ def process_multiqc_data_collection(
                                 logger.info(f"Using new S3 key (hash-based): {s3_key}")
 
                             logger.info(f"Uploading file to S3: {file_path} -> {s3_key}")
-                            # Use put_object to avoid multipart upload issues with MinIO
+                            # Use put_object: single-part PUT is the most portable path across S3-compatible stores
                             with open(file_path, "rb") as f, timed("upload"):
                                 s3_client.put_object(
                                     Bucket=CLI_config.s3_storage.bucket,
@@ -817,9 +818,10 @@ def process_multiqc_data_collection(
                     logger.info(
                         f"Uploading file {i + 1}/{len(individual_file_metadata)}: {file_path}"
                     )
-                    # Force single-part PUT: MinIO + path-style addressing
-                    # rejects boto3 multipart CompleteMultipartUpload with
-                    # AccessDenied (signature drift on the manifest XML).
+                    # Force single-part PUT: some S3-compatible stores (seen
+                    # with MinIO + path-style addressing) reject boto3 multipart
+                    # CompleteMultipartUpload with AccessDenied (signature drift
+                    # on the manifest XML). Single-part is portable everywhere.
                     # MultiQC parquet files are bounded (~25-50 MB), so a
                     # 5 GB threshold keeps every realistic upload single-part.
                     from boto3.s3.transfer import TransferConfig

@@ -180,7 +180,8 @@ spec:
           storage: {{ .Values.redis.persistence.size }}
 {{- end }}
 ---
-# MinIO Deployment (S3-compatible storage)
+# Bundled S3 object store Deployment: SeaweedFS `weed mini`.
+# Resource names keep the historical `minio` label for compatibility.
 {{- if .Values.minio.enabled }}
 apiVersion: apps/v1
 kind: Deployment
@@ -215,22 +216,58 @@ spec:
           securityContext:
             {{- toYaml .Values.minio.securityContext | nindent 12 }}
           env:
-            - name: MINIO_ROOT_USER
+            # Static admin S3 identity, re-applied on every start.
+            - name: AWS_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
                   name: {{ .Release.Name }}-depictio-secrets
                   key: MINIO_ROOT_USER
-            - name: MINIO_ROOT_PASSWORD
+            - name: AWS_SECRET_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Release.Name }}-depictio-secrets
                   key: MINIO_ROOT_PASSWORD
+            # Bucket pre-created at boot (idempotent).
+            - name: S3_BUCKET
+              value: {{ .Values.minio.env.DEPICTIO_MINIO_BUCKET | default "depictio-bucket" | quote }}
           args:
-            - "server"
-            - "/data"
+            - "mini"
+            - "-dir=/data"
+            - "-s3.port={{ .Values.minio.service.httpPort }}"
+            - "-webdav=false"
+            {{- if .Values.minio.adminUI.enabled }}
+            - "-admin.port={{ .Values.minio.service.adminPort }}"
+            - "-admin.user=$(AWS_ACCESS_KEY_ID)"
+            - "-admin.password=$(AWS_SECRET_ACCESS_KEY)"
+            {{- else }}
+            - "-admin.ui=false"
+            {{- end }}
+            {{- if .Values.minio.s3ExternalUrl }}
+            - "-s3.externalUrl={{ .Values.minio.s3ExternalUrl }}"
+            {{- end }}
+            {{- range .Values.minio.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
           ports:
             - containerPort: {{ .Values.minio.service.httpPort }}
-            - containerPort: {{ .Values.minio.service.consolePort }}
+              name: http
+            {{- if .Values.minio.adminUI.enabled }}
+            - containerPort: {{ .Values.minio.service.adminPort }}
+              name: admin
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.minio.service.httpPort }}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.minio.service.httpPort }}
+            initialDelaySeconds: 30
+            periodSeconds: 30
           resources:
             {{- toYaml .Values.minio.resources | nindent 12 }}
           volumeMounts:

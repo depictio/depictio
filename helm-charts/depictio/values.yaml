@@ -55,9 +55,9 @@ persistence:
 
 # Secrets
 secrets:
-  # Optionally override the generated MinIO access key
+  # Optionally override the generated S3 access key (bundled SeaweedFS)
   minioRootUser: ""
-  # Optionally override the generated MinIO secret key
+  # Optionally override the generated S3 secret key
   minioRootPassword: ""
   # First-boot admin bootstrap. Replaces the legacy initial_users.yaml file
   # that shipped admin@example.com / changeme. Both REQUIRED for fresh
@@ -176,15 +176,19 @@ redis:
     seccompProfile:
       type: RuntimeDefault
 
-# MinIO settings
+# Bundled S3 object store settings.
+# The store is SeaweedFS (`weed mini`, Apache-2.0); the `minio` key, the
+# `-minio` resource names and the MINIO_ROOT_* Secret keys are kept for
+# compatibility with existing values files and the DEPICTIO_MINIO_* contract.
+# Set `enabled: false` and `env.DEPICTIO_MINIO_PUBLIC_URL` for an external S3.
 minio:
   enabled: true
   image:
-    repository: minio/minio
-    # Pin to a specific MinIO release. The :latest tag is mutable and was
-    # flagged as a supply-chain risk; override per-deployment when MinIO
+    repository: chrislusf/seaweedfs
+    # Pin to a specific SeaweedFS release. The :latest tag is mutable and was
+    # flagged as a supply-chain risk; override per-deployment when SeaweedFS
     # publishes a security update you want to roll out deliberately.
-    tag: "RELEASE.2024-12-18T13-15-44Z"
+    tag: "4.46"
     pullPolicy: IfNotPresent
   resources:
     requests:
@@ -195,8 +199,23 @@ minio:
       cpu: "1"
   service:
     type: ClusterIP
+    # S3 API port (weed mini is started with -s3.port=<httpPort>).
     httpPort: 9000
-    consolePort: 9001
+    # SeaweedFS admin UI port — only exposed when adminUI.enabled is true.
+    adminPort: 23646
+  # SeaweedFS admin UI. Off by default: upstream serves it unauthenticated and
+  # it can mint S3 identities. When enabled it is protected with the root
+  # access/secret key pair from the depictio-secrets Secret.
+  adminUI:
+    enabled: false
+  # Public S3 URL for signature verification behind a proxy that does NOT set
+  # X-Forwarded-Host/Proto (SeaweedFS auto-detects those headers). Leave empty
+  # unless clients get SignatureDoesNotMatch through the ingress, then set e.g.
+  # "https://<release>-minio.<domain>".
+  s3ExternalUrl: ""
+  # Extra `weed mini` flags, e.g. ["-volume.index=leveldb"] for very large
+  # object counts (the default in-memory index grows with the number of objects).
+  extraArgs: []
   podSecurityContext:
     runAsUser: 1000
     runAsGroup: 1000
@@ -215,8 +234,8 @@ minio:
     # No default credentials. Root user / password come from the
     # ``{{ .Release.Name }}-depictio-secrets`` Kubernetes Secret (set via
     # secrets.minioRootUser / secrets.minioRootPassword in this values file)
-    # and are injected into the pod via envFrom: secretRef in the MinIO
-    # Deployment template. Shipping `minio` / `minio123` as a baked default
+    # and are injected into the SeaweedFS pod as AWS_ACCESS_KEY_ID /
+    # AWS_SECRET_ACCESS_KEY. Shipping `minio` / `minio123` as a baked default
     # was a Critical finding — handing the bucket to anyone who could reach
     # the service on the cluster network.
     DEPICTIO_MINIO_BUCKET: "depictio-bucket"

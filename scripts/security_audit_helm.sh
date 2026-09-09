@@ -175,7 +175,7 @@ check_image_pin() {
 }
 
 check_image_pin "mongo"  "mongo"
-check_image_pin "minio"  "minio/minio"
+check_image_pin "minio (SeaweedFS)"  "chrislusf/seaweedfs"
 check_image_pin "redis"  "redis"
 
 # Backend / viewer / worker — usually pinned by the chart's Chart.yaml version,

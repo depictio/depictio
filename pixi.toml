@@ -13,10 +13,10 @@ platforms = ["linux-64", "osx-arm64", "osx-64"]
 
 [tasks]
 # =============================================================================
-# Infrastructure services (MongoDB, Redis, MinIO)
+# Infrastructure services (MongoDB, Redis, SeaweedFS S3)
 # =============================================================================
 # Initialize data directories
-init-data-dirs = "mkdir -p .pixi-data/mongodb .pixi-data/redis .pixi-data/minio"
+init-data-dirs = "mkdir -p .pixi-data/mongodb .pixi-data/redis .pixi-data/seaweedfs"
 
 # Start MongoDB on port 27018 (matching docker-compose config)
 start-mongo = { cmd = "mongod --dbpath .pixi-data/mongodb --port 27018 --bind_ip 127.0.0.1 --logpath .pixi-data/mongodb/mongod.log --fork", depends-on = ["init-data-dirs"] }
@@ -26,9 +26,12 @@ stop-mongo = "mongosh --port 27018 --eval 'db.adminCommand({shutdown: 1})' || tr
 start-redis = { cmd = "redis-server --daemonize yes --port 6379 --dir .pixi-data/redis --logfile redis.log", depends-on = ["init-data-dirs"] }
 stop-redis = "redis-cli -p 6379 shutdown || true"
 
-# Start MinIO on port 9000 (API) and 9001 (Console)
-start-minio = { cmd = "minio server .pixi-data/minio --address :9000 --console-address :9001 > .pixi-data/minio/minio.log 2>&1 &", depends-on = ["init-data-dirs"] }
-stop-minio = "pkill -f 'minio server' || true"
+# Bundled S3 store = SeaweedFS `weed mini`, S3 API on port 9000 (task names kept
+# as start-minio/stop-minio for compatibility). Admin UI and WebDAV are off.
+# Credentials/bucket default to the docker-compose ones; override with
+# DEPICTIO_MINIO_ROOT_USER / DEPICTIO_MINIO_ROOT_PASSWORD / DEPICTIO_MINIO_BUCKET.
+start-minio = { cmd = "bash -c 'AWS_ACCESS_KEY_ID=\"${DEPICTIO_MINIO_ROOT_USER:-minio}\" AWS_SECRET_ACCESS_KEY=\"${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}\" S3_BUCKET=\"${DEPICTIO_MINIO_BUCKET:-depictio-bucket}\" nohup weed mini -dir=.pixi-data/seaweedfs -ip.bind=127.0.0.1 -s3.port=9000 -admin.ui=false -webdav=false > .pixi-data/seaweedfs/weed.log 2>&1 &'", depends-on = ["init-data-dirs"] }
+stop-minio = "pkill -f 'weed mini' || true"
 
 # Start all infrastructure services
 start-infra = { depends-on = ["start-mongo", "start-redis", "start-minio"] }
@@ -39,7 +42,7 @@ status-infra = """
 echo "=== Infrastructure Status ===" && \
 echo -n "MongoDB (27018): " && (mongosh --port 27018 --eval 'db.runCommand({ping:1})' --quiet 2>/dev/null && echo "running" || echo "stopped") && \
 echo -n "Redis (6379): " && (redis-cli -p 6379 ping 2>/dev/null || echo "stopped") && \
-echo -n "MinIO (9000): " && (curl -s http://localhost:9000/minio/health/live && echo " running" || echo "stopped")
+echo -n "S3/SeaweedFS (9000): " && (curl -sf http://localhost:9000/healthz >/dev/null && echo "running" || echo "stopped")
 """
 
 # =============================================================================
@@ -74,8 +77,8 @@ python = ">=3.11,<3.13"
 # Note: conda-forge mongodb is at 6.0.x, not 7.x
 mongodb = ">=6.0"
 redis-server = ">=7.0"
-# minio-server is the server binary (not minio which is the Python SDK)
-minio-server = "*"
+# seaweedfs provides the `weed` binary (S3-compatible object store)
+seaweedfs = ">=4.46"
 
 # Note: xvfb for headless browser testing should be installed via apt on Linux:
 #   sudo apt-get install xvfb
@@ -103,7 +106,7 @@ pytest-cov = "*"
 mongomock = ">=4.3.0"
 mongomock-motor = ">=0.0.36"
 bump2version = "*"
-testcontainers = { version = "*", extras = ["minio"] }
+testcontainers = "*"
 
 [environments]
 # Default environment with all features
