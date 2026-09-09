@@ -7,7 +7,7 @@ This document explains how to use git worktrees with Depictio's multi-instance d
 Each git worktree (branch) gets its own:
 - **Unique container names**: `depictio-{branch-name}-mongo`, etc.
 - **Unique ports**: Automatically assigned based on branch type
-- **Isolated data**: Separate databases, MinIO storage, Redis data
+- **Isolated data**: Separate databases, S3 (SeaweedFS) storage, Redis data
 - **Independent VS Code window**: Full development environment per branch
 
 ## Quick Start
@@ -48,12 +48,12 @@ Each instance gets unique external ports:
 **Main Branch** (offset: 0):
 - FastAPI: `http://localhost:8000`
 - Dash: `http://localhost:5000`
-- MinIO Console: `http://localhost:9001`
+- S3 admin UI: `http://localhost:9001`
 
 **Feature Branch** (offset: varies, e.g., 42):
 - FastAPI: `http://localhost:8042`
 - Dash: `http://localhost:5042`
-- MinIO Console: `http://localhost:9043`
+- S3 admin UI: `http://localhost:9043`
 
 Check the post-create output in each devcontainer terminal for exact ports.
 
@@ -68,7 +68,7 @@ MongoDB:    27000
 Redis:      6000
 FastAPI:    8000
 Dash:       5000
-MinIO:      9000
+S3 API:     9000
 Console:    9001
 ```
 
@@ -80,7 +80,7 @@ MongoDB:    27042
 Redis:      6042
 FastAPI:    8042
 Dash:       5042
-MinIO:      9042
+S3 API:     9042
 Console:    9043
 ```
 
@@ -111,13 +111,13 @@ depictio/
 ├── data/
 │   ├── depictio-main/
 │   │   ├── depictioDB/          # MongoDB data for main
-│   │   ├── minio_data/          # MinIO storage for main
+│   │   ├── seaweedfs_data/      # S3 (SeaweedFS) storage for main
 │   │   ├── redis/               # Redis data for main
 │   │   └── cache/               # App cache for main
 │   │
 │   ├── depictio-feat-figure-component/
 │   │   ├── depictioDB/          # Separate MongoDB data
-│   │   ├── minio_data/          # Separate MinIO storage
+│   │   ├── seaweedfs_data/      # Separate S3 storage
 │   │   └── ...
 │   │
 │   └── depictio-feat-auth-refactor/
@@ -382,7 +382,7 @@ docker compose -f docker-compose.dev.yaml \
 - `.devcontainer/scripts/allocate-ports.sh` - Port allocation logic
 - `.devcontainer/pre_create_setup.sh` - Instance initialization
 - `.devcontainer/post_create_setup.sh` - Service readiness checks
-- `docker-compose.dev.yaml` - Service definitions with dynamic ports (MinIO bundled)
+- `docker-compose.dev.yaml` - Service definitions with dynamic ports (SeaweedFS S3 bundled)
 - `.devcontainer/docker-compose.devcontainer.yaml` - DevContainer service
 - `.env.instance` - Generated instance configuration
 - `.env` - Combined environment for Docker Compose

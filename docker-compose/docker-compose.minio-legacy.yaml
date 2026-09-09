@@ -1,0 +1,46 @@
+# Depictio — legacy MinIO side-car for one-off data migration.
+#
+# Depictio's bundled object store is now SeaweedFS (compose service `minio`,
+# volume `seaweedfs_data`). A pre-existing MinIO volume (`minio_data`) uses
+# MinIO's own on-disk layout and cannot be read by SeaweedFS, so the old server
+# is started *next to* the new one, on its untouched data, and the bucket is
+# copied S3 → S3 with scripts/migrate_minio_to_seaweedfs.py.
+#
+# Named-volume install (root docker-compose.yaml):
+#   docker compose -f docker-compose.yaml -f docker-compose/docker-compose.minio-legacy.yaml up -d minio-legacy
+#
+# Bind-mount install (docker-compose.dev.yaml, data under ./data/minio_data):
+#   MINIO_LEGACY_DATA=./data/minio_data docker compose -f docker-compose.dev.yaml \
+#     -f docker-compose/docker-compose.minio-legacy.yaml up -d minio-legacy
+#
+# Then follow docs/migrate-minio-to-seaweedfs.md. Remove the side-car afterwards:
+#   docker compose -f docker-compose.yaml -f docker-compose/docker-compose.minio-legacy.yaml rm -sf minio-legacy
+services:
+  minio-legacy:
+    # Last community MinIO release Depictio shipped with. Read-only usage:
+    # nothing writes to it during the migration.
+    image: minio/minio:RELEASE.2025-01-20T14-49-07Z
+    container_name: minio-legacy
+    volumes:
+      - ${MINIO_LEGACY_DATA:-minio_data}:/data
+    environment:
+      # Same credentials the old `minio` service used.
+      MINIO_ROOT_USER: ${DEPICTIO_MINIO_ROOT_USER:-minio}
+      MINIO_ROOT_PASSWORD: ${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}
+    command: server /data
+    ports:
+      # Loopback only: the migration script talks to it from the host.
+      - "127.0.0.1:9100:9000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9000/minio/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: "no"
+
+volumes:
+  # Resolves to the existing <project>_minio_data volume of a named-volume
+  # install. Ignored for bind-mount installs (MINIO_LEGACY_DATA is a path).
+  minio_data:
+    driver: local

@@ -124,7 +124,7 @@ dev = [
   "mongomock==4.3.0",
   "mongomock-motor==0.0.36",
   "bump2version==1.0.1",
-  "testcontainers[minio]==4.15.0",
+  "testcontainers==4.15.0",
   "types-bleach==6.4.0.20260728",
   "types-boto3==1.43.62",
 ]

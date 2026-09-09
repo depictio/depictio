@@ -145,8 +145,8 @@ jobs:
 
       - name: Start services
         run: |
-          mkdir -p depictioDB minio_data
-          chmod 777 depictioDB minio_data
+          mkdir -p depictioDB seaweedfs_data
+          chmod 777 depictioDB seaweedfs_data
 
           # Set the DEPICTIO_VERSION environment variable for docker-compose
           export DEPICTIO_VERSION="${{ steps.image-info.outputs.full-image }}"
@@ -278,8 +278,8 @@ jobs:
           # Set environment variables for docker-compose
           export DEPICTIO_VERSION="${FULL_IMAGE}"
 
-          mkdir -p depictioDB minio_data
-          chmod 777 depictioDB minio_data
+          mkdir -p depictioDB seaweedfs_data
+          chmod 777 depictioDB seaweedfs_data
           docker compose -f docker-compose.dev.yaml up -d
 
 

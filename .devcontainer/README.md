@@ -35,8 +35,8 @@ The devcontainer automatically starts all services:
 | Redis | 6379 | `localhost:6379` | Cache |
 | FastAPI | 8058 | `localhost:8058` | Backend API |
 | Dash | 5080 | `localhost:5080` | Frontend UI |
-| MinIO | 9000 | `localhost:9000` | S3 Storage |
-| MinIO Console | 9001 | `localhost:9001` | Storage UI |
+| S3 (SeaweedFS) | 9000 | `localhost:9000` | S3 Storage |
+| S3 admin UI | 9001 | `localhost:9001` | Storage UI (SeaweedFS) |
 
 **Local worktrees**: Each branch gets unique ports (offset by 10-150) to avoid conflicts.
 **Codespaces**: Uses standard ports, accessed via GitHub's proxy URLs.
@@ -57,7 +57,7 @@ When using git worktrees locally, you get automatic:
 
 If `docker-compose/.env` doesn't exist, a default is created automatically with:
 - Development mode enabled
-- MinIO credentials: `minio` / `minio123`
+- S3 credentials: `minio` / `minio123`
 - Debug logging
 - OAuth disabled
 
@@ -117,7 +117,7 @@ docker logs <container-name>  # Check specific service logs
 ┌─────────────────────────────────────────────────────────┐
 │ Services (docker-compose)                               │
 │ ┌─────────┐ ┌─────────┐ ┌────────┐ ┌─────────────────┐│
-│ │ MongoDB │ │  Redis  │ │ MinIO  │ │ FastAPI + Dash  ││
+│ │ MongoDB │ │  Redis  │ │  S3    │ │ FastAPI + Dash  ││
 │ └─────────┘ └─────────┘ └────────┘ └─────────────────┘│
 └─────────────────────────────────────────────────────────┘
 ```

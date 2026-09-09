@@ -9,7 +9,7 @@ independent mechanisms. Reading this page as an operator, the one thing to take
 away is:
 
 > **Admin > Backups covers the database, not your data.**
-> Delta tables in S3/MinIO are a separate backup, with a separate procedure, and
+> Delta tables in S3 are a separate backup, with a separate procedure, and
 > they are never restored by the admin UI.
 
 ## What lives where
@@ -17,7 +17,7 @@ away is:
 | Store | Holds | Covered by Admin > Backups |
 | --- | --- | --- |
 | MongoDB | users, groups, projects, workflows, dashboards, data collection definitions, file records, delta table *locations*, runs, instance settings, branding assets | Yes |
-| S3 / MinIO | the Delta Lake tables themselves, uploaded images, MultiQC inputs | **No** |
+| S3 (bundled SeaweedFS or external) | the Delta Lake tables themselves, uploaded images, MultiQC inputs | **No** |
 
 A MongoDB backup records that a data collection's table lives at
 `s3://depictio-bucket/<data_collection_id>/`. It does not contain a single row of
@@ -139,7 +139,7 @@ descending order of what we would recommend.
 ### 1. Object store replication (recommended for production)
 
 Let the object store do it. S3 bucket versioning plus Cross-Region Replication,
-or MinIO's `mc mirror` / site replication, gives point-in-time recovery of the
+or an `rclone sync` / `aws s3 sync` job to a second bucket, gives point-in-time recovery of the
 Delta tables without Depictio being in the path at all. Delta Lake is
 append-structured, so object versioning composes well with it.
 
@@ -167,8 +167,8 @@ deployment configuration, and it runs synchronously inside the request.
 
 ### 3. Snapshot the volume
 
-For single-node MinIO deployments, a filesystem or block-device snapshot of the
-MinIO data volume, taken alongside a database backup, is a coherent pair.
+For the bundled single-node SeaweedFS store, a filesystem or block-device snapshot of
+the `seaweedfs_data` volume, taken alongside a database backup, is a coherent pair.
 
 ### Restoring data: manual
 
