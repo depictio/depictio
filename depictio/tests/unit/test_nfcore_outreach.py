@@ -285,3 +285,36 @@ def test_create_discussions_rejects_an_unknown_category(
 
     with pytest.raises(SystemExit, match="Pipeline templates"):
         nfo.create_discussions([(facts, "t", "b")], "depictio/depictio", "Pipeline templates")
+
+
+def test_screenshots_are_paired_with_the_tab_they_show(nfo: ModuleType, template_dir: Path) -> None:
+    """Filenames are tab slugs, so the caption can name the tab a reviewer would fault."""
+    (template_dir / "demoseq" / "1.2.0" / "docs" / "screenshots" / "peaks.png").write_bytes(b"")
+    (template_dir / "demoseq" / "1.2.0" / "docs" / "screenshots" / "stray.png").write_bytes(b"")
+    facts = nfo.collect_facts("demoseq", "1.2.0", projects_dir=template_dir)
+
+    paired = nfo.screenshots_for_tabs(facts, "https://img.example/")
+
+    # Tab order first (QC, Peaks), then anything with no matching tab.
+    assert [title for title, _url in paired] == ["QC", "Peaks", "Stray"]
+    assert paired[0][1].startswith("https://img.example/")
+    assert paired[0][1].endswith("/qc.png")
+
+
+def test_discussion_embeds_the_hero_shot_and_folds_the_rest(
+    nfo: ModuleType, template_dir: Path
+) -> None:
+    (template_dir / "demoseq" / "1.2.0" / "docs" / "screenshots" / "peaks.png").write_bytes(b"")
+    facts = nfo.collect_facts("demoseq", "1.2.0", projects_dir=template_dir)
+
+    body = nfo.render_discussion(
+        facts, "https://demo.example.org", "https://docs/{pipeline}/", {}, "https://img.example"
+    )
+    assert "![QC](https://img.example/" in body
+    assert "<details>" in body
+    assert "![Peaks](https://img.example/" in body
+
+    # An empty base is how a caller asks for a text-only bundle.
+    assert "![QC](" not in nfo.render_discussion(
+        facts, "https://demo.example.org", "https://docs/{pipeline}/", {}, ""
+    )
