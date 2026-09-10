@@ -26,6 +26,7 @@ import {
   findCatalogProjects,
   flattenOffers,
   storedComponentIds,
+  waitForMultiqcOptions,
   CatalogProject,
   RenderOffer,
 } from "../../fixtures/catalog";
@@ -100,15 +101,20 @@ async function checkComponent(
 
   const selector = CONTENT_SELECTOR[offer.render.component];
   if (selector) {
+    const budget =
+      CONTENT_TIMEOUT_MS[offer.render.component] ?? DEFAULT_CONTENT_TIMEOUT_MS;
     try {
-      await pwExpect(cell.locator(selector).first()).toBeVisible({
-        timeout:
-          CONTENT_TIMEOUT_MS[offer.render.component] ?? DEFAULT_CONTENT_TIMEOUT_MS,
-      });
+      await pwExpect(cell.locator(selector).first()).toBeVisible({ timeout: budget });
     } catch {
       const text = (await cell.innerText().catch(() => "")).trim().slice(0, 200);
+      // Distinguish "still working" from "broken": the two need different
+      // answers, and the message is the only evidence a CI log keeps.
+      const stillPreparing = text.includes("Preparing MultiQC figures");
+      const why = stillPreparing
+        ? `still preparing after ${budget / 1000}s`
+        : `nothing matching '${selector}' rendered`;
       return {
-        problem: `${offer.label}: nothing matching '${selector}' rendered on the ${surface} — cell reads: ${text || "(empty)"}`,
+        problem: `${offer.label}: ${why} on the ${surface} — cell reads: ${text || "(empty)"}`,
         fullWidth,
       };
     }
@@ -131,6 +137,23 @@ test.describe("catalog modules are usable on a dashboard", () => {
   test.beforeAll(async ({ request }) => {
     tokens = await apiLogin(request, credentials.adminUser.email, credentials.adminUser.password);
     projects = await findCatalogProjects(request, tokens);
+
+    // Warm every data collection a MultiQC render would be added from, before
+    // the first add rather than during it. See waitForMultiqcOptions: the
+    // picker persists what the builder options say at click time, so a cold
+    // collection is saved as a component with no plot and only fails later.
+    const multiqcDcIds = [
+      ...new Set(
+        projects
+          .flatMap((p) => flattenOffers(p.modules))
+          .filter((o) => o.render.component === "multiqc")
+          .map((o) => o.match.dc_id),
+      ),
+    ];
+    const cold = await waitForMultiqcOptions(request, tokens, multiqcDcIds);
+    if (cold.length) {
+      console.log(`multiqc options never came up for: ${cold.join(", ")}`);
+    }
   });
 
   test("every catalog render adds and renders", async ({ page, request }) => {
