@@ -134,14 +134,6 @@ const Header: React.FC<HeaderProps> = ({
   const addColor = useBrandAccent('primary', 'green');
   const saveColor = useBrandAccent('secondary', 'teal');
   const editColor = useBrandAccent('primary', 'blue');
-  // The reader's context travels with the link: which dashboard, which tab,
-  // which page. Without it a remark arrives as "that plot is wrong" with
-  // nothing saying where.
-  const feedback = useFeedbackLink({
-    dashboard: dashboard?.title ?? null,
-    dashboardId,
-    tab: activeTab?.title ?? null,
-  });
   const resolvedColor = resolveTabColor(activeTab, brand);
   const tabIconColor = resolvedColor || 'gray';
   // Title text color:
@@ -174,6 +166,21 @@ const Header: React.FC<HeaderProps> = ({
   const titleText = dashboardName
     ? `${dashboardName} / ${activeLabel}`
     : activeLabel;
+  // The pill label the reader is actually looking at, or nothing when this tab
+  // has none of its own. `activeTab.title` is the dashboard's own title on a
+  // parent tab, so reading it here sent "nf-core/ampliseq" as both the
+  // dashboard and the tab; an empty field says less but says it truthfully.
+  const tabLabel = (isChild ? activeTab?.title : activeTab?.main_tab_name) || null;
+
+  // The reader's context travels with the link: which dashboard, which tab,
+  // which page. Without it a remark arrives as "that plot is wrong" with
+  // nothing saying where. Both names are the ones on screen, taken from the
+  // breadcrumb rather than the raw fields, so the link and the header agree.
+  const feedback = useFeedbackLink({
+    dashboard: dashboardName ?? null,
+    dashboardId,
+    tab: tabLabel,
+  });
 
   const handleEdit = () => {
     if (dashboardId) {
