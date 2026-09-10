@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from depictio.models.logging import logger as models_logger
 from depictio.models.models.nextflow import NextflowRunInfoReader, normalize_pipeline_version
 
 # Real shape: `Workflow:` indented 4 spaces, plain `software_versions.yml`.
@@ -421,6 +422,10 @@ class TestHeterogeneousSequencingRunsRoot:
     The reader keeps its deterministic first-sorted choice, but has to say that
     a choice was made, because the version it reports then describes one run out
     of several and the tool list belongs to all of them.
+
+    ``at_level`` has to name the logger: ``setup_logging(verbose=False)`` mutes
+    ``depictio-models`` to CRITICAL, so any test that called it earlier in the
+    same xdist worker leaves the warning unemitted and ``caplog`` empty.
     """
 
     def test_two_pipelines_under_one_root_are_reported(self, tmp_path, caplog):
@@ -431,7 +436,7 @@ class TestHeterogeneousSequencingRunsRoot:
             "Workflow:\n  nf-core/viralrecon: 3.0.0\n  Nextflow: 25.10.0\n"
         )
 
-        with caplog.at_level(logging.WARNING):
+        with caplog.at_level(logging.WARNING, logger=models_logger.name):
             info = _reader().read(tmp_path)
 
         assert info is not None
@@ -451,7 +456,7 @@ class TestHeterogeneousSequencingRunsRoot:
             "Workflow:\n  nf-core/ampliseq: 2.18.0\n  Nextflow: 25.10.0\n"
         )
 
-        with caplog.at_level(logging.WARNING):
+        with caplog.at_level(logging.WARNING, logger=models_logger.name):
             info = _reader().read(tmp_path)
 
         assert info is not None
@@ -469,7 +474,7 @@ class TestHeterogeneousSequencingRunsRoot:
         ):
             (_pipeline_info(tmp_path / name) / "software_versions.yml").write_text(versions)
 
-        with caplog.at_level(logging.WARNING):
+        with caplog.at_level(logging.WARNING, logger=models_logger.name):
             info = _reader().read(tmp_path)
 
         assert info is not None
