@@ -644,4 +644,25 @@ workflows:
               sample: "Sample the junction was counted in; one lane per value. CTRL_rep1/rep2 and KD_rep1/rep2, two replicates per condition."
               annotation: "Junction class - known (annotated consecutive-exon intron) or novel (exon-skipping and alternative donor/acceptor sites). Colours the arcs."
 
+      - id: "646b0f3c1e4a2d7f8e5b8d86"
+        data_collection_tag: "scatter_xy_demo"
+        description: "Replicate concordance for 900 genes: the same measurement made twice, with a tenth of the genes moved off the identity diagonal"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/scatter_xy_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              gene: "Gene identifier. Labels each point, and is the column the cross-filter emits when points are selected."
+              rep_a: "Expression in replicate A, on the x axis. Same units as rep_b, which is what makes the identity diagonal meaningful."
+              rep_b: "Expression in replicate B, on the y axis."
+              mean_expression: "Mean of the two replicates. Drives the marker size, so the reader can see the off-diagonal points are not the faint ones."
+              regulation: "up in B, down in B or unchanged. Colours the points; a tenth of the genes are regulated."
+
 # No joins. Filters in each dashboard are scoped to a single DC.

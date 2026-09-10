@@ -125,6 +125,14 @@ export function advancedVizSelectionColumn(metadata: StoredMetadata): string | u
           : undefined;
       return named ?? seriesCol;
     }
+    case 'scatter_xy': {
+      // The label column, because that is what identifies a point: the axes are
+      // numeric by definition and the colour column is a grouping, so filtering
+      // on either would select a band rather than the points that were clicked.
+      const labelCol =
+        typeof config.label_col === 'string' && config.label_col ? config.label_col : undefined;
+      return named ?? labelCol;
+    }
     default:
       return undefined;
   }

@@ -414,6 +414,7 @@ async def create_initial_dashboards(
                 "gene_arrow_track",
                 "gsea_running_score",
                 "sashimi",
+                "scatter_xy",
             )
         ),
         # nf-core/viralrecon multi-tab dashboard. Seed JSONs are snapshotted

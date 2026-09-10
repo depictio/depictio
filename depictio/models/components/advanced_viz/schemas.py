@@ -42,6 +42,14 @@ _STRING = frozenset({"String", "Utf8"})
 _BOOLEAN = frozenset({"Boolean"}) | _INT
 
 CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
+    # The plain plane: one point per row. Only the two axes are required, which
+    # is what lets it bind almost anything; colour, size and the hover/selection
+    # label are optional because the twenty-eight code-mode scatters it replaces
+    # use them in every combination.
+    "scatter_xy": {
+        "x": _NUMERIC,
+        "y": _NUMERIC,
+    },
     # One curve per series over an ordered numeric axis. Deliberately named for
     # the shape, not a domain: a TSS enrichment profile, a fragment-length
     # ladder, a Hill diversity curve and a rank-abundance curve are the same
@@ -470,6 +478,13 @@ ROLE_NAMES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "lower": frozenset({"lower", "ci_lower", "recall_lower", "precision_lower"}),
         "upper": frozenset({"upper", "ci_upper", "recall_upper", "precision_upper"}),
     },
+    "scatter_xy": {
+        "x": frozenset({"x", "x_value", "value_x"}),
+        "y": frozenset({"y", "y_value", "value_y"}),
+        "label": frozenset({"label", "name", "id", "feature_id", "sample", "sample_id"}),
+        "color": frozenset({"color", "colour", "group", "category", "class", "condition"}),
+        "size": frozenset({"size", "weight", "count", "n", "magnitude"}),
+    },
     "profile": {
         "series": frozenset({"series", "sample", "sample_id", "group", "curve", "track"}),
         "x": frozenset({"x", "position", "distance", "offset", "bin", "depth", "tss_distance"}),
@@ -573,6 +588,11 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "tn": _NUMERIC,
     },
     "metric_ci_bars": {},
+    "scatter_xy": {
+        "label": _STRING,
+        "color": _STRING,
+        "size": _NUMERIC,
+    },
     "profile": {
         "lower": _FLOAT,
         "upper": _FLOAT,
@@ -1141,6 +1161,11 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         "label": "Phylogenetic tree",
         "description": "Newick tree + tip metadata (Microreact-style): 5 layouts, tip search, subtree highlight.",
         "icon": "tabler:hierarchy-3",
+    },
+    "scatter_xy": {
+        "label": "Scatter (X/Y)",
+        "description": "Numeric against numeric, with optional colour, marker size, point labels and a reference line.",
+        "icon": "tabler:chart-dots",
     },
     "volcano": {
         "label": "Volcano plot",
