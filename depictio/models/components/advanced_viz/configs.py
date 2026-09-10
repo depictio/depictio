@@ -1245,6 +1245,24 @@ class ProfileConfig(_BaseVizConfig):
         default_factory=list,
         description="x ranges to shade, as (start, end, label); e.g. nucleosome windows",
     )
+
+    @field_validator("shaded_bands", mode="before")
+    @classmethod
+    def _bands_from_yaml_lists(cls, value: Any) -> Any:
+        """Accept the YAML spelling ``- [start, end, label]`` for a band.
+
+        YAML has no tuple, so a band authored in a dashboard arrives as a list.
+        That matters more than it looks: a lite component is validated through
+        ``LiteComponent | dict[str, Any]``, and pydantic's smart union runs a
+        strict pass first, where a list is not a tuple. The component then loses
+        to the ``dict`` member, which matches anything, and is stored as a raw
+        dict with no ``viz_kind`` at all. Nothing raises; the tile simply renders
+        as `Unknown advanced viz kind: ""`.
+        """
+        if isinstance(value, list):
+            return [tuple(band) if isinstance(band, list) else band for band in value]
+        return value
+
     log_x: bool = Field(default=False, description="Log-scale the x axis")
     log_y: bool = Field(default=False, description="Log-scale the y axis")
     band_opacity: float = Field(default=0.2, ge=0.0, le=1.0)
