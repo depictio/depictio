@@ -197,9 +197,9 @@ def test_discussion_body_leads_with_a_checklist(nfo: ModuleType, template_dir: P
     facts = nfo.collect_facts("demoseq", "1.2.0", projects_dir=template_dir)
     body = nfo.render_discussion(facts, "https://demo.example.org", "https://docs/{pipeline}/", {})
 
-    # Five boxes, answerable without typing — a round that only accepts prose
-    # gets no replies from volunteer maintainers.
-    assert body.count("\n- [ ] ") == 5
+    # One box per ask plus the go/no-go, answerable without typing: a round
+    # that only accepts prose gets no replies from volunteer maintainers.
+    assert body.count("\n- [ ] ") == len(nfo.ASK_BUCKETS) + 1
     assert "nf-core/demoseq publishes today" in body
     # And the checklist comes before the reference tables it is a summary of.
     assert body.index("### The two-minute version") < body.index("<details>")
