@@ -146,18 +146,33 @@ def _iter_dcs(raw: dict[str, Any]) -> list[dict[str, Any]]:
     return dcs
 
 
-def _dc_source_detail(dc: dict[str, Any]) -> tuple[str, str]:
-    """Return (source, detail) — recipe ref for transformed DCs, scan target otherwise."""
+def _reads_cell(dc: dict[str, Any], pipeline_version: str) -> str:
+    """Render the Reads cell: what produces this collection, and where that lives.
+
+    A recipe name links to its source on GitHub, so the table is a way into the
+    transform rather than just a name to search for.
+    """
     # `or {}` (not get default) so a present-but-null YAML key (e.g. empty
     # `transform:`) coerces to {} instead of crashing the chained .get().
     config = dc.get("config") or {}
-    source = config.get("source", "scan")
-    if source == "transformed":
+    # Small monospace, wrap-anywhere so long scan paths don't blow out the row.
+    if config.get("source", "scan") == "transformed":
         recipe = (config.get("transform") or {}).get("recipe")
-        return source, _code(recipe) if recipe else "—"
+        badge = _badge("recipe", "gtd-recipe")
+        if not recipe:
+            return f"{badge} —"
+        code = f'<code class="gtd-path">{_html(recipe)}</code>'
+        url = _recipe_github_url(recipe, pipeline_version)
+        if url:
+            code = (
+                f'<a href="{url}" target="_blank" rel="noopener" '
+                f'title="Recipe source on GitHub">{code}</a>'
+            )
+        return f"{badge} {code}"
     scan_params = (config.get("scan") or {}).get("scan_parameters") or {}
     target = (scan_params.get("regex_config") or {}).get("pattern") or scan_params.get("filename")
-    return source, _code(target) if target else "—"
+    path = f'<code class="gtd-path">{_html(target)}</code>' if target else "—"
+    return f"{_badge('file', 'gtd-file')} {path}"
 
 
 def _collect_recipe_refs(raw: dict[str, Any], meta: TemplateMetadata) -> list[str]:
@@ -199,7 +214,7 @@ def _render_variables(meta: TemplateMetadata) -> list[str]:
     auto = [v for v in meta.variables if v.description.lstrip().startswith("Auto")]
 
     lines = [
-        "### Template variables",
+        "### :material-code-braces: Template variables",
         "",
         "Variables you provide when running the template — `DATA_ROOT` via `--data-root`, "
         "the rest via `--var NAME=value`:",
@@ -280,7 +295,7 @@ def _render_data_collections(dcs: list[dict[str, Any]], pipeline_version: str) -
     direct_count = sum(1 for o in origins.values() if o == "direct")
     derived_count = len(origins) - direct_count
     lines = [
-        "### Data collections",
+        "### :material-database-outline: Data collections",
         "",
         f"{len(dcs)} data collections — {_badge(f'{required_count} required', 'gtd-req')} "
         f"{_badge(f'{optional_count} optional', 'gtd-opt')} · "
@@ -291,7 +306,8 @@ def _render_data_collections(dcs: list[dict[str, Any]], pipeline_version: str) -
         f"{_badge('direct', 'gtd-direct')} = a pipeline output (scanned, or a recipe that reads raw "
         f"files); {_badge('derived', 'gtd-derived')} = a recipe that reshapes one or more *direct* "
         f"collections into the layout a visualization needs (no new measurement). **Reads** shows "
-        f"what produces it: a {_badge('recipe', 'gtd-recipe')} `.py` transform, or a raw "
+        f"what produces it: a {_badge('recipe', 'gtd-recipe')} `.py` transform, whose name "
+        f"links to its source on GitHub, or a raw "
         f"{_badge('file', 'gtd-file')} scanned off disk. (A `direct` collection can still have a "
         f"recipe — one that merely parses/cleans the raw file; `derived` means the recipe reshapes "
         f"another collection.)",
@@ -300,23 +316,15 @@ def _render_data_collections(dcs: list[dict[str, Any]], pipeline_version: str) -
         "|---|:--:|---|---|:--:|",
     ]
     for dc in dcs:
-        source, target = _dc_source_detail(dc)
         dc_type = (dc.get("config") or {}).get("type", "—")
         origin = origins[dc["data_collection_tag"]]
         origin_badge = _badge(origin, "gtd-direct" if origin == "direct" else "gtd-derived")
-        reads_badge = (
-            _badge("recipe", "gtd-recipe")
-            if source == "transformed"
-            else _badge("file", "gtd-file")
-        )
-        # Small monospace, wrap-anywhere so long scan paths don't blow out the row.
-        path = f'<code class="gtd-path">{_html(target)}</code>' if target else "—"
         status = (
             _badge("optional", "gtd-opt") if dc.get("optional") else _badge("required", "gtd-req")
         )
         lines.append(
             f"| {_code(dc['data_collection_tag'])} | {origin_badge} | {_dc_type_cell(dc_type)} | "
-            f"{reads_badge} {path} | {status} |"
+            f"{_reads_cell(dc, pipeline_version)} | {status} |"
         )
     lines.append("")
     return lines
@@ -397,7 +405,7 @@ def _render_conditionals(meta: TemplateMetadata, dc_tags: list[str]) -> list[str
         "</tbody></table></div>",
     ]
     return [
-        "### Conditional routes",
+        "### :material-directions-fork: Conditional routes",
         "",
         "Rows are data collections; columns are the variables you set or `params.json` "
         "flags auto-detected from the run. Each filled cell is the effect of **setting** "
@@ -429,7 +437,7 @@ def _render_links(raw: dict[str, Any]) -> list[str]:
             f'<td class="arr">→</td><td><code>{tgt}</code></td><td>{desc}</td></tr>'
         )
     return [
-        "### Cross-DC links",
+        "### :material-vector-link: Cross-DC links",
         "",
         f"{len(links)} links — selecting a value in the **source** collection filters the "
         "**target**. The join column is shown after the source.",
@@ -448,7 +456,7 @@ def _render_recipes(refs: list[str], pipeline_version: str) -> list[str]:
     if not refs:
         return []
     lines = [
-        "### Recipes",
+        "### :material-chef-hat: Recipes",
         "",
         "Each recipe reshapes raw pipeline output into a tidy table. The name links "
         "to its source; *Output* lists the validated `EXPECTED_SCHEMA` columns.",
