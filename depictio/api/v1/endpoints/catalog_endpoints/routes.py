@@ -237,6 +237,7 @@ def _add_matches(
     matches: list[dict[str, Any]],
     dc_id: str,
     wf_id: str,
+    wf_tag: str,
     dc_tag: str,
     dc_type: str,
     seen: set[tuple[str, str, str]],
@@ -262,6 +263,11 @@ def _add_matches(
                 **{k: v for k, v in match.items() if k not in ("tool_id", "tool_name")},
                 "dc_id": dc_id,
                 "wf_id": wf_id,
+                # Both halves a dashboard tile is resolved against. The picker
+                # offers a paste-able YAML block, and `workflow_tag` +
+                # `data_collection_tag` are two of its three binding lines — an
+                # id cannot stand in for either.
+                "wf_tag": wf_tag,
                 "dc_tag": dc_tag,
                 # The picker previews the collection's own rows next to the
                 # offer, and a MultiQC report has none to show.
@@ -309,10 +315,11 @@ async def compose_project(
 
     # Collect recursive-scan DC ids for a single bulk files query.
     recursive_dc_ids: list[ObjectId] = []
-    dc_meta: dict[str, dict[str, Any]] = {}  # dc_id_str -> {wf_id, dc_tag, dc_type}
+    dc_meta: dict[str, dict[str, Any]] = {}  # dc_id_str -> {wf_id, wf_tag, dc_tag, dc_type}
 
     for workflow in project.get("workflows", []):
         wf_id = str(workflow.get("_id", ""))
+        wf_tag = str(workflow.get("workflow_tag") or workflow.get("name") or "")
         for dc in workflow.get("data_collections", []):
             if not isinstance(dc, dict):
                 continue
@@ -342,6 +349,7 @@ async def compose_project(
                     _match_dc_to_catalog(entries, recipe=recipe),
                     dc_id_str,
                     wf_id,
+                    wf_tag,
                     dc_tag,
                     dc_type,
                     seen,
@@ -357,6 +365,7 @@ async def compose_project(
                     _match_dc_to_catalog(entries, basename=Path(filename).name, full_path=filename),
                     dc_id_str,
                     wf_id,
+                    wf_tag,
                     dc_tag,
                     dc_type,
                     seen,
@@ -366,7 +375,12 @@ async def compose_project(
                 try:
                     dc_oid = ObjectId(dc_id_str)
                     recursive_dc_ids.append(dc_oid)
-                    dc_meta[dc_id_str] = {"wf_id": wf_id, "dc_tag": dc_tag, "dc_type": dc_type}
+                    dc_meta[dc_id_str] = {
+                        "wf_id": wf_id,
+                        "wf_tag": wf_tag,
+                        "dc_tag": dc_tag,
+                        "dc_type": dc_type,
+                    }
                 except Exception:
                     logger.debug("catalog/compose: DC %s — invalid ObjectId, skipping", dc_tag)
             elif not recipe:
@@ -407,6 +421,7 @@ async def compose_project(
                 matches,
                 dc_id=dc_id_str,
                 wf_id=meta["wf_id"],
+                wf_tag=meta["wf_tag"],
                 dc_tag=meta["dc_tag"],
                 dc_type=meta["dc_type"],
                 seen=seen,

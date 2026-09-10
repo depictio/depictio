@@ -23,16 +23,18 @@ import {
   Group,
   Image,
   Paper,
-  SimpleGrid,
+  Popover,
   Stack,
   Text,
   ThemeIcon,
   Title,
+  Tooltip,
 } from '@mantine/core';
 import { AgGridReact } from 'ag-grid-react';
 import { Icon } from '@iconify/react';
 import { ComponentRenderer, bulkComputeCards } from 'depictio-react-core';
-import type { StoredMetadata } from 'depictio-react-core';
+import type { CatalogRender, StoredMetadata } from 'depictio-react-core';
+import { buildTileSnippet } from '../catalog-shared/tileSnippet';
 import {
   CATALOG_ACCENT,
   CopyYaml,
@@ -40,7 +42,6 @@ import {
   IdentityLink,
   InfoRow,
   TypeBadge,
-  allRendersYaml,
   edamShort,
   lastSeg,
   logoFor,
@@ -71,54 +72,6 @@ class CellBoundary extends React.Component<
     return this.props.children;
   }
 }
-
-const OutputHeader: React.FC<{
-  out: OutputInfo;
-  count: number;
-  rendersYaml: string;
-  logoSrc: string;
-  onBack?: () => void;
-}> = ({ out, count, rendersYaml, logoSrc, onBack }) => (
-  <>
-    <Group justify="space-between" align="center">
-      <Group gap="sm">
-        {onBack ? (
-          <Button
-            size="xs"
-            variant="subtle"
-            color="gray"
-            leftSection={<Icon icon="mdi:arrow-left" width={16} />}
-            onClick={onBack}
-          >
-            Catalog
-          </Button>
-        ) : (
-          <Image src={logoSrc} h={32} w="auto" fit="contain" />
-        )}
-        <Divider orientation="vertical" />
-        <Stack gap={0}>
-          <Text size="xs" c="dimmed" fw={600} tt="uppercase">
-            Catalog preview
-          </Text>
-          <Title order={3}>{out.id}</Title>
-        </Stack>
-      </Group>
-      <Group gap="sm">
-        {rendersYaml ? (
-          <CopyYaml yaml={rendersYaml} label="Copy all renders_as" variant="button" />
-        ) : null}
-        <Badge variant="light" size="lg" color={CATALOG_ACCENT} radius="sm">
-          {count} component{count === 1 ? '' : 's'}
-        </Badge>
-      </Group>
-    </Group>
-    {out.description ? (
-      <Text size="sm" c="dimmed" mt={6}>
-        {out.description}
-      </Text>
-    ) : null}
-  </>
-);
 
 const OutputInfoPanel: React.FC<{ out: OutputInfo }> = ({ out }) => (
   <Paper withBorder radius="md" p="md" bg="var(--mantine-color-default-hover)">
@@ -212,86 +165,6 @@ const FixturePreviewPanel: React.FC<{ fixture: FixturePreview; theme?: string }>
   </Accordion>
 );
 
-/** Header for one rendered component: a large type identity (icon + name · variant),
- *  the referenceable id, and a clean YAML toggle + copy — replaces the old accordion. */
-const ComponentCard: React.FC<{
-  m: StoredMetadata;
-  height: number;
-  children: React.ReactNode;
-}> = ({ m, height, children }) => {
-  const rec = m as Record<string, unknown>;
-  const yaml = rec._yaml as string | undefined;
-  const variant = (rec._variant as string) || '';
-  const binds = rec._binds as Record<string, string> | undefined;
-  const meta = metaFor(m.component_type);
-  const [showYaml, setShowYaml] = useState(false);
-
-  return (
-    <Card withBorder radius="md" shadow="sm" padding="md">
-      <Group justify="space-between" wrap="nowrap" align="center" mb="sm">
-        <Group gap="sm" wrap="nowrap" align="center" style={{ minWidth: 0 }}>
-          <ThemeIcon size={42} radius="md" variant="light" color={meta.color}>
-            <Icon icon={meta.icon} width={24} />
-          </ThemeIcon>
-          <Stack gap={0} style={{ minWidth: 0 }}>
-            <Text fz="lg" fw={700} style={{ lineHeight: 1.2 }}>
-              {meta.name}
-              {variant ? (
-                <Text span c="dimmed" fw={500}>
-                  {' '}
-                  · {variant}
-                </Text>
-              ) : null}
-            </Text>
-            <Code fz="xs" c="dimmed" bg="transparent" p={0}>
-              {m.index}
-            </Code>
-          </Stack>
-        </Group>
-        {yaml ? (
-          <Group gap={4} wrap="nowrap">
-            <Button
-              size="xs"
-              variant={showYaml ? 'light' : 'subtle'}
-              color="gray"
-              leftSection={<Icon icon="mdi:code-braces" width={14} />}
-              onClick={() => setShowYaml((v) => !v)}
-            >
-              renders_as
-            </Button>
-            <CopyYaml yaml={yaml} label="Copy renders_as YAML" />
-          </Group>
-        ) : null}
-      </Group>
-      {binds && Object.keys(binds).length ? (
-        <Group gap={6} wrap="wrap" mb="sm">
-          <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-            Binds
-          </Text>
-          {Object.entries(binds).map(([role, col]) => (
-            <Badge key={role} size="sm" variant="light" color="gray" radius="sm" tt="none">
-              {role} → {col}
-            </Badge>
-          ))}
-        </Group>
-      ) : null}
-      {yaml ? (
-        <Collapse in={showYaml}>
-          <Code block fz="xs" mb="sm">
-            {yaml}
-          </Code>
-        </Collapse>
-      ) : null}
-      <Box style={{ height }}>{children}</Box>
-    </Card>
-  );
-};
-
-// ---------------------------------------------------------------------------
-// Bare mode: slim collapsible header + full-height component
-// ---------------------------------------------------------------------------
-
-/** One collapsible header bar — shared by the two bare-mode bars. */
 const CollapsibleBar: React.FC<{
   icon: string;
   label: React.ReactNode;
@@ -385,10 +258,18 @@ const OutputView: React.FC<{
   theme?: string;
   renderId?: string | null;
   tileHeight?: number | null;
-}> = ({ entry, onBack, theme, renderId, tileHeight }) => {
+  /** 'page' centres the detail in its own full-width document (the landing view
+   *  of `catalog preview <id>`); 'pane' drops the centring and the branding for
+   *  the split browser, where the chrome around it already supplies both. */
+  variant?: 'page' | 'pane';
+  /** Owning tool id — the first half of the `use:` handle. Not on OutputEntry
+   *  (an output is listed under its tool), so the gallery passes it down. */
+  toolId?: string;
+}> = ({ entry, onBack, theme, renderId, tileHeight, variant = 'page', toolId }) => {
   const out = entry.output;
   const fixture = entry.fixturePreview;
   const renders = entry.renders as unknown as StoredMetadata[];
+  const [selectedIdx, setSelectedIdx] = useState(0);
   const [cardValues, setCardValues] = useState<Record<string, unknown>>({});
   const [cardSecondary, setCardSecondary] = useState<Record<string, Record<string, unknown>>>({});
 
@@ -434,59 +315,202 @@ const OutputView: React.FC<{
 
   const cards = renders.filter((m) => m.component_type === 'card');
   const rest = renders.filter((m) => m.component_type !== 'card');
-  const rendersYaml = allRendersYaml(entry.renders);
+
+  const pane = variant === 'pane';
+
+  // One render at a time, behind a switcher — the same shape as the builder's
+  // "Pick from catalog" panel. The two surfaces render the SAME bundle (the
+  // picker iframes this document with `#render_id=`), so showing every render
+  // stacked here and one at a time there made one catalog look like two.
+  const active = renders[selectedIdx] ?? renders[0];
+  const activeHeight =
+    ((active as Record<string, unknown> | undefined)?._preview_height as number) ||
+    (active ? DEFAULT_HEIGHT[active.component_type] : 0) ||
+    480;
+
+  const snippetCtx = {
+    toolId: toolId || out.id.split('_')[0],
+    outputId: out.id,
+    // No project here: the docs gallery is a catalogue, not a dashboard, so the
+    // two binding lines are placeholders the reader fills in. Saying so beats
+    // handing out a snippet that looks complete and resolves to nothing.
+    dcTag: null,
+    wfTag: null,
+    title: out.name || out.id,
+  };
+  const activeRender = (active as Record<string, unknown> | undefined)?._render as
+    | CatalogRender
+    | undefined;
+  const snippet = active && activeRender ? buildTileSnippet(snippetCtx, activeRender) : '';
 
   return (
-    <Box p="lg" style={{ maxWidth: 1200, margin: '0 auto' }}>
-      <OutputHeader
-        out={out}
-        count={renders.length}
-        rendersYaml={rendersYaml}
-        logoSrc={logoFor(theme)}
-        onBack={onBack}
-      />
-      <Box mt="md">
-        <OutputInfoPanel out={out} />
-      </Box>
-      <Divider my="lg" />
-
-      <Stack gap="xl">
-        {cards.length > 0 ? (
-          <Stack gap="xs">
-            <Text size="sm" fw={700} c="dimmed" tt="uppercase">
-              Metrics
+    <Stack gap={0} h={pane ? '100%' : undefined} style={{ minHeight: 0 }}>
+      {/* Header — identity left, references right. Add / Edit are the builder's
+          alone: there is no dashboard here to add to. */}
+      <Group
+        px={pane ? 'md' : 'lg'}
+        py="xs"
+        gap="sm"
+        justify="space-between"
+        wrap="nowrap"
+        style={{ borderBottom: '1px solid var(--mantine-color-default-border)', flexShrink: 0 }}
+      >
+        <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
+          {pane ? null : onBack ? (
+            <Button
+              size="xs"
+              variant="subtle"
+              color="gray"
+              leftSection={<Icon icon="mdi:arrow-left" width={16} />}
+              onClick={onBack}
+            >
+              Catalog
+            </Button>
+          ) : (
+            <Image src={logoFor(theme)} h={24} w="auto" fit="contain" />
+          )}
+          <Text size="sm" fw={600} style={{ flexShrink: 0 }}>
+            {out.name || out.id}
+          </Text>
+          <Code fz={10} style={{ flexShrink: 0 }}>
+            {out.id}
+          </Code>
+          {out.description ? (
+            <Text size="xs" c="dimmed" lineClamp={1} style={{ minWidth: 0 }}>
+              {out.description}
             </Text>
-            <SimpleGrid cols={{ base: 1, xs: 2, sm: 3, md: 4 }} spacing="md">
-              {cards.map((m) => (
-                <Stack key={m.index} gap={4}>
-                  <Box>{renderOne(m)}</Box>
-                  <Group gap={6} justify="center" wrap="nowrap">
-                    <TypeBadge type={m.component_type} size="xs" />
-                    <Code fz={10} c="dimmed">
-                      {m.index}
-                    </Code>
-                  </Group>
-                </Stack>
-              ))}
-            </SimpleGrid>
-          </Stack>
-        ) : null}
+          ) : null}
+        </Group>
 
-        {rest.map((m) => {
-          const h =
-            ((m as Record<string, unknown>)._preview_height as number) ||
-            DEFAULT_HEIGHT[m.component_type] ||
-            480;
+        <Group gap={6} wrap="nowrap" style={{ flexShrink: 0 }}>
+          <Popover position="bottom-end" withArrow shadow="md" width={400}>
+            <Popover.Target>
+              <Tooltip label="Details" withArrow>
+                <ActionIcon variant="subtle" color="gray" size="md" aria-label="Output details">
+                  <Icon icon="mdi:information-outline" width={17} />
+                </ActionIcon>
+              </Tooltip>
+            </Popover.Target>
+            <Popover.Dropdown p="md">
+              <Stack gap="sm">
+                <Box>
+                  <Text size="sm" fw={700} mb={4} style={{ lineHeight: 1.2 }}>
+                    {out.name || out.id}
+                  </Text>
+                  {out.description ? (
+                    <Text size="xs" c="dimmed" style={{ lineHeight: 1.45 }}>
+                      {out.description}
+                    </Text>
+                  ) : null}
+                  <Group gap={4} mt={6}>
+                    {renders.map((m) => (
+                      <TypeBadge key={m.index} type={m.component_type} size="xs" />
+                    ))}
+                  </Group>
+                </Box>
+                <OutputInfoPanel out={out} />
+              </Stack>
+            </Popover.Dropdown>
+          </Popover>
+
+          {snippet ? (
+            <Popover position="bottom-end" withArrow shadow="md" width={430}>
+              <Popover.Target>
+                <Tooltip label="YAML reference" withArrow>
+                  <ActionIcon
+                    variant="subtle"
+                    color={CATALOG_ACCENT}
+                    size="md"
+                    aria-label="Show use snippet"
+                  >
+                    <Icon icon="mdi:code-tags" width={17} />
+                  </ActionIcon>
+                </Tooltip>
+              </Popover.Target>
+              <Popover.Dropdown p="sm">
+                <Stack gap={6}>
+                  <Group justify="space-between" wrap="nowrap" gap="xs">
+                    <Text size="xs" c="dimmed">
+                      Paste under a dashboard&rsquo;s <Code fz={10}>components:</Code>
+                    </Text>
+                    <CopyYaml yaml={snippet} label="Copy" />
+                  </Group>
+                  <Code block fz={11} style={{ whiteSpace: 'pre', overflowX: 'auto' }}>
+                    {snippet}
+                  </Code>
+                  <Text size="xs" c="dimmed">
+                    Replace the bracketed tags with the workflow and data collection
+                    this dashboard reads.
+                  </Text>
+                </Stack>
+              </Popover.Dropdown>
+            </Popover>
+          ) : null}
+
+          <Badge variant="light" size="sm" color={CATALOG_ACCENT} radius="sm">
+            {renders.length} component{renders.length === 1 ? '' : 's'}
+          </Badge>
+        </Group>
+      </Group>
+
+      {/* Render switcher */}
+      <Group
+        px={pane ? 'md' : 'lg'}
+        py={6}
+        gap={4}
+        wrap="wrap"
+        style={{ borderBottom: '1px solid var(--mantine-color-default-border)', flexShrink: 0 }}
+      >
+        {renders.map((m, i) => {
+          const meta = metaFor(m.component_type);
+          const rec = m as Record<string, unknown>;
+          const variantLabel = (rec._variant as string) || meta.name;
+          const isActive = i === selectedIdx;
           return (
-            <ComponentCard key={m.index} m={m} height={h}>
-              {renderOne(m)}
-            </ComponentCard>
+            <Button
+              key={m.index}
+              size="xs"
+              variant={isActive ? 'light' : 'subtle'}
+              color={meta.color}
+              leftSection={<Icon icon={meta.icon} width={13} />}
+              onClick={() => setSelectedIdx(i)}
+              styles={{
+                root: { fontWeight: isActive ? 600 : 400, flexShrink: 0 },
+                label: { lineHeight: 1.5, overflow: 'visible' },
+              }}
+            >
+              {variantLabel}
+            </Button>
           );
         })}
+      </Group>
 
-        {fixture ? <FixturePreviewPanel fixture={fixture} theme={theme} /> : null}
-      </Stack>
-    </Box>
+      {/* Preview */}
+      <Box
+        p={pane ? 'md' : 'lg'}
+        style={pane ? { flex: 1, minHeight: 0, overflowY: 'auto' } : undefined}
+      >
+        {active ? (
+          <>
+            <Box mih={activeHeight}>{renderOne(active)}</Box>
+            <Group gap={6} mt="xs" wrap="nowrap">
+              <Code fz={10} c="dimmed">
+                {active.index}
+              </Code>
+              <CopyYaml
+                yaml={((active as Record<string, unknown>)._yaml as string) || ''}
+                label="renders_as"
+              />
+            </Group>
+          </>
+        ) : null}
+        {fixture ? (
+          <Box mt="lg">
+            <FixturePreviewPanel fixture={fixture} theme={theme} />
+          </Box>
+        ) : null}
+      </Box>
+    </Stack>
   );
 };
 
