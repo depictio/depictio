@@ -12,7 +12,11 @@ from depictio.cli.cli.utils.api_calls import (
     api_provision_user,
     api_sync_project_config_to_server,
 )
-from depictio.cli.cli.utils.common import generate_api_headers, load_depictio_config
+from depictio.cli.cli.utils.common import (
+    describe_api_target,
+    generate_api_headers,
+    load_depictio_config,
+)
 from depictio.cli.cli.utils.config import validate_project_config_and_check_S3_storage
 from depictio.cli.cli.utils.helpers import process_project_helper
 from depictio.cli.cli.utils.rich_utils import (
@@ -232,15 +236,18 @@ def register_run_command(app: typer.Typer):
                 "Mutually exclusive with --project-config-path.",
             ),
         ] = None,
-        nextflow_manifest: Annotated[
+        pipeline_id: Annotated[
             str | None,
             typer.Option(
-                "--nextflow-manifest",
+                "--pipeline-id",
                 help=(
-                    "Nextflow manifest as '<name>/<version>' (e.g. 'nf-core/ampliseq/2.16.0'). "
-                    "When neither --template nor --project-config-path is given, the CLI "
-                    "auto-resolves a bundled template matching this manifest. Intended for "
-                    "automated triggering from a Nextflow pipeline's workflow.onComplete."
+                    "Which pipeline produced this data, as '<name>/<version>' (e.g. "
+                    "'nf-core/ampliseq/2.16.0'). When neither --template nor "
+                    "--project-config-path is given, the CLI resolves a bundled template "
+                    "matching it; otherwise it is ignored. Distinct from --template, which "
+                    "names a Depictio template directly even though both take the same shape. "
+                    "Automated triggers fill this from whatever their engine knows: a "
+                    "Nextflow pipeline's workflow.manifest, for instance."
                 ),
             ),
         ] = None,
@@ -268,6 +275,18 @@ def register_run_command(app: typer.Typer):
                 "rebuilds the delta tables from all runs, and skips dashboard import."
             ),
         ),
+        triggered_by: Annotated[
+            str,
+            typer.Option(
+                "--triggered-by",
+                help=(
+                    "What invoked this ingestion, recorded on the project and shown in its "
+                    "ingestion report. Defaults to 'manual'; a pipeline's completion trigger "
+                    "passes its engine (e.g. 'nextflow') so an automated project is "
+                    "distinguishable from one someone ingested by hand."
+                ),
+            ),
+        ] = "manual",
         dashboard_name: Annotated[
             str | None,
             typer.Option(
@@ -424,31 +443,45 @@ def register_run_command(app: typer.Typer):
         """
         rich_print_command_usage("run")
 
-        # Step 0-: resolve a bundled template from the Nextflow manifest. The
-        # trigger forwards `workflow.manifest` verbatim and lets the CLI decide
-        # the mode; an explicit --template / --project-config-path always wins.
-        if nextflow_manifest and not template and not project_config_path:
+        # A data root that is not there is an argument mistake, and it is worth
+        # saying so before anything else happens. This used to live inside the
+        # template branch, so the identical mistake made with
+        # --project-config-path instead surfaced three steps later as a raw
+        # pydantic validation error naming a file, a line and a function: it
+        # read like an internal crash rather than a typo. Same cause, same
+        # message, whichever way the project was described.
+        if data_root and not Path(data_root).is_dir():
+            rich_print_checked_statement(
+                f"--data-root does not exist or is not a directory: {data_root}",
+                "error",
+            )
+            raise typer.Exit(code=1)
+
+        # Step 0-: resolve a bundled template from the pipeline identity. The
+        # trigger forwards what its engine reported and lets the CLI decide the
+        # mode; an explicit --template / --project-config-path always wins.
+        if pipeline_id and not template and not project_config_path:
             from depictio.cli.cli.utils.templates import locate_template
 
             try:
-                locate_template(nextflow_manifest)
+                locate_template(pipeline_id)
             except FileNotFoundError:
                 rich_print_checked_statement(
-                    f"No bundled depictio template matches Nextflow manifest "
-                    f"'{nextflow_manifest}'. Provide --project-config-path with a depictio "
+                    f"No bundled depictio template matches pipeline "
+                    f"'{pipeline_id}'. Provide --project-config-path with a depictio "
                     f"project YAML for this pipeline (or --template for a known one).",
                     "error",
                 )
                 raise typer.Exit(code=1)
-            template = nextflow_manifest
+            template = pipeline_id
             rich_print_checked_statement(
-                f"Resolved Nextflow manifest '{nextflow_manifest}' to bundled template.",
+                f"Resolved pipeline '{pipeline_id}' to a bundled template.",
                 "success",
             )
 
         # Read the run's own provenance whenever there is a directory to look at,
         # deliberately independent of how the template was chosen. The dominant
-        # trigger path forwards --nextflow-manifest, which already resolved a
+        # trigger path forwards --pipeline-id, which already resolved a
         # template above, but the engine version and the tool list exist nowhere
         # except the run directory. Gating this on "no template yet" left every
         # pipeline-triggered project with empty provenance.
@@ -528,13 +561,28 @@ def register_run_command(app: typer.Typer):
         # Track whether we're in template mode
         is_template_mode = template is not None
         template_resolved_config: dict | None = None
+        # Only the template branch fills these; a --dashboard import outside it
+        # substitutes nothing, since a hand-written dashboard names its data
+        # collections directly instead of going through template variables.
+        template_variables: dict[str, str] = {}
         template_dashboard_paths: list[Path] = []
+        # (title, id) per imported dashboard, for the summary's links. Step 8
+        # already prints them, but that scrolls past; the summary is where
+        # someone reading a finished pipeline log looks for somewhere to click.
+        imported_dashboards: list[tuple[str, str]] = []
+        # --dashboard is honoured whether or not a template is in play. It used
+        # to be read only inside the template branch, so a pipeline Depictio
+        # ships no template for could ask for a dashboard and be silently
+        # ignored: the run reported 7/7 success and produced a project nobody
+        # could look at.
+        if dashboard:
+            template_dashboard_paths = [Path(p).resolve() for p in dashboard]
         # First dashboard imported for the provisioned user — target of the
         # passwordless login link emitted at the end of the run.
         provisioned_dashboard_id: str | None = None
 
         success_count = 0
-        total_steps = 8 if is_template_mode else 7
+        total_steps = 8 if (is_template_mode or template_dashboard_paths) else 7
         # --attach-run adds step 3b (folding the run into the existing project).
         if attach_run and not dry_run:
             total_steps += 1
@@ -585,14 +633,6 @@ def register_run_command(app: typer.Typer):
             rich_print_section_separator("Step 0: Resolving project template")
             try:
                 from depictio.cli.cli.utils.templates import resolve_template
-
-                # Check data root exists before doing anything
-                if not Path(data_root).is_dir():  # type: ignore[arg-type]
-                    rich_print_checked_statement(
-                        f"--data-root does not exist or is not a directory: {data_root}",
-                        "error",
-                    )
-                    raise typer.Exit(code=1)
 
                 # Parse --var KEY=VALUE pairs into extra_vars dict
                 extra_vars: dict[str, str] = {}
@@ -653,7 +693,6 @@ def register_run_command(app: typer.Typer):
 
                 # Resolve dashboard paths: CLI --dashboard overrides template defaults
                 if dashboard:
-                    template_dashboard_paths = [Path(p).resolve() for p in dashboard]
                     rich_print_checked_statement(
                         f"Using {len(template_dashboard_paths)} dashboard(s) from --dashboard override",
                         "info",
@@ -704,13 +743,30 @@ def register_run_command(app: typer.Typer):
             rich_print_section_separator(f"Step 1/{total_steps}: Checking server accessibility")
             try:
                 if not dry_run:
-                    api_login(CLI_config_path)
+                    # api_login reports a rejected configuration by RETURNING
+                    # {"success": False}, not by raising, so the except below
+                    # cannot see it. Unchecked, an expired token printed its own
+                    # error and was immediately followed by "check passed"; the
+                    # run then died at step 3 on a validation error that named
+                    # nothing about authentication. For a pipeline-triggered run
+                    # that is the difference between a log saying "your token
+                    # expired" and one nobody can act on.
+                    if not api_login(CLI_config_path).get("success"):
+                        raise RuntimeError(
+                            "the server rejected this CLI configuration (see the error "
+                            "above). The token is most likely expired, or was minted "
+                            "for a different Depictio instance."
+                        )
                 rich_print_checked_statement("Server accessibility check passed", "success")
                 success_count += 1
                 _rec("server_check", "success", "server reachable")
             except Exception as e:
+                # Name the endpoint and the file it came from; see
+                # describe_api_target for why that matters here in particular.
+                target = describe_api_target(CLI_config_path)
                 rich_print_checked_statement(f"Server accessibility check failed: {e}", "error")
-                _rec("server_check", "failed", str(e))
+                rich_print_checked_statement(f"Tried {target}", "info")
+                _rec("server_check", "failed", f"{e} (tried {target})")
                 if not continue_on_error:
                     raise typer.Exit(code=1)
         else:
@@ -846,6 +902,12 @@ def register_run_command(app: typer.Typer):
             try:
                 if not dry_run:
                     project_config_dict = convert_model_to_dict(project_config)
+                    # Stamped here rather than at validation because this is the
+                    # single funnel every mode goes through: new project, update
+                    # and attach alike. Re-ingesting overwrites it on purpose, so
+                    # the report always describes how the data currently on the
+                    # project got there.
+                    project_config_dict["triggered_by"] = triggered_by
                     # Provisioned (per-user) runs must stay private: templates
                     # often ship `is_public: true` for showcase visibility, but
                     # that would expose one user's project to everyone on the
@@ -1126,11 +1188,9 @@ def register_run_command(app: typer.Typer):
             success_count += 1
             _rec("joins", "skipped")
 
-        # Step 8 (template only): Import dashboards
-        if is_template_mode and not skip_dashboard_import and template_dashboard_paths:
-            rich_print_section_separator(
-                f"Step {total_steps}/{total_steps}: Importing template dashboards"
-            )
+        # Step 8: Import dashboards (from the template, or from --dashboard)
+        if not skip_dashboard_import and template_dashboard_paths:
+            rich_print_section_separator(f"Step {total_steps}/{total_steps}: Importing dashboards")
             try:
                 if not dry_run:
                     from depictio.cli.cli.utils.templates import (
@@ -1166,6 +1226,10 @@ def register_run_command(app: typer.Typer):
                         provisioned_dashboard_id = imported[0].get("dashboard_id")
 
                     for r in imported:
+                        if r.get("dashboard_id"):
+                            imported_dashboards.append(
+                                (str(r.get("title") or "dashboard"), str(r["dashboard_id"]))
+                            )
                         action = "updated" if r.get("updated") else "imported"
                         rich_print_checked_statement(
                             f"Dashboard {action}: {r.get('title', 'unknown')}", "success"
@@ -1223,6 +1287,37 @@ def register_run_command(app: typer.Typer):
 
         # Final summary
         rich_print_section_separator("Depictio-CLI Run Summary")
+
+        # Where to go and look at what just happened. The ingestion is otherwise
+        # a wall of green ticks that never says where the result landed, which
+        # matters most for the pipeline trigger: nobody is watching that
+        # terminal, they read it afterwards and need a link to click.
+        viewer_url = None
+        try:
+            import httpx as _httpx
+
+            # Re-read rather than reuse: CLI_config is only bound inside the
+            # step that loaded it, and the summary runs even when that step was
+            # skipped or failed.
+            _base = load_depictio_config(yaml_config_path=CLI_config_path, quiet=True).api_base_url
+            _status = _httpx.get(f"{_base}/depictio/api/v1/utils/status", timeout=5)
+            if _status.status_code == 200:
+                viewer_url = (_status.json().get("viewer_url") or "").rstrip("/") or None
+        except Exception as e:
+            # Best effort by design: a missing link must never fail a run that
+            # otherwise worked, and an older server simply does not report it.
+            logger.debug(f"Could not resolve the viewer URL: {e}")
+        if viewer_url and resolved_project_id:
+            rich_print_checked_statement(
+                f"Project: {viewer_url}/projects/{resolved_project_id}", "info"
+            )
+        for dashboard_title, dashboard_id in imported_dashboards:
+            if viewer_url:
+                rich_print_checked_statement(
+                    f"Dashboard '{dashboard_title}': {viewer_url}/dashboard/{dashboard_id}",
+                    "info",
+                )
+
         if is_template_mode:
             # Resolved id, not the raw --template arg — "nf-core/ampliseq/latest"
             # would otherwise print unresolved, hiding which version actually ran.

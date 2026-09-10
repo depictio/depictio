@@ -273,9 +273,7 @@ class TestProvenanceStamping:
         "flags",
         [
             pytest.param(["--template", "nf-core/ampliseq/2.16.0"], id="explicit-template"),
-            pytest.param(
-                ["--nextflow-manifest", "nf-core/ampliseq/2.16.0"], id="nextflow-manifest"
-            ),
+            pytest.param(["--pipeline-id", "nf-core/ampliseq/2.16.0"], id="pipeline-id"),
             pytest.param([], id="auto-detected"),
         ],
     )
@@ -291,3 +289,115 @@ class TestProvenanceStamping:
         assert config["pipeline_version"] == "2.16.0"
         assert config["nextflow_version"] == "25.10.2"
         assert config["tools_executed"] == ["cutadapt", "fastqc"]
+
+
+class TestTriggeredByStamp:
+    """`--triggered-by` records what invoked the ingestion, on every mode.
+
+    The value reaches the server through the synced project dict, so it has to
+    survive `convert_model_to_dict`. It is stamped at the single sync funnel
+    rather than per mode, and these tests pin that: an attach and an update are
+    exactly the paths a pipeline re-run takes, and a tag that only worked on
+    first creation would be missing from every project that ever ran twice.
+    """
+
+    def test_defaults_to_manual(self, app, runner, data_root):
+        harness = _Harness(data_root, remote_locations=[])
+        result = _invoke(app, runner, harness, {"data_root": data_root, "flags": []})
+        assert result.exit_code == 0, result.output
+        assert harness.sync.call_args.kwargs["ProjectConfig"]["triggered_by"] == "manual"
+
+    def test_the_trigger_value_reaches_the_server(self, app, runner, data_root):
+        harness = _Harness(data_root, remote_locations=[])
+        result = _invoke(
+            app,
+            runner,
+            harness,
+            {"data_root": data_root, "flags": ["--triggered-by", "nextflow"]},
+        )
+        assert result.exit_code == 0, result.output
+        assert harness.sync.call_args.kwargs["ProjectConfig"]["triggered_by"] == "nextflow"
+
+    def test_it_survives_an_attach(self, app, runner, data_root):
+        harness = _Harness(data_root, remote_locations=["/data/run_a"])
+        result = _invoke(
+            app,
+            runner,
+            harness,
+            {"data_root": data_root, "flags": ["--attach-run", "--triggered-by", "nextflow"]},
+        )
+        assert result.exit_code == 0, result.output
+        assert harness.sync.call_args.kwargs["ProjectConfig"]["triggered_by"] == "nextflow"
+
+
+class TestServerCheckHonoursTheVerdict:
+    """A rejected CLI configuration must stop the run at step 1.
+
+    `api_login` reports rejection by returning {"success": False} rather than
+    raising, so the step's try/except is blind to it. Unchecked, an expired
+    token printed its own error and was immediately followed by "check passed",
+    and the run failed three steps later on a validation error that mentioned
+    nothing about authentication.
+    """
+
+    def test_a_rejected_config_fails_the_run(self, app, runner, data_root):
+        harness = _Harness(data_root, remote_locations=[])
+        patches = harness.patches()
+        patches.append(
+            patch(
+                "depictio.cli.cli.commands.run.api_login",
+                MagicMock(return_value={"success": False}),
+            )
+        )
+        for p in patches:
+            p.start()
+        try:
+            result = runner.invoke(
+                app,
+                [
+                    "--template",
+                    "nf-core/ampliseq/2.16.0",
+                    "--data-root",
+                    str(data_root),
+                    "--skip-s3-check",
+                ],
+            )
+        finally:
+            for p in patches:
+                p.stop()
+
+        assert result.exit_code == 1, result.output
+        assert "Server accessibility check failed" in result.output
+        assert "expired" in result.output
+        # It stopped at step 1: nothing was synced, scanned or processed.
+        harness.sync.assert_not_called()
+        harness.scan.assert_not_called()
+
+    def test_an_accepted_config_proceeds(self, app, runner, data_root):
+        harness = _Harness(data_root, remote_locations=[])
+        patches = harness.patches()
+        patches.append(
+            patch(
+                "depictio.cli.cli.commands.run.api_login",
+                MagicMock(return_value={"success": True}),
+            )
+        )
+        for p in patches:
+            p.start()
+        try:
+            result = runner.invoke(
+                app,
+                [
+                    "--template",
+                    "nf-core/ampliseq/2.16.0",
+                    "--data-root",
+                    str(data_root),
+                    "--skip-s3-check",
+                ],
+            )
+        finally:
+            for p in patches:
+                p.stop()
+
+        assert result.exit_code == 0, result.output
+        harness.sync.assert_called_once()

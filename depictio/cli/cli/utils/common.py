@@ -104,6 +104,25 @@ def validate_depictio_cli_config(depictio_cli_config: dict) -> CLIConfig:
     return config
 
 
+def describe_api_target(yaml_config_path: str) -> str:
+    """Name the API URL a failed call was aimed at, and the file it came from.
+
+    "Connection refused" on its own sends people restarting a server that is
+    already up: the usual cause is a config pointing at a different instance.
+    That is the default failure of an automated run, where nobody chose the
+    config path and it fell back to ``~/.depictio/CLI.yaml``.
+
+    Never raises. It is only ever called while already reporting another error,
+    and a failure to read the config is itself part of the answer.
+    """
+    try:
+        config = load_depictio_config(yaml_config_path=yaml_config_path, quiet=True)
+    except Exception as exc:
+        logger.debug(f"Could not resolve the API base URL to report it: {exc}")
+        return f"an unreadable configuration at {yaml_config_path}"
+    return f"{config.api_base_url}, read from {yaml_config_path}"
+
+
 # CLI config paths considered "default" - only these are overridden by
 # DEPICTIO_CLI_CONFIG_PATH, so an explicit --CLI-config-path is never clobbered.
 _DEFAULT_CLI_CONFIG_PATHS = ("~/.depictio/cli.yaml", "~/.depictio/CLI.yaml")
@@ -139,12 +158,20 @@ def _apply_env_overrides(config: dict) -> dict:
 
 
 @validate_call(validate_return=True)
-def load_depictio_config(yaml_config_path: str = "~/.depictio/CLI.yaml") -> CLIConfig:
+def load_depictio_config(
+    yaml_config_path: str = "~/.depictio/CLI.yaml", quiet: bool = False
+) -> CLIConfig:
     """
     Load the Depictio configuration file.
+
+    ``quiet`` suppresses the "Loading..." line, for callers that re-read an
+    already-loaded config only to name a field (the API URL in an error
+    message, the viewer URL in the summary). Without it those reads announce a
+    second load that never happened, in the middle of reporting a failure.
     """
     try:
-        rich_print_checked_statement("Loading Depictio configuration...", "loading")
+        if not quiet:
+            rich_print_checked_statement("Loading Depictio configuration...", "loading")
         # DEPICTIO_CLI_CONFIG_PATH overrides the path only when the caller left it
         # at a default - an explicit --CLI-config-path always wins.
         env_path = os.environ.get("DEPICTIO_CLI_CONFIG_PATH")

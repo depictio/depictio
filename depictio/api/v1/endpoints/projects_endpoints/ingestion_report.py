@@ -178,10 +178,33 @@ class IngestionTemplate(BaseModel):
     data_root: str | None = None
 
 
+class IngestionPipeline(BaseModel):
+    """What produced the data, as the run-info readers recorded it.
+
+    Read back from the workflow config rather than recomputed: these values
+    describe the run that was ingested, and the directory it came from may be
+    long gone by the time anyone opens the report.
+    """
+
+    engine: str | None = None
+    name: str | None = None
+    version: str | None = None
+    engine_version: str | None = None
+    tool_count: int = 0
+
+
 class IngestionReport(BaseModel):
     project: IngestionReportProject
     template: IngestionTemplate | None = None
     manifest_source: str = SOURCE_LIVE
+    # What invoked the project's most recent ingestion: "manual" when someone ran
+    # the CLI, otherwise the engine whose completion trigger did (e.g. "nextflow").
+    triggered_by: str = "manual"
+    # Identity of the pipeline behind that trigger. Separate from `triggered_by`
+    # because the two answer different questions and can disagree: a manually
+    # ingested directory still carries a pipeline identity, and a triggered one
+    # whose engine left no breadcrumbs carries none.
+    pipeline: IngestionPipeline | None = None
     variables: list[IngestionVariable] = Field(default_factory=list)
     # Pipeline run provenance (parameters, filtering thresholds, tool
     # versions), grouped as the template's ProvenanceSpec laid them out.
@@ -462,6 +485,23 @@ def build_ingestion_report(project: dict) -> IngestionReport:
             )
         )
 
+    # First workflow that names an engine. Projects hold one workflow in every
+    # shipped template; taking the first keeps a hand-assembled multi-workflow
+    # project from showing nothing at all.
+    pipeline: IngestionPipeline | None = None
+    for workflow in project.get("workflows", []) or []:
+        config = workflow.get("config") or {}
+        if not config.get("engine_name"):
+            continue
+        pipeline = IngestionPipeline(
+            engine=str(config["engine_name"]),
+            name=str(workflow.get("name") or "") or None,
+            version=str(config.get("pipeline_version") or "") or None,
+            engine_version=str(config.get("nextflow_version") or "") or None,
+            tool_count=len(config.get("tools_executed") or []),
+        )
+        break
+
     return IngestionReport(
         project=IngestionReportProject(
             id=str(project.get("_id") or project.get("id") or ""),
@@ -470,6 +510,8 @@ def build_ingestion_report(project: dict) -> IngestionReport:
         ),
         template=template,
         manifest_source=manifest_source,
+        triggered_by=str(project.get("triggered_by") or "manual"),
+        pipeline=pipeline,
         variables=variables,
         run_provenance=run_provenance,
         run_provenance_files=[str(f) for f in (template_origin.get("run_provenance_files") or [])],

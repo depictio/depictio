@@ -3,6 +3,8 @@
 
 The look is Excalidraw's: every stroke is drawn twice along a jittered bezier,
 and the text uses Virgil (Excalidraw's font) when it is installed locally.
+Text in `backticks` is drawn in monospace instead, because handwriting turns
+code into guesswork.
 Jitter comes from a fixed seed, so re-running a diagram produces a
 byte-identical file instead of a spurious diff.
 
@@ -15,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import math
 import random
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -33,6 +36,31 @@ PINK = "#ffe3e3"
 WHITE = "#ffffff"
 
 FONT = "Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive"
+MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace"
+
+# Handwriting is unreadable for code: `--flag` becomes an em dash, `!x` reads as
+# `lx`, `[main]` as `LmainJ`. Anything inside backticks is drawn in monospace.
+_CODE = re.compile(r"`([^`]+)`")
+
+
+def _spans(content: str, size: float) -> str:
+    """Render `content`, with backticked runs in monospace.
+
+    Both fonts sit in one <text> element on one baseline, so centring stays the
+    renderer's job and no width has to be measured here. Monospace carries more
+    ink per character than Virgil, hence the slightly smaller size.
+    """
+    out = []
+    for i, part in enumerate(_CODE.split(content)):
+        if not part:
+            continue
+        if i % 2:
+            out.append(
+                f'<tspan font-family="{MONO}" font-size="{size * 0.88:.1f}">{escape(part)}</tspan>'
+            )
+        else:
+            out.append(escape(part))
+    return "".join(out)
 
 
 @dataclass(frozen=True)
@@ -198,7 +226,7 @@ class Sketch:
         self._parts.append(
             f'<text x="{x:.1f}" y="{y:.1f}" font-family="{FONT}" font-size="{size}" '
             f'fill="{colour}" text-anchor="{anchor}" font-weight="{weight}">'
-            f"{escape(content)}</text>"
+            f"{_spans(content, size)}</text>"
         )
 
     def box(self, box: Box, *, colour: str = INK, dashed: bool = False) -> None:

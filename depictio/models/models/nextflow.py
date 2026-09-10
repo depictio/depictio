@@ -34,7 +34,7 @@ _VERSIONS_GLOBS: tuple[str, ...] = (
 
 # `-params-file` runs write nf-params.json; nf-core's own launcher writes
 # params_<timestamp>.json (one per resume, so the newest name wins).
-_PARAMS_GLOBS: tuple[str, ...] = ("params*.json", "nf-params.json", "nf_params.json")
+PARAMS_GLOBS: tuple[str, ...] = ("params*.json", "nf-params.json", "nf_params.json")
 
 _REPORT_GLOB = "execution_report*.html"
 _TRACE_GLOB = "execution_trace*.txt"
@@ -81,9 +81,14 @@ def normalize_pipeline_version(raw: str | None) -> str | None:
     return version or None
 
 
+def _matching(directory: Path, pattern: str) -> list[Path]:
+    """Files matching ``pattern``, oldest first — nf-core names these by timestamp."""
+    return sorted(p for p in directory.glob(pattern) if p.is_file())
+
+
 def _newest(directory: Path, pattern: str) -> Path | None:
-    """Last match of ``pattern`` in name order — nf-core names these by timestamp."""
-    matches = sorted(p for p in directory.glob(pattern) if p.is_file())
+    """Last match of ``pattern`` in name order."""
+    matches = _matching(directory, pattern)
     return matches[-1] if matches else None
 
 
@@ -94,6 +99,30 @@ def _newest_matching(directory: Path, patterns: tuple[str, ...]) -> Path | None:
         if match is not None:
             return match
     return None
+
+
+def params_files_newest_first(directory: Path) -> list[Path]:
+    """The run's params JSON files in ``directory``, newest first.
+
+    A resumed run writes one params file per attempt, so a results directory
+    routinely holds several and only the last describes the run that produced
+    the outputs. Every reader of these files must therefore agree on "newest",
+    which is why this is public and shared rather than re-globbed per caller:
+    the CLI's template-variable introspection used to take the *first* match and
+    so read the parameters of the first, abandoned attempt.
+
+    A list rather than a single path so a caller can fall through to the next
+    candidate when the newest file is unparseable, which is what a run killed
+    mid-write leaves behind.
+
+    Patterns are tried in order and the first one with any hit wins, so a
+    directory holding both shapes never interleaves them.
+    """
+    for pattern in PARAMS_GLOBS:
+        matches = _matching(directory, pattern)
+        if matches:
+            return list(reversed(matches))
+    return []
 
 
 def _parse_versions_yaml(path: Path) -> tuple[dict[str, Any], set[str]]:
@@ -195,7 +224,20 @@ class NextflowRunInfoReader:
         if not run_dir.is_dir():
             return None
 
+        # Where pipeline_info sits depends on the project layout, not on the
+        # engine. A "flat" project ingests one run and has it at the top; a
+        # "sequencing-runs" project (viralrecon) points DATA_ROOT at the PARENT
+        # of several run_*/ directories, each with its own pipeline_info. Looking
+        # only at the top level meant every sequencing-runs project came back
+        # unidentified, so it got no engine, no pipeline version, no Nextflow
+        # version and no tool list, whether the template was auto-detected or
+        # given explicitly. The CLI's other two readers of the same directory
+        # already fall through to `*/pipeline_info`; this one did not.
+        subdirs: list[Path] = []
         pipeline_info = run_dir / "pipeline_info"
+        if not pipeline_info.is_dir():
+            subdirs = sorted(d for d in run_dir.glob("*/pipeline_info") if d.is_dir())
+
         versions_path: Path | None = None
         params_path: Path | None = None
         report_path: Path | None = None
@@ -206,12 +248,43 @@ class NextflowRunInfoReader:
 
         if pipeline_info.is_dir():
             versions_path = _newest_matching(pipeline_info, _VERSIONS_GLOBS)
-            params_path = _newest_matching(pipeline_info, _PARAMS_GLOBS)
+            params_path = _newest_matching(pipeline_info, PARAMS_GLOBS)
             report_path = _newest(pipeline_info, _REPORT_GLOB)
             trace_path = _newest(pipeline_info, _TRACE_GLOB)
             dag_path = _newest(pipeline_info, _DAG_GLOB)
             if versions_path is not None:
                 workflow, tools = _parse_versions_yaml(versions_path)
+        elif subdirs:
+            # Identity from the first run that carries one, deterministically:
+            # the runs aggregated under one DATA_ROOT are the same pipeline, and
+            # the artefact paths have to come from that same run to stay
+            # coherent with each other. Tools are the exception and are unioned,
+            # because "which tools produced this project" is genuinely the union
+            # over the runs it holds: a nanopore run and an illumina run under
+            # one project ran different tools, and reporting either alone would
+            # be wrong.
+            seen: set[tuple[str | None, str | None]] = set()
+            for candidate in subdirs:
+                candidate_versions = _newest_matching(candidate, _VERSIONS_GLOBS)
+                candidate_workflow: dict[str, Any] = {}
+                candidate_tools: set[str] = set()
+                if candidate_versions is not None:
+                    candidate_workflow, candidate_tools = _parse_versions_yaml(candidate_versions)
+                tools.update(candidate_tools)
+                if candidate_workflow:
+                    candidate_name, candidate_raw, _ = _identity_from_workflow_section(
+                        candidate_workflow
+                    )
+                    seen.add((candidate_name, normalize_pipeline_version(candidate_raw)))
+                if versions_path is not None or not candidate_workflow:
+                    continue
+                workflow = candidate_workflow
+                versions_path = candidate_versions
+                pipeline_info = candidate
+                params_path = _newest_matching(candidate, PARAMS_GLOBS)
+                report_path = _newest(candidate, _REPORT_GLOB)
+                trace_path = _newest(candidate, _TRACE_GLOB)
+                dag_path = _newest(candidate, _DAG_GLOB)
 
         pipeline_name, raw_version, engine_version = _identity_from_workflow_section(workflow)
         homepage: str | None = None
@@ -230,15 +303,49 @@ class NextflowRunInfoReader:
 
         # Only when the run wrote no versions YAML we recognise: catalog's reader
         # searches the whole tree for a legacy `software_versions.yml`.
+        #
+        # Guarded, because that search walks the WHOLE results tree and any
+        # malformed YAML anywhere under it makes it raise. Unguarded, the
+        # exception escaped to the registry, which dropped this reader entirely:
+        # a run with a perfectly good `Workflow:` section came back unidentified
+        # because some unrelated legacy file three directories away was a list
+        # instead of a mapping. The tool list is a nice-to-have; the identity is
+        # the point, and it is already in hand here.
         if not tools:
-            from depictio.models.components.advanced_viz.catalog import read_software_versions
+            try:
+                from depictio.models.components.advanced_viz.catalog import read_software_versions
 
-            tools = read_software_versions(run_dir)
+                tools = read_software_versions(run_dir)
+            except Exception as exc:
+                logger.warning(
+                    f"Nextflow run-info: could not collect the tool list under {run_dir} "
+                    f"({exc}); keeping the identity read from {versions_path or 'the manifest'}."
+                )
 
         params = _read_params(params_path)
         extra: dict[str, Any] = {}
         if raw_version:
             extra["pipeline_version_raw"] = raw_version
+        if subdirs:
+            # Which run the identity came from, and how many contributed tools.
+            # Without this a sequencing-runs project looks identical to a flat
+            # one, and there is no way to tell that the version shown describes
+            # one run out of several.
+            extra["run_subdirs_scanned"] = len(subdirs)
+            extra["identity_from_run"] = pipeline_info.parent.name
+            # Aggregating runs of different pipelines, or of different versions
+            # of one, is a real thing people do by accident: a DATA_ROOT one
+            # level too high, or a directory reused across studies. Reporting
+            # one identity for it is defensible, choosing it silently is not.
+            if len(seen) > 1:
+                extra["identities_seen"] = sorted(f"{n} {v}" for n, v in seen)
+                logger.warning(
+                    f"Nextflow run-info: {run_dir} aggregates runs of more than one pipeline "
+                    f"or version ({', '.join(extra['identities_seen'])}). Reporting "
+                    f"{pipeline_name} {normalize_pipeline_version(raw_version)} from "
+                    f"{pipeline_info.parent.name}, with the tools of all of them. Point "
+                    f"--data-root at one pipeline's runs if that is not what you meant."
+                )
 
         run_name = params.get("run_name")
         return WorkflowRunInfo(

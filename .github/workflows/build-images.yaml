@@ -1,7 +1,7 @@
-name: Build images (api / worker / viewer)
+name: Build images (api / worker / viewer / cli)
 
-# Canonical image build pipeline. Builds the three per-service images
-# (see docker-images/Dockerfile.api / .worker / .viewer) on tag pushes
+# Canonical image build pipeline. Builds the four per-service images
+# (see docker-images/Dockerfile.api / .worker / .viewer / .cli) on tag pushes
 # and validates them on PRs.
 #
 # Architectures (resolved by the `setup` job):
@@ -11,7 +11,9 @@ name: Build images (api / worker / viewer)
 #     emulation), pushed by digest, then stitched into one multi-arch manifest by
 #     the `merge` job. So every released version runs natively on Apple Silicon.
 #
-# Image namespaces: `depictio-api`, `depictio-worker`, `depictio-viewer`.
+# Image namespaces: `depictio-api`, `depictio-worker`, `depictio-viewer`,
+# `depictio-cli`. The CLI image is what lets a pipeline ingest its own
+# results without a local install (see the Nextflow completion trigger).
 
 on:
   pull_request:
@@ -26,11 +28,14 @@ on:
       - "docker-images/Dockerfile.api"
       - "docker-images/Dockerfile.worker"
       - "docker-images/Dockerfile.viewer"
+      - "docker-images/Dockerfile.cli"
       - "docker-images/nginx.conf.template"
       - "docker-images/run_fastapi.sh"
       - "docker-images/run_celery_worker.sh"
       - "pyproject.toml"
       - "uv.lock"
+      - "depictio/cli/pyproject.toml"
+      - "depictio/cli/uv.lock"
       - "pnpm-workspace.yaml"
       - "pnpm-lock.yaml"
       - ".dockerignore"
@@ -91,6 +96,7 @@ jobs:
           - { name: depictio-api, dockerfile: docker-images/Dockerfile.api }
           - { name: depictio-worker, dockerfile: docker-images/Dockerfile.worker }
           - { name: depictio-viewer, dockerfile: docker-images/Dockerfile.viewer }
+          - { name: depictio-cli, dockerfile: docker-images/Dockerfile.cli }
         # amd64 always; arm64 added only for stable releases (see `setup`).
         platform: ${{ fromJSON(needs.setup.outputs.platforms) }}
 
@@ -181,6 +187,47 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  cli-image-check:
+    # Dockerfile.cli already asserts that multiqc imports and that the bundled
+    # templates resolve, so the build fails before an unusable image can be
+    # tagged. That assertion runs as root at build time, though, and the image
+    # runs as the unprivileged `depictio` user: this job re-checks both through
+    # the real entrypoint, as that user, which is the only part the build cannot
+    # cover. Runs on PRs too, since that is when the Dockerfile changes.
+    name: CLI image contents
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build the CLI image locally
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker-images/Dockerfile.cli
+          platforms: linux/amd64
+          load: true
+          tags: depictio-cli:ci
+          cache-from: type=gha,scope=depictio-cli-amd64
+          cache-to: type=gha,scope=depictio-cli-amd64,mode=max
+
+      - name: The entrypoint runs as the unprivileged user
+        run: docker run --rm depictio-cli:ci version
+
+      - name: multiqc and the bundled templates are readable by that user
+        run: |
+          docker run --rm --entrypoint python depictio-cli:ci -c "
+          import multiqc
+          from depictio.cli.cli.utils.templates import locate_template
+          print('multiqc', multiqc.__version__)
+          print('templates', locate_template('nf-core/ampliseq/latest'))
+          "
+
   merge:
     name: Merge ${{ matrix.image }} manifest
     needs: build
@@ -193,7 +240,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [depictio-api, depictio-worker, depictio-viewer]
+        image: [depictio-api, depictio-worker, depictio-viewer, depictio-cli]
 
     steps:
       - name: Determine version

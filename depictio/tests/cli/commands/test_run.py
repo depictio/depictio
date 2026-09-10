@@ -1,7 +1,7 @@
 """Tests for the ``run`` command's early option-resolution branch.
 
 Only the guards that execute *before* any server, S3 or filesystem work are
-covered here: the ``--nextflow-manifest`` auto-resolution added for automated
+covered here: the ``--pipeline-id`` auto-resolution added for automated
 triggering, its precedence against ``--template`` / ``--project-config-path``,
 and the mutual-exclusivity check. That branch is pure argument handling, so
 these tests need no network and no mocking of the ingestion pipeline.
@@ -52,11 +52,11 @@ def runner():
 
 
 class TestNextflowManifestResolution:
-    """``--nextflow-manifest`` maps a Nextflow manifest onto a bundled template."""
+    """``--pipeline-id`` maps a pipeline identity onto a bundled template."""
 
     def test_unknown_manifest_exits_with_guidance(self, app, runner):
         """An unmatched manifest fails loudly instead of silently doing nothing."""
-        result = runner.invoke(app, ["--nextflow-manifest", UNKNOWN_MANIFEST])
+        result = runner.invoke(app, ["--pipeline-id", UNKNOWN_MANIFEST])
 
         assert result.exit_code == 1
         output = normalize(result.output)
@@ -70,7 +70,7 @@ class TestNextflowManifestResolution:
     def test_known_manifest_resolves_to_template(self, app, runner, manifest):
         """A shipped manifest becomes template mode and falls through to the
         next guard (``--data-root``), proving resolution succeeded."""
-        result = runner.invoke(app, ["--nextflow-manifest", manifest])
+        result = runner.invoke(app, ["--pipeline-id", manifest])
 
         output = normalize(result.output)
         assert NO_TEMPLATE_MESSAGE not in output
@@ -89,7 +89,7 @@ class TestNextflowManifestResolution:
         result = runner.invoke(
             app,
             [
-                "--nextflow-manifest",
+                "--pipeline-id",
                 UNKNOWN_MANIFEST,
                 "--project-config-path",
                 str(project_config),
@@ -108,7 +108,7 @@ class TestNextflowManifestResolution:
         result = runner.invoke(
             app,
             [
-                "--nextflow-manifest",
+                "--pipeline-id",
                 UNKNOWN_MANIFEST,
                 "--template",
                 SHIPPED_MANIFESTS[0],
@@ -143,3 +143,45 @@ class TestMutuallyExclusiveOptions:
         assert "--template and --project-config-path are mutually exclusive" in normalize(
             result.output
         )
+
+
+class TestDashboardImportIsNotTemplateOnly:
+    """``--dashboard`` counts as a step whether or not a template is in play.
+
+    It used to be read only inside the template branch, so a pipeline Depictio
+    ships no template for could ask for a dashboard and be ignored without a
+    word: the run reported 7/7 success and left a project with data in it and
+    nothing to look at. The step count is the visible half of that bug.
+    """
+
+    def _run(self, app, runner, tmp_path, *extra):
+        project_config = tmp_path / "project.yaml"
+        project_config.write_text("name: irrelevant-under-dry-run\n")
+        return runner.invoke(
+            app,
+            [
+                "--project-config-path",
+                str(project_config),
+                "--dry-run",
+                "--skip-server-check",
+                "--skip-s3-check",
+                *extra,
+            ],
+        )
+
+    def test_a_project_config_alone_still_runs_seven_steps(self, app, runner, tmp_path):
+        result = self._run(app, runner, tmp_path)
+
+        assert result.exit_code == 0
+        assert "/7" in normalize(result.output)
+
+    def test_a_dashboard_adds_the_import_step(self, app, runner, tmp_path):
+        dashboard = tmp_path / "dashboard.yaml"
+        dashboard.write_text("title: irrelevant-under-dry-run\n")
+
+        result = self._run(app, runner, tmp_path, "--dashboard", str(dashboard))
+
+        assert result.exit_code == 0
+        output = normalize(result.output)
+        assert "/8" in output
+        assert "Importing dashboards" in output
