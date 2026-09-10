@@ -38,6 +38,10 @@ import type {
   CatalogRender,
 } from 'depictio-react-core';
 import { catalogToolUrl, componentTypeVisual, defaultLayoutForType } from 'depictio-react-core';
+import {
+  buildTileSnippet,
+  snippetNeedsBinding,
+} from '../../catalog-shared/tileSnippet';
 import PreviewLoading from '../shared/PreviewLoading';
 import DataPreviewTable from '../data/DataPreviewTable';
 
@@ -76,19 +80,7 @@ function renderHint(render: CatalogRender, vizKinds: VizKinds): string {
 // render's own id; fall back to the output short id. Exported (imported by
 // CatalogTab, which stamps the same ref as provenance on the added component).
 // ---------------------------------------------------------------------------
-function outputShort(outputId: string, toolId: string): string {
-  return outputId.startsWith(`${toolId}_`) ? outputId.slice(toolId.length + 1) : outputId;
-}
-
-export function catalogUseRef(
-  toolId: string,
-  outputId: string,
-  render: CatalogRender,
-): string | undefined {
-  if (render.component !== 'advanced_viz') return undefined;
-  const ref = render.id || outputShort(outputId, toolId);
-  return `${toolId}/${ref}`;
-}
+export { catalogUseRef } from '../../catalog-shared/tileSnippet';
 
 /** "Adapter trimming (Cutadapt)" — the aggregator names its producer. */
 export function matchTitle(match: CatalogOutputMatch): string {
@@ -326,8 +318,20 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
     return () => window.removeEventListener('message', onMessage);
   }, [renderId]);
 
-  const useRef = current ? catalogUseRef(toolId, match.output_id, current) : undefined;
-  const useSnippet = useRef ? `use: ${useRef}` : '';
+  // Every component type gets one. `use:` alone was offered for advanced_viz
+  // only and, being a single line, bound to no workflow or collection — see
+  // catalog-shared/tileSnippet.ts.
+  const snippetCtx = current
+    ? {
+        toolId,
+        outputId: match.output_id,
+        dcTag: match.dc_tag,
+        wfTag: match.wf_tag,
+        title: matchTitle(match),
+      }
+    : null;
+  const useSnippet = current && snippetCtx ? buildTileSnippet(snippetCtx, current) : '';
+  const snippetUnbound = snippetCtx ? snippetNeedsBinding(snippetCtx) : false;
   const matchedOn = match.find?.path_glob || match.find?.filename;
   const toolUrl = catalogToolUrl(toolId);
 
@@ -469,11 +473,10 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
               </Popover.Target>
               <Popover.Dropdown p="sm">
                 <Stack gap={6}>
-                  <Text size="xs" c="dimmed">
-                    Reference this render from a dashboard YAML:
-                  </Text>
-                  <Group gap="xs" wrap="nowrap">
-                    <Code fz={12}>{useSnippet}</Code>
+                  <Group justify="space-between" wrap="nowrap" gap="xs">
+                    <Text size="xs" c="dimmed">
+                      Paste under a dashboard&rsquo;s <Code fz={10}>components:</Code>
+                    </Text>
                     <Tooltip label={copied ? 'Copied!' : 'Copy'} withArrow>
                       <ActionIcon
                         variant="subtle"
@@ -486,6 +489,15 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
                       </ActionIcon>
                     </Tooltip>
                   </Group>
+                  <Code block fz={11} style={{ whiteSpace: 'pre', overflowX: 'auto' }}>
+                    {useSnippet}
+                  </Code>
+                  {snippetUnbound ? (
+                    <Text size="xs" c="dimmed">
+                      Replace the bracketed tags with the workflow and data collection
+                      this dashboard reads.
+                    </Text>
+                  ) : null}
                 </Stack>
               </Popover.Dropdown>
             </Popover>

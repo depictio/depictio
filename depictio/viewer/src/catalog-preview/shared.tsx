@@ -129,6 +129,8 @@ export const nfCoreLabel = (url: string) => {
 
 export interface OutputInfo {
   id: string;
+  /** The catalog's short label for the output, e.g. "ARG hits". */
+  name?: string;
   description?: string;
   mode?: string | null;
   find?: Record<string, unknown>;
