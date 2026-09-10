@@ -286,6 +286,54 @@ export async function addCatalogRender(
   return componentId;
 }
 
+/**
+ * Wait until every MultiQC data collection in `dcIds` reports at least one
+ * plottable module, and say how long it took.
+ *
+ * MultiQC is the one component whose *picker* depends on server-side
+ * preparation. `multiqcConfigForSection` in the catalog tab reads
+ * `/multiqc/builder_options` and persists `selected_plot: plots[anchor][0] ??
+ * null`, so adding a render while a report's metadata is still being written
+ * saves a component that can only fail later, at render time, with
+ * "MultiQC component is missing: selected_plot". Waiting here instead of
+ * retrying the whole walk keeps that failure out of the suite without hiding a
+ * real one: a data collection that never warms up is reported, and the walk
+ * runs anyway so the non-MultiQC renders are still covered.
+ */
+export async function waitForMultiqcOptions(
+  request: APIRequestContext,
+  tokens: TokenBundle,
+  dcIds: string[],
+  timeoutMs = 300_000,
+): Promise<string[]> {
+  const cold: string[] = [];
+  // One deadline for the whole set, not one per collection: on a stack where
+  // nothing warms up, a per-collection budget would add its timeout once per
+  // collection before the walk even starts. Every collection still gets one
+  // attempt even after the deadline, so a warm one is never reported cold.
+  const deadline = Date.now() + timeoutMs;
+  for (const dcId of dcIds) {
+    const startedAt = Date.now();
+    let plottable = false;
+    for (;;) {
+      const res = await request.get(
+        `${API_URL}${API_PREFIX}/multiqc/builder_options?data_collection_id=${dcId}`,
+        { headers: auth(tokens) },
+      );
+      if (res.ok()) {
+        const opts = (await res.json()) as { plots?: Record<string, string[]> };
+        plottable = Object.values(opts.plots ?? {}).some((list) => (list?.length ?? 0) > 0);
+      }
+      if (plottable || Date.now() >= deadline) break;
+      await new Promise((r) => setTimeout(r, 5_000));
+    }
+    const waited = Math.round((Date.now() - startedAt) / 1000);
+    if (!plottable) cold.push(dcId);
+    else if (waited >= 5) console.log(`multiqc options for ${dcId} ready after ${waited}s`);
+  }
+  return cold;
+}
+
 /** Component ids currently stored on a dashboard, straight from the API. */
 export async function storedComponentIds(
   request: APIRequestContext,
