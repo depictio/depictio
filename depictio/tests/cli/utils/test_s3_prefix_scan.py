@@ -4,10 +4,28 @@ Listing is exercised against a stubbed boto3 paginator: the S3 wire protocol is
 not what can break here, the key filtering and pagination handling are.
 """
 
+import hashlib
+from types import SimpleNamespace
+from unittest.mock import MagicMock
+
 import pytest
+from bson import ObjectId
 
 from depictio.cli.cli.utils import scan as scan_module
-from depictio.models.models.data_collections import Scan, ScanS3Prefix
+from depictio.models.models.base import PyObjectId
+from depictio.models.models.data_collections import (
+    DataCollection,
+    DataCollectionConfig,
+    Scan,
+    ScanS3Prefix,
+)
+from depictio.models.models.users import Permission, UserBase
+from depictio.models.models.workflows import (
+    Workflow,
+    WorkflowConfig,
+    WorkflowDataLocation,
+    WorkflowEngine,
+)
 
 
 class _StubPaginator:
@@ -253,3 +271,198 @@ class TestListS3PrefixKeyBudget:
         found = scan_module.list_s3_prefix("s3://b/run42/", "*.csv", 5, None)
         assert [o["relative"] for o in found] == ["late.csv"]
         assert messages == []
+
+
+# ── scan_s3_prefix_for_data_collection: listing to File records ─────────────
+
+PREFIX = "s3://b/run42/"
+SAMPLE_ID_REGEX = r"(sample_[A-Z])\.samples\.csv"
+
+
+def _s3_prefix_dc(pattern: str = "*.samples.csv", id_regex: str | None = SAMPLE_ID_REGEX):
+    return DataCollection(
+        data_collection_tag="samples",
+        config=DataCollectionConfig(
+            type="table",
+            metatype="aggregate",
+            scan=Scan(
+                mode="s3_prefix",
+                scan_parameters=ScanS3Prefix(prefix=PREFIX, pattern=pattern, id_regex=id_regex),
+            ),
+            dc_specific_properties={"format": "csv"},
+        ),
+    )
+
+
+def _workflow(dc: DataCollection) -> Workflow:
+    return Workflow(
+        name="wf",
+        workflow_tag="wf",
+        engine=WorkflowEngine(name="python"),
+        config=WorkflowConfig(),
+        data_location=WorkflowDataLocation(structure="flat", locations=[PREFIX]),
+        data_collections=[dc],
+    )
+
+
+def _object_hash(key: str) -> str:
+    """Identity hash of a stubbed object: url + the ETag the stub derives from its key."""
+    return hashlib.sha256(f"s3://b/{key}|{key}-etag".encode()).hexdigest()
+
+
+def _existing(key: str, file_hash: str) -> dict:
+    return {"_id": str(ObjectId()), "file_location": f"s3://b/{key}", "file_hash": file_hash}
+
+
+@pytest.fixture
+def api(monkeypatch):
+    """Stub the API round-trips the scan makes; see TestUrlScan in
+    tests/cli/test_remote_read.py for the same shape."""
+    recorder = SimpleNamespace(existing=[], status=200, created=[], deleted=[])
+
+    def _lookup(**_):
+        response = MagicMock(status_code=recorder.status)
+        response.json.return_value = recorder.existing
+        return response
+
+    monkeypatch.setattr(scan_module, "api_get_files_by_dc_id", _lookup)
+    monkeypatch.setattr(
+        scan_module,
+        "api_create_files",
+        lambda files, CLI_config, update: recorder.created.append((list(files), update)),
+    )
+    monkeypatch.setattr(
+        scan_module, "api_delete_file", lambda file_id, CLI_config: recorder.deleted.append(file_id)
+    )
+    return recorder
+
+
+@pytest.fixture
+def messages(monkeypatch):
+    captured: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        scan_module,
+        "rich_print_checked_statement",
+        lambda msg, level="info": captured.append((level, msg)),
+    )
+    return captured
+
+
+class TestScanS3PrefixForDataCollection:
+    @staticmethod
+    def _scan(dc: DataCollection, update_files: bool = False) -> dict:
+        owner = UserBase(id=PyObjectId(), email="o@example.com", is_admin=False)
+        return scan_module.scan_s3_prefix_for_data_collection(
+            workflow=_workflow(dc),
+            data_collection=dc,
+            CLI_config=MagicMock(),
+            permissions=Permission(owners=[owner]),
+            update_files=update_files,
+        )
+
+    def test_registers_every_matching_object_with_a_join_id(self, stub_s3, api):
+        stub_s3(KEYS)
+        dc = _s3_prefix_dc()
+
+        assert self._scan(dc) == {"result": "success", "added": 3, "updated": 0}
+
+        ((files, update),) = api.created
+        assert update is False
+        by_id = {f.manifest_id: f for f in files}
+        # id_regex captured the entity id from nested keys too.
+        assert set(by_id) == {"sample_A", "sample_B", "sample_D"}
+        nested = by_id["sample_D"]
+        assert nested.file_location == "s3://b/run42/nested/sample_D.samples.csv"
+        assert nested.filename == "sample_D.samples.csv"
+        assert nested.file_hash == _object_hash("run42/nested/sample_D.samples.csv")
+        assert nested.filesize == 10
+        assert nested.run_tag == "remote"
+        assert {f.data_collection_id for f in files} == {dc.id}
+        assert api.deleted == []
+
+    def test_no_match_is_an_error_not_an_empty_success(self, stub_s3, api):
+        stub_s3(KEYS)
+
+        result = self._scan(_s3_prefix_dc(pattern="*.parquet"))
+
+        assert result["result"] == "error"
+        assert PREFIX in result["message"]
+        assert "*.parquet" in result["message"]
+        assert "samples" in result["message"]
+        assert api.created == []
+
+    def test_listing_failure_is_reported_as_a_scan_error(self, monkeypatch, api):
+        def _no_client(_cfg):
+            raise RuntimeError("no credentials")
+
+        monkeypatch.setattr(scan_module, "_s3_read_client", _no_client)
+
+        result = self._scan(_s3_prefix_dc())
+
+        assert result["result"] == "error"
+        assert "S3 prefix listing failed" in result["message"]
+        assert "no credentials" in result["message"]
+        assert api.created == []
+
+    def test_unchanged_objects_are_skipped_and_stale_records_removed(self, stub_s3, api):
+        stub_s3(KEYS)
+        stale = _existing("run42/gone.samples.csv", "x" * 64)
+        api.existing = [
+            _existing("run42/sample_A.samples.csv", _object_hash("run42/sample_A.samples.csv")),
+            stale,
+        ]
+
+        assert self._scan(_s3_prefix_dc()) == {"result": "success", "added": 2, "updated": 0}
+
+        assert api.deleted == [stale["_id"]]
+        ((files, update),) = api.created
+        assert update is False
+        assert {f.manifest_id for f in files} == {"sample_B", "sample_D"}
+
+    def test_re_uploaded_object_is_an_update_that_keeps_its_id(self, stub_s3, api):
+        stub_s3(KEYS)
+        known = _existing("run42/sample_A.samples.csv", "0" * 64)  # ETag has since changed
+        api.existing = [known]
+
+        assert self._scan(_s3_prefix_dc()) == {"result": "success", "added": 2, "updated": 1}
+
+        ((files, _),) = [(files, update) for files, update in api.created if update]
+        assert [str(f.id) for f in files] == [known["_id"]]
+        assert files[0].file_hash == _object_hash("run42/sample_A.samples.csv")
+
+    def test_update_files_forces_reregistration_of_unchanged_objects(self, stub_s3, api):
+        stub_s3(KEYS)
+        api.existing = [
+            _existing("run42/sample_A.samples.csv", _object_hash("run42/sample_A.samples.csv"))
+        ]
+
+        result = self._scan(_s3_prefix_dc(), update_files=True)
+
+        assert result == {"result": "success", "added": 2, "updated": 1}
+
+    def test_lookup_failure_still_registers_everything(self, stub_s3, api):
+        stub_s3(KEYS)
+        api.status = 500
+
+        assert self._scan(_s3_prefix_dc()) == {"result": "success", "added": 3, "updated": 0}
+
+    def test_unmatched_id_regex_warns_and_leaves_no_join_id(self, stub_s3, api, messages):
+        stub_s3(KEYS)
+
+        result = self._scan(_s3_prefix_dc(id_regex=r"^(run\d+)_"))
+
+        assert result == {"result": "success", "added": 3, "updated": 0}
+        ((files, _),) = api.created
+        assert [f.manifest_id for f in files] == [None, None, None]
+        warning = next(msg for level, msg in messages if level == "warning")
+        assert "3 object(s)" in warning
+        assert "did not match id_regex" in warning
+
+    def test_without_id_regex_no_join_id_and_no_warning(self, stub_s3, api, messages):
+        stub_s3(KEYS)
+
+        self._scan(_s3_prefix_dc(id_regex=None))
+
+        ((files, _),) = api.created
+        assert [f.manifest_id for f in files] == [None, None, None]
+        assert [level for level, _ in messages] == ["info"]
