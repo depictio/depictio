@@ -1,5 +1,5 @@
 name: Dashboard feedback
-description: Something on a dashboard is wrong, missing, or reading a stale path
+description: Something on a dashboard is wrong, missing, or does not load
 title: "[FEEDBACK] "
 labels: ["dashboard-mgt"]
 body:
@@ -7,22 +7,41 @@ body:
     attributes:
       value: |
         Opened from the feedback link in a dashboard header, which fills in the
-        three context fields at the bottom. Leave them as they are, say what you
-        saw, and send. Nothing else is needed.
+        three context fields at the bottom. Leave those as they are, answer the
+        two questions, say what you saw, and send.
+
+        Both questions ask about what you can see. Whether the fix belongs in
+        the template, in Depictio or in the pipeline itself is not yours to
+        work out, and gets decided when the report is triaged.
 
   - type: dropdown
-    id: kind
+    id: symptom
     attributes:
-      label: What kind of remark is this?
+      label: What is wrong with it?
       description: >
-        The same four buckets used when a pipeline's maintainers review a
-        template, so everything that arrives is sorted the same way.
+        The same list a pipeline's maintainers work through when they review a
+        template, so every report is sorted the same way whichever way it came
+        in.
       options:
-        - "Wrong: a number or a plot is incorrect or misleading"
+        - "Wrong number: a value or a figure does not match the run"
+        - "Empty panel: something did not load, or is blank"
+        - "Hard to read: the panel is right, but the scale, colours or labels mislead"
         - "Missing: something I always look at is not here"
-        - "Moved: an output path changed and the dashboard reads the old one"
-        - "Conventions: it breaks a house rule for presenting these results"
-        - "Something else"
+        - "Conventions: not how this pipeline usually presents these results"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: How much does it get in your way?
+      description: >
+        This is the one call only you can make, and it is what decides the
+        order things get looked at.
+      options:
+        - "Blocking: I cannot trust this dashboard until it is fixed"
+        - "Workaround: wrong, but I can still get what I need"
+        - "Polish: a nit worth writing down"
     validations:
       required: true
 
@@ -31,8 +50,8 @@ body:
     attributes:
       label: What did you see?
       description: >
-        The panel or figure, and what is off about it. A screenshot goes a long
-        way, and you can paste one straight into this box.
+        Name the panel or figure, and say what is off about it. A screenshot
+        goes a long way, and you can paste one straight into this box.
       placeholder: >
         The "Reads per sample" bar chart shows every sample at zero, but the
         MultiQC report for the same run has real counts.
