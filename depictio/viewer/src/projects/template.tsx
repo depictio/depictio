@@ -85,6 +85,43 @@ function sourceMeta(source: string): SourceMeta {
   );
 }
 
+/** A template source's brand mark on its own — no version pill, no link.
+ *  For headers that already name the template in text (the run-parameters
+ *  modal), where the full chip would repeat what the title says. */
+export const TemplateSourceLogo: React.FC<{ source: string; size?: number }> = ({
+  source,
+  size = 22,
+}) => {
+  const meta = sourceMeta(source);
+  const Logo = meta.Logo;
+  return Logo ? (
+    <Box
+      w={size}
+      h={size}
+      style={{
+        borderRadius: '50%',
+        overflow: 'hidden',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+      }}
+    >
+      <Logo size={size} />
+    </Box>
+  ) : (
+    <Avatar
+      size={size}
+      radius="xl"
+      color={meta.color}
+      variant="filled"
+      style={{ fontSize: Math.round(size * 0.45), fontWeight: 700 }}
+    >
+      {meta.initials}
+    </Avatar>
+  );
+};
+
 /** Shared chip that renders a template's brand mark (or letter fallback) +
  *  version pill, wrapped in an anchor pointing to the depictio-docs page for
  *  that template. The Anchor stops click propagation so opening the link
@@ -95,7 +132,6 @@ export const TemplateChip: React.FC<{
   verbose?: boolean;
 }> = ({ parsed, verbose }) => {
   const meta = sourceMeta(parsed.source);
-  const Logo = meta.Logo;
   const docsUrl = templateDocsUrl(parsed);
   const tooltipLabel = (
     <Stack gap={2}>
@@ -113,31 +149,7 @@ export const TemplateChip: React.FC<{
 
   const chip = (
     <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
-      {Logo ? (
-        <Box
-          w={22}
-          h={22}
-          style={{
-            borderRadius: '50%',
-            overflow: 'hidden',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Logo size={22} />
-        </Box>
-      ) : (
-        <Avatar
-          size={22}
-          radius="xl"
-          color={meta.color}
-          variant="filled"
-          style={{ fontSize: 10, fontWeight: 700 }}
-        >
-          {meta.initials}
-        </Avatar>
-      )}
+      <TemplateSourceLogo source={parsed.source} size={22} />
       {parsed.version && (
         <Badge
           color={meta.color}

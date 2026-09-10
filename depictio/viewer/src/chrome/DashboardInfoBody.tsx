@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Accordion,
+  Alert,
   Anchor,
   Badge,
   Code,
@@ -20,8 +21,13 @@ import {
 import { Icon } from '@iconify/react';
 
 import type { DashboardData } from 'depictio-react-core';
-import { fetchProject } from 'depictio-react-core';
-import { parseTemplateOrigin, TemplateChip } from '../projects/template';
+import { fetchProject, Z_LAYERS } from 'depictio-react-core';
+import {
+  parseTemplateOrigin,
+  TemplateChip,
+  TemplateSourceLogo,
+  type ParsedTemplate,
+} from '../projects/template';
 import RunProvenanceCard from '../projects/detail/RunProvenanceCard';
 import { formatDateTime } from '../lib/datetime';
 import {
@@ -217,6 +223,7 @@ const DashboardInfoBody: React.FC<DashboardInfoBodyProps> = ({ dashboard, active
                 entries={runProvenance}
                 files={runProvenanceFiles}
                 projectId={projectId}
+                template={parsedTemplate}
               />
             }
           />
@@ -339,7 +346,10 @@ const RunParameters: React.FC<{
   entries: ProvenanceEntryLike[];
   files: string[];
   projectId: string | null;
-}> = ({ entries, files, projectId }) => {
+  /** The template the project was instantiated from, when there is one — it
+   *  names who wrote the files these values were read from. */
+  template: ParsedTemplate | null;
+}> = ({ entries, files, projectId, template }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const highlights = useMemo(() => entries.filter((e) => e.highlight), [entries]);
 
@@ -420,16 +430,97 @@ const RunParameters: React.FC<{
       <Modal
         opened={modalOpen}
         onClose={() => setModalOpen(false)}
-        title="Run parameters"
+        title={<RunParametersTitle template={template} />}
+        // Centre the title on the dialog's own axis. Mantine lays the header
+        // out as title-then-close with asymmetric padding, so a title box that
+        // merely grows still ends up short of centre by half the button. Take
+        // the button out of the flow instead and the title box is the header.
+        styles={{
+          header: { position: 'relative', justifyContent: 'center', paddingRight: 16 },
+          title: { flex: 1, marginRight: 0 },
+          close: { position: 'absolute', top: 12, right: 12 },
+        }}
         size="xl"
         // Above the Settings drawer that opened it.
-        zIndex={400}
+        zIndex={Z_LAYERS.nestedOverlay}
         scrollAreaComponent={ScrollArea.Autosize}
       >
-        <RunProvenanceCard groups={groups} files={files} withCard={false} />
+        <Stack gap="sm">
+          <ProvenanceOriginNote template={template} />
+          <RunProvenanceCard
+            groups={groups}
+            files={files}
+            withCard={false}
+            withHeading={false}
+          />
+        </Stack>
       </Modal>
     </>
   );
 };
+
+/**
+ * Modal header for the run parameters: the pipeline's brand mark, then the
+ * template that wrote the values underneath the title.
+ *
+ * The mark comes from the template-source registry, so a Snakemake or Galaxy
+ * template gets its own without a second code path — but in practice this
+ * reads "nf-core", because nf-core is where the convention these values are
+ * collected under comes from.
+ */
+const RunParametersTitle: React.FC<{ template: ParsedTemplate | null }> = ({ template }) => (
+  <Group gap="sm" wrap="nowrap" align="center" justify="center">
+    {template ? (
+      <TemplateSourceLogo source={template.source} size={30} />
+    ) : (
+      <Icon icon="mdi:tune-variant" width={28} color="var(--mantine-color-orange-6)" />
+    )}
+    <Stack gap={0}>
+      <Text fw={700} size="lg" ta="center">
+        Run parameters
+      </Text>
+      {template && (
+        <Text size="sm" fw={500} ff="monospace" ta="center">
+          {template.repo ? `${template.source}/${template.repo}` : template.source}
+          {template.version ? ` v${template.version.replace(/^v/i, '')}` : ''}
+        </Text>
+      )}
+    </Stack>
+  </Group>
+);
+
+/**
+ * Where these values came from, which is the one thing a reader can get wrong
+ * here.
+ *
+ * Nothing on this screen is Depictio's own reading of the data: the CLI parses
+ * files the run left behind and stores what they said. Saying so matters most
+ * for nf-core, whose `pipeline_info/` dump is a convention of the nf-core
+ * template rather than a Nextflow feature, which is exactly why a pipeline
+ * from outside that ecosystem has to name its own files in the template.
+ */
+const ProvenanceOriginNote: React.FC<{ template: ParsedTemplate | null }> = ({ template }) => (
+  <Alert
+    variant="light"
+    color="gray"
+    p="sm"
+    radius="md"
+    icon={<Icon icon="mdi:file-document-outline" width={18} />}
+  >
+    <Text size="sm">
+      Depictio computes none of these values. They are read at ingestion from the files the run
+      itself wrote.{' '}
+      {template?.source.toLowerCase() === 'nf-core' ? (
+        <>
+          Every nf-core pipeline dumps <Code fz={12}>pipeline_info/params_*.json</Code> and a
+          software versions YAML when it finishes. Nextflow on its own writes neither, so a
+          pipeline from outside nf-core declares its own provenance files in its template.
+        </>
+      ) : (
+        <>Which files to read is declared by the template that created this project.</>
+      )}
+    </Text>
+  </Alert>
+);
 
 export default DashboardInfoBody;
