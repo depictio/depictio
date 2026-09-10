@@ -26,6 +26,7 @@ import {
   findCatalogProjects,
   flattenOffers,
   storedComponentIds,
+  waitForMultiqcOptions,
   CatalogProject,
   RenderOffer,
 } from "../../fixtures/catalog";
@@ -43,6 +44,18 @@ const CONTENT_SELECTOR: Record<string, string> = {
   advanced_viz: ".js-plotly-plot",
   multiqc: ".js-plotly-plot",
 };
+
+/** How long a component gets to draw, when the default is not enough.
+ *
+ * A MultiQC figure is prepared server-side on first request: the component
+ * polls for up to PREPARE_POLL_MAX_MS (300s, MultiQCFigure.tsx) and shows
+ * "Preparing MultiQC figures…" meanwhile, with the comment there putting a cold
+ * data collection at 30-75s. Asserting on a 60s budget inside that window is
+ * what made this spec flaky. 120s sits clear of the documented range while
+ * still failing well before the component gives up, so a genuinely broken tile
+ * does not cost five minutes. */
+const CONTENT_TIMEOUT: Record<string, number> = { multiqc: 120_000 };
+const DEFAULT_CONTENT_TIMEOUT = 60_000;
 
 interface Checked {
   problem: string | null;
@@ -86,12 +99,19 @@ async function checkComponent(
 
   const selector = CONTENT_SELECTOR[offer.render.component];
   if (selector) {
+    const budget = CONTENT_TIMEOUT[offer.render.component] ?? DEFAULT_CONTENT_TIMEOUT;
     try {
-      await pwExpect(cell.locator(selector).first()).toBeVisible({ timeout: 60_000 });
+      await pwExpect(cell.locator(selector).first()).toBeVisible({ timeout: budget });
     } catch {
       const text = (await cell.innerText().catch(() => "")).trim().slice(0, 200);
+      // Distinguish "still working" from "broken": the two need different
+      // answers, and the message is the only evidence a CI log keeps.
+      const stillPreparing = text.includes("Preparing MultiQC figures");
+      const why = stillPreparing
+        ? `still preparing after ${budget / 1000}s`
+        : `nothing matching '${selector}' rendered`;
       return {
-        problem: `${offer.label}: nothing matching '${selector}' rendered on the ${surface} — cell reads: ${text || "(empty)"}`,
+        problem: `${offer.label}: ${why} on the ${surface} — cell reads: ${text || "(empty)"}`,
         fullWidth,
       };
     }
@@ -114,6 +134,23 @@ test.describe("catalog modules are usable on a dashboard", () => {
   test.beforeAll(async ({ request }) => {
     tokens = await apiLogin(request, credentials.adminUser.email, credentials.adminUser.password);
     projects = await findCatalogProjects(request, tokens);
+
+    // Warm every data collection a MultiQC render would be added from, before
+    // the first add rather than during it. See waitForMultiqcOptions: the
+    // picker persists what the builder options say at click time, so a cold
+    // collection is saved as a component with no plot and only fails later.
+    const multiqcDcIds = [
+      ...new Set(
+        projects
+          .flatMap((p) => flattenOffers(p.modules))
+          .filter((o) => o.render.component === "multiqc")
+          .map((o) => o.match.dc_id),
+      ),
+    ];
+    const cold = await waitForMultiqcOptions(request, tokens, multiqcDcIds);
+    if (cold.length) {
+      console.log(`multiqc options never came up for: ${cold.join(", ")}`);
+    }
   });
 
   test("every catalog render adds and renders", async ({ page, request }) => {
