@@ -11,6 +11,10 @@ find:
 recipe: ataqv/tss_coverage.py
 fixture: tss_coverage.tsv
 renders_as:
+  # The `profile` kind rather than a line figure: it puts the TSS marker at 0,
+  # the log axes and the legend placement in the tile's own Settings, which is
+  # what the code-mode `at-sig-fig-tss` was written by hand to get.
+  - { id: tss_profile, component: advanced_viz, kind: profile, roles: {series: sample, x: position, y: coverage} }
   - { component: figure, visu_type: line, dict_kwargs: {x: position, y: coverage, color: sample, title: Coverage around transcription start sites} }
   - { component: card, column: coverage, aggregation: max, secondary_layout: threshold, threshold_value: 5.0, threshold_direction: min, threshold_warn: 3.0 }
   - { component: card, column: coverage, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }

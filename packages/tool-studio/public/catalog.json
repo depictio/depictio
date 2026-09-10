@@ -457,9 +457,23 @@
           "mode": "qc/fragment_length",
           "name": "Fragment length distribution",
           "path_glob": "**/*.ataqv.json",
-          "rawYaml": "id: ataqv_fragment_length\nname: Fragment length distribution\nmode: qc/fragment_length\ndescription: >-\n  The fragment-length histogram of every library in long form. A good ATAC\n  library shows a sub-nucleosomal peak below 100 bp followed by a decaying\n  nucleosome ladder; a flat or ladder-free profile is a failed transposition.\nfind:\n  path_glob: \"**/*.ataqv.json\"\nrecipe: ataqv/fragment_length.py\nfixture: fragment_length.tsv\nrenders_as:\n  # The ladder itself, then how much of the library sits in each window.\n  - { component: figure, visu_type: line, dict_kwargs: {x: fragment_length, y: fraction_of_all_reads, color: sample, title: Fragment length distribution} }\n  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: read_count, color: fragment_class, title: Reads per fragment class} }\n  - { component: card, column: read_count, aggregation: sum, secondary_layout: top_n, breakdown_col: fragment_class, top_n_count: 4 }\n  - { component: card, column: fragment_class, aggregation: count, secondary_layout: donut, breakdown_col: fragment_class }\n  - { component: card, column: fragment_length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: read_count, aggregation: nunique, secondary_layout: composition, breakdown_col: fragment_class }\n  - { component: table }\n",
+          "rawYaml": "id: ataqv_fragment_length\nname: Fragment length distribution\nmode: qc/fragment_length\ndescription: >-\n  The fragment-length histogram of every library in long form. A good ATAC\n  library shows a sub-nucleosomal peak below 100 bp followed by a decaying\n  nucleosome ladder; a flat or ladder-free profile is a failed transposition.\nfind:\n  path_glob: \"**/*.ataqv.json\"\nrecipe: ataqv/fragment_length.py\nfixture: fragment_length.tsv\nrenders_as:\n  # The ladder itself, then how much of the library sits in each window. The\n  # `profile` kind draws the ladder with the sub-nucleosomal and mono-nucleosome\n  # windows as shaded bands, which is the reading; the plain line stays for\n  # dashboards that only want the curve.\n  - { id: fragment_ladder, component: advanced_viz, kind: profile, roles: {series: sample, x: fragment_length, y: fraction_of_all_reads} }\n  - { component: figure, visu_type: line, dict_kwargs: {x: fragment_length, y: fraction_of_all_reads, color: sample, title: Fragment length distribution} }\n  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: read_count, color: fragment_class, title: Reads per fragment class} }\n  - { component: card, column: read_count, aggregation: sum, secondary_layout: top_n, breakdown_col: fragment_class, top_n_count: 4 }\n  - { component: card, column: fragment_class, aggregation: count, secondary_layout: donut, breakdown_col: fragment_class }\n  - { component: card, column: fragment_length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: read_count, aggregation: nunique, secondary_layout: composition, breakdown_col: fragment_class }\n  - { component: table }\n",
           "recipe": "ataqv/fragment_length.py",
           "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "fragment_ladder",
+              "kind": "profile",
+              "roles": {
+                "series": "sample",
+                "x": "fragment_length",
+                "y": "fraction_of_all_reads"
+              }
+            },
             {
               "aggregations": [],
               "attrition_cols": [],
@@ -675,9 +689,23 @@
           "mode": "qc/tss_profile",
           "name": "TSS coverage profile",
           "path_glob": "**/*.ataqv.json",
-          "rawYaml": "id: ataqv_tss_coverage\nname: TSS coverage profile\nmode: qc/tss_profile\ndescription: >-\n  Aggregate read coverage in a window centred on every transcription start site,\n  recentred so 0 is the TSS. The height of the central spike over the flanks is\n  the TSS enrichment score; the shape says whether that enrichment is a sharp\n  signal or a broad shoulder.\nfind:\n  path_glob: \"**/*.ataqv.json\"\nrecipe: ataqv/tss_coverage.py\nfixture: tss_coverage.tsv\nrenders_as:\n  - { component: figure, visu_type: line, dict_kwargs: {x: position, y: coverage, color: sample, title: Coverage around transcription start sites} }\n  - { component: card, column: coverage, aggregation: max, secondary_layout: threshold, threshold_value: 5.0, threshold_direction: min, threshold_warn: 3.0 }\n  - { component: card, column: coverage, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: position, aggregation: nunique, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }\n  - { component: table }\n",
+          "rawYaml": "id: ataqv_tss_coverage\nname: TSS coverage profile\nmode: qc/tss_profile\ndescription: >-\n  Aggregate read coverage in a window centred on every transcription start site,\n  recentred so 0 is the TSS. The height of the central spike over the flanks is\n  the TSS enrichment score; the shape says whether that enrichment is a sharp\n  signal or a broad shoulder.\nfind:\n  path_glob: \"**/*.ataqv.json\"\nrecipe: ataqv/tss_coverage.py\nfixture: tss_coverage.tsv\nrenders_as:\n  # The `profile` kind rather than a line figure: it puts the TSS marker at 0,\n  # the log axes and the legend placement in the tile's own Settings, which is\n  # what the code-mode `at-sig-fig-tss` was written by hand to get.\n  - { id: tss_profile, component: advanced_viz, kind: profile, roles: {series: sample, x: position, y: coverage} }\n  - { component: figure, visu_type: line, dict_kwargs: {x: position, y: coverage, color: sample, title: Coverage around transcription start sites} }\n  - { component: card, column: coverage, aggregation: max, secondary_layout: threshold, threshold_value: 5.0, threshold_direction: min, threshold_warn: 3.0 }\n  - { component: card, column: coverage, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: position, aggregation: nunique, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }\n  - { component: table }\n",
           "recipe": "ataqv/tss_coverage.py",
           "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "tss_profile",
+              "kind": "profile",
+              "roles": {
+                "series": "sample",
+                "x": "position",
+                "y": "coverage"
+              }
+            },
             {
               "aggregations": [],
               "attrition_cols": [],
