@@ -677,7 +677,7 @@ class TestRemoteTemplateResolution:
     def test_a_local_metadata_override_is_still_read_under_a_remote_root(
         self, monkeypatch, tmp_path
     ):
-        """A METADATA_FILE outside the root has to fall back to the filesystem.
+        """In the CLI, a METADATA_FILE outside the root falls back to the filesystem.
 
         `--data-root s3://... --var METADATA_FILE=/local/meta.tsv` is a
         supported combination. Bailing out as soon as the root was remote left
@@ -685,6 +685,7 @@ class TestRemoteTemplateResolution:
         group-aware dashboard rendered ungrouped and the run still reported
         success.
         """
+        monkeypatch.setenv("DEPICTIO_CONTEXT", "CLI")
         local_meta = tmp_path / "outside_the_root.tsv"
         local_meta.write_text("ID\tbiome\tdepth\nS1\tsoil\t10\n")
         _config, _meta, _origin, _dashboards, variables = self._resolve(
@@ -693,6 +694,38 @@ class TestRemoteTemplateResolution:
         assert variables["METADATA_ID_COL"] == "ID"
         assert variables["GROUP_COL"] == "biome"
         assert variables["ANNOTATION_COLS"] == "biome,depth"
+
+    def test_a_server_never_probes_its_own_disk_under_a_remote_root(self, monkeypatch, tmp_path):
+        """Outside the CLI the local fallback is an oracle, so it does not exist.
+
+        `POST /projects/from_run` hands user-supplied variables to this
+        resolver. With the fallback live, `METADATA_FILE=/etc/hostname` read
+        the file's first line, and the optional metadata collection came back
+        pruned or kept depending on whether the path existed in the container:
+        any authenticated caller could probe the server's filesystem one path
+        at a time. Present or absent, a local path must now resolve identically
+        and nothing may be read from it.
+        """
+        monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
+        present = tmp_path / "present.tsv"
+        present.write_text("ID\tbiome\tdepth\nS1\tsoil\t10\n")
+        absent = tmp_path / "absent.tsv"
+
+        outcomes = []
+        for path in (present, absent):
+            config, _meta, _origin, _dashboards, variables = self._resolve(
+                monkeypatch, extra_vars={"METADATA_FILE": str(path)}
+            )
+            tags = sorted(
+                dc["data_collection_tag"] for dc in config["workflows"][0]["data_collections"]
+            )
+            outcomes.append((tags, variables.get("METADATA_ID_COL"), variables.get("GROUP_COL")))
+
+        assert outcomes[0] == outcomes[1]
+        tags, id_col, group_col = outcomes[0]
+        assert "metadata" not in tags
+        assert id_col != "ID"
+        assert group_col != "biome"
 
     def test_scan_modes_become_their_remote_counterparts(self, monkeypatch):
         config, _meta, _origin, _dashboards, _variables = self._resolve(monkeypatch)
@@ -852,6 +885,44 @@ class TestPreviewDataRoot:
     def test_a_recipe_dc_whose_source_is_present(self, monkeypatch):
         row = self._row(self._preview(monkeypatch), "taxonomy_composition")
         assert (row.kind, row.status, row.matched, row.missing_sources) == ("recipe", "ok", 1, [])
+
+    def test_a_recipe_reading_other_collections_counts_them_once_they_settle(self, monkeypatch):
+        """upset_canonical has no file source at all: it reads taxonomy_rel_abundance
+        and, optionally, metadata. With rel-table-2 present the first settles, so
+        upset counts two inputs found; embedding_pcoa then settles through
+        taxonomy_heatmap, one more link down the same chain."""
+        tree = {**MEGATEST_TREE, "qiime2/rel_abundance_tables/rel-table-2.tsv": b"taxon\n"}
+        preview = self._preview(monkeypatch, tree=tree)
+        row = self._row(preview, "upset_canonical")
+        assert (row.kind, row.status, row.matched, row.missing_sources) == ("recipe", "ok", 2, [])
+        assert self._row(preview, "embedding_pcoa").status == "ok"
+
+    def test_a_dc_ref_to_a_collection_that_found_nothing_is_missing(self, monkeypatch):
+        """Presence in the project is not enough: taxonomy_rel_abundance is there but
+        its own table is missing, so nothing reading it can be built either. This
+        is what keeps a prefix at the wrong level from looking partly matched."""
+        row = self._row(self._preview(monkeypatch), "upset_canonical")
+        assert (row.status, row.matched, row.missing_sources) == (
+            "missing",
+            1,
+            ["collection 'taxonomy_rel_abundance'"],
+        )
+
+    def test_a_required_dc_ref_outside_the_settled_set_is_missing(self, monkeypatch):
+        from depictio.cli.cli.utils.template_preview import _preview_recipe_dc
+
+        root = s3_data_root(monkeypatch, MEGATEST_TREE)
+        dc_config = {"transform": {"recipe": "nf-core/ampliseq/upset_canonical.py"}}
+        row = _preview_recipe_dc("upset_canonical", dc_config, root, False, frozenset())
+        # The optional metadata ref is not reported: its absence is nominal.
+        assert (row.matched, row.status, row.missing_sources) == (
+            0,
+            "missing",
+            ["collection 'taxonomy_rel_abundance'"],
+        )
+        settled = frozenset({"taxonomy_rel_abundance"})
+        row = _preview_recipe_dc("upset_canonical", dc_config, root, False, settled)
+        assert (row.matched, row.status, row.missing_sources) == (1, "ok", [])
 
     def test_a_pruned_optional_dc_gets_its_own_row(self, monkeypatch):
         without_tree = {
