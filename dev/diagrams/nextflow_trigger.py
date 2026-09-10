@@ -76,33 +76,33 @@ def build_flow() -> Sketch:
     per_run = Box(
         60,
         120,
-        300,
+        320,
         88,
         WHITE,
         "per run",
-        ("nextflow run … -c $(depictio-cli", "config nextflow)"),
+        ("`nextflow run … -c $(depictio-cli`", "`config nextflow)`"),
     )
     per_machine = Box(
         60,
         228,
-        300,
+        320,
         108,
         WHITE,
         "per machine",
         (
-            "depictio-cli config nextflow --install",
-            "→ ~/.depictio/nextflow.config",
-            "← includeConfig in ~/.nextflow/config",
+            "`depictio-cli config nextflow --install`",
+            "→ `~/.depictio/nextflow.config`",
+            "← `includeConfig` in `~/.nextflow/config`",
         ),
     )
     per_pipeline = Box(
         60,
         356,
-        300,
+        320,
         88,
         WHITE,
         "per pipeline",
-        ("includeConfig '…/depictio.config'", "in the pipeline's nextflow.config"),
+        ("`includeConfig '…/depictio.config'`", "in the pipeline's `nextflow.config`"),
     )
     for b in (per_run, per_machine, per_pipeline):
         s.box(b)
@@ -113,9 +113,9 @@ def build_flow() -> Sketch:
         330,
         148,
         YELLOW,
-        "workflow.onComplete",
+        "`workflow.onComplete`",
         (
-            "depictio.config, assigned:",
+            "`depictio.config`, assigned:",
             "a second include replaces the",
             "first, so two includes ingest once",
             "",
@@ -128,8 +128,8 @@ def build_flow() -> Sketch:
 
     for i, line in enumerate(
         (
-            "the --install copy lives outside the virtualenv:",
-            "a dead includeConfig is a parse failure for every",
+            "the `--install` copy lives outside the virtualenv:",
+            "a dead `includeConfig` is a parse failure for every",
             "pipeline on the machine, not a Depictio warning",
         )
     ):
@@ -144,9 +144,9 @@ def build_flow() -> Sketch:
         PINK,
         "returns without a word when",
         (
-            "workflow == null  (script never compiled)",
-            "!workflow.success  (partial output)",
-            "depictio_enabled == false",
+            "`workflow == null` (script never compiled)",
+            "`!workflow.success` (partial output)",
+            "`depictio_enabled == false`",
         ),
     )
     s.box(guards)
@@ -156,19 +156,19 @@ def build_flow() -> Sketch:
     argv = Box(
         850,
         120,
-        300,
+        320,
         224,
         BLUE,
         "argv it builds",
         (
-            "--CLI-config-path  ~/.depictio/CLI.yaml",
-            "--data-root  params.outdir",
-            "--triggered-by nextflow",
-            "--pipeline-id  manifest.name/version",
-            "--project-config-path / --template",
-            "--dashboard  params.depictio_dashboard",
-            "--attach-run | --update-config",
-            "env: DEPICTIO_DATA_ROOT",
+            "`--CLI-config-path ~/.depictio/CLI.yaml`",
+            "`--data-root params.outdir`",
+            "`--triggered-by nextflow`",
+            "`--pipeline-id manifest.name/version`",
+            "`--project-config-path` / `--template`",
+            "`--dashboard params.depictio_dashboard`",
+            "`--attach-run | --update-config`",
+            "env: `DEPICTIO_DATA_ROOT`",
         ),
     )
     s.box(argv)
@@ -177,10 +177,10 @@ def build_flow() -> Sketch:
     cli = Box(
         850,
         392,
-        300,
+        320,
         150,
         GREEN,
-        "depictio-cli run",
+        "`depictio-cli run`",
         (
             "child process, stdout+stderr merged,",
             "drained line by line into the log",
@@ -207,8 +207,8 @@ def build_flow() -> Sketch:
         WHITE,
         "run summary, last lines of the pipeline log",
         (
-            "📘 Project:   http://…/projects/<id>",
-            "📘 Dashboard: http://…/dashboard/<id>",
+            "📘 Project:   `http://…/projects/<id>`",
+            "📘 Dashboard: `http://…/dashboard/<id>`",
         ),
     )
     s.box(summary)
@@ -227,14 +227,14 @@ def build_flow() -> Sketch:
     for i, line in enumerate(
         (
             "a missing CLI, a refused server, a failed step",
-            "log a warning and the pipeline stays [SUCCESS]",
+            "log a warning and the pipeline stays `[SUCCESS]`",
         )
     ):
         s.text(per_run.x + 34, 626 + i * 18, line, size=13, colour=DIM, anchor="start")
     s.text(
         46,
         FLOW_H - 34,
-        "every [depictio] line carries its prefix: the console concatenates handler output when redirected, .nextflow.log keeps the lines",
+        "every `[depictio]` line carries its prefix: the console concatenates handler output when redirected, `.nextflow.log` keeps the lines",
         size=13,
         colour=DIM,
         anchor="start",
@@ -272,9 +272,9 @@ def build_stack() -> Sketch:
         lane_w,
         136,
         GREEN,
-        "#1037  the Nextflow onComplete trigger",
+        "#1037  the Nextflow `onComplete` trigger",
         (
-            "depictio.config + config nextflow (--print / --install / --uninstall)",
+            "`depictio.config` + `config nextflow` (`--print` / `--install` / `--uninstall`)",
             "example pipeline with a dashboard and a catalog recipe, published CLI image",
             "run summary links, ingestion badge with the pipeline's identity",
         ),
@@ -287,9 +287,9 @@ def build_stack() -> Sketch:
         BLUE,
         "#1036  which pipeline produced this directory",
         (
-            "WorkflowRunInfo + a priority registry of readers (nextflow 100, snakemake 50)",
-            "reads pipeline_info/: identity, engine version, tools; picks the template ≤ run version",
-            "stamps engine_name / pipeline_version / tools_executed on the WorkflowConfig",
+            "`WorkflowRunInfo` + a priority registry of readers (nextflow 100, snakemake 50)",
+            "reads `pipeline_info/`: identity, engine version, tools; picks the template ≤ run version",
+            "stamps `engine_name` / `pipeline_version` / `tools_executed` on the `WorkflowConfig`",
         ),
     )
     base = Box(
@@ -300,9 +300,9 @@ def build_stack() -> Sketch:
         YELLOW,
         "#1035  auth without a secret in the file, and a second run that does not abort",
         (
-            "DEPICTIO_CLI_TOKEN / _API_BASE_URL / _CONFIG_PATH overrides",
-            "sync returns created / updated / exists instead of raising typer.Exit(0)",
-            "--attach-run: union of locations, ids kept, single-file DCs protected",
+            "`DEPICTIO_CLI_TOKEN` / `_API_BASE_URL` / `_CONFIG_PATH` overrides",
+            "sync returns created / updated / exists instead of raising `typer.Exit(0)`",
+            "`--attach-run`: union of locations, ids kept, single-file DCs protected",
         ),
     )
     for b in (top, mid, base):
@@ -314,16 +314,23 @@ def build_stack() -> Sketch:
 
     notes_x = lane_x + lane_w + 50
     s.text(notes_x, top.cy - 22, "needs:", size=14, colour=DIM, anchor="start")
-    s.text(notes_x, top.cy, "--pipeline-id resolved to a template", size=15, anchor="start")
+    s.text(notes_x, top.cy, "`--pipeline-id` resolved to a template", size=15, anchor="start")
     s.text(notes_x, top.cy + 22, "provenance read without a template", size=15, anchor="start")
 
     s.text(notes_x, mid.cy - 22, "needs:", size=14, colour=DIM, anchor="start")
-    s.text(notes_x, mid.cy, "a run.py that reaches step 4 twice", size=15, anchor="start")
-    s.text(notes_x, mid.cy + 22, "a WorkflowConfig with room for it", size=15, anchor="start")
+    s.text(notes_x, mid.cy, "a `run.py` that reaches step 4 twice", size=15, anchor="start")
+    s.text(notes_x, mid.cy + 22, "a `WorkflowConfig` with room for it", size=15, anchor="start")
 
-    s.text(notes_x, base.cy - 12, "base = main", size=14, colour=DIM, anchor="start")
+    s.text(notes_x, base.cy - 12, "base = `main`", size=14, colour=DIM, anchor="start")
     s.text(notes_x, base.cy + 10, "the only PR the unit-test CI runs on", size=15, anchor="start")
-    s.text(notes_x, base.cy + 32, "(pull_request: branches: [main])", size=13, colour=DIM, anchor="start")
+    s.text(
+        notes_x,
+        base.cy + 32,
+        "(`pull_request: branches: [main]`)",
+        size=13,
+        colour=DIM,
+        anchor="start",
+    )
 
     s.text(
         46,
