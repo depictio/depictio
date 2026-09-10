@@ -37,6 +37,7 @@ export interface CatalogPreviewData {
   unique: Record<string, string[]>;
   ranges: Record<string, { min: number | null; max: number | null }>;
   specs: Record<string, Record<string, unknown>>;
+  schemas: Record<string, Record<string, string>>;
   advancedVizData: Record<string, unknown>;
   compute: Record<string, unknown>;
 }
@@ -143,6 +144,14 @@ export async function fetchColumnRange(dcId: string, columnName: string) {
 
 export async function fetchSpecs(dcId: string): Promise<Record<string, unknown>> {
   return need(DATA().specs, dcId, 'specs');
+}
+
+/** Column menus (an embedding's colour-by and hover extras, a rarefaction's
+ *  grouping) read the DC schema to know what can be picked. The Python side
+ *  fills `schemas` only for those kinds, and only with the columns it actually
+ *  shipped, so anything this returns has values in `advancedVizData`. */
+export async function fetchPolarsSchema(dcId: string): Promise<Record<string, string>> {
+  return need(DATA().schemas, dcId, 'polars-schema');
 }
 
 // ---- image / multiqc (keyed by component id) ------------------------------
