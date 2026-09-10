@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 
 import type { DashboardListEntry } from 'depictio-react-core';
+import { matchesTemplateFilter, parseTemplateOrigin } from 'depictio-react-core';
 import {
   type GroupedDashboards,
   groupByParent,
@@ -25,13 +26,27 @@ export interface DashboardSection {
 
 interface FilterContext {
   projectNames: Map<string, string>;
+  /** Raw `template_origin` per project id. Dashboards carry no template of
+   *  their own — the pipeline a dashboard belongs to is a property of the
+   *  project that owns it. */
+  projectTemplates: Map<string, unknown>;
   currentUserEmail: string | null;
+}
+
+/** The template a dashboard inherits from its project, or null when the
+ *  project wasn't built from one. */
+function templateOriginOf(
+  d: DashboardListEntry,
+  projectTemplates: Map<string, unknown>,
+): unknown {
+  const pid = d.project_id ? String(d.project_id) : '';
+  return pid ? (projectTemplates.get(pid) ?? null) : null;
 }
 
 function matchesSearch(
   group: GroupedDashboards,
   search: string,
-  projectNames: Map<string, string>,
+  ctx: FilterContext,
 ): boolean {
   if (!search.trim()) return true;
   const q = search.trim().toLowerCase();
@@ -40,9 +55,13 @@ function matchesSearch(
   if (d.title) haystack.push(String(d.title));
   if (typeof d.subtitle === 'string') haystack.push(d.subtitle);
   if (d.project_id) {
-    const name = projectNames.get(String(d.project_id));
+    const name = ctx.projectNames.get(String(d.project_id));
     if (name) haystack.push(name);
   }
+  // Typing "rnaseq" should find the pipeline's dashboards even when neither
+  // the title nor the project name spells it out.
+  const template = parseTemplateOrigin(templateOriginOf(d, ctx.projectTemplates));
+  if (template) haystack.push(template.full);
   const owner = d.permissions?.owners?.[0]?.email;
   if (owner) haystack.push(owner);
   if (typeof d.workflow_system === 'string') haystack.push(d.workflow_system);
@@ -52,17 +71,29 @@ function matchesSearch(
 function matchesFilters(
   group: GroupedDashboards,
   filters: DashboardFilters,
-  currentUserEmail: string | null,
+  ctx: FilterContext,
 ): boolean {
   const d = group.parent;
   if (filters.projects.length > 0) {
     const pid = d.project_id ? String(d.project_id) : '';
     if (!filters.projects.includes(pid)) return false;
   }
+  if (
+    !matchesTemplateFilter(
+      templateOriginOf(d, ctx.projectTemplates),
+      filters.templates,
+    )
+  ) {
+    return false;
+  }
+  if (filters.workflows.length > 0) {
+    const wf = typeof d.workflow_system === 'string' ? d.workflow_system : '';
+    if (!filters.workflows.includes(wf)) return false;
+  }
   if (filters.owners.length > 0) {
     const ownerEmail = d.permissions?.owners?.[0]?.email ?? '';
     const wantsMine = filters.owners.includes('__mine__');
-    const isMine = wantsMine && isOwnedByEmail(d, currentUserEmail);
+    const isMine = wantsMine && isOwnedByEmail(d, ctx.currentUserEmail);
     const explicit = filters.owners.includes(ownerEmail);
     if (!isMine && !explicit) return false;
   }
@@ -225,6 +256,11 @@ function groupByKey(
 export interface UseDashboardFiltersResult {
   sections: DashboardSection[];
   totalAfterSearch: number;
+  /** Dashboards left after search *and* filters — the numerator the shared-view
+   *  banner reports. */
+  totalMatching: number;
+  /** Every dashboard the user can see, before anything is narrowed. */
+  totalDashboards: number;
 }
 
 export function useDashboardFilters(
@@ -234,11 +270,9 @@ export function useDashboardFilters(
 ): UseDashboardFiltersResult {
   return useMemo(() => {
     const allGrouped = groupByParent(entries);
-    const afterSearch = allGrouped.filter((g) =>
-      matchesSearch(g, prefs.search, ctx.projectNames),
-    );
+    const afterSearch = allGrouped.filter((g) => matchesSearch(g, prefs.search, ctx));
     const afterFilters = afterSearch.filter((g) =>
-      matchesFilters(g, prefs.filters, ctx.currentUserEmail),
+      matchesFilters(g, prefs.filters, ctx),
     );
 
     const sections =
@@ -250,6 +284,11 @@ export function useDashboardFilters(
           )
         : groupByKey(afterFilters, prefs.groupBy, ctx, prefs.sortBy);
 
-    return { sections, totalAfterSearch: afterSearch.length };
-  }, [entries, prefs, ctx.projectNames, ctx.currentUserEmail]);
+    return {
+      sections,
+      totalAfterSearch: afterSearch.length,
+      totalMatching: afterFilters.length,
+      totalDashboards: allGrouped.length,
+    };
+  }, [entries, prefs, ctx.projectNames, ctx.projectTemplates, ctx.currentUserEmail]);
 }

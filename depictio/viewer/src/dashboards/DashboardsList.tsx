@@ -15,8 +15,12 @@ import {
 import { Icon } from '@iconify/react';
 
 import type { DashboardListEntry, ProjectListEntry } from 'depictio-react-core';
+import { parseTemplateOrigin } from 'depictio-react-core';
 
 import DashboardsToolbar from './DashboardsToolbar';
+import SharedViewBanner from '../components/listing/SharedViewBanner';
+import type { SharedViewScope } from '../components/listing/SharedViewBanner';
+import { listingUrl } from '../lib/listingUrl';
 import DashboardThumbnailView from './views/DashboardThumbnailView';
 import DashboardListView from './views/DashboardListView';
 import DashboardTableView from './views/DashboardTableView';
@@ -152,6 +156,7 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
   );
   const {
     prefs,
+    arrivedScoped,
     setView,
     setGroupBy,
     setSortBy,
@@ -164,15 +169,32 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
   const { pinnedIds, recents, togglePin } = useDashboardPinsAndRecents();
 
   const filterCtx = useMemo(
-    () => ({ projectNames, currentUserEmail }),
-    [projectNames, currentUserEmail],
+    () => ({ projectNames, projectTemplates, currentUserEmail }),
+    [projectNames, projectTemplates, currentUserEmail],
   );
 
-  const { sections, totalAfterSearch } = useDashboardFilters(
-    dashboards,
-    prefs,
-    filterCtx,
-  );
+  const { sections, totalAfterSearch, totalMatching, totalDashboards } =
+    useDashboardFilters(dashboards, prefs, filterCtx);
+
+  // A link can name a project by id (what the share button emits) or by name
+  // (what a person types). Swap any name that resolves onto its id once the
+  // projects have loaded, so the toolbar's Project dropdown shows the chip
+  // selected rather than a stray unknown value. Idempotent: after the swap
+  // the entry is an id and matches nothing here.
+  useEffect(() => {
+    if (prefs.filters.projects.length === 0 || projectNames.size === 0) return;
+    const byName = new Map<string, string>();
+    for (const [id, name] of projectNames) byName.set(name.toLowerCase(), id);
+    let changed = false;
+    const resolved = prefs.filters.projects.map((value) => {
+      if (projectNames.has(value)) return value;
+      const id = byName.get(value.toLowerCase());
+      if (!id) return value;
+      changed = true;
+      return id;
+    });
+    if (changed) setFilters({ ...prefs.filters, projects: resolved });
+  }, [prefs.filters, projectNames, setFilters]);
 
   // Build the project / owner option lists for the toolbar dropdowns from the
   // currently-loaded dashboards (cheap, no extra fetch).
@@ -190,6 +212,48 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
       .map(([value, label]) => ({ value, label }))
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [dashboards, projectNames]);
+
+  // Template options come from the projects the listed dashboards actually
+  // belong to, so the dropdown never offers a pipeline that would filter down
+  // to nothing. Each source contributes an "all pipelines" entry alongside its
+  // individual pipelines.
+  const templateOptions = useMemo(() => {
+    const bySource = new Map<string, Set<string>>();
+    for (const d of dashboards) {
+      if (d.parent_dashboard_id) continue;
+      const pid = d.project_id ? String(d.project_id) : '';
+      if (!pid) continue;
+      const parsed = parseTemplateOrigin(projectTemplates.get(pid));
+      if (!parsed) continue;
+      const pipelines = bySource.get(parsed.source) ?? new Set<string>();
+      if (parsed.repo) pipelines.add(parsed.repo);
+      bySource.set(parsed.source, pipelines);
+    }
+    const options: { value: string; label: string }[] = [];
+    for (const source of Array.from(bySource.keys()).sort()) {
+      const pipelines = Array.from(bySource.get(source) ?? []).sort();
+      if (pipelines.length > 1) {
+        options.push({ value: source, label: `${source} (all pipelines)` });
+      }
+      for (const repo of pipelines) {
+        options.push({ value: `${source}/${repo}`, label: `${source} / ${repo}` });
+      }
+      if (pipelines.length === 0) options.push({ value: source, label: source });
+    }
+    return options;
+  }, [dashboards, projectTemplates]);
+
+  const workflowOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const d of dashboards) {
+      if (d.parent_dashboard_id) continue;
+      const wf = typeof d.workflow_system === 'string' ? d.workflow_system.trim() : '';
+      if (wf && wf !== 'none') set.add(wf);
+    }
+    return Array.from(set)
+      .sort()
+      .map((value) => ({ value, label: value }));
+  }, [dashboards]);
 
   const ownerOptions = useMemo(() => {
     const set = new Set<string>();
@@ -396,6 +460,80 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
 
   const noResults = totalAfterSearch === 0 && prefs.search.trim().length > 0;
 
+  // What the shared link narrowed to, spelled out for the banner. Only the
+  // filters that hide rows appear here — view mode and sort order travel in
+  // the URL too, but they change nothing about *what* the recipient sees.
+  const scopeChips: SharedViewScope[] = [];
+  const dropFrom = (key: 'templates' | 'projects' | 'workflows' | 'owners', value: string) =>
+    setFilters({
+      ...prefs.filters,
+      [key]: prefs.filters[key].filter((v) => v !== value),
+    });
+  for (const value of prefs.filters.templates) {
+    const opt = templateOptions.find((o) => o.value === value);
+    scopeChips.push({
+      key: `t:${value}`,
+      label: opt?.label ?? value,
+      onRemove: () => dropFrom('templates', value),
+    });
+  }
+  for (const id of prefs.filters.projects) {
+    scopeChips.push({
+      key: `p:${id}`,
+      label: projectNames.get(id) ?? id,
+      onRemove: () => dropFrom('projects', id),
+    });
+  }
+  for (const value of prefs.filters.workflows) {
+    scopeChips.push({
+      key: `w:${value}`,
+      label: value,
+      onRemove: () => dropFrom('workflows', value),
+    });
+  }
+  for (const owner of prefs.filters.owners) {
+    scopeChips.push({
+      key: `o:${owner}`,
+      label: owner === '__mine__' ? 'Mine' : owner,
+      onRemove: () => dropFrom('owners', owner),
+    });
+  }
+  if (prefs.filters.visibility !== 'all') {
+    scopeChips.push({
+      key: 'v',
+      label: prefs.filters.visibility === 'public' ? 'Public only' : 'Private only',
+      onRemove: () => setFilters({ ...prefs.filters, visibility: 'all' }),
+    });
+  }
+  if (prefs.onlyPinned) {
+    scopeChips.push({
+      key: 'pinned',
+      label: 'Favorites only',
+      onRemove: () => setOnlyPinned(false),
+    });
+  }
+  if (prefs.search.trim()) {
+    scopeChips.push({
+      key: 'q',
+      label: `"${prefs.search.trim()}"`,
+      onRemove: () => setSearch(''),
+    });
+  }
+
+  // The same template scope reads just as well on the projects listing, and
+  // "show me this pipeline" usually means both. One link per page was the
+  // call, so the pages point at each other instead of the share button
+  // offering a menu.
+  const crossLink =
+    prefs.filters.templates.length > 0
+      ? {
+          href: listingUrl('/projects', { template: prefs.filters.templates }),
+          label: 'See the matching projects',
+        }
+      : undefined;
+
+  const showBanner = arrivedScoped && scopeChips.length > 0;
+
   // Shared chrome: toolbar + optional banners + content.
   const chrome = (content: React.ReactNode) => (
     <Stack gap="md">
@@ -403,6 +541,10 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
         prefs={prefs}
         projectOptions={projectOptions}
         ownerOptions={ownerOptions}
+        templateOptions={templateOptions}
+        workflowOptions={workflowOptions}
+        matchingCount={totalMatching}
+        showFilterChips={!showBanner}
         pinnedCount={pinnedGroups.length}
         pinDisabled={pinDisabled}
         setView={setView}
@@ -413,6 +555,17 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
         setOnlyPinned={setOnlyPinned}
         clearFilters={clearFilters}
       />
+
+      {showBanner && (
+        <SharedViewBanner
+          scope={scopeChips}
+          shown={totalMatching}
+          total={totalDashboards}
+          noun="dashboard"
+          crossLink={crossLink}
+          onClearAll={clearFilters}
+        />
+      )}
 
       {noResults ? (
         <Paper p="xl" radius="md" withBorder>

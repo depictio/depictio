@@ -631,3 +631,20 @@ export { COMPONENT_TYPE_VISUALS, componentTypeVisual } from './componentTypeMeta
 export type { ComponentTypeVisual } from './componentTypeMeta';
 export { brandColors } from './brandColors';
 export { catalogToolUrl } from './catalogLinks';
+
+// Shareable listing views: the /dashboards and /projects pages encode their
+// filters into the URL, and both narrow on the template a project came from.
+export {
+  matchesTemplateFilter,
+  parseTemplateOrigin,
+  templateFilterValues,
+} from './templateFilter';
+export type { ParsedTemplate } from './templateFilter';
+export {
+  asEnum,
+  asList,
+  asScalar,
+  decodeListingParams,
+  encodeListingParams,
+} from './listingUrlState';
+export type { ListingParams } from './listingUrlState';
