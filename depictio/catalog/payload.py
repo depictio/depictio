@@ -232,6 +232,8 @@ def _table_payload(df) -> dict[str, Any]:
 _ADVANCED_VIZ_DISPATCH_KINDS = frozenset(
     {"embedding", "upset_plot", "upset", "coverage_track", "sankey"}
 )
+# The two spellings the catalog and the renderer use for the same plot.
+_UPSET_KINDS = frozenset({"upset_plot", "upset"})
 
 
 def _advanced_viz_config_and_data(df, render) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -373,7 +375,12 @@ def _multiqc_payload(df, render) -> list[dict[str, Any]]:
     rows_sorted = [
         r
         for r in plot_rows.iter_rows(named=True)
-        if section == "report" or multiqc_module(r["anchor"]) == section
+        # Lowercased on both sides. The compose endpoint already normalises this
+        # way (`multiqc_module(str(m).lower())`), and a recipe names the module
+        # in lower case, so a camelCase anchor like `featureCounts_assignment_plot`
+        # matched there and not here — the one module in the catalog whose
+        # preview was a placeholder for no reason but casing.
+        if section == "report" or multiqc_module(r["anchor"]).lower() == section.lower()
     ]
 
     results = []
@@ -694,6 +701,95 @@ def advanced_viz_persist_config(output: Any, render, df: Any = None) -> dict[str
         return None
 
 
+def _is_live_embedding(render) -> bool:
+    """True when an ``embedding`` render re-projects rather than plots columns.
+
+    Mirrors ``EmbeddingRenderer``'s ``liveMode = Boolean(config.compute_method)``.
+    Every embedding the catalog ships today is the other case: the recipe already
+    emitted the coordinates, so the render binds ``dim_1``/``dim_2`` and goes
+    through the ordinary role-projection path.
+    """
+    return bool((render.roles or {}).get("compute_method"))
+
+
+def _upset_payload(df, render) -> dict[str, Any]:
+    """Pre-compute the UpSet figure from the fixture.
+
+    plotly-upset builds the figure in Python, so unlike a role-projecting kind
+    there is nothing the browser could draw on its own — without this the tile
+    could only ever show a placeholder. Runs the worker's own kernel so the
+    gallery and a live dashboard cannot drift apart.
+    """
+    from depictio.api.v1.celery_tasks import _upset_result_from_frame
+
+    # A catalog `Render` is `extra="forbid"` and carries only `roles`, so every
+    # tunable here is the renderer's own default. That is the contract the user
+    # asked for: a preview for every render, tuning only where a dashboard can
+    # actually carry the setting.
+    roles = render.roles or {}
+    set_columns = roles.get("sets")
+    return _upset_result_from_frame(
+        df,
+        set_columns=list(set_columns) if isinstance(set_columns, list) else None,
+        sort_by="cardinality",
+        sort_order="descending",
+        min_size=1,
+        max_degree=None,
+        show_set_sizes=True,
+        show_values=False,
+        color_intersections_by="none",
+        set_colors=None,
+        annotation_cols=[],
+    )
+
+
+def _sankey_payload(df, render) -> dict[str, Any]:
+    """Pre-compute the Sankey figure and node metadata from the fixture."""
+    from depictio.api.v1.celery_tasks import _sankey_result_from_frame
+
+    roles = render.roles or {}
+    step_cols = list(roles.get("steps") or [])
+    if len(step_cols) < 2:
+        raise CatalogPayloadError(f"sankey: needs >=2 step columns, got {step_cols!r}")
+    missing = [c for c in step_cols if c not in df.columns]
+    if missing:
+        raise CatalogPayloadError(
+            f"sankey: step column(s) {missing} absent from fixture {list(df.columns)}"
+        )
+    return _sankey_result_from_frame(
+        df,
+        value_col=roles.get("value"),
+        step_cols=step_cols,
+        sort_mode="total_flow",
+        min_link_value=0.0,
+        step_filters={},
+    )
+
+
+def _embedding_payload(df, render) -> dict[str, Any]:
+    """Project the fixture for a *live* embedding (one that names a method).
+
+    Only reached when the render declares ``compute_method``. An embedding whose
+    coordinates the recipe already emitted binds ``dim_1``/``dim_2`` like any
+    other kind and never comes through here.
+    """
+    from depictio.api.v1.celery_tasks import _embedding_result_from_frame
+
+    roles = render.roles or {}
+    feature_id_col = roles.get("sample_id") or "sample_id"
+    if feature_id_col not in df.columns:
+        raise CatalogPayloadError(
+            f"embedding: sample id column {feature_id_col!r} absent from fixture {list(df.columns)}"
+        )
+    return _embedding_result_from_frame(
+        df,
+        feature_id_col=feature_id_col,
+        method=str(roles.get("compute_method") or "pca"),
+        params={},
+        extra_cols=[],
+    )
+
+
 def _render_variant(render) -> str:
     """Sub-label qualifying a component (the type itself is shown as a badge).
 
@@ -754,6 +850,11 @@ def _output_info(output: Any, tool: Any = None, df: Any = None) -> dict[str, Any
     edam = out_edam or (list(tool.edam_topics) if tool else [])
     info: dict[str, Any] = {
         "id": output.id,
+        # The catalog's own short label ("ARG hits"). The compose endpoint has
+        # always sent it and the picker titles its panel with it; without it here
+        # the docs gallery had to fall back to the raw id, so the two surfaces
+        # named the same output differently.
+        "name": output.name or output.id,
         "description": output.description or "",
         "mode": output.mode,
         "find": output.find.model_dump(exclude_none=True),
@@ -784,6 +885,10 @@ def _render_meta(render, output: Any, i: int) -> dict[str, Any]:
         "dc_id": f"catalog::{index}",
         "_variant": _render_variant(render),
         "_yaml": _render_yaml(render),
+        # The `renders_as` entry itself, so the panel can build the dashboard
+        # tile that reproduces this render without reconstructing it from the
+        # preview metadata (which is a lossy, differently-shaped view of it).
+        "_render": render.model_dump(exclude_none=True, exclude_defaults=True),
     }
     binds = _render_binds(render)
     if binds:
@@ -917,10 +1022,27 @@ def build_payload(output: Any, theme: str = "light", tool: Any = None) -> dict[s
                 meta["viz_kind"] = "complex_heatmap"
                 meta["_preview_height"] = _AV_PREVIEW_HEIGHT.get("complex_heatmap", 680)
                 data["compute"][dc_id] = _complex_heatmap_payload(df, render)
-            elif comp == "advanced_viz" and render.kind in _ADVANCED_VIZ_DISPATCH_KINDS:
-                meta["_unsupported"] = (
-                    f"preview for advanced_viz '{render.kind}' (server-computed) is not wired yet"
-                )
+            elif comp == "advanced_viz" and render.kind in _UPSET_KINDS:
+                # mockApi.dispatchUpset → finishedJob(dc_id) → DATA().compute[dc_id]
+                meta["viz_kind"] = render.kind
+                meta["_preview_height"] = _AV_PREVIEW_HEIGHT.get(render.kind, 520)
+                data["compute"][dc_id] = _upset_payload(df, render)
+            elif comp == "advanced_viz" and render.kind == "sankey":
+                meta["viz_kind"] = "sankey"
+                meta["_preview_height"] = _AV_PREVIEW_HEIGHT.get("sankey", 520)
+                data["compute"][dc_id] = _sankey_payload(df, render)
+            elif (
+                comp == "advanced_viz" and render.kind == "embedding" and _is_live_embedding(render)
+            ):
+                # Live mode re-projects the matrix; the renderer keys the result
+                # under the literal dim_1/dim_2, so no column bindings travel.
+                meta["viz_kind"] = "embedding"
+                meta["config"] = {
+                    "viz_kind": "embedding",
+                    "compute_method": render.roles["compute_method"],
+                }
+                meta["_preview_height"] = _AV_PREVIEW_HEIGHT.get("embedding", 480)
+                data["compute"][dc_id] = _embedding_payload(df, render)
             elif comp == "advanced_viz":
                 config, av = _advanced_viz_config_and_data(df, render)
                 _advanced_viz_defaults(df, render, config)

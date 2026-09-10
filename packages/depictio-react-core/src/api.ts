@@ -4689,6 +4689,10 @@ export interface CatalogOutputMatch {
   description: string;
   dc_id: string;
   wf_id: string;
+  /** Workflow tag. With `dc_tag` these are the two lines a dashboard tile is
+   *  resolved against, so the picker's YAML snippet needs both by name — an id
+   *  is not what `workflow_tag:` takes. */
+  wf_tag: string;
   dc_tag: string;
   /** Collection type ("table", "multiqc", …) — decides whether the source rows
    *  can be previewed. */

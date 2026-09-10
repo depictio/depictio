@@ -867,84 +867,28 @@ def preview_deltatable(payload: dict) -> dict:
     }
 
 
-@celery_app.task(
-    name="depictio.advanced_viz.compute_embedding",
-    soft_time_limit=600,
-    time_limit=900,
-)
-def compute_embedding(payload: dict) -> dict:
-    """Live dim-reduction for the Embedding advanced viz.
+def _embedding_result_from_frame(
+    df,
+    *,
+    feature_id_col: str,
+    method: str,
+    params: dict,
+    extra_cols: list[str],
+) -> dict:
+    """Project an already-loaded sample x feature matrix, and shape the result.
 
-    Loads a wide sample×feature matrix DC, projects it via run_pca /
-    run_umap / run_tsne / run_pcoa from depictio.recipes.lib.dimreduction,
-    and returns the 2D coords in the canonical embedding shape (column-
-    oriented dict).
-
-    Input payload (JSON-serialisable):
-        {
-          "wf_id": str,
-          "dc_id": str,                # the feature-matrix DC
-          "feature_id_col": str,       # sample-id column in the matrix
-          "method": "pca" | "umap" | "tsne" | "pcoa",
-          "params": dict,              # per-method tunables
-          "filter_metadata": [...],    # sidebar filters (optional)
-        }
-
-    Output:
-        {
-          "sample_ids": [str],
-          "dim_1": [float],
-          "dim_2": [float],
-          "dim_3": [float],  # only when params.n_components == 3
-        }
+    Split out of :func:`compute_embedding` so the same projection runs off a
+    Delta table in the worker and off a catalog fixture in
+    ``depictio.catalog.payload`` — the catalog gallery has no workflow to load
+    from, and a second implementation there would be a second thing to keep
+    correct. The caller owns loading and adds its own ``load_ms``.
     """
-    from depictio.api.v1.db import deltatables_collection
-    from depictio.api.v1.deltatables_utils import load_deltatable_lite
-    from depictio.recipes.lib.dimreduction import run_pca, run_pcoa, run_tsne, run_umap
-
-    wf_id = payload.get("wf_id")
-    dc_id = payload.get("dc_id")
-    feature_id_col = payload.get("feature_id_col") or "sample_id"
-    method = (payload.get("method") or "pca").lower()
-    params = payload.get("params") or {}
-    filter_metadata = payload.get("filter_metadata") or []
-    # Columns to pass through unchanged from the feature DC alongside the
-    # computed (dim_1, dim_2). Used by the renderer to overlay cluster /
-    # colour annotations on the live embedding without an extra round-trip.
-    extra_cols: list[str] = list(payload.get("extra_cols") or [])
-
-    if not wf_id or not dc_id:
-        raise ValueError("compute_embedding: wf_id and dc_id are required")
-    if method not in {"pca", "umap", "tsne", "pcoa"}:
-        raise ValueError(f"compute_embedding: unsupported method {method!r}")
-
-    # Resolve delta location via Mongo (same pattern as build_figure_preview
-    # — keeps the Celery worker self-contained, no HTTP fallbacks).
-    dt_doc = deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc_id))})
-    if not dt_doc or not dt_doc.get("delta_table_location"):
-        raise ValueError("compute_embedding: feature DC has no materialised Delta table")
-    init_data = {
-        str(dc_id): {
-            "delta_location": dt_doc["delta_table_location"],
-            "dc_type": "table",
-            "size_bytes": 0,
-        }
-    }
-
-    started = time.monotonic()
-    df = load_deltatable_lite(
-        workflow_id=ObjectId(str(wf_id)),
-        data_collection_id=str(dc_id),
-        metadata=filter_metadata or None,
-        init_data=init_data,
-    )
-    load_ms = int((time.monotonic() - started) * 1000)
-    logger.info("compute_embedding[%s]: loaded %d rows in %dms", method, df.height, load_ms)
-
     # Stash any pass-through columns the renderer asked for (e.g. cluster /
     # group labels for colour-coding the embedding) before reducing to the
     # numeric feature matrix.
     import polars as pl
+
+    from depictio.recipes.lib.dimreduction import run_pca, run_pcoa, run_tsne, run_umap
 
     passthrough: dict[str, list] = {}
     if extra_cols:
@@ -1052,12 +996,96 @@ def compute_embedding(payload: dict) -> dict:
         "method": method,
         "params": params,
         "row_count": int(coords.height),
-        "load_ms": load_ms,
         "compute_ms": compute_ms,
     }
     if n_components == 3 and "dim_3" in coords.columns:
         result["dim_3"] = coords["dim_3"].to_list()
     return result
+
+
+@celery_app.task(
+    name="depictio.advanced_viz.compute_embedding",
+    soft_time_limit=600,
+    time_limit=900,
+)
+def compute_embedding(payload: dict) -> dict:
+    """Live dim-reduction for the Embedding advanced viz.
+
+    Loads a wide sample×feature matrix DC, projects it via run_pca /
+    run_umap / run_tsne / run_pcoa from depictio.recipes.lib.dimreduction,
+    and returns the 2D coords in the canonical embedding shape (column-
+    oriented dict).
+
+    Input payload (JSON-serialisable):
+        {
+          "wf_id": str,
+          "dc_id": str,                # the feature-matrix DC
+          "feature_id_col": str,       # sample-id column in the matrix
+          "method": "pca" | "umap" | "tsne" | "pcoa",
+          "params": dict,              # per-method tunables
+          "filter_metadata": [...],    # sidebar filters (optional)
+        }
+
+    Output:
+        {
+          "sample_ids": [str],
+          "dim_1": [float],
+          "dim_2": [float],
+          "dim_3": [float],  # only when params.n_components == 3
+        }
+    """
+    from depictio.api.v1.db import deltatables_collection
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+    wf_id = payload.get("wf_id")
+    dc_id = payload.get("dc_id")
+    feature_id_col = payload.get("feature_id_col") or "sample_id"
+    method = (payload.get("method") or "pca").lower()
+    params = payload.get("params") or {}
+    filter_metadata = payload.get("filter_metadata") or []
+    # Columns to pass through unchanged from the feature DC alongside the
+    # computed (dim_1, dim_2). Used by the renderer to overlay cluster /
+    # colour annotations on the live embedding without an extra round-trip.
+    extra_cols: list[str] = list(payload.get("extra_cols") or [])
+
+    if not wf_id or not dc_id:
+        raise ValueError("compute_embedding: wf_id and dc_id are required")
+    if method not in {"pca", "umap", "tsne", "pcoa"}:
+        raise ValueError(f"compute_embedding: unsupported method {method!r}")
+
+    # Resolve delta location via Mongo (same pattern as build_figure_preview
+    # — keeps the Celery worker self-contained, no HTTP fallbacks).
+    dt_doc = deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc_id))})
+    if not dt_doc or not dt_doc.get("delta_table_location"):
+        raise ValueError("compute_embedding: feature DC has no materialised Delta table")
+    init_data = {
+        str(dc_id): {
+            "delta_location": dt_doc["delta_table_location"],
+            "dc_type": "table",
+            "size_bytes": 0,
+        }
+    }
+
+    started = time.monotonic()
+    df = load_deltatable_lite(
+        workflow_id=ObjectId(str(wf_id)),
+        data_collection_id=str(dc_id),
+        metadata=filter_metadata or None,
+        init_data=init_data,
+    )
+    load_ms = int((time.monotonic() - started) * 1000)
+    logger.info("compute_embedding[%s]: loaded %d rows in %dms", method, df.height, load_ms)
+
+    return {
+        **_embedding_result_from_frame(
+            df,
+            feature_id_col=feature_id_col,
+            method=method,
+            params=params,
+            extra_cols=extra_cols,
+        ),
+        "load_ms": load_ms,
+    }
 
 
 @celery_app.task(
@@ -1472,6 +1500,168 @@ def _detect_upset_set_columns(df) -> list[str]:
     return detected
 
 
+def _upset_result_from_frame(
+    df,
+    *,
+    set_columns: list[str] | None,
+    sort_by: str,
+    sort_order: str,
+    min_size: int,
+    max_degree: int | None,
+    show_set_sizes: bool,
+    show_values: bool,
+    color_intersections_by: str,
+    set_colors: dict | None,
+    annotation_cols: list[str],
+    unfiltered_universes: dict[str, list] | None = None,
+) -> dict:
+    """Build the UpSet figure from an already-loaded frame.
+
+    Split out of :func:`compute_upset` so the catalog gallery can draw the same
+    plot off a bundled fixture, where there is no Delta table to dispatch
+    against. The caller owns loading, set narrowing and its own ``load_ms``.
+    """
+    pdf = df.to_pandas()
+    compute_started = time.monotonic()
+    from plotly_upset import UpSetPlot
+
+    kwargs: dict = {
+        "sort_by": sort_by,
+        "sort_order": sort_order,
+        "min_size": min_size,
+        "show_set_sizes": show_set_sizes,
+        "show_values": show_values,
+    }
+    if max_degree is not None:
+        kwargs["max_degree"] = int(max_degree)
+    if color_intersections_by in ("set", "degree"):
+        kwargs["color_intersections_by"] = color_intersections_by
+    if set_colors:
+        kwargs["set_colors"] = set_colors
+
+    # Distinct categorical palette for annotation tracks — picked to avoid
+    # collision with the library's default UPSET_PALETTE that drives the
+    # set + intersection-bar colouring. Without this, the first feature_group
+    # category and the first set (contrastA) draw from the same first colour
+    # and the two legends look like they describe the same partition.
+    # Source: matplotlib Set2 (pastel qualitative).
+    _ANNOTATION_PALETTE = [
+        "#66c2a5",
+        "#fc8d62",
+        "#8da0cb",
+        "#e78ac3",
+        "#a6d854",
+        "#ffd92f",
+        "#e5c494",
+        "#b3b3b3",
+    ]
+
+    # Route through from_dataframe when set_columns and/or annotation_cols
+    # are specified — that path resolves annotation specs and wires them
+    # into an UpSetAnnotation container. Falls back to the bare constructor
+    # for the legacy "binary-only DataFrame" case.
+    if annotation_cols or set_columns:
+        annotations_spec: dict | list | None
+        if annotation_cols:
+            # Build {col: {"column": col, "type": ..., "colors": {value: hex}}}
+            # for categorical columns so the library uses our pastel palette
+            # instead of the default UPSET_PALETTE. Numeric columns get an
+            # empty spec — the library auto-picks "box" or "bar" type.
+            #
+            # The category list is keyed on the UNFILTERED distinct-value
+            # universe, not on `pdf`. Derived from the filtered frame, a sidebar
+            # filter down to a single category re-derived a one-entry palette
+            # and that category jumped to the palette's first colour — which is
+            # the "colour scale resets when I filter by annotation" report.
+            # Same lazy single-column scan, and the same reason, as the
+            # row-annotation universe in `compute_complex_heatmap` above.
+            # Falls back to this frame's own distinct values. That is the
+            # right universe for a catalog fixture (the fixture is all there
+            # is) and the honest degradation for a filtered worker frame,
+            # which is what the old inline scan did when it failed.
+            anno_universes = dict(unfiltered_universes or {})
+            for col in annotation_cols:
+                if col in anno_universes or col not in pdf.columns:
+                    continue
+                anno_universes[col] = [
+                    v for v in pdf[col].dropna().unique().tolist() if v not in ("", None)
+                ]
+
+            annotations_spec = {}
+            for col in annotation_cols:
+                if col not in pdf.columns:
+                    continue
+                series = pdf[col]
+                spec: dict = {"column": col}
+                # Treat object/string columns and small-cardinality ints as
+                # categorical — matches the library's _infer_type heuristic.
+                # Cardinality is counted on the universe too, so a filter that
+                # narrows an int column can't flip its track from box to
+                # categorical halfway through a session.
+                universe = anno_universes.get(col)
+                distinct = len(universe) if universe is not None else int(series.nunique())
+                is_string = series.dtype.kind in ("U", "S", "O")
+                is_small_int = series.dtype.kind == "i" and distinct <= 10
+                if is_string or is_small_int:
+                    values = (
+                        universe
+                        if universe is not None
+                        else [v for v in series.dropna().unique() if v not in ("", None)]
+                    )
+                    cats = sorted(str(v) for v in values)
+                    # Pin the track type instead of leaving it to the library.
+                    # Left out, the type is re-inferred by the library's own
+                    # `_infer_type` — a second heuristic, run on the FILTERED
+                    # frame, where the test above ran on the universe. The two
+                    # can disagree (an int column with 12 distinct values in the
+                    # universe reads as numeric here, but filtered down to 5 the
+                    # library calls it categorical and mints its own palette
+                    # from UPSET_PALETTE, ignoring the map below). Pinning it
+                    # makes the branch that computes `colors` and the branch
+                    # that consumes them agree by construction, so the track
+                    # can't change shape or palette as filters narrow the data.
+                    spec["type"] = "categorical"
+                    spec["colors"] = {
+                        cat: _ANNOTATION_PALETTE[i % len(_ANNOTATION_PALETTE)]
+                        for i, cat in enumerate(cats)
+                    }
+                annotations_spec[col] = spec
+        else:
+            # Empty, never None: `from_dataframe` reads None as "auto-detect",
+            # which turns EVERY non-set column into an annotation track. On a
+            # consensus peak table that means a categorical track keyed on
+            # `peak_id` — one category per row — and the task walks into its
+            # own soft time limit (measured: 0.2s against 69s on a 20k-row
+            # frame, and it degrades worse than linearly from there).
+            annotations_spec = {}
+
+        upset = UpSetPlot.from_dataframe(
+            pdf,
+            set_columns=list(set_columns) if set_columns else None,
+            annotations=annotations_spec,
+            **kwargs,
+        )
+    else:
+        upset = UpSetPlot(pdf, **kwargs)
+    # Same ndarray-safety dance as compute_complex_heatmap: round-trip
+    # through plotly.io.to_json so numpy arrays serialise for the Celery
+    # JSON result backend.
+    import json as _json
+
+    import plotly.io as _pio
+
+    fig_dict = _json.loads(_pio.to_json(upset.to_plotly()))
+    compute_ms = int((time.monotonic() - compute_started) * 1000)
+    logger.info("compute_upset: built figure in %dms", compute_ms)
+
+    return {
+        "figure": fig_dict,
+        "row_count": len(pdf),
+        "set_count": len(set_columns) if set_columns else None,
+        "compute_ms": compute_ms,
+    }
+
+
 @celery_app.task(
     name="depictio.advanced_viz.compute_upset",
     soft_time_limit=300,
@@ -1561,155 +1751,47 @@ def compute_upset(payload: dict) -> dict:
     candidate_sets = list(set_columns) if set_columns else _detect_upset_set_columns(df)
     set_columns = _narrow_wide_matrix_columns(candidate_sets, filter_metadata) or set_columns
 
-    pdf = df.to_pandas()
-    compute_started = time.monotonic()
-    from plotly_upset import UpSetPlot
-
-    kwargs: dict = {
-        "sort_by": sort_by,
-        "sort_order": sort_order,
-        "min_size": min_size,
-        "show_set_sizes": show_set_sizes,
-        "show_values": show_values,
-    }
-    if max_degree is not None:
-        kwargs["max_degree"] = int(max_degree)
-    if color_intersections_by in ("set", "degree"):
-        kwargs["color_intersections_by"] = color_intersections_by
-    if set_colors:
-        kwargs["set_colors"] = set_colors
-
-    # Distinct categorical palette for annotation tracks — picked to avoid
-    # collision with the library's default UPSET_PALETTE that drives the
-    # set + intersection-bar colouring. Without this, the first feature_group
-    # category and the first set (contrastA) draw from the same first colour
-    # and the two legends look like they describe the same partition.
-    # Source: matplotlib Set2 (pastel qualitative).
-    _ANNOTATION_PALETTE = [
-        "#66c2a5",
-        "#fc8d62",
-        "#8da0cb",
-        "#e78ac3",
-        "#a6d854",
-        "#ffd92f",
-        "#e5c494",
-        "#b3b3b3",
-    ]
-
-    # Route through from_dataframe when set_columns and/or annotation_cols
-    # are specified — that path resolves annotation specs and wires them
-    # into an UpSetAnnotation container. Falls back to the bare constructor
-    # for the legacy "binary-only DataFrame" case.
-    if annotation_cols or set_columns:
-        annotations_spec: dict | list | None
-        if annotation_cols:
-            # Build {col: {"column": col, "type": ..., "colors": {value: hex}}}
-            # for categorical columns so the library uses our pastel palette
-            # instead of the default UPSET_PALETTE. Numeric columns get an
-            # empty spec — the library auto-picks "box" or "bar" type.
-            #
-            # The category list is keyed on the UNFILTERED distinct-value
-            # universe, not on `pdf`. Derived from the filtered frame, a sidebar
-            # filter down to a single category re-derived a one-entry palette
-            # and that category jumped to the palette's first colour — which is
-            # the "colour scale resets when I filter by annotation" report.
-            # Same lazy single-column scan, and the same reason, as the
-            # row-annotation universe in `compute_complex_heatmap` above.
+    # Unfiltered distinct values per annotation column, read straight off the
+    # Delta table: keyed on the filtered frame instead, a sidebar filter down to
+    # one category re-derives a one-entry palette and that category jumps to the
+    # palette's first colour.
+    unfiltered_universes: dict[str, list] = {}
+    if annotation_cols:
+        try:
             import polars as pl
 
-            anno_universes: dict[str, list] = {}
-            try:
-                from depictio.api.v1.s3 import polars_s3_config
+            from depictio.api.v1.s3 import polars_s3_config
 
-                unfiltered_lazy = pl.scan_delta(
-                    dt_doc["delta_table_location"], storage_options=polars_s3_config
-                )
-                for col in annotation_cols:
-                    if col not in pdf.columns:
-                        continue
-                    uniq = unfiltered_lazy.select(pl.col(col)).unique().collect()[col].to_list()
-                    anno_universes[col] = [v for v in uniq if v not in ("", None)]
-            except Exception as exc:  # pragma: no cover - logged + falls back
-                logger.warning(
-                    "compute_upset: unique-value lookup for annotations failed (%s); "
-                    "colours may shift under filtering",
-                    exc,
-                )
-                anno_universes = {}
-
-            annotations_spec = {}
+            unfiltered_lazy = pl.scan_delta(
+                dt_doc["delta_table_location"], storage_options=polars_s3_config
+            )
             for col in annotation_cols:
-                if col not in pdf.columns:
-                    continue
-                series = pdf[col]
-                spec: dict = {"column": col}
-                # Treat object/string columns and small-cardinality ints as
-                # categorical — matches the library's _infer_type heuristic.
-                # Cardinality is counted on the universe too, so a filter that
-                # narrows an int column can't flip its track from box to
-                # categorical halfway through a session.
-                universe = anno_universes.get(col)
-                distinct = len(universe) if universe is not None else int(series.nunique())
-                is_string = series.dtype.kind in ("U", "S", "O")
-                is_small_int = series.dtype.kind == "i" and distinct <= 10
-                if is_string or is_small_int:
-                    values = (
-                        universe
-                        if universe is not None
-                        else [v for v in series.dropna().unique() if v not in ("", None)]
-                    )
-                    cats = sorted(str(v) for v in values)
-                    # Pin the track type instead of leaving it to the library.
-                    # Left out, the type is re-inferred by the library's own
-                    # `_infer_type` — a second heuristic, run on the FILTERED
-                    # frame, where the test above ran on the universe. The two
-                    # can disagree (an int column with 12 distinct values in the
-                    # universe reads as numeric here, but filtered down to 5 the
-                    # library calls it categorical and mints its own palette
-                    # from UPSET_PALETTE, ignoring the map below). Pinning it
-                    # makes the branch that computes `colors` and the branch
-                    # that consumes them agree by construction, so the track
-                    # can't change shape or palette as filters narrow the data.
-                    spec["type"] = "categorical"
-                    spec["colors"] = {
-                        cat: _ANNOTATION_PALETTE[i % len(_ANNOTATION_PALETTE)]
-                        for i, cat in enumerate(cats)
-                    }
-                annotations_spec[col] = spec
-        else:
-            # Empty, never None: `from_dataframe` reads None as "auto-detect",
-            # which turns EVERY non-set column into an annotation track. On a
-            # consensus peak table that means a categorical track keyed on
-            # `peak_id` — one category per row — and the task walks into its
-            # own soft time limit (measured: 0.2s against 69s on a 20k-row
-            # frame, and it degrades worse than linearly from there).
-            annotations_spec = {}
-
-        upset = UpSetPlot.from_dataframe(
-            pdf,
-            set_columns=list(set_columns) if set_columns else None,
-            annotations=annotations_spec,
-            **kwargs,
-        )
-    else:
-        upset = UpSetPlot(pdf, **kwargs)
-    # Same ndarray-safety dance as compute_complex_heatmap: round-trip
-    # through plotly.io.to_json so numpy arrays serialise for the Celery
-    # JSON result backend.
-    import json as _json
-
-    import plotly.io as _pio
-
-    fig_dict = _json.loads(_pio.to_json(upset.to_plotly()))
-    compute_ms = int((time.monotonic() - compute_started) * 1000)
-    logger.info("compute_upset: built figure in %dms", compute_ms)
+                uniq = unfiltered_lazy.select(pl.col(col)).unique().collect()[col].to_list()
+                unfiltered_universes[col] = [v for v in uniq if v not in ("", None)]
+        except Exception as exc:  # pragma: no cover - logged + falls back
+            logger.warning(
+                "compute_upset: unique-value lookup for annotations failed (%s); "
+                "colours may shift under filtering",
+                exc,
+            )
+            unfiltered_universes = {}
 
     return {
-        "figure": fig_dict,
-        "row_count": len(pdf),
-        "set_count": len(set_columns) if set_columns else None,
+        **_upset_result_from_frame(
+            df,
+            unfiltered_universes=unfiltered_universes,
+            set_columns=set_columns,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            min_size=min_size,
+            max_degree=max_degree,
+            show_set_sizes=show_set_sizes,
+            show_values=show_values,
+            color_intersections_by=color_intersections_by,
+            set_colors=set_colors,
+            annotation_cols=annotation_cols,
+        ),
         "load_ms": load_ms,
-        "compute_ms": compute_ms,
     }
 
 
@@ -1876,75 +1958,21 @@ def compute_coverage_track(payload: dict) -> dict:
     }
 
 
-@celery_app.task(
-    name="depictio.advanced_viz.compute_sankey",
-    soft_time_limit=120,
-    time_limit=240,
-)
-def compute_sankey(payload: dict) -> dict:
-    """Aggregate flow across N ordered categorical levels into a Plotly Sankey.
+def _sankey_result_from_frame(
+    df,
+    *,
+    step_cols: list[str],
+    value_col: str | None,
+    sort_mode: str,
+    min_link_value: float,
+    step_filters: dict,
+) -> dict:
+    """Aggregate an already-loaded frame into a Plotly Sankey and its metadata.
 
-    Input payload:
-        {
-          "wf_id": str, "dc_id": str,
-          "step_cols": [str] (≥2),
-          "value_col": str | null  (null → row count),
-          "sort_mode": "alphabetical" | "total_flow" | "input",
-          "min_link_value": float,
-          "step_filters": {col: [value, ...]} | null,
-          "filter_metadata": [...],
-        }
-
-    Returns a Plotly figure JSON ready for react-plotly.js plus node/link
-    metadata so the renderer can recolour client-side without re-dispatching.
+    Split out of :func:`compute_sankey` so the catalog gallery can draw the same
+    flow off a bundled fixture. The caller owns loading and its own ``load_ms``.
     """
     import polars as pl
-
-    from depictio.api.v1.db import deltatables_collection
-    from depictio.api.v1.deltatables_utils import load_deltatable_lite
-
-    wf_id = payload.get("wf_id")
-    dc_id = payload.get("dc_id")
-    step_cols = list(payload.get("step_cols") or [])
-    value_col = payload.get("value_col")
-    sort_mode = str(payload.get("sort_mode") or "total_flow")
-    min_link_value = max(0.0, float(payload.get("min_link_value") or 0.0))
-    step_filters = payload.get("step_filters") or {}
-    filter_metadata = payload.get("filter_metadata") or []
-
-    if not wf_id or not dc_id:
-        raise ValueError("compute_sankey: wf_id and dc_id are required")
-    if len(step_cols) < 2:
-        raise ValueError("compute_sankey: step_cols must have ≥2 columns")
-    if len(set(step_cols)) != len(step_cols):
-        # Duplicate step columns would land in group_by(...).rename({col: ..., col: ...})
-        # where the dict literal silently drops one key and polars then raises on
-        # ambiguous output names. Reject up front with a clearer message.
-        raise ValueError("compute_sankey: step_cols must not contain duplicates")
-
-    dt_doc = deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc_id))})
-    if not dt_doc or not dt_doc.get("delta_table_location"):
-        raise ValueError("compute_sankey: DC has no materialised Delta table")
-    init_data = {
-        str(dc_id): {
-            "delta_location": dt_doc["delta_table_location"],
-            "dc_type": "table",
-            "size_bytes": 0,
-        }
-    }
-
-    project_cols = [*step_cols, value_col] if value_col else list(step_cols)
-
-    started = time.monotonic()
-    df = load_deltatable_lite(
-        workflow_id=ObjectId(str(wf_id)),
-        data_collection_id=str(dc_id),
-        metadata=filter_metadata or None,
-        select_columns=project_cols,
-        init_data=init_data,
-    )
-    load_ms = int((time.monotonic() - started) * 1000)
-    logger.info("compute_sankey: loaded %d rows in %dms", df.height, load_ms)
 
     compute_started = time.monotonic()
 
@@ -2101,8 +2129,89 @@ def compute_sankey(payload: dict) -> dict:
         "link_count": len(values),
         "total_flow": total_flow,
         "row_count": int(df.height),
-        "load_ms": load_ms,
         "compute_ms": compute_ms,
+    }
+
+
+@celery_app.task(
+    name="depictio.advanced_viz.compute_sankey",
+    soft_time_limit=120,
+    time_limit=240,
+)
+def compute_sankey(payload: dict) -> dict:
+    """Aggregate flow across N ordered categorical levels into a Plotly Sankey.
+
+    Input payload:
+        {
+          "wf_id": str, "dc_id": str,
+          "step_cols": [str] (≥2),
+          "value_col": str | null  (null → row count),
+          "sort_mode": "alphabetical" | "total_flow" | "input",
+          "min_link_value": float,
+          "step_filters": {col: [value, ...]} | null,
+          "filter_metadata": [...],
+        }
+
+    Returns a Plotly figure JSON ready for react-plotly.js plus node/link
+    metadata so the renderer can recolour client-side without re-dispatching.
+    """
+
+    from depictio.api.v1.db import deltatables_collection
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+    wf_id = payload.get("wf_id")
+    dc_id = payload.get("dc_id")
+    step_cols = list(payload.get("step_cols") or [])
+    value_col = payload.get("value_col")
+    sort_mode = str(payload.get("sort_mode") or "total_flow")
+    min_link_value = max(0.0, float(payload.get("min_link_value") or 0.0))
+    step_filters = payload.get("step_filters") or {}
+    filter_metadata = payload.get("filter_metadata") or []
+
+    if not wf_id or not dc_id:
+        raise ValueError("compute_sankey: wf_id and dc_id are required")
+    if len(step_cols) < 2:
+        raise ValueError("compute_sankey: step_cols must have ≥2 columns")
+    if len(set(step_cols)) != len(step_cols):
+        # Duplicate step columns would land in group_by(...).rename({col: ..., col: ...})
+        # where the dict literal silently drops one key and polars then raises on
+        # ambiguous output names. Reject up front with a clearer message.
+        raise ValueError("compute_sankey: step_cols must not contain duplicates")
+
+    dt_doc = deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc_id))})
+    if not dt_doc or not dt_doc.get("delta_table_location"):
+        raise ValueError("compute_sankey: DC has no materialised Delta table")
+    init_data = {
+        str(dc_id): {
+            "delta_location": dt_doc["delta_table_location"],
+            "dc_type": "table",
+            "size_bytes": 0,
+        }
+    }
+
+    project_cols = [*step_cols, value_col] if value_col else list(step_cols)
+
+    started = time.monotonic()
+    df = load_deltatable_lite(
+        workflow_id=ObjectId(str(wf_id)),
+        data_collection_id=str(dc_id),
+        metadata=filter_metadata or None,
+        select_columns=project_cols,
+        init_data=init_data,
+    )
+    load_ms = int((time.monotonic() - started) * 1000)
+    logger.info("compute_sankey: loaded %d rows in %dms", df.height, load_ms)
+
+    return {
+        **_sankey_result_from_frame(
+            df,
+            step_cols=step_cols,
+            value_col=value_col,
+            sort_mode=sort_mode,
+            min_link_value=min_link_value,
+            step_filters=step_filters,
+        ),
+        "load_ms": load_ms,
     }
 
 
