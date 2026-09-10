@@ -27,6 +27,10 @@ meant without knowing why. Layout preferences they did not ask you to override
 Every list accepts repeats (`?owner=a&owner=b`) or one comma-joined value
 (`?owner=a,b`). Values are matched case-insensitively.
 
+Because a comma separates values, a project whose *name* contains one has to be
+addressed by its id. The link button always emits ids, so this only comes up in
+a link written by hand.
+
 ### `/dashboards`
 
 | Parameter | Value |
