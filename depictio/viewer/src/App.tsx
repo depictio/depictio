@@ -54,6 +54,7 @@ import {
   SelectionGroupsPanel,
   SaveGroupContext,
   BrandScope,
+  Z_LAYERS,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -1278,6 +1279,7 @@ const App: React.FC = () => {
             onClose={closeFilterDrawer}
             position="left"
             size="min(320px, 85vw)"
+            zIndex={Z_LAYERS.overlay}
             title="Filters"
           >
             <FilterPanel
