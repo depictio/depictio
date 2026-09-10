@@ -155,6 +155,15 @@ async def public_config():
         # added for. A store that is down still degrades to env defaults
         # inside get_effective_brand_theme rather than failing the request.
         "branding": resolve_effective_brand_theme(use_cache=False).model_dump(exclude_none=True),
+        # Opt-in "give feedback" link (off unless a deployment points it
+        # somewhere). The URL is a template the SPA fills with what the reader
+        # is looking at; it is already public config, since anyone who can open
+        # the dashboard can read the link off the button.
+        "feedback": {
+            "enabled": settings.feedback.is_configured,
+            "url": settings.feedback.url if settings.feedback.is_configured else None,
+            "label": settings.feedback.label,
+        },
     }
 
 

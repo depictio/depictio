@@ -5,6 +5,7 @@ import { Icon } from '@iconify/react';
 
 import type { BrandTheme, DashboardData, DashboardSummary } from 'depictio-react-core';
 import PoweredBy from './PoweredBy';
+import { useFeedbackLink } from '../feedback';
 
 /** True for path-like icon values (PNG/SVG file URLs) — these came from the
  *  Dash YAML and aren't valid Iconify names. */
@@ -133,6 +134,14 @@ const Header: React.FC<HeaderProps> = ({
   const addColor = useBrandAccent('primary', 'green');
   const saveColor = useBrandAccent('secondary', 'teal');
   const editColor = useBrandAccent('primary', 'blue');
+  // The reader's context travels with the link: which dashboard, which tab,
+  // which page. Without it a remark arrives as "that plot is wrong" with
+  // nothing saying where.
+  const feedback = useFeedbackLink({
+    dashboard: dashboard?.title ?? null,
+    dashboardId,
+    tab: activeTab?.title ?? null,
+  });
   const resolvedColor = resolveTabColor(activeTab, brand);
   const tabIconColor = resolvedColor || 'gray';
   // Title text color:
@@ -367,6 +376,29 @@ const Header: React.FC<HeaderProps> = ({
           >
             Exit Edit
           </Button>
+        )}
+        {/* An aside, not an action on the dashboard, so it is an icon rather
+            than a sixth button: findable by someone who wants to say something,
+            without competing with Edit / Save / Settings. The tooltip carries
+            the label, which is the whole reason an icon can stand alone here.
+            The same link is repeated as a labelled row in the Settings drawer
+            for anyone who goes looking rather than reacting. */}
+        {feedback && (
+          <Tooltip label={feedback.label} withArrow>
+            <ActionIcon
+              component="a"
+              href={feedback.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={feedback.label}
+              color="gray"
+              variant="subtle"
+              size="md"
+              data-testid="dashboard-feedback"
+            >
+              <Icon icon="mdi:comment-quote-outline" width={18} />
+            </ActionIcon>
+          </Tooltip>
         )}
         <Button
           leftSection={<Icon icon="ic:baseline-settings" width={14} />}
