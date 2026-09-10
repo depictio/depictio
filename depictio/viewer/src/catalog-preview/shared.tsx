@@ -51,6 +51,21 @@ export const DEFAULT_HEIGHT: Record<string, number> = {
   multiqc: 480,
   image: 480,
   table: 520,
+  // A KPI reads in about this much; without an entry it fell to the 480 catch-all
+  // and reserved an empty half-screen under a two-line metric.
+  card: 190,
+};
+
+/** How wide a tile of this type is on a dashboard.
+ *
+ * A card and a filter live in a narrow grid cell, so previewing them at the full
+ * width of the pane misrepresented them: a metric's top-N bars ran the whole
+ * 1200px with their sample labels truncated to "ERZ166…" at the far left. Types
+ * absent here take the whole width, which is what a figure, a table or an
+ * advanced viz gets on a dashboard too. */
+export const PREVIEW_MAX_WIDTH: Record<string, number> = {
+  card: 380,
+  interactive: 380,
 };
 
 export const InfoRow: React.FC<{ label: string; children: React.ReactNode; align?: string }> = ({

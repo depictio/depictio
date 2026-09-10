@@ -39,6 +39,7 @@ import {
   CATALOG_ACCENT,
   CopyYaml,
   DEFAULT_HEIGHT,
+  PREVIEW_MAX_WIDTH,
   IdentityLink,
   InfoRow,
   TypeBadge,
@@ -492,7 +493,16 @@ const OutputView: React.FC<{
       >
         {active ? (
           <>
-            <Box mih={activeHeight}>{renderOne(active)}</Box>
+            {/* Narrow types are centred in the pane rather than left against
+                its edge: at a third of the width, hugging the left reads as a
+                component that failed to fill its box. */}
+            <Box
+              mih={activeHeight}
+              maw={PREVIEW_MAX_WIDTH[active.component_type]}
+              mx={PREVIEW_MAX_WIDTH[active.component_type] ? 'auto' : undefined}
+            >
+              {renderOne(active)}
+            </Box>
             <Group gap={6} mt="xs" wrap="nowrap">
               <Code fz={10} c="dimmed">
                 {active.index}
