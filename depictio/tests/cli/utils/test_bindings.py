@@ -13,12 +13,18 @@ import pytest
 from depictio.cli.cli.utils.bindings import (
     BindingError,
     apply_bindings,
+    apply_remote_data_root,
     assert_no_unbound_vars,
     id_regex_from_glob,
     infer_scan,
     parse_binding,
+    remote_scan_for_dc,
 )
 from depictio.models.models.data_collections import Scan
+
+# The stubbed S3 listing lives with the template tests, which is where the
+# fixture it is shaped like (an ampliseq megatest prefix) belongs.
+from depictio.tests.cli.s3_stubs import S3_ROOT, s3_data_root
 
 
 def _config():
@@ -246,3 +252,150 @@ class TestAssertNoUnboundVars:
         # Never record a synthetic value as though the user had supplied it.
         assert "MANIFEST_URL" not in origin["variables"]
         assert origin["config_snapshot"]["x"] == "{MANIFEST_URL}"
+
+
+class TestRemoteScanForDc:
+    """`--data-root s3://...` is a --bind for every DC, derived from the template.
+
+    The rule is the same one `infer_scan` applies to an explicit bind: the
+    location's shape decides the mode. Here the location is the template's own
+    already-substituted path, so nothing has to be typed.
+    """
+
+    @pytest.fixture
+    def root(self, monkeypatch):
+        return s3_data_root(monkeypatch, {"a.csv": b"x"})
+
+    def test_single_becomes_url(self, root):
+        """Required, not cosmetic: ScanSingle stats the filename in CLI context,
+        so an s3:// key in `single` mode is rejected before it can be read."""
+        dc_config = {
+            "scan": {"mode": "single", "scan_parameters": {"filename": f"{S3_ROOT}/input/s.csv"}}
+        }
+        scan = remote_scan_for_dc(dc_config, root)
+        assert scan == {"mode": "url", "scan_parameters": {"url": f"{S3_ROOT}/input/s.csv"}}
+        Scan(**scan)
+
+    def test_recursive_becomes_a_prefix_scan_over_the_root(self, root):
+        dc_config = {
+            "scan": {
+                "mode": "recursive",
+                "scan_parameters": {"regex_config": {"pattern": "multiqc/.*\\.parquet"}},
+            }
+        }
+        assert remote_scan_for_dc(dc_config, root) == {
+            "mode": "s3_prefix",
+            "scan_parameters": {
+                "prefix": f"{S3_ROOT}/",
+                # Verbatim: the listing replaces the filesystem, so the pattern
+                # that selected files on disk selects keys under the prefix.
+                "pattern": "multiqc/.*\\.parquet",
+                "pattern_syntax": "regex",
+            },
+        }
+
+    def test_recursive_wildcards_are_expanded_like_the_local_walk(self, root):
+        dc_config = {
+            "scan": {
+                "mode": "recursive",
+                "scan_parameters": {
+                    "regex_config": {
+                        "pattern": "run_{date}/summary.tsv",
+                        "wildcards": [{"name": "date", "wildcard_regex": "[0-9]{8}"}],
+                    }
+                },
+            }
+        }
+        params = remote_scan_for_dc(dc_config, root)["scan_parameters"]
+        assert params["pattern"] == "run_([0-9]{8})/summary.tsv"
+
+    @pytest.mark.parametrize(
+        "scan",
+        [
+            {"mode": "url", "scan_parameters": {"url": "https://h/d.csv"}},
+            {"mode": "s3_prefix", "scan_parameters": {"prefix": "s3://other/x/", "pattern": "*"}},
+            {
+                "mode": "manifest",
+                "scan_parameters": {"manifest_url": "https://x/m.json", "manifest_type": "s"},
+            },
+        ],
+    )
+    def test_already_remote_modes_are_left_alone(self, root, scan):
+        """A template that already names a remote location knows better than we do."""
+        assert remote_scan_for_dc({"scan": scan}, root) is None
+
+    def test_a_recipe_dc_has_no_scan_to_rewrite(self, root):
+        """`source: transformed` DCs read their sources through the root itself."""
+        assert remote_scan_for_dc(
+            {"source": "transformed", "transform": {"recipe": "r"}}, root
+        ) is (None)
+
+
+class TestApplyRemoteDataRoot:
+    @pytest.fixture
+    def root(self, monkeypatch):
+        return s3_data_root(monkeypatch, {"a.csv": b"x"})
+
+    def _config(self, **data_location):
+        return {
+            "workflows": [
+                {
+                    "name": "wf",
+                    "data_location": {"structure": "flat", "locations": ["/old/root"]}
+                    | data_location,
+                    "data_collections": [
+                        {
+                            "data_collection_tag": "samplesheet",
+                            "config": {
+                                "scan": {
+                                    "mode": "single",
+                                    "scan_parameters": {"filename": "/old/root/s.csv"},
+                                }
+                            },
+                        },
+                        {
+                            "data_collection_tag": "results",
+                            "config": {
+                                "scan": {
+                                    "mode": "recursive",
+                                    "scan_parameters": {"regex_config": {"pattern": ".*\\.csv"}},
+                                }
+                            },
+                        },
+                        {
+                            "data_collection_tag": "derived",
+                            "config": {"source": "transformed", "transform": {"recipe": "r"}},
+                        },
+                    ],
+                }
+            ]
+        }
+
+    def test_rewrites_every_scan_dc_and_repoints_the_workflow(self, root):
+        config = self._config()
+        notes = apply_remote_data_root(config, root)
+        modes = {
+            dc["data_collection_tag"]: (dc["config"].get("scan") or {}).get("mode")
+            for dc in config["workflows"][0]["data_collections"]
+        }
+        assert modes == {"samplesheet": "url", "results": "s3_prefix", "derived": None}
+        assert config["workflows"][0]["data_location"]["locations"] == [root.location]
+        assert len(notes) == 2
+
+    def test_the_run_structure_is_left_exactly_as_declared(self, root):
+        """A remote sequencing-runs template keeps its runs: only the root moves."""
+        config = self._config(structure="sequencing-runs", runs_regex="run_.*")
+        apply_remote_data_root(config, root)
+        assert config["workflows"][0]["data_location"] == {
+            "structure": "sequencing-runs",
+            "runs_regex": "run_.*",
+            "locations": [root.location],
+        }
+
+    def test_an_explicit_bind_still_wins(self, root):
+        """--bind runs after resolution; the auto-binding must not outrank it."""
+        config = self._config()
+        apply_remote_data_root(config, root)
+        apply_bindings(config, ["samplesheet=https://elsewhere/s.csv"])
+        scan = config["workflows"][0]["data_collections"][0]["config"]["scan"]
+        assert scan == {"mode": "url", "scan_parameters": {"url": "https://elsewhere/s.csv"}}

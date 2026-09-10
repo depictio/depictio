@@ -435,6 +435,103 @@ class TestResolveSources:
                 resolve_sources(module, tmpdir)
 
 
+class TestResolveSourcesAcceptsAnyRoot:
+    """``data_dir`` is a str, a Path or a DataRoot, and all three mean the same.
+
+    ``resolve_sources`` went from ``pathlib`` to the DataRoot abstraction so a
+    recipe can read an ``s3://`` prefix. The remote half is covered in
+    ``depictio/tests/cli/test_remote_read.py``, where the S3 listing is stubbed;
+    what matters here is that the local half did not move: every caller that
+    hands in a path must get byte-identical behaviour.
+    """
+
+    def _make_module(self, sources: list[RecipeSource]) -> ModuleType:
+        module = MagicMock(spec=ModuleType)
+        module.SOURCES = sources
+        module.EXPECTED_SCHEMA = {}
+        return module
+
+    @pytest.fixture
+    def tree(self, tmp_path: Path) -> Path:
+        (tmp_path / "data.csv").write_text("col1,col2\n1,2\n")
+        (tmp_path / "actual.csv").write_text("col1,col2\n9,9\n")
+        parts = tmp_path / "parts"
+        parts.mkdir()
+        (parts / "a.csv").write_text("x,y\n1,2\n")
+        (parts / "b.csv").write_text("x,y\n3,4\n")
+        return tmp_path
+
+    @pytest.fixture(params=["str", "Path", "LocalDataRoot"])
+    def as_root(self, request):
+        """The same directory spelled the three ways a caller may spell it."""
+        from depictio.cli.cli.utils.data_root import LocalDataRoot
+
+        return {
+            "str": str,
+            "Path": Path,
+            "LocalDataRoot": lambda path: LocalDataRoot(str(path)),
+        }[request.param]
+
+    def test_path_source(self, tree, as_root) -> None:
+        module = self._make_module([RecipeSource(ref="data", path="data.csv", format="csv")])
+        sources = resolve_sources(module, as_root(tree))
+        assert sources["data"].to_dicts() == [{"col1": 1, "col2": 2}]
+
+    def test_glob_source_is_sorted_and_concatenated(self, tree, as_root) -> None:
+        module = self._make_module(
+            [RecipeSource(ref="data", glob_pattern="parts/*.csv", format="csv")]
+        )
+        sources = resolve_sources(module, as_root(tree))
+        # a.csv before b.csv: the glob order is part of the contract, since a
+        # concatenated frame's row order is what downstream recipes see.
+        assert sources["data"].to_dicts() == [{"x": 1, "y": 2}, {"x": 3, "y": 4}]
+
+    def test_override_repoints_the_source(self, tree, as_root) -> None:
+        module = self._make_module([RecipeSource(ref="data", path="data.csv", format="csv")])
+        sources = resolve_sources(module, as_root(tree), overrides={"data": "actual.csv"})
+        assert sources["data"].to_dicts() == [{"col1": 9, "col2": 9}]
+
+    def test_missing_source_names_an_absolute_path(self, tree, as_root) -> None:
+        module = self._make_module([RecipeSource(ref="data", path="gone.csv", format="csv")])
+        with pytest.raises(RecipeError) as excinfo:
+            resolve_sources(module, as_root(tree))
+        assert str((tree / "gone.csv").resolve()) in str(excinfo.value)
+
+    def test_absent_optional_source_passes_none_through(self, tree, as_root) -> None:
+        module = self._make_module(
+            [RecipeSource(ref="data", path="gone.csv", format="csv", optional=True)]
+        )
+        sources = resolve_sources(module, as_root(tree))
+        assert sources["data"] is None
+
+    def test_a_local_read_stays_on_the_eager_reader(self, tree, as_root, monkeypatch) -> None:
+        """The local polars call must be exactly the one it has always been.
+
+        Remote reads had to move to ``pl.scan_csv`` (the eager reader routes an
+        ``s3://`` path through s3fs, which chokes on object_store options). That
+        move must not have dragged the local path along with it: local stays
+        eager, and is never handed ``storage_options``.
+        """
+        eager: list[dict] = []
+        real_read_csv = pl.read_csv
+
+        def spy_read_csv(source, **kwargs):
+            eager.append(kwargs)
+            return real_read_csv(source, **kwargs)
+
+        def scan_is_a_bug(source, **kwargs):
+            raise AssertionError(f"local read of {source} went through pl.scan_csv")
+
+        monkeypatch.setattr(pl, "read_csv", spy_read_csv)
+        monkeypatch.setattr(pl, "scan_csv", scan_is_a_bug)
+
+        module = self._make_module([RecipeSource(ref="data", path="data.csv", format="csv")])
+        resolve_sources(module, as_root(tree))
+
+        assert len(eager) == 1
+        assert "storage_options" not in eager[0]
+
+
 class TestValidateSchema:
     """Tests for output schema validation."""
 

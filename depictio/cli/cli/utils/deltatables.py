@@ -1222,10 +1222,13 @@ def process_recipe_data_collection(
             for ref, so in transform_config.source_overrides.items()
         }
 
-    # Resolve data directory from workflow's data_location
-    # For sequencing-runs structure, collect all run directories
-    data_dir = "."
-    run_data_dirs: list[str] = []
+    from depictio.cli.cli.utils.data_root import DataRoot, data_root_for
+
+    # Resolve the data root from the workflow's data_location. It is a DataRoot
+    # rather than a path so the same recipe runs against a local directory or an
+    # s3:// prefix; for a sequencing-runs structure, one scoped root per run.
+    data_dir: str | DataRoot = "."
+    run_data_roots: list[DataRoot] = []
     if workflow is not None and hasattr(workflow, "data_location") and workflow.data_location:
         locations = getattr(workflow.data_location, "locations", None)
         structure = getattr(workflow.data_location, "structure", None)
@@ -1233,25 +1236,29 @@ def process_recipe_data_collection(
 
         if locations and len(locations) > 0:
             base_location = str(locations[0])
+            try:
+                base_root = data_root_for(base_location, CLI_config)
+            except ValueError as exc:
+                # An unlistable scheme, or an s3:// prefix that is neither
+                # allowlisted nor credentialed. A configuration problem, so it
+                # reads as one rather than as a traceback out of ingestion.
+                return {"result": "error", "message": f"Recipe data root unusable: {exc}"}
 
             if structure == "sequencing-runs" and runs_regex:
-                import re as _re
-
-                for entry in sorted(os.listdir(base_location)):
-                    entry_path = os.path.join(base_location, entry)
-                    if os.path.isdir(entry_path) and _re.match(runs_regex, entry):
-                        run_data_dirs.append(entry_path)
-                if run_data_dirs:
-                    data_dir = run_data_dirs[0]
+                # Same rule the listdir walk applied (``re.match`` on the
+                # directory name), asked of the root so it also answers on S3.
+                run_data_roots = [base_root.scoped(run) for run in base_root.runs(runs_regex)]
+                if run_data_roots:
+                    data_dir = run_data_roots[0]
                     rich_print_checked_statement(
-                        f"Recipe data dir: {base_location} ({len(run_data_dirs)} run(s))", "info"
+                        f"Recipe data dir: {base_location} ({len(run_data_roots)} run(s))", "info"
                     )
                 else:
-                    data_dir = base_location
-                    rich_print_checked_statement(f"Recipe data dir: {data_dir}", "info")
+                    data_dir = base_root
+                    rich_print_checked_statement(f"Recipe data dir: {base_location}", "info")
             else:
-                data_dir = base_location
-                rich_print_checked_statement(f"Recipe data dir: {data_dir}", "info")
+                data_dir = base_root
+                rich_print_checked_statement(f"Recipe data dir: {base_location}", "info")
 
     # Resolve dc_ref sources: load referenced DCs from their Delta tables
     extra_sources: dict[str, pl.DataFrame] | None = None
@@ -1317,15 +1324,15 @@ def process_recipe_data_collection(
             return {"result": "error", "message": f"Recipe failed: {e}"}
 
     try:
-        if run_data_dirs and len(run_data_dirs) > 1:
+        if run_data_roots and len(run_data_roots) > 1:
             # Multi-run: execute recipe per run and concatenate
             all_dfs = []
-            for run_dir in run_data_dirs:
-                run_tag = os.path.basename(run_dir)
+            for run_root in run_data_roots:
+                run_tag = run_root.name
                 try:
                     run_df = execute_recipe(
                         recipe_name,
-                        run_dir,
+                        run_root,
                         overrides,
                         extra_sources=extra_sources,
                         pipeline_version=pipeline_version,

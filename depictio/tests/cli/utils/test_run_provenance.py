@@ -9,6 +9,9 @@ from depictio.models.models.templates import (
     ProvenanceSpec,
 )
 
+# The stubbed S3 listing lives with the template tests.
+from depictio.tests.cli.s3_stubs import s3_data_root
+
 
 def _write_params(tmp_path, name, payload):
     d = tmp_path / "pipeline_info"
@@ -104,3 +107,39 @@ def test_user_provenance_file_tsv(tmp_path):
 def test_missing_sources_are_quiet(tmp_path):
     entries, files = collect_run_provenance(str(tmp_path), None)
     assert entries == [] and files == []
+
+
+class TestProvenanceThroughADataRoot:
+    """The same collection, off an ``s3://`` listing instead of a directory.
+
+    ``pipeline_info/`` is read out of the prefix, and the files-read list stays
+    root-relative so the ingestion report reads the same either way.
+    """
+
+    def test_params_are_read_from_a_remote_prefix(self, monkeypatch):
+        root = s3_data_root(
+            monkeypatch,
+            {"pipeline_info/params_2026-02-02.json": json.dumps({"max_ee": 2}).encode()},
+        )
+        entries, files = collect_run_provenance(root, None)
+        assert files == ["pipeline_info/params_2026-02-02.json"]
+        assert [(e.group, e.key, e.value) for e in entries] == [("Parameters", "max_ee", "2")]
+
+    def test_the_run_subdir_fallback_works_remotely(self, monkeypatch):
+        """sequencing-runs layouts keep pipeline_info one level down."""
+        root = s3_data_root(
+            monkeypatch,
+            {"run_1/pipeline_info/params.json": json.dumps({"max_ee": 3}).encode()},
+        )
+        entries, files = collect_run_provenance(root, None)
+        assert files == ["run_1/pipeline_info/params.json"]
+        assert [e.value for e in entries] == ["3"]
+
+    def test_a_prefix_with_no_params_is_quiet(self, monkeypatch):
+        root = s3_data_root(monkeypatch, {"multiqc/report.html": b"<html>"})
+        assert collect_run_provenance(root, None) == ([], [])
+
+    def test_a_path_object_is_accepted(self, tmp_path):
+        """db_init passes a string; a Path must mean the same thing."""
+        _write_params(tmp_path, "params.json", {"max_ee": 1})
+        assert collect_run_provenance(tmp_path, None) == collect_run_provenance(str(tmp_path), None)
