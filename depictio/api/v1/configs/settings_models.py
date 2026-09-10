@@ -1378,6 +1378,45 @@ class GoogleAnalyticsConfig(BaseSettings):
         return self.enabled and self.tracking_id is not None
 
 
+class FeedbackConfig(BaseSettings):
+    """An opt-in "give feedback" link in the dashboard header.
+
+    A deployment that is showing dashboards to an audience it wants to hear
+    from — a pipeline template shared with its maintainers, a facility instance
+    shared with its users — needs the ask to sit where the reader is looking.
+    A message sent separately arrives without context: "the plot is wrong" with
+    no way to tell which dashboard, which tab, or which version it was.
+
+    url is a template. {project}, {dashboard}, {tab} and
+    {url} are substituted client-side and URL-encoded, so a GitHub
+    discussion or issue link can arrive pre-filled with what the reader was
+    looking at::
+
+        DEPICTIO_FEEDBACK_ENABLED=true
+        DEPICTIO_FEEDBACK_URL='https://github.com/org/repo/discussions/new?category=feedback&title=[{project}]&body={url}'
+
+    Off by default: a deployment that has nowhere to send feedback must not
+    grow a button that goes nowhere.
+    """
+
+    enabled: bool = Field(default=False, description="Show the feedback link in dashboard headers")
+    url: Optional[str] = Field(
+        default=None,
+        description=(
+            "URL template opened by the link. {dashboard}, {dashboard_id}, {tab} and {url} "
+            "are substituted and URL-encoded."
+        ),
+    )
+    label: str = Field(default="Feedback", description="Text on the link")
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_FEEDBACK_")
+
+    @property
+    def is_configured(self) -> bool:
+        """Enabled *and* pointed somewhere. Either half alone renders nothing."""
+        return self.enabled and bool(self.url)
+
+
 class BrandingConfig(BaseSettings):
     """Instance-level branding, the deployment-defaults layer (issue #397).
 
@@ -1654,6 +1693,7 @@ class Settings(BaseSettings):
     telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
     google_analytics: GoogleAnalyticsConfig = Field(default_factory=GoogleAnalyticsConfig)
     branding: BrandingConfig = Field(default_factory=BrandingConfig)
+    feedback: FeedbackConfig = Field(default_factory=FeedbackConfig)
     profiling: ProfilingConfig = Field(default_factory=ProfilingConfig)
 
     disable_example_dashboards: bool = Field(

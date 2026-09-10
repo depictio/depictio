@@ -63,6 +63,7 @@ import { brandCssVariablesResolver, buildDepictioTheme } from './theme';
 import { readStoredScheme } from './hooks/useColorScheme';
 import { useUiScalePref } from './hooks/useUiScalePref';
 import { BrandingContext, getBranding, setBranding, subscribeBranding } from './branding';
+import { setFeedback } from './feedback';
 import { initGoogleAnalytics } from './googleAnalytics';
 import { WalkthroughHost } from './walkthrough';
 
@@ -308,6 +309,9 @@ function bootstrapPublicConfig(): void {
       if (config.branding !== undefined) {
         setBranding(config.branding);
       }
+      // Opt-in feedback link. Absent on a backend that predates it, which is
+      // the same as a deployment that configured none: no button.
+      setFeedback(config.feedback ?? null);
     })
     .catch(() => undefined);
 }
