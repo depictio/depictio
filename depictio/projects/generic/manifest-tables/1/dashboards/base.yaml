@@ -1,0 +1,105 @@
+# Manifest Tables — base dashboard (DashboardDataLite format)
+# Deliberately schema-agnostic: the manifest contract only guarantees the
+# injected `depictio_manifest_id` column, so cards/filters bind to it and the
+# raw tables render whatever columns each file actually carries. The
+# `measurements` components are dropped automatically by the self-adapting
+# import when that optional DC has no data.
+version: 1
+
+title: "Manifest Overview"
+subtitle: "Tables ingested from a Data Manifest, joined by manifest id"
+project_tag: "Manifest Tables"
+
+filter_sections:
+  - name: "Entries"
+    icon: "mdi:filter-variant"
+    color: "blue"
+    description: "Narrow every tile to selected manifest entries"
+
+grid_sections:
+  - name: "Coverage"
+    icon: "mdi:counter"
+    color: "teal"
+    description: "How many manifest entries landed in each collection"
+  - name: "Raw Data"
+    icon: "mdi:table"
+    color: "gray"
+    description: "The ingested tables themselves"
+
+components:
+  - tag: text-manifest-intro
+    component_type: text
+    title: "Data Manifest — Overview"
+    order: 2
+    alignment: left
+    body: "Every table below was fetched from the URLs listed in the project's Data Manifest. Rows carry their manifest entry id as `depictio_manifest_id`, so selections propagate across collections without any join configuration."
+    layout: {x: 0, y: 0, w: 8, h: 1}
+
+  - tag: card-sample-entries
+    component_type: card
+    section: "Coverage"
+    workflow_tag: python/manifest
+    data_collection_tag: samples
+    aggregation: nunique
+    column_name: depictio_manifest_id
+    column_type: object
+    icon_name: mdi:counter
+    icon_color: "#4CAF50"
+    title_color: "#4CAF50"
+    title_font_size: md
+    value_font_size: xl
+    title: "Sample entries"
+    layout: {x: 0, y: 1, w: 2, h: 2}
+
+  - tag: card-measurement-entries
+    component_type: card
+    section: "Coverage"
+    workflow_tag: python/manifest
+    data_collection_tag: measurements
+    aggregation: nunique
+    column_name: depictio_manifest_id
+    column_type: object
+    icon_name: mdi:chart-line
+    icon_color: "#2196F3"
+    title_color: "#2196F3"
+    title_font_size: md
+    value_font_size: xl
+    title: "Measurement entries"
+    layout: {x: 2, y: 1, w: 2, h: 2}
+
+  - tag: manifest-id-filter
+    component_type: interactive
+    section: "Entries"
+    workflow_tag: python/manifest
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: depictio_manifest_id
+    column_type: object
+    custom_color: "#DD8452"
+    icon_name: mdi:filter-variant
+    title: "Manifest entry"
+    layout: {x: 0, y: 0, w: 1, h: 3}
+
+  - tag: samples-table
+    component_type: table
+    section: "Raw Data"
+    workflow_tag: python/manifest
+    data_collection_tag: samples
+    title: "Samples"
+    description: "All rows ingested from the manifest's 'samples' entries."
+    title_size: h3
+    title_align: left
+    page_size: 50
+    layout: {x: 0, y: 3, w: 8, h: 5}
+
+  - tag: measurements-table
+    component_type: table
+    section: "Raw Data"
+    workflow_tag: python/manifest
+    data_collection_tag: measurements
+    title: "Measurements"
+    description: "All rows ingested from the manifest's 'measurements' entries."
+    title_size: h3
+    title_align: left
+    page_size: 50
+    layout: {x: 0, y: 8, w: 8, h: 5}

@@ -16,10 +16,19 @@ import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 
-import { createProject, deleteProject as apiDeleteProject, importProjectZip, listProjects, updateProject as apiUpdateProject, useBrandAccents } from 'depictio-react-core';
+import {
+  createProject,
+  createProjectFromManifest,
+  deleteProject as apiDeleteProject,
+  importProjectZip,
+  listProjects,
+  updateProject as apiUpdateProject,
+  useBrandAccents,
+} from 'depictio-react-core';
 import type {
   CreateProjectInput,
   EditProjectInput,
+  FromManifestRequest,
   ProjectListEntry,
 } from 'depictio-react-core';
 
@@ -129,6 +138,49 @@ const ProjectsApp: React.FC = () => {
       });
       closeCreate();
       refresh();
+    },
+    [closeCreate, refresh],
+  );
+
+  const handleCreateFromManifest = useCallback(
+    async (input: FromManifestRequest) => {
+      const report = await createProjectFromManifest(input);
+      const dashboardId = report.dashboards[0]?.dashboard_id;
+      if (report.success && dashboardId) {
+        notifications.show({
+          color: 'teal',
+          title: 'Project created from manifest',
+          message: `"${report.project_name}" is ready — opening its dashboard.`,
+          autoClose: 2500,
+        });
+        closeCreate();
+        window.location.assign(`/dashboard/${dashboardId}`);
+      } else if (report.success) {
+        notifications.show({
+          color: 'teal',
+          title: 'Project created from manifest',
+          message: `"${report.project_name}" is ready.`,
+          autoClose: 2500,
+        });
+        closeCreate();
+        refresh();
+      } else {
+        // Project exists but some collections/dashboards failed — surface the
+        // first per-row message so the user knows where to look.
+        const firstFailure =
+          report.ingestion.find((dc) => dc.status === 'failed')?.message ||
+          report.dashboards.find((d) => !d.success)?.error ||
+          'Some manifest entries could not be ingested.';
+        notifications.show({
+          color: 'orange',
+          title: 'Project created with issues',
+          message: firstFailure,
+          autoClose: 6000,
+        });
+        closeCreate();
+        refresh();
+      }
+      return report;
     },
     [closeCreate, refresh],
   );
@@ -282,6 +334,7 @@ const ProjectsApp: React.FC = () => {
         onClose={closeCreate}
         onCreate={handleCreate}
         onImport={handleImport}
+        onCreateFromManifest={handleCreateFromManifest}
       />
       <EditProjectModal
         opened={Boolean(editTarget)}

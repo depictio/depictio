@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="560" viewBox="0 0 1180 560">
+  <rect width="1180" height="560" fill="#ffffff"/>
+  <text x="60.0" y="56.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="25" fill="#1e1e1e" text-anchor="start" font-weight="normal">Remote data without a manifest</text>
+  <text x="60.0" y="82.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#5c5c5c" text-anchor="start" font-weight="normal">the manifest existed largely to compensate for a missing remote listing</text>
+  <text x="60.0" y="118.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="19" fill="#1e1e1e" text-anchor="start" font-weight="bold">Before</text>
+  <rect x="60.0" y="140.0" width="250.0" height="96.0" rx="6" fill="#fff9db"/>
+  <path d="M60.4,140.7 C143.7,140.8 227.6,141.4 309.2,139.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.0,139.6 C144.8,140.5 227.9,138.8 310.1,140.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M310.4,139.5 C308.4,171.1 309.3,205.3 310.5,235.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M309.5,139.5 C310.4,170.8 308.4,205.2 310.8,236.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M309.5,236.7 C226.0,237.5 143.5,236.6 60.3,236.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M309.4,235.3 C227.9,235.4 142.9,234.9 59.7,236.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.5,236.0 C58.4,204.6 59.5,171.4 59.7,140.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.4,236.6 C60.7,202.6 61.5,170.5 59.2,140.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="185.0" y="167.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">s3://bucket/run42/</text>
+  <text x="185.0" y="191.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">many files, one pattern</text>
+  <path d="M309.4,188.9 C339.5,188.3 368.0,186.2 399.4,188.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M310.0,188.6 C341.7,189.8 369.4,187.4 399.2,188.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M399.6,187.8 C396.5,186.5 390.8,184.5 387.7,181.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M399.8,187.7 C395.6,191.0 391.8,192.0 387.2,194.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <rect x="400.0" y="140.0" width="250.0" height="96.0" rx="6" fill="#ffe3e3"/>
+  <path d="M400.8,140.1 C483.9,141.6 565.6,138.6 649.8,139.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M399.3,140.7 C483.6,141.0 566.5,139.7 649.3,140.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M650.2,140.5 C651.1,170.8 650.7,205.4 649.4,235.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M650.8,140.6 C648.9,173.1 649.3,203.9 650.8,235.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M649.8,235.4 C566.6,236.7 483.3,235.3 399.8,236.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M649.3,235.6 C568.1,236.4 483.3,235.5 400.5,236.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M400.3,236.4 C399.6,204.9 400.9,172.6 399.8,140.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M399.7,236.7 C399.3,204.0 400.9,172.6 400.2,140.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="525.0" y="167.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">write a manifest</text>
+  <text x="525.0" y="191.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">one row per file, by hand</text>
+  <path d="M649.9,188.6 C678.0,188.2 709.0,188.7 740.3,188.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M649.7,188.7 C679.4,188.6 711.0,189.3 740.7,188.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M739.7,188.3 C736.8,186.7 731.8,183.7 728.1,181.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M740.3,188.1 C736.3,190.6 732.2,191.7 727.8,194.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <rect x="740.0" y="140.0" width="250.0" height="96.0" rx="6" fill="#ffe3e3"/>
+  <path d="M739.2,139.5 C823.7,140.9 907.1,140.7 989.9,140.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M740.0,139.6 C822.4,140.6 907.1,138.5 989.3,139.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M989.9,139.8 C989.4,171.0 989.0,202.5 990.2,236.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M989.6,139.9 C989.2,173.3 988.4,203.7 989.4,236.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M990.1,235.7 C906.3,234.5 823.7,234.7 740.1,236.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M989.8,235.4 C907.7,235.7 824.3,236.5 740.2,236.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M740.6,235.2 C741.5,205.5 740.3,171.5 739.4,140.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M739.8,235.9 C740.4,202.9 740.4,173.3 739.6,139.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="865.0" y="167.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">host it</text>
+  <text x="865.0" y="191.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">entries must be URLs</text>
+  <path d="M1037.1,174.7 C1046.8,183.4 1055.4,193.3 1063.6,201.0" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1036.7,201.0 C1045.5,191.9 1055.5,183.6 1062.5,175.1" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="1075.0" y="194.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#c92a2a" text-anchor="start" font-weight="normal">toil</text>
+  <text x="60.0" y="320.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="19" fill="#1e1e1e" text-anchor="start" font-weight="bold">After</text>
+  <rect x="60.0" y="342.0" width="250.0" height="96.0" rx="6" fill="#fff9db"/>
+  <path d="M59.2,342.1 C143.2,341.3 227.6,343.0 309.6,342.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.8,341.7 C144.2,341.2 225.9,340.9 310.2,342.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M310.4,341.7 C310.5,374.3 310.8,404.8 310.1,437.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M310.4,342.1 C309.3,374.1 309.9,405.6 309.3,437.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M309.2,438.4 C226.5,439.3 144.6,438.1 59.9,438.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M309.8,437.8 C227.3,438.4 143.3,439.3 60.6,437.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.3,437.9 C59.3,407.1 58.6,375.1 59.7,342.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.0,437.7 C61.3,404.9 59.9,374.2 59.4,342.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="185.0" y="369.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">s3://bucket/run42/</text>
+  <text x="185.0" y="393.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">many files, one pattern</text>
+  <path d="M310.6,390.3 C341.2,388.3 368.9,391.3 399.1,390.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M310.7,389.4 C341.9,392.0 370.8,388.2 400.3,390.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M399.6,390.1 C396.3,387.1 391.3,386.5 387.6,383.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M399.6,389.6 C396.1,391.3 391.0,394.1 387.7,396.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <rect x="400.0" y="342.0" width="340.0" height="96.0" rx="6" fill="#ffe8cc"/>
+  <path d="M400.2,342.0 C514.5,340.8 626.4,341.4 740.7,341.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M400.0,342.7 C511.9,342.6 625.6,342.4 740.1,342.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M740.0,341.4 C739.2,374.2 739.2,406.8 739.6,437.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M739.3,342.3 C740.8,373.0 740.7,406.5 739.3,437.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M739.7,438.5 C627.0,437.2 514.5,437.9 399.2,438.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M739.6,437.4 C625.2,436.9 514.8,438.6 400.8,438.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M399.6,437.7 C401.0,404.8 400.4,373.5 400.2,341.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M400.5,437.9 C399.6,404.8 401.1,374.5 400.6,342.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="570.0" y="369.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">--bind samples=</text>
+  <text x="570.0" y="393.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">s3://bucket/run42/*.samples.csv</text>
+  <path d="M739.2,389.1 C770.4,390.3 801.0,389.6 829.4,389.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M739.9,390.8 C771.6,389.9 801.0,388.0 830.2,389.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M829.9,389.9 C825.8,387.0 821.1,384.9 818.0,383.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M829.7,390.0 C825.4,391.7 821.1,394.0 817.2,397.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <rect x="830.0" y="342.0" width="280.0" height="96.0" rx="6" fill="#ebfbee"/>
+  <path d="M830.0,342.7 C922.9,343.4 1017.3,342.6 1109.4,342.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M829.5,341.2 C922.7,342.6 1017.4,340.9 1109.6,341.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1109.9,341.7 C1109.7,375.5 1109.6,405.4 1110.4,438.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1110.2,341.9 C1108.9,373.2 1110.6,407.4 1110.8,437.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1110.1,438.8 C1015.3,438.9 923.0,436.5 830.0,437.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1110.7,437.3 C1015.4,436.6 924.6,438.0 829.6,437.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M829.7,437.3 C829.7,404.6 829.2,373.7 829.3,342.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M829.3,437.7 C829.0,406.0 829.7,374.1 829.4,342.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="970.0" y="369.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">data collection</text>
+  <text x="970.0" y="393.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">listed + ingested</text>
+  <text x="60.0" y="500.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">The glob's * also becomes the cross-DC join key (depictio_manifest_id),</text>
+  <text x="60.0" y="522.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">so two prefixes cross-filter each other with no manifest and no join config.</text>
+</svg>

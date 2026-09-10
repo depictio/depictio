@@ -115,6 +115,11 @@ class MongoModel(BaseModel):
         Sanitizes the input to ensure it is plain text and neutralizes any code.
         Converts special characters to their HTML-safe equivalents to neutralize code execution.
         Ensures no HTML tags or JavaScript can persist in the sanitized description.
+
+        The result is idempotent: a description that already went through this
+        validator (e.g. read back from Mongo, exported to a template, and
+        re-instantiated) is decoded before being re-encoded, so ``'`` stays
+        ``&#x27;`` instead of growing into ``&amp;#x27;`` on every pass.
         """
         # If value is a Description instance, extract the string
         # if isinstance(value, Description):
@@ -123,8 +128,10 @@ class MongoModel(BaseModel):
         if not value:
             return None
 
-        # Step 1: Convert special characters to their HTML-safe equivalents
-        neutralized = html.escape(value)
+        # Step 1: Convert special characters to their HTML-safe equivalents.
+        # Decode first so an already-sanitized value is not escaped twice
+        # (html.escape is not idempotent on '&').
+        neutralized = html.escape(html.unescape(value))
 
         # Step 2: Use bleach to remove all HTML tags and attributes
         sanitized = bleach.clean(neutralized, tags=[], attributes={}, strip=True)

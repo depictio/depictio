@@ -88,8 +88,69 @@ def _load_yaml(path: str) -> dict:
     return data
 
 
+class TemplateNotFoundError(FileNotFoundError):
+    """No template YAML for ``template_id``.
+
+    Carries the catalogue separately from the message so API callers can be
+    told what exists without being shown the server's filesystem layout.
+    """
+
+    def __init__(self, message: str, template_id: str, available_templates: list[str]):
+        super().__init__(message)
+        self.template_id = template_id
+        self.available_templates = available_templates
+
+
+def _is_cli_context() -> bool:
+    """True inside the depictio CLI process (it sets ``DEPICTIO_CONTEXT=CLI``)."""
+    from depictio.models.utils import get_depictio_context
+
+    return get_depictio_context().lower() == "cli"
+
+
+def _locate_template_path(template_id: str) -> Path | None:
+    """The path form: ``template_id`` names an existing directory or YAML file.
+
+    Returns None when it names neither (the id form is tried next). A
+    directory that exists but holds no template YAML is an error rather than
+    a fall-through, since falling back to the catalogue would only confuse.
+    """
+    candidate_path = Path(template_id).expanduser()
+    if candidate_path.is_file() and candidate_path.suffix in (".yaml", ".yml"):
+        return candidate_path.resolve()
+    if candidate_path.is_dir():
+        for filename in ("template.yaml", "project.yaml"):
+            candidate = candidate_path / filename
+            if candidate.is_file():
+                return candidate.resolve()
+        raise FileNotFoundError(
+            f"Directory '{template_id}' holds no template.yaml or project.yaml. "
+            "Point --template at the directory produced by `depictio template export`."
+        )
+    return None
+
+
+def _template_dir_within(projects_dir: Path, template_id: str) -> Path | None:
+    """``projects_dir/<resolved id>``, or None when the id would leave ``projects_dir``.
+
+    Ids reach here from API callers (``POST /projects/from_manifest``) as well
+    as the CLI, so the candidate is resolved (symlinks included) and checked
+    for containment instead of being trusted as a plain relative id. Dot
+    segments are refused up front so nothing outside the directory is even
+    stat'ed while resolving ``latest``.
+    """
+    parts = [p for p in template_id.split("/") if p]
+    if not parts or any(p in (".", "..") for p in parts):
+        return None
+    root = projects_dir.resolve()
+    candidate = (root / _resolve_template_id_in(root, template_id)).resolve()
+    if not candidate.is_relative_to(root):
+        return None
+    return candidate
+
+
 def locate_template(template_id: str) -> Path:
-    """Find template YAML by template_id (e.g., 'nf-core/ampliseq/2.16.0').
+    """Find template YAML by template_id (e.g., 'nf-core/ampliseq/2.16.0') or by path.
 
     Searches in the depictio/projects/ directory relative to the package installation.
     Looks for template.yaml first (dedicated template file), then falls back to
@@ -100,40 +161,54 @@ def locate_template(template_id: str) -> Path:
     highest version directory shipping a template, so callers never need to
     hardcode a pinned version.
 
+    In the CLI a local directory or YAML file is also accepted. That is what
+    makes an exported bundle usable by whoever receives it: ``depictio template
+    export`` produces a directory, and without this the recipient would have to
+    copy it into their own site-packages before it could be run. The server
+    never accepts the path form: it resolves ids on behalf of remote callers,
+    and a path there would let any request read an arbitrary YAML on the host.
+    Ids are confined to the templates directory in both contexts.
+
     Args:
-        template_id: Template identifier (e.g., 'nf-core/ampliseq/2.16.0').
+        template_id: Template identifier (e.g., 'nf-core/ampliseq/2.16.0'), or,
+            on the CLI, a path to a template directory / YAML file.
 
     Returns:
         Path to the template YAML file.
 
     Raises:
-        FileNotFoundError: If no template YAML exists.
+        FileNotFoundError: If no template YAML exists (``TemplateNotFoundError``
+            for an unknown or out-of-tree id).
     """
-    # Resolve relative to depictio package root
+    # Path form first: an existing directory or YAML file wins over id lookup, so
+    # a local bundle is never shadowed by an installed template of the same name.
+    if _is_cli_context():
+        located = _locate_template_path(template_id)
+        if located is not None:
+            return located
+
+    # Resolve relative to depictio package root, then without the package
+    # nesting (installed packages). template.yaml (dedicated template file)
+    # is preferred over project.yaml (fixture) in each.
     package_root = Path(__file__).resolve().parents[4]  # cli/cli/utils/ -> depictio/
     projects_dir = package_root / "depictio" / "projects"
-    template_dir = projects_dir / _resolve_template_id_in(projects_dir, template_id)
-
-    # Prefer template.yaml (dedicated template file) over project.yaml (fixture)
-    for filename in ("template.yaml", "project.yaml"):
-        candidate = template_dir / filename
-        if candidate.is_file():
-            return candidate
-
-    # Also try without the package nesting (for installed packages)
-    alt_root = Path(__file__).resolve().parents[3]  # cli/cli/utils/ -> cli/
-    alt_projects_dir = alt_root / "projects"
-    alt_dir = alt_projects_dir / _resolve_template_id_in(alt_projects_dir, template_id)
-    for filename in ("template.yaml", "project.yaml"):
-        candidate = alt_dir / filename
-        if candidate.is_file():
-            return candidate
+    alt_projects_dir = Path(__file__).resolve().parents[3] / "projects"  # cli/cli/utils/ -> cli/
+    for root in (projects_dir, alt_projects_dir):
+        template_dir = _template_dir_within(root, template_id)
+        if template_dir is None:
+            continue
+        for filename in ("template.yaml", "project.yaml"):
+            candidate = template_dir / filename
+            if candidate.is_file():
+                return candidate
 
     available = _list_available_templates(package_root)
     available_str = ", ".join(available) if available else "none found"
-    raise FileNotFoundError(
-        f"Template '{template_id}' not found at {template_dir}. "
-        f"Available templates: {available_str}"
+    raise TemplateNotFoundError(
+        f"Template '{template_id}' not found under {projects_dir}. "
+        f"Available templates: {available_str}",
+        template_id=template_id,
+        available_templates=available,
     )
 
 
@@ -811,7 +886,7 @@ def _stringify_provenance_value(v: Any) -> str:
 
 
 def collect_run_provenance(
-    data_root: str,
+    data_root: str | None,
     spec: ProvenanceSpec | None,
     extra_files: list[str] | None = None,
 ) -> tuple[list[ProvenanceEntry], list[str]]:
@@ -830,7 +905,9 @@ def collect_run_provenance(
     from fnmatch import fnmatch
 
     spec = spec or _DEFAULT_PROVENANCE_SPEC
-    root = Path(data_root)
+    # Manifest-driven templates have no local run directory: only the explicit
+    # --provenance-file entries can be collected, the spec's globs have no root.
+    root = Path(data_root) if data_root is not None else None
 
     def assign_group(key: str, source: ProvenanceSource | None) -> str:
         if source is not None and source.group:
@@ -844,7 +921,7 @@ def collect_run_provenance(
     collected: list[tuple[str, str, str, Any]] = []  # (source, group, key, value)
     files_read: list[str] = []
 
-    for source in spec.sources:
+    for source in spec.sources if root is not None else []:
         matches = sorted(root.glob(source.glob))
         if not matches:
             # sequencing-runs layouts keep pipeline_info one level down
@@ -1042,12 +1119,16 @@ def _auto_detect_metadata_columns(metadata_path: Path, variables: dict[str, str]
         logger.warning(f"Could not read metadata file for column detection: {exc}")
 
 
+UNBOUND_VAR_SENTINEL = "__DEPICTIO_UNBOUND_{name}__"
+
+
 def resolve_template(
     template_id: str,
-    data_root: str,
+    data_root: str | None,
     project_name: str | None = None,
     extra_vars: dict[str, str] | None = None,
     provenance_files: list[str] | None = None,
+    allow_missing_vars: bool = False,
 ) -> tuple[dict[str, Any], TemplateMetadata, TemplateOrigin, list[Path], dict[str, str]]:
     """Load template YAML, substitute variables, apply conditionals, return resolved config.
 
@@ -1066,7 +1147,10 @@ def resolve_template(
 
     Args:
         template_id: Template identifier (e.g., 'nf-core/ampliseq/2.16.0').
-        data_root: Absolute path to user's data root directory.
+        data_root: Absolute path to user's data root directory, or None for
+            manifest-driven templates whose sources are remote (every
+            filesystem-local step — params introspection, samplesheet/metadata
+            auto-detection — is skipped in that case).
         project_name: Custom project name. If None, auto-generated from template.
         extra_vars: Additional variables from --var KEY=VALUE flags (e.g., METADATA_FILE).
 
@@ -1094,15 +1178,20 @@ def resolve_template(
     template_metadata = TemplateMetadata(**template_section)
     logger.info(f"Template: {template_metadata.template_id} v{template_metadata.version}")
 
-    # 3. Build variables dict: DATA_ROOT is always set; extra_vars adds --var values
-    data_root_abs = str(Path(data_root).absolute())
-    variables: dict[str, str] = {"DATA_ROOT": data_root_abs}
+    # 3. Build variables dict: DATA_ROOT when a local data root is given (None
+    # for manifest-driven templates); extra_vars adds --var values
+    data_root_abs: str | None = None
+    variables: dict[str, str] = {}
+    if data_root is not None:
+        data_root_abs = str(Path(data_root).absolute())
+        variables["DATA_ROOT"] = data_root_abs
     if extra_vars:
         variables.update(extra_vars)
 
     # 3a. Introspect the run's params.json to set protocol/skip flags + auto-fill
-    # METADATA_FILE (does not override explicit --var values).
-    _introspect_pipeline_params(data_root_abs, variables)
+    # METADATA_FILE (does not override explicit --var values). Local runs only.
+    if data_root_abs is not None:
+        _introspect_pipeline_params(data_root_abs, variables)
 
     # 3b. Collect the run's provenance (parameters, thresholds, tool versions)
     # per the template's spec — persisted on TemplateOrigin for the ingestion
@@ -1114,7 +1203,7 @@ def resolve_template(
     # 3b. Auto-detect metadata annotation columns when METADATA_FILE is provided
     if "METADATA_FILE" in variables:
         metadata_path = Path(variables["METADATA_FILE"])
-        if not metadata_path.is_absolute():
+        if not metadata_path.is_absolute() and data_root_abs is not None:
             # Try relative to data_root first, then CWD
             candidate = Path(data_root_abs) / metadata_path
             if candidate.is_file():
@@ -1127,8 +1216,8 @@ def resolve_template(
     # supplied. nf-core/ampliseq copies the input samplesheet into <run>/input/
     # under a pipeline/user dependent name (e.g. "Samplesheet.tsv",
     # "samplesheet.csv"), so locate it case-insensitively rather than forcing the
-    # caller to pass an explicit path.
-    if "SAMPLESHEET_FILE" not in variables:
+    # caller to pass an explicit path. Local runs only.
+    if "SAMPLESHEET_FILE" not in variables and data_root_abs is not None:
         input_dir = Path(data_root_abs) / "input"
         if input_dir.is_dir():
             candidates = sorted(
@@ -1161,6 +1250,18 @@ def resolve_template(
     # 4. Validate required variables; warn about unknown extras
     required_vars = template_metadata.get_required_variable_names()
     missing_vars = [v for v in required_vars if v not in variables]
+    if missing_vars and allow_missing_vars:
+        # --bind replaces whole scan blocks after resolution, which can make a
+        # required variable irrelevant (e.g. MANIFEST_URL once every manifest DC
+        # is bound elsewhere). Substitute a sentinel now; the caller must verify
+        # none survives binding, so a genuinely-needed variable still fails loudly.
+        for name in missing_vars:
+            variables[name] = UNBOUND_VAR_SENTINEL.format(name=name)
+        logger.info(
+            f"Deferred template variables (expected to be replaced by --bind): "
+            f"{', '.join(missing_vars)}"
+        )
+        missing_vars = []
     if missing_vars:
         raise ValueError(
             f"Missing required template variables: {', '.join(missing_vars)}. "
@@ -1217,9 +1318,13 @@ def resolve_template(
     #     gated-out DC stays gated out even when a seed sits next to it, and
     #     before `_strip_ids` / `_build_expected_dcs` so tags and links are still
     #     intact and the manifest reflects the final config.
-    materialized_seeds, _ = materialize_recipe_seeds(
-        resolved_config, data_root_abs, drop_missing=False
-    )
+    #     Seeds live under DATA_ROOT, so manifest-driven templates (no local
+    #     root) have nothing to materialize.
+    materialized_seeds: list[str] = []
+    if data_root_abs is not None:
+        materialized_seeds, _ = materialize_recipe_seeds(
+            resolved_config, data_root_abs, drop_missing=False
+        )
     if materialized_seeds:
         logger.info(
             f"Materialized {len(materialized_seeds)} recipe DC(s) from pre-computed seeds: "
@@ -1236,7 +1341,13 @@ def resolve_template(
         # template_metadata.template_id (resolved), not the raw template_id param —
         # otherwise "nf-core/ampliseq/latest" runs all name-collide under one
         # generic project name instead of the concrete version actually ingested.
-        resolved_config["name"] = f"{template_metadata.template_id} - {Path(data_root).name}"
+        if data_root is not None:
+            suffix = Path(data_root).name
+        else:
+            # Manifest-driven: derive the suffix from the manifest filename.
+            manifest_url = variables.get("MANIFEST_URL", "")
+            suffix = Path(manifest_url.split("?", 1)[0]).stem or "manifest"
+        resolved_config["name"] = f"{template_metadata.template_id} - {suffix}"
 
     # 9. Build TemplateOrigin for DB tracking
     expected_dcs = _build_expected_dcs(dc_superset, resolved_config, removal_reasons)

@@ -237,3 +237,98 @@ async def test_export_admin_query_is_not_permission_scoped() -> None:
     assert exc_info.value.status_code == 404
     query = mock_projects.find_one.call_args.args[0]
     assert "$or" not in query
+
+
+# ---------------------------------------------------------------------------
+# Regression D: project-mutating manifest routes share create_project's gate
+# ---------------------------------------------------------------------------
+#
+# ``POST /projects/from_manifest`` mirrored ``create_project``'s public/demo-mode
+# gate from the start; ``ingest_manifest``, ``refresh_manifest`` and
+# ``export_template`` did not, so an auto-minted temp user could pull arbitrary
+# remote data into (or export) any project they could edit on a demo instance.
+
+
+def _manifest_route(name: str):
+    """(handler, kwargs, downstream attribute to patch) for each gated route.
+
+    ``dry_run=True`` keeps the token minting out of the picture; the
+    downstream helper is patched so passing the gate is observable without a
+    database.
+    """
+    from depictio.api.v1.endpoints.projects_endpoints import routes
+    from depictio.api.v1.endpoints.projects_endpoints.export_template import (
+        ExportTemplateRequest,
+    )
+    from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
+        IngestManifestRequest,
+        RefreshManifestRequest,
+    )
+
+    project_id = str(PyObjectId())
+    if name == "ingest_manifest":
+        payload = IngestManifestRequest(
+            project_id=project_id, manifest_url="https://example.org/m.json", dry_run=True
+        )
+        return routes.ingest_manifest, {"payload": payload}, "_ingest_manifest_into_project"
+    if name == "refresh_manifest":
+        payload = RefreshManifestRequest(project_id=project_id, dry_run=True)
+        return routes.refresh_manifest, {"payload": payload}, "_refresh_manifest_in_project"
+    payload = ExportTemplateRequest(template_id="lab/tool/1")
+    return (
+        routes.export_project_template,
+        {"project_id": project_id, "payload": payload},
+        "build_template_bundle",
+    )
+
+
+_GATED_ROUTES = ["ingest_manifest", "refresh_manifest", "export_template"]
+
+
+@pytest.mark.parametrize("route", _GATED_ROUTES)
+@pytest.mark.asyncio
+async def test_manifest_routes_blocked_for_non_admin_in_public_mode(route: str) -> None:
+    from fastapi import HTTPException
+
+    from depictio.api.v1.endpoints.projects_endpoints import routes
+
+    handler, kwargs, downstream = _manifest_route(route)
+    mock_settings = MagicMock()
+    mock_settings.auth.is_public_mode = True
+
+    with (
+        patch.object(routes, "settings", mock_settings),
+        patch.object(routes, downstream) as work,
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await handler(current_user=_user(is_admin=False), **kwargs)
+
+    assert exc_info.value.status_code == 403
+    assert "public/demo mode" in str(exc_info.value.detail)
+    work.assert_not_called()
+
+
+@pytest.mark.parametrize("route", _GATED_ROUTES)
+@pytest.mark.parametrize(
+    ("is_public_mode", "is_admin"),
+    [(True, True), (False, False)],
+    ids=["admin-in-public-mode", "non-admin-on-standard-instance"],
+)
+@pytest.mark.asyncio
+async def test_manifest_routes_pass_the_gate_otherwise(
+    route: str, is_public_mode: bool, is_admin: bool
+) -> None:
+    from depictio.api.v1.endpoints.projects_endpoints import routes
+
+    handler, kwargs, downstream = _manifest_route(route)
+    mock_settings = MagicMock()
+    mock_settings.auth.is_public_mode = is_public_mode
+
+    with (
+        patch.object(routes, "settings", mock_settings),
+        patch.object(routes, downstream, return_value={"gate": "passed"}) as work,
+        patch.object(routes, "bundle_to_zip", return_value=b"zip"),
+    ):
+        await handler(current_user=_user(is_admin=is_admin), **kwargs)
+
+    work.assert_called_once()

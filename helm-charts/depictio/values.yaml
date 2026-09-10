@@ -344,6 +344,27 @@ backend:
     # DEPICTIO_EVENTS_ENABLED: "true"
     # DEPICTIO_EVENTS_MONGODB_CHANGE_STREAMS_ENABLED: "true"
 
+    # Remote data sources (URL / manifest scan modes). Policy for the SSRF
+    # gateway in api/v1/remote_fetch.py. Rendered into BOTH the backend and
+    # the celery ConfigMaps (templates/configmaps.yaml), since the worker
+    # performs the reads the API enqueues and the two must agree. Defaults are
+    # the safe ones; an overlay values file that omits them gets the same
+    # defaults from the template.
+    # Accept plain http:// sources. Keep false anywhere but a local demo.
+    DEPICTIO_REMOTE_ALLOW_HTTP: "false"
+    # Comma-separated host names. EXCLUSIVE while set: every host not listed
+    # is rejected, public ones included, and a listed host bypasses the
+    # private-address check. Empty means no allowlist.
+    DEPICTIO_REMOTE_URL_ALLOWLIST: ""
+    # Comma-separated host names rejected outright. Checked before the allowlist.
+    DEPICTIO_REMOTE_URL_DENYLIST: ""
+    # Per-download size cap in bytes (500 MiB).
+    DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES: "524288000"
+    # Per-request timeout in seconds.
+    DEPICTIO_REMOTE_TIMEOUT_S: "30"
+    # Redirect hops followed; each hop is re-validated by the gateway.
+    DEPICTIO_REMOTE_MAX_REDIRECTS: "3"
+
   podSecurityContext:
     runAsUser: 1000
     runAsGroup: 2000

@@ -2,6 +2,7 @@ import asyncio
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
@@ -9,6 +10,7 @@ from depictio.api.v1.db import db, projects_collection
 from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
     _check_multiqc_uniformity_from_uploads,
     _create_dc_from_upload,
+    _create_dc_from_url,
     _create_multiqc_dc_from_uploads,
     _delete_data_collection_by_id,
     _delete_orphan_links_for_dc,
@@ -370,6 +372,55 @@ async def create_data_collection_from_upload(
         current_user=current_user,
         lat_column=lat_column,
         lon_column=lon_column,
+    )
+
+
+class CreateDCFromURLRequest(BaseModel):
+    """Body of POST /create_from_url — remote-URL twin of the upload form."""
+
+    project_id: str
+    name: str
+    url: str
+    data_type: str = "table"
+    file_format: str = "csv"
+    separator: str = ","
+    custom_separator: str | None = None
+    compression: str = "none"
+    has_header: bool = True
+    description: str = ""
+    lat_column: str | None = None
+    lon_column: str | None = None
+
+
+@datacollections_endpoint_router.post("/create_from_url")
+async def create_data_collection_from_url(
+    payload: CreateDCFromURLRequest,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Create a data collection from a remote s3:// or https:// URL.
+
+    Mirrors the ``/create_from_upload`` pipeline (scan + process via the CLI
+    helpers) for a remote URL instead of an uploaded file — no CLI needed on
+    the client side. The URL is validated by the SSRF gateway
+    (depictio/api/v1/remote_fetch.py) before anything is fetched; column
+    validation for lat/lon happens at process time.
+    """
+    await _ensure_user_cli_token(current_user)
+    return await asyncio.to_thread(
+        _create_dc_from_url,
+        project_id=payload.project_id,
+        name=payload.name,
+        description=payload.description,
+        data_type=payload.data_type,
+        file_format=payload.file_format,
+        separator=payload.separator,
+        custom_separator=payload.custom_separator,
+        compression=payload.compression,
+        has_header=payload.has_header,
+        url=payload.url,
+        current_user=current_user,
+        lat_column=payload.lat_column,
+        lon_column=payload.lon_column,
     )
 
 
