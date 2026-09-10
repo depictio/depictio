@@ -19,6 +19,7 @@ import {
   BrandThemePreview,
   isEmptyBrandTheme,
   useResolvedBrandTheme,
+  Z_LAYERS,
   type BrandTheme,
   type DashboardData,
   type LogoMode,
@@ -338,6 +339,9 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
     onClose={onClose}
     position="right"
     size="md"
+    // Above the floating map card, so the drawer's overlay dims it like the
+    // rest of the dashboard instead of leaving it lit on top.
+    zIndex={Z_LAYERS.overlay}
     title={
       <Group gap="xs">
         <Icon icon="mdi:cog" width={20} />

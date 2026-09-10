@@ -3,6 +3,7 @@ import { Paper } from '@mantine/core';
 import { useViewportSize } from '@mantine/hooks';
 
 import type { InteractiveFilter } from '../../api';
+import { Z_LAYERS } from '../../zLayers';
 import MapPanelBody from './MapPanelBody';
 import { useCardResize } from './useCardResize';
 import { clampToViewport, useDraggable, type Position } from './useDraggable';
@@ -34,10 +35,6 @@ function cardSize(
 
 /** Default anchor for the floating card: bottom-right, clear of the Notes FAB. */
 const DEFAULT_ANCHOR = { right: 16, bottom: 72 };
-
-/** Above the Notes FAB (200) and banners, below the boot splash (400) and the
- *  walkthrough overlay (1000/1100) so neither gets occluded by a stray card. */
-const Z_INDEX = 250;
 
 export interface MapPanelSurfaceProps {
   panel: MapPanel;
@@ -107,7 +104,7 @@ const MapPanelSurface: React.FC<MapPanelSurfaceProps> = ({
       radius="md"
       style={{
         position: 'fixed',
-        zIndex: Z_INDEX,
+        zIndex: Z_LAYERS.mapPanel,
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
