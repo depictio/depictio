@@ -175,6 +175,46 @@ def test_advanced_viz_components_validate(path: Path):
 
 @pytest.mark.no_db
 @pytest.mark.parametrize("path", _shipped_yamls(), ids=_rel)
+def test_advanced_viz_survives_the_component_union(path: Path):
+    """A component that validates alone can still be lost by the union.
+
+    ``DashboardDataLite.components`` is ``list[LiteComponent | dict[str, Any]]``.
+    Pydantic's smart union runs a strict pass first, and the ``dict`` member
+    matches any mapping, so a component that fails only under strict rules is
+    silently kept as a raw dict instead of raising. It reaches the database
+    with no ``viz_kind`` and the viewer renders `Unknown advanced viz kind: ""`.
+
+    ``test_advanced_viz_components_validate`` cannot see this: it validates each
+    component on its own, where the lax pass applies and everything passes. The
+    trigger found in the wild was ``shaded_bands``, typed as a tuple, which YAML
+    can only spell as a list.
+    """
+    doc = yaml.safe_load(path.read_text())
+    errors: list[str] = []
+    for label, tab in _tabs_of(doc):
+        expected = sum(
+            1
+            for comp in tab.get("components") or []
+            if isinstance(comp, dict) and comp.get("component_type") == "advanced_viz"
+        )
+        if not expected:
+            continue
+        lite = DashboardDataLite.model_validate(tab)
+        degraded = [
+            comp.get("tag") or comp.get("index") or "?"
+            for comp in lite.components
+            if isinstance(comp, dict) and comp.get("component_type") == "advanced_viz"
+        ]
+        if degraded:
+            errors.append(
+                f"{label}: {len(degraded)} of {expected} advanced_viz components lost to the "
+                f"dict member of the union: {', '.join(degraded)}"
+            )
+    assert not errors, f"{_rel(path)} degrades advanced_viz:\n" + "\n\n".join(errors)
+
+
+@pytest.mark.no_db
+@pytest.mark.parametrize("path", _shipped_yamls(), ids=_rel)
 def test_card_secondary_strips_have_the_config_they_read(path: Path):
     """A layout without the field it draws from renders an empty strip, silently."""
     doc = yaml.safe_load(path.read_text())
