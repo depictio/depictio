@@ -497,49 +497,60 @@ def _md_table(headers: list[str], rows: list[list[str]]) -> str:
     return "\n".join(out) + "\n"
 
 
+def _checklist(facts: PipelineFacts) -> str:
+    """The two-minute version: five claims to tick, no prose required.
+
+    A volunteer maintainer will not write three paragraphs, and a review round
+    that only accepts paragraphs gets no replies at all. Every item is a claim
+    about this template that the person reading it is uniquely able to confirm
+    or refuse, so an unticked box is a finding on its own and the whole thing
+    can be answered without typing a word.
+    """
+    return (
+        "### The two-minute version\n\n"
+        "Tick what is true. An unticked box tells me as much as a ticked one, so "
+        "please leave the ones you are not sure about alone.\n\n"
+        "- [ ] The headline numbers on the first tab are correct\n"
+        "- [ ] The tabs cover what I would want to see for a run of this pipeline\n"
+        f"- [ ] The files it reads are still where nf-core/{facts.pipeline} writes them\n"
+        "- [ ] I would point a user of this pipeline at this dashboard\n"
+        "- [ ] I would be happy for it to be linked from the pipeline's own docs\n\n"
+    )
+
+
 def _review_questions(facts: PipelineFacts) -> str:
     """Three questions grounded in this template's own content.
 
-    An open "what do you think?" to a volunteer maintainer returns nothing.
-    Each question quotes something specific back — the headline numbers, the
-    tab outline, the routes the variables cover — so answering it is a
-    correction rather than an essay.
+    For anyone who wants to say more than the checklist allows. Each one quotes
+    something specific back — the headline numbers, the tab outline, the routes
+    the variables cover — so answering is a correction rather than an essay.
     """
     cards = facts.card_titles[:MAX_QUOTED_CARDS]
     tabs = [t.title for t in facts.tabs if t.title]
     routes = [name for name, _ in _route_vars(facts.optional_vars)]
 
-    lines = ["### What I would like your take on\n\n"]
+    quoted_cards = ", ".join(f"`{c}`" for c in cards) if cards else "_(none shown)_"
+    quoted_tabs = ", ".join(f"`{t}`" for t in tabs) if tabs else "_(none declared)_"
+    quoted_routes = ", ".join(f"`{r}`" for r in routes) if routes else ""
 
-    lines.append("**1. Is any of this wrong or misleading?** The headline numbers are:\n")
-    lines.append(
-        ", ".join(f"`{c}`" for c in cards) + "\n"
-        if cards
-        else "_(this template shows no summary cards)_\n"
-    )
-    lines.append(
-        "\nA metric that is subtly wrong for your pipeline is the single most expensive "
-        "thing to leave in, so please be blunt.\n"
-    )
-
-    lines.append("\n**2. What do you always look at that is not here?** The tabs are:\n")
-    lines.append(", ".join(f"`{t}`" for t in tabs) + "\n" if tabs else "_(no tabs declared)_\n")
-    lines.append(
-        "\nI am after the one plot or table you open first when you debug a run of this "
-        "pipeline, whether or not it is in MultiQC.\n"
-    )
-
-    lines.append("\n**3. Which real runs would this not fit?** The template adapts to:\n")
-    if routes:
-        lines.append(", ".join(f"`{r}`" for r in routes) + "\n")
+    lines = [
+        "### If you have more than two minutes\n\n",
+        f"**Is anything wrong or misleading?** The headline numbers are {quoted_cards}. "
+        "A metric that is subtly wrong for your pipeline is the most expensive thing to "
+        "leave in, so please be blunt.\n\n",
+        f"**What do you always look at that is not here?** The tabs are {quoted_tabs}. "
+        "I am after the one plot or table you open first when you debug a run, whether "
+        "or not it is in MultiQC.\n\n",
+    ]
+    if quoted_routes:
         lines.append(
-            "\nThose are the parameter combinations it was told about. Which ones that your "
-            "users actually run are missing from that list?\n"
+            f"**Which real runs would this not fit?** It was told about {quoted_routes}. "
+            "Which parameter combinations that your users actually run are missing?\n\n"
         )
     else:
         lines.append(
-            "_(nothing yet — it assumes a default-profile run)_\n\nWhich parameter "
-            "combinations do your users run that would break that assumption?\n"
+            "**Which real runs would this not fit?** It assumes a default-profile run. "
+            "Which parameter combinations do your users run that would break that?\n\n"
         )
     return "".join(lines)
 
@@ -551,7 +562,13 @@ def render_discussion(
     urls: dict[str, str],
     image_base: str = "",
 ) -> str:
-    """The GitHub Discussion body: what it is, what to click, what I am asking."""
+    """The GitHub Discussion body.
+
+    Ordered for someone who will give it two minutes: what it is, what to
+    click, a picture, then the checklist. The reference tables that prove the
+    claims come after, folded away — they are what you open when the checklist
+    made you suspicious, not what you read to decide whether to care.
+    """
     docs_url = docs_url_template.format(pipeline=facts.pipeline, version=facts.version)
     live, deep = dashboard_url(facts, instance, urls)
     pr = facts.pr
@@ -560,24 +577,30 @@ def render_discussion(
     if facts.description:
         parts.append(f"{facts.description}\n\n")
 
-    where = "" if deep else f' (open the "{project_tag(facts)}" project)'
-    parts.append(f"- **Try it live:** {live}{where}\n")
-    parts.append(f"- **Docs:** {docs_url}\n")
+    where = "" if deep else f' — open the "{project_tag(facts)}" project'
+    parts.append(f"**[Open the dashboard]({live})**{where}. No account needed.\n\n")
+    parts.append(f"[Docs]({docs_url})")
     if pr:
         draft = " (draft)" if pr.get("isDraft") else ""
-        parts.append(f"- **Template source:** {pr['url']}{draft}\n")
-    parts.append(f"- **Template:** `depictio/projects/nf-core/{facts.pipeline}/{facts.version}/`\n")
+        parts.append(f" · [Template source]({pr['url']}){draft}")
+    parts.append(f" · `depictio/projects/nf-core/{facts.pipeline}/{facts.version}/`")
     if facts.megatest_sha:
         root = f", run root `{facts.run_root}`" if facts.run_root else ""
         parts.append(
-            f"- **Validated against:** the AWS megatest run "
-            f"`s3://nf-core-awsmegatests/{facts.pipeline}/results-{facts.megatest_sha}/`{root}\n"
+            f"\n\nBuilt from the AWS megatest run "
+            f"`{facts.pipeline}/results-{facts.megatest_sha}/`{root} — so every number on it "
+            f"comes from a real run of your pipeline, not from mock data.\n\n"
         )
-    parts.append("\n")
+    else:
+        parts.append("\n\n")
+
     if image_base:
         parts.append(render_screenshots(facts, image_base))
 
-    parts.append("### What the dashboard shows\n\n")
+    parts.append(_checklist(facts))
+    parts.append(_review_questions(facts))
+
+    parts.append("<details>\n<summary><b>What each tab shows</b></summary>\n\n")
     parts.append(
         _md_table(
             ["Tab", "What it is about", "Sections"],
@@ -588,8 +611,12 @@ def render_discussion(
             ],
         )
     )
+    parts.append("\n</details>\n\n")
 
-    parts.append("\n### What it reads out of a run\n\n")
+    parts.append(
+        "<details>\n<summary><b>What it reads out of a run</b> — the paths it expects "
+        "your pipeline to publish</summary>\n\n"
+    )
     parts.append(
         _md_table(
             ["Data collection", "How", "From", "Optional"],
@@ -617,23 +644,29 @@ def render_discussion(
             f"\nThe MultiQC panels are read from the run's own report (MultiQC "
             f"{facts.multiqc_version}), not recomputed.\n"
         )
+    parts.append("\n</details>\n\n")
 
     routes = _route_vars(facts.optional_vars)
     if routes:
-        parts.append("\n### Runs it adapts to\n\n")
+        parts.append(
+            "<details>\n<summary><b>Runs it adapts to</b> — the pipeline routes it was "
+            "told about</summary>\n\n"
+        )
         parts.append(
             _md_table(
                 ["Variable", "The route it covers"],
                 [[f"`{name}`", desc or "—"] for name, desc in routes],
             )
         )
+        parts.append("\n</details>\n\n")
 
-    parts.append("\n")
-    parts.append(_review_questions(facts))
     parts.append(
-        f"\n---\n\nNo account is needed to open the dashboard. If it is easier, reply in the "
-        f"nf-core Slack `#{facts.pipeline}` channel and I will bring it back here so the "
-        f"thread stays with the template.\n"
+        "---\n\n"
+        "**What happens to your answer.** Anything concrete becomes an issue linked back "
+        "to this thread; anything that changes a panel goes into the template and the docs "
+        "page is regenerated from it. Either way I reply here, so you can see where it "
+        f"landed. If a thread is not your thing, the nf-core Slack `#{facts.pipeline}` "
+        "channel works too and I will bring it back here.\n"
     )
     return "".join(parts)
 
@@ -672,41 +705,70 @@ def render_epic(
     urls: dict[str, str],
     discussions: dict[str, str],
 ) -> str:
-    """The tracking table for the round's epic issue. Regenerate and re-post as it moves."""
+    """The tracking table for the round's epic issue.
+
+    One row per pipeline, every column a link or a checkbox, so the state of
+    the whole round reads at a glance and GitHub renders the progress from the
+    task list. Regenerate and re-post it rather than editing cells: the links
+    and versions come from the templates, and only the two checkbox columns are
+    yours to tick.
+    """
     rows = []
     for facts in all_facts:
         pr = facts.pr
         live, deep = dashboard_url(facts, instance, urls)
         docs = docs_url_template.format(pipeline=facts.pipeline, version=facts.version)
+        thread = discussions.get(facts.pipeline)
         rows.append(
             [
-                f"nf-core/{facts.pipeline}",
+                f"**{facts.pipeline}**",
                 facts.version,
-                f"#{pr['number']}" if pr else "—",
-                f"[dashboard]({live})" if deep else "⚠ needs link",
-                f"[docs]({docs})",
-                f"[thread]({discussions[facts.pipeline]})"
-                if facts.pipeline in discussions
-                else "—",
+                f"[#{pr['number']}]({pr['url']})" if pr else "—",
+                f"[open]({live})" if deep else "⚠ needs link",
+                f"[page]({docs})",
+                f"[thread]({thread})" if thread else "⚠ not opened",
                 "☐",
                 "☐",
             ]
         )
+
+    ready = [f for f in all_facts if f.pipeline in discussions]
+    blocked = [
+        f.pipeline
+        for f in all_facts
+        if f.pipeline not in urls or f.pipeline not in discussions or not f.screenshots
+    ]
+
     body = [
         "## nf-core template review round\n\n",
-        "One discussion per pipeline, each asking its maintainers the same three questions: "
-        "is anything wrong, what is missing, which runs would it not fit. This table is "
-        "generated by `scripts/nfcore_outreach.py` — regenerate it rather than editing cells.\n\n",
+        f"{len(all_facts)} pipelines, one discussion each, all asking the same five-box "
+        "checklist: are the numbers right, do the tabs cover what matters, are the file "
+        "paths still current, would you point a user here, would you link it from the "
+        "pipeline docs.\n\n",
+        f"**{len(ready)} of {len(all_facts)} threads open.**\n\n",
         _md_table(
-            ["Pipeline", "Version", "PR", "Live", "Docs", "Thread", "Contacted", "Answered"],
+            ["Pipeline", "Version", "PR", "Dashboard", "Docs", "Thread", "Contacted", "Answered"],
             rows,
         ),
-        "\n### How a reply gets handled\n\n",
+        "\n### Before a thread is opened\n\n",
+        "- [ ] The dashboard link is a deep link, not the instance's list page\n"
+        "- [ ] The instance it points at is stable (a link that 404s costs the contact)\n"
+        "- [ ] The template has screenshots, so the thread does not open on a wall of text\n"
+        "- [ ] The pipeline's current maintainers are identified, not just its original author\n",
+    ]
+    if blocked:
+        body.append(
+            f"\nStill blocked on one of the above: {', '.join(f'`{p}`' for p in sorted(set(blocked)))}.\n"
+        )
+    body.append(
+        "\n### How a reply gets handled\n\n"
         "1. Anything concrete becomes an issue linked back to the thread.\n"
         "2. Anything that changes a panel goes into the template YAML, and the docs page "
         "is regenerated from it.\n"
-        "3. The thread is answered either way, so nobody wonders whether it landed.\n",
-    ]
+        "3. The thread is answered either way, so nobody wonders whether it landed.\n\n"
+        "_Generated by `scripts/nfcore_outreach.py` — regenerate it rather than editing "
+        "cells._\n"
+    )
     return "".join(body)
 
 
