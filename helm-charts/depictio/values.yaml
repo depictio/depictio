@@ -320,6 +320,15 @@ backend:
     # Set true to log the payload instead of sending it.
     DEPICTIO_TELEMETRY_DEBUG: "false"
 
+    # Dashboard feedback link, served to the SPA through /utils/public-config.
+    # Both halves are required: the flag alone renders nothing, and so does a URL
+    # without it. The URL is a template whose {dashboard}, {dashboard_id}, {tab}
+    # and {url} are filled in the browser, so a remark arrives already carrying
+    # what the reader was looking at.
+    DEPICTIO_FEEDBACK_ENABLED: "false"
+    DEPICTIO_FEEDBACK_URL: ""
+    DEPICTIO_FEEDBACK_LABEL: "Feedback"
+
     # Google Analytics configuration (GA4)
     # Enable to track page views, user interactions, and engagement metrics
     # Get your tracking ID from Google Analytics dashboard (Property → Data Streams)

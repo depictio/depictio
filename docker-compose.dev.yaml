@@ -118,6 +118,14 @@ services:
         # the numbers useless. The shipped docker-compose.yaml has it on.
         DEPICTIO_TELEMETRY_ENABLED: "${DEPICTIO_TELEMETRY_ENABLED:-false}"
         DEPICTIO_TELEMETRY_DEPLOYMENT_KIND: "${DEPICTIO_TELEMETRY_DEPLOYMENT_KIND:-docker-compose-dev}"
+        # Dashboard feedback link, served to the SPA through
+        # /utils/public-config. Off unless both halves are set: the flag alone
+        # renders nothing, and so does a URL without it. The URL is a template
+        # whose {dashboard}, {dashboard_id}, {tab} and {url} are filled in the
+        # browser, so the link arrives carrying what the reader was looking at.
+        DEPICTIO_FEEDBACK_ENABLED: "${DEPICTIO_FEEDBACK_ENABLED:-false}"
+        DEPICTIO_FEEDBACK_URL: "${DEPICTIO_FEEDBACK_URL:-}"
+        DEPICTIO_FEEDBACK_LABEL: "${DEPICTIO_FEEDBACK_LABEL:-Feedback}"
         # Belt-and-suspenders: the editable plotly-upset / plotly-complexheatmap
         # packages are installed into the venv at image build (uv sync). If the
         # build re-used a cached layer (pre-dating the package addition), the
