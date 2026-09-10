@@ -235,6 +235,51 @@ _ADVANCED_VIZ_DISPATCH_KINDS = frozenset(
 # The two spellings the catalog and the renderer use for the same plot.
 _UPSET_KINDS = frozenset({"upset_plot", "upset"})
 
+# Kinds whose renderer offers a column menu at render time — colour-by and
+# hover extras on an embedding, the grouping on a rarefaction. On a dashboard
+# those menus are filled from ``GET /datacollections/polars_schema`` and the
+# column the user picks is fetched on demand; offline the preview can do
+# neither, so for these kinds it ships the unbound fixture columns alongside the
+# bound roles and advertises them as the DC's schema. Every other kind stays on
+# its roles, which is all its renderer ever asks for.
+_COLUMN_MENU_KINDS = frozenset({"embedding", "rarefaction"})
+
+# Cell budget for those extra columns, per render. `_load_fixture_df` already
+# caps rows, so this only bites on a *wide* fixture — a matrix-shaped output
+# would otherwise inline every one of its columns into the bundle for the sake
+# of a menu nobody would scroll that far down.
+_COLUMN_MENU_CELL_BUDGET = 20_000
+
+
+def _menu_columns(df, bound: list[str]) -> list[str]:
+    """Unbound fixture columns worth shipping for a ``_COLUMN_MENU_KINDS`` render."""
+    budget = _COLUMN_MENU_CELL_BUDGET
+    extra: list[str] = []
+    for col in df.columns:
+        if col in bound or df.height > budget:
+            continue
+        budget -= df.height
+        extra.append(col)
+    return extra
+
+
+def _column_menu_support(df, dc_id: str, data: dict[str, Any], columns: list[str]) -> None:
+    """Answer the per-DC endpoints a render-time column menu reads.
+
+    ``fetchPolarsSchema`` names what can be picked and ``fetchUniqueValues``
+    orders a categorical legend. Only the columns the payload actually carries
+    are advertised, so the menu can never offer one whose values the offline
+    bundle left out.
+    """
+    data["schemas"][dc_id] = {name: str(df.schema[name]) for name in columns}
+    for name in columns:
+        col = df[name]
+        if col.dtype.is_numeric() or col.n_unique() > _UNIQUE_VALUES_CAP:
+            continue
+        data["unique"][f"{dc_id}::{name}"] = [
+            str(v) for v in col.drop_nulls().unique().sort().to_list()
+        ]
+
 
 def _advanced_viz_config_and_data(df, render) -> tuple[dict[str, Any], dict[str, Any]]:
     """Build the advanced-viz ``config`` blob + the projected role columns.
@@ -242,7 +287,8 @@ def _advanced_viz_config_and_data(df, render) -> tuple[dict[str, Any], dict[str,
     Role → config field comes from ``role_config_key``, the shared twin of
     ``buildAdvancedVizConfigBlob``. The renderer
     fetches the role columns via ``fetchAdvancedVizData`` and plots client-side,
-    so the payload is just those columns projected from the fixture.
+    so the payload is just those columns projected from the fixture — plus, for
+    a kind with a column menu, whatever else the menu may be pointed at.
     """
     config: dict[str, Any] = {"viz_kind": render.kind}
     columns: list[str] = []
@@ -277,6 +323,8 @@ def _advanced_viz_config_and_data(df, render) -> tuple[dict[str, Any], dict[str,
         raise CatalogPayloadError(
             f"advanced_viz {render.kind}: column(s) {missing} absent from fixture {list(df.columns)}"
         )
+    if render.kind in _COLUMN_MENU_KINDS:
+        present += _menu_columns(df, present)
     rows = {c: df[c].to_list() for c in present}
     return config, {
         "columns": present,
@@ -571,6 +619,7 @@ def _empty_data() -> dict[str, Any]:
         "unique": {},
         "ranges": {},
         "specs": {},
+        "schemas": {},
         "advancedVizData": {},
         "compute": {},
     }
@@ -1050,6 +1099,8 @@ def build_payload(output: Any, theme: str = "light", tool: Any = None) -> dict[s
                 meta["config"] = config
                 meta["_preview_height"] = _AV_PREVIEW_HEIGHT.get(render.kind, 480)
                 data["advancedVizData"][dc_id] = av
+                if render.kind in _COLUMN_MENU_KINDS:
+                    _column_menu_support(df, dc_id, data, av["columns"])
             else:
                 # Phase B: multiqc / image / map / interactive / text.
                 meta["_unsupported"] = (

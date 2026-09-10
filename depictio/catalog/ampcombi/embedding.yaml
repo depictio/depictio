@@ -10,6 +10,8 @@ recipe: ampcombi/embedding.py
 fixture: embedding.tsv
 renders_as:
   # One point per candidate, so the embedding's `sample_id` role carries the
-  # CDS id; the sample rides along as an optional colour key.
-  - { id: amp_embedding, component: advanced_viz, kind: embedding, roles: {sample_id: cds_id, dim_1: dim_1, dim_2: dim_2} }
+  # CDS id. Charge class is the default colour because the plane is a
+  # physicochemical one; the sample and the per-tool probabilities ride along in
+  # the output, and the renderer's colour menu reaches them.
+  - { id: amp_embedding, component: advanced_viz, kind: embedding, roles: {sample_id: cds_id, dim_1: dim_1, dim_2: dim_2, color: charge_class} }
   - { component: table }

@@ -210,3 +210,41 @@ def test_every_advanced_viz_offer_persists_a_valid_config() -> None:
                     first = exc.errors()[0]
                     invalid.append(f"{output.id} ({render.kind}): {first['loc']} {first['msg']}")
     assert invalid == [], f"catalog offers whose persisted config is invalid: {invalid}"
+
+
+def test_an_embedding_ships_the_columns_its_colour_menu_offers() -> None:
+    """The preview answers the render-time column menu, offline.
+
+    On a dashboard the embedding's "Colour by" and "Hover columns" menus are
+    filled from ``GET /datacollections/polars_schema`` and the picked column is
+    fetched on demand. The offline bundle can do neither, so the payload has to
+    carry the unbound fixture columns and advertise them as the DC schema —
+    otherwise the menu is empty and the plot is stuck on dim_1/dim_2.
+    """
+    payload = build_payload(_get_output("ampcombi_embedding"), "light")
+    render = next(m for m in payload["renders"] if m.get("viz_kind") == "embedding")
+    dc_id = render["dc_id"]
+
+    schema = payload["data"]["schemas"][dc_id]
+    rows = payload["data"]["advancedVizData"][dc_id]["rows"]
+    # The annotations the recipe emits precisely so the plane can be re-coloured.
+    for column in ("sample", "prob_max", "charge_class", "aa_length"):
+        assert column in schema, f"{column} missing from the advertised schema"
+        assert column in rows, f"{column} advertised but its values were not shipped"
+    # Nothing may be offered that the payload cannot colour by.
+    assert set(schema) <= set(rows)
+
+
+def test_a_kind_without_a_column_menu_stays_on_its_roles() -> None:
+    """The extra columns are for the menus, not a blanket fixture dump.
+
+    A manhattan has no column menu, so shipping its whole fixture would only
+    grow the bundle every reader downloads.
+    """
+    payload = build_payload(_get_output("ivar_variants_long"), "light")
+    render = next(m for m in payload["renders"] if m.get("viz_kind") == "manhattan")
+    dc_id = render["dc_id"]
+
+    assert dc_id not in payload["data"]["schemas"]
+    bound = {v for k, v in render["config"].items() if k.endswith("_col")}
+    assert set(payload["data"]["advancedVizData"][dc_id]["rows"]) == bound
