@@ -1164,6 +1164,58 @@ class MetricCiBarsConfig(_BaseVizConfig):
     colorscale: str = Field(default="Tealgrn", description="Continuous colour scale for the points")
 
 
+class ScatterXyConfig(_BaseVizConfig):
+    """Numeric against numeric: the plainest kind here, and the most asked for.
+
+    Twenty-eight figures across ten nf-core templates drop into code mode to draw
+    a scatter, and none of them does it for the shape. They do it for a marker
+    size column, a `custom_data` selection key, a reference diagonal or a log
+    axis, which is exactly the set below.
+    """
+
+    viz_kind: Literal["scatter_xy"] = "scatter_xy"
+
+    x_col: str = Field(default="x", description="Numeric column on the x axis")
+    y_col: str = Field(default="y", description="Numeric column on the y axis")
+    label_col: str | None = Field(
+        default=None, description="Column naming each point, used in hover and for labels"
+    )
+    color_col: str | None = Field(default=None, description="Column driving the marker colour")
+    size_col: str | None = Field(default=None, description="Numeric column driving marker size")
+
+    log_x: bool = Field(default=False, description="Log-scale the x axis")
+    log_y: bool = Field(default=False, description="Log-scale the y axis")
+    x_title: str | None = Field(default=None)
+    y_title: str | None = Field(default=None)
+
+    reference_line: Literal["none", "diagonal", "horizontal", "vertical"] = Field(
+        default="none",
+        description="Guide line: the identity diagonal, or a line at reference_value",
+    )
+    reference_value: float | None = Field(
+        default=None, description="Where a horizontal or vertical reference line sits"
+    )
+
+    min_size: float = Field(default=4.0, gt=0.0, description="Marker size at the smallest value")
+    max_size: float = Field(default=22.0, gt=0.0, description="Marker size at the largest value")
+    marker_size: float = Field(
+        default=7.0, gt=0.0, description="Marker size when no size column is bound"
+    )
+    opacity: float = Field(default=0.8, ge=0.05, le=1.0)
+    marker_outline: bool = Field(
+        default=True, description="Draw a thin outline so overlapping points stay separable"
+    )
+    top_n_labels: int = Field(
+        default=0, ge=0, description="Label this many points, the largest by size or by |y|"
+    )
+    color_scale: str = Field(
+        default="Viridis", description="Colourscale used when the colour column is numeric"
+    )
+    legend_pos: Literal["right", "bottom", "none"] = Field(default="right")
+    selection_enabled: bool = Field(default=False)
+    selection_column: str | None = Field(default=None)
+
+
 class ProfileConfig(_BaseVizConfig):
     """One curve per series over an ordered numeric axis.
 
@@ -1322,7 +1374,8 @@ class SashimiConfig(_BaseVizConfig):
 
 
 VizConfig = Annotated[
-    VolcanoConfig
+    ScatterXyConfig
+    | VolcanoConfig
     | EmbeddingConfig
     | ManhattanConfig
     | StackedTaxonomyConfig
