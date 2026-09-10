@@ -201,12 +201,39 @@ def api_update_project(project_config: dict, CLI_config: CLIConfig):
     return response
 
 
+def _project_write_outcome(response: httpx.Response) -> tuple[bool, str | None]:
+    """Normalise a /projects/create|update response into ``(succeeded, detail)``.
+
+    ``/projects/create`` answers **HTTP 200 with a failure body** for the cases
+    that matter to an automated trigger - ``409`` when the name is taken and
+    ``403`` in public/demo mode - so the transport status alone silently reports
+    a project that was never written. Read the body when there is one.
+    """
+    if response.status_code != 200:
+        return False, response.text
+    try:
+        body = response.json()
+    except ValueError:
+        return True, None
+    if isinstance(body, dict) and body.get("success") is False:
+        return False, body.get("message") or response.text
+    return True, None
+
+
 @validate_call
 def api_sync_project_config_to_server(
     CLI_config: CLIConfig, ProjectConfig: dict, update: bool = False
-):
+) -> dict:
     """
     Sync the pipeline configuration to the server.
+
+    Returns a verdict dict ``{"action": "created" | "updated" | "exists"}``.
+    ``"exists"`` means the project is already on the server and ``update`` was not
+    requested: that is a *decision for the caller*, not an error, which is why it
+    is returned rather than raised. It used to ``raise typer.Exit(code=0)``, and
+    since ``typer.Exit`` subclasses ``RuntimeError`` the caller's ``except
+    Exception`` swallowed it and reported an empty "sync failed" with exit code 1 -
+    exactly the path a second automated trigger takes.
     """
     rich_print_checked_statement("Syncing pipeline configuration to server...", "info")
 
@@ -242,16 +269,10 @@ def api_sync_project_config_to_server(
         rich_print_checked_statement("Project configuration found on server", "info")
         logger.info(f"Project configuration found on server: {response.json()}")
 
-        # If update flag is False, exit
+        # Already on the server and no update requested: hand the decision back.
         if not update:
-            logger.error(
-                "Project configuration already exists on server, use --update flag to update."
-            )
-            rich_print_checked_statement(
-                "Project configuration already exists on server, use --update flag to update.",
-                "error",
-            )
-            raise typer.Exit(code=0)
+            logger.info("Project already exists on server and no update was requested.")
+            return {"action": "exists"}
 
         # If update flag is True, update the project on the server
         rich_print_checked_statement(
@@ -259,15 +280,14 @@ def api_sync_project_config_to_server(
         )
         logger.debug(f"Updating project configuration on server: {project_config}")
         response = api_update_project(project_config, CLI_config)
-        if response.status_code == 200:
-            rich_print_checked_statement("Project updated on server", "success")
-            logger.info(f"Project updated on server: {response.json()}")
-        else:
-            rich_print_checked_statement(
-                f"Failed to update project on server: {response.text}", "error"
-            )
-            logger.error(f"Failed to update project on server: {response.text}")
+        succeeded, detail = _project_write_outcome(response)
+        if not succeeded:
+            rich_print_checked_statement(f"Failed to update project on server: {detail}", "error")
+            logger.error(f"Failed to update project on server: {detail}")
             raise typer.Exit(code=1)
+        rich_print_checked_statement("Project updated on server", "success")
+        logger.info("Project updated on server")
+        return {"action": "updated"}
 
     elif response.status_code == 404:
         logger.info("Project configuration not found on server.")
@@ -276,15 +296,21 @@ def api_sync_project_config_to_server(
         )
         # Create the project on the server
         response = api_create_project(project_config, CLI_config)
-        if response.status_code == 200:
-            logger.info(f"Project created on server: {response.json()}")
-            rich_print_checked_statement("Project created on server", "success")
-        else:
-            logger.error(f"Failed to create project on server: {response.text}")
-            rich_print_checked_statement(
-                f"Failed to create project on server: {response.text}", "error"
-            )
+        succeeded, detail = _project_write_outcome(response)
+        if not succeeded:
+            logger.error(f"Failed to create project on server: {detail}")
+            rich_print_checked_statement(f"Failed to create project on server: {detail}", "error")
             raise typer.Exit(code=1)
+        logger.info("Project created on server")
+        rich_print_checked_statement("Project created on server", "success")
+        return {"action": "created"}
+
+    else:
+        rich_print_checked_statement(
+            f"Could not look up project on server (HTTP {response.status_code}): {response.text}",
+            "error",
+        )
+        raise typer.Exit(code=1)
 
 
 @validate_call

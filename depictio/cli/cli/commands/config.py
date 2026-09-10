@@ -142,6 +142,15 @@ def sync(
         return
     rich_print_checked_statement("Pipeline configuration validated", "success")
     project_config = convert_model_to_dict(validation_response["project_config"])
-    api_sync_project_config_to_server(
+    sync_verdict = api_sync_project_config_to_server(
         CLI_config=CLI_config, ProjectConfig=project_config, update=update
     )
+    # The sync reports "exists" instead of raising, so this caller has to speak up:
+    # otherwise refusing to touch an existing project looks exactly like success.
+    if sync_verdict.get("action") == "exists":
+        rich_print_checked_statement(
+            f"Project '{project_config.get('name')}' already exists on this server. "
+            "Re-run with --update to refresh its configuration.",
+            "error",
+        )
+        raise typer.Exit(code=2)
