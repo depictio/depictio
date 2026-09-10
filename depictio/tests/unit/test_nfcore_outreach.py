@@ -227,7 +227,7 @@ def test_outreach_writes_a_bundle_per_pipeline(
     epic = (out / "EPIC.md").read_text()
     assert "nf-core/demoseq" in epic
     # No dashboard URL was supplied, so the round still owes this pipeline a link.
-    assert "⚠ needs link" in epic
+    assert "**needs link**" in epic
     assert json.loads((out / "facts.json").read_text())[0]["pipeline"] == "demoseq"
 
 
