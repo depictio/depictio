@@ -452,3 +452,6 @@ work/
 # never committed — see benchmark/README.md). The glob covers the per-run
 # directories a `--output` flag creates alongside the default one.
 benchmark/output*/
+
+# Generated outreach bundles (scripts/nfcore_outreach.py) — regenerate, never commit.
+dev/outreach/
