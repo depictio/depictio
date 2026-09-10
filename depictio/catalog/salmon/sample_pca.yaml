@@ -9,7 +9,7 @@ find: { path_glob: "**/salmon.merged.gene_tpm.tsv" }
 recipe: salmon/sample_pca.py
 fixture: sample_pca.tsv
 renders_as:
-  - { id: pca, component: advanced_viz, kind: embedding, roles: {sample_id: sample_id, dim_1: dim_1, dim_2: dim_2} }
+  - { id: pca, component: advanced_viz, kind: embedding, roles: {sample_id: sample_id, dim_1: dim_1, dim_2: dim_2, color: group} }
   - { component: card, column: sample_id, aggregation: nunique, secondary_layout: donut, breakdown_col: group }
   - { component: card, column: median_tpm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
   # A library that expresses far fewer genes than its peers is the classic

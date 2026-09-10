@@ -14,7 +14,7 @@ renders_as:
       id: profiler_embedding,
       component: advanced_viz,
       kind: embedding,
-      roles: { sample_id: sample_id, dim_1: dim_1, dim_2: dim_2 },
+      roles: { sample_id: sample_id, dim_1: dim_1, dim_2: dim_2, color: profiler },
     }
   - { component: table }
   # Metric cards and the row-level table behind them: the readings the

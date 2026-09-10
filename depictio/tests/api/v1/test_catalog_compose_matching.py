@@ -157,16 +157,20 @@ class TestDedupe:
         """A DC can match through both its path and its recipe."""
         modules: dict[str, dict[str, Any]] = {}
         seen: set[tuple[str, str, str]] = set()
-        _add_matches(modules, [self.MATCH], "dc1", "wf1", "ancombc_results", "table", seen)
-        _add_matches(modules, [self.MATCH], "dc1", "wf1", "ancombc_results", "table", seen)
+        _add_matches(
+            modules, [self.MATCH], "dc1", "wf1", "ampliseq", "ancombc_results", "table", seen
+        )
+        _add_matches(
+            modules, [self.MATCH], "dc1", "wf1", "ampliseq", "ancombc_results", "table", seen
+        )
 
         assert len(modules["qiime2"]["matches"]) == 1
 
     def test_the_same_output_on_two_collections_is_kept(self):
         modules: dict[str, dict[str, Any]] = {}
         seen: set[tuple[str, str, str]] = set()
-        _add_matches(modules, [self.MATCH], "dc1", "wf1", "tag1", "table", seen)
-        _add_matches(modules, [self.MATCH], "dc2", "wf1", "tag2", "table", seen)
+        _add_matches(modules, [self.MATCH], "dc1", "wf1", "ampliseq", "tag1", "table", seen)
+        _add_matches(modules, [self.MATCH], "dc2", "wf1", "ampliseq", "tag2", "table", seen)
 
         assert len(modules["qiime2"]["matches"]) == 2
 
@@ -269,8 +273,21 @@ class TestMatchPayload:
     def test_the_collection_type_reaches_the_client(self):
         modules: dict[str, dict[str, Any]] = {}
         match = {"tool_id": "t", "tool_name": "T", "output_id": "o", "renders_as": []}
-        _add_matches(modules, [match], "dc1", "wf1", "tag1", "multiqc", set())
+        _add_matches(modules, [match], "dc1", "wf1", "ampliseq", "tag1", "multiqc", set())
         assert modules["t"]["matches"][0]["dc_type"] == "multiqc"
+
+    def test_both_tags_reach_the_client(self):
+        """The picker's `use:` snippet is a whole tile, so it needs both tags.
+
+        `data_collection_tag` alone does not resolve — a tile names the workflow
+        too — and the picker has no other source for it.
+        """
+        modules: dict[str, dict[str, Any]] = {}
+        match = {"tool_id": "t", "tool_name": "T", "output_id": "o", "renders_as": []}
+        _add_matches(modules, [match], "dc1", "wf1", "ampliseq", "tag1", "table", set())
+        emitted = modules["t"]["matches"][0]
+        assert emitted["wf_tag"] == "ampliseq"
+        assert emitted["dc_tag"] == "tag1"
 
 
 class TestPreviewPayloadSerialisation:
