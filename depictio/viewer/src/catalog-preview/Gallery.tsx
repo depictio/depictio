@@ -21,16 +21,15 @@ import {
   Box,
   Button,
   Card,
+  Chip,
   Collapse,
   Divider,
   Group,
   MultiSelect,
   Paper,
   Pill,
-  Popover,
   ScrollArea,
   SegmentedControl,
-  SimpleGrid,
   Stack,
   Switch,
   Table,
@@ -49,6 +48,11 @@ type ViewMode = 'split' | 'cards' | 'table';
 type SortCol = 'tool' | 'output' | 'fixture';
 type SortDir = 'asc' | 'desc';
 const ACCENT = CATALOG_ACCENT;
+
+/** Said once under the facets, because the three of them do not count the same
+ *  thing: a component type and a visualisation kind belong to a render, a tool
+ *  owns outputs. */
+const UNIT_HINT = 'Type and kind counts are renders; tool counts are outputs.';
 
 /** Everything a free-text search should match for one output: its id/description,
  *  mode, recipe, find rule, fixture columns, and every render's variant + bindings
@@ -289,12 +293,22 @@ const ToolSection: React.FC<{
     </Group>
     <Collapse in={opened}>
       <Divider />
-      <Box p="md">
-        <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="md">
-          {entries.map((e) => (
-            <OutputCard key={e.output.id} tool={tool} entry={e} onOpen={onOpen} />
-          ))}
-        </SimpleGrid>
+      {/* Sized by the width actually available, not by a viewport breakpoint.
+          Mantine's responsive `cols` resolve against the document viewport, and
+          in the docs this document IS the iframe — around 700px wide, under the
+          `sm` breakpoint — so every card fell back to `base: 1` and drew full
+          width however much room the page had. */}
+      <Box
+        p="md"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+          gap: 'var(--mantine-spacing-md)',
+        }}
+      >
+        {entries.map((e) => (
+          <OutputCard key={e.output.id} tool={tool} entry={e} onOpen={onOpen} />
+        ))}
       </Box>
     </Collapse>
   </Card>
@@ -581,31 +595,57 @@ const Gallery: React.FC<{
   const [kindFilter, setKindFilter] = useState<string[]>([]);
   const [toolFilter, setToolFilter] = useState<string[]>([]);
   const [fixtureOnly, setFixtureOnly] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('split');
   // Track collapsed sections (default: all open — a fresh tool shows expanded).
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
-  // Facet options carry counts (a histogram of the catalog — "Figure (1)",
-  // "Advanced viz (12)") so the filters convey the catalog's shape at a glance.
+  // A histogram of the catalog, so the facets convey its shape. Type and kind
+  // count RENDERS — they are properties of a render, and one output ships four
+  // cards — so the type counts sum to the catalogue's render total and the kind
+  // counts to its advanced-viz renders. Tool counts outputs, which is what a
+  // tool owns and what the rail's section badges already show. Each facet says
+  // which of the two it is; leaving that unsaid is what made the numbers read
+  // as arbitrary.
   const { typeOptions, kindOptions, toolOptions } = useMemo(() => {
     const typeCt = new Map<string, number>();
     const kindCt = new Map<string, number>();
     const bump = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) || 0) + 1);
     tools.forEach((t) =>
-      t.outputs.forEach((o) => {
-        const { types, kinds } = renderTags(o);
-        types.forEach((x) => bump(typeCt, x));
-        kinds.forEach((x) => bump(kindCt, x));
-      }),
+      t.outputs.forEach((o) =>
+        o.renders.forEach((r) => {
+          const type = r.component_type as string;
+          if (!type) return;
+          bump(typeCt, type);
+          const variant = r._variant as string;
+          if (type === 'advanced_viz' && variant) bump(kindCt, variant);
+        }),
+      ),
     );
     return {
-      typeOptions: [...typeCt].map(([v, n]) => ({ value: v, label: `${metaFor(v).name} (${n})` })),
+      typeOptions: [...typeCt].map(([v, n]) => ({ value: v, label: metaFor(v).name, count: n })),
       kindOptions: [...kindCt].map(([v, n]) => ({ value: v, label: `${v} (${n})` })),
       toolOptions: tools.map((t) => ({ value: t.id, label: `${t.name} (${t.outputs.length})` })),
     };
   }, [tools]);
 
-  const totalOutputs = useMemo(() => tools.reduce((n, t) => n + t.outputs.length, 0), [tools]);
+  // Outputs and renders both, everywhere the catalogue states its size. An
+  // output is a table of numbers until something draws it, so "137 outputs"
+  // undersells a catalogue that ships 547 ready visualisations — and it is the
+  // visualisations a reader came to browse.
+  const { totalOutputs, totalRenders, noFixtureCount } = useMemo(() => {
+    let outputs = 0;
+    let renders = 0;
+    let noFixture = 0;
+    for (const t of tools) {
+      for (const o of t.outputs) {
+        outputs += 1;
+        renders += o.renders.length;
+        if (!o.output.fixture) noFixture += 1;
+      }
+    }
+    return { totalOutputs: outputs, totalRenders: renders, noFixtureCount: noFixture };
+  }, [tools]);
 
   const groups = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -640,6 +680,28 @@ const Gallery: React.FC<{
   };
 
   const shown = groups.reduce((n, g) => n + g.entries.length, 0);
+  // The renders the facets actually select, not every render the surviving
+  // outputs happen to carry: tick "Advanced viz 100" and the line has to read
+  // 100, or the chip and the count contradict each other on the same screen.
+  // Type and kind both narrow, except when both are set — "cards and volcanoes"
+  // is a union, and reading it as an intersection would report zero.
+  const shownRenders = useMemo(() => {
+    const both = typeFilter.length > 0 && kindFilter.length > 0;
+    let n = 0;
+    for (const g of groups) {
+      for (const e of g.entries) {
+        for (const r of e.renders) {
+          const type = r.component_type as string;
+          const byType = typeFilter.length === 0 || typeFilter.includes(type);
+          const byKind =
+            kindFilter.length === 0 ||
+            (type === 'advanced_viz' && kindFilter.includes(r._variant as string));
+          if (both ? byType || byKind : byType && byKind) n += 1;
+        }
+      }
+    }
+    return n;
+  }, [groups, typeFilter, kindFilter]);
   const shownToolIds = groups.map((g) => g.tool.id);
   const allCollapsed = shownToolIds.length > 0 && shownToolIds.every((id) => collapsed.has(id));
 
@@ -665,43 +727,118 @@ const Gallery: React.FC<{
   const activeFilterCount =
     typeFilter.length + kindFilter.length + toolFilter.length + (fixtureOnly ? 1 : 0);
 
-  /** Type / Kind / Tool / fixture, as the stacked block a 300px rail can hold.
-   *  The page views keep these laid out in a row instead. */
-  const facetFields = (
-    <Stack gap="sm">
-      <MultiSelect
-        label="Type"
-        placeholder="any"
-        data={typeOptions}
-        value={typeFilter}
-        onChange={setTypeFilter}
-        clearable
-      />
-      <MultiSelect
-        label="Kind"
-        placeholder="any"
-        data={kindOptions}
-        value={kindFilter}
-        onChange={setKindFilter}
-        searchable
-        clearable
-      />
-      <MultiSelect
-        label="Tool"
-        placeholder="any"
-        data={toolOptions}
-        value={toolFilter}
-        onChange={setToolFilter}
-        searchable
-        clearable
-      />
-      <Switch
-        label="Has fixture"
-        checked={fixtureOnly}
-        onChange={(e) => setFixtureOnly(e.currentTarget.checked)}
-      />
-    </Stack>
-  );
+  /** How much of the catalogue is on screen, in one wording used everywhere it
+   *  is stated: the rail, the page header, and the top bar's totals. Outputs and
+   *  renders always travel together and always in that order, so the two numbers
+   *  can be compared between places instead of re-read. */
+  const countLine = hasFilters
+    ? `${shown} / ${totalOutputs} outputs · ${shownRenders} / ${totalRenders} renders`
+    : `${totalOutputs} outputs · ${totalRenders} renders`;
+
+  /** The one filter surface: stacked inside the rail's collapse, and a single
+   *  wrapping toolbar row on a page.
+   *
+   * It used to exist twice and the copies had drifted (Kind and Tool searchable
+   * in one, not the other), and both hid every count one click inside a
+   * dropdown, so a panel written to "convey the catalog's shape at a glance"
+   * conveyed nothing until opened. Component type is a chip row now: six values,
+   * counts on their faces, one click to apply. Kind and Tool stay dropdowns
+   * because 25 and 37 values are a list, not a shape.
+   *
+   * The page copy takes `search` so the text field sits in the same row as the
+   * dropdowns instead of above them: as a labelled full-width field over two
+   * half-page selects it was a form the height of the first tool section, and
+   * the catalogue it filters started below the fold.
+   *
+   * `UNIT_HINT` states the units once for all three facets. A type or a kind is
+   * a property of a render, not of an output — one output ships four cards — so
+   * those count renders and add up to the catalogue's render total; a tool owns
+   * outputs, which is what the section badges show. Leaving that unsaid was the
+   * confusing part: six numbers that summed to neither total. */
+  const facetPanel = (layout: 'stack' | 'row', search?: React.ReactNode) => {
+    const wide = layout === 'row';
+    const selects = (
+      <>
+        <MultiSelect
+          label="Visualisation kind"
+          placeholder={`any of ${kindOptions.length}`}
+          data={kindOptions}
+          value={kindFilter}
+          onChange={setKindFilter}
+          size="xs"
+          w={wide ? 210 : undefined}
+          searchable
+          clearable
+        />
+        <MultiSelect
+          label="Tool"
+          placeholder={`any of ${toolOptions.length}`}
+          data={toolOptions}
+          value={toolFilter}
+          onChange={setToolFilter}
+          size="xs"
+          w={wide ? 210 : undefined}
+          searchable
+          clearable
+        />
+      </>
+    );
+    const types = (
+      <Box>
+        <Text size="xs" fw={500} mb={4}>
+          Component type
+        </Text>
+        <Chip.Group multiple value={typeFilter} onChange={setTypeFilter}>
+          <Group gap={6}>
+            {typeOptions.map((o) => (
+              <Chip key={o.value} value={o.value} size="xs" variant="outline" color={ACCENT}>
+                {o.label} {o.count}
+              </Chip>
+            ))}
+          </Group>
+        </Chip.Group>
+      </Box>
+    );
+    // Only offered when it can remove something. Every bundled output has a
+    // fixture today, so an always-inert switch is one more control to read
+    // past; a new output that ships without one brings it back.
+    const fixture =
+      noFixtureCount > 0 ? (
+        <Switch
+          size="xs"
+          label="Has a fixture"
+          description={`${noFixtureCount} without`}
+          checked={fixtureOnly}
+          onChange={(e) => setFixtureOnly(e.currentTarget.checked)}
+        />
+      ) : null;
+    const hint = (
+      <Text size="xs" c="dimmed">
+        {UNIT_HINT}
+      </Text>
+    );
+    if (wide) {
+      return (
+        <Stack gap={8}>
+          <Group gap="md" align="flex-end" wrap="wrap">
+            {search}
+            {selects}
+            {types}
+            {fixture}
+          </Group>
+          {hint}
+        </Stack>
+      );
+    }
+    return (
+      <Stack gap="sm">
+        {types}
+        {selects}
+        {fixture}
+        {hint}
+      </Stack>
+    );
+  };
 
   const railFilters = (
     <Stack gap={6}>
@@ -713,41 +850,35 @@ const Gallery: React.FC<{
         size="xs"
       />
       <Group justify="space-between" wrap="nowrap" gap={6}>
-        <Popover position="bottom-start" withArrow shadow="md" width={280}>
-          <Popover.Target>
-            <Button
-              size="compact-xs"
-              variant={activeFilterCount ? 'light' : 'subtle'}
-              color={activeFilterCount ? ACCENT : 'gray'}
-              leftSection={<Icon icon="mdi:filter-variant" width={14} />}
-              rightSection={
-                activeFilterCount ? (
-                  <Badge size="xs" circle variant="filled" color={ACCENT}>
-                    {activeFilterCount}
-                  </Badge>
-                ) : null
-              }
-            >
-              Filters
-            </Button>
-          </Popover.Target>
-          <Popover.Dropdown p="sm">{facetFields}</Popover.Dropdown>
-        </Popover>
+        {/* Opens in place rather than in a popover. The rail is 300px inside a
+            fixed-height iframe, and a dropdown wide enough to hold the facets
+            covered the list it filters and ran off the bottom of the document. */}
+        <Button
+          size="compact-xs"
+          variant={activeFilterCount ? 'light' : 'subtle'}
+          color={activeFilterCount ? ACCENT : 'gray'}
+          leftSection={<Icon icon="mdi:filter-variant" width={14} />}
+          rightSection={
+            <Icon icon={filtersOpen ? 'mdi:chevron-up' : 'mdi:chevron-down'} width={14} />
+          }
+          onClick={() => setFiltersOpen((v) => !v)}
+        >
+          {activeFilterCount ? `Filters (${activeFilterCount})` : 'Filters'}
+        </Button>
         {hasFilters ? (
           <Button size="compact-xs" variant="subtle" color="gray" onClick={clearAll}>
             Clear
           </Button>
-        ) : (
-          <Text size="xs" c="dimmed">
-            {totalOutputs} outputs
-          </Text>
-        )}
+        ) : null}
       </Group>
-      {hasFilters ? (
-        <Text size="xs" c="dimmed">
-          Showing {shown} of {totalOutputs}
-        </Text>
-      ) : null}
+      <Text size="xs" c="dimmed">
+        {countLine}
+      </Text>
+      <Collapse in={filtersOpen}>
+        <Box pt={6} pb={4}>
+          {facetPanel('stack')}
+        </Box>
+      </Collapse>
     </Stack>
   );
 
@@ -818,7 +949,7 @@ const Gallery: React.FC<{
           Tools Catalog
         </Text>
         <Text size="xs" c="dimmed" lineClamp={1}>
-          · {tools.length} tools · {totalOutputs} outputs
+          · {tools.length} tools · {totalOutputs} outputs · {totalRenders} renders
         </Text>
       </Group>
       <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
@@ -925,56 +1056,24 @@ const Gallery: React.FC<{
     <Box>
       {topBar}
       <Box p="lg" style={{ maxWidth: 1280, margin: '0 auto' }}>
-        <Paper withBorder radius="md" p="md" bg="var(--mantine-color-default-hover)">
-          <Group gap="md" align="flex-end" wrap="wrap">
+        <Paper withBorder radius="md" p="sm" bg="var(--mantine-color-default-hover)">
+          {facetPanel(
+            'row',
             <TextInput
               label="Search"
-              placeholder="tool, output or kind (e.g. volcano)…"
+              placeholder="tool, output or kind…"
               leftSection={<Icon icon="mdi:magnify" width={16} />}
               value={query}
               onChange={(e) => setQuery(e.currentTarget.value)}
-              style={{ flex: 1, minWidth: 220 }}
-            />
-            <MultiSelect
-              label="Type"
-              placeholder="any"
-              data={typeOptions}
-              value={typeFilter}
-              onChange={setTypeFilter}
-              clearable
-              style={{ minWidth: 160 }}
-            />
-            <MultiSelect
-              label="Kind"
-              placeholder="any"
-              data={kindOptions}
-              value={kindFilter}
-              onChange={setKindFilter}
-              searchable
-              clearable
-              style={{ minWidth: 160 }}
-            />
-            <MultiSelect
-              label="Tool"
-              placeholder="any"
-              data={toolOptions}
-              value={toolFilter}
-              onChange={setToolFilter}
-              clearable
-              style={{ minWidth: 160 }}
-            />
-            <Switch
-              label="Has fixture"
-              checked={fixtureOnly}
-              onChange={(e) => setFixtureOnly(e.currentTarget.checked)}
-              mb={6}
-            />
-          </Group>
+              size="xs"
+              w={240}
+            />,
+          )}
         </Paper>
 
-        <Group justify="space-between" align="center" mt="md" wrap="wrap">
+        <Group justify="space-between" align="center" mt="sm" wrap="wrap">
           <Text size="xs" c="dimmed">
-            {shown < totalOutputs ? `Showing ${shown} of ${totalOutputs}` : `${totalOutputs} outputs`}
+            {countLine}
           </Text>
           {viewMode === 'cards' ? (
             <Button
