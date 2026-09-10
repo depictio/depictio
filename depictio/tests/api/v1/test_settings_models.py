@@ -575,6 +575,7 @@ class TestRemoteConfig:
                 "DEPICTIO_REMOTE_ALLOW_HTTP": None,
                 "DEPICTIO_REMOTE_URL_ALLOWLIST": None,
                 "DEPICTIO_REMOTE_URL_DENYLIST": None,
+                "DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS": None,
                 "DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES": None,
                 "DEPICTIO_REMOTE_TIMEOUT_S": None,
                 "DEPICTIO_REMOTE_MAX_REDIRECTS": None,
@@ -584,6 +585,8 @@ class TestRemoteConfig:
         assert remote.allow_http is False
         assert remote.url_allowlist == ""
         assert remote.url_denylist == ""
+        # Unsigned public-bucket reads are opt-in.
+        assert remote.public_s3_buckets == ""
         assert remote.max_download_bytes == 500 * 1024 * 1024
         assert remote.timeout_s == 30.0
         assert remote.max_redirects == 3
@@ -594,6 +597,7 @@ class TestRemoteConfig:
                 "DEPICTIO_REMOTE_ALLOW_HTTP": "true",
                 "DEPICTIO_REMOTE_URL_ALLOWLIST": "data.example, mirror.example",
                 "DEPICTIO_REMOTE_URL_DENYLIST": "evil.example",
+                "DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS": "open-bucket,megatests/ampliseq",
                 "DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES": "1048576",
                 "DEPICTIO_REMOTE_TIMEOUT_S": "12.5",
                 "DEPICTIO_REMOTE_MAX_REDIRECTS": "1",
@@ -603,6 +607,7 @@ class TestRemoteConfig:
         assert remote.allow_http is True
         assert remote.url_allowlist == "data.example, mirror.example"
         assert remote.url_denylist == "evil.example"
+        assert remote.public_s3_buckets == "open-bucket,megatests/ampliseq"
         assert remote.max_download_bytes == 1048576
         assert remote.timeout_s == 12.5
         assert remote.max_redirects == 1

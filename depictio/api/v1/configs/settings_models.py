@@ -813,6 +813,17 @@ class RemoteConfig(BaseSettings):
             "exceeded."
         ),
     )
+    public_s3_buckets: str = Field(
+        default="",
+        description=(
+            "Comma-separated S3 locations readable without credentials, each either "
+            "'bucket' or 'bucket/prefix'. Empty by default, so unsigned access is "
+            "opt-in. A bucket listed here is read with the signature disabled; every "
+            "other s3:// URL keeps using the instance or project credentials. The "
+            "list is consulted before any request goes out, so naming a bucket that "
+            "is not on it never turns into an existence or region oracle."
+        ),
+    )
     timeout_s: float = Field(
         default=30.0,
         gt=0,

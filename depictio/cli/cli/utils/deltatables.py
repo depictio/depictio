@@ -12,6 +12,7 @@ from depictio.api.v1.remote_fetch import (
     bounded_download,
     direct_download,
     is_server_context,
+    public_s3_storage_options,
 )
 from depictio.cli.cli.utils.api_calls import (
     api_get_files_by_dc_id,
@@ -215,13 +216,15 @@ def _read_remote_file_lazy(
 ) -> pl.LazyFrame:
     """Read a remote file (scan mode "url") into a LazyFrame.
 
-    s3:// — lazy scan straight through the object store using the instance's
-    configured credentials (phase 1: per-project storage config comes later).
+    s3:// — lazy scan straight through the object store. A location on the
+    administrator's public bucket allowlist is read with the signature disabled,
+    since credentials for someone else's open bucket would only be rejected;
+    everything else uses the project's or the instance's configured credentials.
     http(s):// — bounded download to a temp file, eager read, temp deleted;
     keeps lifetime simple at the cost of holding one file in memory.
     """
     if url.startswith("s3://"):
-        storage_options = remote_storage_options or {}
+        storage_options = public_s3_storage_options(url) or remote_storage_options or {}
         if file_format == "parquet":
             return pl.scan_parquet(url, storage_options=storage_options, **polars_kwargs)
         if file_format in ["csv", "tsv", "txt"]:

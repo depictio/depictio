@@ -1601,7 +1601,7 @@ const CreateDataCollectionModal: React.FC<{
                 <TextInput
                   label="File URL"
                   placeholder="https://example.org/data.csv or s3://bucket/key.csv"
-                  description="Fetched by the server, so the file never travels through your browser. Private buckets use this project's storage credentials."
+                  description="Fetched by the server, so the file never travels through your browser. Private buckets use this project's storage credentials; a bucket the administrator marked public is read without any."
                   value={remoteUrl}
                   onChange={(e) => setRemoteUrl(e.currentTarget.value)}
                   disabled={submitting}

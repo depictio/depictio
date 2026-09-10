@@ -430,16 +430,110 @@ def _ingest_manifest_into_project(
     return report
 
 
-def _manifest_dc_index(project_dict: dict) -> dict[str, tuple[int, int, dict]]:
-    """{dc_tag: (workflow_index, dc_index, scan_parameters)} for manifest-mode DCs."""
-    index: dict[str, tuple[int, int, dict]] = {}
+# Scan modes whose source this process reads over the network, so it can always
+# read it again. The local modes depend on whether the data root happens to be
+# visible from this container, which is checked per data collection.
+_REMOTE_SCAN_MODES = frozenset({"manifest", "url", "s3_prefix"})
+
+
+def _server_can_reread(workflow: dict, mode: str, scan_params: dict) -> bool:
+    """Whether this process could scan the data collection's source again.
+
+    A remote source always qualifies. A local one only if the path is visible
+    from *this* container: a CLI-created project normally points at the user's
+    own filesystem, which the API has never seen, and offering a refresh button
+    for it would only produce a scan failure with an unhelpful message.
+    """
+    if mode in _REMOTE_SCAN_MODES:
+        return True
+    if mode == "single":
+        return os.path.isfile(str(scan_params.get("filename") or ""))
+    if mode == "recursive":
+        locations = (workflow.get("data_location") or {}).get("locations") or []
+        return any(os.path.isdir(str(location)) for location in locations)
+    return False
+
+
+def _refreshable_dc_index(project_dict: dict) -> dict[str, tuple[int, int, dict, str]]:
+    """Every data collection this process can scan again, as
+    ``{dc_tag: (workflow_index, dc_index, scan_parameters, mode)}``.
+
+    Re-ingestion is scan-mode agnostic: ``_run_dc_ingest`` parses the workflow
+    and calls scan then process, exactly as the CLI would. Manifest mode was
+    only ever special in the *selection*, so widening it here turns the refresh
+    button into a browser-triggered re-run for a project the CLI created, which
+    is the whole point of having one.
+    """
+    index: dict[str, tuple[int, int, dict, str]] = {}
     for wf_i, wf in enumerate(project_dict.get("workflows", []) or []):
         for dc_i, dc in enumerate(wf.get("data_collections", []) or []):
             tag = dc.get("data_collection_tag")
+            if not tag or tag in index:
+                continue
             scan = (dc.get("config") or {}).get("scan") or {}
-            if tag and tag not in index and str(scan.get("mode", "")).lower() == "manifest":
-                index[tag] = (wf_i, dc_i, scan.get("scan_parameters") or {})
+            mode = str(scan.get("mode", "")).lower()
+            scan_params = scan.get("scan_parameters") or {}
+            if _server_can_reread(wf, mode, scan_params):
+                index[tag] = (wf_i, dc_i, scan_params, mode)
     return index
+
+
+def _manifest_preflight_entries(
+    tag: str, scan_params: dict, manifests: dict[tuple, DataManifest | str]
+) -> int | str:
+    """Entries a manifest DC would re-ingest, or the message saying why it must
+    be skipped (same "value or error text" shape as the ``manifests`` cache).
+
+    Manifest mode is the one mode whose source can be checked before running:
+    the manifest is a document this process can fetch and count. That check is
+    worth keeping because a manifest that fetches fine but has lost the DC's
+    type would otherwise empty the collection silently.
+
+    ``manifests`` caches by (url, field map) across DCs, so several collections
+    backed by the same manifest fetch it once, and one dead manifest fails only
+    the collections that use it.
+    """
+    manifest_url = str(scan_params.get("manifest_url") or "")
+    field_map = {
+        "id": scan_params.get("id_field") or "id",
+        "type": scan_params.get("type_field") or "type",
+        "url": scan_params.get("url_field") or "url",
+    }
+    run_field = scan_params.get("run_field")
+    if run_field:
+        field_map["run"] = run_field
+
+    key = (manifest_url, tuple(sorted(field_map.items())))
+    if key not in manifests:
+        try:
+            # The stored URL may predate the gateway or come from a CLI
+            # ingest of a local manifest path — re-validate before fetching.
+            validate_remote_url(manifest_url)
+            if manifest_url.startswith("s3://"):
+                raise RemoteURLRejected(
+                    "s3:// manifest locations are not supported yet — "
+                    "serve the manifest over https."
+                )
+            manifests[key] = _fetch_and_parse_manifest(manifest_url, field_map)
+        except ManifestEntriesRejected as exc:
+            # Fetched fine, but an entry points somewhere the worker must
+            # not read: a per-DC failure like any other, before dispatch.
+            manifests[key] = str(exc)
+        except (RemoteURLRejected, ValueError) as exc:
+            manifests[key] = f"Could not fetch manifest: {exc}"
+
+    manifest = manifests[key]
+    if isinstance(manifest, str):
+        return manifest
+
+    manifest_type = str(scan_params.get("manifest_type") or tag)
+    entry_count = len(manifest.entries_for_type(manifest_type))
+    if entry_count == 0:
+        return (
+            f"Manifest has no entries of type '{manifest_type}': "
+            "refresh skipped to avoid emptying the data collection."
+        )
+    return entry_count
 
 
 def _refresh_manifest_in_project(
@@ -450,10 +544,10 @@ def _refresh_manifest_in_project(
     dry_run: bool = False,
     async_run: bool = False,
 ) -> ManifestRefreshReport:
-    """Re-fetch each manifest DC's stored manifest and re-ingest it in place.
+    """Re-run each refreshable DC's stored scan and re-ingest it in place.
 
     Refresh semantics are overwrite-with-report (RFC open question 2): the scan
-    prunes File records for entries dropped from the manifest, ``sync_files``
+    prunes File records for entries that vanished from the source, ``sync_files``
     forces metadata updates for kept entries, and the Delta table is rebuilt
     from the resulting file set. The scan configs are already persisted on the
     project, so — unlike first ingestion — nothing is written to the project
@@ -488,22 +582,26 @@ def _refresh_manifest_in_project(
             status_code=403, detail="You don't have edit permission on this project."
         )
 
-    manifest_index = _manifest_dc_index(project_dict)
-    if not manifest_index:
+    refreshable_index = _refreshable_dc_index(project_dict)
+    if not refreshable_index:
         raise HTTPException(
             status_code=422,
-            detail="Project has no manifest-backed data collections to refresh.",
+            detail=(
+                "Project has no data collections this server can re-read. Remote "
+                "sources can always be refreshed; a local one only if its path is "
+                "visible from the server."
+            ),
         )
     if data_collection_tag is not None:
-        if data_collection_tag not in manifest_index:
+        if data_collection_tag not in refreshable_index:
             raise HTTPException(
                 status_code=422,
                 detail=(
-                    f"'{data_collection_tag}' is not a manifest-backed data collection. "
-                    f"Manifest DCs in this project: {sorted(manifest_index)}."
+                    f"'{data_collection_tag}' is not a data collection this server can "
+                    f"re-read. Refreshable in this project: {sorted(refreshable_index)}."
                 ),
             )
-        manifest_index = {data_collection_tag: manifest_index[data_collection_tag]}
+        refreshable_index = {data_collection_tag: refreshable_index[data_collection_tag]}
 
     report = ManifestRefreshReport(project_id=str(project_oid), dry_run=dry_run)
     workflows = project_dict.get("workflows", []) or []
@@ -542,54 +640,20 @@ def _refresh_manifest_in_project(
         if async_run and not dry_run:
             preflight_failed.append((tag, dc_id, message))
 
-    for tag, (wf_i, dc_i, scan_params) in manifest_index.items():
+    for tag, (wf_i, dc_i, scan_params, mode) in refreshable_index.items():
         dc_dict = workflows[wf_i]["data_collections"][dc_i]
         dc_id = str(dc_dict.get("_id") or dc_dict.get("id") or "")
-        manifest_url = str(scan_params.get("manifest_url") or "")
 
-        field_map = {
-            "id": scan_params.get("id_field") or "id",
-            "type": scan_params.get("type_field") or "type",
-            "url": scan_params.get("url_field") or "url",
-        }
-        run_field = scan_params.get("run_field")
-        if run_field:
-            field_map["run"] = run_field
-
-        key = (manifest_url, tuple(sorted(field_map.items())))
-        if key not in manifests:
-            try:
-                # The stored URL may predate the gateway or come from a CLI
-                # ingest of a local manifest path — re-validate before fetching.
-                validate_remote_url(manifest_url)
-                if manifest_url.startswith("s3://"):
-                    raise RemoteURLRejected(
-                        "s3:// manifest locations are not supported yet — "
-                        "serve the manifest over https."
-                    )
-                manifests[key] = _fetch_and_parse_manifest(manifest_url, field_map)
-            except ManifestEntriesRejected as exc:
-                # Fetched fine, but an entry points somewhere the worker must
-                # not read: a per-DC failure like any other, before dispatch.
-                manifests[key] = str(exc)
-            except (RemoteURLRejected, ValueError) as exc:
-                manifests[key] = f"Could not fetch manifest: {exc}"
-
-        manifest = manifests[key]
-        if isinstance(manifest, str):
-            _fail_preflight(tag, dc_id, manifest)
-            continue
-
-        manifest_type = str(scan_params.get("manifest_type") or tag)
-        entry_count = len(manifest.entries_for_type(manifest_type))
-        if entry_count == 0:
-            _fail_preflight(
-                tag,
-                dc_id,
-                f"Manifest has no entries of type '{manifest_type}': "
-                "refresh skipped to avoid emptying the data collection.",
-            )
-            continue
+        # Only manifest mode has a pre-flight. Every other mode discovers its
+        # own files during the scan, so there is nothing to check up front and
+        # no entry count to report before running.
+        entry_count = 0
+        if mode == "manifest":
+            preflight = _manifest_preflight_entries(tag, scan_params, manifests)
+            if isinstance(preflight, str):
+                _fail_preflight(tag, dc_id, preflight)
+                continue
+            entry_count = preflight
 
         if dry_run:
             report.refreshed.append(
@@ -617,7 +681,7 @@ def _refresh_manifest_in_project(
         except HTTPException:
             raise
         except Exception as exc:  # helper crash — treat as a per-DC failure
-            logger.error(f"Manifest refresh crashed for DC '{tag}': {exc}")
+            logger.error(f"Refresh crashed for DC '{tag}': {exc}")
             ok, message = False, str(exc)
         if not ok:
             all_ok = False
@@ -789,9 +853,15 @@ def _get_refresh_run_report(run_id: str, current_user) -> ManifestRefreshReport:
         else None
     )
     if project_dict:
-        for tag, (wf_i, dc_i, _params) in _manifest_dc_index(project_dict).items():
-            dc = project_dict["workflows"][wf_i]["data_collections"][dc_i]
-            dc_ids_by_tag[tag] = str(dc.get("_id") or dc.get("id") or "")
+        # Every collection, not just the currently refreshable ones: this
+        # reports a run that already happened, and a source that has become
+        # unreadable since (an unmounted data root) must not lose its id in the
+        # report of the run that refreshed it.
+        for wf in project_dict.get("workflows") or []:
+            for dc in wf.get("data_collections") or []:
+                tag = dc.get("data_collection_tag")
+                if tag and tag not in dc_ids_by_tag:
+                    dc_ids_by_tag[tag] = str(dc.get("_id") or dc.get("id") or "")
 
     report = ManifestRefreshReport(project_id=str(doc.get("project_id") or ""), run_id=run_id)
     for step in doc.get("steps") or []:

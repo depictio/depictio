@@ -123,6 +123,7 @@ data:
   DEPICTIO_REMOTE_ALLOW_HTTP: {{ .Values.backend.env.DEPICTIO_REMOTE_ALLOW_HTTP | default "false" | quote }}
   DEPICTIO_REMOTE_URL_ALLOWLIST: {{ .Values.backend.env.DEPICTIO_REMOTE_URL_ALLOWLIST | default "" | quote }}
   DEPICTIO_REMOTE_URL_DENYLIST: {{ .Values.backend.env.DEPICTIO_REMOTE_URL_DENYLIST | default "" | quote }}
+  DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS: {{ .Values.backend.env.DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS | default "" | quote }}
   DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES: {{ .Values.backend.env.DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES | default "524288000" | quote }}
   DEPICTIO_REMOTE_TIMEOUT_S: {{ .Values.backend.env.DEPICTIO_REMOTE_TIMEOUT_S | default "30" | quote }}
   DEPICTIO_REMOTE_MAX_REDIRECTS: {{ .Values.backend.env.DEPICTIO_REMOTE_MAX_REDIRECTS | default "3" | quote }}
@@ -190,6 +191,7 @@ data:
   DEPICTIO_REMOTE_ALLOW_HTTP: {{ .Values.backend.env.DEPICTIO_REMOTE_ALLOW_HTTP | default "false" | quote }}
   DEPICTIO_REMOTE_URL_ALLOWLIST: {{ .Values.backend.env.DEPICTIO_REMOTE_URL_ALLOWLIST | default "" | quote }}
   DEPICTIO_REMOTE_URL_DENYLIST: {{ .Values.backend.env.DEPICTIO_REMOTE_URL_DENYLIST | default "" | quote }}
+  DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS: {{ .Values.backend.env.DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS | default "" | quote }}
   DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES: {{ .Values.backend.env.DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES | default "524288000" | quote }}
   DEPICTIO_REMOTE_TIMEOUT_S: {{ .Values.backend.env.DEPICTIO_REMOTE_TIMEOUT_S | default "30" | quote }}
   DEPICTIO_REMOTE_MAX_REDIRECTS: {{ .Values.backend.env.DEPICTIO_REMOTE_MAX_REDIRECTS | default "3" | quote }}
