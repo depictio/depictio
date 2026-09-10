@@ -1944,6 +1944,119 @@
     },
     {
       "category": "plot",
+      "description": "Numeric against numeric, with optional colour, marker size, point labels and a reference line.",
+      "heavy": false,
+      "icon": "tabler:chart-dots",
+      "label": "Scatter (X/Y)",
+      "required_roles": [
+        "x",
+        "y"
+      ],
+      "role_names": {
+        "color": [
+          "category",
+          "class",
+          "color",
+          "colour",
+          "condition",
+          "group"
+        ],
+        "label": [
+          "feature_id",
+          "id",
+          "label",
+          "name",
+          "sample",
+          "sample_id"
+        ],
+        "size": [
+          "count",
+          "magnitude",
+          "n",
+          "size",
+          "weight"
+        ],
+        "x": [
+          "value_x",
+          "x",
+          "x_value"
+        ],
+        "y": [
+          "value_y",
+          "y",
+          "y_value"
+        ]
+      },
+      "roles": {
+        "color": {
+          "description": "Optional column mapped to point colour.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "label": {
+          "description": "Optional text label for points.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "size": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "x": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "y": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "scatter_xy"
+    },
+    {
+      "category": "plot",
       "description": "One row per region, one column per offset: the heatmap half of a metagene plot, rows binned by mean rather than truncated.",
       "heavy": false,
       "icon": "tabler:grid-pattern",
