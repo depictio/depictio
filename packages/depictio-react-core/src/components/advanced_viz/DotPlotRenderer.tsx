@@ -20,6 +20,7 @@ import {
 import { adaptGlTrace, SVG_MAX_POINTS, useWebglSlot } from '../../webglBudget';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { COLOUR_SCALES, type ColourScale } from './colourScales';
+import { dotSizeKey, dotSizes, type DotSizeKeyEntry } from './dotSizes';
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
@@ -45,6 +46,55 @@ interface Props {
 }
 
 type AxisSort = 'name' | 'mean' | 'frac';
+
+/** Significant digits that separate the key's steps without printing noise.
+ *  The steps fall by quarters, so two digits keep 0.097 / 0.024 / 0.0060 apart
+ *  while a fixed decimal count would round the smallest of them to zero. */
+const formatKeyValue = (v: number): string =>
+  v === 0 ? '0' : Number(v.toPrecision(2)).toString();
+
+/** Row of reference circles explaining the marker-size channel.
+ *
+ *  Circles are drawn at the diameters `dotSizes` produced, so the key is the
+ *  scale rather than a restatement of it. Renders nothing when there is no
+ *  scale to explain (an empty or all-zero frame). */
+const DotSizeKey: React.FC<{ entries: DotSizeKeyEntry[]; label: string }> = ({
+  entries,
+  label,
+}) => {
+  const theme = useMantineTheme();
+  const { colorScheme } = useMantineColorScheme();
+  if (entries.length === 0) return null;
+  const widest = Math.max(...entries.map((e) => e.diameter));
+  const stroke = colorScheme === 'dark' ? theme.colors.dark[1] : theme.colors.gray[6];
+  return (
+    // Top padding keeps the row clear of the x-axis title, which Plotly draws
+    // hard against the bottom of its own box.
+    <Group gap="sm" wrap="nowrap" justify="center" style={{ padding: '10px 0 4px' }}>
+      <Text size="xs" c="dimmed">
+        {label}
+      </Text>
+      {/* Largest first, matching how the eye scans a bubble key. */}
+      {entries.map((e) => (
+        <Group key={e.value} gap={4} wrap="nowrap">
+          <svg width={widest} height={widest} aria-hidden focusable="false">
+            <circle
+              cx={widest / 2}
+              cy={widest / 2}
+              r={e.diameter / 2}
+              fill="none"
+              stroke={stroke}
+              strokeWidth={1}
+            />
+          </svg>
+          <Text size="xs" c="dimmed">
+            {formatKeyValue(e.value)}
+          </Text>
+        </Group>
+      ))}
+    </Group>
+  );
+};
 
 const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, groupRender }) => {
   const { colorScheme } = useMantineColorScheme();
@@ -245,10 +295,9 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
     const clusters = sortAxis(clustersInData, clusterSort, clusterUniverse, 'cluster');
     const genes = sortAxis(genesInData, geneSort, geneUniverse, 'gene');
 
-    const sizes = fracVals.map((f) => {
-      const clamped = Math.max(0, Math.min(1, Number(f) || 0));
-      return minSize + clamped * (maxSize - minSize);
-    });
+    // Area-mapped against the data's own maximum, not a linear map onto a unit
+    // domain — see dotSizes for why both of those matter here.
+    const sizes = dotSizes(fracVals, minSize, maxSize);
 
     // Annotation overlay: top-N (cluster, gene) cells by frac_expressing.
     const annotations: any[] = [];
@@ -277,6 +326,9 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
       pointsShown,
       pointsTotal: geneAll.length,
       capActive,
+      // Built from the same values the markers were, so the key states the
+      // scale actually on screen — including after the gene cap narrowed it.
+      sizeKey: dotSizeKey(fracVals, minSize, maxSize),
       data: [
         adaptGlTrace(
           {
@@ -540,13 +592,21 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
       }
     >
       {groupedFigure ? (
-        <Plot
-          data={applyDataTheme(groupedFigure.data, isDark, theme) as any}
-          layout={applyLayoutTheme(groupedFigure.layout as any, isDark, theme) as any}
-          useResizeHandler
-          style={{ width: '100%', height: '100%' }}
-          config={{ displaylogo: false, responsive: true } as any}
-        />
+        <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>
+          <Plot
+            data={applyDataTheme(groupedFigure.data, isDark, theme) as any}
+            layout={applyLayoutTheme(groupedFigure.layout as any, isDark, theme) as any}
+            useResizeHandler
+            style={{ width: '100%', flex: 1, minHeight: 0 }}
+            config={{ displaylogo: false, responsive: true } as any}
+          />
+          {/* Plotly has no size legend, and a legend-only trace cannot stand in
+              for one: it clamps legend markers to 16 px (legend/style.js), so
+              the top of a 3-26 px scale would collapse and the key would
+              understate the very dots it explains. Drawn here in SVG instead,
+              at the exact diameters the plot used. */}
+          <DotSizeKey entries={figure?.sizeKey ?? []} label={config.frac_expressing_col} />
+        </div>
       ) : null}
     </AdvancedVizFrame>
   );
