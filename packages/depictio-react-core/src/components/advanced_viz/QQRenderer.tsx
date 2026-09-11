@@ -19,6 +19,8 @@ import {
 } from '../../api';
 import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { splitFigureByGroups } from './groupSplit';
+import type { GroupRenderState } from '../../selectionGroups';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
 
@@ -33,9 +35,11 @@ interface Props {
   metadata: StoredMetadata & { viz_kind?: string; config?: QQConfig };
   filters: InteractiveFilter[];
   refreshTick?: number;
+  /** Dashboard-wide analysis grouping, applied to the finished figure. */
+  groupRender?: GroupRenderState;
 }
 
-const QQRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
+const QQRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, groupRender }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
   const isDark = colorScheme === 'dark';
@@ -190,6 +194,10 @@ const QQRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
           x: s.expected,
           y: s.observed,
           text: s.ids,
+          // Slot 0 is the feature, and only when the binding names one: with no
+          // `feature_id_col` there is no identity to carry and the trace stays
+          // as it was. The hover reads `text`, so this changes none of it.
+          ...(ids ? { customdata: s.ids.map((id) => [id]) } : {}),
           hovertemplate:
             (s.ids[0] ? `<b>%{text}</b><br>` : '') +
             `expected: %{x:.3f}<br>observed: %{y:.3f}<extra></extra>`,
@@ -208,6 +216,8 @@ const QQRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
         x: s.expected,
         y: s.observed,
         text: s.ids,
+        // Slot 0 is the feature; see the stratified branch above.
+        ...(ids ? { customdata: s.ids.map((id) => [id]) } : {}),
         hovertemplate:
           (s.ids[0] ? `<b>%{text}</b><br>` : '') +
           `expected: %{x:.3f}<br>observed: %{y:.3f}<extra></extra>`,
@@ -341,6 +351,40 @@ const QQRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
     };
   }, [rows, config, showCi, showIdentity, pointSize, topNLabels, colorScheme, theme, categoryUniverse]);
 
+  // Recolour by the dashboard's analysis groups. The identity here is the
+  // feature, not the sample: a group of samples matches nothing and the figure
+  // comes back untouched. A group of features does match — a lasso on the
+  // Manhattan of the same table, or ticked rows in its table, saves exactly
+  // these ids — and the answer it gives is worth having: whether the features
+  // someone flagged are the ones out in the tail.
+  //
+  // `facetable: false`. The x coordinate is a rank *within the plotted set*:
+  // the k-th of n points sits at -log10(k / (n+1)). Dealing those points into
+  // per-group panels would leave each panel's curve drawn against the whole
+  // cohort's quantiles while reading as that group's own QQ, and its λ would be
+  // the cohort's. Honest small multiples need the quantiles recomputed per
+  // group, which is what the dispatch's `SplitPanels` does — one renderer per
+  // group, over that group's rows. Colour is the answer this path can give.
+  //
+  // `contextTraces: 'drop'` for the same reason: the 95% band is the null
+  // envelope for n points across the whole set, not for any group's subset.
+  const groupedFigure = useMemo(
+    () =>
+      figure
+        ? splitFigureByGroups(
+            { data: figure.data, layout: figure.layout },
+            {
+              groupRender,
+              identitySlot: 0,
+              facetable: false,
+              contextTraces: 'drop',
+              showLegend: true,
+            },
+          )
+        : null,
+    [figure, groupRender],
+  );
+
   const controls = useMemo(
     () => (
       <Stack gap="xs">
@@ -417,10 +461,10 @@ const QQRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
     >
-      {figure ? (
+      {groupedFigure ? (
         <AdvancedVizPlot
-          data={applyDataTheme(figure.data, isDark, theme) as any}
-          layout={applyLayoutTheme(figure.layout as any, isDark, theme) as any}
+          data={applyDataTheme(groupedFigure.data, isDark, theme) as any}
+          layout={applyLayoutTheme(groupedFigure.layout as any, isDark, theme) as any}
           useResizeHandler
           style={{ width: '100%', height: '100%' }}
           config={{ displaylogo: false, responsive: true } as any}

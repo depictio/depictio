@@ -34,6 +34,8 @@ import {
   plotlyThemeFragment,
 } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
+import { splitFigureByGroups } from './groupSplit';
+import type { GroupRenderState } from '../../selectionGroups';
 
 type LegendPos = 'right' | 'bottom' | 'none';
 
@@ -70,6 +72,8 @@ interface Props {
   filters: InteractiveFilter[];
   refreshTick?: number;
   onFilterChange?: (filter: InteractiveFilter) => void;
+  /** Dashboard-wide analysis grouping, applied to the finished figure. */
+  groupRender?: GroupRenderState;
 }
 
 // Sent so the server applies this kind's reduction policy:
@@ -168,7 +172,7 @@ ProfilePlot.displayName = 'ProfilePlot';
  * rank-abundance curve are the same three columns with different axis labels,
  * so they share one renderer and differ only in their config.
  */
-const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilterChange }) => {
+const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilterChange, groupRender }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
   const palette = resolveCategoricalPalette(theme, PALETTE);
@@ -623,6 +627,26 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
     </Stack>
   );
 
+  // Recolour by the dashboard's analysis groups. Slot 0 of `customdata` is
+  // the series identity — the same value `extractScatterSelection` reads back
+  // out of a lasso, so a group built from these curves and the curves
+  // themselves cannot drift apart. `splitFigureByGroups` returns the figure
+  // untouched when no series matches, so a group of peak ids leaves a
+  // per-sample profile alone. Faceting is off: the ribbons are context
+  // traces without identity and would be repeated into every panel.
+  const groupedFigure = useMemo(
+    () =>
+      figure
+        ? splitFigureByGroups(figure, {
+            groupRender,
+            identitySlot: 0,
+            facetable: false,
+            showLegend: true,
+          })
+        : figure,
+    [figure, groupRender],
+  );
+
   return (
     <AdvancedVizFrame
       estimated={estimated}
@@ -635,9 +659,9 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
     >
-      {figure ? (
+      {groupedFigure ? (
         <ProfilePlot
-          figure={figure}
+          figure={groupedFigure}
           isDark={isDark}
           theme={theme}
           plotConfig={selectionEnabled ? PLOT_CONFIG_SELECT : PLOT_CONFIG_PLAIN}
