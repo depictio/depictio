@@ -1845,6 +1845,95 @@ def _build_filter_metadata(filters: list[dict]) -> list[dict]:
     return clean_filter_payload(filters)
 
 
+def _dc_column_names(dc_id: str) -> set[str] | None:
+    """The column names a data collection carries, or ``None`` when unknown.
+
+    Read off the deltatable's ``aggregation_columns_specs`` — the schema
+    recorded at ingest — because this runs before any load and only needs
+    names. ``None`` means "could not tell", and callers must not collapse that
+    into "carries nothing": an unreadable document would then look exactly like
+    a data collection that matches no group at all.
+    """
+    from depictio.api.v1.db import deltatables_collection
+
+    try:
+        dt = deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc_id))})
+    except Exception as exc:
+        logger.warning(f"group-resolve: deltatable lookup failed for {dc_id}: {exc}")
+        return None
+    aggregations = (dt or {}).get("aggregation") or []
+    raw = (aggregations[-1] or {}).get("aggregation_columns_specs") if aggregations else None
+    if isinstance(raw, list):
+        names = {e["name"] for e in raw if isinstance(e, dict) and e.get("name")}
+        return names or None
+    if isinstance(raw, dict):  # legacy shape
+        return set(raw) or None
+    return None
+
+
+def _resolve_group_defs(
+    group_defs: list[dict],
+    target_dc_id: str,
+    project_id: Any,
+    access_token: str | None,
+    component_type: str,
+    target_columns: set[str] | None = None,
+) -> tuple[list[dict], list[dict]]:
+    """Selection groups pointed at one data collection, plus why each one did or didn't reach it.
+
+    The group counterpart of ``_resolve_link_filters``: same link graph, same
+    ``source_column`` rule for naming the target's column, different unit of
+    work — a filter may be emitted once per declared route, a group annotates
+    exactly one column and so takes the shortest route only.
+
+    The project lookup is deferred into ``translate`` and happens at most once,
+    on the first group that actually needs translating. A dashboard whose
+    components all share the group's own data collection therefore pays nothing
+    for this: the column is present, and no link is ever consulted.
+    """
+    from depictio.api.v1.filter_links import resolve_values_via_links
+    from depictio.api.v1.services.figure.groups import resolve_group_defs_for_dc
+
+    if not group_defs:
+        return [], []
+    if target_columns is None:
+        target_columns = _dc_column_names(str(target_dc_id))
+
+    metadata_cache: dict[str, dict | None] = {}
+
+    def translate(origin_dc_id: str, origin_column: str, values: list[str]):
+        if "project" not in metadata_cache:
+            metadata_cache["project"] = _project_link_metadata(project_id)
+        return resolve_values_via_links(
+            project_metadata=metadata_cache["project"],
+            origin_dc_id=origin_dc_id,
+            origin_column=origin_column,
+            values=values,
+            target_dc_id=str(target_dc_id),
+            access_token=access_token,
+            component_type=component_type,
+        )
+
+    return resolve_group_defs_for_dc(
+        group_defs,
+        str(target_dc_id),
+        target_columns,
+        translate=translate if (project_id and access_token) else None,
+    )
+
+
+def _project_link_metadata(project_id: Any) -> dict | None:
+    """The project document in the envelope shape the link resolver expects."""
+    try:
+        project_doc = projects_collection.find_one({"_id": ObjectId(str(project_id))})
+    except Exception as exc:
+        logger.warning(f"group-resolve: project fetch failed for {project_id}: {exc}")
+        return None
+    if not project_doc:
+        return None
+    return {"project": convert_objectid_to_str(project_doc)}
+
+
 @dataclass(frozen=True)
 class _ComponentContext:
     """A resolved, authorised component plus what the Delta loader needs for it."""
@@ -1971,6 +2060,7 @@ def bulk_compute_cards(
                 ...
             },
             "aggregations": {"<component_index>": ["<aggregation>", ...], ...},
+            "group_status": {"<component_index>": [<group status>, ...], ...},
             "filter_applied": bool,
             "filter_count": int
         }
@@ -2066,6 +2156,8 @@ def bulk_compute_cards(
     # Multi-metrics card: per-card map of secondary aggregation results.
     secondary_values: dict[str, dict[str, Any]] = {}
     aggregations_per_card: dict[str, list[str]] = {}
+    # Per-card selection-group resolution report (only while comparing groups).
+    group_status: dict[str, list[dict]] = {}
 
     has_filters = len(base_filter_metadata) > 0
     logger.debug(
@@ -2117,6 +2209,25 @@ def bulk_compute_cards(
         specs_cache[dc_id_str] = flat
         return flat
 
+    # Selection groups are dashboard-global but a card's frame is not: the same
+    # group has to reach every data collection on the board, and only some of
+    # them spell its column the same way. Resolve once per DC — translating
+    # through a declared project link where one exists — and keep why each group
+    # did or didn't make it, so a card that can't compare says so.
+    groups_per_dc: dict[str, tuple[list[dict], list[dict]]] = {}
+
+    def _groups_for(dc_id_str: str) -> tuple[list[dict], list[dict]]:
+        if dc_id_str not in groups_per_dc:
+            groups_per_dc[dc_id_str] = _resolve_group_defs(
+                group_defs=group_defs,
+                target_dc_id=dc_id_str,
+                project_id=project_id,
+                access_token=access_token,
+                component_type="card",
+                target_columns=set(_get_specs(dc_id_str)) or None,
+            )
+        return groups_per_dc[dc_id_str]
+
     def _card_cache_key(wf_id: Any, dc_id: Any, filter_expr: str | None = None) -> tuple:
         """``(wf_id, dc_id, filter signature, filter_expr)`` — the dedupe key for a
         card's Delta load. Cards sharing it share one loaded frame (via
@@ -2163,8 +2274,11 @@ def bulk_compute_cards(
         key_cols |= _filter_expr_columns(card_filter_expr)
         # Group comparison annotates the frame from the groups' real source
         # columns — project them in (the loader schema-guards absent ones).
+        # The RESOLVED columns: a group that reaches this DC through a link
+        # annotates on the link's column, and projecting the group's original
+        # one would leave the annotation without its input.
         if compare_groups:
-            key_cols |= group_source_columns(group_defs)
+            key_cols |= group_source_columns(_groups_for(str(dc_id))[0])
 
     # Cards sharing a cache key share one Delta read; group them so the pushdown
     # below can answer all of their aggregations in a single query.
@@ -2438,6 +2552,10 @@ def bulk_compute_cards(
         # that group's partition, so the client can draw one mini-rendering per
         # group in the group's color.
         if compare_groups:
+            # Recorded before the comparison is attempted, so a card whose
+            # payload computation then fails still reports which groups could
+            # reach its data collection and which could not.
+            group_status[idx] = _groups_for(str(dc_id))[1]
             try:
                 payload_fn = None
                 gc_domain = None
@@ -2500,7 +2618,7 @@ def bulk_compute_cards(
                     )
                 group_compare = compute_group_compare(
                     df,
-                    group_defs,
+                    _groups_for(str(dc_id))[0],
                     column,
                     aggregation,
                     _agg_expr,
@@ -2534,6 +2652,7 @@ def bulk_compute_cards(
         "values": values,
         "secondary_values": secondary_values,
         "aggregations": aggregations_per_card,
+        "group_status": group_status,
         "filter_applied": len(base_filter_metadata) > 0,
         "filter_count": len(base_filter_metadata),
     }
@@ -2746,6 +2865,11 @@ async def render_figure_endpoint(
 
     Response:
         {"figure": <plotly fig dict>, "metadata": {visu_type, ...}}
+
+    ``metadata.group_status`` (present whenever ``color_by_group`` was asked
+    for) is one entry per submitted group saying whether it reached this
+    figure's data collection — directly, through a declared project link, or
+    not at all, with the reason. See ``resolve_group_defs_for_dc``.
     """
     from depictio.api.v1.services.figure.groups import (
         sanitize_color_by_column,
@@ -2839,6 +2963,21 @@ async def render_figure_endpoint(
     )
     response.headers["X-Celery-Path"] = "offloaded" if offload else "inline"
 
+    # A group captured on another data collection only ever reached this one if
+    # it happened to spell the column the same way. Translate it through any
+    # link the project declares, and keep the verdict per group so a group that
+    # cannot reach this figure is reported rather than silently missing.
+    group_status: list[dict] = []
+    if color_by_group:
+        group_defs, group_status = await run_in_threadpool(
+            _resolve_group_defs,
+            group_defs,
+            str(dc_id),
+            project_id,
+            access_token,
+            "figure",
+        )
+
     payload = {
         "metadata": metadata,
         "filter_metadata": filter_metadata,
@@ -2870,6 +3009,16 @@ async def render_figure_endpoint(
         logger.error(f"render_figure: build failed for {component_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Figure render failed: {e}")
     _emit_timing_headers(response, (result or {}).get("metadata", {}).get("timings"), _t0, _time)
+    if group_status and isinstance(result, dict):
+        # Alongside ``group_colored``, which says whether the figure ended up
+        # coloured; this says whether each group could reach the frame at all.
+        # The two answer different questions — a visu type may decline the
+        # override even when every group resolved.
+        meta = result.get("metadata")
+        if not isinstance(meta, dict):
+            meta = {}
+            result["metadata"] = meta
+        meta["group_status"] = group_status
     return result
 
 

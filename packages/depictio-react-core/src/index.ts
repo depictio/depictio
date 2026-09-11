@@ -113,6 +113,7 @@ export {
   PANEL_TOGGLE_EVENTS,
   SIDEBAR_TOGGLE_EVENT,
   FILTER_PANEL_TOGGLE_EVENT,
+  ANALYSIS_PANEL_TOGGLE_EVENT,
   INSPECTOR_TOGGLE_EVENT,
   dispatchPanelToggle,
   PANEL_RESIZE_END_EVENT,
@@ -427,6 +428,8 @@ export type {
   ColorByState,
   GroupingDisplay,
 } from './selectionGroups';
+export { groupBadgeLabel, summarizeGroupStatus } from './groupStatus';
+export type { GroupStatusEntry, GroupStatusSummary } from './groupStatus';
 export { useSelectionGroups } from './hooks/useSelectionGroups';
 export type { SelectionGroupsApi } from './hooks/useSelectionGroups';
 export { useCategoricalColumns, useColorByColumnRender } from './hooks/useColorByColumns';
