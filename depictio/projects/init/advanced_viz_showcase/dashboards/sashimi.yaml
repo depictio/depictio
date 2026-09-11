@@ -72,6 +72,18 @@ components:
       min_count: 1
       top_n: 25
       log_width: true
+      # Real read depth, from a second collection. The junction table counts
+      # spliced reads only, so the exon support the renderer can infer from it
+      # is an estimate; this is the measurement. Bound by tag so a fresh
+      # deployment resolves it to whatever ids that project mints.
+      coverage_dc_tag: "sashimi_coverage_demo"
+      coverage_chr_col: "chromosome"
+      coverage_position_col: "position"
+      coverage_end_col: "end"
+      coverage_value_col: "depth"
+      coverage_sample_col: "sample"
+      show_coverage: true
+      coverage_height: 0.6
     layout: { x: 0, y: 2, w: 8, h: 8 }
 
   - tag: filter-sashimi-sample

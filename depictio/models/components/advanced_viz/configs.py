@@ -1390,6 +1390,123 @@ class SashimiConfig(_BaseVizConfig):
         default=True, description="Scale arc width by log10(count) rather than count"
     )
 
+    # The two derived tracks. Both are inferred from the junction ends in the
+    # bound collection: an exon is the interval between an acceptor and the next
+    # donor, and its support is the read count of the junctions touching it.
+    # Neither is a coverage measurement, and no second collection is involved.
+    show_support_track: bool = Field(
+        default=True, description="Draw inferred exon support under the arcs of each lane"
+    )
+    show_gene_model: bool = Field(
+        default=True, description="Draw the inferred exon model in a lane under the panel"
+    )
+    support_track_height: float = Field(
+        default=0.3, gt=0, le=0.6, description="Share of each lane given to the support profile"
+    )
+    gene_model_height: float = Field(
+        default=0.14, gt=0, le=0.4, description="Share of the panel given to the exon model lane"
+    )
+    arc_height: float = Field(
+        default=1.0, gt=0, le=1.5, description="Scale factor on the arc apex height"
+    )
+    arc_colors: dict[str, str] | None = Field(
+        default=None,
+        description=(
+            "Arc colour per annotation value, overriding the theme palette. "
+            "Key '*' colours every arc when the binding has no annotation column."
+        ),
+    )
+
+    # ------------------------------------------------------------------
+    # Optional real coverage, from a SECOND data collection.
+    #
+    # A junction table counts spliced reads only, so the support track above
+    # is an estimate and says so. Per-base or per-bin read depth is a
+    # different measurement and lives in a different file (mosdepth regions,
+    # a bedGraph, a BigWig export). Binding it here replaces the inferred
+    # profile with the real thing, per lane, and leaves everything else alone.
+    #
+    # Same contract as the phylogenetic viz's `tree_dc_*`: the `_dc_tag` is
+    # what a template YAML ships, and the dashboard import rewrites
+    # `coverage_dc_id` / `coverage_wf_id` from it against the project it is
+    # importing into. Unbound (the default) the component behaves exactly as
+    # it did before this existed.
+    # ------------------------------------------------------------------
+    coverage_wf_id: str | None = Field(
+        default=None, description="Workflow id of the coverage DC (optional)"
+    )
+    coverage_dc_id: str | None = Field(
+        default=None, description="Data-collection id of the coverage DC (optional)"
+    )
+    coverage_dc_tag: str | None = Field(
+        default=None,
+        description="Data-collection tag of the coverage DC (resolved to ids at import)",
+    )
+    coverage_chr_col: str = Field(
+        default="chromosome", description="Chromosome column in the coverage DC"
+    )
+    coverage_position_col: str = Field(
+        default="position", description="Bin start / single-base position in the coverage DC"
+    )
+    coverage_end_col: str | None = Field(
+        default=None,
+        description="Optional bin end, so binned depth is drawn as intervals rather than points",
+    )
+    coverage_value_col: str = Field(
+        default="value", description="Read depth / signal column in the coverage DC"
+    )
+    coverage_sample_col: str | None = Field(
+        default=None,
+        description=(
+            "Sample column in the coverage DC. Its values must match the junction "
+            "table's sample column so each lane gets its own depth profile."
+        ),
+    )
+    show_coverage: bool = Field(
+        default=True,
+        description="Draw the bound coverage DC under the arcs (ignored when none is bound)",
+    )
+    coverage_height: float = Field(
+        default=0.6,
+        gt=0,
+        le=0.8,
+        description="Share of the room above the zero line given to the coverage profile",
+    )
+    coverage_color: str | None = Field(
+        default=None,
+        description="Fill colour of the coverage area; null uses the theme's grid colour",
+    )
+    coverage_log: bool = Field(
+        default=False,
+        description="Compress the depth axis with log10(1 + depth); tames one deep exon",
+    )
+    color_by: Literal["annotation", "sample"] = Field(
+        default="annotation",
+        description=(
+            "What the arcs take their colour from. 'annotation' separates known "
+            "from novel; 'sample' gives each lane one colour, the ggsashimi "
+            "convention. The depth profile is always coloured per lane."
+        ),
+    )
+    max_arc_width: int = Field(default=2, ge=1, le=18, description="Pixel width of an arc")
+    arc_width_by_support: bool = Field(
+        default=False,
+        description=(
+            "Scale arc width by read support. Off by default: the count is "
+            "already printed at the apex, and scaling it makes a junction class "
+            "that happens to be weaker look thinner as a class."
+        ),
+    )
+    arc_split: Literal["annotation", "alternate"] = Field(
+        default="annotation",
+        description=(
+            "Which side of the zero line an arc is drawn on. 'annotation' puts "
+            "each class on its own side, so two junctions sharing a span never "
+            "overlap; 'alternate' flips side along the locus instead, which is "
+            "what a binding with no annotation column falls back to."
+        ),
+    )
+
 
 VizConfig = Annotated[
     ScatterXyConfig

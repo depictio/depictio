@@ -1696,6 +1696,87 @@ generate_sashimi_demo()
 
 
 # ---------------------------------------------------------------------------
+# NN. Sashimi coverage: per-bin read depth over the same two loci.
+# columns: chromosome, position, end, depth, sample
+#
+# The second collection the sashimi component can bind. A junction table counts
+# spliced reads only, so the exon support the renderer infers from it is an
+# estimate; this is the measurement it stands in for. Binned rather than
+# per-base, the way mosdepth and a bedGraph export write it.
+
+#: Bin width, in bp. 50 is fine enough that the cassette exon (112 bp) is two
+#: bins wide and coarse enough to keep the whole fixture near 4 000 rows.
+_SASHIMI_COV_BIN = 50
+
+#: Exonic depth per condition, in exon order. Locus A carries the contrast: E3
+#: is the cassette, and the knockdown that skips it also stops covering it.
+#: The neighbouring exons barely move, which is what makes the drop readable as
+#: skipping rather than as a library-size difference.
+_SASHIMI_COV_A = {
+    "ctrl": (262.0, 251.0, 198.0, 243.0, 254.0, 212.0, 176.0, 151.0),
+    "kd": (254.0, 242.0, 23.0, 237.0, 247.0, 206.0, 171.0, 147.0),
+}
+_SASHIMI_COV_B = {
+    "ctrl": (86.0, 97.0, 81.0, 92.0, 71.0),
+    "kd": (84.0, 94.0, 79.0, 90.0, 69.0),
+}
+
+#: Intronic depth as a share of the flanking exons. Not zero: pre-mRNA and a
+#: little intron retention always leave a floor, and a coverage track that
+#: drops to exactly zero between exons looks drawn rather than measured.
+_SASHIMI_INTRON_SHARE = 0.04
+
+
+#: Its own stream, not the module-wide `R`. Drawing from the shared generator
+#: would shift every fixture written after this one, so adding a track here
+#: would show up as a diff in unrelated demo files.
+_SASHIMI_COV_RNG = random.Random(20260910)
+
+
+def _sashimi_coverage_depth(
+    exons: list[tuple[int, int]], depths: tuple[float, ...], pos: int
+) -> float:
+    """Expected depth at `pos`: the exon's own level, or the intronic floor."""
+    for (start, end), level in zip(exons, depths):
+        if start <= pos < end:
+            return level
+    # Between two exons (or outside the locus): a floor scaled by whichever
+    # exons the position sits between, so a deep part of the gene has a deeper
+    # intronic floor than a shallow one.
+    before = [lvl for (_s, end), lvl in zip(exons, depths) if end <= pos]
+    after = [lvl for (start, _e), lvl in zip(exons, depths) if start > pos]
+    flank = (before[-1:] or [depths[0]]) + (after[:1] or [depths[-1]])
+    return (sum(flank) / len(flank)) * _SASHIMI_INTRON_SHARE
+
+
+def generate_sashimi_coverage_demo() -> None:
+    """Write sashimi_coverage_demo.tsv — binned read depth, 4 samples, 2 loci."""
+    header = ["chromosome", "position", "end", "depth", "sample"]
+    rows: list[list] = []
+
+    # The same per-sample library scale the junction fixture uses, redrawn:
+    # both tables come off the same run, so the lane that has the most spliced
+    # reads is also the lane with the deepest coverage.
+    scale = {name: _SASHIMI_COV_RNG.uniform(0.85, 1.2) for name, _ in _SASHIMI_SAMPLES}
+
+    for exons, levels in ((_SASHIMI_EXONS_A, _SASHIMI_COV_A), (_SASHIMI_EXONS_B, _SASHIMI_COV_B)):
+        lo = exons[0][0]
+        hi = exons[-1][1]
+        for sample, condition in _SASHIMI_SAMPLES:
+            depths = levels[condition]
+            for start in range(lo, hi, _SASHIMI_COV_BIN):
+                end = min(start + _SASHIMI_COV_BIN, hi)
+                mean = _sashimi_coverage_depth(exons, depths, start) * scale[sample]
+                value = max(0, int(round(mean * _SASHIMI_COV_RNG.gauss(1.0, 0.14))))
+                rows.append([SASHIMI_CHROM, start, end, value, sample])
+
+    write_tsv(OUT / "sashimi_coverage_demo.tsv", header, rows)
+
+
+generate_sashimi_coverage_demo()
+
+
+# ---------------------------------------------------------------------------
 # NN. Scatter (X/Y): replicate concordance for 900 genes.
 # columns: gene, rep_a, rep_b, mean_expression, regulation
 # ---------------------------------------------------------------------------
