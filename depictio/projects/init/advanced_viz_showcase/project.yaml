@@ -644,6 +644,27 @@ workflows:
               sample: "Sample the junction was counted in; one lane per value. CTRL_rep1/rep2 and KD_rep1/rep2, two replicates per condition."
               annotation: "Junction class - known (annotated consecutive-exon intron) or novel (exon-skipping and alternative donor/acceptor sites). Colours the arcs."
 
+      - id: "646b0f3c1e4a2d7f8e5b8d87"
+        data_collection_tag: "sashimi_coverage_demo"
+        description: "Binned read depth over the same two chr12 loci as sashimi_demo, 4 samples - the second collection the sashimi component binds for real coverage"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/sashimi_coverage_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              chromosome: "Chromosome the bin sits on. chr12 throughout, matching sashimi_demo so the two collections line up."
+              position: "Start of the 50 bp bin. Binned rather than per-base, the way mosdepth and a bedGraph export write coverage."
+              end: "End of the bin, so the profile is drawn as intervals rather than points."
+              depth: "Mean read depth in the bin. Exons sit at their own level, introns at a low floor; the cassette exon E3 drops from ~230 in the controls to ~25 in the knockdowns, which is the same event the skipping arc reports."
+              sample: "Sample the depth was measured in. Matches sashimi_demo's sample column, which is what lets each junction lane get its own profile."
+
       - id: "646b0f3c1e4a2d7f8e5b8d86"
         data_collection_tag: "scatter_xy_demo"
         description: "Replicate concordance for 900 genes: the same measurement made twice, with a tenth of the genes moved off the identity diagonal"
