@@ -2,8 +2,9 @@
 # ============================================================================
 # Funnel: Screening overview (what did the four screens find, per sample) ->
 # Resistome -> AMPs -> BGCs -> CAZymes, each drilling into one screen. The
-# `Reference tables` section is persistent and pinned to the bottom, so the
-# rows behind every tile are one scroll away on every tab.
+# `Sample sheet` section is persistent and pinned to the top and `Reference
+# tables` to the bottom, so the cohort and the rows behind every tile are one
+# click away on every tab.
 #
 # The run's MultiQC report carries software versions only (no general-stats,
 # no module sections), so there is no QC tab; the tool versions reach the UI
@@ -43,6 +44,13 @@ main_dashboard:
     icon: mdi:chart-scatter-plot
     color: blue
     description: Pick samples here and every tab follows the selection
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: teal
+    description: The assemblies the run screened, on every tab
+    collapsed: true
+    persistent: true
+    pin: top
   - name: Reference tables
     icon: mdi:table
     color: gray
@@ -263,9 +271,16 @@ main_dashboard:
     data_collection_tag: screening_summary
     mode: code
     code_content: |
+      # The colour channel belongs to the screen here, so the dashboard's
+      # analysis groups take the facet axis instead: one band of samples per
+      # group. Spread into the reshape below too, or the unpivot would drop the
+      # annotation column before the facet could read it.
+      index_cols = ["sample"] + [c for c in depictio_group_by if c != "sample"]
+      grp_col = depictio_group_by[0] if depictio_group_by else None
+
       # wide -> long so each screen becomes its own bar colour
       df_modified = df.unpivot(
-          index=["sample"],
+          index=index_cols,
           on=["arg_hits", "amp_candidates", "bgc_regions", "cazymes"],
           variable_name="screen",
           value_name="findings",
@@ -288,14 +303,21 @@ main_dashboard:
           color="screen",
           barmode="group",
           log_y=True,
+          facet_col=grp_col,
           category_orders={"screen": list(labels.values())},
       )
       fig.update_layout(
-          xaxis_title="Sample",
           yaxis_title="Findings (log scale)",
           legend_title_text="Screen",
           margin={"t": 24, "l": 56, "r": 16, "b": 80},
       )
+      if grp_col:
+          # Each panel keeps only its own samples, and its title is the group
+          # name rather than the annotation column's name and an equals sign.
+          fig.update_xaxes(matches=None, showticklabels=True, title_text="")
+          fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
+      else:
+          fig.update_layout(xaxis_title="Sample")
     title: Findings per sample and screen
     description: Grouped bars on a log axis, because the four screens differ by two orders of magnitude.
     title_size: h3
@@ -330,23 +352,35 @@ main_dashboard:
           (pl.col("bgc_regions") + 1).alias("bgc_size")
       )
 
+      # The dashboard's analysis groups take the colour channel when the viewer
+      # has made some, in whichever display the Colour/Split toggle asks for.
+      # Without groups the colour stays the AMP candidate count.
+      colour_kwargs = dict(depictio_group_kwargs) or {
+          "color": "amp_candidates",
+          "color_continuous_scale": "Tealgrn",
+      }
+
       fig = px.scatter(
           df_modified.to_pandas(),
           x="arg_hits",
           y="cazymes",
-          color="amp_candidates",
           size="bgc_size",
           size_max=26,
           hover_name="sample",
-          color_continuous_scale="Tealgrn",
           custom_data=["sample"],
+          **colour_kwargs,
       )
       fig.update_layout(
           xaxis_title="ARG hits",
           yaxis_title="CAZyme genes",
-          coloraxis_colorbar_title="AMP candidates",
           margin={"t": 24, "l": 64, "r": 16, "b": 48},
       )
+      if depictio_group_kwargs:
+          # Panel titles read as the group name, not the annotation column and
+          # an equals sign. A no-op unless the toggle asked for Split.
+          fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
+      else:
+          fig.update_layout(coloraxis_colorbar_title="AMP candidates")
     selection_enabled: true
     selection_column: sample
     title: Resistome load against CAZyme capacity
@@ -363,7 +397,7 @@ main_dashboard:
     title: Per-sample screening summary
     description: The hub collection. Selecting rows here filters the same samples as the scatter.
     title_size: h3
-    layout: {x: 4, y: 1, w: 4, h: 6}
+    layout: {x: 0, y: 7, w: 8, h: 6}
 
   # --- Reference tables (persistent, pinned) -------------------------------
   - component_type: text
@@ -382,15 +416,6 @@ main_dashboard:
     data_collection_tag: screening_summary
     layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: table
-    tag: fs-ref-samplesheet
-    section: Reference tables
-    workflow_tag: funcscan
-    data_collection_tag: samplesheet
-    title: Samplesheet
-    description: The assemblies the run screened.
-    title_size: h3
-    layout: {x: 0, y: 1, w: 4, h: 4}
-  - component_type: table
     tag: fs-ref-arg
     section: Reference tables
     workflow_tag: funcscan
@@ -399,7 +424,7 @@ main_dashboard:
     title: ARG hits
     description: One row per resistance-gene hit, normalised across the five ARG tools.
     title_size: h3
-    layout: {x: 4, y: 1, w: 4, h: 4}
+    layout: {x: 0, y: 1, w: 8, h: 4}
   - component_type: table
     tag: fs-ref-amp
     section: Reference tables
@@ -409,7 +434,7 @@ main_dashboard:
     title: AMP candidates
     description: One row per antimicrobial-peptide candidate with its physicochemistry.
     title_size: h3
-    layout: {x: 0, y: 5, w: 4, h: 4}
+    layout: {x: 0, y: 5, w: 8, h: 4}
   - component_type: table
     tag: fs-ref-bgc
     section: Reference tables
@@ -419,7 +444,7 @@ main_dashboard:
     title: BGC regions
     description: One row per predicted biosynthetic gene cluster region.
     title_size: h3
-    layout: {x: 4, y: 5, w: 4, h: 4}
+    layout: {x: 0, y: 9, w: 8, h: 4}
   - component_type: table
     tag: fs-ref-cazyme
     section: Reference tables
@@ -429,7 +454,18 @@ main_dashboard:
     title: CAZyme annotations
     description: One row per CAZyme gene with the family each of the three tools called.
     title_size: h3
-    layout: {x: 0, y: 9, w: 8, h: 4}
+    layout: {x: 0, y: 13, w: 8, h: 4}
+
+  # --- Sample sheet (persistent, pinned top) -------------------------------
+  - component_type: table
+    tag: fs-ref-samplesheet
+    section: Sample sheet
+    workflow_tag: funcscan
+    data_collection_tag: samplesheet
+    title: Samplesheet
+    description: The assemblies the run screened, one row per sample.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 4}
 
 tabs:
 # ============================================================================
@@ -540,10 +576,15 @@ tabs:
     order: 2
     alignment: left
     body: >
-      ABRicate, AMRFinderPlus, DeepARG, fARGene and RGI each report resistance
-      genes their own way; hAMRonization maps them onto shared column names.
-      The drug-class labels themselves are not harmonised, so the hierarchy
-      below keeps each tool's vocabulary on its own branch.
+      [ABRicate](https://github.com/tseemann/abricate),
+      [AMRFinderPlus](https://github.com/ncbi/amr),
+      [DeepARG](https://github.com/gaarangoa/deeparg),
+      [fARGene](https://github.com/fannyhb/fargene) and
+      [RGI](https://github.com/arpcard/rgi) each report resistance genes their
+      own way; [hAMRonization](https://github.com/pha4ge/hAMRonization) maps
+      them onto shared column names. The drug-class labels themselves are not
+      harmonised, so the hierarchy below keeps each tool's vocabulary on its
+      own branch.
     workflow_tag: funcscan
     data_collection_tag: hamronization_report
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -751,7 +792,7 @@ tabs:
     title: ARG hits
     description: Selecting rows narrows the scatter to the same genes.
     title_size: h3
-    layout: {x: 4, y: 1, w: 4, h: 6}
+    layout: {x: 0, y: 7, w: 8, h: 6}
   - component_type: advanced_viz
     tag: arg-av-island-track
     index: arg-island-track
@@ -766,7 +807,7 @@ tabs:
     title: Resistance genes along their contig
     description: One lane per contig, one arrow per ARG hit pointing the way the gene is read. Genes packed head to tail on a single contig are a resistance island, which an aggregate over drug classes cannot show.
     title_size: h3
-    layout: {x: 0, y: 7, w: 8, h: 6}
+    layout: {x: 0, y: 13, w: 8, h: 6}
 
 # ============================================================================
 # Tab 2: AMPs
@@ -858,10 +899,12 @@ tabs:
     order: 2
     alignment: left
     body: >
-      AMPcombi merges the per-tool predictions, keeps the peptides above the
-      run's probability cut-off and annotates each with physicochemistry. In
-      this run ampir carried the screen and Macrel agreed on almost nothing,
-      so the best-probability column is effectively ampir's.
+      [AMPcombi](https://github.com/Darcy220606/AMPcombi) merges the per-tool
+      predictions, keeps the peptides above the run's probability cut-off and
+      annotates each with physicochemistry. In this run
+      [ampir](https://github.com/Legana/ampir) carried the screen and
+      [Macrel](https://github.com/BigDataBiology/macrel) agreed on almost
+      nothing, so the best-probability column is effectively ampir's.
     workflow_tag: funcscan
     data_collection_tag: ampcombi_summary
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1017,9 +1060,10 @@ tabs:
     order: 2
     alignment: left
     body: >
-      MMseqs2 clusters the candidates of the whole run, so a large cluster is a
-      peptide family several assemblies carry. The sample shown is the one that
-      contributed the representative sequence.
+      [MMseqs2](https://github.com/soedinglab/MMseqs2) clusters the candidates
+      of the whole run, so a large cluster is a peptide family several
+      assemblies carry. The sample shown is the one that contributed the
+      representative sequence.
     workflow_tag: funcscan
     data_collection_tag: ampcombi_clusters
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -1049,7 +1093,7 @@ tabs:
     title: Peptide clusters
     description: One row per cluster, largest first.
     title_size: h3
-    layout: {x: 4, y: 1, w: 4, h: 6}
+    layout: {x: 0, y: 7, w: 8, h: 6}
 
 # ============================================================================
 # Tab 3: BGCs
@@ -1405,10 +1449,11 @@ tabs:
     order: 2
     alignment: left
     body: >
-      run_dbCAN annotates every predicted protein with HMMER, dbCAN-sub and
-      DIAMOND at once and recommends a family only where at least two agree.
-      Genes called by a single tool keep that tool's family here, so the
-      agreement card is the one to read first.
+      [run_dbCAN](https://github.com/bcb-unl/run_dbcan) annotates every
+      predicted protein with [HMMER](https://github.com/EddyRivasLab/hmmer),
+      dbCAN-sub and DIAMOND at once and recommends a family only where at
+      least two agree. Genes called by a single tool keep that tool's family
+      here, so the agreement card is the one to read first.
     workflow_tag: funcscan
     data_collection_tag: dbcan_overview
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1567,7 +1612,7 @@ tabs:
     title: CGC substrate predictions
     description: One row per CAZyme gene cluster with a dbCAN-PUL match.
     title_size: h3
-    layout: {x: 4, y: 1, w: 4, h: 6}
+    layout: {x: 0, y: 7, w: 8, h: 6}
 
   - component_type: text
     tag: caz-conc-intro

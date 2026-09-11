@@ -221,7 +221,7 @@ main_dashboard:
     title: Run at a glance
     order: 2
     alignment: left
-    body: Per-sample QC aggregated from every stage of the nf-core/viralrecon pipeline. The four cards read the summary table directly; the MultiQC panels below are the reports they were derived from. The two filter sections on the left are persistent, so a sample or a coverage floor picked here narrows the coverage, typing, QC and variant tabs as well.
+    body: Per-sample QC aggregated from every stage of the nf-core/viralrecon pipeline. The four cards read the summary table directly; the [MultiQC](https://multiqc.info) panels below are the reports they were derived from. The two filter sections on the left are persistent, so a sample or a coverage floor picked here narrows the coverage, typing, QC and variant tabs as well.
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
     layout:
@@ -474,7 +474,7 @@ main_dashboard:
       w: 8
       h: 1
     title: Read quality, contamination and alignment
-    body: FastQC base quality and its status grid, the Kraken2 contamination screen, the post-iVar alignment flagstat, per-contig depth and the primer-trimming counts. Each becomes interesting once a panel above has flagged something.
+    body: '[FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) base quality and its status grid, the [Kraken2](https://github.com/DerrickWood/kraken2) contamination screen, the post-[iVar](https://github.com/andersen-lab/ivar) alignment flagstat, per-contig depth and the primer-trimming counts. Each becomes interesting once a panel above has flagged something.'
   - component_type: multiqc
     workflow_tag: viralrecon
     data_collection_tag: multiqc_data
@@ -605,7 +605,7 @@ main_dashboard:
       w: 8
       h: 1
     title: Variant calling and consensus assembly
-    body: The iVar calling summary, the snpEff effect and region breakdowns, the bcftools substitution spectrum, the QUAST contig count and the nf-core assembly summary. Read together they say whether the consensus is trustworthy, which is the question the Variants tab then answers call by call.
+    body: The iVar calling summary, the [snpEff](https://pcingola.github.io/SnpEff/) effect and region breakdowns, the [bcftools](https://samtools.github.io/bcftools/) substitution spectrum, the [QUAST](https://github.com/ablab/quast) contig count and the nf-core assembly summary. Read together they say whether the consensus is trustworthy, which is the question the Variants tab then answers call by call.
   - component_type: multiqc
     workflow_tag: viralrecon
     data_collection_tag: multiqc_data
@@ -824,7 +824,7 @@ tabs:
     title: Coverage at a glance
     order: 2
     alignment: left
-    body: 'Depth from mosdepth, per amplicon and per genome position. The amplicon view is the one that finds primer dropout: a scheme drops one amplicon in a handful of samples long before whole-genome breadth moves. The threshold card counts how many amplicon measurements sit under 20x, which is the floor a consensus base call needs.'
+    body: 'Depth from [mosdepth](https://github.com/brentp/mosdepth), per amplicon and per genome position. The amplicon view is the one that finds primer dropout: a scheme drops one amplicon in a handful of samples long before whole-genome breadth moves. The threshold card counts how many amplicon measurements sit under 20x, which is the floor a consensus base call needs.'
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
     layout:
@@ -1158,7 +1158,7 @@ tabs:
     title: Typing at a glance
     order: 2
     alignment: left
-    body: 'Pangolin assigns a lineage, Nextclade assigns a clade and scores the consensus it was called from. They disagree usefully: a confident lineage on a consensus Nextclade marks as bad is a call to distrust, and the two QC selectors on the left are there to isolate exactly that case.'
+    body: '[Pangolin](https://github.com/cov-lineages/pangolin) assigns a lineage, [Nextclade](https://github.com/nextstrain/nextclade) assigns a clade and scores the consensus it was called from. They disagree usefully: a confident lineage on a consensus Nextclade marks as bad is a call to distrust, and the two QC selectors on the left are there to isolate exactly that case.'
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
     layout:
@@ -1407,7 +1407,7 @@ tabs:
     index: lin-tables-header
     layout:
       x: 0
-      y: 24
+      y: 0
       w: 8
       h: 1
     title: The raw reports
@@ -1425,8 +1425,8 @@ tabs:
     title_size: h3
     layout:
       x: 0
-      y: 25
-      w: 4
+      y: 1
+      w: 8
       h: 5
   - component_type: table
     workflow_tag: viralrecon
@@ -1440,9 +1440,9 @@ tabs:
     description: Per-sample clade, substitutions, deletions, QC.
     title_size: h3
     layout:
-      x: 4
-      y: 25
-      w: 4
+      x: 0
+      y: 6
+      w: 8
       h: 5
 - title: Sample QC
   subtitle: Per-Sample Coverage, Variant Yield, Substitution Patterns & Genome Completeness
@@ -1677,7 +1677,7 @@ tabs:
       w: 8
       h: 1
     title: Where the signals disagree
-    body: 'Coverage against variant count separates a genuinely divergent sample from one that is simply under-sequenced: both produce few calls, but only one of them is well covered. The Nextclade panel beside it says the same thing from the consensus side.'
+    body: 'Coverage against variant count separates a genuinely divergent sample from one that is simply under-sequenced: both produce few calls, but only one of them is well covered. The [Nextclade](https://github.com/nextstrain/nextclade) panel beside it says the same thing from the consensus side.'
   - component_type: figure
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
@@ -2076,7 +2076,7 @@ tabs:
     title: Variant burden
     order: 2
     alignment: left
-    body: Every iVar call with its snpEff annotation. The Manhattan plot places the calls on the genome and the lollipop places them on the protein, so the same set reads once positionally and once functionally. The left panel narrows by gene, effect class and support; the persistent sample filter narrows by sample through the project link.
+    body: Every [iVar](https://github.com/andersen-lab/ivar) call with its [snpEff](https://pcingola.github.io/SnpEff/) annotation. The Manhattan plot places the calls on the genome and the lollipop places them on the protein, so the same set reads once positionally and once functionally. The left panel narrows by gene, effect class and support; the persistent sample filter narrows by sample through the project link.
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
     layout:

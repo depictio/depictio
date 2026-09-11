@@ -69,6 +69,10 @@ All four dashboard tabs imported, 65 / 65 components, nothing dropped by
 | `Expression heatmap` | 6 | 2 text, 2 interactive, 1 advanced_viz, 1 table |
 | `Gene explorer` | 12 | 4 card, 3 text, 3 interactive, 1 figure, 1 table |
 
+The main tab's tile list moved on after this ingest without changing its total: the
+general-statistics panel was added (RS-C5) and the at-a-glance intro was folded away when the
+design cards moved into `Sample sheet` (RS-C6), so it ships 18 MultiQC and 5 text tiles today.
+
 Every tile was then executed or grounded against those frames:
 
 - **1 / 1 `mode: code` figure** executed with scope
@@ -82,11 +86,14 @@ Every tile was then executed or grounded against those frames:
 - **2 / 2 advanced visualisations** resolve their `use:` handle against the on-disk catalog
   (`salmon/pca` → `embedding`, `salmon/top_variable_heatmap` → `complex_heatmap`) and every
   role the render declares, plus every `*_col` in the stored config, is a real column.
-- **19 / 19 MultiQC tiles** name a module and a plot MultiQC's own `list_plots()` reports
-  for this parquet (the nested one, see RS-D1). None is a general-statistics tile.
-- **20 tiles carry a `use:` handle**: 14 MultiQC (`multiqc/fastqc` x4, `multiqc/qualimap` x2,
+- **19 / 19 module MultiQC tiles** name a module and a plot MultiQC's own `list_plots()`
+  reports for this parquet (the nested one, see RS-D1). The general-statistics tile added
+  after this run (RS-C5) is the twentieth: `list_plots()` does not enumerate `general_stats`,
+  so it was checked against the parquet's own general-statistics table instead (8 samples,
+  37 metrics, MultiQC 1.33). Its rendering was not replayed here.
+- **21 tiles carry a `use:` handle**: 15 MultiQC (`multiqc/fastqc` x4, `multiqc/qualimap` x2,
   `multiqc/rseqc` x2, and one each of `cutadapt`, `star`, `samtools`, `picard`, `salmon`,
-  `dupradar`), 4 tables (`salmon/sample_pca`, `salmon/expression_heatmap`,
+  `dupradar`, `general_stats`), 4 tables (`salmon/sample_pca`, `salmon/expression_heatmap`,
   `salmon/gene_expression`, `salmon/merged_gene_counts`) and 2 advanced visualisations.
 
 Links were replayed against the real frames, hub values against target values:
@@ -149,19 +156,51 @@ so no `GROUP_COL` variable is exposed and no `--var` is needed for the common ca
 whose sample names do not follow that convention gets one condition per sample, which
 degrades the colouring but breaks nothing.
 
-### RS-C5: no general-statistics tile
+### RS-C5: the general-statistics tile, and the per-read rows it carries
 
-Every other nf-core template opens with MultiQC's general statistics table. This one does not,
-because for rnaseq that table is the widest in the report (FastQC per read, Trim Galore, STAR,
-Salmon, samtools, Picard, RSeQC, Qualimap and dupRadar columns for every library) and it is
-also the only place the `<sample> Read 1` / `Read 2` sample ids appear, which the sample
-filter cannot reach (RS-D4). The QC tab opens on the four design cards and the raw-read panels
-instead.
+The QC tab carries MultiQC's general statistics table, like every other nf-core template:
+`rna-qc-general-stats`, full width at the top of `Read quality`, directly under that section's
+intro text. For rnaseq it is the widest table in the report (FastQC per read, Trim Galore,
+STAR, Salmon, samtools, Picard, RSeQC, Qualimap and dupRadar, 37 columns over 8 libraries),
+which is why it is bound at `w: 8, h: 5` rather than sharing a row.
+
+It is also the only place the `<sample> Read 1` / `Read 2` sample ids appear, and the sample
+filter does not reach those ids (RS-D4): applying a sample filter drops the per-read rows
+rather than narrowing them. The tile's `description` says so, so a reader meets the caveat in
+the tile rather than only here.
+
+An earlier revision of this template shipped without the tile, on the grounds of the column
+count and that same filter gap. That decision is reversed: the table is the headline view of
+a run, and a caveat in the tile copy costs less than not shipping it.
+
+### RS-C6: the tab named MultiQC carries MultiQC panels only
+
+The main tab is called `MultiQC`, so it ships the panels MultiQC drew and nothing else. The
+four cards that summarised the run design are computed from the samplesheet, not from the
+report, so they moved to the samplesheet: `Sample sheet` is `persistent: true, pin: top`, so
+one full row of four `w: 2` cards now opens every tab, above the sheet the numbers come from.
+That section answers "what was this run told about its samples?" instead of being a bare
+table, and the MultiQC tab no longer carries a tile MultiQC did not draw. Text and interactive
+tiles are the deliberate exceptions, along with everything inside the two pinned sections,
+which are on every tab by design.
+
+`Run at a glance` held nothing else once the cards left, so the section is gone rather than
+left as a heading over an intro: a declared section with no tiles renders as an empty box. Its
+orientation moved into the `Read quality` intro as one clause naming the sections the funnel
+runs through, so the tab still says what it is before the first panel. With the section
+removed the tab opens on the general-statistics table directly under that intro, which is
+where RS-C5 puts it.
+
+The main tab still imports 32 components and the four tabs still 65: the design cards did not
+leave the tab, they changed section, and only the intro text tile was dropped against the
+general-statistics tile RS-C5 added. No data collection, column binding or link changed, so
+the ingest above was not replayed.
 
 ## MultiQC overlap policy
 
 | Signal | Decision |
 |---|---|
+| The run's headline numbers, one row per library | **MultiQC** (`use: multiqc/general_stats`), 1 tile (RS-C5) |
 | Raw and trimmed read counts, quality, GC, length, duplication, adapters, status | **MultiQC** (`use: multiqc/fastqc`, `use: multiqc/cutadapt`), 5 tiles |
 | STAR alignment summary, percent mapped, duplicate marking | **MultiQC** (`use: multiqc/star`, `use: multiqc/samtools`, `use: multiqc/picard`), 3 tiles |
 | Salmon fragment length / library type | **MultiQC** (`use: multiqc/salmon`), 1 tile |
@@ -236,10 +275,12 @@ has 24 canonical ids for 8 libraries (the bare name plus `Read 1` and `Read 2`),
 samplesheet values expand to 69 of the 85 report sample ids; the 16 unreached ones are exactly
 the per-read entries.
 
-They appear only in `general_stats_table`'s `plot_input_data`, and no tile on this dashboard is
-a general-statistics tile (RS-C5), so no shipped panel loses a series. It is recorded because
-any template that does add one for this pipeline will see the per-read rows disappear under a
-sample filter.
+They appear only in `general_stats_table`'s `plot_input_data`, so the one tile this reaches is
+the general-statistics table the QC tab now ships (RS-C5). With no sample filter active the
+table shows all 85 ids; with one active the 16 per-read rows drop out, because they are not
+among the ids the samplesheet values expand to. Every other shipped panel reads a module whose
+ids are all per-library, so none of them loses a series. The tile's `description` carries the
+caveat.
 
 ### RS-D5: rnaseq's five custom-content MultiQC sections carry no `use:` badge
 

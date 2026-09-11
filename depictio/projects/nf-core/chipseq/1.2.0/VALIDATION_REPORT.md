@@ -152,6 +152,14 @@ interactive filters, 13 MultiQC panels, 7 tables, 7 advanced visualisations and 
 43 of those tiles carry a `use:` catalog reference that resolved
 (`macs2/*` 20, `deseq2/*` 9, `homer/annotated_peaks` 5, `multiqc/*` 9).
 
+Those counts are the state validated on the date above. The shipped YAML has since gained a
+fifth tab and a top-pinned metadata section, and lost the four peak cards that opened the
+MultiQC tab (CS-D11, CS-D12, CS-D13): five tabs, 97 components (24 cards, 23 text tiles, 15
+interactive filters, 13 MultiQC panels, 12 advanced visualisations, 7 tables and 3 figures),
+49 of them carrying a `use:`. It has not been re-ingested against
+the megatest since; it is model-validated by
+`depictio/tests/models/test_shipped_dashboard_yamls.py`.
+
 ## Post-ingest verification
 
 Every collection was read back from its Delta table in MinIO and every tile grounded against
@@ -215,7 +223,8 @@ strand cross-correlation 16 / 6416, NSC 16, RSC 16.
 |---|---|
 | Read counts, quality, GC, length, duplication, adapters | **MultiQC** (`use: multiqc/fastqc`, `use: multiqc/cutadapt`) |
 | Alignment, duplication, insert size, library complexity | **MultiQC** (`use: multiqc/samtools`, `use: multiqc/picard`, `use: multiqc/preseq`) |
-| ChIP enrichment over input, read distribution around genes | **MultiQC** (`use: multiqc/deeptools`) |
+| ChIP enrichment over input (the fingerprint curve) | **MultiQC** (`use: multiqc/deeptools`) |
+| Read distribution around genes | **Dedicated** (`deeptools/metagene_profile`), see CS-D11: MultiQC's "Read Distribution Profile after Annotation" plots the same `plotProfile` matrix as a bare curve |
 | Reads assigned to consensus peaks | **MultiQC** (`use: multiqc/featurecounts`) |
 | FRiP, peak count, NSC / RSC, strand cross-correlation | **MultiQC**, pipeline custom content, no catalog entry (CS-D6) |
 | Per-peak coordinates, width, enrichment, significance | **Dedicated** (`macs2/peaks`, `macs2/peak_summary`): the MultiQC `macs` module exposes no plot, only general-statistics columns |
@@ -280,10 +289,13 @@ This is not chipseq-specific. Sweeping every megatest parquet on this machine th
 positionally rather than through a dict keyed on the display title, and disambiguate the
 display title itself by section key), which is outside this workstream's owned paths.
 
-Until it lands, the template's QC tab does not bind a General Statistics tile. Its slot is
-taken by the RSC coefficient and the deepTools read-distribution panels, which read the same
-report; `general_stats` stays in the data collection's `modules` list because the underlying
-data is present and the tile becomes usable again as soon as the API is fixed.
+The template's QC tab did not bind a General Statistics tile while that stood. It binds one
+now (`cs-qc-general-stats`, the canonical `use: multiqc/general_stats` binding the other
+templates carry) on the strength of the payload-builder fix landing alongside this change;
+`general_stats` had stayed in the data collection's `modules` list throughout because the
+underlying data was always present: 80 libraries by 26 metrics, MultiQC 1.35. The table
+paginates at 50 rows, so this run's 80 libraries come out over two pages. If the API fix is
+reverted, this tile is the first thing to unbind.
 
 ### CS-D4: `macs2_consensus_fc` is a top-N view, so its link back is 500 of 153891
 
@@ -362,3 +374,101 @@ zero CRLF, zero lone CR, LF throughout. Every other table in the run is LF too. 
 change was needed and none was made: `deseq2/results_long.py` already documents CR/CRLF
 tolerance and strips stray `\r` from string columns, so a run that does write CR would still
 ingest. Recorded so the assumption is not carried forward untested.
+
+### CS-D11: the signal-level tiles moved off the MultiQC tab, and three of them were rebound
+
+The MultiQC tab lost its `advanced_viz` tiles here; the card row that also read outside the
+report stayed behind until CS-D13. The three `advanced_viz` tiles that read the
+per-sample tables `preseq`, `plotFingerprint` and `plotProfile` write beside their curves
+moved to a new **Signal** tab (`tab_order: 2`; `Peaks`, `Consensus` and `Differential
+binding` shifted to 3, 4, 5). Four decisions came with the move:
+
+* **`cs-qc-readdist` deleted.** MultiQC's deepTools "Read Distribution Profile after
+  Annotation" renders the same `plotProfile` matrix as `cs-qc-av-metagene`, which adds the
+  TSS marker, the scaled gene-body band, axis titles, the viz-settings panel and
+  show-underlying-data. Only the richer of the two is kept. The intro copy that claimed
+  "MultiQC has no panel for it" was false and is gone.
+
+* **`cs-qc-av-fingerprint` rebound.** The catalog render's default axes (`auc` against
+  `synthetic_js_distance`) measure the same thing twice (r = -0.868 across the 16 libraries
+  of this run), so the cloud was a diagonal band. It is now `percent_genome_enriched`
+  against `js_distance`, deepTools' own QC scatter, sized by `diff_enrichment` and coloured
+  by `auc_ratio`. The cost is that those columns need `--JSDsample` and are therefore
+  non-null for the 8 IP libraries only: the 8 inputs carry no point, because they are the
+  reference each IP is compared against. That is stated in the tile's intro.
+
+* **`cs-pk-fig-volcano` converted to an `advanced_viz` volcano.** It was a `mode: code`
+  scatter over `macs2_peaks` (258 986 rows) that kept `sort().head(2000)`. Code mode skips
+  column projection and aggregation pushdown, so the worker materialised the whole table
+  whatever the figure drew, and the tile's badge read "258 986 / 258 986 pts". The `volcano`
+  kind reduces at scan level and keeps the tail whole (`sampling.py`, `TAIL_ROLE["volcano"]`),
+  which is what the `head(2000)` was reaching for. The component's `index` is unchanged
+  (`cs-pk-fig-volcano`) so saved filters survive. Two things are lost and are deliberate:
+  the volcano renderer emits no lasso cross-filter (the sibling Manhattan does, and the
+  section intro now says so) and it colours by hit tier rather than by sample (the Manhattan
+  colours by sample over the same frame, and `category_col: sample` keeps the sample in the
+  show-underlying-data table).
+
+* **Analysis-mode grouping opt-in.** After the conversion, `cs-pk-fig-tss` is the template's
+  only `mode: code` figure. Its frame is per-peak, not per-sample, and its colour axis is the
+  HOMER feature class; the per-sample reading of the same distances is the `cs-pk-av-tss`
+  advanced_viz directly below it. It therefore does not name `depictio_group_kwargs` /
+  `depictio_group_by` and stays out of grouping on purpose.
+
+### CS-D12: the design sheet is pinned to the top of every tab
+
+Every template in the family carries its metadata / samplesheet collection in a
+`persistent: true, pin: top, collapsed: true` grid section, so the cohort is one click away
+wherever the viewer lands. chipseq's `design` table used to sit inside the bottom-pinned
+`Reference tables` next to the peak QC summary. It now has its own top-pinned **ChIP design**
+section (icon `mdi:table-account`, teal) with an intro, four cards (ChIP samples split by
+antibody, the antibodies themselves, the input controls, and the share of ChIPs whose
+antibody is replicated) and the full-width table. `Reference tables` keeps the peak QC
+summary alone and its intro was narrowed to match.
+
+### CS-D13: the MultiQC tab holds MultiQC panels only, and the four peak cards it opened with are gone
+
+The tab named **MultiQC** is the reprocessed report and nothing else. Two exceptions are by
+design and stay: text tiles and interactive filters, and the two `persistent: true` pinned
+sections (`ChIP design` at the top, `Reference tables` at the bottom) that every tab carries.
+Everything else on that tab now reads `multiqc_data`.
+
+That left the `Run at a glance` card row, four cards on `macs2/peak_summary`. None of them
+moved, because each already said what it says somewhere else, and the tab that owns MACS2
+data already had a full four-card row of its own:
+
+* **`cs-qc-card-peaks` (Peaks called)** = `cs-pk-card-count` (Peaks, `Peak yield`). The same
+  number with the same top-3-by-sample breakdown; the Peaks-tab card counts the peak rows
+  themselves, so it also follows the `Peak scope` sliders.
+* **`cs-qc-card-width` (Median peak width)** = `cs-pk-card-width` (Peak width, `Peak yield`).
+  The same box-plot statement, taken over the 258986 peak widths rather than over the eight
+  per-sample medians.
+* **`cs-qc-card-fold` (Median fold enrichment)** = `cs-pk-card-fold` (Fold enrichment,
+  `Peak yield`). The same mean enrichment over input. The pass / warn threshold framing the
+  deleted card carried is kept in that row by `cs-pk-card-qvalue`, which is a threshold card.
+* **`cs-qc-card-frip` (FRiP score)** = `cs-qc-frip`, the `frip_score` MultiQC panel that stays
+  on this tab in `ChIP enrichment` (CS-D6). The panel plots FRiP per sample, which is strictly
+  more than the gauge's average of it, and the pinned `Peak QC summary` table carries the
+  `frip_score` column on every tab, with a FRiP `RangeSlider` pinned beside it.
+
+Moving the FRiP card to the Peaks tab instead was considered and rejected on two grounds: it
+would have made that card row five wide, which is ragged at eight columns, and it reads
+`macs2_peak_summary` while its neighbours read `macs2_peaks`, so it would have sat still while
+the rest of the row responded to the `Peak scope` sliders.
+
+With the cards gone, `Run at a glance` would have held its intro alone, which renders as an
+empty box and is what `test_grid_sections_are_not_empty` catches. The section is instead
+renamed **Run summary** (icon `mdi:view-dashboard-outline`, teal) and given MultiQC content:
+`cs-qc-general-stats`, the General Statistics table, moved up into it from `Read quality`,
+where it had always been a poor fit - it pools MACS2, Picard and phantompeakqualtools numbers
+as well as the read-level ones. The tab therefore still opens on a one-row-per-library
+summary, and `Read quality` now holds exactly the FastQC and Trim Galore panels its name
+promises. Three layouts shifted with it: the two FastQC tiles from `y: 6` to `y: 1` and the
+cutadapt tile from `y: 11` to `y: 6`. One consequence for CS-D3: the General Statistics tile
+is now the only tile in `Run summary`, so if the payload-builder fix is ever reverted and the
+tile has to be unbound, the section goes with it rather than being left holding its intro.
+
+Two intros were rewritten for what is actually on screen. `cs-qc-intro` no longer announces
+"four cards for the peak yield and signal-to-noise of the run" and now describes the general
+statistics table and the panels under it; `cs-ref-intro` no longer calls the peak QC summary
+the rows "behind the cards on every tab", because after this change no card reads it.

@@ -38,9 +38,9 @@ main_dashboard:
     pin: bottom
   grid_sections:
   - name: Run at a glance
-    icon: mdi:counter
+    icon: mdi:view-dashboard-outline
     color: teal
-    description: What the six libraries yielded, and how clean they are
+    description: Every module's headline numbers, one row per library
   - name: Read quality
     icon: mdi:chart-bell-curve
     color: blue
@@ -53,10 +53,21 @@ main_dashboard:
     icon: mdi:chart-line
     color: cyan
     description: How concentrated the reads are in the accessible fraction of the genome
+  # `Sample sheet` is pinned to the top and `Reference tables` to the bottom, so
+  # the design every tab is filtered by and the per-library QC rows behind the
+  # tiles trail the reader from tab to tab. Both are declared here, on the tab
+  # no route conditional can remove.
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: teal
+    description: The six ATAC libraries, their protocol and their replicate
+    collapsed: true
+    persistent: true
+    pin: top
   - name: Reference tables
     icon: mdi:table
     color: gray
-    description: The sample design and the per-library QC rows, on every tab
+    description: The per-library peak QC rows behind the tiles, on every tab
     collapsed: true
     persistent: true
     pin: bottom
@@ -71,83 +82,30 @@ main_dashboard:
     order: 2
     alignment: left
     body: >
-      Four cards for the yield and the signal-to-noise of the run, then the
-      MultiQC panels behind them: read quality, insert sizes and duplication,
-      and how concentrated the reads are in accessible chromatin.
+      Every number [MultiQC](https://multiqc.info) collected for this run, one
+      row per library, then the panels behind it: read quality, insert sizes
+      and duplication, and how concentrated the reads are in accessible
+      chromatin. The ATAC-specific ataqv measures are on the ATAC signal tab.
     workflow_tag: atacseq
-    data_collection_tag: macs2_peak_summary
+    data_collection_tag: multiqc_data
     layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: card
-    tag: at-qc-card-peaks
-    index: at-qc-card-peaks
+  # The general-statistics table is the one MultiQC panel that is about the run
+  # rather than about a single tool, so it is what this tab opens on. The
+  # per-library ataqv cards that used to sit here are on the ATAC signal tab,
+  # next to the collections they read.
+  - component_type: multiqc
+    tag: at-qc-general-stats
     section: Run at a glance
     workflow_tag: atacseq
-    data_collection_tag: macs2_peak_summary
-    use: macs2/peak_summary
-    aggregation: sum
-    column_name: num_peaks
-    column_type: int64
-    secondary_layout: top_n
-    breakdown_col: sample
-    top_n_count: 3
-    display: {icon_name: 'mdi:counter', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
+    data_collection_tag: multiqc_data
+    use: multiqc/general_stats
+    selected_module: general_stats
+    selected_plot: general_stats
+    title: General statistics
+    description: One row per library, pooling the FastQC, Trim Galore, samtools, Picard, MACS2 and ataqv headline numbers.
     title_size: sm
     title_align: left
-    title: Peaks called
-    layout: {x: 0, y: 1, w: 2, h: 2}
-  - component_type: card
-    tag: at-qc-card-tss
-    index: at-qc-card-tss
-    section: Run at a glance
-    workflow_tag: atacseq
-    data_collection_tag: ataqv_metrics
-    use: ataqv/metrics
-    aggregation: average
-    column_name: tss_enrichment
-    column_type: float64
-    secondary_layout: gauge
-    coverage_max: 10
-    display: {icon_name: 'mdi:target', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: TSS enrichment
-    layout: {x: 2, y: 1, w: 2, h: 2}
-  - component_type: card
-    tag: at-qc-card-mito
-    index: at-qc-card-mito
-    section: Run at a glance
-    workflow_tag: atacseq
-    data_collection_tag: ataqv_metrics
-    use: ataqv/metrics
-    aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: mitochondrial_fraction
-    column_type: float64
-    display: {icon_name: 'mdi:bacteria-outline', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Mitochondrial fraction
-    layout: {x: 4, y: 1, w: 2, h: 2}
-  - component_type: card
-    tag: at-qc-card-inpeaks
-    index: at-qc-card-inpeaks
-    section: Run at a glance
-    workflow_tag: atacseq
-    data_collection_tag: ataqv_metrics
-    use: ataqv/metrics
-    aggregation: average
-    column_name: hqaa_overlapping_peaks_percent
-    column_type: float64
-    secondary_layout: threshold
-    threshold_value: 20
-    threshold_direction: min
-    threshold_warn: 10
-    display: {icon_name: 'mdi:magnet', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Reads inside peaks
-    layout: {x: 6, y: 1, w: 2, h: 2}
+    layout: {x: 0, y: 1, w: 8, h: 5}
 
   # ------------------------------------------------------------ read quality
   - component_type: text
@@ -159,7 +117,9 @@ main_dashboard:
     order: 2
     alignment: left
     body: >
-      FastQC on the raw and the trimmed libraries, plus what Trim Galore
+      [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) on
+      the raw and the trimmed libraries, plus what
+      [Trim Galore](https://www.bioinformatics.babraham.ac.uk/projects/trim_galore/)
       removed. Every library carries a technical-replicate suffix, so a sample
       appears here once per library and read.
     workflow_tag: atacseq
@@ -212,10 +172,13 @@ main_dashboard:
     order: 2
     alignment: left
     body: >
-      samtools reports every merged library twice, before filtering (mLb.mkD) and
-      after it (mLb.clN), so the gap between the two series is what ATAC filtering
-      removed. The Picard histogram is the nucleosome ladder, and duplication and
-      the preseq curve say how much of the library was distinct.
+      samtools reports every merged library twice, before filtering (mLb.mkD)
+      and after it (mLb.clN), so the gap between the two series is what ATAC
+      filtering removed. The
+      [Picard](https://broadinstitute.github.io/picard/) histogram is the
+      nucleosome ladder, and duplication and the
+      [preseq](https://github.com/smithlabcode/preseq) curve say how much of
+      the library was distinct.
     workflow_tag: atacseq
     data_collection_tag: multiqc_data
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -282,37 +245,6 @@ main_dashboard:
 
   # ------------------------------------------------------ accessibility signal
   - component_type: text
-    tag: at-qc-complexity-intro
-    section: Alignment and library complexity
-    title: "How much new material is left in each library"
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      The MultiQC panel above plots the expected-distinct curve alone. This one adds the 95% interval preseq puts around it: where the ribbon is narrow the extrapolation is safe, where it fans out, sequencing deeper is a guess.
-    workflow_tag: atacseq
-    data_collection_tag: preseq_complexity_curve
-    layout: {x: 0, y: 16, w: 8, h: 1}
-  - component_type: advanced_viz
-    tag: at-qc-av-complexity
-    index: at-qc-av-complexity
-    section: Alignment and library complexity
-    workflow_tag: atacseq
-    data_collection_tag: preseq_complexity_curve
-    use: preseq/complexity_ribbon
-    config:
-      log_x: true
-      band_opacity: 0.18
-      line_width: 2
-      x_title: Sequencing depth (reads)
-      y_title: Expected distinct molecules
-      legend_pos: right
-    title: "Library complexity with its confidence ribbon"
-    description: "One curve per library, extrapolated by preseq; the band is the 95% interval on that extrapolation."
-    title_size: h3
-    layout: {x: 0, y: 17, w: 8, h: 7}
-  - component_type: text
     tag: at-qc-signal-intro
     section: Accessibility signal
     title: Is the signal where it should be?
@@ -321,9 +253,11 @@ main_dashboard:
     order: 2
     alignment: left
     body: >
-      The deepTools fingerprint says how concentrated the reads are; the FRiP
-      score and peak count say how much of that concentration MACS2 turned into
-      calls, and featureCounts how many reads the consensus set carries.
+      The [deepTools](https://deeptools.readthedocs.io) fingerprint says how
+      concentrated the reads are; the FRiP score and peak count say how much
+      of that concentration [MACS2](https://github.com/macs3-project/MACS)
+      turned into calls, and featureCounts how many reads the consensus set
+      carries.
     workflow_tag: atacseq
     data_collection_tag: multiqc_data
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -374,71 +308,24 @@ main_dashboard:
     title_align: left
     layout: {x: 4, y: 6, w: 4, h: 5}
 
+  # ------------------------------------------------------------ sample sheet
+  # Pinned to the top of every tab: the design sheet is the hub the project
+  # links fan every selection out from, so it is the one table that belongs
+  # above the tiles rather than under them.
+  - component_type: table
+    tag: at-ref-table-design
+    section: Sample sheet
+    workflow_tag: atacseq
+    data_collection_tag: sample_design
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: Sample design
+    description: One row per ATAC sample, with its protocol group, replicate and merged-library name. Tick a row to carry that library into every tab.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 4}
+
   # -------------------------------------------------------- reference tables
-  - component_type: text
-    tag: at-qc-fingerprint-intro
-    section: Accessibility signal
-    title: "The numbers under the fingerprint curve"
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      MultiQC draws the fingerprint curve; the per-sample metrics beside it never reach a panel. Each point is one library: up and to the left means the reads pile into a small share of the genome, which for ATAC is the open chromatin.
-    workflow_tag: atacseq
-    data_collection_tag: deeptools_fingerprint_metrics
-    layout: {x: 0, y: 11, w: 8, h: 1}
-  - component_type: advanced_viz
-    tag: at-qc-av-fingerprint
-    index: at-qc-av-fingerprint
-    section: Accessibility signal
-    workflow_tag: atacseq
-    data_collection_tag: deeptools_fingerprint_metrics
-    use: deeptools/fingerprint_scatter
-    config:
-      x_title: Area under the observed coverage curve
-      y_title: Divergence from a uniform library
-      marker_size: 12
-      opacity: 0.85
-      marker_outline: true
-      top_n_labels: 4
-      legend_pos: none
-    title: "Coverage concentration per library"
-    description: "plotFingerprint's own quality metrics: enrichment against divergence from a uniform library of the same depth."
-    title_size: h3
-    layout: {x: 0, y: 12, w: 8, h: 7}
-  - component_type: text
-    tag: at-qc-metagene-intro
-    section: Accessibility signal
-    title: "Where the signal sits along a gene"
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      deepTools writes this matrix as a plain table beside its PDF and MultiQC has no panel for it. Bins 1 to 300 are the 3 kb upstream of each gene, 300 to 400 the gene body scaled to a fixed length, 400 to 700 the 3 kb downstream.
-    workflow_tag: atacseq
-    data_collection_tag: deeptools_plot_profile
-    layout: {x: 0, y: 19, w: 8, h: 1}
-  - component_type: advanced_viz
-    tag: at-qc-av-metagene
-    index: at-qc-av-metagene
-    section: Accessibility signal
-    workflow_tag: atacseq
-    data_collection_tag: deeptools_plot_profile
-    use: deeptools/metagene_profile
-    config:
-      reference_x: 300
-      reference_label: TSS
-      shaded_bands:
-        - [300, 400, Gene body]
-      x_title: Bin along the plotted window
-      y_title: Mean signal
-      legend_pos: right
-    title: "Metagene signal profile"
-    description: "Mean accessibility of every library across the plotted window, with the transcription start site marked and the gene body shaded."
-    title_size: h3
-    layout: {x: 0, y: 20, w: 8, h: 7}
   - component_type: text
     tag: at-ref-intro
     section: Reference tables
@@ -448,23 +335,12 @@ main_dashboard:
     order: 2
     alignment: left
     body: >
-      Which protocol and replicate each library belongs to, and the peak count,
-      FRiP score and peak-metric spreads per library. Filters picked in the left
-      panel narrow both tables.
+      The peak count, FRiP score and the width, enrichment and significance
+      spreads of every library. Filters picked in the left panel narrow it; the
+      design sheet those filters are sourced on is pinned to the top instead.
     workflow_tag: atacseq
-    data_collection_tag: sample_design
+    data_collection_tag: macs2_peak_summary
     layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: table
-    tag: at-ref-table-design
-    section: Reference tables
-    workflow_tag: atacseq
-    data_collection_tag: sample_design
-    row_selection_enabled: false
-    title: Sample design
-    description: One row per ATAC sample, with its protocol group, replicate and merged-library name.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 1, w: 4, h: 4}
   - component_type: table
     tag: at-ref-table-summary
     section: Reference tables
@@ -476,7 +352,7 @@ main_dashboard:
     description: Peak count, FRiP score and the width, enrichment and significance spreads per library.
     title_size: h3
     title_align: left
-    layout: {x: 4, y: 1, w: 4, h: 4}
+    layout: {x: 0, y: 1, w: 8, h: 4}
 
   # -------------------------------------------------------------- left panel
   - component_type: interactive
@@ -557,7 +433,14 @@ tabs:
   - name: Library quality at a glance
     icon: mdi:counter
     color: cyan
-    description: The four ataqv numbers a library is accepted or rejected on
+    description: The ataqv numbers a library is accepted or rejected on, then what its peaks and fragments look like
+  # Neither preseq nor deepTools is an ataqv measure, but both answer the same
+  # library-level question the cards above open on, and neither reaches a
+  # MultiQC panel with its own numbers attached.
+  - name: Depth and coverage concentration
+    icon: mdi:chart-box-outline
+    color: green
+    description: How much distinct material a library still holds, and how tightly its reads pile up
   - name: Signal at transcription start sites
     icon: mdi:chart-line
     color: teal
@@ -585,12 +468,87 @@ tabs:
     order: 2
     alignment: left
     body: >
-      ataqv reads the filtered alignment against the peak calls and a TSS
-      annotation. Its numbers are the ones an ATAC library is judged by, and
-      none of them reach a dashboard through the general MultiQC tables.
+      [ataqv](https://github.com/ParkerLab/ataqv) reads the filtered alignment
+      against the peak calls and a TSS annotation. The four numbers a library
+      is accepted or rejected on come first: TSS enrichment, reads inside
+      peaks, the mitochondrial and the duplicate fraction. None of them reaches
+      a general [MultiQC](https://multiqc.info) table.
     workflow_tag: atacseq
     data_collection_tag: ataqv_metrics
     layout: {x: 0, y: 0, w: 8, h: 1}
+  # Two rows, both filling the 8-column grid. Row one (y 1) is the acceptance
+  # quartet, four cards at w 2. Row two (y 3) is what the library's peaks and
+  # fragments look like: the top-N card is widened to w 4 because it spells out
+  # merged-library names, the two fragment cards keep w 2.
+  - component_type: card
+    tag: at-qc-card-tss
+    index: at-qc-card-tss
+    section: Library quality at a glance
+    workflow_tag: atacseq
+    data_collection_tag: ataqv_metrics
+    use: ataqv/metrics
+    aggregation: average
+    column_name: tss_enrichment
+    column_type: float64
+    secondary_layout: gauge
+    coverage_max: 10
+    display: {icon_name: 'mdi:target', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: TSS enrichment
+    layout: {x: 0, y: 1, w: 2, h: 2}
+  - component_type: card
+    tag: at-qc-card-inpeaks
+    index: at-qc-card-inpeaks
+    section: Library quality at a glance
+    workflow_tag: atacseq
+    data_collection_tag: ataqv_metrics
+    use: ataqv/metrics
+    aggregation: average
+    column_name: hqaa_overlapping_peaks_percent
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 20
+    threshold_direction: min
+    threshold_warn: 10
+    display: {icon_name: 'mdi:magnet', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Reads inside peaks
+    layout: {x: 2, y: 1, w: 2, h: 2}
+  - component_type: card
+    tag: at-qc-card-mito
+    index: at-qc-card-mito
+    section: Library quality at a glance
+    workflow_tag: atacseq
+    data_collection_tag: ataqv_metrics
+    use: ataqv/metrics
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: mitochondrial_fraction
+    column_type: float64
+    display: {icon_name: 'mdi:bacteria-outline', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Mitochondrial fraction
+    layout: {x: 4, y: 1, w: 2, h: 2}
+  - component_type: card
+    tag: at-sig-card-dups
+    index: at-sig-card-dups
+    section: Library quality at a glance
+    workflow_tag: atacseq
+    data_collection_tag: ataqv_metrics
+    use: ataqv/metrics
+    aggregation: average
+    column_name: duplicate_fraction
+    column_type: float64
+    secondary_layout: histogram
+    display: {icon_name: 'mdi:relation-many-to-many', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Duplicate fraction
+    layout: {x: 6, y: 1, w: 2, h: 2}
   - component_type: card
     tag: at-sig-card-peaks
     index: at-sig-card-peaks
@@ -608,23 +566,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Peaks ataqv scored
-    layout: {x: 0, y: 1, w: 2, h: 2}
-  - component_type: card
-    tag: at-sig-card-dups
-    index: at-sig-card-dups
-    section: Library quality at a glance
-    workflow_tag: atacseq
-    data_collection_tag: ataqv_metrics
-    use: ataqv/metrics
-    aggregation: average
-    column_name: duplicate_fraction
-    column_type: float64
-    secondary_layout: histogram
-    display: {icon_name: 'mdi:relation-many-to-many', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Duplicate fraction
-    layout: {x: 2, y: 1, w: 2, h: 2}
+    layout: {x: 0, y: 3, w: 4, h: 2}
   - component_type: card
     tag: at-sig-card-fraglen
     index: at-sig-card-fraglen
@@ -641,7 +583,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Fragment length
-    layout: {x: 4, y: 1, w: 2, h: 2}
+    layout: {x: 4, y: 3, w: 2, h: 2}
   - component_type: card
     tag: at-sig-card-class
     index: at-sig-card-class
@@ -658,7 +600,87 @@ tabs:
     title_size: sm
     title_align: left
     title: Fragment windows
-    layout: {x: 6, y: 1, w: 2, h: 2}
+    layout: {x: 6, y: 3, w: 2, h: 2}
+
+  # ------------------------------------------- depth and coverage concentration
+  - component_type: text
+    tag: at-qc-complexity-intro
+    section: Depth and coverage concentration
+    title: "How much new material is left in each library"
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      [preseq](https://github.com/smithlabcode/preseq) extrapolates how many
+      distinct molecules a library would still yield if it were sequenced
+      deeper. The band is the 95% interval on that extrapolation: where it
+      stays narrow the estimate is safe, where it fans out, sequencing deeper
+      is a guess.
+    workflow_tag: atacseq
+    data_collection_tag: preseq_complexity_curve
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: at-qc-av-complexity
+    index: at-qc-av-complexity
+    section: Depth and coverage concentration
+    workflow_tag: atacseq
+    data_collection_tag: preseq_complexity_curve
+    use: preseq/complexity_ribbon
+    config:
+      log_x: true
+      band_opacity: 0.18
+      line_width: 2
+      x_title: Sequencing depth (reads)
+      y_title: Expected distinct molecules
+      legend_pos: right
+      selection_enabled: true
+      selection_column: sample
+    title: "Library complexity with its confidence ribbon"
+    description: "One curve per library, extrapolated by preseq; the band is the 95% interval on that extrapolation. Click a curve to select the library."
+    title_size: h3
+    layout: {x: 0, y: 1, w: 8, h: 7}
+  - component_type: text
+    tag: at-qc-fingerprint-intro
+    section: Depth and coverage concentration
+    title: "The numbers under the fingerprint curve"
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      MultiQC draws the fingerprint curve on the MultiQC tab; the per-sample
+      metrics [deepTools](https://deeptools.readthedocs.io) writes beside it
+      never reach a panel. Each point is one library: up and to the left means
+      the reads pile into a small share of the genome, which for ATAC is the
+      open chromatin.
+    workflow_tag: atacseq
+    data_collection_tag: deeptools_fingerprint_metrics
+    layout: {x: 0, y: 8, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: at-qc-av-fingerprint
+    index: at-qc-av-fingerprint
+    section: Depth and coverage concentration
+    workflow_tag: atacseq
+    data_collection_tag: deeptools_fingerprint_metrics
+    use: deeptools/fingerprint_scatter
+    config:
+      x_title: Area under the observed coverage curve
+      y_title: Divergence from a uniform library
+      marker_size: 12
+      opacity: 0.85
+      marker_outline: true
+      top_n_labels: 4
+      # Six points and a click-to-select: without a colour and a legend the
+      # library a point belongs to is only readable from the four labels.
+      color_col: sample
+      legend_pos: right
+      selection_enabled: true
+      selection_column: sample
+    title: "Coverage concentration per library"
+    description: "plotFingerprint's own quality metrics: enrichment against divergence from a uniform library of the same depth. Click a point to select the library."
+    title_size: h3
+    layout: {x: 0, y: 9, w: 8, h: 7}
 
   # ------------------------------------------------------------ TSS profile
   - component_type: text
@@ -689,17 +711,28 @@ tabs:
       # the profile is symmetric about the start site; 0 is the TSS itself
       df_modified = df.sort(["sample", "position"])
 
+      # The axis this figure colours on: the dashboard's analysis groups when the
+      # viewer has made some, else one colour per library. `line_group` keeps one
+      # curve per library either way, so grouping recolours the lines rather than
+      # collapsing several libraries into one jagged trace.
+      grp_col = depictio_group_by[0] if depictio_group_by else "sample"
+      color_col = grp_col if grp_col in df_modified.columns else "sample"
+      colors = depictio_group_kwargs.get("color_discrete_map") or {}
+
       fig = px.line(
           df_modified.to_pandas(),
           x="position",
           y="coverage",
-          color="sample",
+          color=color_col,
+          line_group="sample",
+          color_discrete_map=colors,
+          hover_name="sample",
       )
       fig.add_vline(x=0, line_dash="dot", line_color="grey")
       fig.update_layout(
           xaxis_title="Distance from transcription start site (bp)",
           yaxis_title="Aggregate coverage",
-          legend_title_text="Library",
+          legend_title_text="Library" if color_col == "sample" else "Analysis group",
           margin={"t": 24, "l": 64, "r": 16, "b": 48},
       )
     title: Coverage around transcription start sites
@@ -722,11 +755,20 @@ tabs:
           pl.col("total_peaks").cast(pl.Float64).alias("peak_count")
       )
 
+      # This is the tile groups are built from, so it has to show them back: the
+      # dashboard's analysis groups once the viewer has made some, one colour per
+      # library before that. `custom_data` stays on `sample` either way, which is
+      # what the lasso hands back as the selection.
+      grp_col = depictio_group_by[0] if depictio_group_by else "sample"
+      color_col = grp_col if grp_col in df_modified.columns else "sample"
+      colors = depictio_group_kwargs.get("color_discrete_map") or {}
+
       fig = px.scatter(
           df_modified.to_pandas(),
           x="tss_enrichment",
           y="hqaa_overlapping_peaks_percent",
-          color="sample",
+          color=color_col,
+          color_discrete_map=colors,
           size="peak_count",
           size_max=32,
           hover_name="sample",
@@ -735,7 +777,7 @@ tabs:
       fig.update_layout(
           xaxis_title="TSS enrichment",
           yaxis_title="Percent of HQAA inside peaks",
-          legend_title_text="Library",
+          legend_title_text="Library" if color_col == "sample" else "Analysis group",
           margin={"t": 24, "l": 64, "r": 16, "b": 48},
       )
     selection_enabled: true
@@ -744,6 +786,41 @@ tabs:
     description: Each library at its TSS enrichment and share of reads inside peaks; point size is the peak count. Click to select libraries.
     title_size: h3
     layout: {x: 4, y: 1, w: 4, h: 7}
+  - component_type: text
+    tag: at-qc-metagene-intro
+    section: Signal at transcription start sites
+    title: "Where the signal sits along a gene"
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      deepTools writes this matrix as a plain table beside its PDF and MultiQC has no panel for it. Bins 1 to 300 are the 3 kb upstream of each gene, 300 to 400 the gene body scaled to a fixed length, 400 to 700 the 3 kb downstream.
+    workflow_tag: atacseq
+    data_collection_tag: deeptools_plot_profile
+    layout: {x: 0, y: 8, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: at-qc-av-metagene
+    index: at-qc-av-metagene
+    section: Signal at transcription start sites
+    workflow_tag: atacseq
+    data_collection_tag: deeptools_plot_profile
+    use: deeptools/metagene_profile
+    config:
+      reference_x: 300
+      reference_label: TSS
+      shaded_bands:
+        - [300, 400, Gene body]
+      x_title: Bin along the plotted window
+      y_title: Mean signal
+      line_width: 2
+      legend_pos: right
+      selection_enabled: true
+      selection_column: sample
+    title: "Metagene signal profile"
+    description: "Mean accessibility of every library across the plotted window, with the transcription start site marked and the gene body shaded. Click a curve to select the library."
+    title_size: h3
+    layout: {x: 0, y: 9, w: 8, h: 7}
 
   # -------------------------------------------------------- fragment ladder
   - component_type: text
@@ -778,11 +855,21 @@ tabs:
           .sort(["sample", "fragment_length"])
       )
 
+      # The axis this figure colours on: the dashboard's analysis groups when the
+      # viewer has made some, else one colour per library. `line_group` keeps one
+      # ladder per library either way.
+      grp_col = depictio_group_by[0] if depictio_group_by else "sample"
+      color_col = grp_col if grp_col in df_modified.columns else "sample"
+      colors = depictio_group_kwargs.get("color_discrete_map") or {}
+
       fig = px.line(
           df_modified.to_pandas(),
           x="fragment_length",
           y="fraction_of_all_reads",
-          color="sample",
+          color=color_col,
+          line_group="sample",
+          color_discrete_map=colors,
+          hover_name="sample",
       )
       for start, end, label in ((0, 100, "sub-nucleosomal"), (150, 324, "mononucleosomal")):
           fig.add_vrect(
@@ -797,7 +884,7 @@ tabs:
       fig.update_layout(
           xaxis_title="Fragment length (bp)",
           yaxis_title="Fraction of all reads",
-          legend_title_text="Library",
+          legend_title_text="Library" if color_col == "sample" else "Analysis group",
           margin={"t": 24, "l": 64, "r": 16, "b": 48},
       )
     title: Fragment length distribution
@@ -1084,8 +1171,10 @@ tabs:
     alignment: left
     body: >
       Each point is a broad call at the centre of its region, height is the
-      MACS2 q-value. Lasso a region on the scatter: the selection carries the
-      peak id into the HOMER annotation table through the project links.
+      [MACS2](https://github.com/macs3-project/MACS) q-value. Lasso a region
+      on the scatter: the selection carries the peak id into the
+      [HOMER](http://homer.ucsd.edu/homer/) annotation table through the
+      project links.
     workflow_tag: atacseq
     data_collection_tag: macs2_broad_peaks
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -1634,8 +1723,9 @@ tabs:
     alignment: left
     body: >
       The merged intervals and their per-library presence, and the fold
-      enrichment behind the heatmap. Selecting a row in one carries the interval
-      to the other and to its DESeq2 statistics.
+      enrichment behind the heatmap. Selecting a row in one carries the
+      interval to the other and to its
+      [DESeq2](https://bioconductor.org/packages/DESeq2) statistics.
     workflow_tag: atacseq
     data_collection_tag: macs2_consensus_boolean
     layout: {x: 0, y: 0, w: 8, h: 1}

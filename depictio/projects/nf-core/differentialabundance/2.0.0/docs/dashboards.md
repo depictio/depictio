@@ -104,19 +104,29 @@ Is the experiment sound before any contrast is read?
   significance spread and the best adjusted p-value against a 0.05 cut-off.
 * **Signal along the genome**: the Manhattan plot, height `-log10(padj)`, threshold line
   at padj 0.05, selectable by `gene_id`.
-* **Per-chromosome detail**: the lollipop panel splits the calls one chromosome at a
-  time (pick a few chromosomes in the left panel to keep it readable), beside the volcano
-  redrawn with gene symbols and coloured by biotype.
+* **Per-chromosome detail**: the lollipop panel gives each contrast a lane and each gene a
+  head at its start coordinate, coloured by direction, sized by significance and labelled
+  for the strongest calls in each lane (pick a chromosome in the left panel first, since
+  coordinates from different contigs otherwise share one axis), above the volcano redrawn
+  with gene symbols and coloured by biotype.
 
 ![Genome view](screenshots/genome-view.png)
 
 
 
 
+### Observation sheet (pinned, every tab)
+
+Every column of the pipeline's `--input` sheet with the DESeq2 size factor joined on,
+collapsed by default and pinned to the top of every tab. The template binds `sample_id`,
+`group` and `size_factor` by name and keeps whatever else the sheet carried, so the
+covariates a contrast was blocked on are readable here even though no tile is bound to
+them.
+
 ### Reference tables (pinned, every tab)
 
-The observation sheet and the full DESeq2 result set, collapsed by default and pinned to
-the bottom of every tab. The results table carries row selection on `gene_id`.
+The full DESeq2 result set, collapsed by default and pinned to the bottom of every tab. The
+results table carries row selection on `gene_id`.
 
 ## Reading notes
 
