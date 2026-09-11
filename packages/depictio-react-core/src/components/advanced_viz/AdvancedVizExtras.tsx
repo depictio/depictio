@@ -10,6 +10,7 @@ import { Icon } from '@iconify/react';
 const DataGridBody = lazy(() => import('../data/DataGridBody'));
 import type { TierAnnotation } from '../data/DataGridBody';
 import type { LoadAllState } from '../chrome/LoadAllButton';
+import { useFullscreenPortalTarget } from '../chrome/useFullscreenPortalTarget';
 
 /**
  * Bridges the per-renderer Settings + Show-data popovers into ComponentChrome's
@@ -93,6 +94,10 @@ export const AdvancedVizSettingsPopover: React.FC<SettingsPopoverProps> = ({ con
   // Controlled `opened` state so the in-dropdown close-X can dismiss it;
   // also keeps Mantine's target-click toggle working.
   const [opened, setOpened] = useState(false);
+  // Portaled into the fullscreen element when there is one, otherwise Mantine's
+  // default. Without this the dropdown is painted outside the browser's top
+  // layer and a fullscreen figure's Settings cannot be used at all.
+  const portalTarget = useFullscreenPortalTarget();
   return (
     <Popover
       position="bottom-end"
@@ -102,6 +107,7 @@ export const AdvancedVizSettingsPopover: React.FC<SettingsPopoverProps> = ({ con
       closeOnEscape
       opened={opened}
       onChange={setOpened}
+      portalProps={{ target: portalTarget }}
     >
       <Popover.Target>
         <ActionIcon
@@ -115,8 +121,13 @@ export const AdvancedVizSettingsPopover: React.FC<SettingsPopoverProps> = ({ con
           <Icon icon="tabler:adjustments-horizontal" width={16} height={16} />
         </ActionIcon>
       </Popover.Target>
+      {/* Capped and scrolled: a renderer with a dozen controls (sashimi has
+          region, zoom, three track heights, per-annotation colours, labels)
+          builds a dropdown taller than the window, and Mantine then floats it
+          past the top edge with its first sections unreachable. The header
+          stays out of the scroller so the close button is always in reach. */}
       <Popover.Dropdown p="sm" style={{ maxWidth: 380 }}>
-        <Stack gap="xs">
+        <Stack gap="xs" style={{ maxHeight: 'min(70vh, 560px)' }}>
           <Group justify="space-between" wrap="nowrap" gap="xs">
             <Text size="xs" fw={600} c="dimmed">
               Viz controls
@@ -132,7 +143,20 @@ export const AdvancedVizSettingsPopover: React.FC<SettingsPopoverProps> = ({ con
               <Icon icon="tabler:x" width={14} height={14} />
             </ActionIcon>
           </Group>
-          {controls}
+          <div
+            style={{
+              overflowY: 'auto',
+              overflowX: 'hidden',
+              // A flex child scrolls only once it is allowed to shrink below
+              // its content height.
+              minHeight: 0,
+              // Room for the scrollbar so it never sits on top of a slider
+              // thumb or a colour swatch.
+              paddingRight: 6,
+            }}
+          >
+            {controls}
+          </div>
         </Stack>
       </Popover.Dropdown>
     </Popover>
@@ -175,6 +199,7 @@ export const AdvancedVizDataPopover: React.FC<DataPopoverProps> = ({
   // Controlled so the table's own close button can reach it; Mantine only
   // attaches its toggle to the target while uncontrolled, hence the onClick.
   const [opened, setOpened] = useState(false);
+  const portalTarget = useFullscreenPortalTarget();
 
   // Hide the icon outright when there is nothing behind it. Unlike the map's
   // popover, whose data only arrives once opened, this one is handed its rows
@@ -190,6 +215,7 @@ export const AdvancedVizDataPopover: React.FC<DataPopoverProps> = ({
       closeOnEscape
       opened={opened}
       onChange={setOpened}
+      portalProps={{ target: portalTarget }}
     >
       <Popover.Target>
         <ActionIcon
