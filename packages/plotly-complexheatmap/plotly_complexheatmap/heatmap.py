@@ -8,7 +8,7 @@ import numpy as np
 import plotly.graph_objects as go
 from numpy.typing import NDArray
 
-from plotly_complexheatmap.annotations import HeatmapAnnotation
+from plotly_complexheatmap.annotations import HeatmapAnnotation, brick_gap
 from plotly_complexheatmap.clustering import DendrogramResult, compute_dendrogram, dendrogram_traces
 from plotly_complexheatmap.layout import GridLayout, compute_grid_layout, create_figure
 from plotly_complexheatmap.legends import collect_legend_items
@@ -402,6 +402,37 @@ class ComplexHeatmap:
         )
 
     # ------------------------------------------------------------------
+    # Density
+    # ------------------------------------------------------------------
+
+    def _row_pitch_px(self, layout: GridLayout, cell: tuple[int, int], n_items: int) -> float:
+        """Plot-area pixels one data row gets in the grid cell *cell*.
+
+        The figure size and the grid fractions both live here, so this is the
+        only place that can answer the question — the tracks are handed the
+        answer rather than a reference back to the heatmap.
+
+        The grid fractions divide the PLOT AREA, not the figure, so the margins
+        come off first: counting them in overstates the room every row has by
+        whatever the title and the rotated column labels took.
+        """
+        if n_items <= 0:
+            return 0.0
+        top, bottom = self._vertical_margins()
+        row_idx = cell[0] - 1
+        fraction = layout.row_heights[row_idx] if row_idx < len(layout.row_heights) else 1.0
+        return (max(0.0, self.height - top - bottom) * fraction) / n_items
+
+    def _col_pitch_px(self, layout: GridLayout, cell: tuple[int, int], n_items: int) -> float:
+        """Plot-area pixels one data column gets in the grid cell *cell*."""
+        if n_items <= 0:
+            return 0.0
+        left, right = self._horizontal_margins(layout)
+        col_idx = cell[1] - 1
+        fraction = layout.column_widths[col_idx] if col_idx < len(layout.column_widths) else 1.0
+        return (max(0.0, self.width - left - right) * fraction) / n_items
+
+    # ------------------------------------------------------------------
     # Heatmap traces
     # ------------------------------------------------------------------
 
@@ -469,8 +500,10 @@ class ComplexHeatmap:
                 colorbar=self._colorbar_props(),
                 hovertemplate="row: %{customdata[0]}<br>col: %{customdata[1]}<br>value: %{z:.3f}<extra></extra>",
                 customdata=self._hover_custom(self._row_labels, self._col_labels),
-                xgap=0.5,
-                ygap=0.5,
+                # Same density guard as the annotation strips: a half-pixel gap
+                # on a one-pixel cell washes the map out to a faint band.
+                xgap=brick_gap(self._col_pitch_px(layout, (r, c), self._data.shape[1]), 0.5),
+                ygap=brick_gap(self._row_pitch_px(layout, (r, c), self._data.shape[0]), 0.5),
             )
             fig.add_trace(trace, row=r, col=c)
 
@@ -498,8 +531,8 @@ class ComplexHeatmap:
                 colorbar=self._colorbar_props() if show_colorbar else None,
                 hovertemplate="row: %{customdata[0]}<br>col: %{customdata[1]}<br>value: %{z:.3f}<extra></extra>",
                 customdata=self._hover_custom(rl, self._col_labels),
-                xgap=0.5,
-                ygap=0.5,
+                xgap=brick_gap(self._col_pitch_px(layout, (r, c), self._data.shape[1]), 0.5),
+                ygap=brick_gap(self._row_pitch_px(layout, (r, c), gs), 0.5),
             )
             fig.add_trace(trace, row=r, col=c)
             offset += gs
@@ -561,7 +594,8 @@ class ComplexHeatmap:
             if not cells:
                 continue
             r, c = cells[0]
-            for tr in track.to_traces("x", col_pos):
+            pitch = self._col_pitch_px(layout, (r, c), self._data.shape[1])
+            for tr in track.to_traces("x", col_pos, pitch):
                 fig.add_trace(tr, row=r, col=c)
 
     def _add_bottom_annotations(self, fig: go.Figure, layout: GridLayout) -> None:
@@ -576,7 +610,8 @@ class ComplexHeatmap:
             if not cells:
                 continue
             r, c = cells[0]
-            for tr in track.to_traces("x", col_pos):
+            pitch = self._col_pitch_px(layout, (r, c), self._data.shape[1])
+            for tr in track.to_traces("x", col_pos, pitch):
                 fig.add_trace(tr, row=r, col=c)
 
     def _add_left_annotations(self, fig: go.Figure, layout: GridLayout) -> None:
@@ -593,7 +628,8 @@ class ComplexHeatmap:
                 if ti >= len(layout.left_anno_cells[0]):
                     break
                 r, c = layout.left_anno_cells[0][ti]
-                for tr in track.to_traces("y", row_pos):
+                pitch = self._row_pitch_px(layout, (r, c), self._data.shape[0])
+                for tr in track.to_traces("y", row_pos, pitch):
                     fig.add_trace(tr, row=r, col=c)
 
     def _add_right_annotations(self, fig: go.Figure, layout: GridLayout) -> None:
@@ -610,7 +646,8 @@ class ComplexHeatmap:
                 if ti >= len(layout.right_anno_cells[0]):
                     break
                 r, c = layout.right_anno_cells[0][ti]
-                for tr in track.to_traces("y", row_pos):
+                pitch = self._row_pitch_px(layout, (r, c), self._data.shape[0])
+                for tr in track.to_traces("y", row_pos, pitch):
                     fig.add_trace(tr, row=r, col=c)
 
     def _add_split_side_annotations(
@@ -642,7 +679,8 @@ class ComplexHeatmap:
                 if tmp is None:
                     continue
 
-                for tr in tmp.to_traces("y", row_pos):
+                pitch = self._row_pitch_px(layout, (r, c), gs)
+                for tr in tmp.to_traces("y", row_pos, pitch):
                     if gi > 0 and hasattr(tr, "showlegend"):
                         tr.showlegend = False
                     fig.add_trace(tr, row=r, col=c)
@@ -878,9 +916,7 @@ class ComplexHeatmap:
         for cell, size in zip(cells, sizes):
             if size <= 0:
                 continue
-            row_idx = cell[0] - 1
-            fraction = layout.row_heights[row_idx] if row_idx < len(layout.row_heights) else 1.0
-            pitch = (self.height * fraction) / size
+            pitch = self._row_pitch_px(layout, cell, size)
             worst = pitch if worst == 0.0 else min(worst, pitch)
         self._row_labels_visible = worst >= _MIN_ROW_LABEL_PITCH_PX
         return self._row_labels_visible
@@ -985,20 +1021,45 @@ class ComplexHeatmap:
                 cells.extend(group_cells)
             _set_range(cells, y_range)
 
-    def _style_figure(self, fig: go.Figure, layout: GridLayout) -> None:
-        """Apply global figure styling: margins, legend, font, background."""
-        # Measure the legend off the traces that will actually draw one rather
-        # than off "an annotation exists": a purely numeric annotation track
-        # contributes no legend entry, and reserving a band for it would waste
-        # right margin the heatmap could have used.
-        legend_texts: list[str] = []
-        for trace in fig.data:
-            if not getattr(trace, "showlegend", False):
-                continue
-            legend_texts.append(str(getattr(trace, "name", "") or ""))
-            group_title = getattr(trace, "legendgrouptitle", None)
-            legend_texts.append(str(getattr(group_title, "text", "") or ""))
-        has_legend = any(legend_texts)
+    def _vertical_margins(self) -> tuple[float, float]:
+        """Top and bottom margin in pixels.
+
+        Split out of ``_style_figure`` because the density guards need it
+        before any trace is added: the grid fractions are fractions of what is
+        left once these are taken off. Depends on the title and the column
+        labels only, both settled by ``_reorder``, so there is no cycle with
+        the row-label decision that ``_horizontal_margins`` waits on.
+        """
+        # Dynamic top margin based on title / description presence
+        top_margin = 30.0
+        if self.title and self.description:
+            top_margin = 65.0
+        elif self.title:
+            top_margin = 50.0
+
+        # Dynamic bottom margin to fit rotated column labels.
+        # Labels are placed at -90deg when > 20 cols, otherwise -45deg.
+        # Char-pixel approximation: width ~6px per char at the configured font
+        # size. For -90deg labels the visual *height* equals char-count * 6;
+        # for -45deg it's ~0.7 of that. Always reserve a 14px gap for the
+        # tick-mark plus tickfont.
+        max_col_label_len = max((len(lbl) for lbl in self._col_labels), default=0)
+        col_tickangle_deg = 90 if len(self._col_labels) > 20 else 45
+        col_label_px = int(max_col_label_len * 6 * (1.0 if col_tickangle_deg == 90 else 0.7))
+        bottom_margin = float(max(20, col_label_px + 14))
+
+        return top_margin, bottom_margin
+
+    def _horizontal_margins(
+        self, layout: GridLayout, legend_texts: list[str] | None = None
+    ) -> tuple[float, float]:
+        """Left and right margin in pixels.
+
+        *legend_texts* is the measured legend content when the traces already
+        exist; before that the widest annotation legend entry is unknown and the
+        colorbar sets the floor, which is what the column-density guard needs.
+        """
+        has_legend = bool(legend_texts and any(legend_texts))
 
         # The right margin holds two bands side by side: the row labels next to
         # the heatmap, then an outer band shared by the legend (top) and the
@@ -1013,34 +1074,33 @@ class ComplexHeatmap:
         # Zero when the labels were dropped for density: the band would
         # otherwise still be reserved and the map drawn narrow to make room
         # for nothing.
-        label_px = (max_label_len * 7 + 10) if self._row_labels_visible else 0
+        label_px = (max_label_len * 7 + 10) if self._resolve_row_label_visibility(layout) else 0
         # Bar thickness 12 + xpad on both sides + room for the value tick labels.
         colorbar_px = 58
-        legend_px = (max((len(t) for t in legend_texts), default=0) * 6 + 46) if has_legend else 0
-        right_margin = label_px + max(colorbar_px, legend_px) + 8
+        legend_px = (max((len(t) for t in legend_texts or []), default=0) * 6 + 46) if has_legend else 0
+        right_margin = float(label_px + max(colorbar_px, legend_px) + 8)
 
         # Left margin for left annotations or dendrogram
-        left_margin = 5
+        left_margin = 5.0
 
-        # Dynamic top margin based on title / description presence
-        top_margin = 30
-        if self.title and self.description:
-            top_margin = 65
-        elif self.title:
-            top_margin = 50
+        return left_margin, right_margin
 
-        # Dynamic bottom margin to fit rotated column labels.
-        # Labels are placed at -90deg when > 20 cols, otherwise -45deg.
-        # Char-pixel approximation: width ~6px per char at the configured font
-        # size. For -90deg labels the visual *height* equals char-count * 6;
-        # for -45deg it's ~0.7 of that. Always reserve a 14px gap for the
-        # tick-mark plus tickfont.
-        max_col_label_len = max((len(lbl) for lbl in self._col_labels), default=0)
-        col_tickangle_deg = 90 if len(self._col_labels) > 20 else 45
-        col_label_px = int(
-            max_col_label_len * 6 * (1.0 if col_tickangle_deg == 90 else 0.7)
-        )
-        bottom_margin = max(20, col_label_px + 14)
+    def _style_figure(self, fig: go.Figure, layout: GridLayout) -> None:
+        """Apply global figure styling: margins, legend, font, background."""
+        # Measure the legend off the traces that will actually draw one rather
+        # than off "an annotation exists": a purely numeric annotation track
+        # contributes no legend entry, and reserving a band for it would waste
+        # right margin the heatmap could have used.
+        legend_texts: list[str] = []
+        for trace in fig.data:
+            if not getattr(trace, "showlegend", False):
+                continue
+            legend_texts.append(str(getattr(trace, "name", "") or ""))
+            group_title = getattr(trace, "legendgrouptitle", None)
+            legend_texts.append(str(getattr(group_title, "text", "") or ""))
+
+        left_margin, right_margin = self._horizontal_margins(layout, legend_texts)
+        top_margin, bottom_margin = self._vertical_margins()
 
         fig.update_layout(
             width=self.width,

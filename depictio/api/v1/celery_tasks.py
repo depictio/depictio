@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any
+from typing import Any, Sequence
 
 from bson import ObjectId
 
@@ -1088,6 +1088,30 @@ def compute_embedding(payload: dict) -> dict:
     }
 
 
+def _stable_palette_map(
+    universes: dict[str, list[str]],
+    palette: Sequence[str],
+) -> dict[str, dict[str, str]]:
+    """Map each annotation column's value universe onto *palette*.
+
+    The palette index runs ACROSS the columns, not from 0 within each one.
+    Restarting per column hands the first value of every track the same hue, so
+    two strips side by side (chipseq: ``consensus_set`` and ``support``) paint
+    the same colours in the same order and read as two views of one variable.
+    Continuing the cycle keeps distinct tracks on distinct hues for as long as
+    the palette lasts.
+
+    Iteration order is the caller's insertion order, so the mapping is stable
+    for a given annotation-column list.
+    """
+    colors: dict[str, dict[str, str]] = {}
+    offset = 0
+    for col, universe in universes.items():
+        colors[col] = {v: palette[(offset + i) % len(palette)] for i, v in enumerate(universe)}
+        offset += len(universe)
+    return colors
+
+
 @celery_app.task(
     name="depictio.advanced_viz.compute_complex_heatmap",
     soft_time_limit=300,
@@ -1315,19 +1339,21 @@ def compute_complex_heatmap(payload: dict) -> dict:
             )
             anno_universes = {}
 
+        # Palette offset runs across the annotation columns — see
+        # ``_stable_palette_map``. Two strips that both started at index 0 gave
+        # e.g. consensus_set=EZH2_IP and support=2 the same #66c2a5.
+        anno_colors = _stable_palette_map(anno_universes, _STABLE_PALETTE)
+
         annotations_spec: dict[str, dict[str, Any]] = {}
         for ann_col in row_annotation_cols:
-            if ann_col in anno_universes:
-                universe = anno_universes[ann_col]
+            if ann_col in anno_colors:
                 # Library silently drops ``colors`` when ``type`` is omitted
                 # (the dict path falls through to ``_infer`` which doesn't pass
                 # colors). Force ``type="categorical"`` so our stable palette
                 # actually reaches CategoricalTrack.
                 annotations_spec[ann_col] = {
                     "type": "categorical",
-                    "colors": {
-                        v: _STABLE_PALETTE[i % len(_STABLE_PALETTE)] for i, v in enumerate(universe)
-                    },
+                    "colors": anno_colors[ann_col],
                 }
             else:
                 # Numeric / unknown — let the library auto-pick the track type.
@@ -1357,22 +1383,28 @@ def compute_complex_heatmap(payload: dict) -> dict:
             "#666666",
         ]
         col_annotation_colors = payload.get("col_annotation_colors") or {}
-        col_ann_kwargs: dict[str, Any] = {}
+        # Universes first, palette second: the offset has to run across the
+        # annotations (same reason as the row strips above), so no colour can
+        # be assigned before every universe is known.
+        col_ordered: dict[str, list[str]] = {}
+        col_universes: dict[str, list[str]] = {}
         for ann_name, value_map in col_annotations_map.items():
             if not isinstance(value_map, dict):
                 continue
             ordered_values = [str(value_map.get(c, "—")) for c in value_columns]
-            uniq = sorted(set(v for v in ordered_values if v not in ("", "—")))
+            col_ordered[ann_name] = ordered_values
+            col_universes[ann_name] = sorted({v for v in ordered_values if v not in ("", "—")})
+        col_palette_map = _stable_palette_map(col_universes, _COL_PALETTE)
+
+        col_ann_kwargs: dict[str, Any] = {}
+        for ann_name, ordered_values in col_ordered.items():
             # Dashboard-supplied palette override wins; otherwise palette-cycle.
             override = (
                 (col_annotation_colors.get(ann_name) or {})
                 if isinstance(col_annotation_colors.get(ann_name), dict)
                 else {}
             )
-            colors = {
-                v: override.get(v) or _COL_PALETTE[i % len(_COL_PALETTE)]
-                for i, v in enumerate(uniq)
-            }
+            colors = {v: override.get(v) or hex_ for v, hex_ in col_palette_map[ann_name].items()}
             colors.setdefault("—", "rgba(150,150,150,0.4)")
             col_ann_kwargs[ann_name] = {
                 "values": ordered_values,
