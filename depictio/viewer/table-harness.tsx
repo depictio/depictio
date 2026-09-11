@@ -72,6 +72,10 @@ const projects = [
   },
 ] as never;
 
+// One dashboard opened recently, one never opened: exercises both branches of
+// the Last viewed column (a time cell and the "Never" placeholder).
+const recents = [{ id: '646b0f3c1e4a2d7f8e5b8ca2', ts: Date.now() - 3 * 3600_000 }];
+
 const noop = () => {};
 
 const App = () => (
@@ -85,6 +89,7 @@ const App = () => (
         pinnedIds={new Set()}
         pinDisabled={false}
         density="cozy"
+        recents={recents}
         onView={noop}
         onEdit={noop}
         onDelete={noop}
