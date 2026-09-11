@@ -14,7 +14,13 @@ renders_as:
   # The resistance genes as strand-aware arrows along their contig, one lane
   # per contig. Where several ARGs sit head to tail on one contig, that is a
   # resistance island, and no aggregate over drug classes can show it.
-  - { id: arg_island_track, component: advanced_viz, kind: gene_arrow_track, roles: {contig: contig, feature_id: gene_symbol, start: start, end: stop, strand: strand} }
+  # Coloured by tool, not by drug class: the report holds one row per (tool,
+  # hit), so a single locus called by four screens draws four stacked arrows,
+  # and the tool is what tells them apart. drug_class would be the biological
+  # axis but hAMRonization does not normalise it, so AMINOGLYCOSIDE,
+  # aminoglycoside and "aminoglycoside antibiotic" would each take a hue of
+  # their own and the island would read as more diverse than it is.
+  - { id: arg_island_track, component: advanced_viz, kind: gene_arrow_track, roles: {contig: contig, feature_id: gene_symbol, start: start, end: stop, strand: strand, class: tool} }
   # Screen -> drug class -> gene: which tool contributes which part of the
   # resistome. hAMRonization does not normalise the drug-class vocabulary
   # across tools, so the tool ring keeps the three vocabularies apart.

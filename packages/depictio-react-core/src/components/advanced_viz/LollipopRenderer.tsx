@@ -35,6 +35,11 @@ interface LollipopConfig {
   position_col: string;
   category_col: string;
   effect_col?: string | null;
+  /** Names each stem. `feature_id_col` is the lane, not the mark, so a panel
+   *  keyed on a contrast or a chromosome has no other way to say which gene a
+   *  stem belongs to. Unset keeps the position-number labels and the lane-name
+   *  hover this renderer has always drawn. */
+  label_col?: string | null;
   max_subplot_genes?: number;
 }
 
@@ -82,16 +87,19 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gro
   const [geneSort, setGeneSort] = usePersistedVizControl<GeneSort>(metadata, 'gene_sort', 'count');
   const [topNLabels, setTopNLabels] = usePersistedVizControl(metadata, 'top_n_labels', 0);
 
-  const requiredCols = useMemo(
-    () =>
-      [
-        config.feature_id_col,
-        config.position_col,
-        config.category_col,
-        ...(config.effect_col ? [config.effect_col] : []),
-      ].filter(Boolean) as string[],
-    [config],
-  );
+  const requiredCols = useMemo(() => {
+    const cols = [
+      config.feature_id_col,
+      config.position_col,
+      config.category_col,
+      ...(config.effect_col ? [config.effect_col] : []),
+    ].filter(Boolean) as string[];
+    // Appended rather than spread in, so a label bound to a column that is
+    // already a role does not send it twice, and so the `< 3` binding guard
+    // below still counts the three required roles and nothing else.
+    if (config.label_col && !cols.includes(config.label_col)) cols.push(config.label_col);
+    return cols;
+  }, [config]);
 
   const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -189,6 +197,7 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gro
     const pv = (rows[config.position_col] || []) as number[];
     const cv = (rows[config.category_col] || []) as (string | number)[];
     const ev = config.effect_col ? ((rows[config.effect_col] || []) as number[]) : null;
+    const lv = config.label_col ? ((rows[config.label_col] || []) as (string | number)[]) : null;
 
     const genesToShow = useSinglePicker
       ? selectedGene
@@ -300,13 +309,22 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gro
           y: heights,
           xaxis: 'x',
           yaxis: yref,
-          customdata: idx.map((i) => [
-            String(gv[i] ?? ''),
-            String(cv[i] ?? ''),
-            ev ? ev[i] ?? null : null,
-          ]),
+          customdata: idx.map((i) => {
+            const row: (string | number | null)[] = [
+              String(gv[i] ?? ''),
+              String(cv[i] ?? ''),
+              ev ? ev[i] ?? null : null,
+            ];
+            // Slot 3 only exists when a label is bound, so an unlabelled panel
+            // serialises byte-for-byte what it always did.
+            if (lv) row.push(String(lv[i] ?? ''));
+            return row;
+          }),
           hovertemplate:
-            `<b>%{customdata[0]}</b>:%{x}<br>${config.category_col}: %{customdata[1]}` +
+            (lv
+              ? `<b>%{customdata[3]}</b><br>%{customdata[0]}:%{x}`
+              : `<b>%{customdata[0]}</b>:%{x}`) +
+            `<br>${config.category_col}: %{customdata[1]}` +
             (ev ? `<br>${config.effect_col}: %{customdata[2]}` : '') +
             `<extra></extra>`,
           marker: {
@@ -336,7 +354,9 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gro
             mode: 'text' as const,
             x: ranked.map((r) => pv[r.i]),
             y: ranked.map((r) => Math.max(0, Number(ev[r.i]) || 0)),
-            text: ranked.map((r) => String(pv[r.i])),
+            // The stem's name when one is bound; the bare coordinate otherwise,
+            // which is all an unlabelled panel has ever had to show.
+            text: ranked.map((r) => (lv ? String(lv[r.i] ?? '') : String(pv[r.i]))),
             textposition: 'top center' as const,
             textfont: { size: 9, color: isDark ? '#fff' : '#222' },
             xaxis: 'x',
