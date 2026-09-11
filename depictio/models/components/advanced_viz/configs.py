@@ -512,6 +512,34 @@ class ComplexHeatmapConfig(_BaseVizConfig):
             "column axis without joining a second DC."
         ),
     )
+    col_annotation_cols: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Columns of the LINKED METADATA DC to draw as a top strip, named "
+            "declaratively instead of baked into ``col_annotations``. E.g. "
+            "``[condition, replicate, read_type]`` on an rnaseq expression matrix "
+            "pulls those three off the samplesheet. Opt-in: an empty list resolves "
+            "no link and issues no extra query, which is why this is safe to leave "
+            "unset everywhere. The server resolves the single enabled link whose "
+            "TARGET is this matrix and whose SOURCE DC carries ``metatype: "
+            "Metadata``, then joins on that link's ``source_column``. Restricting "
+            "to metadata sources is what keeps a matrix-to-matrix link (a derived "
+            "stats table, say) from ever becoming an annotation source. When the "
+            "gate leaves zero or several candidates nothing is drawn and the "
+            "dispatcher logs why, rather than guessing; name "
+            "``annotation_source_dc_tag`` to settle it."
+        ),
+    )
+    annotation_source_dc_tag: str | None = Field(
+        default=None,
+        description=(
+            "Which linked metadata DC ``col_annotation_cols`` reads from, for the "
+            "case where a matrix has more than one. Only consulted when "
+            "``col_annotation_cols`` is non-empty, and the named DC still has to be "
+            "a linked ``metatype: Metadata`` source: this picks among candidates, "
+            "it does not widen what may become one."
+        ),
+    )
     col_annotation_colors: dict[str, dict[str, str]] | None = Field(
         default=None,
         description=(
@@ -520,7 +548,8 @@ class ComplexHeatmapConfig(_BaseVizConfig):
             "unset the server picks colours from a Dark2 palette (chosen to "
             "contrast with the row-track's Set2 pastels so the two tracks "
             "read as distinct families). Use to pin domain palettes (e.g. "
-            "habitat → Set1) across PCoA + UpSet + heatmap."
+            "habitat → Set1) across PCoA + UpSet + heatmap. Applies to both "
+            "``col_annotations`` and ``col_annotation_cols`` strips."
         ),
     )
     cluster_rows: bool = Field(default=True)

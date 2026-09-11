@@ -1112,6 +1112,198 @@ def _stable_palette_map(
     return colors
 
 
+_BAKED_ANNOTATIONS_COL = "_col_annotations_json"
+
+# Placeholder the column-annotation aligner paints where a sample has no value.
+_COL_ANNOTATION_GAP = "—"
+
+
+def _drawable_col_annotations(
+    col_annotations_map: dict[str, Any], value_columns: list[str]
+) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+    """Column annotations worth painting, as ``(ordered values, value universe)``.
+
+    Aligns each ``{sample: value}`` map to the matrix's current column order and
+    drops the annotations that would say nothing.
+
+    An annotation whose universe has a single level is a band of one colour: it
+    separates no sample from any other, and costs a lane plus a legend entry to
+    do it. That matters because a template is written for a pipeline, not for one
+    run, so a column well worth naming in general (``read_type``,
+    ``strandedness``) is routinely constant in a particular cohort. Declining to
+    paint it is what lets one YAML stay honest across runs. Note this does not
+    pick the columns, the dashboard still does; it only declines to draw what
+    carries no contrast.
+    """
+    ordered: dict[str, list[str]] = {}
+    universes: dict[str, list[str]] = {}
+    for ann_name, value_map in col_annotations_map.items():
+        if not isinstance(value_map, dict):
+            continue
+        ordered_values = [str(value_map.get(c, _COL_ANNOTATION_GAP)) for c in value_columns]
+        universe = sorted({v for v in ordered_values if v not in ("", _COL_ANNOTATION_GAP)})
+        if len(universe) < 2:
+            logger.info(
+                "complex_heatmap: annotation '%s' has %d distinct value(s) across "
+                "%d columns, not drawn",
+                ann_name,
+                len(universe),
+                len(value_columns),
+            )
+            continue
+        ordered[ann_name] = ordered_values
+        universes[ann_name] = universe
+    return ordered, universes
+
+
+def _annotation_join_sources(
+    join: dict | None, sample_columns: list[str]
+) -> tuple[dict[str, dict[str, str]] | None, list[str], list[str]]:
+    """``(requested maps, pickable columns, single-value columns)`` from the metadata DC.
+
+    ``join`` is what the dispatcher resolved out of the project's declared links
+    (see ``_resolve_annotation_join``): a metadata DC, the column it joins on and
+    the columns the component asked for. Reading it here rather than at dispatch
+    keeps the Delta load in the worker, where the rest of the heavy work lives.
+
+    All three come out of one load because the viz-controls picker has to describe
+    what the heatmap could draw, not what the metadata sheet happens to contain.
+    A column is pickable only if it resolves to at least two distinct values
+    *across this matrix's samples*, the same bar ``_drawable_col_annotations``
+    applies, so the picker never offers an option that would then refuse to paint.
+    The single-value ones are reported separately rather than dropped, because a
+    column silently missing from the list reads as a bug: the picker shows them
+    greyed out, which answers "why can I not pick read_type" on the spot.
+
+    That is also why the requested list may be empty: the component draws nothing
+    until something is picked, but the options still have to be discoverable.
+
+    The metadata frame is loaded unfiltered on purpose. It is a lookup, not a
+    data source: the aligner only ever asks it about samples that survived into
+    ``value_columns``, so rows for filtered-out samples cost a little memory and
+    change nothing, while filtering it would mean applying the matrix's filters
+    to a different DC's schema.
+    """
+    if not isinstance(join, dict):
+        return None, [], []
+    cols = [str(c) for c in (join.get("cols") or []) if c]
+    source_column = str(join.get("source_column") or "")
+    dc_id, wf_id = join.get("source_dc_id"), join.get("source_wf_id")
+    if not source_column or not dc_id or not wf_id:
+        return None, [], []
+
+    from depictio.api.v1.db import deltatables_collection
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+    try:
+        dt_doc = deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc_id))})
+        if not dt_doc or not dt_doc.get("delta_table_location"):
+            logger.warning("annotation join: metadata dc_id=%s has no Delta table", dc_id)
+            return None, [], []
+        mdf = load_deltatable_lite(
+            workflow_id=ObjectId(str(wf_id)),
+            data_collection_id=str(dc_id),
+            init_data={
+                str(dc_id): {
+                    "delta_location": dt_doc["delta_table_location"],
+                    "dc_type": "table",
+                    "size_bytes": 0,
+                }
+            },
+        )
+    except Exception as exc:
+        logger.warning("annotation join: failed to load metadata dc_id=%s: %s", dc_id, exc)
+        return None, [], []
+
+    if source_column not in mdf.columns:
+        logger.warning(
+            "annotation join: metadata dc_id=%s has no join column '%s' (has %s)",
+            dc_id,
+            source_column,
+            list(mdf.columns),
+        )
+        return None, [], []
+
+    import polars as pl
+
+    candidates = [c for c in mdf.columns if c != source_column]
+    lookup = mdf.select([source_column, *candidates]).unique(subset=[source_column])
+    ids = [str(v) for v in lookup[source_column].cast(pl.Utf8).to_list()]
+
+    per_column: dict[str, dict[str, str]] = {}
+    available: list[str] = []
+    constant: list[str] = []
+    for col in candidates:
+        values = lookup[col].cast(pl.Utf8).fill_null("").to_list()
+        mapping = {k: str(v) for k, v in zip(ids, values)}
+        per_column[col] = mapping
+        universe = {mapping.get(s, "") for s in sample_columns}
+        levels = {v for v in universe if v not in ("", _COL_ANNOTATION_GAP)}
+        (available if len(levels) >= 2 else constant).append(col)
+
+    missing = [c for c in cols if c not in per_column]
+    if missing:
+        logger.warning(
+            "annotation join: metadata dc_id=%s is missing requested %s (has %s)",
+            dc_id,
+            missing,
+            list(mdf.columns),
+        )
+    requested = {c: per_column[c] for c in cols if c in per_column}
+    return (requested or None), available, constant
+
+
+def _annotation_map_from_baked_column(
+    df: Any, sample_columns: list[str]
+) -> dict[str, dict[str, str]] | None:
+    """``{annotation: {sample: value}}`` out of a recipe-baked annotations column.
+
+    Several ingest recipes (``salmon/top_variable_genes``, ``deseq2/vst_*``,
+    ``taxpasta/matrix``) join the samplesheet at ingest and serialise the result
+    into a constant ``_col_annotations_json`` column. Only the figure path ever
+    read it, so on the advanced-viz path the strip those recipes advertise was
+    computed, stored and then dropped. This is that fallback, for matrices whose
+    dashboards have not moved to the declarative join yet.
+
+    Its ``values`` are positional against the matrix's sample columns as they
+    stood at ingest, so a length mismatch means the frame has changed shape
+    since and every label would name the wrong sample: skip rather than mislabel.
+
+    Recipe-supplied ``colors`` are deliberately dropped. The caller assigns the
+    column track its Dark2 palette so the four templates that reach this path
+    agree with each other and stay visually distinct from the row track, which
+    a per-recipe palette would not.
+    """
+    if _BAKED_ANNOTATIONS_COL not in getattr(df, "columns", []) or df.height == 0:
+        return None
+    raw = df[_BAKED_ANNOTATIONS_COL][0]
+    if not raw:
+        return None
+    try:
+        spec = json.loads(raw)
+    except (TypeError, ValueError) as exc:
+        logger.warning("baked annotations: %s is not valid JSON: %s", _BAKED_ANNOTATIONS_COL, exc)
+        return None
+    if not isinstance(spec, dict):
+        return None
+
+    out: dict[str, dict[str, str]] = {}
+    for name, body in spec.items():
+        values = body.get("values") if isinstance(body, dict) else None
+        if not isinstance(values, list):
+            continue
+        if len(values) != len(sample_columns):
+            logger.warning(
+                "baked annotations: '%s' has %d values for %d sample columns, skipping",
+                name,
+                len(values),
+                len(sample_columns),
+            )
+            continue
+        out[str(name)] = {c: str(v) for c, v in zip(sample_columns, values)}
+    return out or None
+
+
 @celery_app.task(
     name="depictio.advanced_viz.compute_complex_heatmap",
     soft_time_limit=300,
@@ -1234,10 +1426,38 @@ def compute_complex_heatmap(payload: dict) -> dict:
     # filter VALUES against the column names — the previous version only
     # honoured filters literally named `sample`/`sample_id`, which is not what
     # a metadata pick (`ID`) or a map lasso sends.
+    # The full sample universe in Delta column order, captured BEFORE the filter
+    # narrowing below. ``_col_annotations_json`` stores its values positionally
+    # against exactly this list (the recipe wrote it at ingest, when no filter
+    # existed), so zipping against the narrowed list would slide every label one
+    # sample to the left as soon as a filter is active.
+    all_sample_columns = list(value_columns)
+
+    # Wide-matrix sample subsetting: sample IDs are MATRIX COLUMNS, not rows,
+    # so the row-filter skipped them silently. Mirror the subset by matching
+    # filter VALUES against the column names — the previous version only
+    # honoured filters literally named `sample`/`sample_id`, which is not what
+    # a metadata pick (`ID`) or a map lasso sends.
     value_columns = (
         _narrow_wide_matrix_columns(value_columns, filter_metadata, what="heatmap columns")
         or value_columns
     )
+
+    # Column annotations, in priority order. Both branches produce the same
+    # ``{annotation_name: {sample_column: value}}`` shape the aligner below
+    # consumes, so only the *source* differs:
+    #   1. an explicit payload map (dashboard-authored, oldest path),
+    #   2. a link-resolved join against the metadata DC (declarative, follows
+    #      filters because it is read per request),
+    #   3. the ``_col_annotations_json`` column several ingest recipes bake into
+    #      the matrix (frozen at ingest, but already shipped in every seed).
+    joined_map, available_col_annotations, constant_col_annotations = _annotation_join_sources(
+        payload.get("annotation_join"), all_sample_columns
+    )
+    if not col_annotations_map:
+        col_annotations_map = joined_map or _annotation_map_from_baked_column(
+            df, all_sample_columns
+        )
 
     pdf = df.select([index_column] + value_columns + row_annotation_cols).to_pandas()
 
@@ -1386,14 +1606,7 @@ def compute_complex_heatmap(payload: dict) -> dict:
         # Universes first, palette second: the offset has to run across the
         # annotations (same reason as the row strips above), so no colour can
         # be assigned before every universe is known.
-        col_ordered: dict[str, list[str]] = {}
-        col_universes: dict[str, list[str]] = {}
-        for ann_name, value_map in col_annotations_map.items():
-            if not isinstance(value_map, dict):
-                continue
-            ordered_values = [str(value_map.get(c, "—")) for c in value_columns]
-            col_ordered[ann_name] = ordered_values
-            col_universes[ann_name] = sorted({v for v in ordered_values if v not in ("", "—")})
+        col_ordered, col_universes = _drawable_col_annotations(col_annotations_map, value_columns)
         col_palette_map = _stable_palette_map(col_universes, _COL_PALETTE)
 
         col_ann_kwargs: dict[str, Any] = {}
@@ -1461,6 +1674,12 @@ def compute_complex_heatmap(payload: dict) -> dict:
         "col_count": len(value_columns),
         "load_ms": load_ms,
         "compute_ms": compute_ms,
+        # What the viz-controls picker may offer for the column strips, and the
+        # metadata columns it must show greyed out because they hold one value
+        # across these samples. Both empty when the matrix has no metadata link,
+        # which is what hides the control entirely.
+        "available_col_annotations": available_col_annotations,
+        "constant_col_annotations": constant_col_annotations,
     }
 
 
