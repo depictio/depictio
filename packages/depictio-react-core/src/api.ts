@@ -1226,6 +1226,16 @@ export interface ComplexHeatmapResult {
   col_count: number;
   load_ms?: number;
   compute_ms?: number;
+  /** Metadata columns the viz-controls picker may offer for the column strips,
+   *  resolved server-side through the matrix's metadata link. Only columns that
+   *  take at least two distinct values across the current samples are listed,
+   *  so the picker never offers one the heatmap would then refuse to paint.
+   *  Empty when the matrix has no metadata link, which hides the control. */
+  available_col_annotations?: string[];
+  /** Metadata columns that exist but hold one value across the current samples.
+   *  Shown greyed out rather than omitted, so the picker answers why a column
+   *  cannot be chosen instead of appearing to have lost it. */
+  constant_col_annotations?: string[];
 }
 
 export interface ComplexHeatmapJob {

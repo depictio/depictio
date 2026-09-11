@@ -36,6 +36,15 @@ interface ComplexHeatmapConfig {
    *  Shape: ``{annotation_name: {column_label: category_value}}``.
    *  Aligned to value_columns order server-side. */
   col_annotations?: Record<string, Record<string, string>> | null;
+  /** Columns of the linked metadata DC to draw as a top strip. The server
+   *  resolves which DC that is from the project's declared links, keeping only
+   *  a source marked `metatype: Metadata`, so the component names columns and
+   *  never a data collection. Empty (the default) resolves nothing. */
+  col_annotation_cols?: string[];
+  /** Which linked metadata DC `col_annotation_cols` reads from, for a matrix
+   *  linked to more than one. Only consulted when `col_annotation_cols` is
+   *  non-empty. */
+  annotation_source_dc_tag?: string | null;
   /** Optional palette overrides for the col-annotation track. Shape:
    *  ``{annotation_name: {category_value: hex}}``. Lets dashboards pin
    *  domain colours (e.g. habitat → Set1) across PCoA / UpSet / heatmap. */
@@ -86,6 +95,15 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
   const [rowAnnotationCols, setRowAnnotationCols] = useState<string[]>(
     config.row_annotation_cols ?? [],
   );
+  // Column strips, same non-persisted reasoning as the row bindings above. The
+  // options are not a column subset of this DC but of the linked metadata one,
+  // so unlike `annotationOptions` they cannot be derived from the schema here:
+  // the server resolves the link and reports them back with the figure.
+  const [colAnnotationCols, setColAnnotationCols] = useState<string[]>(
+    config.col_annotation_cols ?? [],
+  );
+  const [colAnnotationOptions, setColAnnotationOptions] = useState<string[]>([]);
+  const [colAnnotationConstant, setColAnnotationConstant] = useState<string[]>([]);
   const [schema, setSchema] = useState<Record<string, string> | null>(null);
 
   const [figure, setFigure] = useState<ComplexHeatmapResult['figure'] | null>(null);
@@ -117,6 +135,8 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
       value_columns: config.value_columns ?? null,
       row_annotation_cols: rowAnnotationCols,
       col_annotations: config.col_annotations ?? null,
+      col_annotation_cols: colAnnotationCols,
+      annotation_source_dc_tag: config.annotation_source_dc_tag ?? null,
       col_annotation_colors: config.col_annotation_colors ?? null,
       cluster_rows: clusterRows,
       cluster_cols: clusterCols,
@@ -132,6 +152,8 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
       if (cancelled) return;
       setFigure(result.figure);
       setDims({ rows: result.row_count, cols: result.col_count });
+      setColAnnotationOptions(result.available_col_annotations ?? []);
+      setColAnnotationConstant(result.constant_col_annotations ?? []);
       setComputeMs(result.compute_ms ?? null);
       setComputeStatus(null);
       setLoading(false);
@@ -191,6 +213,7 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
     config.index_column,
     JSON.stringify(config.value_columns),
     JSON.stringify(rowAnnotationCols),
+    JSON.stringify(colAnnotationCols),
   ]);
 
   // Fetch the column schema once so the MultiSelect knows what's available.
@@ -223,6 +246,29 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
     for (const c of rowAnnotationCols) if (!opts.includes(c)) opts.push(c);
     return opts;
   }, [schema, config.index_column, config.value_columns, rowAnnotationCols]);
+
+  // What the column-annotation picker shows selected: the requested columns
+  // that the server could actually paint. A template names the fields worth
+  // annotating for the pipeline (`read_type`, `strandedness`), and any given
+  // cohort leaves some of them constant. Showing those as selected pills would
+  // claim strips that are not on the chart, so the control reflects the figure
+  // and the greyed-out options below explain the difference.
+  const drawnColAnnotations = useMemo(
+    () => colAnnotationCols.filter((c) => colAnnotationOptions.includes(c)),
+    [colAnnotationCols, colAnnotationOptions],
+  );
+
+  const colAnnotationData = useMemo(
+    () => [
+      ...colAnnotationOptions.map((value) => ({ value, label: value })),
+      ...colAnnotationConstant.map((value) => ({
+        value,
+        label: `${value} (one value here)`,
+        disabled: true,
+      })),
+    ],
+    [colAnnotationOptions, colAnnotationConstant],
+  );
 
   // Best-effort fetch of a small data sample (max 200 rows) for the
   // Show-data popover — separate from the heatmap dispatch.
@@ -318,6 +364,19 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
           searchable
           clearable
         />
+        {colAnnotationData.length > 0 ? (
+          <MultiSelect
+            size="xs"
+            label="Column annotations"
+            description="Sample metadata drawn as strips above the columns"
+            value={drawnColAnnotations}
+            onChange={setColAnnotationCols}
+            data={colAnnotationData}
+            placeholder={drawnColAnnotations.length === 0 ? 'Pick columns' : ''}
+            searchable
+            clearable
+          />
+        ) : null}
         {computeStatus ? (
           <Badge size="sm" color="grape" variant="light" radius="sm" fullWidth>
             {computeStatus}
@@ -337,6 +396,8 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
       clusterCols,
       rowAnnotationCols,
       annotationOptions,
+      drawnColAnnotations,
+      colAnnotationData,
       computeStatus,
       computeMs,
       dims,
