@@ -23,12 +23,23 @@ import type {
   SortBy,
   ViewMode,
 } from './hooks/useDashboardViewPrefs';
+import { emptyDashboardFilters } from './hooks/useDashboardViewPrefs';
 import { useBrandAccents } from 'depictio-react-core';
+import ShareViewButton from '../components/listing/ShareViewButton';
+
+export type FilterOption = { value: string; label: string };
 
 export interface DashboardsToolbarProps {
   prefs: DashboardViewPrefs;
-  projectOptions: { value: string; label: string }[];
-  ownerOptions: { value: string; label: string }[];
+  projectOptions: FilterOption[];
+  ownerOptions: FilterOption[];
+  templateOptions: FilterOption[];
+  workflowOptions: FilterOption[];
+  /** Rows currently on screen, for the share confirmation's wording. */
+  matchingCount: number;
+  /** False while the shared-view banner is up: it lists the same filters, and
+   *  two identical chip rows one above the other reads as a bug. */
+  showFilterChips?: boolean;
   pinnedCount: number;
   pinDisabled: boolean;
   setView: (v: ViewMode) => void;
@@ -138,14 +149,25 @@ const ViewPicker: React.FC<{
 
 const FilterPopover: React.FC<{
   prefs: DashboardViewPrefs;
-  projectOptions: { value: string; label: string }[];
-  ownerOptions: { value: string; label: string }[];
+  projectOptions: FilterOption[];
+  ownerOptions: FilterOption[];
+  templateOptions: FilterOption[];
+  workflowOptions: FilterOption[];
   setFilters: (f: DashboardFilters) => void;
-}> = ({ prefs, projectOptions, ownerOptions, setFilters }) => {
+}> = ({
+  prefs,
+  projectOptions,
+  ownerOptions,
+  templateOptions,
+  workflowOptions,
+  setFilters,
+}) => {
   const accent = useBrandAccents();
   const activeCount =
     prefs.filters.projects.length +
     prefs.filters.owners.length +
+    prefs.filters.templates.length +
+    prefs.filters.workflows.length +
     (prefs.filters.visibility !== 'all' ? 1 : 0);
 
   return (
@@ -178,17 +200,28 @@ const FilterPopover: React.FC<{
               Filters
             </Text>
             {activeCount > 0 && (
-              <Button
-                variant="subtle"
-                size="compact-xs"
-                onClick={() =>
-                  setFilters({ projects: [], owners: [], visibility: 'all' })
-                }
-              >
+              <Button variant="subtle" size="compact-xs" onClick={() => setFilters(emptyDashboardFilters())}>
                 Clear all
               </Button>
             )}
           </Group>
+
+          <MultiSelect
+            label="Template"
+            placeholder={
+              templateOptions.length === 0
+                ? 'No templated projects loaded'
+                : 'Any template'
+            }
+            description="Pick a source for every pipeline under it, or one pipeline on its own."
+            data={templateOptions}
+            value={prefs.filters.templates}
+            onChange={(v) => setFilters({ ...prefs.filters, templates: v })}
+            disabled={templateOptions.length === 0}
+            searchable
+            clearable
+            comboboxProps={{ withinPortal: false }}
+          />
 
           <MultiSelect
             label="Project"
@@ -207,6 +240,20 @@ const FilterPopover: React.FC<{
             data={ownerOptions}
             value={prefs.filters.owners}
             onChange={(v) => setFilters({ ...prefs.filters, owners: v })}
+            searchable
+            clearable
+            comboboxProps={{ withinPortal: false }}
+          />
+
+          <MultiSelect
+            label="Workflow system"
+            placeholder={
+              workflowOptions.length === 0 ? 'No workflow tagged' : 'Any workflow'
+            }
+            data={workflowOptions}
+            value={prefs.filters.workflows}
+            onChange={(v) => setFilters({ ...prefs.filters, workflows: v })}
+            disabled={workflowOptions.length === 0}
             searchable
             clearable
             comboboxProps={{ withinPortal: false }}
@@ -236,6 +283,10 @@ const DashboardsToolbar: React.FC<DashboardsToolbarProps> = ({
   prefs,
   projectOptions,
   ownerOptions,
+  templateOptions,
+  workflowOptions,
+  matchingCount,
+  showFilterChips = true,
   pinnedCount,
   pinDisabled,
   setView,
@@ -251,6 +302,18 @@ const DashboardsToolbar: React.FC<DashboardsToolbarProps> = ({
   const showSort = prefs.view !== 'table';
 
   const activeFilterChips: { key: string; label: string; onRemove: () => void }[] = [];
+  for (const id of prefs.filters.templates) {
+    const opt = templateOptions.find((o) => o.value === id);
+    activeFilterChips.push({
+      key: `t:${id}`,
+      label: opt?.label ?? id,
+      onRemove: () =>
+        setFilters({
+          ...prefs.filters,
+          templates: prefs.filters.templates.filter((t) => t !== id),
+        }),
+    });
+  }
   for (const id of prefs.filters.projects) {
     const opt = projectOptions.find((o) => o.value === id);
     activeFilterChips.push({
@@ -272,6 +335,18 @@ const DashboardsToolbar: React.FC<DashboardsToolbarProps> = ({
         setFilters({
           ...prefs.filters,
           owners: prefs.filters.owners.filter((o) => o !== id),
+        }),
+    });
+  }
+  for (const id of prefs.filters.workflows) {
+    const opt = workflowOptions.find((o) => o.value === id);
+    activeFilterChips.push({
+      key: `w:${id}`,
+      label: opt?.label ?? id,
+      onRemove: () =>
+        setFilters({
+          ...prefs.filters,
+          workflows: prefs.filters.workflows.filter((w) => w !== id),
         }),
     });
   }
@@ -370,13 +445,23 @@ const DashboardsToolbar: React.FC<DashboardsToolbarProps> = ({
           prefs={prefs}
           projectOptions={projectOptions}
           ownerOptions={ownerOptions}
+          templateOptions={templateOptions}
+          workflowOptions={workflowOptions}
           setFilters={setFilters}
+        />
+
+        <ShareViewButton
+          describes={
+            hasAnyActive
+              ? `this filtered view (${matchingCount} dashboard${matchingCount === 1 ? '' : 's'})`
+              : 'the full dashboard list'
+          }
         />
 
         <ViewPicker value={prefs.view} onChange={setView} />
       </Group>
 
-      {activeFilterChips.length > 0 && (
+      {showFilterChips && activeFilterChips.length > 0 && (
         <Group gap="xs" wrap="wrap" align="center">
           {activeFilterChips.map((chip) => (
             <Badge

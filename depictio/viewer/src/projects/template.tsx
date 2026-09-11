@@ -1,52 +1,21 @@
 import React from 'react';
 import { Anchor, Avatar, Badge, Box, Group, Stack, Text, Tooltip } from '@mantine/core';
 
-import type { ProjectListEntry } from 'depictio-react-core';
+import type { ParsedTemplate, ProjectListEntry } from 'depictio-react-core';
+import { parseTemplateOrigin } from 'depictio-react-core';
 
-export interface ParsedTemplate {
-  /** Original full identifier, e.g. `nf-core/viralrecon/3.0.0` */
-  full: string;
-  /** First slash-separated segment, e.g. `nf-core` */
-  source: string;
-  /** Middle segment if present, e.g. `viralrecon` */
-  repo: string;
-  /** Trailing segment if it looks like a semver, otherwise empty */
-  version: string;
-}
+/** Template identifiers are parsed and matched in `depictio-react-core`
+ *  (`templateFilter.ts`), where both listings' filters can share the rules and
+ *  a unit test can hold them still. Re-exported here so the components that
+ *  already reach for this module keep their import path. */
+export type { ParsedTemplate };
+export { parseTemplateOrigin };
 
-/** Parse `template_origin.template_id` (e.g. `nf-core/viralrecon/3.0.0`) into
- *  source/repo/version. Backwards-compatible with `template_origin` passed as
- *  a plain string and with shorter ids that omit the version segment. Returns
- *  null when the project wasn't created from a template. */
+/** Parse a project's `template_origin` (e.g. `nf-core/viralrecon/3.0.0`) into
+ *  source/repo/version. Returns null when the project wasn't created from a
+ *  template. */
 export function parseTemplate(project: ProjectListEntry): ParsedTemplate | null {
   return parseTemplateOrigin(project.template_origin);
-}
-
-/** Same as `parseTemplate` but accepts the raw `template_origin` value
- *  directly — for callers that already have it on hand (dashboard list
- *  cards, settings drawer) and don't want to fabricate a fake
- *  `ProjectListEntry` to call it. */
-export function parseTemplateOrigin(origin: unknown): ParsedTemplate | null {
-  let raw: string | null = null;
-  if (typeof origin === 'string') {
-    raw = origin.trim();
-  } else if (
-    origin &&
-    typeof origin === 'object' &&
-    typeof (origin as { template_id?: unknown }).template_id === 'string'
-  ) {
-    raw = ((origin as { template_id: string }).template_id || '').trim();
-  }
-  if (!raw) return null;
-  const parts = raw.split('/').map((s) => s.trim()).filter(Boolean);
-  const looksVersion = (s: string) => /^v?\d/.test(s);
-  let version = '';
-  if (parts.length >= 2 && looksVersion(parts[parts.length - 1])) {
-    version = parts.pop() || '';
-  }
-  const source = parts[0] || raw;
-  const repo = parts[1] || '';
-  return { full: raw, source, repo, version };
 }
 
 /** Build the depictio-docs page URL for a parsed template. Pattern:
