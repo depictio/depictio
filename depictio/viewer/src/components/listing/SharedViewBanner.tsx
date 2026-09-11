@@ -2,8 +2,6 @@ import React from 'react';
 import { ActionIcon, Anchor, Badge, Button, Group, Paper, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import { useBrandAccents } from 'depictio-react-core';
-
 export interface SharedViewScope {
   key: string;
   label: string;
@@ -22,6 +20,10 @@ interface SharedViewBannerProps {
   noun: string;
   /** The same scope on the other listing, when it carries over. */
   crossLink?: { href: string; label: string };
+  /** Mantine color for the banner. Each listing passes its own page accent so
+   *  the banner reads as part of that page rather than as a stray alert:
+   *  Dashboards is the tertiary role, Projects the secondary one. */
+  color: string;
   onClearAll: () => void;
 }
 
@@ -40,9 +42,9 @@ const SharedViewBanner: React.FC<SharedViewBannerProps> = ({
   total,
   noun,
   crossLink,
+  color,
   onClearAll,
 }) => {
-  const accent = useBrandAccents();
   const hidden = Math.max(total - shown, 0);
 
   return (
@@ -52,8 +54,8 @@ const SharedViewBanner: React.FC<SharedViewBannerProps> = ({
       p="sm"
       data-testid="shared-view-banner"
       style={{
-        borderColor: `var(--mantine-color-${accent.tertiary}-4)`,
-        background: `var(--mantine-color-${accent.tertiary}-light)`,
+        borderColor: `var(--mantine-color-${color}-4)`,
+        background: `var(--mantine-color-${color}-light)`,
       }}
     >
       <Group justify="space-between" wrap="wrap" gap="sm">
@@ -61,7 +63,7 @@ const SharedViewBanner: React.FC<SharedViewBannerProps> = ({
           <Icon
             icon="mdi:link-variant"
             width={18}
-            color={`var(--mantine-color-${accent.tertiary}-7)`}
+            color={`var(--mantine-color-${color}-7)`}
           />
           <Text size="sm" fw={600}>
             Shared view
@@ -70,7 +72,7 @@ const SharedViewBanner: React.FC<SharedViewBannerProps> = ({
             <Badge
               key={s.key}
               variant="filled"
-              color={accent.tertiary}
+              color={color}
               radius="sm"
               rightSection={
                 <ActionIcon

@@ -15,7 +15,7 @@ import {
 import { Icon } from '@iconify/react';
 
 import type { DashboardListEntry, ProjectListEntry } from 'depictio-react-core';
-import { parseTemplateOrigin } from 'depictio-react-core';
+import { parseTemplateOrigin, useBrandAccents } from 'depictio-react-core';
 
 import DashboardsToolbar from './DashboardsToolbar';
 import SharedViewBanner from '../components/listing/SharedViewBanner';
@@ -146,6 +146,7 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
   onBulkExport,
   onBulkDelete,
 }) => {
+  const accent = useBrandAccents();
   const projectNames = useMemo(() => projectNameLookup(projects), [projects]);
   // Per-project template_origin so the cards can render a TemplateChip
   // without re-fetching the project. Only populated for projects that were
@@ -563,6 +564,7 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
           total={totalDashboards}
           noun="dashboard"
           crossLink={crossLink}
+          color={accent.tertiary}
           onClearAll={clearFilters}
         />
       )}

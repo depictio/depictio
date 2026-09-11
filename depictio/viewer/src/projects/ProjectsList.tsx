@@ -279,6 +279,7 @@ const ProjectsList: React.FC<ProjectsListProps> = ({
           total={projects.length}
           noun="project"
           crossLink={crossLink}
+          color={accent.secondary}
           onClearAll={clearFilters}
         />
       )}
