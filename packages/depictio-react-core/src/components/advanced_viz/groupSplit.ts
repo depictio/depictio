@@ -52,6 +52,11 @@ export interface GroupSplitOptions {
    *  `extractScatterSelection`, so what a lasso emits and what a group is read
    *  back against cannot drift apart. */
   identitySlot?: number;
+  /** Extra `customdata` slots to try when `identitySlot` misses. A dot plot
+   *  carries the feature in slot 0 and the sample in slot 1, and a group can
+   *  legitimately be built from either — the first slot whose value belongs to
+   *  a group wins, so one renderer serves both without guessing. */
+  identitySlots?: number[];
   /** Set false by renderers whose axes cannot be faceted (a 3D scene, a
    *  polar or geo subplot): "Split" then degrades to colouring rather than
    *  producing a broken layout. */
@@ -75,6 +80,15 @@ export interface GroupSplitOptions {
   showLegend?: boolean;
 }
 
+/** The `customdata` slots to read an identity from, in priority order. */
+function identitySlots(opts: GroupSplitOptions): number[] {
+  const slots = [
+    ...(typeof opts.identitySlot === 'number' ? [opts.identitySlot] : []),
+    ...(opts.identitySlots ?? []),
+  ].filter((n) => Number.isInteger(n) && n >= 0);
+  return Array.from(new Set(slots));
+}
+
 /** Whether grouping is on and this component is able to read it at all. Says
  *  nothing about whether any point will actually match — only the split
  *  itself can answer that, and it answers by leaving the figure alone. */
@@ -83,9 +97,9 @@ export function canSplitByGroups(opts: GroupSplitOptions): boolean {
 }
 
 function applicableGroups(opts: GroupSplitOptions): GroupRenderState['groups'] {
-  const { groupRender, identitySlot } = opts;
+  const { groupRender } = opts;
   if (!groupRender?.colorByGroup) return [];
-  if (typeof identitySlot !== 'number' || identitySlot < 0) return [];
+  if (identitySlots(opts).length === 0) return [];
   return (groupRender.groups ?? []).filter((g) => (g.values ?? []).length > 0);
 }
 
@@ -129,6 +143,27 @@ function sliceTrace(trace: any, idx: number[], name: string, color: string): any
     delete marker.cmax;
     delete marker.cmid;
     out.marker = marker;
+  }
+  // A line-mode trace paints from `line.color`, not `marker.color`, so without
+  // this a grouped profile or coverage track would get renamed and legended
+  // while every stroke kept its original colour — the feature would read as
+  // broken. Only the flat colour is replaced; `width`, `dash` and `shape` are
+  // the renderer's business.
+  if (out.line && typeof out.line === 'object') {
+    out.line = { ...out.line, color };
+  }
+  // Error bars are per-point arrays that Plotly indexes positionally against
+  // the sliced coordinates. Leaving them full-length silently attaches each
+  // whisker to the wrong point, which is worse than no grouping at all.
+  for (const key of ['error_x', 'error_y'] as const) {
+    const err = out[key];
+    if (!err || typeof err !== 'object') continue;
+    const next: any = { ...err };
+    for (const arrayKey of ['array', 'arrayminus'] as const) {
+      if (arrayKey in next) next[arrayKey] = sliceAt(next[arrayKey], idx);
+    }
+    if ('color' in next) next.color = color;
+    out[key] = next;
   }
   out.name = name;
   out.legendgroup = name;
@@ -180,7 +215,6 @@ export function splitFigureByGroups(figure: FigureLike, opts: GroupSplitOptions)
   if (groups.length === 0) return figure;
 
   const {
-    identitySlot = 0,
     groupRender,
     facetable = true,
     contextTraces = 'repeat',
@@ -200,10 +234,17 @@ export function splitFigureByGroups(figure: FigureLike, opts: GroupSplitOptions)
   }
   colors.set(OTHER_LABEL, OTHER_COLOR);
 
+  // Slots in priority order; the first whose value is claimed by a group wins.
+  // A point matching in none of them is "Other", exactly as before.
+  const slots = identitySlots(opts);
   const labelOf = (point: any): string => {
-    const key = point?.[identitySlot];
-    if (key === undefined || key === null) return OTHER_LABEL;
-    return assignment.get(String(key)) ?? OTHER_LABEL;
+    for (const slot of slots) {
+      const key = point?.[slot];
+      if (key === undefined || key === null) continue;
+      const label = assignment.get(String(key));
+      if (label) return label;
+    }
+    return OTHER_LABEL;
   };
 
   // Partition every trace that carries identities. A trace without customdata

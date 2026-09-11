@@ -187,32 +187,56 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   const panels = React.useMemo(() => JSON.parse(panelKey) as PanelSpec[], [panelKey]);
   React.useEffect(() => setSplitIneffective(false), [metadata.dc_id, panelKey]);
   const split = Boolean(Renderer) && !splitIneffective && shouldSplitIntoPanels(panels, vizKind);
-  const inner = !Renderer ? (
-    <div className="dashboard-error" style={{ fontSize: '0.75rem' }}>
-      Unknown advanced viz kind: "{vizKind}"
-    </div>
-  ) : split ? (
-    <SplitPanels
-      panels={panels}
-      filters={filters}
-      onIneffective={() => setSplitIneffective(true)}
-      renderPanel={(panelFilters, key) => (
-        <Renderer
-          key={key}
-          metadata={metadata}
-          filters={panelFilters}
-          refreshTick={refreshTick}
+  const handleIneffective = React.useCallback(() => setSplitIneffective(true), []);
+  // Memoised so that `published` changing — which is this component's own
+  // state, and says nothing about what the renderer should draw — hands React
+  // the same element and it skips the whole subtree. Without that, every
+  // publish re-renders the renderer, several of which build their `controls`
+  // JSX inline: a fresh node makes the frame's payload look new, so it
+  // publishes again, and the two setStates chase each other until React gives
+  // up. `filters` is a fresh array per parent render, but it is stable across
+  // the re-renders this is defending against, which is the point.
+  const inner = React.useMemo(
+    () =>
+      !Renderer ? (
+        <div className="dashboard-error" style={{ fontSize: '0.75rem' }}>
+          Unknown advanced viz kind: "{vizKind}"
+        </div>
+      ) : split ? (
+        <SplitPanels
+          panels={panels}
+          filters={filters}
+          onIneffective={handleIneffective}
+          renderPanel={(panelFilters, key) => (
+            <Renderer
+              key={key}
+              metadata={metadata}
+              filters={panelFilters}
+              refreshTick={refreshTick}
+            />
+          )}
         />
-      )}
-    />
-  ) : (
-    <Renderer
-      metadata={metadata}
-      filters={filters}
-      refreshTick={refreshTick}
-      onFilterChange={onFilterChange}
-      groupRender={groupRender}
-    />
+      ) : (
+        <Renderer
+          metadata={metadata}
+          filters={filters}
+          refreshTick={refreshTick}
+          onFilterChange={onFilterChange}
+          groupRender={groupRender}
+        />
+      ),
+    [
+      Renderer,
+      vizKind,
+      split,
+      panels,
+      filters,
+      handleIneffective,
+      metadata,
+      refreshTick,
+      onFilterChange,
+      groupRender,
+    ],
   );
 
   const combinedExtras = popovers || extraActions ? (

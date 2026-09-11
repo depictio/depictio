@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   MultiSelect,
   SegmentedControl,
@@ -55,6 +55,20 @@ interface Props {
  *  sampling policy, and a uniform sample of a locus map is a gene
  *  neighbourhood with holes in it. */
 const VIZ_KIND: AdvancedVizKind = 'gene_arrow_track';
+
+/** Feature-label metrics. Plotly gives no text-measurement hook, so the width
+ *  of a label is estimated from its character count; 0.6em is a safe average
+ *  for the default sans at these sizes, and erring high drops a borderline
+ *  label rather than letting two collide. */
+const LABEL_FONT_PX = 9;
+const LABEL_CHAR_PX = LABEL_FONT_PX * 0.6;
+/** Clear space demanded between two labels on the same lane. */
+const LABEL_GAP_PX = 10;
+/** Tick text of the y axis, whose automargin is what eats the plot's width. */
+const TICK_CHAR_PX = 9 * 0.6;
+/** Mirrors the `margin` set on the layout below. */
+const LAYOUT_MARGIN_L = 8;
+const LAYOUT_MARGIN_R = 16;
 
 /** Lane budget choices. A locus map is read a few contigs at a time; past ~10
  *  lanes the arrows are thinner than their own outline. */
@@ -404,6 +418,30 @@ const GeneArrowTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
   );
   const neutralColor = isDark ? theme.colors.gray[6] : theme.colors.gray[5];
 
+  /**
+   * Container width, measured rather than assumed.
+   *
+   * Whether two feature labels collide is a pixel question: the text keeps its
+   * width while the bp span behind it changes with the zoom and the lane set,
+   * so the old "arrow spans 3% of the axis" rule could not answer it. Two
+   * adjacent 3%-wide arrows are ~25px apart on a 900px plot and their labels
+   * are twice that, which is the overlap you see on an ARG island where the
+   * same locus is called by several tools.
+   */
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const [boxWidth, setBoxWidth] = useState<number>(720);
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect?.width;
+      if (!w || !Number.isFinite(w)) return;
+      setBoxWidth((prev) => (Math.abs(prev - w) >= 8 ? w : prev));
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   const figure = useMemo<{ data: unknown[]; layout: Record<string, unknown> } | null>(() => {
     if (!lanes.length) return null;
 
@@ -412,6 +450,17 @@ const GeneArrowTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
     const span = Math.max(xMax - xMin, 1);
     const pad = span * 0.02;
     const half = Math.min(Math.max(arrowHeight, 0.1), 0.9) / 2;
+
+    // Plot area, not container: the y axis automargins to fit the contig
+    // names, which on a funcscan run are the full SPAdes headers. Estimating
+    // that margin low would make labels look cheaper than they are, so round
+    // the character width up and let the greedy pass below be conservative.
+    const longestContig = lanes.reduce((n, l) => Math.max(n, l.contig.length), 0);
+    const plotPx = Math.max(
+      boxWidth - (LAYOUT_MARGIN_L + longestContig * TICK_CHAR_PX + LAYOUT_MARGIN_R),
+      240,
+    );
+    const bpPerPx = span / plotPx;
 
     // Class -> colour, assigned over the classes actually on screen so the
     // legend never carries a hue nothing uses. Neutral classes keep grey.
@@ -458,6 +507,9 @@ const GeneArrowTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
     const annotations: Record<string, unknown>[] = [];
 
     lanes.forEach((lane, laneIdx) => {
+      // Right edge, in bp, of the last label placed on this lane. Features
+      // arrive sorted by start, so one left-to-right pass is enough.
+      let lastLabelRight = -Infinity;
       lane.features.forEach((f) => {
         const key = f.cls ?? '';
         const bucket = ringsByClass.get(key) ?? { xs: [], ys: [] };
@@ -477,21 +529,27 @@ const GeneArrowTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
           hoverData.push([f.label, f.contig, f.start, f.end, len, f.strand, f.cls ?? '']);
         });
 
-        // Labels only where the arrow is wide enough to sit under one without
-        // colliding with its neighbour, and only while the lanes are few
-        // enough that a row of text still fits between them.
-        if (showLabels && lanes.length <= 12 && len >= span * 0.03) {
-          annotations.push({
-            xref: 'x',
-            yref: 'y',
-            x: mid,
-            y: laneIdx - half - 0.16,
-            text: f.label,
-            showarrow: false,
-            font: { size: 9 },
-            xanchor: 'center',
-            yanchor: 'middle',
-          });
+        // A label goes in when its own box clears the last one placed on this
+        // lane, and only while the lanes are few enough that a row of text
+        // still fits between them. Dropping the old width rule with it also
+        // buys back the lone short gene, which used to go unnamed however
+        // much empty axis sat either side of it.
+        if (showLabels && lanes.length <= 12) {
+          const halfLabel = (f.label.length * LABEL_CHAR_PX * bpPerPx) / 2;
+          if (mid - halfLabel >= lastLabelRight + LABEL_GAP_PX * bpPerPx) {
+            lastLabelRight = mid + halfLabel;
+            annotations.push({
+              xref: 'x',
+              yref: 'y',
+              x: mid,
+              y: laneIdx - half - 0.16,
+              text: f.label,
+              showarrow: false,
+              font: { size: LABEL_FONT_PX },
+              xanchor: 'center',
+              yanchor: 'middle',
+            });
+          }
         }
       });
     });
@@ -597,6 +655,7 @@ const GeneArrowTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
     showLabels,
     showRegions,
     align,
+    boxWidth,
     config.class_col,
   ]);
 
@@ -720,21 +779,23 @@ const GeneArrowTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
     >
-      {figure ? (
-        <AdvancedVizPlot
-          data={applyDataTheme(figure.data, isDark, theme) as any}
-          layout={
-            applyLayoutTheme(
-              { ...(figure.layout as any), width: undefined, height: undefined, autosize: true },
-              isDark,
-              theme,
-            ) as any
-          }
-          useResizeHandler
-          style={{ width: '100%', height: '100%' }}
-          config={{ displaylogo: false, responsive: true } as any}
-        />
-      ) : null}
+      <div ref={boxRef} style={{ width: '100%', height: '100%' }}>
+        {figure ? (
+          <AdvancedVizPlot
+            data={applyDataTheme(figure.data, isDark, theme) as any}
+            layout={
+              applyLayoutTheme(
+                { ...(figure.layout as any), width: undefined, height: undefined, autosize: true },
+                isDark,
+                theme,
+              ) as any
+            }
+            useResizeHandler
+            style={{ width: '100%', height: '100%' }}
+            config={{ displaylogo: false, responsive: true } as any}
+          />
+        ) : null}
+      </div>
     </AdvancedVizFrame>
   );
 };

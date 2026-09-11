@@ -492,15 +492,18 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
   );
 
   // Recolour by the dashboard's analysis groups. The join is on values, and
-  // `splitFigureByGroups` returns the figure untouched when no point matches,
-  // so a group built from sample ids leaves a per-feature plot alone. Slot 0 of
-  // `customdata` is the feature id.
+  // `splitFigureByGroups` returns the figure untouched when no point matches.
+  // A dot plot is a matrix: slot 0 of `customdata` is the feature, slot 1 the
+  // cluster/sample. Both are legitimate group keys here — a group of samples is
+  // the common case and slot 0 alone never matched it — so both are offered and
+  // the first that belongs to a group wins.
   const groupedFigure = useMemo(
     () =>
       figure
         ? splitFigureByGroups(figure, {
             groupRender,
             identitySlot: 0,
+            identitySlots: [1],
             facetable: false,
             showLegend: true,
           })

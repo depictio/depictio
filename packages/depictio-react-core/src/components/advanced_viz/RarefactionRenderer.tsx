@@ -20,6 +20,8 @@ import {
 } from '../../api';
 import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { splitFigureByGroups } from './groupSplit';
+import type { GroupRenderState } from '../../selectionGroups';
 import {
   applyDataTheme,
   applyLayoutTheme,
@@ -51,6 +53,8 @@ interface Props {
   metadata: StoredMetadata & { viz_kind?: string; config?: RarefactionConfig };
   filters: InteractiveFilter[];
   refreshTick?: number;
+  /** Dashboard-wide analysis grouping, applied to the finished figure. */
+  groupRender?: GroupRenderState;
 }
 
 // Stable Tabs.styles object so Mantine doesn't see a new prop identity on
@@ -112,7 +116,7 @@ RarefactionPlot.displayName = 'RarefactionPlot';
 // in sync — the fallback when the deployment states no brand of its own.
 const PALETTE = TAB10_PALETTE;
 
-const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
+const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, groupRender }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
   const palette = resolveCategoricalPalette(theme, PALETTE);
@@ -340,6 +344,13 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
         mode: 'lines+markers' as const,
         x: ds,
         y: means,
+        // Slot 0 carries the sample the curve was aggregated from — the value an
+        // analysis group of samples is read back against. Every point of a curve
+        // carries the same id, so a curve is assigned to a group whole rather
+        // than cut in two, which is also what keeps the ±SE array below (a
+        // per-point array the splitter does not slice) aligned with its points.
+        // The hover quotes `sid` directly, so this slot changes no hover text.
+        customdata: ds.map(() => [sid]),
         name: legendName,
         legendgroup: legendName,
         showlegend: showInLegend,
@@ -463,6 +474,29 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
     return out;
   }, [rows, dcSchema, config, metricOptions]);
 
+  // Recolour by the dashboard's analysis groups. Slot 0 of `customdata` is the
+  // sample id, so a group of samples lights up the curves it owns and a group
+  // of anything else (taxa, features) leaves the plot untouched — that no-op is
+  // `splitFigureByGroups`' own answer when nothing matches.
+  //
+  // `facetable: false`: "Split" for this kind is the dispatch's job, which
+  // builds one renderer per group from that group's own rows (`SplitPanels`) —
+  // a second, figure-level facet here would only compete with it. There are no
+  // context traces to place either way: every trace is one sample's curve, and
+  // the error bars ride on the trace rather than beside it.
+  const groupedFigure = useMemo(
+    () =>
+      figure
+        ? splitFigureByGroups(figure, {
+            groupRender,
+            identitySlot: 0,
+            facetable: false,
+            showLegend: true,
+          })
+        : figure,
+    [figure, groupRender],
+  );
+
   const controls = (
     <Stack gap="xs">
       {groupOptions.length > 0 ? (
@@ -530,17 +564,17 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
             ))}
           </Tabs.List>
           <div style={PLOT_CONTAINER_STYLE}>
-            {figure ? (
+            {groupedFigure ? (
               <RarefactionPlot
-                figure={figure}
+                figure={groupedFigure}
                 isDark={isDark}
                 theme={theme}
               />
             ) : null}
           </div>
         </Tabs>
-      ) : figure ? (
-        <RarefactionPlot figure={figure} isDark={isDark} theme={theme} />
+      ) : groupedFigure ? (
+        <RarefactionPlot figure={groupedFigure} isDark={isDark} theme={theme} />
       ) : null}
     </AdvancedVizFrame>
   );

@@ -4,6 +4,8 @@ import Plot from 'react-plotly.js';
 
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { splitFigureByGroups } from './groupSplit';
+import type { GroupRenderState } from '../../selectionGroups';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 import { COLORSCALE_NAMES, plotlyColorscale } from '../../utils/colorScale';
 
@@ -21,9 +23,11 @@ interface Props {
   metadata: StoredMetadata & { viz_kind?: string; config?: MetricCiBarsConfig };
   filters: InteractiveFilter[];
   refreshTick?: number;
+  /** Dashboard-wide analysis grouping, applied to the finished figure. */
+  groupRender?: GroupRenderState;
 }
 
-const MetricCiBarsRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
+const MetricCiBarsRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, groupRender }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
   const isDark = colorScheme === 'dark';
@@ -131,7 +135,12 @@ const MetricCiBarsRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
           hovertemplate:
             `<b>%{y}</b><br>${metricName}: %{x:.3f}` +
             `<br>95% CI: [%{customdata[0]:.3f}, %{customdata[1]:.3f}]<extra></extra>`,
-          customdata: order.map((i) => [lower[i] ?? null, upper[i] ?? null]),
+          // Slots 0 and 1 are the CI bounds the hover above quotes by index, so
+          // the label goes on the END: renumbering them would silently rewrite
+          // the hover. Slot 2 is the label — the callset for a benchmark, the
+          // sample for a per-sample metric — which is what an analysis group is
+          // matched against.
+          customdata: order.map((i) => [lower[i] ?? null, upper[i] ?? null, labels[i]]),
         },
       ],
       layout: {
@@ -148,6 +157,29 @@ const MetricCiBarsRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
       },
     };
   }, [rows, config, sortDesc, metricName, colorscale, pointSize, showLabels, isDark, theme]);
+
+  // Recolour by the dashboard's analysis groups, reading the label from slot 2.
+  // The continuous colour ramp is the value itself, which the split replaces
+  // with the group's colour — the same trade every other kind makes, and the
+  // x position still carries the value.
+  //
+  // `facetable: false`: the y axis *is* the list of labels, so panels would
+  // share it (the split links their ranges) and every panel would draw every
+  // label with only its own group's rows filled in. "Split" is the dispatch's
+  // job for this kind. The CI whiskers ride in `error_x`, a per-point array
+  // that must be sliced alongside the points a panel keeps.
+  const groupedFigure = useMemo(
+    () =>
+      figure
+        ? splitFigureByGroups(figure, {
+            groupRender,
+            identitySlot: 2,
+            facetable: false,
+            showLegend: true,
+          })
+        : figure,
+    [figure, groupRender],
+  );
 
   const controls = useMemo(
     () => (
@@ -182,10 +214,10 @@ const MetricCiBarsRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
     >
-      {figure ? (
+      {groupedFigure ? (
         <Plot
-          data={applyDataTheme(figure.data, isDark, theme) as any}
-          layout={applyLayoutTheme(figure.layout as any, isDark, theme) as any}
+          data={applyDataTheme(groupedFigure.data, isDark, theme) as any}
+          layout={applyLayoutTheme(groupedFigure.layout as any, isDark, theme) as any}
           useResizeHandler
           style={{ width: '100%', height: '100%' }}
           config={{ displaylogo: false, responsive: true } as any}
