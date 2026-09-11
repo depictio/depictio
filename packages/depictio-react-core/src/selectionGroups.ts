@@ -174,6 +174,10 @@ export interface SelectionGroupsPayload {
   /** Whether card comparisons include the "All rows" reference entry.
    *  Additive to v2: absent in older payloads, read as true. */
   showOverall: boolean;
+  /** Whether analysis mode is armed. Persisted because a tab switch is a full
+   *  page navigation — the mode would otherwise die on every tab the groups
+   *  survive into. Additive to v2: absent in older payloads, read as false. */
+  analysisArmed: boolean;
 }
 
 function parseColorBy(raw: unknown): ColorByState {
@@ -371,6 +375,7 @@ export function readSelectionGroups(dashboardId: string): SelectionGroupsPayload
       displayMode: parsed.displayMode === 'facet' ? 'facet' : 'color',
       showOther: parsed.showOther !== false,
       showOverall: parsed.showOverall !== false,
+      analysisArmed: parsed.analysisArmed === true,
     };
   } catch {
     return null;
@@ -385,10 +390,13 @@ export function writeSelectionGroups(
   displayMode: GroupingDisplay = 'color',
   showOther = true,
   showOverall = true,
+  analysisArmed = false,
 ): void {
   try {
     const key = STORAGE_PREFIX + dashboardId;
-    if (groups.length === 0 && colorBy.kind === 'none' && !compareInCards) {
+    // Armed-with-nothing-else is still worth keeping: arming the mode and then
+    // switching tab before saving a group is an ordinary flow.
+    if (groups.length === 0 && colorBy.kind === 'none' && !compareInCards && !analysisArmed) {
       window.localStorage.removeItem(key);
       return;
     }
@@ -402,6 +410,7 @@ export function writeSelectionGroups(
         displayMode,
         showOther,
         showOverall,
+        analysisArmed,
       }),
     );
   } catch {

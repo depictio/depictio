@@ -89,7 +89,9 @@ import { FILTER_PANEL_WIDTH_VAR, useFilterPanelWidth } from './hooks/useFilterPa
 import { useCurrentUser } from './hooks/useCurrentUser';
 import { isDashboardOwner } from './lib/dashboardOwnership';
 import FilterPanelResizer, { FILTER_PANEL_RESIZER_WIDTH } from './components/FilterPanelResizer';
-import GroupingHeaderControl from './components/GroupingHeaderControl';
+import GroupingHeaderControl, {
+  ANALYSIS_PANEL_WIDTH_PX,
+} from './components/GroupingHeaderControl';
 import Inspector from './chrome/inspector/Inspector';
 import { useInspectorChrome } from './chrome/inspector/useInspectorChrome';
 import InspectorProviders from './chrome/inspector/InspectorProviders';
@@ -838,17 +840,24 @@ const App: React.FC = () => {
   // the one that starts a lasso — so tying the mode to `analysisOpen` would
   // erase every capability marker exactly when the user acts on one. Opening
   // the panel arms the mode; only the button (or a second click on it) ends it.
+  // `armed` is persisted with the groups (a tab switch is a full page
+  // navigation, so local state would drop the mode on every tab the groups
+  // survive into); `open` stays local, since restoring an open popover on
+  // arrival would be worse than closing it.
   const [analysisOpen, setAnalysisOpen] = useState(false);
-  const [analysisArmed, setAnalysisArmed] = useState(false);
-  const handleAnalysisOpenChange = useCallback((next: boolean) => {
-    setAnalysisOpen(next);
-    if (next) setAnalysisArmed(true);
-  }, []);
+  const { analysisArmed, setAnalysisArmed } = groupsApi;
+  const handleAnalysisOpenChange = useCallback(
+    (next: boolean) => {
+      setAnalysisOpen(next);
+      if (next) setAnalysisArmed(true);
+    },
+    [setAnalysisArmed],
+  );
   const handleAnalysisToggle = useCallback(() => {
     const next = !analysisOpen;
     setAnalysisOpen(next);
     setAnalysisArmed(next);
-  }, [analysisOpen]);
+  }, [analysisOpen, setAnalysisArmed]);
 
   const saveGroupApi = useMemo(
     () => ({
@@ -932,6 +941,7 @@ const App: React.FC = () => {
                   onOpenedChange={handleAnalysisOpenChange}
                   armed={analysisArmed}
                   onToggle={handleAnalysisToggle}
+                  pushesContent={!isNarrow}
                 >
                   {groupsSection}
                 </GroupingHeaderControl>
@@ -967,7 +977,20 @@ const App: React.FC = () => {
         <Sidebar tabs={tabSiblings} activeId={dashboardId} brandTheme={dashboard?.brand_theme} />
       </AppShell.Navbar>
 
-      <AppShell.Main style={{ height: 'calc(100vh - 50px)' }}>
+      <AppShell.Main
+        style={{
+          height: 'calc(100vh - 50px)',
+          // The Analysis panel is a Drawer, not an AppShell slot (the single
+          // `aside` belongs to the inspector), so nothing offsets the content
+          // for it and it would sit on top of the rightmost tiles — the ones
+          // a user opens it to lasso a group out of. Pad by exactly its width
+          // and let the grid re-measure (see ANALYSIS_PANEL_TOGGLE_EVENT).
+          // Not on a narrow viewport, where the panel is ~92vw and padding
+          // would leave no dashboard at all: there it overlays, as a drawer.
+          paddingRight: analysisOpen && !isNarrow ? ANALYSIS_PANEL_WIDTH_PX : 0,
+          transition: 'padding-right 250ms ease',
+        }}
+      >
         {ingestionHealth &&
           ingestionProjectId &&
           !ingestionBannerDismissed &&

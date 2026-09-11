@@ -16,12 +16,18 @@
 export const SIDEBAR_TOGGLE_EVENT = 'depictio:sidebar-toggle';
 export const FILTER_PANEL_TOGGLE_EVENT = 'depictio:filter-panel-toggle';
 export const INSPECTOR_TOGGLE_EVENT = 'depictio:inspector-toggle';
+/** The Analysis panel. Not an AppShell slot (the single `aside` is the
+ *  inspector's), so the apps pad their own main column and announce the swing
+ *  here rather than letting the panel sit on top of the rightmost tiles —
+ *  which is exactly the tile a user is trying to lasso a group out of. */
+export const ANALYSIS_PANEL_TOGGLE_EVENT = 'depictio:analysis-panel-toggle';
 
 /** Every event name `DashboardGrid` reacts to. Add a panel here, not a listener. */
 export const PANEL_TOGGLE_EVENTS = [
   SIDEBAR_TOGGLE_EVENT,
   FILTER_PANEL_TOGGLE_EVENT,
   INSPECTOR_TOGGLE_EVENT,
+  ANALYSIS_PANEL_TOGGLE_EVENT,
 ] as const;
 
 export interface PanelToggleDetail {
