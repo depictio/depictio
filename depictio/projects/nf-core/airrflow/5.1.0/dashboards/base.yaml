@@ -70,9 +70,11 @@ main_dashboard:
     order: 2
     alignment: left
     body: >
-      airrflow trims with fastp and runs FastQC twice, on the raw reads and again
-      after the mate pairs are assembled. Read these panels first: everything on
-      the later tabs is built from whatever survives here.
+      airrflow trims with [fastp](https://github.com/OpenGene/fastp) and runs
+      [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) twice,
+      on the raw reads and again after the mate pairs are assembled. Read these
+      panels first: everything on the later tabs is built from whatever survives
+      here.
     layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: multiqc
     tag: airr-qc-general-stats
@@ -374,7 +376,7 @@ main_dashboard:
     description: Sequences remaining after every pRESTO and Change-O step.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 5, w: 4, h: 4}
+    layout: {x: 0, y: 5, w: 8, h: 4}
   - component_type: table
     tag: airr-tables-threshold
     section: Reference tables
@@ -386,7 +388,7 @@ main_dashboard:
     description: The shazam model and threshold fitted for each subject.
     title_size: h3
     title_align: left
-    layout: {x: 4, y: 5, w: 4, h: 4}
+    layout: {x: 0, y: 9, w: 8, h: 4}
   - component_type: table
     tag: airr-tables-overlap
     section: Reference tables
@@ -398,7 +400,7 @@ main_dashboard:
     description: Shared clone counts for every sample pair, zero across subjects.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 9, w: 8, h: 4}
+    layout: {x: 0, y: 13, w: 8, h: 4}
 
   # ------------------------------------------------------------- left panel
   - component_type: interactive
@@ -599,7 +601,8 @@ tabs:
     body: >
       Each band is a group of reads following the same path. Reads that stop at a
       step peel off into the Lost lane and stay there. The depth control in the
-      panel settings adds the Change-O steps after IgBLAST annotation.
+      panel settings adds the [Change-O](https://changeo.readthedocs.io) steps
+      after [IgBLAST](https://ncbi.github.io/igblast/) annotation.
     layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: advanced_viz
     tag: airr-seq-sankey
@@ -950,7 +953,7 @@ tabs:
     description: Select rows to narrow the clone-level panels to those samples.
     title_size: h3
     title_align: left
-    layout: {x: 4, y: 1, w: 4, h: 6}
+    layout: {x: 0, y: 7, w: 8, h: 6}
 
   - component_type: interactive
     tag: airr-rep-filter-clones
@@ -1046,9 +1049,10 @@ tabs:
     order: 2
     alignment: left
     body: >
-      Clones are called by nearest-neighbour distance, and the threshold shazam
-      fitted per subject decides where one clone ends and the next begins. Every
-      number on this tab rests on it, so it is on the card row.
+      Clones are called by nearest-neighbour distance, and the threshold
+      [shazam](https://shazam.readthedocs.io) fitted per subject decides where one
+      clone ends and the next begins. Every number on this tab rests on it, so it
+      is on the card row.
     layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: card
     tag: airr-clone-card-richness

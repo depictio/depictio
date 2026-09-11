@@ -129,6 +129,12 @@ All five dashboard tabs imported (`Library QC` + `ATAC signal` + `Peaks` + `Cons
 8 advanced visualisations). 47 of those tiles carry a `use:` catalog reference that resolved
 (`multiqc/*` 12, `macs2/*` 10, `ataqv/*` 10, `deseq2/*` 9, `homer/annotated_peaks` 6).
 
+**Those counts are the tree as it was validated, and the YAML has moved on since.** The first
+tab is now called `MultiQC`, and the shipped file holds 110 components across 30 sections: 23
+cards (one fewer, AT-D11), 26 text tiles, 17 interactive filters, 15 MultiQC panels (the
+General Statistics tile is bound again, AT-D8), 12 advanced visualisations, 9 figures and 8
+tables, 64 of them carrying a `use:`. Nothing after this line was re-run against that tree.
+
 ## Post-ingest verification
 
 Every collection was read back from its Delta table in MinIO and every tile grounded against
@@ -284,6 +290,13 @@ underlying data is present and the tile becomes usable as soon as the API is fix
 belongs in `depictio/api/v1/services/multiqc/general_stats_payload.py` and is outside this
 workstream's owned paths.
 
+**Since fixed, and the tile is bound again.** `general_stats_payload.py` now resolves the
+display titles in two passes and qualifies only the ones that actually repeat, so
+`reads_mapped` from `samtools stats` and `mapped_passed` from `samtools flagstat` land in two
+columns instead of collapsing onto one. The template binds a General Statistics tile, and
+AT-D11 makes it the panel the MultiQC tab opens on. The paragraphs above are the state at
+validation time; the tile has not been re-rendered against this run's parquet since the fix.
+
 ### AT-D9: five MultiQC tiles carry no `use:` badge
 
 `mlib_frip_score`, `mlib_peak_count`, `mlib_peak_annotation`, `mlib_deseq2_pca` and
@@ -322,3 +335,56 @@ write with `AccessDenied` rather than a storage error.
 The third ingest of the identical tree went green 8/8 with all 14 collections, which is the
 run this report describes. Worth knowing for anyone validating a template with a collection
 above roughly 50 MB on a nearly full disk: retry before believing the recipe.
+
+### AT-D11: the MultiQC tab carried four cards no MultiQC module reports
+
+A tab named `MultiQC` is a promise that what is on it is the MultiQC report. The intro text,
+the left-panel filters and the two persistent pinned sections are the agreed exceptions; the
+`Run at a glance` grid section was not. It held four cards read from Delta tables: peaks
+called (`macs2/peak_summary.num_peaks`) and TSS enrichment, mitochondrial fraction and reads
+inside peaks (all three `ataqv/metrics`). Everything else on the tab was already clean.
+
+**The three ataqv cards moved to `ATAC signal`**, the tab that owns `ataqv_metrics` and
+`ataqv_fragment_length`, and none of them repeats a card that was already there.
+`Library quality at a glance` now holds seven cards in two rows that each fill the 8-column
+grid:
+
+| Row | Cards |
+|---|---|
+| `y: 1`, four at `w: 2` | TSS enrichment (gauge), Reads inside peaks (threshold), Mitochondrial fraction (Tukey box), Duplicate fraction (histogram) |
+| `y: 3`, one at `w: 4` and two at `w: 2` | Peaks ataqv scored (top 3 libraries), Fragment length (Tukey box), Fragment windows (donut) |
+
+Row one is the quartet an ATAC library is accepted or rejected on, which is what the section
+name has always claimed and what the moved cards complete. Row two is what the library's peaks
+and fragments look like. Seven cards cannot be dealt into rows of four, so the top-N card takes
+the wide slot of row two rather than leaving a gap: its strip spells out merged-library names,
+which is the card of the seven that gains the most from the extra width.
+
+**The fourth card was deleted rather than moved.** `macs2/peak_summary.num_peaks` summed over
+the six libraries and broken down by sample is the same statement as `at-pk-card-count` on the
+`Peaks` tab, which counts `peak_id` over `macs2/broad_peaks` and breaks down by sample:
+`peak_summary.py` documents `num_peaks` as "peaks MACS2 called for the sample", which is the
+row count of the calls the other card counts. The `Peaks` card is the better of the two,
+because it sits behind that tab's significance, width and feature-class filters and so reads
+"peaks in view" rather than a constant; moving the summary card there would also have left a
+row built for four cards holding five. The peak count still reaches the MultiQC tab in MultiQC
+form, as the `mlib_peak_count` panel ("Peaks per library") in `Accessibility signal`.
+
+**What `Run at a glance` holds now.** Its intro, and the MultiQC General Statistics table
+moved up from `Read quality`. That table pools FastQC, Trim Galore, samtools, Picard, MACS2
+and ataqv columns, so it is the run at a glance rather than a read-quality panel, and it is
+the one MultiQC panel about the run instead of about a single tool. The tab therefore still
+opens on something that speaks for every library, every declared section still has components,
+and `Read quality` compacts onto its three FastQC and Trim Galore panels. The section keeps its
+name, takes the overview icon and now describes what it shows.
+
+Both intros were rewritten: the MultiQC one no longer announces four cards and says where the
+ataqv measures went, and the `ATAC signal` one names the acceptance quartet its section now
+opens with. `index` is preserved on all three moved cards (`at-qc-card-tss`,
+`at-qc-card-mito`, `at-qc-card-inpeaks`) because saved filters and stored metadata key on it,
+and their `at-qc-` tags were left alone for the same reason, so three tags on `ATAC signal`
+carry the prefix of the tab they came from.
+
+`docs/dashboards.md` still describes `Run at a glance` as a four-card strip, `Library quality
+at a glance` as a four-card strip and the General Statistics table as unbound. It is outside
+this change's owned paths and needs the same pass.

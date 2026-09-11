@@ -150,7 +150,8 @@ Every tile was executed or grounded against the Delta frames the run actually wr
   breakdowns behind a `donut` or a `top_n`, one `composition`, one `uniqueness`, two
   `threshold`); the other three are the `gauge` strips, which the viewer draws from the primary
   value and `coverage_max` and for which the endpoint returns nothing by design. Each tab's
-  card row is four `w: 2` cards filling all eight grid columns with four different strips.
+  card row was four `w: 2` cards filling all eight grid columns with four different strips;
+  one of the sixteen is no longer shipped and the rows were repacked afterwards, see TP-C6.
 - The persistent `Samples` filter was exercised end to end
   (`sample = MOCK_002_Illumina_Hiseq_3000`, sent with every tab's card request the way the
   viewer sends a persistent filter): `filter_applied` is true on all four tabs and 14 of the
@@ -221,6 +222,55 @@ The full taxon by run matrix is 428 taxa by 60 profiling runs, which no clustere
 reads usefully. `taxpasta/matrix.py` keeps the 60 taxa with the highest relative abundance
 summed over every run, giving a 60-row matrix with the rank as a row annotation and the
 profiler and platform of each column serialised as heatmap column strips.
+
+### TP-C6: the tab named MultiQC carries MultiQC panels only
+
+The main tab is called `MultiQC`, so it ships the panels MultiQC drew and nothing else,
+alongside the text tiles and the two pinned sections every tab carries by design. The four
+run-level cards each moved to the data they are computed from:
+
+- `Samples` reads the samplesheet, so it moved into the pinned `Sample sheet` section, above
+  the sheet itself. Tables span all eight columns (TP-C7), so nothing can sit beside one, and
+  a single `w: 2` card in an otherwise empty row is a hole rather than a layout: the card takes
+  the full width of its own row. The section is `persistent: true, pin: top`, so the sample
+  count and its per-platform donut still open every tab.
+- `Profiling runs` and `Evenness` read `taxpasta_sample_summary`, the hub the Profiles tab is
+  built on, so they joined that tab's `Composition` card grid. `Profiling runs` heads the
+  existing row of four `w: 2` cards, which is where a reader asks how many runs the bars stand
+  for, and `Evenness` sits beside `Most dominant taxon` in a second row of two `w: 4` cards:
+  the gauge and the threshold are the two readings of how concentrated a community is. Both
+  rows fill all eight columns. Their icons and colours were changed to stay distinct from the
+  cards they now sit next to, using ids this file already ships.
+- `Taxa per run` was deleted rather than moved. `Composition` already carries `Distinct taxa`
+  over the same profiles, and two cards counting taxa in one section is a repetition rather
+  than a second reading. Dropping it is also what makes both destination rows come out full.
+
+`Run at a glance` held nothing else once the cards left, so the section is gone rather than
+left as a heading over an intro: a declared section with no tiles renders as an empty box. Its
+framing moved into the `Read quality` intro, which now opens the tab by saying that every
+classifier ran over the same reads and that the tabs after it compare what they made of them.
+The tab therefore opens on the general-statistics table under that intro.
+
+One consequence is recorded rather than fixed: the `Read stats` filter section (taxa observed,
+Shannon) is on the main tab and is not persistent, so it now narrows only the per-run table in
+the pinned `Reference tables` section, and the two cards it used to move sit on a tab whose
+left panel filters `taxpasta_profiles` instead. Making that section persistent would put a
+`taxpasta_sample_summary` filter on every request of every tab, which is a wider change than
+this one and is not made here.
+
+The file now ships 75 components: 15 MultiQC panels, 15 cards, 14 interactive filters, 12 text
+tiles, 8 advanced visualisations, 7 tables and 4 figures. Against the 76 recorded above that is
+the general-statistics panel added after this ingest, less the deleted card and the folded-away
+intro. No data collection, column binding or link changed, so the run was not replayed.
+
+### TP-C7: the containment table spans the grid
+
+`sylph containment table` shared a row with the ANI scatter, each at `w: 4`. AG Grid keeps its
+columns at their natural width and scrolls horizontally, so a half-width table showed two of
+its twelve columns and spent part of its height on a scrollbar. Both tiles now own a full-width
+row in the order they already had, the scatter first and the table under it, with the four
+containment cards after them. Every table in this file is `w: 8`, which
+`test_tables_are_full_width` now enforces repo-wide.
 
 ## MultiQC overlap policy
 

@@ -17,17 +17,19 @@ Trim Galore then STAR + Salmon.
 
 ## How the dashboard is built
 
-- **One funnel, four tabs.** QC, then Expression overview, then Expression heatmap, then Gene
-  explorer. Each tab answers the question the previous one raises: are the libraries usable,
-  how do they relate to each other, which genes drive that, and what does one gene do.
+- **One funnel, four tabs.** MultiQC, then Expression overview, then Expression heatmap, then
+  Gene explorer. Each tab answers the question the previous one raises: are the libraries
+  usable, how do they relate to each other, which genes drive that, and what does one gene do.
 - **Persistent sample filter.** `Sample scope` (sample, condition, replicate) is pinned to the
   top of every tab's filter panel and reads the samplesheet, which links to every other
   collection. One pick there narrows the MultiQC panels, the PCA, the heatmap columns and the
   gene explorer at once. Each tab adds its own filter group on top: a depth and expression
   band on Expression overview, the sample columns on Expression heatmap, gene and expression
   range on Gene explorer.
-- **Pinned reference tables.** The samplesheet and the raw merged count matrix sit in a
-  collapsed `Reference tables` section pinned to the bottom of every tab.
+- **Pinned sample sheet and reference tables.** The samplesheet, with the four design cards
+  computed from it above the sheet itself, sits in a collapsed `Sample sheet` section pinned
+  to the top of every tab; the raw merged count matrix sits in a collapsed `Reference tables`
+  section pinned to the bottom.
 - **Catalog provenance.** Every expression panel is a catalog render (`use: salmon/...`) and
   every tool-level MultiQC tile names its module (`use: multiqc/star`,
   `use: multiqc/qualimap`, …), so the tile chrome shows where the panel comes from. The five
@@ -40,15 +42,18 @@ Trim Galore then STAR + Salmon.
 
 ---
 
-## QC
+## MultiQC
 
-The main tab, and the pipeline in the order it ran. `Run at a glance` is the design: four
-cards over the samplesheet, one per strip style, giving the library count with its
-per-condition breakdown, the condition count as a donut, the replicate depth as a histogram
-and the declared strandedness as a composition bar.
+The main tab, and the pipeline in the order it ran. `Sample sheet`, collapsed at the top of
+every tab, is the design: four cards over the samplesheet, one per strip style, giving the
+library count with its per-condition breakdown, the condition count as a donut, the replicate
+depth as a histogram and the declared strandedness as a composition bar, above the sheet
+itself.
 
-`Read quality` pairs FastQC on the raw reads with Trim Galore's filtered-read counts and
-FastQC again after trimming, so the same two measurements sit side by side before and after.
+`Read quality` opens on the general statistics table, one row per library pooling every
+module's headline numbers, then pairs FastQC on the raw reads with Trim Galore's
+filtered-read counts and FastQC again after trimming, so the same two measurements sit side
+by side before and after.
 `Alignment` carries STAR's summary statistics, samtools' percent mapped and Picard's duplicate
 marking.
 
@@ -64,7 +69,7 @@ genomic origin and gene body coverage, and dupRadar's duplication against expres
 that falls away at the 5' end is degraded RNA; duplication that rises with expression is
 normal, duplication that is flat and high is a library problem.
 
-![QC](screenshots/qc.png)
+![MultiQC](screenshots/qc.png)
 
 ## Expression overview
 
@@ -75,10 +80,10 @@ condition breakdown, median TPM as a Tukey box plot, genes expressed against a 1
 `Sample relationships` is the signature panel: a PCA of the log2(TPM + 1) matrix over its most
 variable genes, one point per library, coloured by condition, with lasso selection enabled on
 `sample_id`. Replicates of one condition should sit together and away from the others; a
-library that lands with the wrong group is the one to take back to the QC tab. Beside it, the
-pipeline's own DESeq2 sample-similarity heatmap gives the same structure computed a different
-way, and below, the library summary table selects rows on the same `sample_id`, so picking
-points in the PCA and picking rows in the table are the same act.
+library that lands with the wrong group is the one to take back to the MultiQC tab. Beside it,
+the pipeline's own DESeq2 sample-similarity heatmap gives the same structure computed a
+different way, and below, the library summary table selects rows on the same `sample_id`, so
+picking points in the PCA and picking rows in the table are the same act.
 
 `Library composition` pairs the featureCounts biotype composition with a bar of genes
 expressed per library, coloured by condition. A library dominated by rRNA or by a single

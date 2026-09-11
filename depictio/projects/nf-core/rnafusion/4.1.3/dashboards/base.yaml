@@ -77,10 +77,11 @@ main_dashboard:
     order: 2
     alignment: left
     body: >
-      A fusion call is only as good as the alignment under it. STAR has to place
-      reads across the breakpoint, and Picard says whether those reads landed on
-      transcripts at all. Everything on the later tabs is built from what
-      survives here.
+      A fusion call is only as good as the alignment under it.
+      [STAR](https://github.com/alexdobin/STAR) has to place reads across the
+      breakpoint, and [Picard](https://broadinstitute.github.io/picard/) says
+      whether those reads landed on transcripts at all. Everything on the later
+      tabs is built from what survives here.
     layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: multiqc
     tag: rnaf-qc-general-stats
@@ -134,9 +135,11 @@ main_dashboard:
     order: 2
     alignment: left
     body: >
-      rnafusion runs FastQC twice, on the raw reads and again after fastp. The
-      second pass is anchored as fastqc-1 in the report, so the two panels below
-      are the same measurement either side of trimming.
+      rnafusion runs
+      [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) twice,
+      on the raw reads and again after [fastp](https://github.com/OpenGene/fastp).
+      The second pass is anchored as fastqc-1 in the report, so the two panels
+      below are the same measurement either side of trimming.
     layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: multiqc
     tag: rnaf-qc-fastqc-quality
@@ -289,7 +292,7 @@ main_dashboard:
     description: One row per fusion and caller, with the raw evidence string.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 5, w: 4, h: 4}
+    layout: {x: 0, y: 5, w: 8, h: 4}
   - component_type: table
     tag: rnaf-ref-table-fi
     section: Reference tables
@@ -302,7 +305,7 @@ main_dashboard:
     description: The calls re-quantified against a fusion contig reference.
     title_size: h3
     title_align: left
-    layout: {x: 4, y: 5, w: 4, h: 4}
+    layout: {x: 0, y: 9, w: 8, h: 4}
   - component_type: table
     tag: rnaf-ref-table-junctions
     section: Reference tables
@@ -314,7 +317,7 @@ main_dashboard:
     description: Every junction CTAT-splicing scored, with its read support.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 9, w: 8, h: 4}
+    layout: {x: 0, y: 13, w: 8, h: 4}
 
   # ---------------------------------------------------------------- left panel
   - component_type: interactive
@@ -428,9 +431,10 @@ tabs:
     order: 2
     alignment: left
     body: >
-      fusion-report pools every caller into one table and scores each fusion
-      with the Fusion Indication Index, which combines caller agreement with
-      how many knowledge bases already list the pair.
+      [fusion-report](https://github.com/Clinical-Genomics/fusion-report) pools
+      every caller into one table and scores each fusion with the Fusion
+      Indication Index, which combines caller agreement with how many knowledge
+      bases already list the pair.
     layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: card
     tag: rnaf-calls-card-fusions
@@ -787,9 +791,11 @@ tabs:
     alignment: left
     body: >
       The consensus flattens three very different evidence models. Here each
-      caller keeps its own grouping: Arriba by confidence class, STAR-Fusion by
-      splice type, FusionCatcher by the effect it predicts on the coding
-      sequence.
+      caller keeps its own grouping: [Arriba](https://github.com/suhrig/arriba)
+      by confidence class,
+      [STAR-Fusion](https://github.com/STAR-Fusion/STAR-Fusion) by splice type,
+      [FusionCatcher](https://github.com/ndaniel/fusioncatcher) by the effect it
+      predicts on the coding sequence.
     layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: advanced_viz
     tag: rnaf-ev-arriba-dot
@@ -865,7 +871,7 @@ tabs:
     description: Junction and spanning counts, splice type and normalised abundance.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 4, w: 4, h: 4}
+    layout: {x: 0, y: 4, w: 8, h: 4}
   - component_type: table
     tag: rnaf-ev-table-fusioncatcher
     section: Caller tables
@@ -878,7 +884,7 @@ tabs:
     description: Spanning pairs, unique reads, anchor length and the annotation labels.
     title_size: h3
     title_align: left
-    layout: {x: 4, y: 4, w: 4, h: 4}
+    layout: {x: 0, y: 8, w: 8, h: 4}
   - component_type: interactive
     tag: rnaf-filter-caller
     index: rnaf-caller-filter
@@ -966,9 +972,10 @@ tabs:
     order: 2
     alignment: left
     body: >
-      FusionInspector rebuilds a contig for every candidate and re-aligns the
-      reads to it. The fusion allelic ratio is the give-away: it weighs the
-      fusion reads against the wild-type reads competing on each side.
+      [FusionInspector](https://github.com/FusionInspector/FusionInspector)
+      rebuilds a contig for every candidate and re-aligns the reads to it. The
+      fusion allelic ratio is the give-away: it weighs the fusion reads against
+      the wild-type reads competing on each side.
     layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: card
     tag: rnaf-fi-card-validated
@@ -1099,9 +1106,10 @@ tabs:
     order: 2
     alignment: left
     body: >
-      Pfam hits on each partner, in amino-acid coordinates. A PARTIAL suffix
-      means the breakpoint cuts through the domain, which the structure below
-      draws as a domain that stops where the partner does.
+      [Pfam](https://www.ebi.ac.uk/interpro/entry/pfam/) hits on each partner,
+      in amino-acid coordinates. A PARTIAL suffix means the breakpoint cuts
+      through the domain, which the structure below draws as a domain that
+      stops where the partner does.
     layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: advanced_viz
     tag: rnaf-fi-domain-track
@@ -1160,9 +1168,10 @@ tabs:
     order: 2
     alignment: left
     body: >
-      CTAT-splicing scores every junction in the genes the callers touched. The
-      landscape is keyed on the junction, not on the fusion, so it is not
-      narrowed by the fusion filter in the left panel.
+      [CTAT-splicing](https://github.com/TrinityCTAT/CTAT-SPLICING) scores every
+      junction in the genes the callers touched. The landscape is keyed on the
+      junction, not on the fusion, so it is not narrowed by the fusion filter in
+      the left panel.
     layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: card
     tag: rnaf-splice-card-junctions

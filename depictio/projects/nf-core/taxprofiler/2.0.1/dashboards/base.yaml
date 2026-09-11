@@ -23,15 +23,15 @@ main_dashboard:
     color: orange
     description: Keep only the profiling runs inside a richness or diversity band
     collapsed: true
-  # Right panel, in reading order: the run-level cards, then the pipeline's own
-  # MultiQC panels from raw reads through host removal to the per-profiler top
-  # taxa. `Reference tables` is persistent and pinned to the bottom so the raw
-  # rows trail every tab.
+  # Right panel, in reading order: the pipeline's own MultiQC panels from raw
+  # reads through host removal to the per-profiler top taxa. This tab is named
+  # MultiQC and carries MultiQC panels only, so the run-level cards moved to
+  # the data they are computed from: the samples card into `Sample sheet`, the
+  # taxpasta ones onto the Profiles tab. `Sample sheet` is pinned to the top
+  # and `Reference tables` to the bottom, so the cohort every tab is filtered
+  # by and the raw rows every tile is computed from trail each tab. Both are
+  # declared here, on the tab no route conditional can remove.
   grid_sections:
-  - name: Run at a glance
-    icon: mdi:counter
-    color: orange
-    description: How many communities were profiled, by how many classifiers, and how rich the profiles are
   - name: Read quality
     icon: mdi:chart-box-outline
     color: orange
@@ -45,6 +45,13 @@ main_dashboard:
     color: grape
     description: The top-taxa panels MultiQC already builds for each classifier
     collapsed: true
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: teal
+    description: How many samples the run was given, and the platform each was sequenced on
+    collapsed: true
+    persistent: true
+    pin: top
   - name: Reference tables
     icon: mdi:table
     color: gray
@@ -53,89 +60,6 @@ main_dashboard:
     persistent: true
     pin: bottom
   components:
-  # ---------------------------------------------------------------- at a glance
-  - component_type: text
-    tag: tp-intro
-    section: Run at a glance
-    title: One community, many classifiers
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      taxprofiler runs every classifier in the database sheet over the same
-      reads. This tab is the pipeline's own quality report; the Profiles,
-      Concordance and Confidence tabs compare what the classifiers made of it.
-    workflow_tag: taxprofiler
-    data_collection_tag: taxpasta_sample_summary
-    layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: card
-    tag: tp-card-samples
-    section: Run at a glance
-    workflow_tag: taxprofiler
-    data_collection_tag: samplesheet
-    aggregation: nunique
-    column_name: sample
-    column_type: object
-    secondary_layout: donut
-    breakdown_col: instrument_platform
-    display: {icon_name: 'mdi:test-tube', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Samples
-    layout: {x: 0, y: 1, w: 2, h: 2}
-  - component_type: card
-    tag: tp-card-runs
-    section: Run at a glance
-    workflow_tag: taxprofiler
-    data_collection_tag: taxpasta_sample_summary
-    use: taxpasta/sample_summary
-    aggregation: nunique
-    column_name: profiler_db
-    column_type: object
-    secondary_layout: top_n
-    breakdown_col: profiler
-    top_n_count: 4
-    display: {icon_name: 'mdi:bacteria-outline', icon_color: '#8E44AD', title_color: '#8E44AD', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Profiling runs
-    layout: {x: 2, y: 1, w: 2, h: 2}
-  - component_type: card
-    tag: tp-card-taxa
-    section: Run at a glance
-    workflow_tag: taxprofiler
-    data_collection_tag: taxpasta_sample_summary
-    use: taxpasta/sample_summary
-    aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: taxa_observed
-    column_type: int64
-    display: {icon_name: 'mdi:counter', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Taxa per run
-    layout: {x: 4, y: 1, w: 2, h: 2}
-  - component_type: card
-    tag: tp-card-evenness
-    section: Run at a glance
-    workflow_tag: taxprofiler
-    data_collection_tag: taxpasta_sample_summary
-    use: taxpasta/sample_summary
-    aggregation: average
-    column_name: evenness
-    column_type: float64
-    secondary_layout: threshold
-    threshold_value: 0.6
-    threshold_direction: min
-    threshold_warn: 0.4
-    display: {icon_name: 'mdi:scale-balance', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Evenness
-    layout: {x: 6, y: 1, w: 2, h: 2}
-
   # --------------------------------------------------------------- read quality
   - component_type: text
     tag: tp-qc-intro
@@ -146,11 +70,29 @@ main_dashboard:
     order: 2
     alignment: left
     body: >
-      FastQC before and after trimming, and the fastp filtering summary. Every
-      panel here is the pipeline's own MultiQC output, not a recomputation.
+      taxprofiler ran every classifier in the database sheet over the same
+      reads, and this tab is the pipeline's own
+      [MultiQC](https://multiqc.info) report on them:
+      [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/)
+      before and after trimming, and the [fastp](https://github.com/OpenGene/fastp)
+      filtering summary. The tabs after it compare what the classifiers made of
+      those reads.
     workflow_tag: taxprofiler
     data_collection_tag: multiqc_data
     layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    tag: tp-qc-general-stats
+    section: Read quality
+    workflow_tag: taxprofiler
+    data_collection_tag: multiqc_data
+    use: multiqc/general_stats
+    selected_module: general_stats
+    selected_plot: general_stats
+    title: General statistics
+    description: One row per sample, pooling the FastQC, fastp, Bowtie 2, samtools and every classifier's headline numbers. Only one sample is detected as a read pair, so the default mean view shows a single row; switch the read toggle to All reads to see all 70, 50 to a page.
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 1, w: 8, h: 5}
   - component_type: multiqc
     tag: tp-qc-counts
     section: Read quality
@@ -162,7 +104,7 @@ main_dashboard:
     title: Sequence counts (pre-trimming)
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 1, w: 4, h: 5}
+    layout: {x: 0, y: 6, w: 4, h: 5}
   - component_type: multiqc
     tag: tp-qc-quality
     section: Read quality
@@ -174,7 +116,7 @@ main_dashboard:
     title: Per-base quality (pre-trimming)
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 1, w: 4, h: 5}
+    layout: {x: 4, y: 6, w: 4, h: 5}
   - component_type: multiqc
     tag: tp-qc-fastp-filtered
     section: Read quality
@@ -186,7 +128,7 @@ main_dashboard:
     title: fastp filtered reads
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 6, w: 4, h: 5}
+    layout: {x: 0, y: 11, w: 4, h: 5}
   - component_type: multiqc
     tag: tp-qc-post-lengths
     section: Read quality
@@ -198,7 +140,7 @@ main_dashboard:
     title: Read lengths (post-trimming)
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 6, w: 4, h: 5}
+    layout: {x: 4, y: 11, w: 4, h: 5}
 
   # ------------------------------------------------- host removal and long reads
   - component_type: text
@@ -211,8 +153,10 @@ main_dashboard:
     alignment: left
     body: >
       Reads matching the host reference are aligned away before any classifier
-      sees them. The nanoq and Nonpareil panels cover the long-read half of the
-      run and how much of the community the sequencing effort reached.
+      sees them. The [nanoq](https://github.com/esteinig/nanoq) and
+      [Nonpareil](https://nonpareil.readthedocs.io) panels cover the long-read
+      half of the run and how much of the community the sequencing effort
+      reached.
     workflow_tag: taxprofiler
     data_collection_tag: multiqc_data
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -354,6 +298,57 @@ main_dashboard:
     title_align: left
     layout: {x: 4, y: 11, w: 4, h: 5}
 
+  # ------------------------------------------------------------------ samplesheet
+  # The sheet's own counts sit above the sheet, in one row that fills the grid.
+  # Two halves rather than four quarters: the platform split is already told by
+  # the donut on Samples and by the Platform control in the left panel, so a
+  # third telling would be padding. What the two numbers say together is the
+  # thing the sheet alone makes you count: a sample can be split across
+  # sequencing runs, so runs outnumber samples. The section is persistent and
+  # pinned to the top, so both counts open every tab and the MultiQC tab stays
+  # MultiQC only.
+  - component_type: card
+    tag: tp-card-samples
+    section: Sample sheet
+    workflow_tag: taxprofiler
+    data_collection_tag: samplesheet
+    aggregation: nunique
+    column_name: sample
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: instrument_platform
+    display: {icon_name: 'mdi:test-tube', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Samples
+    layout: {x: 0, y: 0, w: 4, h: 2}
+  - component_type: card
+    tag: tp-card-sheet-runs
+    section: Sample sheet
+    workflow_tag: taxprofiler
+    data_collection_tag: samplesheet
+    aggregation: count
+    column_name: run_accession
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: instrument_platform
+    display: {icon_name: 'mdi:layers-triple-outline', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Sequencing runs
+    layout: {x: 4, y: 0, w: 4, h: 2}
+  - component_type: table
+    tag: tp-table-samplesheet
+    section: Sample sheet
+    workflow_tag: taxprofiler
+    data_collection_tag: samplesheet
+    row_selection_enabled: false
+    title: Samplesheet
+    description: The samples, their sequencing runs and their platform.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 2, w: 8, h: 4}
+
   # ---------------------------------------------------------- reference tables
   - component_type: text
     tag: tp-tables-intro
@@ -364,10 +359,10 @@ main_dashboard:
     order: 2
     alignment: left
     body: >
-      The long taxpasta frame every cross-profiler tile is computed from, the
-      per-run statistics, and the two sheets that say which sample and which
-      database each profiling run belongs to. Filters picked in the left panel
-      narrow these tables too.
+      The long [taxpasta](https://taxpasta.readthedocs.io) frame every
+      cross-profiler tile is computed from, the per-run statistics, and the
+      database sheet saying which reference each run was classified against.
+      Filters narrow these too; the samplesheet has its own section at the top.
     workflow_tag: taxprofiler
     data_collection_tag: taxpasta_profiles
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -397,17 +392,6 @@ main_dashboard:
     title_align: left
     layout: {x: 0, y: 6, w: 8, h: 4}
   - component_type: table
-    tag: tp-table-samplesheet
-    section: Reference tables
-    workflow_tag: taxprofiler
-    data_collection_tag: samplesheet
-    row_selection_enabled: false
-    title: Samplesheet
-    description: The samples, their sequencing runs and their platform.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 10, w: 4, h: 4}
-  - component_type: table
     tag: tp-table-databases
     section: Reference tables
     workflow_tag: taxprofiler
@@ -417,7 +401,7 @@ main_dashboard:
     description: Which database each classifier ran against, and for which read type.
     title_size: h3
     title_align: left
-    layout: {x: 4, y: 10, w: 4, h: 4}
+    layout: {x: 0, y: 10, w: 8, h: 4}
 
   # -------------------------------------------------------------- left panel
   - component_type: interactive
@@ -518,7 +502,8 @@ tabs:
     body: >
       Every bar is one profiling run, normalised to its own assigned total. Use
       the classifier filter in the left panel to compare two of them side by
-      side; the rank picker moves the whole chart up and down the taxonomy.
+      side; the rank picker moves the whole chart up and down the taxonomy. The
+      cards below count the runs and how even their communities are.
     workflow_tag: taxprofiler
     data_collection_tag: taxpasta_profiles
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -541,6 +526,27 @@ tabs:
     description: Per-sample relative abundance; the strip above the bars marks the sequencing platform.
     title_size: h3
     layout: {x: 0, y: 1, w: 8, h: 8}
+  # Two card rows, both full: how many runs the bars stand for and what they
+  # reported, then the two views of how concentrated the community is. The
+  # runs and evenness cards read `taxpasta_sample_summary` rather than the long
+  # profile frame, which is why they carry their own `use:`.
+  - component_type: card
+    tag: tp-card-runs
+    section: Composition
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_sample_summary
+    use: taxpasta/sample_summary
+    aggregation: nunique
+    column_name: profiler_db
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: profiler
+    top_n_count: 4
+    display: {icon_name: 'mdi:database-outline', icon_color: '#0097A7', title_color: '#0097A7', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Profiling runs
+    layout: {x: 0, y: 9, w: 2, h: 2}
   - component_type: card
     tag: tp-comp-card-taxa
     section: Composition
@@ -555,7 +561,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Distinct taxa
-    layout: {x: 0, y: 9, w: 2, h: 2}
+    layout: {x: 2, y: 9, w: 2, h: 2}
   - component_type: card
     tag: tp-comp-card-counts
     section: Composition
@@ -571,7 +577,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Assigned reads
-    layout: {x: 2, y: 9, w: 2, h: 2}
+    layout: {x: 4, y: 9, w: 2, h: 2}
   - component_type: card
     tag: tp-comp-card-ranks
     section: Composition
@@ -587,7 +593,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Ranks reported
-    layout: {x: 4, y: 9, w: 2, h: 2}
+    layout: {x: 6, y: 9, w: 2, h: 2}
   - component_type: card
     tag: tp-comp-card-dominant
     section: Composition
@@ -603,7 +609,25 @@ tabs:
     title_size: sm
     title_align: left
     title: Most dominant taxon
-    layout: {x: 6, y: 9, w: 2, h: 2}
+    layout: {x: 0, y: 11, w: 4, h: 2}
+  - component_type: card
+    tag: tp-card-evenness
+    section: Composition
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_sample_summary
+    use: taxpasta/sample_summary
+    aggregation: average
+    column_name: evenness
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 0.6
+    threshold_direction: min
+    threshold_warn: 0.4
+    display: {icon_name: 'mdi:scale-balance', icon_color: '#7CB342', title_color: '#7CB342', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Evenness
+    layout: {x: 4, y: 11, w: 4, h: 2}
 
   - component_type: text
     tag: tp-sylph-intro
@@ -614,9 +638,10 @@ tabs:
     order: 2
     alignment: left
     body: >
-      sylph does not classify reads. It measures how much of each reference
-      genome is contained in the sample, which gives a composition built from
-      whole genomes rather than from per-read assignments.
+      [sylph](https://github.com/bluenote-1577/sylph) does not classify reads.
+      It measures how much of each reference genome is contained in the sample,
+      which gives a composition built from whole genomes rather than from
+      per-read assignments.
     workflow_tag: taxprofiler
     data_collection_tag: sylph_profile
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -657,9 +682,10 @@ tabs:
     order: 2
     alignment: left
     body: >
-      Melon estimates how many genome copies of each lineage the long reads
-      carry, using prokaryotic marker genes. Its output names the sample only in
-      the file path, so these rings pool the long-read samples.
+      [Melon](https://github.com/xinehc/melon) estimates how many genome copies
+      of each lineage the long reads carry, using prokaryotic marker genes. Its
+      output names the sample only in the file path, so these rings pool the
+      long-read samples.
     workflow_tag: taxprofiler
     data_collection_tag: melon_ranks
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -800,10 +826,11 @@ tabs:
     order: 2
     alignment: left
     body: >
-      Bray-Curtis PCoA over the taxpasta profiles. Distance here is classifier
-      disagreement, not biology: three mock communities profiled twelve ways
-      should cluster by community, and anything that does not is a classifier
-      artefact. Lasso a group of points to narrow the rest of the tab.
+      Bray-Curtis PCoA over the [taxpasta](https://taxpasta.readthedocs.io)
+      profiles. Distance here is classifier disagreement, not biology: three
+      mock communities profiled twelve ways should cluster by community, and
+      anything that does not is a classifier artefact. Lasso a group of points
+      to narrow the rest of the tab.
     workflow_tag: taxprofiler
     data_collection_tag: taxpasta_embedding
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -1055,10 +1082,10 @@ tabs:
     order: 2
     alignment: left
     body: >
-      sylph reports how much of a reference genome the reads contain and how
-      close they are to it. A high abundance at a low adjusted ANI is a call
-      against a divergent relative, which a read-count classifier reports as a
-      confident species hit.
+      [sylph](https://github.com/bluenote-1577/sylph) reports how much of a
+      reference genome the reads contain and how close they are to it. A high
+      abundance at a low adjusted ANI is a call against a divergent relative,
+      which a read-count classifier reports as a confident species hit.
     workflow_tag: taxprofiler
     data_collection_tag: sylph_ani
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -1089,7 +1116,7 @@ tabs:
     title: ANI against abundance
     description: The bottom-right corner is where a confident-looking abundance rests on a divergent match.
     title_size: h3
-    layout: {x: 0, y: 9, w: 4, h: 6}
+    layout: {x: 0, y: 9, w: 8, h: 6}
   - component_type: table
     tag: tp-table-ani
     section: Containment identity
@@ -1102,7 +1129,7 @@ tabs:
     description: One row per genome sylph detected, with ANI, coverage and both abundance estimates.
     title_size: h3
     title_align: left
-    layout: {x: 4, y: 9, w: 4, h: 6}
+    layout: {x: 0, y: 15, w: 8, h: 6}
   - component_type: card
     tag: tp-card-ani
     section: Containment identity
@@ -1118,7 +1145,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Adjusted ANI
-    layout: {x: 0, y: 15, w: 2, h: 2}
+    layout: {x: 0, y: 21, w: 2, h: 2}
   - component_type: card
     tag: tp-card-genomes
     section: Containment identity
@@ -1135,7 +1162,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Genomes detected
-    layout: {x: 2, y: 15, w: 2, h: 2}
+    layout: {x: 2, y: 21, w: 2, h: 2}
   - component_type: card
     tag: tp-card-cov
     section: Containment identity
@@ -1153,7 +1180,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Effective coverage
-    layout: {x: 4, y: 15, w: 2, h: 2}
+    layout: {x: 4, y: 21, w: 2, h: 2}
   - component_type: card
     tag: tp-card-containment
     section: Containment identity
@@ -1169,7 +1196,7 @@ tabs:
     title_size: sm
     title_align: left
     title: K-mer containment
-    layout: {x: 6, y: 15, w: 2, h: 2}
+    layout: {x: 6, y: 21, w: 2, h: 2}
 
   - component_type: text
     tag: tp-shape-intro

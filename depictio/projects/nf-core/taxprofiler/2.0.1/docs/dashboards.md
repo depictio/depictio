@@ -17,7 +17,7 @@ Oxford Nanopore MinION R9.
 
 ## How the dashboard is built
 
-- **One funnel, four tabs.** Read QC, then Profiles, then Concordance, then Confidence. Each
+- **One funnel, four tabs.** MultiQC, then Profiles, then Concordance, then Confidence. Each
   tab answers the question the previous one raises: are the reads worth classifying, what does
   each classifier say the community is, where do the classifiers disagree, and how much should
   a given call be trusted.
@@ -30,9 +30,12 @@ Oxford Nanopore MinION R9.
   tab's filter panel, sourced on the taxprofiler samplesheet. The template's links fan a
   selection there out to the taxpasta collections, the sylph containment table and the MultiQC
   panels, so one pick narrows composition, concordance and confidence at once.
-- **Pinned reference tables.** The rows behind every tile sit in a collapsed
-  `Reference tables` section pinned to the bottom of every tab: the long profiles frame, the
-  per-run statistics, the samplesheet and the database sheet.
+- **Pinned sheet and reference tables.** The cohort every tab is filtered on sits in a
+  collapsed `Sample sheet` section pinned to the top of every tab: a card counting the
+  samples and a card counting the sequencing runs, both broken down by sequencing platform,
+  above the samplesheet itself. The rows behind every tile sit in a collapsed
+  `Reference tables` section pinned to the bottom: the long profiles frame, the per-run
+  statistics and the database sheet.
 - **Catalog provenance.** Every analysis panel is a catalog render (`use: taxpasta/...`,
   `use: sylph/...`, `use: melon/...`) and every MultiQC tile names its module
   (`use: multiqc/fastqc`, `use: multiqc/bracken`, and so on), so the tile chrome shows where
@@ -75,16 +78,17 @@ since taxprofiler only routes nanopore data to melon. Every one of those is decl
 
 ---
 
-## Read QC
+## MultiQC
 
-The main tab. `Run at a glance` carries four cards: samples broken down by sequencing
-platform, profiling runs broken down by profiler, the median taxa reported per run as a Tukey
-box plot, and mean evenness against a threshold.
+The main tab. Its three sections are the pipeline's own MultiQC report, from the raw reads
+through host removal to each classifier's top taxa; the pinned `Sample sheet` and
+`Reference tables` sections frame them here as they do on every tab.
 
-`Read quality` holds the panels MultiQC already builds: FastQC sequence counts and quality
-histograms, fastp's filtered-read bars, and the post-trimming FastQC length distribution.
-taxprofiler runs FastQC twice, before and after preprocessing, so MultiQC labels the second
-run `fastqc-1`.
+`Read quality` opens on MultiQC's general-statistics table, one row per sample pooling every
+module's headline numbers, and then holds the read panels themselves: FastQC sequence counts
+and quality histograms, fastp's filtered-read bars, and the post-trimming FastQC length
+distribution. taxprofiler runs FastQC twice, before and after preprocessing, so MultiQC
+labels the second run `fastqc-1`.
 
 `Host removal and long reads` pairs the bowtie2 and samtools views of what the host-genome
 alignment took out with nanoq's nanopore read summary and nonpareil's redundancy curves.
@@ -95,16 +99,18 @@ sequencing depth actually covered, which is the ceiling on everything downstream
 it: kraken2, bracken, centrifuge, kaiju, metaphlan, plus MALT's mappability. These are the
 per-classifier view; the cross-classifier view starts on the next tab.
 
-![Read QC](screenshots/read-qc.png)
+![MultiQC](screenshots/read-qc.png)
 
 ## Profiles
 
 `Composition` is the tab's centre: one stacked taxonomy panel over the whole hub, switchable
 by taxonomic rank and narrowed by the `Profile scope` filter, so the same tile shows one
-classifier at a time or all of them. Four cards sit beside it: distinct taxa named, median
-assigned count as a box plot, ranks reported as a composition strip, and the share held by the
-single most dominant taxon on a gauge. A profile whose top taxon holds more than half the
-reads is either a very simple community or a classifier that has collapsed onto one reference.
+classifier at a time or all of them. Six cards sit under it: the profiling runs the bars stand
+for broken down by profiler, distinct taxa named, median assigned count as a box plot and
+ranks reported as a composition strip, then the share held by the single most dominant taxon
+on a gauge next to mean evenness against a threshold. A profile whose top taxon holds more
+than half the reads is either a very simple community or a classifier that has collapsed onto
+one reference.
 
 `Containment composition` shows the same communities as sylph reconstructs them. sylph does
 not count reads into a taxonomy; it estimates how much of each reference genome is contained
