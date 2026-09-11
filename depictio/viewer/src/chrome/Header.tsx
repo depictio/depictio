@@ -1,10 +1,11 @@
 import React from 'react';
-import { ActionIcon, Badge, Box, Button, Group, Loader, Menu, Title, Tooltip, useMantineColorScheme } from '@mantine/core';
+import { ActionIcon, Badge, Box, Button, Divider, Group, Loader, Menu, Title, Tooltip, useMantineColorScheme } from '@mantine/core';
 import { BRAND_PALETTES, useBrandAccent, useBranding } from 'depictio-react-core';
 import { Icon } from '@iconify/react';
 
 import type { BrandTheme, DashboardData, DashboardSummary } from 'depictio-react-core';
 import PoweredBy from './PoweredBy';
+import { useFeedbackLink } from '../feedback';
 
 /** True for path-like icon values (PNG/SVG file URLs) — these came from the
  *  Dash YAML and aren't valid Iconify names. */
@@ -165,6 +166,21 @@ const Header: React.FC<HeaderProps> = ({
   const titleText = dashboardName
     ? `${dashboardName} / ${activeLabel}`
     : activeLabel;
+  // The pill label the reader is actually looking at, or nothing when this tab
+  // has none of its own. `activeTab.title` is the dashboard's own title on a
+  // parent tab, so reading it here sent "nf-core/ampliseq" as both the
+  // dashboard and the tab; an empty field says less but says it truthfully.
+  const tabLabel = (isChild ? activeTab?.title : activeTab?.main_tab_name) || null;
+
+  // The reader's context travels with the link: which dashboard, which tab,
+  // which page. Without it a remark arrives as "that plot is wrong" with
+  // nothing saying where. Both names are the ones on screen, taken from the
+  // breadcrumb rather than the raw fields, so the link and the header agree.
+  const feedback = useFeedbackLink({
+    dashboard: dashboardName ?? null,
+    dashboardId,
+    tab: tabLabel,
+  });
 
   const handleEdit = () => {
     if (dashboardId) {
@@ -377,6 +393,36 @@ const Header: React.FC<HeaderProps> = ({
         >
           Settings
         </Button>
+        {/* An aside, not an action on the dashboard, so it is an icon rather
+            than a sixth button: findable by someone who wants to say something,
+            without competing with Edit / Save / Settings. It sits past the
+            divider, at the end of the row, because it is about the dashboard
+            rather than a thing you can do to it. The subtle grey icon button
+            is the same treatment as the hamburgers at the other end of the
+            header, and the tooltip carries the label, which is the whole
+            reason an icon can stand alone here. The same link is repeated as a
+            labelled row in the Settings drawer for anyone who goes looking
+            rather than reacting. */}
+        {feedback && (
+          <>
+            <Divider orientation="vertical" my={6} />
+            <Tooltip label={feedback.label} withArrow>
+              <ActionIcon
+                component="a"
+                href={feedback.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={feedback.label}
+                color="gray"
+                variant="subtle"
+                size="md"
+                data-testid="dashboard-feedback"
+              >
+                <Icon icon="mdi:comment-quote" width={22} />
+              </ActionIcon>
+            </Tooltip>
+          </>
+        )}
       </Group>
     </Group>
   );

@@ -105,6 +105,13 @@ data:
   DEPICTIO_TELEMETRY_MEMORY_LIMIT: {{ .Values.backend.env.DEPICTIO_TELEMETRY_MEMORY_LIMIT | default .Values.backend.resources.limits.memory | quote }}
   DEPICTIO_TELEMETRY_INCLUDE_USAGE_METRICS: {{ .Values.backend.env.DEPICTIO_TELEMETRY_INCLUDE_USAGE_METRICS | default "true" | quote }}
   DEPICTIO_TELEMETRY_DEBUG: {{ .Values.backend.env.DEPICTIO_TELEMETRY_DEBUG | default "false" | quote }}
+  # Dashboard feedback link, served to the SPA through /utils/public-config.
+  # Both halves are required: the flag alone renders nothing, and so does a URL
+  # without it. The URL is a template the browser fills with {dashboard},
+  # {dashboard_id}, {tab} and {url}.
+  DEPICTIO_FEEDBACK_ENABLED: {{ .Values.backend.env.DEPICTIO_FEEDBACK_ENABLED | default "false" | quote }}
+  DEPICTIO_FEEDBACK_URL: {{ .Values.backend.env.DEPICTIO_FEEDBACK_URL | default "" | quote }}
+  DEPICTIO_FEEDBACK_LABEL: {{ .Values.backend.env.DEPICTIO_FEEDBACK_LABEL | default "Feedback" | quote }}
   DEPICTIO_GOOGLE_ANALYTICS_ENABLED: {{ .Values.backend.env.DEPICTIO_GOOGLE_ANALYTICS_ENABLED | default "false" | quote }}
   {{- if .Values.googleAnalytics }}
   DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: {{ .Values.googleAnalytics.DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID | default "G-XXXXXXXXXX" | quote }}

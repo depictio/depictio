@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   ActionIcon,
+  Anchor,
   Button,
   Divider,
   Drawer,
@@ -25,6 +26,7 @@ import {
 } from 'depictio-react-core';
 import DashboardInfoBody from './DashboardInfoBody';
 import { useBranding } from '../branding';
+import { useFeedbackLink } from '../feedback';
 import { useUiScalePref } from '../hooks/useUiScalePref';
 
 /** Client-side mirror of the server's upload cap (routes.py). */
@@ -299,6 +301,49 @@ const BrandingBlock: React.FC<{
   );
 };
 
+/**
+ * The deployment's feedback link, as a labelled row.
+ *
+ * The header carries the same link as a bare icon, for reacting in the moment.
+ * This is the other half: somewhere to find it when you went looking for it,
+ * with the label and a line saying what it is for. Both read the one config,
+ * so there is a single place the URL can be wrong.
+ */
+const FeedbackBlock: React.FC<{ dashboard: DashboardData | null }> = ({ dashboard }) => {
+  const feedback = useFeedbackLink({
+    dashboard: dashboard?.title ?? null,
+    dashboardId: dashboard?.dashboard_id ?? dashboard?._id ?? null,
+    tab: null,
+  });
+  if (!feedback) return null;
+  return (
+    <>
+      <Divider />
+      <Stack gap={6} data-testid="feedback-section">
+        <Group gap="xs">
+          <Icon icon="mdi:comment-quote-outline" width={18} />
+          <Text fw={600} size="sm">
+            Feedback
+          </Text>
+        </Group>
+        <Text size="xs" c="dimmed">
+          Tell us what this dashboard gets wrong, or what it is missing. The link carries which
+          dashboard you were on.
+        </Text>
+        <Anchor
+          href={feedback.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          size="sm"
+          data-testid="feedback-link"
+        >
+          {feedback.label}
+        </Anchor>
+      </Stack>
+    </>
+  );
+};
+
 interface SettingsDrawerProps {
   opened: boolean;
   onClose: () => void;
@@ -358,6 +403,8 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
           />
         </>
       )}
+      <Divider />
+      <FeedbackBlock dashboard={dashboard} />
       <Divider />
       <Stack gap="sm" data-testid="appearance-section">
         <Group gap="xs">

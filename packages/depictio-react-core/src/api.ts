@@ -1723,6 +1723,14 @@ export interface PublicConfigResponse {
    *  materialised and defaults made explicit, so the client never re-derives
    *  a palette. Empty-ish object on an unbranded deployment. */
   branding?: BrandTheme;
+  /** Opt-in feedback link for dashboard headers. `url` is a template the SPA
+   *  fills with what the reader is looking at ({project}, {dashboard}, {tab},
+   *  {url}); absent or disabled on a deployment that set none. */
+  feedback?: {
+    enabled: boolean;
+    url: string | null;
+    label: string;
+  };
 }
 
 export async function fetchPublicConfig(): Promise<PublicConfigResponse> {
