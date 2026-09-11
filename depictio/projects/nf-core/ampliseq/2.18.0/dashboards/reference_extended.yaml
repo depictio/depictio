@@ -109,7 +109,7 @@ main_dashboard:
     order: 2
     alignment: left
     section: QC overview
-    body: 'MultiQC aggregates the per-sample FastQC and Cutadapt reports for this run. The four panels here answer the questions asked first: how many reads survived trimming, how evenly they are spread across samples, and whether base quality holds to the end of the read. The remaining ten panels are folded into *QC details* below. Pick a sample on the left to narrow every panel at once.'
+    body: '[MultiQC](https://multiqc.info) aggregates the per-sample [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) and [Cutadapt](https://cutadapt.readthedocs.io) reports for this run. The four panels here answer the questions asked first: how many reads survived trimming, how evenly they are spread across samples, and whether base quality holds to the end of the read. The remaining ten panels are folded into *QC details* below. Pick a sample on the left to narrow every panel at once.'
     tag: text-multiqc-section-header-47c567
     index: multiqc-section-header
     layout:
@@ -702,7 +702,7 @@ tabs:
     order: 2
     alignment: left
     section: Diversity at a glance
-    body: Four alpha-diversity indices computed by QIIME 2 on the rarefied feature table, one row per sample. Shannon weights richness by evenness, Faith's PD weights it by branch length on the phylogeny, and evenness isolates the balance between taxa. Each card carries the distribution behind its median rather than the median alone.
+    body: Four alpha-diversity indices computed by [QIIME 2](https://qiime2.org) on the rarefied feature table, one row per sample. Shannon weights richness by evenness, Faith's PD weights it by branch length on the phylogeny, and evenness isolates the balance between taxa. Each card carries the distribution behind its median rather than the median alone.
     tag: text-alpha-section-header-78cb12
     index: alpha-section-header
     layout:
@@ -1077,7 +1077,7 @@ tabs:
     order: 2
     alignment: left
     section: Overview
-    body: 'Relative abundance per sample from the QIIME 2 taxonomic classification. The cards report how much of the table the current filters leave: how many distinct taxa remain, how the samples split across Habitat, how the abundances are distributed, and what the phyla are made of.'
+    body: 'Relative abundance per sample from the [QIIME 2](https://qiime2.org) taxonomic classification. The cards report how much of the table the current filters leave: how many distinct taxa remain, how the samples split across Habitat, how the abundances are distributed, and what the phyla are made of.'
     tag: text-community-section-header-28d771
     index: community-section-header
     layout:
@@ -1907,7 +1907,7 @@ tabs:
     order: 2
     alignment: left
     section: Summary
-    body: 'ANCOM-BC tests each taxon for a difference in abundance between two groups, correcting for compositional bias and for the number of tests. Pick a contrast on the left first: every number on this tab is conditional on it. The cards count what was tested, what survives FDR, and how large the effects are.'
+    body: '[ANCOM-BC](https://bioconductor.org/packages/ANCOMBC) tests each taxon for a difference in abundance between two groups, correcting for compositional bias and for the number of tests. Pick a contrast on the left first: every number on this tab is conditional on it. The cards count what was tested, what survives FDR, and how large the effects are.'
     tag: text-diff-section-header-b63d9f
     index: diff-section-header
     layout:
@@ -2458,7 +2458,7 @@ tabs:
     order: 2
     alignment: left
     section: Reconstruction at a glance
-    body: SIDLE rebuilds a single feature table from several amplicon regions sequenced separately, so a feature here rests on evidence from more than one region. The cards report how many features were reconstructed, which samples carry them, what phyla they resolve to, and how many regions each feature draws on.
+    body: '[SIDLE](https://q2-sidle.readthedocs.io) rebuilds a single feature table from several amplicon regions sequenced separately, so a feature here rests on evidence from more than one region. The cards report how many features were reconstructed, which samples carry them, what phyla they resolve to, and how many regions each feature draws on.'
     tag: text-sidle-section-header-9a1c44
     index: sidle-section-header
     layout:

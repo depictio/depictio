@@ -43,10 +43,12 @@ main_dashboard:
     order: 2
     alignment: left
     body: >
-      General statistics carry truvari precision, recall, F1 and genotype
-      concordance per callset. The precision-recall scatter is the signature
-      view and the classifications panel breaks down TP / FP / FN; SURVIVOR
-      summarises the merged SV callset.
+      General statistics carry [truvari](https://github.com/ACEnglish/truvari)
+      precision, recall, F1 and genotype concordance per callset. The
+      precision-recall scatter is the signature view and the classifications
+      panel breaks down TP / FP / FN;
+      [SURVIVOR](https://github.com/fritzsedlazeck/SURVIVOR) summarises the
+      merged SV callset.
     workflow_tag: variantbenchmarking
     data_collection_tag: multiqc_data
     layout: {x: 0, y: 0, w: 8, h: 1}

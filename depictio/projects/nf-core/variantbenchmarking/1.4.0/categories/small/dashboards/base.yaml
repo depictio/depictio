@@ -67,10 +67,12 @@ main_dashboard:
     order: 2
     alignment: left
     body: >
-      How well does each callset recover the GIAB / HG002 truth set? The cards
-      summarise the run, the precision-recall benchmark ranks the callsets, the
-      confusion matrix counts TP / FP / FN, and the hap.py panels split the score
-      by variant type and quality threshold.
+      How well does each callset recover the
+      [GIAB](https://www.nist.gov/programs-projects/genome-bottle) / HG002 truth
+      set? The cards summarise the run, the precision-recall benchmark ranks the
+      callsets, the confusion matrix counts TP / FP / FN, and the
+      [hap.py](https://github.com/Illumina/hap.py) panels split the score by
+      variant type and quality threshold.
     workflow_tag: variantbenchmarking
     data_collection_tag: vcfeval_summary
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -286,8 +288,9 @@ main_dashboard:
     order: 2
     alignment: left
     body: >
-      The rtg-tools vcfeval and hap.py summary rows every panel above is computed
-      from. Filters picked in the left panel narrow these tables too.
+      The [rtg-tools](https://github.com/RealTimeGenomics/rtg-tools) vcfeval and
+      hap.py summary rows every panel above is computed from. Filters picked in
+      the left panel narrow these tables too.
     workflow_tag: variantbenchmarking
     data_collection_tag: vcfeval_summary
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -314,7 +317,7 @@ main_dashboard:
     description: Variant type × filter, pooled across samples.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 5, w: 4, h: 3}
+    layout: {x: 0, y: 5, w: 8, h: 3}
   - component_type: table
     tag: small-table-happy-roc
     section: Reference tables
@@ -326,7 +329,7 @@ main_dashboard:
     description: Precision / recall / F1 per quality threshold.
     title_size: h3
     title_align: left
-    layout: {x: 4, y: 5, w: 4, h: 3}
+    layout: {x: 0, y: 8, w: 8, h: 3}
 
   # -------------------------------------------------------------- left panel
   - component_type: interactive
@@ -466,9 +469,10 @@ tabs:
     order: 2
     alignment: left
     body: >
-      The pipeline's own MultiQC report: bcftools general statistics per callset,
-      hap.py SNP and INDEL panels, and the variant substitution and indel-length
-      distributions.
+      The pipeline's own [MultiQC](https://multiqc.info) report:
+      [bcftools](https://samtools.github.io/bcftools/) general statistics per
+      callset, [hap.py](https://github.com/Illumina/hap.py) SNP and INDEL
+      panels, and the variant substitution and indel-length distributions.
     workflow_tag: variantbenchmarking
     data_collection_tag: multiqc_data
     layout: {x: 0, y: 0, w: 8, h: 1}

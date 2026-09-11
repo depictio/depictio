@@ -225,3 +225,36 @@ The fetched `pipeline_info/` carries the software versions (both
 so `_introspect_pipeline_params` sets no template variable and the template exposes
 `DATA_ROOT` alone. Provenance is collected from the two version files. Nothing degrades:
 there is no metadata-gated conditional in this template.
+
+### CR-D9: the MultiQC tab's opening strip was four non-MultiQC cards, and three of them were duplicates
+
+`Run at a glance` opened the MultiQC tab with four cards that no MultiQC module feeds: three
+read `seacr/peak_summary` and one read `samples`. A tab named MultiQC holds MultiQC panels
+only, so all four left the section.
+
+The three SEACR cards were not moved to the Peak calls tab, they were deleted. That tab's
+`SEACR peak yield` row already carries the same four statements over `seacr/peaks`, the
+per-region collection the summary is an aggregate of, and with the same secondary layouts:
+`SEACR regions called` (sum of `num_peaks`, top 3 by sample) restates `Regions in view`
+(count of `peak_id`, top 3 by sample); `Median region width` box-plots four per-sample
+medians where `Region width` box-plots every region; and `Coverage per base` was duplicated
+verbatim, same title, same `threshold_value: 50` and `threshold_warn: 25`. Moving them would
+have put two identically titled cards on one tab and made the row ragged at seven cards. The
+per-sample summary itself is not lost: `cr-ref-table-summary` carries it in the pinned
+`Reference tables` section on every tab, and the two `QC thresholds` sliders still read it.
+
+`Samples by role` moved into the pinned `Sample sheet` section, which is the section that
+owns the `samples` collection, so the donut now rides along on every tab instead of only the
+MultiQC one. A lone `w: 2` card would have left six empty columns, so it sits beside the
+section intro (`w: 6`) rather than on a row of its own; the intro grew to `h: 2` to keep its
+prose inside the narrower tile.
+
+What is left in `Run at a glance` is the `General statistics` panel, moved up from
+`Read quality`. The section keeps the tab's opening orientation without being empty, its
+content is a MultiQC panel, and `Read quality` is four FastQC and cutadapt panels in two full
+rows. The text tiles on both sections were rewritten: the old opener announced "four cards
+for the peak yield", and the `Reference tables` opener pointed at "the QC cards" that no
+longer exist.
+
+Still stale after this change: `docs/dashboards.md` describes `Run at a glance` as a
+four-card strip.

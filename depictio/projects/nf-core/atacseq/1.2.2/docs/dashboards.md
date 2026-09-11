@@ -15,7 +15,7 @@ each.
 > **This template reads a REPROCESSED MultiQC report.**
 > atacseq 1.2.2 is a DSL1 pipeline and this run published MultiQC 1.9, which writes
 > `multiqc_data.json` and no parquet, nested at `multiqc/broadPeak/multiqc_data/`. Depictio
-> reads only `multiqc.parquet` (MultiQC 1.31 and later), so the QC tab is bound to a report
+> reads only `multiqc.parquet` (MultiQC 1.31 and later), so the MultiQC tab is bound to a report
 > this repository generates by re-running the pinned MultiQC 1.35 over the run's own raw tool
 > outputs. Here the upgrade is not only a format change: MultiQC 1.35 gained an `ataqv`
 > module that 1.9 had no idea about, so the reprocess adds four ATAC-specific QC panels
@@ -33,7 +33,7 @@ each.
 
 ## How the dashboard is built
 
-- **One funnel, five tabs.** Library QC, then ATAC signal, then Peaks, then Consensus, then
+- **One funnel, five tabs.** MultiQC, then ATAC signal, then Peaks, then Consensus, then
   Differential accessibility. Each tab answers the question the previous one raises: are the
   libraries clean, is the ATAC signal where it should be, what did MACS2 call in each
   library, which of those calls the libraries agree on, and which of the agreed intervals
@@ -48,9 +48,10 @@ each.
   summary and MultiQC use the bare sample id. `sample_design` carries both columns and each
   link starts from whichever one its target uses, so one pick in the sample filter reaches
   every collection.
-- **Pinned reference tables and thresholds.** The design sheet and the per-library peak QC
-  rows sit in a collapsed `Reference tables` section pinned to the bottom of every tab, next
-  to a collapsed `QC thresholds` section holding the TSS enrichment and FRiP floors, so the
+- **Pinned reference tables and thresholds.** The design sheet sits in a collapsed `Sample
+  sheet` section pinned to the top of every tab, and the per-library peak QC rows in a
+  collapsed `Reference tables` section pinned to the bottom, next to a collapsed
+  `QC thresholds` section holding the TSS enrichment and FRiP floors, so the design, the
   numbers behind the cards and the cut-offs applied to them are one click away everywhere.
 - **Selection, both ways.** The signal-against-specificity scatter on the ATAC signal tab
   carries `selection_enabled` on `sample` and the ataqv metrics table carries
@@ -58,7 +59,7 @@ each.
   both peak tables do the same on `peak_id`. Lassoing narrows the tables, ticking rows
   narrows the panels, and the project links carry the selection between the MACS2 and HOMER
   collections.
-- **Catalog provenance.** 47 of the 102 tiles carry a `use:` catalog reference, so the tile
+- **Catalog provenance.** 64 of the 110 tiles carry a `use:` catalog reference, so the tile
   chrome says where the panel comes from: `ataqv/*` for the ATAC quality panels, `macs2/*`
   for the peak and consensus panels, `homer/annotated_peaks` for the annotation panels,
   `deseq2/*` for the differential accessibility panels and `multiqc/<module>` for the
@@ -69,15 +70,15 @@ each.
 
 ---
 
-## Library QC
+## MultiQC
 
 The main tab, and the one reading the reprocessed report.
 
-`Run at a glance` is a four-card strip, each card with a different secondary layout: peaks
-called across the run with a breakdown by library, mean TSS enrichment, the median
-mitochondrial fraction, and the share of high-quality autosomal reads that fall inside peaks.
-Three of the four read the `ataqv` collections rather than MultiQC, because those are the
-numbers an ATAC library is accepted or rejected on.
+`Run at a glance` is the MultiQC General Statistics table: one row per library, pooling the
+FastQC, Trim Galore, samtools, Picard, MACS2 and ataqv headline numbers. It is the one panel
+in the report that speaks for the run rather than for a single tool, so it is what the tab
+opens on, and the sections below take it apart module by module. The ATAC-specific ataqv
+measures are on the ATAC signal tab.
 
 `Read quality` carries FastQC sequence counts and quality histograms and the cutadapt kept
 reads. Every library appears here more than once, under its raw and trimmed read-pair names.
@@ -86,41 +87,45 @@ reads. Every library appears here more than once, under its raw and trimmed read
 samtools percent mapped and per-contig distribution at both filtering levels the run
 published, then the preseq complexity curve. The doubled samtools entries are the point of
 that section: `mLb.mkD` is duplicate-marked but unfiltered, `mLb.clN` is what the peak caller
-sees, and the pair says how much ATAC filtering removed. Under them, `use:
-preseq/complexity_ribbon` reads preseq's own output rather than the report and adds the 95%
-confidence band MultiQC drops, so a library whose extrapolation is guesswork shows as a
-ribbon that fans out instead of a line that looks as certain as any other.
+sees, and the pair says how much ATAC filtering removed.
 
 `Accessibility signal` is the tab's conclusion: the deepTools fingerprint curve, the FRiP
 scores, the peak counts per library and the featureCounts bars saying how many reads fall
-inside the consensus peaks. Two tiles then read the deepTools tables the report has no panel
-for: `use: deeptools/fingerprint_scatter` puts every library on one plane, coverage
-concentration against divergence from a uniform library, which for ATAC is how much of the
-signal sits in open chromatin; and `use: deeptools/metagene_profile` draws the `plotProfile`
-matrix as one curve per library with the TSS marked at bin 300 and the scaled gene body
-shaded.
+inside the consensus peaks.
 
-The MultiQC General Statistics table is **not** bound on this tab, for the reason chipseq
-documented: samtools stats and flagstat both contribute a column titled "Reads mapped" and
-the API's general-stats payload collapses them. See `VALIDATION_REPORT.md`, AT-D8.
+Every tile on this tab reads the report. The panels that read a tool's own tables instead of
+MultiQC's rendering of them sit on the ATAC signal tab, next to the collections they come
+from.
 
 ---
 
-![Library QC](screenshots/library-qc.png)
+![MultiQC](screenshots/library-qc.png)
 
 ## ATAC signal
 
 The tab that exists because MultiQC 1.9 reported none of this and 1.35 only reports part of
 it.
 
-`Library quality at a glance` is a four-card strip on the ataqv collections: the peaks ataqv
-scored, the duplicate fraction, the median fragment length and the spread of reads over the
-fragment classes.
+`Library quality at a glance` is seven cards on the ataqv collections, in two rows that each
+fill the grid. The first row is the quartet a library is accepted or rejected on: mean TSS
+enrichment, the share of high-quality autosomal reads that fall inside peaks, the median
+mitochondrial fraction and the duplicate fraction. The second is what the library's peaks and
+fragments look like: the peaks ataqv scored with a breakdown by library, the median fragment
+length and the spread of reads over the fragment classes.
+
+`Depth and coverage concentration` reads two tables the report renders as bare curves. `use:
+preseq/complexity_ribbon` adds the 95% confidence band MultiQC drops, so a library whose
+extrapolation is guesswork shows as a ribbon that fans out instead of a line that looks as
+certain as any other; `use: deeptools/fingerprint_scatter` puts every library on one plane,
+coverage concentration against divergence from a uniform library, which for ATAC is how much
+of the signal sits in open chromatin. Clicking a curve or a point selects that library.
 
 `Signal at transcription start sites` holds the canonical ATAC enrichment curve, coverage
 against distance to the TSS with one trace per library, next to a scatter placing each
-library on TSS enrichment against the share of reads in peaks. That scatter is the tab's
-selection source: lassoing libraries there narrows the ataqv table below.
+library on TSS enrichment against the share of reads in peaks. Lassoing libraries on that
+scatter narrows the ataqv table below. Under them, `use: deeptools/metagene_profile` draws
+the `plotProfile` matrix as one curve per library with the TSS marked at bin 300 and the
+scaled gene body shaded.
 
 `Fragment length ladder` puts the template's own fragment-length figure next to MultiQC's
 rendering of the same signal, then the reads-per-fragment-class bars. The pair is
@@ -228,5 +233,5 @@ python -m depictio.cli run --template nf-core/atacseq/1.2.2 \
 ```
 
 Step 2 is mandatory, not optional: without it `multiqc_data` finds no parquet and the whole
-Library QC tab is empty. Step 2 is also not idempotent for its provenance record, so keep the
+MultiQC tab is empty. Step 2 is also not idempotent for its provenance record, so keep the
 first `REPROCESSED.json` or delete `multiqc/multiqc_data/` before re-running (AT-D7).

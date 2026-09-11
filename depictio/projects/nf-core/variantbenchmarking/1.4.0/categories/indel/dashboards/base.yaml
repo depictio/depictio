@@ -78,7 +78,8 @@ main_dashboard:
       How well does each somatic caller recover the SEQC2 truth set? Somatic
       indels are hard: recall stays low, so the callers sit to the left of the
       precision-recall plane. The confusion matrix exposes over-calling and the
-      forest plots carry som.py's confidence intervals.
+      forest plots carry [som.py](https://github.com/Illumina/hap.py)'s
+      confidence intervals.
     workflow_tag: variantbenchmarking
     data_collection_tag: sompy_summary
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -332,10 +333,11 @@ main_dashboard:
     order: 2
     alignment: left
     body: >
-      The pipeline benchmarks the somatic callers with two tools. rtg-tools
-      vcfeval matches haplotypes rather than sites, so its precision and recall
-      differ slightly from som.py's; a caller that moves rank between the two
-      views deserves a closer look.
+      The pipeline benchmarks the somatic callers with two tools.
+      [rtg-tools](https://github.com/RealTimeGenomics/rtg-tools) vcfeval matches
+      haplotypes rather than sites, so its precision and recall differ slightly
+      from som.py's; a caller that moves rank between the two views deserves a
+      closer look.
     workflow_tag: variantbenchmarking
     data_collection_tag: vcfeval_summary
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -361,7 +363,7 @@ main_dashboard:
     description: Per-caller TP / FP / FN and precision / recall / F1.
     title_size: h3
     title_align: left
-    layout: {x: 4, y: 1, w: 4, h: 6}
+    layout: {x: 0, y: 7, w: 8, h: 6}
 
   # ---------------------------------------------------------- reference tables
   - component_type: text
@@ -527,9 +529,10 @@ tabs:
     order: 2
     alignment: left
     body: >
-      The pipeline's own MultiQC report: bcftools general statistics per callset,
-      som.py combined / indel / SNV panels, and the variant substitution and
-      depth distributions.
+      The pipeline's own [MultiQC](https://multiqc.info) report:
+      [bcftools](https://samtools.github.io/bcftools/) general statistics per
+      callset, [som.py](https://github.com/Illumina/hap.py) combined / indel /
+      SNV panels, and the variant substitution and depth distributions.
     workflow_tag: variantbenchmarking
     data_collection_tag: multiqc_data
     layout: {x: 0, y: 0, w: 8, h: 1}

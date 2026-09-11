@@ -3,9 +3,9 @@ version: 1
 #
 # Funnel: Samples (is the experiment sound?) -> Differential expression (what
 # changed?) -> Expression (how do the samples separate on the features that
-# move?) -> Genome view (where do the calls sit?). `Reference tables` is
-# persistent and pinned to the bottom, so the rows behind every tile trail the
-# viewer onto every tab.
+# move?) -> Genome view (where do the calls sit?). `Observation sheet` is
+# pinned to the top and `Reference tables` to the bottom, both persistent, so
+# the design and the rows behind every tile trail the viewer onto every tab.
 #
 # No MultiQC tab: this pipeline runs no MultiQC (it ships an R/shinyngs report
 # instead), so the Samples tab carries the run-level quality read.
@@ -37,6 +37,13 @@ main_dashboard:
     description: Narrow the cohort by DESeq2 size factor
     collapsed: true
   grid_sections:
+  - name: Observation sheet
+    icon: mdi:table-account
+    color: teal
+    description: The run's own --input sheet, every column of it, on every tab
+    collapsed: true
+    persistent: true
+    pin: top
   - name: Study at a glance
     icon: mdi:counter
     color: teal
@@ -66,9 +73,12 @@ main_dashboard:
     alignment: left
     body: >
       Every differential call rests on these samples. The cards count the
-      cohort, split it by experimental group and check that DESeq2 had to
-      correct library sizes by roughly the same amount everywhere: a size
-      factor far from the rest is a sample worth looking at twice.
+      cohort, split it by experimental group and check that
+      [DESeq2](https://bioconductor.org/packages/DESeq2) had to correct
+      library sizes by roughly the same amount everywhere: a size factor far
+      from the rest is a sample worth looking at twice. The rest of the sheet
+      rides along on every sample, blocking factors included: read it in the
+      Observation sheet below, or colour the PCA by it.
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: card
     tag: da-card-samples
@@ -171,7 +181,7 @@ main_dashboard:
       selection_enabled: true
       selection_column: sample_id
     title: Sample PCA
-    description: One point per sample, coloured by the sheet's leading factor. Lasso a cluster to filter the linked panels.
+    description: One point per sample, coloured by the sheet's leading factor. The Colour-by and Hover-columns controls list every column of this collection, so a blocking factor such as batch is one pick away; lasso a cluster to filter the linked panels.
     title_size: h3
     layout: {x: 0, y: 2, w: 8, h: 7}
   - component_type: advanced_viz
@@ -194,25 +204,31 @@ main_dashboard:
     layout: {x: 0, y: 9, w: 8, h: 7}
 
   # -------------------------------------------------------- reference tables
+  # ------------------------------------------------------- observation sheet
+  # Pinned to the top of every tab: this sheet is the only place the run's own
+  # annotation columns are readable. The recipe normalises sample_id / group /
+  # size_factor and keeps every other column the sheet carried, so whatever the
+  # experiment recorded beside the design (batch, sex, timepoint, replicate)
+  # arrives here even though no tile is bound to it by name.
   - component_type: text
-    tag: da-tables-intro
-    section: Reference tables
+    tag: da-sheet-intro
+    section: Observation sheet
     workflow_tag: differentialabundance
     data_collection_tag: samples
-    title: The rows behind every tile
+    title: What the run was told about each sample
     title_size: sm
     title_align: left
-    order: 2
+    order: 0
     alignment: left
     body: >
-      The observation sheet and the full DESeq2 result set, on every tab.
-      Selecting a gene row here carries it onto the annotated table on the
-      Differential expression tab, and filters picked in the left panel narrow
-      these tables too.
+      Every column of the pipeline's --input sheet, with the DESeq2 size factor
+      joined on. The template binds sample_id, group and size_factor by name;
+      any further column the sheet carried is kept and shows here, which is
+      where to look for the covariates a contrast was blocked on.
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: table
     tag: da-table-samples
-    section: Reference tables
+    section: Observation sheet
     workflow_tag: differentialabundance
     data_collection_tag: samples
     row_selection_enabled: false
@@ -220,7 +236,22 @@ main_dashboard:
     description: The pipeline's --input sheet, normalised, with the DESeq2 size factor joined on.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 2, w: 8, h: 4}
+    layout: {x: 0, y: 2, w: 8, h: 5}
+  - component_type: text
+    tag: da-tables-intro
+    section: Reference tables
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results
+    title: The rows behind every tile
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The full DESeq2 result set, on every tab. Selecting a gene row here
+      carries it onto the annotated table on the Differential expression tab,
+      and filters picked in the left panel narrow this table too.
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: table
     tag: da-table-results
     section: Reference tables
@@ -233,7 +264,7 @@ main_dashboard:
     description: Every feature in every contrast, with the significance call. Select a row to follow that gene into the annotated table.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 6, w: 8, h: 5}
+    layout: {x: 0, y: 2, w: 8, h: 5}
 
   # --------------------------------------------------------------- left panel
   - component_type: interactive
@@ -263,6 +294,10 @@ main_dashboard:
     display: {title_size: md, custom_color: '#0E9384', icon_name: 'mdi:account-group-outline'}
     placement: left
     title: Group
+    # Says which sheet column this actually is. The recipe aliases rather than
+    # renames, so the source column is also still there under its own name, and
+    # nothing in the panel said so.
+    description: Not a column of the sheet. The ingest recipe aliases `group` to whichever sample-sheet column has the fewest levels above one, so it reads as the study's leading factor (genotype, treatment, timepoint). Every sheet column keeps its own name in the Observation sheet table.
     layout: {x: 0, y: 3, w: 1, h: 3}
   - component_type: interactive
     tag: da-filter-sizefactor
@@ -552,7 +587,8 @@ tabs:
     body: >
       The same statistics carrying the gene symbol, coordinates and biotype
       from the GTF. Selecting a row sends that gene back to the panels above
-      and to the DESeq2 results table pinned at the bottom of every tab.
+      and to the [DESeq2](https://bioconductor.org/packages/DESeq2) results
+      table pinned at the bottom of every tab.
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: table
     tag: da-de-table-annotated
@@ -893,7 +929,7 @@ tabs:
   - name: Per-chromosome detail
     icon: mdi:star-outline
     color: pink
-    description: The same calls one chromosome at a time, and the annotated volcano
+    description: The same calls gene by gene, scoped by the chromosome picker, and the annotated volcano
   components:
   # ------------------------------------------------------ calls on the genome
   - component_type: text
@@ -993,7 +1029,8 @@ tabs:
     body: >
       One dot per gene, laid out along the chromosomes, height is -log10 of the
       adjusted p-value. Points above the line cleared padj 0.05. Select one to
-      carry that gene onto the DESeq2 results table pinned below.
+      carry that gene onto the [DESeq2](https://bioconductor.org/packages/DESeq2)
+      results table pinned below.
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: advanced_viz
     tag: da-av-manhattan
@@ -1023,16 +1060,18 @@ tabs:
     section: Per-chromosome detail
     workflow_tag: differentialabundance
     data_collection_tag: deseq2_results_annotated
-    title: One chromosome at a time
+    title: Gene by gene
     title_size: sm
     title_align: left
     order: 2
     alignment: left
     body: >
-      The lollipop panel splits the same calls per chromosome and colours each
-      stem by direction; pick a few chromosomes in the left panel to keep it
-      readable. The volcano repeats the contrast view with gene symbols rather
-      than Ensembl ids.
+      The lollipop panel gives each contrast a lane and each gene a head at its
+      start coordinate, coloured by direction and sized by significance. Pick a
+      chromosome in the left panel before turning the stems on: coordinates
+      from different contigs otherwise share one axis. The volcano repeats the
+      contrast view with gene symbols rather than
+      [Ensembl](https://www.ensembl.org) ids.
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: advanced_viz
     tag: da-av-lollipop
@@ -1042,18 +1081,30 @@ tabs:
     data_collection_tag: deseq2_results_annotated
     use: deseq2/chromosome_lollipop
     config:
+      # Keyed on the contrast, not the chromosome. `feature_id_col` is the
+      # subplot LANE, and the catalog render binds it to `chromosome`: a mouse
+      # GTF carries thirty-odd contigs, past `max_subplot_genes`, so the panel
+      # collapsed into a single-contig dropdown and no stem said which gene it
+      # was. Two contrasts give two lanes that both draw, and `label_col` puts
+      # the gene symbol on the hover and on the top-N labels, which is what
+      # reading the panel gene by gene needs.
+      feature_id_col: contrast
+      position_col: start
+      category_col: direction
+      label_col: gene_name
       effect_col: neg_log10_padj
       scale_points_by_effect: true
-      # feature_id is the chromosome here, not a gene, and LollipopRenderer falls
-      # back to a single-value picker above this count. A mammalian GTF has more
-      # than 24 contigs once scaffolds are in, so the picker is the honest
-      # default and the description says so.
       max_subplot_genes: 6
-      gene_sort: count
-      show_stems: true
-      point_size: 7
-    title: Calls per chromosome
-    description: One chromosome at a time, stems at the gene start coordinate, head size scaled by significance.
+      gene_sort: name
+      # A stem is one layout shape per call, and both lanes now draw every row
+      # the endpoint returns (it hash-samples ~55 k calls down to 10 k). Off
+      # until the chromosome picker has narrowed the set; the switch is in the
+      # panel's own controls.
+      show_stems: false
+      point_size: 6
+      top_n_labels: 8
+    title: Calls per gene
+    description: One lane per contrast, one head per gene at its start coordinate, coloured by direction and sized by significance; the eight strongest calls in each lane carry their gene symbol. Pick a chromosome in the Region panel first, since coordinates from different contigs otherwise stack on the same axis.
     title_size: h3
     layout: {x: 0, y: 2, w: 8, h: 7}
   - component_type: advanced_viz

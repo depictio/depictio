@@ -15,7 +15,7 @@ two-subject multiple sclerosis B cell study of cervical lymph node and brain les
 
 ## How the dashboard is built
 
-- **One funnel, four tabs.** Quality control, then Sequence processing, then Repertoire, then
+- **One funnel, four tabs.** MultiQC, then Sequence processing, then Repertoire, then
   Clonal analysis. Each tab answers the question the previous one raises: are the reads good,
   how many survive, what repertoire do the survivors make, and how is that repertoire
   structured.
@@ -36,7 +36,7 @@ two-subject multiple sclerosis B cell study of cervical lymph node and brain les
 
 ---
 
-## Quality control
+## MultiQC
 
 The main tab. `Read QC at a glance` carries the MultiQC general statistics table, the fastp
 filtered-read bars and the FastQC sequence counts. `Base quality` pairs fastp's per-base quality
@@ -51,7 +51,7 @@ narrow GC and length range, so most FastQC warnings here are normal.
 A `Read QC scope` filter narrows the panels to selected report samples, independently of the
 persistent sample filter, because the MultiQC sample ids carry the `_ASSEMBLED` suffix.
 
-![Quality control](screenshots/quality-control.png)
+![MultiQC](screenshots/quality-control.png)
 
 
 ## Sequence processing
