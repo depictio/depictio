@@ -134,6 +134,95 @@ def _apply_link_filters_to_payload(
         payload["filter_metadata"] = resolved
 
 
+def _resolve_annotation_join(payload: dict) -> None:
+    """Turn ``col_annotation_cols`` into a resolved ``annotation_join`` payload entry.
+
+    The component names columns, not a data collection: the source is whichever
+    enabled link *targets* this matrix and whose source DC is declared
+    ``metatype: Metadata``. That gate is the whole safety story. An rnaseq
+    expression matrix is the target of two links, one from the samplesheet and
+    one from a derived per-sample stats table; only the first is metadata, so
+    the join resolves without the dashboard naming anything.
+
+    Ambiguity is never guessed. Zero or several surviving candidates leave the
+    payload untouched (no strip, a log line saying which), and
+    ``annotation_source_dc_tag`` is how a dashboard settles it.
+
+    Resolution runs even when no column has been picked yet, because the
+    viz-controls picker cannot offer what was never resolved. An empty ``cols``
+    therefore still yields a join: the worker reads it to list the options and
+    draws nothing. The cost of that is one Mongo read here and, in the worker, a
+    load of a samplesheet-sized table.
+
+    Called before ``_compute_cache_key`` so the resolved source and column list
+    land in the cache namespace: changing the annotation columns has to miss the
+    cache the same way changing ``normalize`` does.
+    """
+    cols = [str(c) for c in (payload.get("col_annotation_cols") or []) if c]
+    wf_id, dc_id = payload.get("wf_id"), payload.get("dc_id")
+    if not wf_id or not dc_id:
+        return
+
+    from depictio.api.v1.db import projects_collection
+
+    try:
+        wf_oid = ObjectId(str(wf_id))
+    except Exception:
+        return
+    project = projects_collection.find_one({"workflows._id": wf_oid}, {"links": 1, "workflows": 1})
+    if not project:
+        return
+
+    # DC id -> (tag, metatype, owning workflow id). The worker needs the owning
+    # workflow to load the Delta table, and it is not on the link itself.
+    dcs: dict[str, tuple[str, str | None, str]] = {}
+    for wf in project.get("workflows") or []:
+        for dc in wf.get("data_collections") or []:
+            dcs[str(dc.get("_id"))] = (
+                str(dc.get("data_collection_tag") or ""),
+                (dc.get("config") or {}).get("metatype"),
+                str(wf.get("_id")),
+            )
+
+    wanted_tag = payload.get("annotation_source_dc_tag")
+    candidates = []
+    for link in project.get("links") or []:
+        if not link.get("enabled", True) or str(link.get("target_dc_id")) != str(dc_id):
+            continue
+        src = dcs.get(str(link.get("source_dc_id")))
+        if not src or str(src[1] or "").lower() != "metadata":
+            continue
+        if wanted_tag and src[0] != str(wanted_tag):
+            continue
+        candidates.append((link, src))
+
+    if len(candidates) != 1:
+        logger.info(
+            "complex_heatmap annotation join skipped: %d metadata-linked candidates "
+            "for dc_id=%s (requested cols=%s, source_tag=%s)",
+            len(candidates),
+            dc_id,
+            cols,
+            wanted_tag,
+        )
+        return
+
+    link, (src_tag, _metatype, src_wf_id) = candidates[0]
+    payload["annotation_join"] = {
+        "source_dc_id": str(link["source_dc_id"]),
+        "source_wf_id": src_wf_id,
+        "source_column": str(link.get("source_column") or ""),
+        "cols": cols,
+    }
+    logger.info(
+        "complex_heatmap annotation join resolved: %s.%s -> dc_id=%s cols=%s",
+        src_tag,
+        link.get("source_column"),
+        dc_id,
+        cols,
+    )
+
+
 @advanced_viz_endpoint_router.get("/kinds")
 def list_kinds(current_user=Depends(get_user_or_anonymous)) -> list[dict[str, Any]]:
     """The metadata payload the React builder populates its viz_kind picker from.
@@ -964,6 +1053,7 @@ def dispatch_compute_complex_heatmap(
     from datetime import datetime, timezone
 
     _apply_link_filters_to_payload(payload, access_token, "complex_heatmap")
+    _resolve_annotation_join(payload)
 
     from depictio.api.v1.celery_tasks import compute_complex_heatmap as compute_task
     from depictio.api.v1.db import db
