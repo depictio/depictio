@@ -32,6 +32,52 @@ export const TAB10_PALETTE: readonly string[] = [
   '#17becf',
 ];
 
+/**
+ * Hue order for `mantineCategoricalPalette`, chosen so the first two are as far
+ * apart as the wheel allows: a two-class viz (known vs novel, pass vs fail) is
+ * the common case and its two colours have to survive being drawn crossing each
+ * other. Deliberately not tab10's blue-then-orange, which every matplotlib and
+ * seaborn figure already opens with.
+ */
+export const MANTINE_COLORWAY_HUES: readonly string[] = [
+  'teal',
+  'pink',
+  'violet',
+  'lime',
+  'cyan',
+  'grape',
+  'indigo',
+  'red',
+  'yellow',
+  'blue',
+];
+
+/** A theme carrying Mantine's colour scales — `MantineTheme`, structurally. */
+interface ScaleCarryingTheme {
+  colors?: Record<string, readonly string[]>;
+}
+
+/**
+ * A categorical palette taken from the theme's own colour scales rather than
+ * from a table of hex literals, so it follows a customised Mantine theme and
+ * shifts with the colour scheme: shade 6 reads on white, shade 4 on the dark
+ * background, where 6 goes muddy.
+ *
+ * Pass it as the `fallback` of `resolveCategoricalPalette` — a branded
+ * deployment's own colorway still wins over it.
+ */
+export function mantineCategoricalPalette(
+  theme?: ScaleCarryingTheme | null,
+  isDark = false,
+  hues: readonly string[] = MANTINE_COLORWAY_HUES,
+): readonly string[] {
+  const scales = theme?.colors;
+  if (!scales) return TAB10_PALETTE;
+  const shade = isDark ? 4 : 6;
+  const out = hues.map((hue) => scales[hue]?.[shade]).filter((c): c is string => !!c);
+  return out.length ? out : TAB10_PALETTE;
+}
+
 /** A theme carrying the resolved brand — `MantineTheme`, structurally. */
 interface BrandCarryingTheme {
   other?: Record<string, unknown>;
