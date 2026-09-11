@@ -35,6 +35,10 @@ export interface SelectionGroupsApi {
   showOther: boolean;
   /** Whether card comparisons include the "All rows" reference entry. */
   showOverall: boolean;
+  /** Whether analysis mode is armed. Lives here, with the groups, because a
+   *  tab switch is a full page navigation: local state would drop the mode on
+   *  every tab the groups themselves survive into. */
+  analysisArmed: boolean;
   /** Snapshot a selection filter into a new group. Returns the created group,
    *  or null when the filter isn't usable (empty, oversized, no column). */
   createGroupFromFilter: (
@@ -57,6 +61,7 @@ export interface SelectionGroupsApi {
   setDisplayMode: (mode: GroupingDisplay) => void;
   setShowOther: (on: boolean) => void;
   setShowOverall: (on: boolean) => void;
+  setAnalysisArmed: (on: boolean) => void;
   /** Projection of filter-active groups into dashboard filters (memoised). */
   groupFilters: InteractiveFilter[];
   /** Render-payload shape for the figure endpoint (memoised). */
@@ -83,6 +88,7 @@ function hydrate(dashboardId: string | undefined) {
     displayMode: stored?.displayMode ?? ('color' as GroupingDisplay),
     showOther: stored?.showOther ?? true,
     showOverall: stored?.showOverall ?? true,
+    analysisArmed: stored?.analysisArmed ?? false,
   };
 }
 
@@ -96,6 +102,7 @@ export function useSelectionGroups(dashboardId: string | undefined): SelectionGr
   const [displayMode, setDisplayModeState] = useState<GroupingDisplay>(initial.displayMode);
   const [showOther, setShowOtherState] = useState<boolean>(initial.showOther);
   const [showOverall, setShowOverallState] = useState<boolean>(initial.showOverall);
+  const [analysisArmed, setAnalysisArmedState] = useState<boolean>(initial.analysisArmed);
 
   // Which dashboard id the current state actually reflects. The write-through
   // below must not run for a dashboardId the state hasn't been re-hydrated for
@@ -118,6 +125,7 @@ export function useSelectionGroups(dashboardId: string | undefined): SelectionGr
     setDisplayModeState(next.displayMode);
     setShowOtherState(next.showOther);
     setShowOverallState(next.showOverall);
+    setAnalysisArmedState(next.analysisArmed);
     setHydratedFor(dashboardId);
   }, [dashboardId]);
 
@@ -133,6 +141,7 @@ export function useSelectionGroups(dashboardId: string | undefined): SelectionGr
       displayMode,
       showOther,
       showOverall,
+      analysisArmed,
     );
   }, [
     dashboardId,
@@ -143,6 +152,7 @@ export function useSelectionGroups(dashboardId: string | undefined): SelectionGr
     displayMode,
     showOther,
     showOverall,
+    analysisArmed,
   ]);
 
   // Mirror of `groups` so `createGroupFromFilter` can build the group outside
@@ -249,6 +259,7 @@ export function useSelectionGroups(dashboardId: string | undefined): SelectionGr
       displayMode,
       showOther,
       showOverall,
+      analysisArmed,
       createGroupFromFilter,
       updateGroup,
       deleteGroup,
@@ -261,6 +272,7 @@ export function useSelectionGroups(dashboardId: string | undefined): SelectionGr
       setDisplayMode: setDisplayModeState,
       setShowOther: setShowOtherState,
       setShowOverall: setShowOverallState,
+      setAnalysisArmed: setAnalysisArmedState,
       groupFilters,
       renderGroups,
       summaryRows,
@@ -273,6 +285,7 @@ export function useSelectionGroups(dashboardId: string | undefined): SelectionGr
       displayMode,
       showOther,
       showOverall,
+      analysisArmed,
       createGroupFromFilter,
       updateGroup,
       deleteGroup,

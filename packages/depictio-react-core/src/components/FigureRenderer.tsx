@@ -5,6 +5,7 @@ import {
   Stack,
   Badge,
   Group,
+  Tooltip,
   useMantineColorScheme,
 } from '@mantine/core';
 import Plot from 'react-plotly.js';
@@ -16,6 +17,7 @@ import Plotly from 'plotly.js';
 
 import { renderFigure, InteractiveFilter, StoredMetadata, FigureResponse } from '../api';
 import { useGroupingColor } from '../selectionGroups';
+import { groupBadgeLabel, summarizeGroupStatus } from '../groupStatus';
 import type { GroupRenderState } from '../selectionGroups';
 import { Icon } from '@iconify/react';
 import { enqueueFetch, isStaleFetch } from '../fetchQueue';
@@ -485,13 +487,25 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   // of one feature, and a badge in some other hue reads as a different thing
   // entirely. `useGroupingColor` is the same source the action and the
   // component outline read, so a branded instance restains all three at once.
-  let groupedBadgeLabel: string | null = null;
-  if (renderMeta?.group_colored) groupedBadgeLabel = 'grouped';
-  else if (renderMeta?.column_colored) groupedBadgeLabel = `by ${renderMeta.column_colored}`;
-  const groupedBadge = groupedBadgeLabel ? (
+  //
+  // A group that could not reach this frame gets a badge too. Silence was the
+  // old behaviour and it is indistinguishable from a tile that ignores
+  // grouping altogether: the reader has no way to tell "these ids aren't this
+  // component's" from "this is broken". The dimmed variant says which groups
+  // missed and why, on hover.
+  const groupStatus = summarizeGroupStatus(renderMeta?.group_status);
+  let groupedBadgeLabel: string | null = groupBadgeLabel(
+    Boolean(renderMeta?.group_colored),
+    groupStatus,
+  );
+  if (!groupedBadgeLabel && renderMeta?.column_colored) {
+    groupedBadgeLabel = `by ${renderMeta.column_colored}`;
+  }
+  const unapplied = groupStatus?.unapplied ?? [];
+  const groupedBadgeNode = groupedBadgeLabel ? (
     <Badge
-      variant="light"
-      color={groupingColor}
+      variant={renderMeta?.group_colored || renderMeta?.column_colored ? 'light' : 'outline'}
+      color={groupStatus?.faulted ? 'gray' : groupingColor}
       size="xs"
       radius="sm"
       leftSection={<Icon icon="mdi:select-group" width={11} height={11} />}
@@ -499,6 +513,21 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
       {groupedBadgeLabel}
     </Badge>
   ) : null;
+  const groupedBadge =
+    groupedBadgeNode && unapplied.length > 0 ? (
+      <Tooltip
+        withArrow
+        multiline
+        w={260}
+        openDelay={200}
+        label={unapplied.map((u) => `${u.name}: ${u.reason}`).join('\n')}
+        style={{ whiteSpace: 'pre-line' }}
+      >
+        <span>{groupedBadgeNode}</span>
+      </Tooltip>
+    ) : (
+      groupedBadgeNode
+    );
 
   // Publish the sample/full state so the chrome can render the "load all points"
   // action icon in the same cluster as reset / fullscreen. Bidirectional: the
