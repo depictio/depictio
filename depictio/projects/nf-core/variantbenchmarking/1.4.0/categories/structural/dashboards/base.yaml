@@ -1,11 +1,13 @@
 version: 1
 main_dashboard:
-  title: Variant Benchmarking — Structural variants
+  title: nf-core/variantbenchmarking (structural variants)
   subtitle: "variant_type=structural — truvari precision · recall · F1 + SURVIVOR (HG002 SVs Tier1)"
   project_tag: Variant Benchmarking — Structural variants
   main_tab_name: MultiQC
   tab_icon: /assets/images/logos/multiqc_icon_color.svg
   tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
   workflow_system: none
   # Structural variants have no separate summary table in the pipeline: the
   # benchmark numbers only exist inside the MultiQC report, so this project is a

@@ -16,10 +16,10 @@ version: 1
 # run's raw tool outputs; the run itself published MultiQC 1.14, which writes no
 # parquet. Module and plot names are therefore the 1.35 ones.
 main_dashboard:
-  title: CUT&RUN Chromatin Profiling
+  title: nf-core/cutandrun
   subtitle: "nf-core/cutandrun 3.1 megatest: H3K4me3 and H3K27me3 in two replicates each, against two IgG controls"
   project_tag: CUT&RUN Chromatin Profiling
-  main_tab_name: Sequencing and enrichment QC
+  main_tab_name: MultiQC
   tab_icon: /assets/images/logos/multiqc_icon_color.svg
   tab_icon_color: orange
   icon: /assets/images/workflows/nf-core.png

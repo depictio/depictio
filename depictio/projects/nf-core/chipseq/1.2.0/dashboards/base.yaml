@@ -11,10 +11,10 @@ version: 1
 # run's raw tool outputs; the run itself published MultiQC 1.9, which writes no
 # parquet. Anchors and section names are therefore the 1.35 ones.
 main_dashboard:
-  title: ChIP-seq Peak Analysis
+  title: nf-core/chipseq
   subtitle: "nf-core/chipseq 1.2.0 megatest: EZH2 (NTKO / TKO) and FOXA1 (E2 / VEH) ChIP against matched inputs"
   project_tag: ChIP-seq Peak Analysis
-  main_tab_name: Sequencing QC
+  main_tab_name: MultiQC
   tab_icon: /assets/images/logos/multiqc_icon_color.svg
   tab_icon_color: orange
   icon: /assets/images/workflows/nf-core.png

@@ -3,9 +3,11 @@ main_dashboard:
   title: nf-core/taxprofiler
   subtitle: "Many classifiers, one community: read QC, per-profiler composition, cross-profiler concordance and containment confidence"
   project_tag: Taxprofiler Metagenomic Profiling
-  main_tab_name: Read QC
+  main_tab_name: MultiQC
   tab_icon: /assets/images/logos/multiqc_icon_color.svg
   tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
   workflow_system: none
   # Left panel. The sample scope is persistent: taxprofiler runs every profiler
   # over the same samples, so narrowing to one community has to follow the
@@ -482,6 +484,8 @@ tabs:
   tab_order: 1
   tab_icon: mdi:bacteria-outline
   tab_icon_color: grape
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
   workflow_system: none
   filter_sections:
   - name: Profile scope
@@ -764,6 +768,8 @@ tabs:
   tab_order: 2
   tab_icon: mdi:graph-outline
   tab_icon_color: indigo
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
   workflow_system: none
   filter_sections:
   - name: Ordination scope
@@ -1022,6 +1028,8 @@ tabs:
   tab_order: 3
   tab_icon: mdi:target
   tab_icon_color: cyan
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
   workflow_system: none
   filter_sections:
   - name: Confidence ranges

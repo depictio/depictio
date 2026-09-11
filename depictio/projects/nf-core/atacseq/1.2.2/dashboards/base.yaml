@@ -13,10 +13,10 @@ version: 1
 # parquet. Anchors and section names are therefore the 1.35 ones, which is also
 # why an ataqv section exists at all: the 1.9 report had no ataqv module.
 main_dashboard:
-  title: ATAC-seq Chromatin Accessibility
+  title: nf-core/atacseq
   subtitle: "nf-core/atacseq 1.2.2 megatest: six GM12878 libraries across three transposition protocols (FAST, OMNI, STD)"
   project_tag: ATAC-seq Chromatin Accessibility
-  main_tab_name: Library QC
+  main_tab_name: MultiQC
   tab_icon: /assets/images/logos/multiqc_icon_color.svg
   tab_icon_color: orange
   icon: /assets/images/workflows/nf-core.png
@@ -803,7 +803,9 @@ tabs:
     title: Fragment length distribution
     description: Fraction of reads at each fragment length, per library, over the informative 0 to 800 bp range.
     title_size: h3
-    layout: {x: 0, y: 1, w: 4, h: 7}
+    # Full width: six libraries' curves over 800 bp of x, and the two shaded
+    # windows they are read against, do not separate in half a grid.
+    layout: {x: 0, y: 1, w: 8, h: 7}
   - component_type: multiqc
     tag: at-sig-mqc-fld
     section: Fragment length ladder
@@ -815,7 +817,7 @@ tabs:
     title: Fragment length distribution (MultiQC)
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 1, w: 4, h: 7}
+    layout: {x: 0, y: 8, w: 8, h: 5}
   - component_type: figure
     tag: at-sig-fig-class
     section: Fragment length ladder
@@ -827,7 +829,7 @@ tabs:
     title: Reads per fragment class
     description: How each library splits across the sub-nucleosomal, transitional, mononucleosomal and multi-nucleosomal windows.
     title_size: h3
-    layout: {x: 0, y: 8, w: 8, h: 6}
+    layout: {x: 0, y: 13, w: 8, h: 6}
 
   # ------------------------------------------------------ read distribution
   - component_type: text

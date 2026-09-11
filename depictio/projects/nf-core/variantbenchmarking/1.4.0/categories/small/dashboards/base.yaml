@@ -1,11 +1,13 @@
 version: 1
 main_dashboard:
-  title: Variant Benchmarking — Germline small variants
+  title: nf-core/variantbenchmarking (germline small variants)
   subtitle: "analysis=germline · variant_type=small — SNV + INDEL, hap.py / rtg-tools vcfeval (HG002 / GIAB)"
   project_tag: Variant Benchmarking — Germline small variants
   main_tab_name: Benchmark
   tab_icon: mdi:target-arrow
   tab_icon_color: indigo
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
   workflow_system: none
   # Left panel. The three sections narrow the vcfeval callsets (and, for the
   # last one, the hap.py rows). They are declared once here and stay local to
@@ -432,6 +434,8 @@ tabs:
   tab_order: 1
   tab_icon: /assets/images/logos/multiqc_icon_color.svg
   tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
   workflow_system: none
   filter_sections:
   - name: Report samples
