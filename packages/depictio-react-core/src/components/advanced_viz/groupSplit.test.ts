@@ -163,3 +163,122 @@ describe('splitFigureByGroups', () => {
     expect(out.layout.coloraxis).toBeUndefined();
   });
 });
+
+describe('identity slots', () => {
+  /** A dot plot's matrix point: slot 0 is the feature, slot 1 the sample. */
+  function matrixFigure() {
+    return {
+      data: [
+        {
+          type: 'scattergl',
+          mode: 'markers',
+          x: ['s1', 's2', 's3'],
+          y: ['geneA', 'geneA', 'geneA'],
+          customdata: [
+            ['geneA', 's1'],
+            ['geneA', 's2'],
+            ['geneA', 's3'],
+          ],
+          marker: { size: 8 },
+        },
+      ],
+      layout: {},
+    };
+  }
+
+  it('reads an identity from a fallback slot when the first one misses', () => {
+    // The historical bug: a dot plot passed slot 0 (the feature), so a group of
+    // samples never matched a single point and the tile stayed inert.
+    const out = splitFigureByGroups(matrixFigure(), {
+      groupRender: GROUPS,
+      identitySlot: 0,
+      identitySlots: [1],
+    });
+    expect(out.data.map((t: any) => t.name)).toEqual(['Soil', 'River']);
+  });
+
+  it('keeps slot priority: the first slot that belongs to a group wins', () => {
+    const byFeature: GroupRenderState = {
+      colorByGroup: true,
+      groups: [
+        { name: 'Marker genes', column_name: 'gene', values: ['geneA'], color: '#E24A33' },
+        ...GROUPS.groups,
+      ],
+    };
+    const out = splitFigureByGroups(matrixFigure(), {
+      groupRender: byFeature,
+      identitySlot: 0,
+      identitySlots: [1],
+    });
+    // Every point's slot 0 is geneA, which is claimed — so the sample groups
+    // never get a look in.
+    expect(out.data.map((t: any) => t.name)).toEqual(['Marker genes']);
+  });
+
+  it('still refuses to act when no slot is declared', () => {
+    const original = matrixFigure();
+    expect(splitFigureByGroups(original, { groupRender: GROUPS })).toBe(original);
+    expect(canSplitByGroups({ groupRender: GROUPS })).toBe(false);
+  });
+});
+
+describe('per-point attributes that are not coordinates', () => {
+  /** One line trace holding every point, with asymmetric error bars — the
+   *  shape `metric_ci_bars` and `rarefaction` both produce. */
+  function lineFigure() {
+    return {
+      data: [
+        {
+          type: 'scatter',
+          mode: 'lines+markers',
+          x: [1, 2, 3, 4, 5, 6],
+          y: [10, 20, 30, 40, 50, 60],
+          customdata: [['s1'], ['s2'], ['s3'], ['s4'], ['s5'], ['s6']],
+          line: { color: '#999', width: 2, dash: 'dot' },
+          error_y: {
+            type: 'data',
+            array: [1, 2, 3, 4, 5, 6],
+            arrayminus: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+            color: '#999',
+            visible: true,
+          },
+        },
+      ],
+      layout: {},
+    };
+  }
+
+  it('slices the error bars with the points they belong to', () => {
+    const out = splitFigureByGroups(lineFigure(), OPTS);
+    const soil = out.data.find((t: any) => t.name === 'Soil');
+    expect(soil.y).toEqual([10, 20]);
+    expect(soil.error_y.array).toEqual([1, 2]);
+    expect(soil.error_y.arrayminus).toEqual([0.1, 0.2]);
+    const river = out.data.find((t: any) => t.name === 'River');
+    expect(river.error_y.array).toEqual([3]);
+    expect(river.error_y.arrayminus).toEqual([0.3]);
+  });
+
+  it('keeps the settings that are not per point', () => {
+    const out = splitFigureByGroups(lineFigure(), OPTS);
+    const soil = out.data.find((t: any) => t.name === 'Soil');
+    expect(soil.error_y.type).toBe('data');
+    expect(soil.error_y.visible).toBe(true);
+    expect(soil.line.width).toBe(2);
+    expect(soil.line.dash).toBe('dot');
+  });
+
+  it('repaints a line trace, which draws from line.color rather than marker.color', () => {
+    const out = splitFigureByGroups(lineFigure(), OPTS);
+    expect(out.data.find((t: any) => t.name === 'Soil').line.color).toBe('#E24A33');
+    expect(out.data.find((t: any) => t.name === 'River').line.color).toBe('#348ABD');
+    expect(out.data.find((t: any) => t.name === 'Soil').error_y.color).toBe('#E24A33');
+  });
+
+  it('leaves a trace with neither alone', () => {
+    const out = splitFigureByGroups(figure(), OPTS);
+    const soil = out.data.find((t: any) => t.name === 'Soil');
+    expect(soil.line).toBeUndefined();
+    expect(soil.error_y).toBeUndefined();
+  });
+});

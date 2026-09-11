@@ -131,7 +131,13 @@ interface DashboardGridProps {
 // Grid geometry, mirrored by the ResponsiveGridLayout props below. Lives in
 // `autofit` because every grid that shows fitted tiles converts against it.
 
-function responsiveLayouts(lg: Layout[]): Record<string, Layout[]> {
+/** One layout per breakpoint, proportionally rescaled from the `lg` one.
+ *  Exported because every grid that shows stored tiles needs it: handing
+ *  react-grid-layout only `lg` lets it generate the narrower breakpoints
+ *  itself, and its `correctBounds` clamps a right-hand tile onto its
+ *  neighbour, which vertical compaction then pushes onto its own row — two
+ *  half-width tables stack instead of sitting side by side. */
+export function responsiveLayouts(lg: Layout[]): Record<string, Layout[]> {
   const scale = (cols: number) =>
     lg.map((item) => {
       const edge = (v: number) => Math.round((v * cols) / GRID_MAX_COLS);

@@ -14,8 +14,8 @@ import {
   SectionHeader,
 } from './SectionAccordion';
 import ComponentRenderer from './ComponentRenderer';
-import { normalizeLayout, SectionSummary } from './DashboardGrid';
-import { fitLayoutHeights, useAutofitHeights } from './autofit';
+import { normalizeLayout, responsiveLayouts, SectionSummary } from './DashboardGrid';
+import { fitLayoutHeights, GRID_ROW_GAP_PX, GRID_ROW_PX, useAutofitHeights } from './autofit';
 
 export interface PersistentSectionsHostProps {
   /** Persistent *grid* sections owned by sibling tabs. The caller filters out
@@ -256,13 +256,18 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
                   <div data-persistent-section-grid>
                     <ResponsiveGridLayout
                       className="layout"
-                      layouts={{
-                        // Fitted here as in DashboardGrid: a pinned section is
-                        // still a grid of tiles, and a text tile that sizes
-                        // itself on the tab that declares it has to do the same
-                        // on every tab that shows it. Always on — this host is
-                        // read-only, so a measurement can never be persisted.
-                        lg: fitLayoutHeights(
+                      // Fitted here as in DashboardGrid: a pinned section is
+                      // still a grid of tiles, and a text tile that sizes
+                      // itself on the tab that declares it has to do the same
+                      // on every tab that shows it. Always on — this host is
+                      // read-only, so a measurement can never be persisted.
+                      // Rescaled for every breakpoint by the same helper the
+                      // main grid uses: passing `lg` alone let react-grid-layout
+                      // generate the others, and its clamp collided the second
+                      // half-width tile with the first, stacking a two-table row
+                      // below 1440px.
+                      layouts={responsiveLayouts(
+                        fitLayoutHeights(
                           members.map((m) => m.metadata),
                           normalizeLayout(
                             members.map((m) => m.metadata),
@@ -271,12 +276,15 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
                           ),
                           autoHeights,
                         ),
-                      }}
+                      )}
                       breakpoints={GRID_BREAKPOINTS}
                       cols={GRID_COL_COUNTS}
-                      rowHeight={100}
+                      rowHeight={GRID_ROW_PX}
                       width={Math.max(100, containerWidth - sectionInset)}
-                      margin={[12, 4]}
+                      // Same asymmetric gap as the main grid, from the same
+                      // constants: gridConfig.ts's header warns these two
+                      // surfaces must not drift.
+                      margin={[12, GRID_ROW_GAP_PX]}
                       containerPadding={[0, 0]}
                       isDraggable={false}
                       isResizable={false}

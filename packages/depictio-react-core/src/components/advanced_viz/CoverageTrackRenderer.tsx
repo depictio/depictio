@@ -20,6 +20,8 @@ import {
   pollCoverageTrack,
 } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { splitFigureByGroups } from './groupSplit';
+import type { GroupRenderState } from '../../selectionGroups';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
 import { GenomeAnnotation, resolveAnnotation } from './genome_annotations';
 import { usePersistedVizControl, useVizConfigWriter } from './usePersistedVizControl';
@@ -49,6 +51,8 @@ interface Props {
   metadata: StoredMetadata & { viz_kind?: string; config?: CoverageTrackConfig };
   filters: InteractiveFilter[];
   refreshTick?: number;
+  /** Dashboard-wide analysis grouping, applied to the finished figure. */
+  groupRender?: GroupRenderState;
 }
 
 const SMOOTHING_CHOICES = [
@@ -72,7 +76,12 @@ const AGGREGATE_DEFAULT_THRESHOLD = 10;
 
 type ViewMode = 'aggregate' | 'facet' | 'overlay';
 
-const CoverageTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
+const CoverageTrackRenderer: React.FC<Props> = ({
+  metadata,
+  filters,
+  refreshTick,
+  groupRender,
+}) => {
   const config = (metadata.config || {}) as CoverageTrackConfig;
   const theme = useMantineTheme();
   const { colorScheme } = useMantineColorScheme();
@@ -362,6 +371,9 @@ const CoverageTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
             name: sample,
             x: xs,
             y: ys,
+            // Slot 0 is the sample, so an analysis group can pick its own tracks
+            // out of the ghost cohort. Hover stays skipped, as before.
+            customdata: idxs.map(() => [sample]),
             line: { color: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.18)', width: 0.6 },
             hoverinfo: 'skip',
             showlegend: false,
@@ -437,6 +449,11 @@ const CoverageTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
           x: xs,
           y: ys,
           text,
+          // Slot 0 is the sample this track belongs to — the value a saved group
+          // of samples is matched against. One trace is one sample, so a track
+          // is assigned to a group whole. The hover reads `text`, not
+          // `customdata`, so it renders exactly as it did before.
+          customdata: idxs.map(() => [sample]),
           hovertemplate: `%{text}<br>pos %{x:,}<br>cov %{y:,.2f}<extra></extra>`,
           line: { color: traceColor, width: 1.4 },
           ...(markerColor
@@ -624,6 +641,36 @@ const CoverageTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
     aggregate,
   ]);
 
+  // Recolour by the dashboard's analysis groups. Slot 0 of `customdata` is the
+  // sample, which is what a saved group of samples is matched on; a group of
+  // anything else leaves the figure untouched.
+  //
+  // `facetable: false` is not a preference here, it is the only safe answer:
+  // this renderer already owns its y-axes — one per sample in "Per-sample"
+  // view, plus the gene strip's own axis, whose shapes are anchored to `y2` /
+  // `y{N+1}` — and a figure-level facet would rebuild `xaxis`/`yaxis` from
+  // scratch underneath them. Splitting by group is the dispatch's job anyway
+  // (`SplitPanels` gives each group its own renderer).
+  //
+  // `contextTraces: 'drop'`: the traces without an identity are the cohort
+  // median and its IQR ribbon, a summary over every sample. Repeating that band
+  // inside a per-group panel would present the whole cohort's spread as the
+  // group's own. It is unreachable while `facetable` is false, and stated so
+  // that stays true if it ever is not.
+  const groupedFigure = useMemo(
+    () =>
+      figureSpec
+        ? splitFigureByGroups(figureSpec, {
+            groupRender,
+            identitySlot: 0,
+            facetable: false,
+            contextTraces: 'drop',
+            showLegend: true,
+          })
+        : figureSpec,
+    [figureSpec, groupRender],
+  );
+
   const controls = useMemo(
     () => (
       <Stack gap="xs">
@@ -792,12 +839,12 @@ const CoverageTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
       dataRows={data?.rows ?? undefined}
       dataColumns={dataColumns}
     >
-      {figureSpec ? (
+      {groupedFigure ? (
         <AdvancedVizPlot
-          data={applyDataTheme(figureSpec.data, isDark, theme) as any}
+          data={applyDataTheme(groupedFigure.data, isDark, theme) as any}
           layout={
             applyLayoutTheme(
-              { ...(figureSpec.layout as any), width: undefined, height: undefined, autosize: true },
+              { ...(groupedFigure.layout as any), width: undefined, height: undefined, autosize: true },
               isDark,
               theme,
             ) as any
