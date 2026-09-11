@@ -69,3 +69,32 @@ def test_import_is_still_refused():
     )
     assert not ok
     assert "import" in message.lower()
+
+
+def test_tuple_unpack_assignment_is_bound():
+    """`a, b = ...` compiles to `_unpack_sequence_`, which the for-loop guard does not cover.
+
+    The shape that failed in production: differentialabundance's
+    contrast-against-contrast tile picks two contrasts out of a sorted list,
+    and airrflow's clone ribbons unpack an RGB triple.
+    """
+    code = (
+        "names = sorted(['b', 'a'])\n"
+        "first, second = names[0], names[1]\n"
+        "probe = f'{first}{second}'\n"
+        "fig = px.scatter(df.to_pandas(), x='x', y='y')\n"
+    )
+    ok, _, message = SimpleCodeExecutor().execute_code(code, _frame())
+    assert ok, message
+
+
+def test_for_loop_unpacking_still_works():
+    """The neighbouring guard, pinned alongside so neither regresses alone."""
+    code = (
+        "total = 0\n"
+        "for idx, value in enumerate([1, 2, 3]):\n"
+        "    total = total + idx * value\n"
+        "fig = px.scatter(df.to_pandas(), x='x', y='y')\n"
+    )
+    ok, _, message = SimpleCodeExecutor().execute_code(code, _frame())
+    assert ok, message

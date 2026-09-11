@@ -47,6 +47,17 @@ def safe_iter_unpack_sequence(seq, *args):
     return iter(seq)
 
 
+def safe_unpack_sequence(seq, expected, *args):
+    """Safe implementation of _unpack_sequence_ for RestrictedPython.
+
+    Emitted for a plain tuple-unpack assignment (``a, b = ...``), which
+    ``_iter_unpack_sequence_`` — the for-loop target hook — does not cover.
+    Materialising the sequence reaches nothing that indexing it one element at
+    a time could not.
+    """
+    return list(seq)
+
+
 def safe_getiter(obj):
     """Safe implementation of _getiter_ for RestrictedPython."""
     return iter(obj)
@@ -81,6 +92,7 @@ class SimpleCodeExecutor:
             "_setattr_": safe_setattr,
             # Additional safe functions for complex operations
             "_iter_unpack_sequence_": safe_iter_unpack_sequence,
+            "_unpack_sequence_": safe_unpack_sequence,
             "_getiter_": safe_getiter,
             # RestrictedPython's hook for `f(*args, **kwargs)` unpacking, which
             # a code figure needs to spread `**depictio_group_kwargs`. Plain
