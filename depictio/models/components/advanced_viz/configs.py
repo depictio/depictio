@@ -772,6 +772,16 @@ class LollipopConfig(_BaseVizConfig):
     effect_col: str | None = Field(
         default=None, description="Optional numeric effect column (marker size)"
     )
+    label_col: str | None = Field(
+        default=None,
+        description=(
+            "Optional column naming each stem (gene symbol, variant id). "
+            "``feature_id_col`` is the TRACK the stems are drawn on (one "
+            "subplot lane per distinct value), so without this the hover and "
+            "the ``top_n_labels`` text can only name the lane and the raw "
+            "position. Unset leaves both exactly as they were."
+        ),
+    )
 
     max_subplot_genes: int = Field(
         default=6,

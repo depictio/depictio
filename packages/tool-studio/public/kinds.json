@@ -1009,6 +1009,13 @@
           "feature_id",
           "gene"
         ],
+        "label": [
+          "gene_name",
+          "gene_symbol",
+          "label",
+          "name",
+          "symbol"
+        ],
         "position": [
           "aa_pos",
           "pos",
@@ -1018,7 +1025,7 @@
       },
       "roles": {
         "category": {
-          "description": "Categorical grouping / annotation.",
+          "description": "Stem and head colour: consequence, direction, class.",
           "dtypes": [
             "String",
             "Utf8"
@@ -1026,7 +1033,7 @@
           "required": true
         },
         "effect": {
-          "description": "Optional effect-size column.",
+          "description": "Optional magnitude, drawn as the stem height and the head size.",
           "dtypes": [
             "Float32",
             "Float64"
@@ -1034,15 +1041,23 @@
           "required": false
         },
         "feature_id": {
-          "description": "Identifier for each feature / gene / row (e.g. gene_id, ENSEMBL id).",
+          "description": "One subplot lane per distinct value: the track the stems sit on.",
           "dtypes": [
             "String",
             "Utf8"
           ],
           "required": true
         },
+        "label": {
+          "description": "Optional name for each stem, used in the hover and the top-N labels.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
         "position": {
-          "description": "Genomic or sequence position (integer).",
+          "description": "Where each stem stands along the lane's shared x-axis.",
           "dtypes": [
             "Int16",
             "Int32",
