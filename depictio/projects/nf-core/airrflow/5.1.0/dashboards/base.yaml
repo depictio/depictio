@@ -3,7 +3,7 @@ main_dashboard:
   title: nf-core/airrflow
   subtitle: Read QC - fastp trimming and FastQC on raw and post-assembly reads
   project_tag: Airrflow Immune Repertoire Analysis
-  main_tab_name: Quality control
+  main_tab_name: MultiQC
   tab_icon: /assets/images/logos/multiqc_icon_color.svg
   tab_icon_color: orange
   icon: /assets/images/workflows/nf-core.png
@@ -481,6 +481,8 @@ tabs:
   tab_order: 1
   tab_icon: mdi:chart-areaspline
   tab_icon_color: indigo
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
   workflow_system: nf-core
   filter_sections:
   - name: Processing scope
@@ -715,6 +717,8 @@ tabs:
   tab_order: 2
   tab_icon: mdi:dna
   tab_icon_color: pink
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
   workflow_system: nf-core
   filter_sections:
   - name: Repertoire scope
@@ -999,6 +1003,8 @@ tabs:
   tab_order: 3
   tab_icon: mdi:chart-bell-curve
   tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
   workflow_system: nf-core
   filter_sections:
   - name: Clonal scope
