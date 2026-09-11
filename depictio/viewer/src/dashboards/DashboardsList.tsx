@@ -634,6 +634,7 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
           pinDisabled={pinDisabled}
           density={prefs.density}
           categoryById={categoryById}
+          recents={recents}
           onView={onView}
           onEdit={onEdit}
           onDelete={onDelete}

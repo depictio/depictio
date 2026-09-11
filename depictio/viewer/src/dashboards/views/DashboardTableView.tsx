@@ -20,6 +20,7 @@ import DashboardActionsMenu from '../DashboardActionsMenu';
 import type { CategoryInfo } from '../DashboardsList';
 import type { GroupedDashboards } from '../lib/splitDefaultSections';
 import { dashboardHref, dashboardLinkClickHandler } from '../lib/dashboardLinks';
+import type { RecentEntry } from '../lib/dashboardRecents';
 import { isOwnedByEmail } from '../lib/splitDefaultSections';
 import { coerceString, isImagePath, resolveAssetUrl } from '../lib/format';
 import { WORKFLOW_COLOR_MAP, WORKFLOW_ICON_MAP } from '../lib/workflowIcons';
@@ -44,6 +45,10 @@ export interface DashboardTableViewProps {
   /** When provided, a Category column is rendered (and made sortable) so the
    *  section the dashboard would have lived in is surfaced inline. */
   categoryById?: Map<string, CategoryInfo>;
+  /** Locally-tracked opens, newest first. Per-browser (localStorage), so the
+   *  Last viewed column is empty on a machine the user has never opened the
+   *  dashboard from — see lib/dashboardRecents.ts. */
+  recents: RecentEntry[];
   onView: (d: DashboardListEntry) => void;
   onEdit: (d: DashboardListEntry) => void;
   onDelete: (d: DashboardListEntry) => void;
@@ -63,6 +68,7 @@ type ColumnKey =
   | 'owner'
   | 'created'
   | 'modified'
+  | 'lastViewed'
   | 'visibility'
   | 'tabs'
   | 'components'
@@ -82,6 +88,11 @@ const ALL_COLUMNS: ColumnDef<ColumnKey>[] = [
   { key: 'owner', label: 'Owner' },
   { key: 'created', label: 'Created', description: 'Created (local time)' },
   { key: 'modified', label: 'Modified', description: 'Last modified (local time)' },
+  {
+    key: 'lastViewed',
+    label: 'Last viewed',
+    description: 'Last opened in this browser',
+  },
   { key: 'visibility', label: 'Visibility' },
   { key: 'tabs', label: 'Tabs' },
   { key: 'components', label: 'Components', defaultVisible: false },
@@ -90,7 +101,10 @@ const ALL_COLUMNS: ColumnDef<ColumnKey>[] = [
   { key: 'id', label: 'ID', description: 'Dashboard ID', defaultVisible: false },
 ];
 
-const STORAGE_KEY = 'depictio.dashboards.tableColumns.v1';
+// Bumped to v2 with the Last viewed column: `useTableColumns` replays the
+// stored selection verbatim, so a v1 selection would silently omit any column
+// added afterwards. The cost is one reset of per-browser column choices.
+const STORAGE_KEY = 'depictio.dashboards.tableColumns.v2';
 
 interface Row {
   id: string;
@@ -103,6 +117,8 @@ interface Row {
   isPublic: boolean;
   lastSavedTs: string;
   createdTs: string;
+  /** Epoch ms of the last local open, or null when never opened here. */
+  lastViewedTs: number | null;
   titleText: string;
   subtitle: string;
   workflowSystem: string;
@@ -139,6 +155,10 @@ function compareRows(a: Row, b: Row, key: ColumnKey, dir: SortDir): number {
       return mul * (timestampSortKey(a.createdTs) - timestampSortKey(b.createdTs));
     case 'modified':
       return mul * (timestampSortKey(a.lastSavedTs) - timestampSortKey(b.lastSavedTs));
+    // Never-opened rows sort last in both directions rather than piling up at
+    // the top of the ascending order, where they'd bury the actual answer.
+    case 'lastViewed':
+      return compareNullable(a.lastViewedTs, b.lastViewedTs, dir);
     case 'visibility':
       return mul * Number(b.isPublic) - mul * Number(a.isPublic);
     case 'tabs':
@@ -206,7 +226,10 @@ const Dash: React.FC = () => (
 /** Absolute local time in the cell, with a tooltip spelling out the timezone
  *  and the original UTC value so a "why is this 2h off?" question answers
  *  itself (issue #932). */
-const TimeCell: React.FC<{ raw: string; empty?: string }> = ({ raw, empty = 'Never' }) => {
+const TimeCell: React.FC<{ raw: string | number | null; empty?: string }> = ({
+  raw,
+  empty = 'Never',
+}) => {
   if (!raw) {
     return (
       <Text size="xs" c="dimmed">
@@ -246,6 +269,7 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
   pinDisabled,
   density,
   categoryById,
+  recents,
   onView,
   onEdit,
   onDelete,
@@ -271,6 +295,11 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
   const { visibleColumns, isVisible, allColumns, toggle, reset, isCustomized } =
     useTableColumns<ColumnKey>(STORAGE_KEY, columnCatalogue);
 
+  const lastViewedById = useMemo(
+    () => new Map(recents.map((e) => [e.id, e.ts])),
+    [recents],
+  );
+
   const rows = useMemo<Row[]>(() => {
     const list: Row[] = groups.map((g) => {
       const id = String(g.parent.dashboard_id);
@@ -292,6 +321,7 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
         isPublic: Boolean(g.parent.is_public),
         lastSavedTs: coerceString(g.parent.last_saved_ts, ''),
         createdTs: coerceString(g.parent.creation_time, ''),
+        lastViewedTs: lastViewedById.get(id) ?? null,
         titleText: g.parent.title || g.parent.dashboard_id,
         subtitle: coerceString(g.parent.subtitle, ''),
         workflowSystem: coerceString(g.parent.workflow_system, ''),
@@ -305,7 +335,7 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
     });
     list.sort((a, b) => compareRows(a, b, sortKey, sortDir));
     return list;
-  }, [groups, projectNames, currentUserEmail, categoryById, sortKey, sortDir]);
+  }, [groups, projectNames, currentUserEmail, categoryById, lastViewedById, sortKey, sortDir]);
 
   // A hidden column must not keep driving the sort order, otherwise the table
   // looks arbitrarily ordered with no visible sort indicator.
@@ -339,7 +369,9 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
     } else {
       setSortKey(key);
       // Time columns are far more useful newest-first.
-      setSortDir(key === 'modified' || key === 'created' ? 'desc' : 'asc');
+      setSortDir(
+        key === 'modified' || key === 'created' || key === 'lastViewed' ? 'desc' : 'asc',
+      );
     }
   };
 
@@ -457,6 +489,8 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
         return <TimeCell raw={r.createdTs} empty="Unknown" />;
       case 'modified':
         return <TimeCell raw={r.lastSavedTs} />;
+      case 'lastViewed':
+        return <TimeCell raw={r.lastViewedTs} />;
       case 'visibility':
         return (
           <Badge color={r.isPublic ? 'green' : 'grape'} variant="light" size="sm">
