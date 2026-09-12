@@ -523,6 +523,32 @@ running it. Whether the 1.10.0 handler turns a completed run into the right
 right `manifest {}` exercises the whole path in seconds. Both modes pass on all fourteen
 template directories, and the must-fail cases below fail for the right reason.
 
+### Two traps in the harness, not in the templates
+
+Both cost a run and neither says anything about a template, but both will bite anyone
+running nf-core pipelines under Singularity on a shared cluster.
+
+**TMPDIR has to be per task.** Nextflow forwards the host `TMPDIR` into the container
+verbatim, the task launcher writing `${TMPDIR:+SINGULARITYENV_TMPDIR="$TMPDIR"}`, while
+`autoMounts` binds only the run root. A node-local `TMPDIR` is therefore a path that does
+not exist inside the image, and nf-core/differentialabundance dies in `QUARTONOTEBOOK`
+with `NotFound: No such file or directory (os error 2): tmpdir`. Pointing `TMPDIR` at one
+fixed directory inside the bind fixes that pipeline and breaks the next one:
+nf-core/ampliseq died at `QIIME2_DIVERSITY_ALPHA` with `OSError: [Errno 121] Remote I/O
+error: .../qiime2/<user>/LOCK`, because QIIME2 writes its cache lock to the *fixed* path
+`$TMPDIR/qiime2/$USER/LOCK` rather than going through `mkdtemp`, so every concurrent
+QIIME2 task on every node contends for one lock file over the network filesystem. The
+value that satisfies both is `$NXF_TASK_WORKDIR`: inside the bind, and unique per task.
+It survives either escaping behaviour, since the variable is defined on the host before
+`nxf_launch` and forwarded into the container as `SINGULARITYENV_NXF_TASK_WORKDIR`.
+
+**The head job builds the images.** A Nextflow head job submitted with a modest memory
+request is fine until a pipeline needs a large container that is not yet in the cache:
+building the SIF runs `mksquashfs` in the head job, and both ampliseq (QIIME2) and
+airrflow (immcantation) were killed with `mksquashfs command failed: exit status 137` at
+6 GB. Twenty-four gigabytes covers them. The symptom is easy to misread as a pipeline
+failure because Nextflow reports it as a failed pull.
+
 ### What running it turned up
 
 Three things the analytical survey could not have known, all confirmed against the
@@ -581,32 +607,131 @@ degrades the dashboard, a failed one aborts the run.
 | taxprofiler `test` | 10/12 | ⚠️ | ⚠️ |
 | funcscan `test` | 8/15 | ⚠️ | ⚠️ |
 | variantbenchmarking `germline_small` | 3/9 | ✅ germline | ✅ |
-| chipseq `test` | 13/15 | ✅ | **❌** |
-| atacseq `test` | 17/19 | 🚫 (`MQC`) | **❌** |
+| chipseq `test` | 15/15 | ✅ | ✅ (after the HOMER fix) |
+| atacseq `test` | 19/19 | 🚫 (`MQC`) | ✅ (after the HOMER fix) |
+| airrflow `test` | 12/12 | ✅ | ✅ |
+| ampliseq `test` | 12/23 | ✅ (`DB`) | **⚠️** |
 
 ### The defect a megatest could never have caught
 
 chipseq and atacseq both fail on the same two collections, `homer_annotated_peaks` and
 `homer_tss_distance_profile`, with `polars.exceptions.DuplicateError: column 'chr' is
-duplicate`. The cause is the shared catalog recipe's source glob,
-`**/*.annotatePeaks.txt` in `depictio/catalog/homer/annotate_peaks.py`, which on a real
-run matches three different file shapes:
+duplicate`. `homer_tss_distance_profile` is collateral: its source is
+`RecipeSource(ref="peaks", dc_ref=...)`, so it only falls because the collection it
+derives from falls.
 
-| file | columns |
-|---|---|
-| `<sample>_peaks.annotatePeaks.txt` | 19 |
-| `<antibody>.consensus_peaks.annotatePeaks.txt` | 19 |
-| `<antibody>.consensus_peaks.boolean.annotatePeaks.txt` | **47** |
+The cause is the source glob of the shared catalog recipe,
+`**/*.annotatePeaks.txt` in `depictio/catalog/homer/annotate_peaks.py`. On a real run it
+matches three different file shapes, only two of which are HOMER tables:
 
-Concatenated they give a 57-column frame in which two columns rename onto `chr`, and both
-collections abort, taking the whole ingestion with them.
+| file | columns | identity column | coordinates |
+|---|---|---|---|
+| `<sample>_peaks.annotatePeaks.txt` | 19 | `PeakID (cmd=...)` | `Chr`, `Start`, `End` |
+| `<prefix>consensus_peaks<...>.annotatePeaks.txt` | 19 | `PeakID (cmd=...)` | `Chr`, `Start`, `End` |
+| `<prefix>consensus_peaks<...>.boolean.annotatePeaks.txt` | 43 to 47 | `interval_id` | `chr`, `start`, `end` |
+
+The third is not an `annotatePeaks.pl` output at all: it is the consensus boolean matrix
+with the HOMER annotation columns appended, and its coordinate columns are lower case.
+`_resolve_glob_source` concatenates matches with `pl.concat(..., how="diagonal_relaxed")`,
+a union of columns, so the combined frame carries `chr` and `Chr` side by side (5382 x 57
+for chipseq, 13211 x 68 for atacseq). The recipe's `rename({"Chr": "chr", ...})` then
+collides with a column that is already there, and both collections abort, taking the whole
+ingestion with them.
+
+Note what is *not* the problem. The plain consensus table is handled on purpose: the
+recipe's docstring says "consensus-level tables, whose ids are `Interval_12`, fall back to
+`consensus`", and `_CONSENSUS_LABEL` implements it. Only the boolean variant is foreign.
+
+The fix therefore narrows the glob to `**/*_peaks.annotatePeaks.txt`, which excludes
+`.boolean.annotatePeaks.txt` structurally without a negative pattern, plus a
+`source_overrides` entry in each template to pin the aggregation level the template's own
+header comment already claims:
+
+```yaml
+transform:
+  recipe: "homer/annotate_peaks.py"
+  source_overrides:
+    annotation:
+      glob_pattern: "bwa/mergedLibrary/macs/*/*_peaks.annotatePeaks.txt"
+```
+
+That second half is not cosmetic. atacseq publishes the whole peak tree twice, per merged
+library (`.mLb.clN`) and per merged replicate (`.mRp.clN`), and
+`atacseq/1.2.2/template.yaml` states that "only the merged-library level is bound here".
+Nothing was enforcing it: the template scopes no path, so the recipe's unanchored glob was
+the only selector and it took both levels.
+
+Measured against all four repatriated datasets, the narrowed glob is a no-op everywhere
+the current one works:
+
+| glob | chipseq test | chipseq megatest | atacseq test | atacseq megatest |
+|---|---|---|---|---|
+| `**/*.annotatePeaks.txt` | DuplicateError | 258986 rows | DuplicateError | 224137 rows |
+| `**/*_peaks.annotatePeaks.txt` | 4107 rows | 258986 rows | 6403 rows | 224137 rows |
+| with the template override | 2832 rows, 4 samples | 258986 rows | 3839 rows, 4 samples | 224137 rows |
+
+The fix is applied. `annotate_peaks.py` and both catalog YAMLs now glob
+`**/*_peaks.annotatePeaks.txt`, and `chipseq/1.2.0/template.yaml` and
+`atacseq/1.2.2/template.yaml` pin the merged-library level through
+`source_overrides`. Re-ingested, chipseq `test` goes to 15 of 15 collections and
+atacseq `test` to 19 of 19, both above the predicted 13 and 17, and the megatests
+are byte-identical to before at 258986 and 224137 rows.
 
 What makes this worth writing down is why it was invisible. `chipseq/1.2.0/megatest.yaml`
 says, in its own comment: *"The consensus-level annotatePeaks.txt files are not fetched:
 the dashboard reads the consensus boolean matrix instead."* The fetch manifest performs
 the filtering the recipe should be doing, so the template passes on the megatest precisely
-because the files that break it are never downloaded. No amount of megatest-based
-validation can find this class of defect; only a real pipeline run can.
+because the files that break it are never downloaded, which is exactly what the two
+megatest columns above show. No amount of megatest-based validation can find this class of
+defect; only a real pipeline run can.
+
+### A documented caveat that costs seven collections
+
+ampliseq `test` is the one profile whose measured verdict is worse than predicted, and
+the cause is neither a template defect nor a harness artefact. The run ends with
+`taxonomy_rel_abundance` failing on a missing file:
+
+    qiime2/rel_abundance_tables/rel-table-3.tsv
+
+The template pins that path deliberately, and its own comment explains why and predicts
+this exact situation:
+
+> ampliseq 2.18.0 classifies against `sbdi-gtdb` by default, whose DADA2 taxlevels are
+> Domain,Kingdom,Phylum ... one rank deeper than the 7-rank databases earlier releases
+> defaulted to. QIIME2's collapsed outputs are addressed by DEPTH, so the Phylum that used
+> to sit at level 2 now sits at level 3. [...] A run that overrides `--dada_ref_taxonomy`
+> with a 7-rank database (rdp, silva, unite ...) must point these back at level 2.
+
+The CI profile does both halves of that. `params.json` records
+`dada_ref_taxonomy = gtdb=R07-RS207`, a 7-rank database rather than the 8-rank default,
+and `tax_agglom_min = tax_agglom_max = 2`, which caps agglomeration so level 3 is never
+written at all. Only `rel-table-2.tsv` exists, holding exactly two ranks
+(`Bacteria;Omnitrophota`), which is the Phylum depth the collection wants.
+
+So the `DB` blocker code the profile table already carries is correct. What the table got
+wrong is its weight. `DB` was read as "degrades", and the verdict stayed ✅; the measured
+result is 12 of 23 collections, because `taxonomy_rel_abundance` is not `optional` and six
+further collections reach it through `dc_ref`:
+
+| collection | recipe |
+|---|---|
+| `taxonomy_heatmap` | `qiime2/taxonomy_heatmap.py` |
+| `embedding_pcoa` | `qiime2/embedding_pcoa.py` |
+| `complex_heatmap_canonical` | `nf-core/ampliseq/complex_heatmap_canonical.py` |
+| `upset_canonical` | `nf-core/ampliseq/upset_canonical.py` |
+| `ma_canonical` | `nf-core/ampliseq/ma_canonical.py` |
+| `bray_curtis_canonical` | `nf-core/ampliseq/bray_curtis_canonical.py` |
+
+They fail with `Failed to read dc_ref 'taxonomy_rel_abundance' from Delta Lake`, which is a
+true statement about a table that was never written and tells a reader nothing about the
+cause seven collections upstream.
+
+Two things follow. A collection that others derive from should be `optional: true` when
+its source path is route-dependent, so a documented caveat degrades one tile instead of a
+subtree. And the agglomeration depth is exactly the kind of thing that belongs in the
+template's variables rather than in a pinned path: it is readable from `params.json`
+(`tax_agglom_min`/`tax_agglom_max` and `dada_ref_taxonomy`), which is the same source the
+template already uses to auto-detect `SKIP_QIIME` and `IS_MULTIREGION`.
 
 ### Two further version traps
 
