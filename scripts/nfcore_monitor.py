@@ -11,7 +11,8 @@ break our recipes.
 This script does two things:
 
 * ``check``  — detect when a newer nf-core version exists for the pipelines we
-  template (GitHub releases API vs. our pinned version dirs).
+  template (nf-co.re ``pipelines.json`` release index, GitHub releases API as
+  the fallback, vs. our pinned version dirs).
 * ``report`` — for a pipeline with an update, validate the template against that
   version's AWS megatest results (anonymous S3) in three layers:
     1. source-path existence (which recipe inputs moved/renamed),
@@ -21,10 +22,16 @@ This script does two things:
     3. ``depictio dev catalog validate`` as a static module/recipe gate.
   Pass ``--no-exec`` for the fast path-existence check only.
 
+The megatest prefix is the release's ``tag_sha`` (``results-<tag_sha>/``); the
+resolution, the empty-run check and the S3 helpers live in
+``scripts/nfcore_megatest.py`` and are re-exported here. When the release's
+own run is empty or missing the report degrades to the newest real run and
+says so in its header.
+
 Usage::
 
     python scripts/nfcore_monitor.py check [--json]
-    python scripts/nfcore_monitor.py report --pipeline ampliseq [--results-hash H] [--out FILE]
+    python scripts/nfcore_monitor.py report --pipeline ampliseq [--version V] [--results-hash H] [--out FILE]
 """
 
 from __future__ import annotations
@@ -34,42 +41,56 @@ import json
 import os
 import sys
 import urllib.error
-import urllib.parse
-import urllib.request
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any, NamedTuple
-from xml.etree import ElementTree as ET
 
 from packaging.version import InvalidVersion, Version
 
 # Allow `python scripts/nfcore_monitor.py` to import the in-repo `depictio`
 # package even when it is not pip-installed (CI installs it editable; this keeps
-# direct script runs working too).
+# direct script runs working too), and the sibling megatest module.
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+
+from nfcore_megatest import (  # noqa: E402
+    _S3_NS,
+    MEGATEST_BUCKET,
+    MEGATEST_REGION,
+    MegatestError,
+    _s3_list,
+    download_object,
+    http_get,
+    list_keys,
+    list_objects,
+    load_manifest,
+    load_pipelines_index,
+    manifest_path,
+    newest_nonempty_run,
+    release_for_version,
+    resolve_run,
+)
+
+__all__ = [
+    "MEGATEST_BUCKET",
+    "MEGATEST_REGION",
+    "_S3_NS",
+    "_s3_list",
+    "download_object",
+    "list_keys",
+    "list_objects",
+    "resolve_results_prefix",
+]
 
 # nf-core pipeline templates live here, one folder per pipeline, with one
 # sub-folder per pinned version (plus a non-version ``recipes/`` folder).
 NFCORE_PROJECTS_DIR = _REPO_ROOT / "depictio" / "projects" / "nf-core"
 
-# Public bucket holding the AWS "megatest" full-scale test results per release.
-MEGATEST_BUCKET = "nf-core-awsmegatests"
-MEGATEST_REGION = os.environ.get("NFCORE_MEGATEST_REGION", "eu-west-1")
-
 GITHUB_API = "https://api.github.com"
-_S3_NS = "{http://s3.amazonaws.com/doc/2006-03-01/}"
-
-
-# ---------------------------------------------------------------------------
-# Network helper
-# ---------------------------------------------------------------------------
-def _get(url: str, headers: dict[str, str] | None = None, timeout: int = 60) -> bytes:
-    """GET ``url`` and return the raw body (mirrors catalog.py: refresh-index)."""
-    req = urllib.request.Request(url, headers=headers or {})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
-        return resp.read()
 
 
 # ---------------------------------------------------------------------------
@@ -100,17 +121,18 @@ def local_latest_version(versions: list[Version]) -> Version:
 
 
 def fetch_latest_release(pipeline: str, token: str | None = None) -> str | None:
-    """Return nf-core's latest release tag for ``pipeline`` (``v`` stripped).
+    """Return nf-core's latest release tag for ``pipeline`` via the GitHub API (``v`` stripped).
 
-    Returns ``None`` when the lookup fails (network/rate-limit/no releases) so a
-    single flaky pipeline never breaks the whole run.
+    Fallback for pipelines the nf-co.re index does not know. Returns ``None``
+    when the lookup fails (network/rate-limit/no releases) so a single flaky
+    pipeline never breaks the whole run.
     """
     headers = {"Accept": "application/vnd.github+json", "User-Agent": "depictio-nfcore-monitor"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
     url = f"{GITHUB_API}/repos/nf-core/{pipeline}/releases/latest"
     try:
-        data = json.loads(_get(url, headers=headers))
+        data = json.loads(http_get(url, headers=headers, retries=2))
     except (urllib.error.URLError, ValueError, TimeoutError) as exc:
         print(f"  ! could not fetch latest release for {pipeline}: {exc}", file=sys.stderr)
         return None
@@ -118,20 +140,49 @@ def fetch_latest_release(pipeline: str, token: str | None = None) -> str | None:
     return tag or None
 
 
+def load_index_or_none() -> dict[str, Any] | None:
+    """The nf-co.re release index, or ``None`` (with a warning) when unreachable."""
+    try:
+        return load_pipelines_index()
+    except (OSError, ValueError) as exc:
+        print(f"  ! nf-core pipelines index unavailable: {exc}", file=sys.stderr)
+        return None
+
+
+def latest_release_tag(
+    pipeline: str, index: dict[str, Any] | None = None, token: str | None = None
+) -> str | None:
+    """Latest release tag: nf-co.re index first, GitHub releases API as fallback."""
+    if index is not None:
+        try:
+            return str(release_for_version(index, pipeline, "latest")["tag_name"]).lstrip("v")
+        except MegatestError:
+            pass  # pipeline (or its releases) unknown to the index: ask GitHub
+    return fetch_latest_release(pipeline, token)
+
+
 def check_updates(
-    projects_dir: Path = NFCORE_PROJECTS_DIR, token: str | None = None
+    projects_dir: Path = NFCORE_PROJECTS_DIR,
+    token: str | None = None,
+    index: dict[str, Any] | None = None,
 ) -> list[dict[str, object]]:
-    """Compare each pipeline's local-latest version against nf-core's release."""
+    """Compare each pipeline's local-latest version against nf-core's release.
+
+    ``index`` is the nf-co.re release index (loaded once when not given); the
+    GitHub API is only asked for pipelines the index does not cover.
+    """
+    if index is None:
+        index = load_index_or_none()
     results: list[dict[str, object]] = []
     for pipeline, versions in discover_pipelines(projects_dir).items():
         local = local_latest_version(versions)
-        remote_str = fetch_latest_release(pipeline, token)
+        remote_str = latest_release_tag(pipeline, index, token)
         update_available = False
         if remote_str is not None:
             try:
                 update_available = Version(remote_str) > local
             except InvalidVersion:
-                update_available = False
+                pass  # an unparseable remote tag never claims an update
         results.append(
             {
                 "pipeline": pipeline,
@@ -144,92 +195,33 @@ def check_updates(
 
 
 # ---------------------------------------------------------------------------
-# Megatest results listing (anonymous S3 REST)
+# Megatest results prefix (listing/download helpers come from nfcore_megatest)
 # ---------------------------------------------------------------------------
-def _s3_list(
-    prefix: str,
-    region: str = MEGATEST_REGION,
-    delimiter: str | None = None,
-    continuation_token: str | None = None,
-    max_keys: int | None = None,
-) -> ET.Element:
-    """One anonymous ListObjectsV2 call against the megatest bucket -> XML root."""
-    params: dict[str, str] = {"list-type": "2", "prefix": prefix}
-    if delimiter:
-        params["delimiter"] = delimiter
-    if continuation_token:
-        params["continuation-token"] = continuation_token
-    if max_keys is not None:
-        params["max-keys"] = str(max_keys)
-    url = f"https://{MEGATEST_BUCKET}.s3.{region}.amazonaws.com/?" + urllib.parse.urlencode(params)
-    return ET.fromstring(_get(url))
-
-
-def _prefix_last_modified(prefix: str, region: str = MEGATEST_REGION) -> str:
-    """LastModified of the first object under ``prefix`` (cheap recency signal)."""
-    root = _s3_list(prefix, region=region, max_keys=1)
-    lm = root.find(f"{_S3_NS}Contents/{_S3_NS}LastModified")
-    return lm.text or "" if lm is not None else ""
-
-
 def resolve_results_prefix(
-    pipeline: str, results_hash: str | None = None, region: str = MEGATEST_REGION
+    pipeline: str,
+    results_hash: str | None = None,
+    version: str | None = None,
+    index: dict[str, Any] | None = None,
+    run_root: str = "",
+    region: str = MEGATEST_REGION,
 ) -> str:
-    """Resolve the S3 ``{pipeline}/results-<hash>/`` prefix to inspect.
+    """Resolve the S3 prefix whose keys are the template's DATA_ROOT.
 
-    With ``results_hash`` the choice is explicit. Otherwise pick the
-    most-recently-modified real ``results-<40hex>/`` dir (skipping ``results-dev``
-    and ``results-test-*``). NOTE: the hash does not encode the pipeline version,
-    so this is a recency heuristic — pass ``--results-hash`` to pin an exact run.
+    ``<pipeline>/results-<hash>/`` is the release's ``tag_sha`` in nf-co.re's
+    ``pipelines.json``, so ``version`` (``latest`` when None) maps to exactly one
+    run; ``nfcore_megatest.resolve_run`` does the lookup and rejects empty or
+    failed runs (raising ``MegatestError`` with a table of real runs). An
+    explicit ``results_hash`` is taken as-is, without network access. The
+    returned prefix ends with ``run_root`` (e.g. rnaseq ``aligner_star_salmon/``)
+    when the template's DATA_ROOT is a sub-directory of the run.
     """
+    root = run_root.strip("/")
+    root = f"{root}/" if root else ""
     if results_hash:
         h = results_hash.removeprefix("results-")
-        return f"{pipeline}/results-{h}/"
-
-    root = _s3_list(f"{pipeline}/", region=region, delimiter="/")
-    candidates: list[str] = []
-    for cp in root.findall(f"{_S3_NS}CommonPrefixes/{_S3_NS}Prefix"):
-        text = (cp.text or "").rstrip("/")
-        name = text.rsplit("/", 1)[-1]
-        suffix = name.removeprefix("results-")
-        if len(suffix) == 40 and all(c in "0123456789abcdef" for c in suffix):
-            candidates.append(text + "/")
-    if not candidates:
-        raise RuntimeError(f"No megatest results-<hash> dirs found for {pipeline}")
-    return max(candidates, key=lambda p: _prefix_last_modified(p, region))
-
-
-def list_objects(prefix: str, region: str = MEGATEST_REGION) -> list[tuple[str, int]]:
-    """All objects under ``prefix`` as ``(key_relative_to_prefix, size)`` (paginated)."""
-    objects: list[tuple[str, int]] = []
-    token: str | None = None
-    while True:
-        root = _s3_list(prefix, region=region, continuation_token=token)
-        for contents in root.findall(f"{_S3_NS}Contents"):
-            key_el = contents.find(f"{_S3_NS}Key")
-            size_el = contents.find(f"{_S3_NS}Size")
-            if key_el is not None and key_el.text:
-                size = int(size_el.text) if size_el is not None and size_el.text else 0
-                objects.append((key_el.text[len(prefix) :], size))
-        truncated = root.findtext(f"{_S3_NS}IsTruncated", "false") == "true"
-        token = root.findtext(f"{_S3_NS}NextContinuationToken")
-        if not truncated or not token:
-            break
-    return objects
-
-
-def list_keys(prefix: str, region: str = MEGATEST_REGION) -> list[str]:
-    """All object keys under ``prefix``, returned relative to it (paginated)."""
-    return [key for key, _ in list_objects(prefix, region)]
-
-
-def download_object(prefix: str, rel_key: str, dest: Path, region: str = MEGATEST_REGION) -> None:
-    """Download one megatest object (``prefix`` + ``rel_key``) to ``dest``."""
-    url = f"https://{MEGATEST_BUCKET}.s3.{region}.amazonaws.com/" + urllib.parse.quote(
-        prefix + rel_key
-    )
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(_get(url))
+        return f"{pipeline}/results-{h}/{root}"
+    run = resolve_run(pipeline, version=version, run_root=root, index=index, region=region)
+    return run.root_prefix
 
 
 # ---------------------------------------------------------------------------
@@ -490,6 +482,8 @@ def build_drift_report(
     keys: list[str],
     recipe_results: list[RecipeCheck] | None = None,
     catalog_result: tuple[str, str] | None = None,
+    run_root: str = "",
+    note: str | None = None,
 ) -> tuple[str, int]:
     """Render a markdown drift report. Returns ``(markdown, n_problems)``.
 
@@ -497,6 +491,9 @@ def build_drift_report(
     Layer 2 (when ``recipe_results`` given): the recipes actually run — load the
     real files, run ``transform()`` and assert ``EXPECTED_SCHEMA``.
     Layer 3 (when ``catalog_result`` given): static ``catalog validate`` gate.
+    ``run_root`` names the sub-directory of the run that is the DATA_ROOT and
+    ``note`` is printed under the header (e.g. when the report had to fall back
+    to another run because the release's own megatest is empty).
     """
     key_set = set(keys)
     resolved: list[tuple[str, str, str]] = []
@@ -518,12 +515,17 @@ def build_drift_report(
     n_problems = len(missing) + len(failed_recipes) + (1 if catalog_failed else 0)
     overall = "❌ action needed" if n_problems else "✅ still valid"
 
+    megatest = f"**{overall}** · Megatest: `s3://{MEGATEST_BUCKET}/{results_prefix}`"
+    if run_root:
+        megatest += f" · run_root: `{run_root}`"
     lines = [
         f"# nf-core/{pipeline} drift report — {local_version} → {new_version}",
         "",
-        f"**{overall}** · Megatest: `s3://{MEGATEST_BUCKET}/{results_prefix}`",
+        megatest,
         "",
     ]
+    if note:
+        lines += [f"> ⚠️ {note}", ""]
 
     # Layer 2: recipe execution
     if recipe_results is not None:
@@ -585,7 +587,7 @@ def build_drift_report(
 # ---------------------------------------------------------------------------
 def cmd_check(args: argparse.Namespace) -> int:
     token = os.environ.get("GITHUB_TOKEN")
-    results = check_updates(token=token)
+    results = check_updates(token=token, index=load_index_or_none())
     if args.json:
         print(json.dumps(results, indent=2))
         return 0
@@ -604,10 +606,37 @@ def cmd_report(args: argparse.Namespace) -> int:
         print(f"Unknown pipeline '{pipeline}' (have: {', '.join(pipelines)})", file=sys.stderr)
         return 2
     local = str(local_latest_version(pipelines[pipeline]))
-    new_version = fetch_latest_release(pipeline, os.environ.get("GITHUB_TOKEN")) or local
+    index = load_index_or_none()
+    new_version = (
+        args.version or latest_release_tag(pipeline, index, os.environ.get("GITHUB_TOKEN")) or local
+    )
+
+    # The template's DATA_ROOT may be a sub-directory of the megatest run
+    # (rnaseq `aligner_star_salmon/`): the local version's manifest knows it.
+    run_root = ""
+    manifest = manifest_path(pipeline, local)
+    if manifest.is_file():
+        run_root = load_manifest(manifest).run_root
 
     print(f"→ nf-core/{pipeline}: {local} (local) → {new_version} (release)", file=sys.stderr)
-    results_prefix = resolve_results_prefix(pipeline, args.results_hash)
+    note: str | None = None
+    try:
+        results_prefix = resolve_results_prefix(
+            pipeline, args.results_hash, version=new_version, index=index, run_root=run_root
+        )
+    except MegatestError as exc:
+        # The release's own megatest is empty/missing: degrade to the newest
+        # real run so the drift report still says something, and flag it.
+        fallback = newest_nonempty_run(pipeline, index=index, run_root=run_root)
+        if fallback is None:
+            print(f"error: {exc}", file=sys.stderr)
+            return 3
+        note = (
+            f"{exc.reason}. Falling back to the newest real run "
+            f"`{fallback.prefix}` (release {fallback.tag or 'unknown'})."
+        )
+        print(f"! {note}", file=sys.stderr)
+        results_prefix = fallback.root_prefix
     print(f"→ megatest results: {results_prefix}", file=sys.stderr)
     objects = list_objects(results_prefix)
     keys = [k for k, _ in objects]
@@ -645,6 +674,8 @@ def cmd_report(args: argparse.Namespace) -> int:
         keys,
         recipe_results,
         catalog_result,
+        run_root=run_root,
+        note=note,
     )
     status = "✅ valid" if n_problems == 0 else f"⚠️ {n_problems} issue(s)"
     if args.out:
@@ -673,7 +704,12 @@ def main(argv: list[str] | None = None) -> int:
     p_report = sub.add_parser("report", help="Report megatest output drift for a pipeline")
     p_report.add_argument("--pipeline", required=True, help="Pipeline name, e.g. ampliseq")
     p_report.add_argument(
-        "--results-hash", help="Pin a specific megatest results-<hash> (else newest is used)"
+        "--version",
+        help="Release to validate against (default: nf-core's latest); its tag_sha picks the megatest",
+    )
+    p_report.add_argument(
+        "--results-hash",
+        help="Pin a specific megatest results-<hash> (else the release's own run is used)",
     )
     p_report.add_argument("--out", help="Write the markdown report to this file instead of stdout")
     p_report.add_argument(

@@ -111,6 +111,9 @@ def test_build_drift_report_includes_recipe_and_catalog_layers(nfm: ModuleType) 
 def test_check_updates_flags_newer_release(
     nfm: ModuleType, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # Without the nf-co.re index (offline) the GitHub releases API is the source.
+    monkeypatch.setattr(nfm, "load_index_or_none", lambda: None)
+
     def fake_latest(pipeline: str, token: str | None = None) -> str | None:
         return {"ampliseq": "9.9.9", "viralrecon": None}.get(pipeline, "0.0.1")
 
@@ -119,6 +122,111 @@ def test_check_updates_flags_newer_release(
     assert by_pipeline["ampliseq"]["update_available"] is True
     # A failed (None) lookup must never report an update.
     assert by_pipeline["viralrecon"]["update_available"] is False
+
+
+def test_check_updates_prefers_index_over_github(
+    nfm: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    index = {
+        "remote_workflows": [
+            {
+                "name": "ampliseq",
+                "releases": [
+                    {
+                        "tag_name": "9.9.9",
+                        "tag_sha": "a" * 40,
+                        "published_at": "2030-01-01T00:00:00Z",
+                    },
+                    {
+                        "tag_name": "2.18.0",
+                        "tag_sha": "b" * 40,
+                        "published_at": "2026-06-17T00:00:00Z",
+                    },
+                    {
+                        "tag_name": "dev",
+                        "tag_sha": "c" * 40,
+                        "published_at": "2030-02-01T00:00:00Z",
+                    },
+                ],
+            }
+        ]
+    }
+    asked_github: list[str] = []
+
+    def fake_latest(pipeline: str, token: str | None = None) -> str | None:
+        asked_github.append(pipeline)
+        return "0.0.1"
+
+    monkeypatch.setattr(nfm, "fetch_latest_release", fake_latest)
+    by_pipeline = {r["pipeline"]: r for r in nfm.check_updates(index=index)}
+    # The index answers for ampliseq (9.9.9, never the dev pseudo-release) ...
+    assert by_pipeline["ampliseq"]["remote"] == "9.9.9"
+    assert by_pipeline["ampliseq"]["update_available"] is True
+    assert "ampliseq" not in asked_github
+    # ... and GitHub is only asked for pipelines the index does not know.
+    assert "viralrecon" in asked_github
+    assert by_pipeline["viralrecon"]["remote"] == "0.0.1"
+    assert nfm.latest_release_tag("ampliseq", index) == "9.9.9"
+
+
+def test_resolve_results_prefix_delegates_to_resolve_run(
+    nfm: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from types import SimpleNamespace
+
+    calls: list[dict] = []
+
+    def fake_resolve_run(pipeline, version=None, run_root="", index=None, region=None, **kw):
+        calls.append(
+            {"pipeline": pipeline, "version": version, "run_root": run_root, "index": index}
+        )
+        return SimpleNamespace(root_prefix=f"{pipeline}/results-{'a' * 40}/{run_root}")
+
+    monkeypatch.setattr(nfm, "resolve_run", fake_resolve_run)
+    index = {"remote_workflows": []}
+    prefix = nfm.resolve_results_prefix(
+        "rnaseq", version="3.26.0", index=index, run_root="aligner_star_salmon"
+    )
+    assert prefix == f"rnaseq/results-{'a' * 40}/aligner_star_salmon/"
+    assert calls == [
+        {
+            "pipeline": "rnaseq",
+            "version": "3.26.0",
+            "run_root": "aligner_star_salmon/",
+            "index": index,
+        }
+    ]
+    # An explicit hash short-circuits the lookup (no resolve_run call) and keeps the run_root.
+    assert (
+        nfm.resolve_results_prefix("rnaseq", "deadbeef", run_root="aligner_star_salmon/")
+        == "rnaseq/results-deadbeef/aligner_star_salmon/"
+    )
+    assert len(calls) == 1
+
+
+def test_build_drift_report_shows_run_root_and_fallback_note(nfm: ModuleType) -> None:
+    keys = ["multiqc/star_salmon/multiqc_report_data/multiqc.parquet"]
+    source_paths = [("multiqc", "parquet", keys[0], False)]
+    report, n_problems = nfm.build_drift_report(
+        "rnaseq",
+        "3.26.0",
+        "3.27.0",
+        "rnaseq/results-abc/",
+        source_paths,
+        keys,
+        run_root="aligner_star_salmon/",
+        note="nf-core/rnaseq 3.27.0: megatest run is empty. Falling back to `rnaseq/results-abc/`.",
+    )
+    assert n_problems == 0
+    header = report.splitlines()[2]
+    assert "Megatest: `s3://nf-core-awsmegatests/rnaseq/results-abc/`" in header
+    assert "run_root: `aligner_star_salmon/`" in header
+    assert "> ⚠️ nf-core/rnaseq 3.27.0: megatest run is empty" in report
+    # Without a run_root or note the header stays as before.
+    plain, _ = nfm.build_drift_report(
+        "rnaseq", "3.26.0", "3.27.0", "rnaseq/results-abc/", source_paths, keys
+    )
+    assert "run_root" not in plain and "⚠️" not in plain
 
 
 def test_validate_one_recipe_skips_dc_ref_recipes(nfm: ModuleType, tmp_path: Path) -> None:
