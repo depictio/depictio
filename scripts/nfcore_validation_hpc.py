@@ -297,6 +297,53 @@ RUNS: list[RunSpec] = [
         inject_samplesheet=False,  # publishes pipeline_info/samplesheet.valid.tsv
         note="7 grouping columns, the richest AIRR metadata of the survey",
     ),
+    # --- second wave -----------------------------------------------------------
+    # One profile per pipeline answers "does this template read this pipeline's
+    # output". It does not answer "does it read the pipeline's OTHER routes",
+    # and the route conditionals are where the untested surface actually sits.
+    # The cluster already carries these three ampliseq routes at 2.16.0
+    # (run_its_pacbio, run_iontorrent, run_multiregion); these reproduce them at
+    # the template version the showcase actually uses.
+    RunSpec(
+        key="ampliseq-pacbio",
+        pipeline="ampliseq",
+        version="2.18.0",
+        profile="test_pacbio_its",
+        nxf_ver="25.10.7",
+        samples=3,
+        inject_samplesheet=False,
+        note="sintax route (--skip_qiime): the only way to reach sintax_rel_abundance",
+    ),
+    RunSpec(
+        key="ampliseq-iontorrent",
+        pipeline="ampliseq",
+        version="2.18.0",
+        profile="test_iontorrent",
+        nxf_ver="25.10.7",
+        samples=3,
+        inject_samplesheet=False,
+        note="sintax route, single-end IonTorrent; sintax ref is fetched from ut.ee",
+    ),
+    RunSpec(
+        key="ampliseq-multiregion",
+        pipeline="ampliseq",
+        version="2.18.0",
+        profile="test_multiregion",
+        nxf_ver="25.10.7",
+        samples=3,
+        inject_samplesheet=False,
+        note="SIDLE route: the only way to reach sidle_reconstructed / _reconstruction_qc",
+    ),
+    RunSpec(
+        key="variantbench-sv",
+        pipeline="variantbenchmarking",
+        version="1.4.0",
+        profile="germline_sv",
+        revision="1.4.0",
+        samples=3,
+        inject_samplesheet=False,
+        note="SV route, 3 callers; germline_small reached only 3 of 9 collections",
+    ),
 ]
 
 RUNS_BY_KEY = {spec.key: spec for spec in RUNS}
