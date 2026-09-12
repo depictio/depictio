@@ -7,6 +7,16 @@ is coalesced into ``peak_id``. The sample is read off the MACS2 peak name
 (``<sample>_peak_12``); consensus-level tables, whose ids are ``Interval_12``,
 fall back to ``consensus``.
 
+The glob deliberately requires ``_peaks`` before the suffix. chipseq and atacseq
+also publish ``<prefix>consensus_peaks<...>.boolean.annotatePeaks.txt``, which is
+not an ``annotatePeaks.pl`` output at all but the consensus boolean matrix with
+the HOMER annotation columns appended: it has no ``PeakID`` column and carries
+``chr``/``start``/``end`` in lower case. Sources are concatenated with
+``how="diagonal_relaxed"``, a union of columns, so including it puts ``chr`` and
+``Chr`` in one frame and the rename below raises ``DuplicateError``. The plain
+consensus table, which has the same 19 columns as a per-sample one, stays in and
+is handled by the ``Interval_12`` fallback described above.
+
 ``annotation_class`` is the coarse HOMER class (``promoter-TSS``, ``intron``,
 ``exon``, ``Intergenic``, ``TTS``, ``5' UTR``, ``3' UTR``, ``non-coding``) taken
 from the ``Annotation`` column before its parenthesised detail, so peaks group
@@ -40,7 +50,7 @@ from depictio.models.models.transforms import RecipeSource
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="annotation",
-        glob_pattern="**/*.annotatePeaks.txt",
+        glob_pattern="**/*_peaks.annotatePeaks.txt",
         format="TSV",
         read_kwargs={"infer_schema_length": 0, "null_values": ["NA"]},
     ),

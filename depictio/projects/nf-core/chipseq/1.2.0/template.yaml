@@ -294,6 +294,14 @@ workflows:
           source: "transformed"
           transform:
             recipe: "homer/annotate_peaks.py"
+            source_overrides:
+              annotation:
+                # Per-sample tables of the merged-library level only. The recipe's
+                # own glob is layout-agnostic and would also take the consensus
+                # tables and, on atacseq, the merged-REPLICATE copy of the whole
+                # peak tree, concatenating two aggregation levels into one table
+                # under a `sample` column that then means two different things.
+                glob_pattern: "bwa/mergedLibrary/macs/*/*_peaks.annotatePeaks.txt"
           dc_specific_properties:
             format: "TSV"
             columns_description:
