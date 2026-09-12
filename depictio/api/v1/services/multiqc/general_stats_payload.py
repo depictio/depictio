@@ -9,6 +9,7 @@ stay in the dash/ tree and die with it.
 
 import json
 import re
+from collections import Counter
 from typing import Any
 
 import pandas as pd
@@ -82,6 +83,7 @@ def _extract_metadata_from_parquet(
                 "min": None,
                 "max": None,
                 "hidden": False,
+                "namespace": "",
             }
             continue
 
@@ -104,6 +106,10 @@ def _extract_metadata_from_parquet(
             "min": meta.get("min", None),
             "max": meta.get("max", None),
             "hidden": meta.get("hidden", False),
+            # MultiQC's own per-column group label ("Samtools: stats" vs
+            # "Samtools: flagstat"). It is what tells two metrics that share a
+            # `title` apart, so it is what disambiguates them in the header.
+            "namespace": meta.get("namespace") or "",
         }
 
     return mappings
@@ -295,19 +301,29 @@ def _process_multiqc_data(
 
     tools = df_explore["section_key"].unique()
 
-    column_mapping: dict[str, str] = {}
-    percentage_columns: list[str] = []
-
+    # Two MultiQC metrics can carry the same column `title`. Pipelines that run
+    # both `samtools stats` and `samtools flagstat` over the same BAMs report
+    # `reads_mapped` and `mapped_passed` — different metrics, both titled
+    # "Reads mapped". Resolving the titles in one pass let the second one
+    # overwrite the first, `rename()` then gave both columns the same name and
+    # `df[col]` returned a DataFrame instead of a Series. So resolve in two
+    # passes: pass 1 computes the base title per pivot column, pass 2 qualifies
+    # only the titles that actually repeat.
+    resolved: list[dict[str, Any]] = []
     for col in df_pivot.columns:
         if col == "sample":
-            column_mapping[col] = "Sample Name"
+            resolved.append({"col": col, "display": "Sample Name", "qualifier": "", "config": None})
             continue
 
         display_name = None
         config = None
+        qualifier = ""
         for tool in tools:
             if tool in column_metadata and col in column_metadata[tool]:
                 config = column_metadata[tool][col]
+                # MultiQC's namespace ("Samtools: flagstat") when the parquet
+                # carries one, else the raw parquet section_key.
+                qualifier = str(config.get("namespace") or tool)
                 display_name = config.get("title") or col.replace("_", " ").title()
                 suffix = config.get("suffix")
                 if suffix and not display_name.endswith(f" ({suffix.strip()})"):
@@ -320,8 +336,37 @@ def _process_multiqc_data(
                 if not display_name.endswith(" (%)"):
                     display_name = display_name.replace("Pct ", "") + " (%)"
 
-        column_mapping[col] = display_name
+        resolved.append(
+            {"col": col, "display": display_name, "qualifier": qualifier, "config": config}
+        )
 
+    repeated_titles = {
+        title for title, count in Counter(r["display"] for r in resolved).items() if count > 1
+    }
+
+    column_mapping: dict[str, str] = {}
+    percentage_columns: list[str] = []
+    taken_displays: set[str] = set()
+
+    for entry in resolved:
+        display_name = entry["display"]
+        if display_name in repeated_titles and entry["qualifier"]:
+            display_name = f"{display_name} ({entry['qualifier']})"
+        if display_name in taken_displays:
+            # Last resort: same title AND same namespace. Still better a numbered
+            # header than two columns collapsing onto one.
+            base_display = display_name
+            counter = 2
+            while display_name in taken_displays:
+                display_name = f"{base_display} ({counter})"
+                counter += 1
+        taken_displays.add(display_name)
+        column_mapping[entry["col"]] = display_name
+
+        if entry["col"] == "sample":
+            continue
+
+        config = entry["config"]
         suffix = config.get("suffix") if config else None
         if suffix and suffix.strip() == "%":
             percentage_columns.append(display_name)
@@ -330,24 +375,27 @@ def _process_multiqc_data(
 
     df_multiqc_real = df_pivot.rename(columns=column_mapping)
 
-    sanitized_columns: dict[str, str] = {}
+    # Build the internal names positionally. Keying the de-dup on the display
+    # name is what let a repeated title overwrite the earlier entry.
+    sanitized_columns: list[str] = []
     display_to_internal: dict[str, str] = {}
+    used_internal: set[str] = set()
     for col in df_multiqc_real.columns:
         if col == "Sample Name":
-            sanitized_columns[col] = col
-            display_to_internal[col] = col
+            sanitized = col
         else:
             sanitized = _sanitize_column_name(col)
             counter = 1
             original_sanitized = sanitized
-            while sanitized in sanitized_columns.values():
+            while sanitized in used_internal:
                 sanitized = f"{original_sanitized}_{counter}"
                 counter += 1
-            sanitized_columns[col] = sanitized
-            display_to_internal[col] = sanitized
+        used_internal.add(sanitized)
+        sanitized_columns.append(sanitized)
+        display_to_internal[col] = sanitized
 
     internal_to_display = {v: k for k, v in display_to_internal.items()}
-    df_multiqc_real = df_multiqc_real.rename(columns=sanitized_columns)
+    df_multiqc_real.columns = pd.Index(sanitized_columns)
     df_for_display = df_multiqc_real.copy()
 
     return (
