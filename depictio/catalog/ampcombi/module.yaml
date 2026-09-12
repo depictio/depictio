@@ -1,0 +1,7 @@
+# AMPcombi. Lightweight: identity is derived from the nf-core meta.yml that
+# `nf_core_url` points at (not duplicated). Override a field here only on drift.
+# AMPcombi merges per-tool antimicrobial-peptide predictions, annotates each
+# candidate with physicochemistry and aligns it against a reference AMP database.
+id: ampcombi
+name: AMPcombi
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/ampcombi2/complete
