@@ -137,32 +137,136 @@ template ingests" and "the template ships".
 
 ## 10. Visualisation kinds the life-science outputs actually wanted
 
-Bound with a code-mode figure in this lot because no kind exists:
+No new `advanced_viz` kind was added in this lot. Every tile either binds one of the 22
+existing kinds or falls back to a code-mode figure, and the 27 code-mode figures across
+the nine templates are the evidence for what is missing.
 
-- diversity profile with confidence ribbons (airrflow Hill profiles)
-- fusion protein-domain track (rnafusion FusionInspector)
-- **metagene / reference-point signal profile**: mean signal against position
-  relative to a TSS or across a scaled gene body, one line per sample, classically
-  paired with a heatmap of every region sorted by signal. This is the strongest
-  candidate for the next kind, because it recurs across four pipelines in this lot
-  alone: cutandrun `04_reporting/deeptools_heatmaps/*/*.plotHeatmap.mat.tab`,
-  atacseq ataqv TSS enrichment and deepTools plotProfile, chipseq deepTools
-  plotProfile, rnaseq RSeQC gene body coverage.
+### Per pipeline
 
-  `coverage_track` is the closest existing kind and does not fit: it requires a
-  `chromosome` column, treats `position` as an absolute coordinate rather than a
-  signed offset from a reference point, and stacks one subplot per sample where
-  this figure needs the samples overlaid to be read at all. The parts that justify
-  a kind rather than a code-mode line are the reference-point axis (a labelled
-  marker at 0, scaled-body ticks) and the paired per-region heatmap; a plain
-  `px.line` covers the rest, which is why the lot ships code mode for now.
+| pipeline | kinds bound | code-mode figures | what a kind would replace |
+|---|---|---|---|
+| differentialabundance 2.0.0 | volcano x2, ma, qq, da_barplot, manhattan, lollipop, embedding, complex_heatmap x2 | 1 | nothing, the contrast-against-contrast scatter only wants UI-mode size and `custom_data` |
+| funcscan 4.0.0 | sunburst x3, upset_plot x3, complex_heatmap, dot_plot, embedding | 4 | nothing, all four are plain bars and scatters |
+| airrflow 5.1.0 | complex_heatmap x2, rarefaction, sankey, stacked_taxonomy, sunburst, upset_plot, metric_ci_bars | 5 | diversity profile with confidence ribbons, rank abundance |
+| rnafusion 4.1.3 | dot_plot x5, lollipop x2, manhattan, upset_plot | 3 | protein-domain track |
+| rnaseq 3.26.0 | embedding, complex_heatmap | 1 | nothing, and the gene-body coverage profile stays a MultiQC panel |
+| taxprofiler 2.0.1 | stacked_taxonomy x2, sunburst, dot_plot x2, complex_heatmap, embedding, upset_plot | 1 | rank-abundance accumulation |
+| chipseq 1.2.0 | volcano, ma, qq, da_barplot, manhattan, complex_heatmap, upset_plot | 2 | nothing in the template, because the deepTools profile is left in MultiQC |
+| atacseq 1.2.2 | volcano, ma, qq, da_barplot, complex_heatmap, dot_plot, upset_plot | 6 | TSS signal profile, fragment-length ladder |
+| cutandrun 3.1 | manhattan x2, upset_plot, dot_plot | 4 | fragment-length ladder |
 
-Wanted by pipelines not in this lot, and still missing:
+### What those 27 figures are
 
-- V-to-J pairing heatmap (airrflow, full rearrangement tables)
-- 96-context mutational signature, and circos (oncoanalyser)
-- knee plot (scrnaseq), isomiR ladder (smrnaseq), jplace reader (phyloplace),
-  assembly graph (bacass)
+- **12 scatter plots.** They are in code mode for `custom_data`, a marker size column or a
+  reference diagonal, not because the shape is exotic. This is a figure-builder gap, not a
+  missing kind: a UI-mode scatter that accepts a size column and a selection key would
+  retire all twelve and shrink every template in the lot.
+- **7 bars, boxes and histograms.** Same story, minus the selection: grouped bars on a log
+  axis and a histogram split by a category are both one `dict_kwargs` away.
+- **6 profile curves.** The real gap, detailed below.
+- **1 protein-domain track** (rnafusion FusionInspector) and **1 log-scale stage line**
+  (airrflow attrition, which the sankey beside it already tells).
+
+### Candidates, split by how far they travel
+
+The useful axis is not "which pipeline asked for it" but how much of the kind is shape and
+how much is domain. Depictio already mixes the two, and it shows: `dot_plot` carries scRNA
+role names (`cluster`, `gene`, `mean_expression`, `frac_expressing`) yet is bound nine
+times in this lot and not once for scRNA, while `rarefaction` has exactly the shape of a
+multi-series curve (`sample_id`, `depth`, `metric`) and cannot be reused for a TSS profile
+because its name and renderer assume an accumulation.
+
+#### Reusable well beyond these pipelines
+
+**1. `profile`: multi-series curve over an ordered axis.** Roles `series`, `x`, `y`, with
+optional `lower` and `upper` for a band; config for a reference marker at x = 0, shaded
+x-ranges and log axes. Six code-mode figures in four pipelines collapse into it:
+
+| figure | pipeline | x axis |
+|---|---|---|
+| `at-sig-fig-tss` | atacseq | signed offset from a TSS |
+| `at-sig-fig-ladder` | atacseq | fragment length, sub-nucleosomal bands |
+| `cr-qc-fig-fragments` | cutandrun | fragment length, same bands |
+| `airr-clone-fig-ribbons` | airrflow | diversity order q, bootstrap band |
+| `airr-clone-fig-rank` | airrflow | clone rank, log-log |
+| `tp-fig-accumulation` | taxprofiler | taxon rank, cumulative |
+
+It also unlocks data already on disk that nothing reads: rnaseq `rseqc/inner_distance/`
+and gene body coverage, chipseq and atacseq deepTools `plotProfile`, and airrflow
+`clonal_abundance.tsv` (AF-D1), whose absence is why the rank-abundance panel plots a point
+estimate with no ribbon. `rarefaction` becomes a special case of it. Outside genomics the
+same shape covers any timecourse, dose response or sweep, which is what makes this the one
+clear win.
+
+The cheap fallback, if the kind is not built: add optional `lower` and `upper` roles to
+`rarefaction`. That alone retires `airr-clone-fig-ribbons`.
+
+**2. `agreement_matrix`: pairwise concordance between tools.** Takes (item, tool, called)
+and draws the Jaccard matrix plus the per-sample agreement scatter against the diagonal.
+Recurs everywhere: cutandrun MACS2 against SEACR, rnafusion across three callers,
+funcscan across three ARG tools, taxprofiler across ten profilers, and variantbenchmarking
+outside this lot. Today each one is an `upset_plot` for membership plus a code-mode
+scatter, and cutandrun's `caller_agreement` recipe lives in the pipeline rather than the
+catalog. Note this one collides with a standing policy: `test_compositions_stay_out_of_the_catalog`
+keeps cross-set compositions dashboard-side, so it needs a decision before it needs code.
+
+**3. `scatter_xy`: numeric against numeric, with size, colour and a selection key.**
+Twelve code-mode figures, in every template of the lot. `dot_plot` is the closest kind and
+cannot express them: its two axis roles are `cluster` and `gene`, both String, so it draws
+a categorical grid, not a plane. This is the largest single group of fallbacks in the lot
+and the cheapest to specify, whether it lands as a kind or as size and `custom_data`
+support in the figure builder.
+
+#### Reusable across a family, not universal
+
+**3. `signal_matrix`: the metagene heatmap.** Rows are regions ordered by signal, columns
+are position offsets, drawn under the profile curve of candidate 1. Wanted by all three
+chromatin templates, and the reason cutandrun leaves `04_reporting/deeptools_heatmaps/`
+(2.9 GB) unfetched. `complex_heatmap` can technically bind it, since it only requires
+`index`, but the column order is positional and must survive clustering, there is no
+marker at 0, and the row count runs to 10^5 so the kind has to bin. Travels to any
+pipeline with signal over a reference point: chipseq, atacseq, cutandrun, cuttag,
+methylseq, nascent, and rnaseq gene bodies.
+
+**4. `feature_distance`: signed distance to the nearest annotated feature, split by
+class.** Behind `cs-pk-fig-tss` and `at-pk-fig-tss`, both reading HOMER `annotatePeaks`.
+The MultiQC `peak_annotation` sections that CS-D6 and AT-D9 leave unbound are the same
+data. It is close to a plain histogram, so the value is only the zero marker, the class
+stacking and the standard promoter and distal binning. Worth it if peak annotation stays a
+recurring template, not before.
+
+#### Pipeline-specific
+
+**5. Protein-domain track.** `rnaf-fi-domain-track`: one bar per Pfam hit along each
+partner protein with the breakpoint marked. rnafusion today, oncoanalyser when it lands,
+nothing else in sight.
+
+#### Asked for, but not actually a viz-kind gap
+
+- **V-by-J pairing and CDR3 spectratype (airrflow).** AF-D8 skips
+  `vdj_annotation/02-make-db/*_db-pass.tsv`, so this is a data gap, not a viz gap. V-by-J
+  is a contingency table that `complex_heatmap` already draws, and CDR3 length is
+  candidate 1.
+- **The seven code-mode bars and boxes.** They need a grouping and a log axis in UI mode,
+  not a kind.
+- **The MultiQC sections nobody badged.** rnaseq strandedness, sample-relationships and
+  biotype counts (RS-D5), chipseq `peak_count`, `peak_annotation` and four `deseq2_*`
+  sections (CS-D6), atacseq `mlib_peak_annotation` and the two `mlib_deseq2_*` (AT-D9),
+  taxprofiler MALT (TP-D6). Each is one catalog YAML plus a stub, no renderer work.
+- **The General Statistics tile.** Missing from three of nine templates for two different
+  server bugs: a duplicate `Reads mapped` display title (CS-D3, AT-D8) and a DataFrame
+  truth-value error, with rnaseq simply going without (RS-C5). This is the widest QC table
+  in every report and no new kind recovers it.
+- **`_col_annotations_json` on `complex_heatmap`.** differentialabundance computes the
+  sample annotation strip in both heatmap recipes and the `advanced_viz` renderer ignores
+  it; only the legacy `visu_type: heatmap` path reads it. An existing kind under-powered,
+  not a missing one.
+
+### Still missing, for pipelines outside this lot
+
+V-to-J pairing at scale (airrflow full rearrangement tables), 96-context mutational
+signature and circos (oncoanalyser), knee plot (scrnaseq), isomiR ladder (smrnaseq),
+jplace reader (phyloplace), assembly graph (bacass).
 
 Also: the `phylogenetic` kind has no catalog output binding it, and `upset_plot` and
 `sankey` can only be bound through a dashboard `config:` block because their roles are
