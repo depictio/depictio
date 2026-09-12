@@ -18,6 +18,7 @@ import polars as pl
 
 from depictio.api.v1.services.figure.groups import (
     GROUP_COLUMN,
+    GROUP_COLUMN_ABSENT,
     OTHER_LABEL,
     group_annotation_expr,
 )
@@ -59,7 +60,8 @@ def compute_group_compare(
         {"aggregation": str,
          "groups": [{"name", "color", "value", "count"[, "payload"]}, ...],
          "other": {"value", "count"[, "payload"]} | None
-         [, "overall": {"value", "count"[, "payload"]}]}
+         [, "overall": {"value", "count"[, "payload"]}]
+         [, "omitted": [{"name": str, "status": "column_absent"}, ...]]}
 
     Groups with no matching rows in this frame still appear (value ``None``,
     count 0) so the client's chip strip keeps one chip per group everywhere —
@@ -67,10 +69,20 @@ def compute_group_compare(
     on another data collection's column is *omitted* rather than shown as
     "0 rows": its rows can't be told apart from ``Other`` here, and an empty
     chip would misread as "no matches".
+
+    ``omitted`` names those groups — present only when there are any. Callers
+    are expected to have run ``resolve_group_defs_for_dc`` first, so anything
+    landing here was not reachable through a project link either; the key exists
+    so the omission is never invisible, whatever the caller did upstream.
     """
     if column not in df.columns:
         return None
     applicable = [g for g in group_defs if g["column_name"] in df.columns]
+    omitted = [
+        {"name": g["name"], "status": GROUP_COLUMN_ABSENT}
+        for g in group_defs
+        if g["column_name"] not in df.columns
+    ]
     if not applicable:
         return None
     expr = group_annotation_expr(applicable, df.columns, dict(df.schema))
@@ -115,4 +127,6 @@ def compute_group_compare(
     result = {"aggregation": aggregation, "groups": groups_out, "other": entry(OTHER_LABEL)}
     if include_overall:
         result["overall"] = reduce_frame(df)
+    if omitted:
+        result["omitted"] = omitted
     return result

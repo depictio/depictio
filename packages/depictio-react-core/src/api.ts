@@ -9,6 +9,7 @@
 
 import type { BrandTheme } from './brandTheme';
 import { enqueueFetch } from './fetchQueue';
+import type { GroupStatusEntry } from './groupStatus';
 import type { GroupingDisplay, GroupRenderDef } from './selectionGroups';
 
 const API_BASE = '/depictio/api/v1';
@@ -893,6 +894,11 @@ export interface FigureResponse {
     full_data_loaded?: boolean;
     /** True when the figure was colored by the caller's selection groups. */
     group_colored?: boolean;
+    /** Per-group account of whether each saved group could reach this frame —
+     *  directly, through a declared link, or not at all. Answers a different
+     *  question from `group_colored`: a visu type can decline the override with
+     *  every group resolved. Present whenever group coloring was requested. */
+    group_status?: GroupStatusEntry[];
     /** Column the figure was actually colored by (global "Color by" mode),
      *  null/absent when the override didn't apply to this frame. */
     column_colored?: string | null;

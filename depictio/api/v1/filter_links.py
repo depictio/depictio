@@ -393,6 +393,72 @@ def clear_link_resolution_cache():
     _link_resolution_cache.clear()
 
 
+def _project_links(project_metadata: dict | None) -> tuple[str, list[dict]]:
+    """``(project_id, declared links)`` out of a project-metadata envelope.
+
+    Resolves template-time ``tag:`` link placeholders on the way out (see
+    ``resolve_link_tag_refs``) so every caller walks a graph of real ids.
+    """
+    project_data = (project_metadata or {}).get("project", {}) or {}
+    resolve_link_tag_refs(project_data)
+    return str(project_data.get("_id", "")), list(project_data.get("links") or [])
+
+
+def resolve_values_via_links(
+    project_metadata: dict | None,
+    origin_dc_id: str,
+    origin_column: str,
+    values: list,
+    target_dc_id: str,
+    access_token: str | None,
+    component_type: str = "unknown",
+) -> tuple[str, list] | None:
+    """Translate one value set from one data collection onto another.
+
+    The single-translation entry point shared by the two cross-DC features.
+    Dashboard filters go through ``extend_filters_via_links``, which emits one
+    synthetic filter per declared route because a component can carry several
+    filters at once. A *selection group* needs exactly one answer — it annotates
+    one column — so here the SHORTEST declared route wins and the rest are not
+    walked: a second route naming a different target column has nothing to add,
+    and walking it would only cost another resolution.
+
+    Returns ``(target_column, target_values)``, or ``None`` when no usable route
+    exists. The two are not the same and must not be conflated (same rule as
+    ``_walk_link_path``): an empty ``target_values`` means the route resolved,
+    to nothing — the values are satisfiable on the origin but name no row here.
+
+    ``target_column`` is whatever ``_link_target_column`` decides — the
+    resolver's explicit column, else the link's ``target_field``, else the
+    link's ``source_column`` (the join column). Never ``origin_column``: that
+    names something the target DC may not have, and a caller that used it would
+    match nothing or, worse, everything.
+
+    Raises ``LinkResolutionError`` when a hop could not be resolved at all.
+    """
+    if not (origin_dc_id and origin_column and values and target_dc_id and access_token):
+        return None
+    if origin_dc_id == target_dc_id:
+        return None
+
+    project_id, project_links = _project_links(project_metadata)
+    if not project_id or not project_links:
+        return None
+
+    for path in sorted(_link_paths(project_links, origin_dc_id, target_dc_id), key=len):
+        target_column, resolved_values = _walk_link_path(
+            path=path,
+            project_id=project_id,
+            origin_column=origin_column,
+            origin_values=list(values),
+            access_token=access_token,
+            component_type=component_type,
+        )
+        if target_column:
+            return target_column, resolved_values
+    return None
+
+
 def extend_filters_via_links(
     target_dc_id: str,
     filters_by_dc: dict,
@@ -427,12 +493,7 @@ def extend_filters_via_links(
         )
         return link_filters
 
-    project_data = project_metadata.get("project", {})
-    # Resolve template-time ``tag:`` link placeholders before walking the
-    # graph — see ``resolve_link_tag_refs``.
-    resolve_link_tag_refs(project_data)
-    project_id = str(project_data.get("_id", ""))
-    project_links = project_data.get("links", [])
+    project_id, project_links = _project_links(project_metadata)
 
     if not project_id or not project_links:
         return link_filters
