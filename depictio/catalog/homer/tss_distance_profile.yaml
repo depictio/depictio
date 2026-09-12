@@ -7,7 +7,7 @@ description: >-
   means the peaks are promoter-bound; a flat curve means they sit across gene
   bodies and intergenic space.
 find:
-  path_glob: "**/*.annotatePeaks.txt"
+  path_glob: "**/*_peaks.annotatePeaks.txt"
 recipe: homer/tss_distance_profile.py
 fixture: tss_distance_profile.tsv
 renders_as:
