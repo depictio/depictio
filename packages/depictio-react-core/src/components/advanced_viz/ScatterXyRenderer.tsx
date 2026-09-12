@@ -26,6 +26,7 @@ import {
   filtersExcludingOwn,
 } from '../../selection';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { looksContinuous } from './colourScales';
 import {
   applyDataTheme,
   applyLayoutTheme,
@@ -34,6 +35,8 @@ import {
   plotlyThemeFragment,
 } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
+import { splitFigureByGroups } from './groupSplit';
+import type { GroupRenderState } from '../../selectionGroups';
 
 type LegendPos = 'right' | 'bottom' | 'none';
 type ReferenceLine = 'none' | 'diagonal' | 'horizontal' | 'vertical';
@@ -70,6 +73,8 @@ interface Props {
   filters: InteractiveFilter[];
   refreshTick?: number;
   onFilterChange?: (filter: InteractiveFilter) => void;
+  /** Dashboard-wide analysis grouping, applied to the finished figure. */
+  groupRender?: GroupRenderState;
 }
 
 // Sent so the server applies this kind's reduction policy: `KIND_SAMPLING_POLICY`
@@ -103,22 +108,6 @@ const PLOT_CONFIG_SELECT = {
 const COLOUR_SCALES = ['Viridis', 'Cividis', 'RdBu', 'Blackbody'] as const;
 
 const PALETTE = TAB10_PALETTE;
-
-/** Categorical until proven numeric: a colour column of run ids that happen to
- *  be integers should still get discrete swatches, so a value only counts as
- *  numeric when every non-null entry parses AND the column has more distinct
- *  values than a small palette would exhaust. */
-function looksNumeric(values: unknown[]): boolean {
-  let seen = 0;
-  const distinct = new Set<string>();
-  for (const v of values) {
-    if (v === null || v === undefined || v === '') continue;
-    if (!Number.isFinite(Number(v))) return false;
-    seen += 1;
-    if (distinct.size <= 12) distinct.add(String(v));
-  }
-  return seen > 0 && distinct.size > 12;
-}
 
 const num = (v: unknown): number | null => {
   if (v === null || v === undefined || v === '') return null;
@@ -167,7 +156,7 @@ ScatterXyPlot.displayName = 'ScatterXyPlot';
  * column, a `custom_data` selection key, a reference diagonal or a log axis, so
  * those four are what this renderer exists to make declarable.
  */
-const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilterChange }) => {
+const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilterChange, groupRender }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
   const palette = resolveCategoricalPalette(theme, PALETTE);
@@ -304,7 +293,7 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
   }, [rows, config.x_col, config.y_col, config.label_col, config.color_col, config.size_col, selectionColumn]);
 
   const numericColour = useMemo(
-    () => Boolean(config.color_col && points && looksNumeric(points.map((p) => p.colour))),
+    () => Boolean(config.color_col && points && looksContinuous(points.map((p) => p.colour))),
     [config.color_col, points],
   );
 
@@ -685,6 +674,23 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
     </Stack>
   );
 
+  // Recolour by the dashboard's analysis groups. Slot 0 of `customdata` is
+  // the point's key (the label column), which is what a lasso on this tile
+  // captures — so the groups a user builds here are the ones it reads back.
+  // `splitFigureByGroups` returns the figure untouched when nothing matches.
+  const groupedFigure = useMemo(
+    () =>
+      figure
+        ? splitFigureByGroups(figure, {
+            groupRender,
+            identitySlot: 0,
+            facetable: false,
+            showLegend: true,
+          })
+        : figure,
+    [figure, groupRender],
+  );
+
   return (
     <AdvancedVizFrame
       estimated={estimated}
@@ -698,9 +704,9 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
     >
-      {figure ? (
+      {groupedFigure ? (
         <ScatterXyPlot
-          figure={figure}
+          figure={groupedFigure}
           isDark={isDark}
           theme={theme}
           plotConfig={selectionEnabled ? PLOT_CONFIG_SELECT : PLOT_CONFIG_PLAIN}

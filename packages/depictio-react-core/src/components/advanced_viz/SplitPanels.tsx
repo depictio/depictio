@@ -103,20 +103,32 @@ const SplitPanels: React.FC<SplitPanelsProps> = ({
   const signatures = React.useRef<Array<string | null>>([]);
   const settled = React.useRef(false);
 
-  const publisherFor = React.useCallback(
-    (index: number) => (payload: AdvancedVizExtrasPayload | null) => {
-      if (index === 0) outerPublish?.(payload);
-      if (settled.current) return;
-      signatures.current[index] = rowsSignature(payload?.data?.rows);
-      const reported = signatures.current;
-      if (reported.length < panels.length) return;
-      if (reported.some((s) => s == null)) return;
-      if (reported.every((s) => s === reported[0])) {
-        settled.current = true;
-        onIneffective();
-      }
-    },
-    [outerPublish, onIneffective, panels.length],
+  // One publisher per cell, built once. These become the context value each
+  // panel's `AdvancedVizFrame` depends on in its publish effect, so a fresh
+  // closure per render would re-fire that effect, which calls `outerPublish`,
+  // which setStates in the dispatch, which re-renders this — an update loop
+  // React aborts with "Maximum update depth exceeded", leaving the tile
+  // half-drawn. Keyed on the count rather than the array: `panels` is rebuilt
+  // by the dispatch on every render.
+  const panelCount = panels.length;
+  const publishers = React.useMemo(
+    () =>
+      Array.from(
+        { length: panelCount },
+        (_, index) => (payload: AdvancedVizExtrasPayload | null) => {
+          if (index === 0) outerPublish?.(payload);
+          if (settled.current) return;
+          signatures.current[index] = rowsSignature(payload?.data?.rows);
+          const reported = signatures.current;
+          if (reported.length < panelCount) return;
+          if (reported.some((s) => s == null)) return;
+          if (reported.every((s) => s === reported[0])) {
+            settled.current = true;
+            onIneffective();
+          }
+        },
+      ),
+    [outerPublish, onIneffective, panelCount],
   );
 
   React.useEffect(() => {
@@ -164,7 +176,7 @@ const SplitPanels: React.FC<SplitPanelsProps> = ({
             {panel.name}
           </div>
           <div style={{ flex: 1, minHeight: 0 }}>
-            <AdvancedVizExtrasProvider onChange={publisherFor(i)}>
+            <AdvancedVizExtrasProvider onChange={publishers[i]}>
               {renderPanel(panelFilters(filters, panel), panel.name)}
             </AdvancedVizExtrasProvider>
           </div>

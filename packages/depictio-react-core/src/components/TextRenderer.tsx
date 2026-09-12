@@ -1,8 +1,9 @@
 import React, { useRef } from 'react';
-import { Stack, Text, Title } from '@mantine/core';
+import { Anchor, Stack, Text, Title } from '@mantine/core';
 
 import { StoredMetadata } from '../api';
 import { useAutofitHeight } from './autofit';
+import { parseInlineMarkdown } from './inlineMarkdown';
 
 interface TextRendererProps {
   metadata: StoredMetadata;
@@ -12,49 +13,48 @@ interface TextRendererProps {
 }
 
 /**
- * Tiny inline-markdown parser for the body field. Handles the three formats
- * users reach for in section descriptions:
- *   `**bold**`   -> <strong>
- *   `*italic*`   -> <em>
- *   \`code\`     -> <code>
- *
- * We deliberately do NOT pull in react-markdown / remark / rehype — the body
- * is a single paragraph, and a regex pass is ~30 lines vs ~30 KB of deps.
- * Anything more complex (links, lists, images) should use a proper image /
- * table / link component instead.
+ * Maps the body's inline-markdown tokens to React nodes. The grammar itself
+ * lives in `inlineMarkdown.ts` so it can be unit-tested without a DOM.
  */
-const renderInlineMarkdown = (input: string): React.ReactNode[] => {
-  // Pattern order matters: `code` first (greedy backticks), then `**bold**`
-  // (two-asterisk), then `*italic*` (single-asterisk). The capture groups
-  // come back in lockstep with the split() chunks.
-  const pattern = /(`[^`\n]+`|\*\*[^*\n]+\*\*|\*[^*\n]+\*)/g;
-  const parts = input.split(pattern);
-  return parts.map((part, idx) => {
-    if (!part) return null;
-    if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
-      return <strong key={idx}>{part.slice(2, -2)}</strong>;
+const renderInlineMarkdown = (input: string): React.ReactNode[] =>
+  parseInlineMarkdown(input).map((token, idx) => {
+    switch (token.type) {
+      case 'bold':
+        return <strong key={idx}>{token.value}</strong>;
+      case 'italic':
+        return <em key={idx}>{token.value}</em>;
+      case 'code':
+        return (
+          <code
+            key={idx}
+            style={{
+              background: 'var(--mantine-color-default-hover, rgba(127,127,127,0.12))',
+              padding: '1px 4px',
+              borderRadius: 3,
+              fontSize: '0.92em',
+            }}
+          >
+            {token.value}
+          </code>
+        );
+      case 'link':
+        return (
+          <Anchor
+            key={idx}
+            href={token.href}
+            // A dashboard is a working surface: an outbound link opens beside
+            // it, never over it. Same-origin paths navigate in place.
+            target={token.external ? '_blank' : undefined}
+            rel={token.external ? 'noopener noreferrer' : undefined}
+            inherit
+          >
+            {token.value}
+          </Anchor>
+        );
+      default:
+        return <React.Fragment key={idx}>{token.value}</React.Fragment>;
     }
-    if (part.startsWith('*') && part.endsWith('*') && part.length >= 3) {
-      return <em key={idx}>{part.slice(1, -1)}</em>;
-    }
-    if (part.startsWith('`') && part.endsWith('`') && part.length >= 3) {
-      return (
-        <code
-          key={idx}
-          style={{
-            background: 'var(--mantine-color-default-hover, rgba(127,127,127,0.12))',
-            padding: '1px 4px',
-            borderRadius: 3,
-            fontSize: '0.92em',
-          }}
-        >
-          {part.slice(1, -1)}
-        </code>
-      );
-    }
-    return <React.Fragment key={idx}>{part}</React.Fragment>;
   });
-};
 
 /**
  * Pure-presentational renderer for the `text` component_type — section
