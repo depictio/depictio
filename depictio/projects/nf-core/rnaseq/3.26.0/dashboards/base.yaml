@@ -19,15 +19,15 @@ main_dashboard:
     description: Which samples, conditions and replicates every tab is about
     persistent: true
     pin: top
-  # Right panel, in reading order: the run summary, then the QC funnel in the
-  # order the pipeline runs it (reads, alignment, quantification, transcript
-  # QC). `Reference tables` is persistent and pinned to the bottom so the raw
-  # rows trail every tab.
+  # Right panel, in reading order: the QC funnel in the order the pipeline runs
+  # it (reads, alignment, quantification, transcript QC). This tab is named
+  # MultiQC and carries MultiQC panels only, so the cards that summarise the
+  # run design sit in `Sample sheet`, above the sheet they are computed from.
+  # `Sample sheet` is pinned to the top and `Reference tables` to the bottom,
+  # so the cohort the whole dashboard is filtered by and the raw rows every
+  # tile is computed from trail each tab. Both are declared here, on the tab no
+  # route conditional can remove.
   grid_sections:
-  - name: Run at a glance
-    icon: mdi:counter
-    color: indigo
-    description: What was sequenced and how the design is laid out
   - name: Read quality
     icon: mdi:chart-bell-curve
     color: blue
@@ -45,91 +45,21 @@ main_dashboard:
     color: grape
     description: Where the reads landed on the transcriptome and whether duplication tracks expression
     collapsed: true
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: teal
+    description: The cohort every other tab is filtered by, and the design it lays out
+    collapsed: true
+    persistent: true
+    pin: top
   - name: Reference tables
     icon: mdi:table
     color: gray
-    description: The samplesheet and the raw merged count matrix behind every tile, on every tab
+    description: The raw merged count matrix behind every tile, on every tab
     collapsed: true
     persistent: true
     pin: bottom
   components:
-  # ---------------------------------------------------------------- at a glance
-  - component_type: text
-    tag: rna-qc-intro
-    section: Run at a glance
-    workflow_tag: rnaseq
-    data_collection_tag: samplesheet
-    title: The run, end to end
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Cards summarise the experimental design, then the panels below follow the
-      pipeline: raw reads, trimming, STAR alignment, Salmon quantification, and
-      the transcript-level QC that says whether the libraries are usable.
-    layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: card
-    tag: rna-qc-card-samples
-    section: Run at a glance
-    workflow_tag: rnaseq
-    data_collection_tag: samplesheet
-    aggregation: nunique
-    column_name: sample
-    column_type: object
-    secondary_layout: top_n
-    breakdown_col: condition
-    top_n_count: 4
-    display: {icon_name: 'mdi:flask', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
-    title: Samples
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 1, w: 2, h: 2}
-  - component_type: card
-    tag: rna-qc-card-conditions
-    section: Run at a glance
-    workflow_tag: rnaseq
-    data_collection_tag: samplesheet
-    aggregation: nunique
-    column_name: condition
-    column_type: object
-    secondary_layout: donut
-    breakdown_col: condition
-    display: {icon_name: 'mdi:shape-outline', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
-    title: Conditions
-    title_size: sm
-    title_align: left
-    layout: {x: 2, y: 1, w: 2, h: 2}
-  - component_type: card
-    tag: rna-qc-card-replicates
-    section: Run at a glance
-    workflow_tag: rnaseq
-    data_collection_tag: samplesheet
-    aggregation: max
-    column_name: replicate
-    column_type: int64
-    secondary_layout: histogram
-    display: {icon_name: 'mdi:counter', icon_color: '#7B1FA2', title_color: '#7B1FA2', title_font_size: xl, value_font_size: xl}
-    title: Replicates per condition
-    title_size: sm
-    title_align: left
-    layout: {x: 4, y: 1, w: 2, h: 2}
-  - component_type: card
-    tag: rna-qc-card-strandedness
-    section: Run at a glance
-    workflow_tag: rnaseq
-    data_collection_tag: samplesheet
-    aggregation: nunique
-    column_name: strandedness
-    column_type: object
-    secondary_layout: composition
-    breakdown_col: strandedness
-    display: {icon_name: 'mdi:arrow-left-right', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
-    title: Declared strandedness
-    title_size: sm
-    title_align: left
-    layout: {x: 6, y: 1, w: 2, h: 2}
-
   # --------------------------------------------------------------- read quality
   - component_type: text
     tag: rna-qc-reads-intro
@@ -142,10 +72,28 @@ main_dashboard:
     order: 2
     alignment: left
     body: >
-      FastQC ran twice, on the raw reads and again after Trim Galore. Reading the
-      two side by side is what tells you whether a quality or adapter problem was
-      actually removed or only hidden.
+      [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) ran
+      twice, on the raw reads and again after
+      [Trim Galore](https://www.bioinformatics.babraham.ac.uk/projects/trim_galore/)
+      . Reading the two side by side is what tells you whether a quality or
+      adapter problem was actually removed or only hidden. The sections after
+      it follow the pipeline: [STAR](https://github.com/alexdobin/STAR)
+      alignment, [Salmon](https://combine-lab.github.io/salmon/)
+      quantification and transcript QC.
     layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    tag: rna-qc-general-stats
+    section: Read quality
+    workflow_tag: rnaseq
+    data_collection_tag: multiqc_data
+    use: multiqc/general_stats
+    selected_module: general_stats
+    selected_plot: general_stats
+    title: General statistics
+    description: One row per library, pooling the FastQC, Trim Galore, STAR, Salmon, samtools, Picard, RSeQC, Qualimap and dupRadar headline numbers. The per-read rows are named after the read rather than the sample, so a sample filter drops them instead of narrowing them.
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 1, w: 8, h: 5}
   - component_type: multiqc
     tag: rna-qc-fastqc-raw-counts
     section: Read quality
@@ -157,7 +105,7 @@ main_dashboard:
     title: Raw sequence counts
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 1, w: 4, h: 5}
+    layout: {x: 0, y: 6, w: 4, h: 5}
   - component_type: multiqc
     tag: rna-qc-fastqc-raw-quality
     section: Read quality
@@ -169,7 +117,7 @@ main_dashboard:
     title: Raw per-base quality
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 1, w: 4, h: 5}
+    layout: {x: 4, y: 6, w: 4, h: 5}
   - component_type: multiqc
     tag: rna-qc-cutadapt-filtered
     section: Read quality
@@ -181,7 +129,7 @@ main_dashboard:
     title: Reads kept by Trim Galore
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 6, w: 4, h: 5}
+    layout: {x: 0, y: 11, w: 4, h: 5}
   - component_type: multiqc
     tag: rna-qc-fastqc-trimmed-quality
     section: Read quality
@@ -193,7 +141,7 @@ main_dashboard:
     title: Trimmed per-base quality
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 6, w: 4, h: 5}
+    layout: {x: 4, y: 11, w: 4, h: 5}
   - component_type: multiqc
     tag: rna-qc-fastqc-trimmed-status
     section: Read quality
@@ -205,7 +153,7 @@ main_dashboard:
     title: FastQC status after trimming
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 11, w: 8, h: 5}
+    layout: {x: 0, y: 16, w: 8, h: 5}
 
   # ----------------------------------------------------------------- alignment
   - component_type: text
@@ -219,9 +167,10 @@ main_dashboard:
     order: 2
     alignment: left
     body: >
-      A low uniquely-mapped share points at contamination or the wrong reference;
-      a high multimapping share points at repeats or rRNA. The Picard panel shows
-      how much of what was mapped was then marked duplicate.
+      A low uniquely-mapped share points at contamination or the wrong
+      reference; a high multimapping share points at repeats or rRNA. The
+      [Picard](https://broadinstitute.github.io/picard/) panel shows how much
+      of what was mapped was then marked duplicate.
     layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: multiqc
     tag: rna-qc-star-summary
@@ -274,8 +223,9 @@ main_dashboard:
     body: >
       Salmon reports the fragment-length distribution it inferred. The
       strandedness panels compare what the samplesheet declared against what
-      Salmon and RSeQC measured, and the DESeq2 PCA is the pipeline's own view of
-      how the libraries group.
+      Salmon and RSeQC measured, and the
+      [DESeq2](https://bioconductor.org/packages/DESeq2) PCA is the pipeline's
+      own view of how the libraries group.
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: multiqc
     tag: rna-qc-salmon-fld
@@ -336,10 +286,11 @@ main_dashboard:
     order: 2
     alignment: left
     body: >
-      RSeQC and Qualimap split the alignments by transcript feature: a library
-      heavy in introns or intergenic space is one where the RNA, not the
-      sequencing, went wrong. dupRadar separates natural high-expression
-      duplicates from library-preparation ones.
+      RSeQC and [Qualimap](http://qualimap.conesalab.org/) split the
+      alignments by transcript feature: a library heavy in introns or
+      intergenic space is one where the RNA, not the sequencing, went wrong.
+      dupRadar separates natural high-expression duplicates from
+      library-preparation ones.
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: multiqc
     tag: rna-qc-rseqc-distribution
@@ -402,25 +353,74 @@ main_dashboard:
     title_align: left
     layout: {x: 0, y: 12, w: 8, h: 5}
 
-  # ----------------------------------------------------------- reference tables
-  - component_type: text
-    tag: rna-tables-intro
-    section: Reference tables
+  # ------------------------------------------------------------------ samplesheet
+  # The four design cards are computed from the samplesheet, so they live with
+  # it: one full row of four `w: 2` cards above the sheet itself. The section
+  # is persistent and pinned to the top, so they still open every tab, and the
+  # MultiQC tab stays MultiQC only.
+  - component_type: card
+    tag: rna-qc-card-samples
+    section: Sample sheet
     workflow_tag: rnaseq
     data_collection_tag: samplesheet
-    title: The rows behind every tile
+    aggregation: nunique
+    column_name: sample
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: condition
+    top_n_count: 4
+    display: {icon_name: 'mdi:flask', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
+    title: Samples
     title_size: sm
     title_align: left
-    order: 2
-    alignment: left
-    body: >
-      The samplesheet the run was given, with the condition and replicate its
-      sample names encode, and the raw merged count matrix tximport wrote.
-      Filters picked in the left panel narrow both.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: rna-qc-card-conditions
+    section: Sample sheet
+    workflow_tag: rnaseq
+    data_collection_tag: samplesheet
+    aggregation: nunique
+    column_name: condition
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: condition
+    display: {icon_name: 'mdi:shape-outline', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
+    title: Conditions
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: rna-qc-card-replicates
+    section: Sample sheet
+    workflow_tag: rnaseq
+    data_collection_tag: samplesheet
+    aggregation: max
+    column_name: replicate
+    column_type: int64
+    secondary_layout: histogram
+    display: {icon_name: 'mdi:counter', icon_color: '#7B1FA2', title_color: '#7B1FA2', title_font_size: xl, value_font_size: xl}
+    title: Replicates per condition
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: rna-qc-card-strandedness
+    section: Sample sheet
+    workflow_tag: rnaseq
+    data_collection_tag: samplesheet
+    aggregation: nunique
+    column_name: strandedness
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: strandedness
+    display: {icon_name: 'mdi:arrow-left-right', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
+    title: Declared strandedness
+    title_size: sm
+    title_align: left
+    layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: table
     tag: rna-table-samplesheet
-    section: Reference tables
+    section: Sample sheet
     workflow_tag: rnaseq
     data_collection_tag: samplesheet
     row_selection_enabled: false
@@ -428,7 +428,24 @@ main_dashboard:
     description: One row per sample, with the condition and replicate parsed from its name.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 1, w: 8, h: 4}
+    layout: {x: 0, y: 2, w: 8, h: 4}
+
+  # ----------------------------------------------------------- reference tables
+  - component_type: text
+    tag: rna-tables-intro
+    section: Reference tables
+    workflow_tag: rnaseq
+    data_collection_tag: gene_counts
+    title: The rows behind every tile
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The raw merged count matrix tximport wrote, before any normalisation.
+      Filters picked in the left panel narrow it too; the samplesheet those
+      filters read sits in its own section at the top of every tab.
+    layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: table
     tag: rna-table-gene-counts
     section: Reference tables
@@ -441,7 +458,7 @@ main_dashboard:
     description: Estimated counts per gene and sample, the matrix a differential-expression tool is handed.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 5, w: 8, h: 5}
+    layout: {x: 0, y: 1, w: 8, h: 5}
 
   # -------------------------------------------------------------- left panel
   - component_type: interactive
@@ -612,10 +629,11 @@ tabs:
     order: 2
     alignment: left
     body: >
-      The embedding is a PCA of the log2(TPM + 1) matrix over its most variable
-      genes, coloured by condition. Selecting points, or rows in the table below,
-      narrows the heatmap and the gene explorer to those libraries. The MultiQC
-      panel beside it is the pipeline's own sample-distance view.
+      The embedding is a PCA of the log2(TPM + 1) matrix over its most
+      variable genes, coloured by condition. Selecting points, or rows in the
+      table below, narrows the heatmap and the gene explorer to those
+      libraries. The [MultiQC](https://multiqc.info) panel beside it is the
+      pipeline's own sample-distance view.
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: advanced_viz
     tag: rna-ovw-pca
@@ -742,7 +760,7 @@ tabs:
     layout: {x: 0, y: 6, w: 1, h: 3}
 
 - title: Expression heatmap
-  subtitle: The 500 most variable genes, clustered, with the condition annotation on top
+  subtitle: The 500 most variable genes, clustered, with the samplesheet design on top
   tab_order: 2
   tab_icon: mdi:grid
   tab_icon_color: grape
@@ -778,8 +796,9 @@ tabs:
     body: >
       Genes are ranked by variance across the libraries on the log2(TPM + 1)
       scale and the top 500 are kept, so the block structure you see is the
-      structure the conditions actually impose. The strip above the columns is
-      the condition each library belongs to.
+      structure the conditions actually impose. The strips above the columns
+      are what the samplesheet declared each library to be, and only the
+      fields that actually vary across this run get one.
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: advanced_viz
     tag: rna-heat-heatmap
@@ -793,6 +812,13 @@ tabs:
       cluster_cols: true
       normalize: row_z
       colorscale: RdBu
+      # Pulled from the samplesheet DC through the declared link, which is the
+      # only one into this matrix whose source is metatype Metadata. The other
+      # link in (sample_overview) is a derived stats table and stays ineligible.
+      # These are the four the sheet can describe a library by; a run where one
+      # of them is constant (the megatest is paired-end and reverse throughout)
+      # simply does not get that strip.
+      col_annotation_cols: [condition, replicate, read_type, strandedness]
     title: Top 500 variable genes
     description: Row-normalised log2(TPM + 1). Rows and columns are clustered, so replicates of one condition should form a block.
     title_size: h3
@@ -987,6 +1013,13 @@ tabs:
     use: salmon/gene_expression
     mode: code
     code_content: |
+      # The axis this figure compares on: the dashboard's analysis groups when
+      # the viewer has made some, else the samplesheet's own condition. One
+      # grouping axis, not two stacked on each other.
+      grp_col = depictio_group_by[0] if depictio_group_by else 'group'
+      if grp_col not in df.columns:
+          grp_col = 'group'
+      colors = depictio_group_kwargs.get('color_discrete_map') or {}
       # Cap the genes drawn: the box plot is a comparison of a handful of genes,
       # and an unfiltered frame would put thousands of boxes on one axis.
       top_genes = (
@@ -996,14 +1029,16 @@ tabs:
           .head(12)['gene_name']
           .to_list()
       )
-      df_modified = df.filter(pl.col('gene_name').is_in(top_genes)).sort(['gene_name', 'group'])
+      df_modified = df.filter(pl.col('gene_name').is_in(top_genes)).sort(['gene_name', grp_col])
       fig = px.box(
-          df_modified.to_pandas(), x='gene_name', y='log2_tpm', color='group',
+          df_modified.to_pandas(), x='gene_name', y='log2_tpm', color=grp_col,
+          color_discrete_map=colors,
           points='all', hover_name='sample', custom_data=['gene_name'],
       )
       fig.update_layout(
           xaxis_title='Gene', yaxis_title='log2(TPM + 1)',
-          legend_title_text='Condition', boxmode='group',
+          legend_title_text='Group' if depictio_group_by else 'Condition',
+          boxmode='group',
           margin={'t': 24, 'l': 64, 'r': 16, 'b': 88},
       )
       fig.update_xaxes(tickangle=-40)

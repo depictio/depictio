@@ -1,7 +1,7 @@
 # nf-core/cutandrun 3.1: Depictio dashboards
 
 This template turns the output of [nf-core/cutandrun](https://nf-co.re/cutandrun) 3.1 into a
-single four-tab Depictio dashboard. cutandrun trims and aligns CUT&RUN libraries against both
+single five-tab Depictio dashboard. cutandrun trims and aligns CUT&RUN libraries against both
 the target genome and a spike-in, converts the alignments to fragment coverage, calls
 enriched regions with SEACR against the IgG control (and, optionally, with MACS2 over the
 same fragments), and merges the calls of each target into a consensus set. The dashboard
@@ -14,52 +14,57 @@ H3K27me3 in two replicates each, plus two IgG controls.
 
 > **This template reads a REPROCESSED MultiQC report.**
 > cutandrun 3.1 published MultiQC 1.14, which writes `multiqc_data.json` and no parquet.
-> Depictio reads only `multiqc.parquet` (MultiQC 1.31 and later), so the QC tab is bound to a
-> report this repository generates by re-running the pinned MultiQC 1.35 over the run's own
-> raw tool outputs. Unlike chipseq and atacseq, 1.14 already parsed every module 1.35 does
-> for this run, so the reprocess buys the format and not new panels. It is still mandatory:
-> without it the QC tab is empty. See the Reproducing section below and
+> Depictio reads only `multiqc.parquet` (MultiQC 1.31 and later), so the MultiQC tab is bound
+> to a report this repository generates by re-running the pinned MultiQC 1.35 over the run's
+> own raw tool outputs. Unlike chipseq and atacseq, 1.14 already parsed every module 1.35
+> does for this run, so the reprocess buys the format and not new panels. It is still
+> mandatory: without it the MultiQC tab is empty. See the Reproducing section below and
 > `VALIDATION_REPORT.md`.
 
 ---
 
 ## How the dashboard is built
 
-- **One funnel, four tabs.** Sequencing and enrichment QC, then Peak calls, then Caller
-  agreement, then Consensus and reproducibility. Each tab answers the question the previous
-  one raises: are the libraries clean and is the target enriched over its control, what did
-  each caller call, how much of that the two callers share, and how much of it both
-  replicates of a target support.
+- **One funnel, five tabs.** MultiQC, then Signal, then Peak calls, then Caller agreement,
+  then Consensus and reproducibility. Each tab answers the question the previous one raises:
+  are the libraries clean and is the target enriched over its control, what the signal
+  underneath that looks like, what did each caller call, how much of that the two callers
+  share, and how much of it both replicates of a target support.
 - **The sample hub is the hub.** `samples` is one row per library with its target, its
   replicate number and its role (target or control). A persistent `Sample filters` section
   (sample, target, role) is pinned to the top of every tab, and the template's links fan a
   pick there out to the MultiQC panels, both peak collections, the peak summary, the
   fragment-length tables and the caller comparison at once.
-- **Pinned reference tables and thresholds.** The sample hub and the per-sample SEACR summary
-  sit in a collapsed `Reference tables` section pinned to the bottom of every tab, next to a
-  collapsed `QC thresholds` section holding the yield and coverage floors.
+- **Pinned sample sheet, tables and thresholds.** The sample hub sits in a collapsed
+  `Sample sheet` section pinned to the top of every tab, and the per-sample SEACR summary in
+  a collapsed `Reference tables` section pinned to the bottom, next to a collapsed
+  `QC thresholds` section holding the yield and coverage floors.
 - **Selection, both ways.** The total-against-maximum-coverage scatter on the Peak calls tab
   carries `selection_enabled` on `peak_id` and both peak tables carry
   `row_selection_enabled` on the same column; the caller scatter on the Caller agreement tab
   and the comparison table do the same on `sample`. Lassoing narrows the tables, ticking rows
   narrows the panels.
-- **Catalog provenance.** 41 of the 81 tiles carry a `use:` catalog reference, so the tile
+- **Catalog provenance.** 45 of the 84 tiles carry a `use:` catalog reference, so the tile
   chrome says where the panel comes from: `seacr/*` for the SEACR panels, `macs2/*` for the
-  MACS2 comparison panels, and `multiqc/<module>` for the tool-module QC panels.
+  MACS2 comparison panels, `deeptools/*` for the three tables on the Signal tab, and
+  `multiqc/<module>` for the tool-module QC panels.
 - **Everything matches on file name.** No data collection or recipe glob spells out the
   numbered `03_peak_calling/` prefixes, so only `megatest.yaml` knows about the stage
   numbering and a reorganised release needs the manifest updated and nothing else.
 
 ---
 
-## Sequencing and enrichment QC
+## MultiQC
 
 The main tab, and the one reading the reprocessed report.
 
-`Run at a glance` is a four-card strip: SEACR regions called across the run with a breakdown
-by sample, the median region width as a Tukey box plot, the median coverage per base against
-a threshold, and the sample count broken down by role, which is the card that makes the two
-IgG controls visible.
+`Sample sheet`, collapsed at the top of every tab, holds the sample hub with a donut of the
+sample count by role beside its intro, which is the tile that makes the two IgG controls
+visible.
+
+`Run at a glance` opens the report itself with the general statistics table: one row per
+sample, pooling the FastQC, Trim Galore, bowtie2, samtools and MACS2 headline numbers, with a
+read toggle for the two reads of a pair.
 
 `Read quality` carries FastQC sequence counts, quality histograms and GC content, then the
 cutadapt kept reads.
@@ -73,21 +78,30 @@ target alignment looks fine.
 `Enrichment over the control` is the tab's point: the deepTools fingerprint curve and its
 quality metrics, which separate an enriched target from a flat IgG control, then the sample
 PCA and the sample correlation matrix. Those four panels are pictures MultiQC redraws from
-its own parquet; nf-core also publishes the three tables behind them, and three tiles below
-read those instead. `use: deeptools/fingerprint_scatter` puts every library on one plane,
-coverage concentration against divergence from a uniform library, so the targets separate
-from the IgG controls; `use: deeptools/pca_embedding` reads the `plotPCA` loadings with the
-variance each component explains; and `use: deeptools/correlation_heatmap` reads the
-correlation matrix itself, where a block spanning two targets is a swap or a contamination.
-
-`Fragment lengths` closes the tab with the nucleosomal ladder: four cards on the
-fragment-length table, a code-mode distribution figure and its cumulative twin. For H3K4me3
-the ladder should show a clear mononucleosome peak; a flat distribution means the digestion
-did not work.
+its own parquet; the three tables nf-core publishes behind them are read on the Signal tab.
 
 ---
 
-![Sequencing and enrichment QC](screenshots/sequencing-and-enrichment-qc.png)
+![MultiQC](screenshots/sequencing-and-enrichment-qc.png)
+
+## Signal
+
+What the run published as a table beside the report. None of it reaches a MultiQC panel: the
+fragment histogram and the three deepTools tables are files of their own.
+
+`Fragment length structure` is the nucleosomal ladder: four cards on the fragment-length
+table, a code-mode distribution figure and its cumulative twin. For H3K4me3 the ladder should
+show a clear mononucleosome peak; a flat distribution means the digestion did not work.
+
+`Coverage concentration and sample similarity` reads the three tables behind the deepTools
+panels on the MultiQC tab. `use: deeptools/fingerprint_scatter` puts every library on one
+plane, coverage concentration against divergence from a uniform library, so the targets
+separate from the IgG controls; `use: deeptools/pca_embedding` reads the `plotPCA` loadings
+with the variance each component explains; and `use: deeptools/correlation_heatmap` reads the
+correlation matrix itself, clustered on both axes, where a block spanning two targets is a
+swap or a contamination.
+
+---
 
 ## Peak calls
 
@@ -181,5 +195,5 @@ python -m depictio.cli run --template nf-core/cutandrun/3.1 \
 ```
 
 Step 2 is mandatory, not optional: without it `multiqc_data` finds no parquet and the whole
-QC tab is empty. Keep the first `REPROCESSED.json` or delete `multiqc/multiqc_data/` before
-re-running, because the source-version probe reads the parquet it just wrote.
+MultiQC tab is empty. Keep the first `REPROCESSED.json` or delete `multiqc/multiqc_data/`
+before re-running, because the source-version probe reads the parquet it just wrote.

@@ -1,7 +1,7 @@
 # nf-core/chipseq 1.2.0: Depictio dashboards
 
 This template turns the output of [nf-core/chipseq](https://nf-co.re/chipseq) 1.2.0 into a
-single four-tab Depictio dashboard. chipseq aligns ChIP and input libraries, filters and
+single five-tab Depictio dashboard. chipseq aligns ChIP and input libraries, filters and
 deduplicates them, calls peaks per sample with MACS2, annotates those peaks with HOMER, merges
 them into one consensus peak set per antibody and finally tests each consensus interval for
 differential binding with DESeq2. The dashboard follows that chain from left to right.
@@ -14,7 +14,7 @@ replicates each, every ChIP against its own input control.
 > **This template reads a REPROCESSED MultiQC report.**
 > chipseq 1.2.0 is a DSL1 pipeline and this run published MultiQC 1.9, which writes
 > `multiqc_data.json` and no parquet. Depictio reads only `multiqc.parquet` (MultiQC 1.31 and
-> later), so the QC tab is bound to a report this repository generates by re-running the
+> later), so the MultiQC tab is bound to a report this repository generates by re-running the
 > pinned MultiQC 1.35 over the run's own raw tool outputs. The published 1.9 report is not
 > used. Its anchors and plot names differ from the 1.35 ones the template is authored
 > against, so never copy a `selected_plot` out of the published HTML report: read it from
@@ -25,24 +25,27 @@ replicates each, every ChIP against its own input control.
 
 ## How the dashboard is built
 
-- **One funnel, four tabs.** Sequencing QC, then Peaks, then Consensus, then Differential
-  binding. Each tab answers the question the previous one raises: are the libraries and the
-  enrichment good, what did MACS2 call in each sample, which of those calls the replicates
-  agree on, and which of the agreed intervals change between conditions.
+- **One funnel, five tabs.** MultiQC, then Signal, then Peaks, then Consensus, then
+  Differential binding. Each tab answers the question the previous one raises: are the
+  libraries good, is each ChIP enriched over its own input, what did MACS2 call in each
+  sample, which of those calls the replicates agree on, and which of the agreed intervals
+  change between conditions.
 - **The design sheet is the hub.** `pipeline_info/design_controls.csv` is one row per ChIP
   sample with the input control it was called against and its antibody. A persistent
   `Sample filters` section (ChIP sample, antibody) is pinned to the top of every tab, and the
   template's links fan a pick there out to the MultiQC panels, the peak table, the peak QC
   summary and the HOMER annotation at once.
-- **Pinned reference tables.** The design sheet and the per-sample peak QC rows sit in a
-  collapsed `Reference tables` section pinned to the bottom, so the numbers behind the cards
-  are one click away from every tab.
-- **Peak-level selection, both ways.** The manhattan panel and the enrichment scatter on the
-  Peaks tab both carry `selection_enabled` on `peak_id`, and both peak tables carry
-  `row_selection_enabled` on the same column. Lassoing peaks on a panel narrows the tables,
-  ticking rows in a table narrows the panels, and the project links carry the selection
-  between the MACS2 and HOMER collections.
-- **Catalog provenance.** 43 of the 83 tiles carry a `use:` catalog reference, so the tile
+- **Pinned design and reference tables.** The design sheet sits in a collapsed `ChIP design`
+  section pinned to the top, with four cards counting the ChIP samples split by antibody, the
+  antibodies themselves, the input controls and the share of ChIPs whose antibody is
+  replicated; the per-sample peak QC rows sit in a collapsed `Reference tables` section
+  pinned to the bottom. Both follow the viewer from tab to tab, so the cohort and the numbers
+  behind the cards are one click away everywhere.
+- **Peak-level selection, both ways.** The manhattan panel on the Peaks tab carries
+  `selection_enabled` on `peak_id`, and both peak tables carry `row_selection_enabled` on the
+  same column. Lassoing peaks there narrows the tables, ticking rows in a table narrows the
+  panels, and the project links carry the selection between the MACS2 and HOMER collections.
+- **Catalog provenance.** 49 of the 97 tiles carry a `use:` catalog reference, so the tile
   chrome says where the panel comes from: `macs2/*` for the peak and consensus panels,
   `homer/annotated_peaks` for the annotation panels, `deseq2/*` for the differential binding
   panels and `multiqc/<module>` for the tool-module QC panels.
@@ -52,14 +55,14 @@ replicates each, every ChIP against its own input control.
 
 ---
 
-## Sequencing QC
+## MultiQC
 
 The main tab, and the one reading the reprocessed report.
 
-`Run at a glance` is a four-card strip on the per-sample peak QC summary, each card with a
-different secondary layout: peaks called with a top-3 breakdown by sample, the mean FRiP score
-on a gauge, median peak width as a Tukey box plot, and median fold enrichment against a
-threshold of 5.
+`Run summary` is the MultiQC General Statistics table: one row per library, pooling the
+FastQC, Trim Galore, samtools, Picard, MACS2 and phantompeakqualtools headline numbers. It is
+the one panel in the report that speaks for the run rather than for a single tool, so it is
+what the tab opens on, and the sections below take it apart module by module.
 
 `Read quality` carries FastQC sequence counts and quality histograms and the cutadapt filtered
 read bars. Every library appears here under its `<sample>_T<n>` technical-replicate name, so a
@@ -67,28 +70,41 @@ sample shows up once per library rather than once per sample.
 
 `Alignment and library complexity` pairs samtools percent mapped with Picard duplication, then
 the preseq complexity curve full width, then the featureCounts assignment bars that say how
-many reads fall inside the consensus peaks. Below them, the same preseq curves again but
-read from the tool's own output rather than the report: `use: preseq/complexity_ribbon`
-adds the 95% confidence band MultiQC drops, so a library whose extrapolation is guesswork
-is visible as a ribbon that fans out rather than as a line that looks as certain as any
-other.
+many reads fall inside the consensus peaks.
 
 `ChIP enrichment` is the tab's point: the deepTools fingerprint curve, which separates an
 enriched ChIP from a flat input, next to the FRiP scores, then the strand cross-correlation
-plot with the NSC and RSC coefficients derived from it, then the deepTools read-distribution
-profile around annotated genes. Two tiles then read the deepTools tables the report has no
-panel for: `use: deeptools/fingerprint_scatter` puts every library on one plane, coverage
-concentration against divergence from a uniform library, so the IPs separate from their
-inputs in one glance; and `use: deeptools/metagene_profile` draws the `plotProfile` matrix
-as one curve per library with the TSS marked at bin 300 and the scaled gene body shaded.
+plot with the NSC and RSC coefficients derived from it.
 
-The MultiQC General Statistics table is **not** bound on this tab. chipseq runs `samtools
-stats` and `samtools flagstat` over the same BAMs and both contribute a general-stats column
-titled "Reads mapped", which the API's general-stats payload collapses onto one label; the
-render answers 500. The panels above carry the same numbers. See `VALIDATION_REPORT.md`,
-CS-D3.
+Every tile on this tab reads the report. The panels that read a tool's own tables instead of
+MultiQC's rendering of them are on the Signal tab, next to the collections they come from.
 
-![Sequencing QC](screenshots/sequencing-qc.png)
+![MultiQC](screenshots/sequencing-qc.png)
+
+## Signal
+
+preseq, plotFingerprint and plotProfile each write a per-sample table beside the curve MultiQC
+renders. This tab reads those tables.
+
+`Signal at a glance` is a four-card strip on them: coverage concentration as a Tukey box plot,
+the mean divergence from the input on a gauge, the share of the genome called enriched as a
+histogram, and the strongest metagene signal with a top-3 breakdown by sample.
+
+`Library complexity` is `use: preseq/complexity_ribbon`, which adds the 95% confidence band
+MultiQC drops, so a library whose extrapolation is guesswork is visible as a ribbon that fans
+out rather than as a line that looks as certain as any other.
+
+`Coverage concentration` is `use: deeptools/fingerprint_scatter`, deepTools' own QC scatter:
+the share of the genome called enriched against the Jensen-Shannon distance to the input,
+point size the differential enrichment and colour how concentrated the coverage is against a
+uniform library of the same depth. Both axes need `--JSDsample`, so only the IP libraries
+carry a point; the inputs are the reference each IP is compared against.
+
+`Metagene signal` is `use: deeptools/metagene_profile`, the `plotProfile` matrix as one curve
+per library with the TSS marked at bin 300 and the scaled gene body shaded.
+
+Clicking a curve or a point on any of those three panels filters the dashboard to that
+library.
 
 ## Peaks
 
@@ -99,10 +115,10 @@ a threshold.
 `Significance along the genome` puts every peak at its summit position with -log10 of the
 MACS2 q-value as height, coloured by sample. It is the tab's selection source: lasso a region
 and the peak ids travel to the tables below and, through the project links, to the HOMER
-annotation. Beside it, a code-mode scatter of fold enrichment against significance for the
-2000 most significant peaks in view, point size the peak width, also selection enabled on
-`peak_id`; and a peak-width histogram per sample, which is what separates a sharp
-transcription-factor profile from a broad histone mark.
+annotation. Beside it, a volcano of the same significance against fold enrichment over input,
+with the q 1e-10 and five-fold lines drawn and the peaks past both drawn large; and a
+peak-width histogram per sample, which is what separates a sharp transcription-factor profile
+from a broad histone mark.
 
 `Where the peaks land` reads the HOMER annotation: cards for annotated peaks by feature class
 (donut), genes touched (composition by class), distance to TSS (box plot) and peak score
@@ -191,7 +207,8 @@ per-sample fingerprint metrics the panels leave out. See `TEMPLATE_BOTTLENECKS.m
 MultiQC parses but never publishes as data".
 
 `macs` and `phantompeakqualtools` are parsed by MultiQC but expose no plot, only
-general-statistics columns, so they get no catalog entry and no tile. chipseq's own
+general-statistics columns, so they get no catalog entry and no panel of their own; they
+reach the dashboard through the General Statistics table alone. chipseq's own
 custom-content sections (FRiP, peak counts, NSC/RSC, strand cross-correlation, the DESeq2 PCA
 and clustering panels) are pipeline specifics rather than tool modules, so they are bound as
 plain MultiQC tiles with no `use:` badge.
@@ -207,7 +224,7 @@ bash depictio/projects/nf-core/chipseq/1.2.0/download_test_data.sh
 
 # 2. REQUIRED. Regenerate the MultiQC report with the pinned MultiQC 1.35.
 #    The run published MultiQC 1.9, which ships no parquet, so without this step
-#    the multiqc_data collection finds nothing and the QC tab is empty.
+#    the multiqc_data collection finds nothing and the MultiQC tab is empty.
 python -m depictio.dev_scripts.multiqc_reprocess \
   --src  ~/Data/depictio-nfcore/chipseq/1.2.0/megatest \
   --dest ~/Data/depictio-nfcore/chipseq/1.2.0/megatest

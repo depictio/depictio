@@ -151,7 +151,8 @@ main_dashboard:
     body: >
       Somatic indels are hard: recall stays low, so the callers sit to the left
       of the precision-recall plane. The Somatic tab exposes over-calling, the
-      allele-fraction strata and som.py's confidence intervals.
+      allele-fraction strata and [som.py](https://github.com/Illumina/hap.py)'s
+      confidence intervals.
     workflow_tag: variantbenchmarking
     data_collection_tag: somatic_sompy_summary
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -332,8 +333,9 @@ tabs:
     body: >
       The Overview scores the callsets; this tab counts them. The cards total the
       true positives and errors across the selected samples, the confusion matrix
-      places every count per callset, and hap.py splits the score by variant type
-      and quality threshold.
+      places every count per callset, and
+      [hap.py](https://github.com/Illumina/hap.py) splits the score by variant
+      type and quality threshold.
     workflow_tag: variantbenchmarking
     data_collection_tag: germline_vcfeval_summary
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -504,8 +506,9 @@ tabs:
     order: 2
     alignment: left
     body: >
-      The rtg-tools vcfeval and hap.py summary rows every panel above is computed
-      from. Filters picked in the left panel narrow these tables too.
+      The [rtg-tools](https://github.com/RealTimeGenomics/rtg-tools) vcfeval and
+      hap.py summary rows every panel above is computed from. Filters picked in
+      the left panel narrow these tables too.
     workflow_tag: variantbenchmarking
     data_collection_tag: germline_vcfeval_summary
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -532,7 +535,7 @@ tabs:
     description: Variant type × filter, pooled across samples.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 5, w: 4, h: 3}
+    layout: {x: 0, y: 5, w: 8, h: 3}
   - component_type: table
     tag: table-germline-happy-roc
     section: Reference tables
@@ -544,7 +547,7 @@ tabs:
     description: Precision / recall / F1 per quality threshold.
     title_size: h3
     title_align: left
-    layout: {x: 4, y: 5, w: 4, h: 3}
+    layout: {x: 0, y: 8, w: 8, h: 3}
 
   # -------------------------------------------------------------- left panel
   - component_type: interactive
@@ -815,9 +818,10 @@ tabs:
     order: 2
     alignment: left
     body: >
-      som.py re-scores each caller inside allele-fraction bins. Low-AF somatic
-      variants are the hardest to recover, so recall usually climbs from left to
-      right; a caller that stays flat is missing the subclonal fraction.
+      [som.py](https://github.com/Illumina/hap.py) re-scores each caller inside
+      allele-fraction bins. Low-AF somatic variants are the hardest to recover,
+      so recall usually climbs from left to right; a caller that stays flat is
+      missing the subclonal fraction.
     workflow_tag: variantbenchmarking
     data_collection_tag: somatic_sompy_regions
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -895,10 +899,11 @@ tabs:
     order: 2
     alignment: left
     body: >
-      The pipeline benchmarks the somatic callers with two tools. rtg-tools
-      vcfeval matches haplotypes rather than sites, so its precision and recall
-      differ slightly from som.py's; a caller that moves rank between the two
-      views deserves a closer look.
+      The pipeline benchmarks the somatic callers with two tools.
+      [rtg-tools](https://github.com/RealTimeGenomics/rtg-tools) vcfeval matches
+      haplotypes rather than sites, so its precision and recall differ slightly
+      from som.py's; a caller that moves rank between the two views deserves a
+      closer look.
     workflow_tag: variantbenchmarking
     data_collection_tag: somatic_vcfeval_summary
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -924,7 +929,7 @@ tabs:
     description: Per-caller TP / FP / FN and precision / recall / F1.
     title_size: h3
     title_align: left
-    layout: {x: 4, y: 1, w: 4, h: 6}
+    layout: {x: 0, y: 7, w: 8, h: 6}
 
   # ---------------------------------------------------------- reference tables
   - component_type: text
@@ -1076,9 +1081,12 @@ tabs:
     alignment: left
     body: >
       These panels populate when the pipeline runs the SV (truvari, svbenchmark)
-      and CNV (wittyer) profiles. Truvari and SVanalyzer score each callset
-      against the SV truth set; Wittyer stratifies CNV accuracy by event type and
-      size bin.
+      and CNV (wittyer) profiles.
+      [Truvari](https://github.com/ACEnglish/truvari) and
+      [SVanalyzer](https://github.com/nhansen/SVanalyzer) score each callset
+      against the SV truth set;
+      [Wittyer](https://github.com/Illumina/witty.er) stratifies CNV accuracy by
+      event type and size bin.
     workflow_tag: variantbenchmarking
     data_collection_tag: sv_truvari_summary
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -1227,7 +1235,7 @@ tabs:
     description: Precision / recall / F1 per callset.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 1, w: 4, h: 4}
+    layout: {x: 0, y: 1, w: 8, h: 4}
   - component_type: table
     tag: table-sv-svbenchmark
     section: Reference tables
@@ -1239,7 +1247,7 @@ tabs:
     description: Precision / recall / F1 per callset.
     title_size: h3
     title_align: left
-    layout: {x: 4, y: 1, w: 4, h: 4}
+    layout: {x: 0, y: 5, w: 8, h: 4}
   - component_type: table
     tag: table-cnv-wittyer
     section: Reference tables
@@ -1251,7 +1259,7 @@ tabs:
     description: Precision / recall / F1 per callset × event type × size bin.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 5, w: 8, h: 4}
+    layout: {x: 0, y: 9, w: 8, h: 4}
 
   # -------------------------------------------------------------- left panel
   - component_type: interactive

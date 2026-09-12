@@ -356,7 +356,20 @@ def test_upset_set_colouring_declares_its_palette(path: Path):
 # autofits text tiles at render, so this guards the STORED estimate against
 # going wildly wrong (which is what the first paint shows), not the final
 # rendered size.
+# `packages/depictio-react-core/src/gridConfig.ts`.
+GRID_COLUMNS = 8
+
 _TEXT_CHARS_PER_ROW = 300
+
+# `[label](https://…)` renders as `label`, so the href is authored characters
+# that never reach the tile. Counting it would push a tile over budget for
+# adding a link, i.e. penalise the very thing the renderer just learned to do.
+_MARKDOWN_LINK = re.compile(r"\[([^\]\n]+)\]\((?:https?://[^)\s]+|/[^)\s]*)\)")
+
+
+def _rendered_length(body: str) -> int:
+    """Characters the reader actually sees, which is what has to fit."""
+    return len(_MARKDOWN_LINK.sub(r"\1", body))
 
 
 @pytest.mark.no_db
@@ -383,9 +396,109 @@ def test_text_tiles_are_tall_enough_for_their_body(path: Path):
             if height is None:
                 continue
             budget = _TEXT_CHARS_PER_ROW * height
-            if len(body) > budget:
+            shown = _rendered_length(body)
+            if shown > budget:
                 errors.append(
-                    f"{label} [{comp.get('tag', '?')}]: {len(body)} chars in h={height} "
+                    f"{label} [{comp.get('tag', '?')}]: {shown} chars in h={height} "
                     f"(fits ~{budget}); raise h or trim the body"
                 )
     assert not errors, f"{_rel(path)} has overflowing text tiles:\n" + "\n".join(errors)
+
+
+def _is_multiqc_panel(comp: dict) -> bool:
+    """A tile that renders a panel out of the MultiQC report itself."""
+    if comp.get("component_type") == "multiqc":
+        return True
+    if str(comp.get("use") or "").startswith("multiqc/"):
+        return True
+    return bool(comp.get("selected_module") or comp.get("selected_plot"))
+
+
+@pytest.mark.no_db
+@pytest.mark.parametrize("path", _shipped_yamls(), ids=_rel)
+def test_multiqc_tabs_hold_only_multiqc_panels(path: Path):
+    """A tab called MultiQC is the MultiQC report, not a second overview page.
+
+    Tiles built from the pipeline's own tool outputs kept accumulating there
+    because the MultiQC tab is usually the landing tab, which makes it the
+    tempting place for headline numbers. The result was a tab whose name
+    promised one thing and whose content answered another, and a reader with a
+    MultiQC question had to scroll past cards to reach it.
+
+    Three things are not violations:
+      * `text` and `interactive` tiles, the intros and the filters;
+      * anything in a persistent pinned section, which appears on every tab by
+        design (the sample sheet, the reference tables);
+      * a component with `placement: floating`, which overlays the dashboard
+        rather than taking a place in the tab's grid.
+    """
+    doc = yaml.safe_load(path.read_text())
+    errors: list[str] = []
+    for label, tab in _tabs_of(doc):
+        # `main_tab_name` names the main tab; a secondary tab names itself with
+        # `title`. Reading only one of the two is how a MultiQC tab that is not
+        # the landing tab slips past this check.
+        name = tab.get("main_tab_name") or tab.get("title") or ""
+        if "multiqc" not in str(name).lower():
+            continue
+        pinned = {
+            section.get("name")
+            for section in (tab.get("grid_sections") or [])
+            if isinstance(section, dict) and section.get("persistent") and section.get("pin")
+        }
+        for comp in tab.get("components") or []:
+            if not isinstance(comp, dict):
+                continue
+            if comp.get("component_type") in {"text", "interactive"}:
+                continue
+            if comp.get("placement") == "floating":
+                continue
+            if comp.get("section") in pinned:
+                continue
+            if _is_multiqc_panel(comp):
+                continue
+            errors.append(
+                f"{label} [{comp.get('tag', '?')}]: {comp.get('component_type')} on "
+                f"{comp.get('use') or comp.get('data_collection_tag')} in section "
+                f"{comp.get('section')!r}, which is not a MultiQC panel"
+            )
+    assert not errors, f"{_rel(path)} has non-MultiQC tiles on a MultiQC tab:\n" + "\n".join(errors)
+
+
+@pytest.mark.no_db
+@pytest.mark.parametrize("path", _shipped_yamls(), ids=_rel)
+def test_tables_are_full_width(path: Path):
+    """A table narrower than the grid is not a smaller table, it is a broken one.
+
+    AG Grid keeps its columns at their natural width and scrolls horizontally,
+    so a `w: 4` table shows two of its eight columns and spends a third of its
+    height on the scrollbar. Half-width tables kept reappearing in shipped
+    dashboards because a pair of them looks tidy in the YAML, which is why this
+    is a test and not a review note.
+    """
+    doc = yaml.safe_load(path.read_text())
+    errors: list[str] = []
+    for label, tab in _tabs_of(doc):
+        for comp in tab.get("components") or []:
+            if not isinstance(comp, dict) or comp.get("component_type") != "table":
+                continue
+            layout = comp.get("layout") or {}
+            width = layout.get("w")
+            if width is None or width == GRID_COLUMNS:
+                continue
+            errors.append(
+                f"{label} [{comp.get('tag', '?')}]: table at w={width}; tables span "
+                f"all {GRID_COLUMNS} columns"
+            )
+    assert not errors, f"{_rel(path)} has narrow tables:\n" + "\n".join(errors)
+
+
+@pytest.mark.no_db
+def test_a_tool_link_costs_the_tile_nothing():
+    """The href is authored, not rendered, so it must not eat the height budget."""
+    plain = "Peak calling is done by MACS2, per sample."
+    linked = "Peak calling is done by [MACS2](https://github.com/macs3-project/MACS), per sample."
+    assert _rendered_length(linked) == len(plain)
+    assert _rendered_length(plain) == len(plain)
+    # A bare bracket pair is not a link and keeps its characters.
+    assert _rendered_length("see [1] below") == len("see [1] below")
