@@ -199,6 +199,7 @@ STATIC_IDS = {
             "gsea_running_score_demo": "646b0f3c1e4a2d7f8e5b8d84",
             "sashimi_demo": "646b0f3c1e4a2d7f8e5b8d85",
             "scatter_xy_demo": "646b0f3c1e4a2d7f8e5b8d86",
+            "sashimi_coverage_demo": "646b0f3c1e4a2d7f8e5b8d87",
         },
         "dashboards": {
             # Main tab reuses the project_id so get_child_tabs(main_id) finds

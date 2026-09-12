@@ -1,9 +1,10 @@
 /**
- * Catalog-preview app shell: switches between the Gallery (all outputs on one
- * page) and a single output's detail view. The CLI decides the landing view via
- * `initialOutputId` — `catalog gallery` leaves it null (grid first), `catalog
- * preview <id>` sets it (straight into detail). Both embed the same payload
- * schema, so this is the only place that branches.
+ * Catalog-preview app shell: hands off either to the Gallery (the catalogue
+ * browser, which owns its own gallery↔detail switching) or straight to one
+ * output's detail view. The CLI decides which via `initialOutputId` — `catalog
+ * gallery` leaves it null and ships every tool, `catalog preview <id>` sets it
+ * and ships one. Both embed the same payload schema, so this is the only place
+ * that branches.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AdvancedVizConfigDraftProvider } from 'depictio-react-core';
@@ -115,17 +116,26 @@ const CatalogApp: React.FC<{ g: CatalogGlobal }> = ({ g }) => {
     return undefined;
   }, [selected, tools]);
 
-  const body = entry ? (
-    <OutputView
-      entry={entry}
-      onBack={totalOutputs > 1 ? () => navigate(null) : undefined}
-      theme={g.theme}
-      renderId={renderId}
-      tileHeight={tileHeight}
-    />
-  ) : (
-    <Gallery tools={tools} onOpen={navigate} theme={g.theme} />
-  );
+  // Two embedder-driven paths keep going straight to the detail, because in both
+  // the catalogue around it would be noise: a pinned single render (the builder's
+  // picker iframes one tile) and `catalog preview <id>`, whose payload carries
+  // exactly one output. Everything else lands in the browser, which owns the
+  // selection from here on — its default view shows the catalogue and the opened
+  // output side by side, so handing it `selected` is what keeps #output= deep
+  // links and the back button working.
+  const pinned = renderId !== null || tileHeight !== null;
+  const body =
+    entry && (pinned || totalOutputs <= 1) ? (
+      <OutputView
+        entry={entry}
+        onBack={totalOutputs > 1 ? () => navigate(null) : undefined}
+        theme={g.theme}
+        renderId={renderId}
+        tileHeight={tileHeight}
+      />
+    ) : (
+      <Gallery tools={tools} selected={selected} onOpen={navigate} theme={g.theme} />
+    );
 
   return (
     <AdvancedVizConfigDraftProvider value={draftSink}>{body}</AdvancedVizConfigDraftProvider>

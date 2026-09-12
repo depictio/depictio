@@ -1,6 +1,7 @@
 import React from 'react';
 import { Alert } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import { Z_LAYERS } from 'depictio-react-core';
 
 interface DemoModeBannerProps {
   /** Optional override for the banner copy. */
@@ -19,7 +20,7 @@ const DemoModeBanner: React.FC<DemoModeBannerProps> = ({ message }) => (
     style={{
       position: 'sticky',
       top: 0,
-      zIndex: 200,
+      zIndex: Z_LAYERS.furniture,
     }}
   >
     {message ?? "Demo mode — your changes won't be saved."}

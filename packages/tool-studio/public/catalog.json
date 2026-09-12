@@ -92,7 +92,7 @@
           "mode": "amp/embedding",
           "name": "Property embedding",
           "path_glob": "**/ampcombi2/Ampcombi_summary.tsv",
-          "rawYaml": "id: ampcombi_embedding\nname: Property embedding\nmode: amp/embedding\ndescription: >-\n  Two-dimensional PCA of the AMP candidates over their physicochemical\n  descriptors (molecular weight, isoelectric point, hydrophobicity and the\n  helix, turn and sheet fractions), standardised before the decomposition.\nfind: { path_glob: \"**/ampcombi2/Ampcombi_summary.tsv\" }\nrecipe: ampcombi/embedding.py\nfixture: embedding.tsv\nrenders_as:\n  # One point per candidate, so the embedding's `sample_id` role carries the\n  # CDS id; the sample rides along as an optional colour key.\n  - { id: amp_embedding, component: advanced_viz, kind: embedding, roles: {sample_id: cds_id, dim_1: dim_1, dim_2: dim_2} }\n  - { component: table }\n",
+          "rawYaml": "id: ampcombi_embedding\nname: Property embedding\nmode: amp/embedding\ndescription: >-\n  Two-dimensional PCA of the AMP candidates over their physicochemical\n  descriptors (molecular weight, isoelectric point, hydrophobicity and the\n  helix, turn and sheet fractions), standardised before the decomposition.\nfind: { path_glob: \"**/ampcombi2/Ampcombi_summary.tsv\" }\nrecipe: ampcombi/embedding.py\nfixture: embedding.tsv\nrenders_as:\n  # One point per candidate, so the embedding's `sample_id` role carries the\n  # CDS id. Charge class is the default colour because the plane is a\n  # physicochemical one; the sample and the per-tool probabilities ride along in\n  # the output, and the renderer's colour menu reaches them.\n  - { id: amp_embedding, component: advanced_viz, kind: embedding, roles: {sample_id: cds_id, dim_1: dim_1, dim_2: dim_2, color: charge_class} }\n  - { component: table }\n",
           "recipe": "ampcombi/embedding.py",
           "renders_as": [
             {
@@ -104,6 +104,7 @@
               "id": "amp_embedding",
               "kind": "embedding",
               "roles": {
+                "color": "charge_class",
                 "dim_1": "dim_1",
                 "dim_2": "dim_2",
                 "sample_id": "cds_id"
@@ -2197,7 +2198,7 @@
           "mode": "exploratory/pca",
           "name": "Sample PCA",
           "path_glob": "**/all.vst.tsv",
-          "rawYaml": "id: deseq2_vst_pca\nname: Sample PCA\nmode: exploratory/pca\ndescription: >-\n  Principal components of the variance-stabilised expression matrix, one point\n  per sample, computed on the most variable features the way DESeq2 plotPCA does.\nfind: { path_glob: \"**/all.vst.tsv\" }\nrecipe: deseq2/vst_pca.py\nfixture: vst_pca.tsv\nrenders_as:\n  - { id: pca, component: advanced_viz, kind: embedding, roles: {sample_id: sample_id, dim_1: dim_1, dim_2: dim_2} }\n  - { component: card, column: sample_id, aggregation: nunique, secondary_layout: donut, breakdown_col: group }\n  - { component: card, column: dim_1, aggregation: range, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: table }\n",
+          "rawYaml": "id: deseq2_vst_pca\nname: Sample PCA\nmode: exploratory/pca\ndescription: >-\n  Principal components of the variance-stabilised expression matrix, one point\n  per sample, computed on the most variable features the way DESeq2 plotPCA does.\nfind: { path_glob: \"**/all.vst.tsv\" }\nrecipe: deseq2/vst_pca.py\nfixture: vst_pca.tsv\nrenders_as:\n  - { id: pca, component: advanced_viz, kind: embedding, roles: {sample_id: sample_id, dim_1: dim_1, dim_2: dim_2, color: group} }\n  - { component: card, column: sample_id, aggregation: nunique, secondary_layout: donut, breakdown_col: group }\n  - { component: card, column: dim_1, aggregation: range, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: table }\n",
           "recipe": "deseq2/vst_pca.py",
           "renders_as": [
             {
@@ -2209,6 +2210,7 @@
               "id": "pca",
               "kind": "embedding",
               "roles": {
+                "color": "group",
                 "dim_1": "dim_1",
                 "dim_2": "dim_2",
                 "sample_id": "sample_id"
@@ -8000,7 +8002,7 @@
           "mode": "expression/pca",
           "name": "Sample overview",
           "path_glob": "**/salmon.merged.gene_tpm.tsv",
-          "rawYaml": "id: salmon_sample_pca\nname: Sample overview\nmode: expression/pca\ndescription: >-\n  One row per sample: principal components of the log2(TPM + 1) matrix over its\n  most variable genes, plus how many genes the sample detects and expresses and\n  the median TPM of the genes it detects.\nfind: { path_glob: \"**/salmon.merged.gene_tpm.tsv\" }\nrecipe: salmon/sample_pca.py\nfixture: sample_pca.tsv\nrenders_as:\n  - { id: pca, component: advanced_viz, kind: embedding, roles: {sample_id: sample_id, dim_1: dim_1, dim_2: dim_2} }\n  - { component: card, column: sample_id, aggregation: nunique, secondary_layout: donut, breakdown_col: group }\n  - { component: card, column: median_tpm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  # A library that expresses far fewer genes than its peers is the classic\n  # under-sequenced / degraded sample; 10k is the usual floor for a bulk\n  # human RNA-seq library, and the dashboard tile can retune it per run.\n  - { component: card, column: genes_expressed, aggregation: average, secondary_layout: threshold, threshold_value: 10000, threshold_direction: min, threshold_warn: 8000 }\n  - { component: card, column: genes_detected, aggregation: average, secondary_layout: histogram }\n  - { component: table }\n  # Metric cards and the row-level table behind them: the readings the\n  # nf-core dashboards were already computing off this output by hand.\n  - { component: card, column: sample_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: group, top_n_count: 4 }\n  - { component: card, column: genes_detected, aggregation: average, secondary_layout: gauge, coverage_max: 30000 }\n",
+          "rawYaml": "id: salmon_sample_pca\nname: Sample overview\nmode: expression/pca\ndescription: >-\n  One row per sample: principal components of the log2(TPM + 1) matrix over its\n  most variable genes, plus how many genes the sample detects and expresses and\n  the median TPM of the genes it detects.\nfind: { path_glob: \"**/salmon.merged.gene_tpm.tsv\" }\nrecipe: salmon/sample_pca.py\nfixture: sample_pca.tsv\nrenders_as:\n  - { id: pca, component: advanced_viz, kind: embedding, roles: {sample_id: sample_id, dim_1: dim_1, dim_2: dim_2, color: group} }\n  - { component: card, column: sample_id, aggregation: nunique, secondary_layout: donut, breakdown_col: group }\n  - { component: card, column: median_tpm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  # A library that expresses far fewer genes than its peers is the classic\n  # under-sequenced / degraded sample; 10k is the usual floor for a bulk\n  # human RNA-seq library, and the dashboard tile can retune it per run.\n  - { component: card, column: genes_expressed, aggregation: average, secondary_layout: threshold, threshold_value: 10000, threshold_direction: min, threshold_warn: 8000 }\n  - { component: card, column: genes_detected, aggregation: average, secondary_layout: histogram }\n  - { component: table }\n  # Metric cards and the row-level table behind them: the readings the\n  # nf-core dashboards were already computing off this output by hand.\n  - { component: card, column: sample_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: group, top_n_count: 4 }\n  - { component: card, column: genes_detected, aggregation: average, secondary_layout: gauge, coverage_max: 30000 }\n",
           "recipe": "salmon/sample_pca.py",
           "renders_as": [
             {
@@ -8012,6 +8014,7 @@
               "id": "pca",
               "kind": "embedding",
               "roles": {
+                "color": "group",
                 "dim_1": "dim_1",
                 "dim_2": "dim_2",
                 "sample_id": "sample_id"
@@ -9410,7 +9413,7 @@
           "name": "Profiler ordination",
           "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/taxpasta/merge",
           "path_glob": "**/taxpasta/*.tsv",
-          "rawYaml": "id: taxpasta_embedding\nname: Profiler ordination\nmode: merge/ordination\ndescription: >-\n  Bray-Curtis PCoA over every profiling run. One point per sample, profiler and\n  database, so runs that agree on the community land together and the spread\n  reads as profiler disagreement rather than as biological distance.\nnf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/taxpasta/merge\nfind: { path_glob: \"**/taxpasta/*.tsv\" }\nrecipe: taxpasta/embedding.py\nfixture: embedding.tsv\nrenders_as:\n  - {\n      id: profiler_embedding,\n      component: advanced_viz,\n      kind: embedding,\n      roles: { sample_id: sample_id, dim_1: dim_1, dim_2: dim_2 },\n    }\n  - { component: table }\n  # Metric cards and the row-level table behind them: the readings the\n  # nf-core dashboards were already computing off this output by hand.\n  - { component: card, column: sample_id, aggregation: nunique, secondary_layout: donut, breakdown_col: platform }\n",
+          "rawYaml": "id: taxpasta_embedding\nname: Profiler ordination\nmode: merge/ordination\ndescription: >-\n  Bray-Curtis PCoA over every profiling run. One point per sample, profiler and\n  database, so runs that agree on the community land together and the spread\n  reads as profiler disagreement rather than as biological distance.\nnf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/taxpasta/merge\nfind: { path_glob: \"**/taxpasta/*.tsv\" }\nrecipe: taxpasta/embedding.py\nfixture: embedding.tsv\nrenders_as:\n  - {\n      id: profiler_embedding,\n      component: advanced_viz,\n      kind: embedding,\n      roles: { sample_id: sample_id, dim_1: dim_1, dim_2: dim_2, color: profiler },\n    }\n  - { component: table }\n  # Metric cards and the row-level table behind them: the readings the\n  # nf-core dashboards were already computing off this output by hand.\n  - { component: card, column: sample_id, aggregation: nunique, secondary_layout: donut, breakdown_col: platform }\n",
           "recipe": "taxpasta/embedding.py",
           "renders_as": [
             {
@@ -9422,6 +9425,7 @@
               "id": "profiler_embedding",
               "kind": "embedding",
               "roles": {
+                "color": "profiler",
                 "dim_1": "dim_1",
                 "dim_2": "dim_2",
                 "sample_id": "sample_id"

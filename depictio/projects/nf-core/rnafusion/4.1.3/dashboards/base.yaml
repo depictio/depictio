@@ -3,7 +3,7 @@ main_dashboard:
   title: nf-core/rnafusion
   subtitle: Read and alignment QC before the fusion calls, from FastQC, fastp, STAR and Picard
   project_tag: RNAfusion Gene Fusion Detection
-  main_tab_name: Quality control
+  main_tab_name: MultiQC
   tab_icon: /assets/images/logos/multiqc_icon_color.svg
   tab_icon_color: orange
   icon: /assets/images/workflows/nf-core.png

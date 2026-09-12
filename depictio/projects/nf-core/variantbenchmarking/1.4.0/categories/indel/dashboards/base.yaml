@@ -1,11 +1,13 @@
 version: 1
 main_dashboard:
-  title: Variant Benchmarking — Somatic indels
+  title: nf-core/variantbenchmarking (somatic indels)
   subtitle: "analysis=somatic · variant_type=indel — som.py / rtg-tools per caller (SEQC2 / HCC1395)"
   project_tag: Variant Benchmarking — Somatic indels
   main_tab_name: Benchmark
   tab_icon: mdi:target-arrow
   tab_icon_color: pink
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
   workflow_system: none
   # Left panel. `Callers` drives every som.py panel and, through the template's
   # `links`, the allele-fraction strata and the rtg-tools cross-check as well.
@@ -493,6 +495,8 @@ tabs:
   tab_order: 1
   tab_icon: /assets/images/logos/multiqc_icon_color.svg
   tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
   workflow_system: none
   filter_sections:
   - name: Report samples

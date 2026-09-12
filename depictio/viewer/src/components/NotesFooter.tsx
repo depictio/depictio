@@ -18,6 +18,7 @@
 import React, { useCallback, useState } from 'react';
 import { ActionIcon, Drawer, Group, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import { Z_LAYERS } from 'depictio-react-core';
 import type { DashboardPermissions } from 'depictio-react-core';
 import { useNotesEditor } from './notes/useNotesEditor';
 import NotesEditorSurface, { NotesSaveStatusIndicator } from './notes/NotesEditorSurface';
@@ -93,7 +94,7 @@ const NotesFooter: React.FC<NotesFooterProps> = ({
             position: 'fixed',
             bottom: 16,
             right: 16,
-            zIndex: 200,
+            zIndex: Z_LAYERS.furniture,
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
           }}
         >
@@ -106,6 +107,9 @@ const NotesFooter: React.FC<NotesFooterProps> = ({
         onClose={handleClose}
         position="bottom"
         size={fullscreen ? '100%' : 420}
+        // Above the floating map card (see Z_LAYERS) — a bottom drawer and the
+        // card's default bottom-right anchor land on the same pixels.
+        zIndex={Z_LAYERS.overlay}
         padding="md"
         withCloseButton={false}
         title={

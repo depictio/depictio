@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActionIcon,
   Anchor,
@@ -15,7 +15,7 @@ import {
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import { brandAccent, useBranding } from 'depictio-react-core';
+import { brandAccent, useBranding, Z_LAYERS } from 'depictio-react-core';
 import type { BrandTheme, DashboardSummary } from 'depictio-react-core';
 import BrandLogo from './BrandLogo';
 import ThemeToggle from './ThemeToggle';
@@ -35,6 +35,10 @@ import './chrome.css';
  * clientWidth` is the only reliable read of "the ellipsis is showing" — it is
  * re-measured on resize because the sidebar is user-resizable.
  */
+/** Where the tab list's scroll offset is parked across a tab navigation. One
+ *  key for the whole app: there is only ever one tab sidebar on screen. */
+const TAB_SCROLL_KEY = 'depictio.sidebar.tabScroll';
+
 const TabLabel: React.FC<{ label: string }> = ({ label }) => {
   const ref = React.useRef<HTMLSpanElement>(null);
   const [truncated, setTruncated] = useState(false);
@@ -52,7 +56,18 @@ const TabLabel: React.FC<{ label: string }> = ({ label }) => {
   }, [label]);
 
   return (
-    <Tooltip label={label} disabled={!truncated} withArrow openDelay={300} position="right">
+    <Tooltip
+      label={label}
+      disabled={!truncated}
+      withArrow
+      openDelay={300}
+      position="right"
+      // Inline, this tooltip renders inside the tab list's ScrollArea
+      // viewport, which clips it: the name it exists to reveal was cut off at
+      // the sidebar edge and stacked under the neighbouring pills.
+      withinPortal
+      zIndex={Z_LAYERS.tooltip}
+    >
       <span ref={ref} className="depictio-chrome-tab-label">
         {label}
       </span>
@@ -207,6 +222,51 @@ const Sidebar: React.FC<SidebarProps> = ({
   // tab list).
   const [openMenuTabId, setOpenMenuTabId] = useState<string | null>(null);
 
+  // Switching tab is a real anchor navigation, so the sidebar is rebuilt from
+  // scratch and its tab list came back scrolled to the top. On a dashboard
+  // family with more tabs than fit, that threw the reader back to the first
+  // tab's neighbourhood every single time they moved. sessionStorage rather
+  // than component state for exactly that reason: the component does not
+  // survive the navigation, the session does.
+  const tabScrollRef = useRef<HTMLDivElement>(null);
+  const rememberTabScroll = ({ y }: { x: number; y: number }) => {
+    try {
+      sessionStorage.setItem(TAB_SCROLL_KEY, String(y));
+    } catch {
+      // Private browsing and "block site data" both throw here. Losing the
+      // scroll position is not worth breaking the sidebar over.
+    }
+  };
+  useEffect(() => {
+    const el = tabScrollRef.current;
+    if (!el) return;
+    let saved: string | null = null;
+    try {
+      saved = sessionStorage.getItem(TAB_SCROLL_KEY);
+    } catch {
+      return;
+    }
+    const y = Number(saved);
+    if (!saved || !Number.isFinite(y) || y <= 0) return;
+    // Restoring on the next frame is too early: the tab pills, their icons and
+    // the fonts all land after that, so the list is still shorter than the
+    // offset and the browser clamps it to zero. Watch the viewport instead and
+    // apply the offset the moment the content is tall enough to hold it, then
+    // stop watching so a later resize never yanks the reader back.
+    const apply = () => {
+      if (el.scrollHeight - el.clientHeight < y) return false;
+      el.scrollTop = y;
+      return el.scrollTop > 0;
+    };
+    if (apply()) return;
+    const observer = new ResizeObserver(() => {
+      if (apply()) observer.disconnect();
+    });
+    observer.observe(el);
+    if (el.firstElementChild) observer.observe(el.firstElementChild);
+    return () => observer.disconnect();
+  }, []);
+
   // Pre-compute first/last child indices so Move up/down can be disabled
   // appropriately. Main tab (no parent_dashboard_id) is always at the top
   // and never moves, so it doesn't count toward "first child".
@@ -253,7 +313,16 @@ const Sidebar: React.FC<SidebarProps> = ({
       </Stack>
 
       {/* Middle region — scrollable tab list */}
-      <ScrollArea style={{ flex: 1 }} type="auto">
+      {/* `hover` rather than `auto`: a permanently drawn scrollbar down the
+          side of a dozen tabs is chrome the reader never asked for, and it
+          sits between the pills and the sidebar edge where it reads as a
+          border. It still appears the moment the pointer is over the list. */}
+      <ScrollArea
+        style={{ flex: 1 }}
+        type="hover"
+        viewportRef={tabScrollRef}
+        onScrollPositionChange={rememberTabScroll}
+      >
         <Stack gap={4}>
           <Text c="dimmed" size="xs" tt="uppercase" fw={700} mb={4}>
             Tabs
@@ -512,6 +581,7 @@ const TabMenu: React.FC<TabMenuProps> = ({
       <Menu
         position="bottom-end"
         withinPortal
+        zIndex={Z_LAYERS.tooltip}
         shadow="md"
         width={170}
         opened={opened}
