@@ -1,0 +1,27 @@
+id: sylph_profile
+name: Taxonomic profile
+mode: profile/merged
+description: >-
+  The sylph-tax merged report melted into the canonical long composition shape
+  (sample, rank, taxon, abundance), so one tile can switch between taxonomic
+  ranks instead of needing a collapsed table per rank.
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/sylphtax/merge
+find: { path_glob: "**/sylph/sylph_*_combined_reports.tsv" }
+recipe: sylph/profile.py
+fixture: profile.tsv
+renders_as:
+  - {
+      id: stacked_taxonomy,
+      component: advanced_viz,
+      kind: stacked_taxonomy,
+      roles: { sample_id: sample_id, taxon: taxon, rank: rank, abundance: abundance },
+    }
+  - {
+      component: card,
+      column: taxon,
+      aggregation: nunique,
+      secondary_layout: top_n,
+      breakdown_col: rank,
+      top_n_count: 4,
+    }
+  - { component: table }

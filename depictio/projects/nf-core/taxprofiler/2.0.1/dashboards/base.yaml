@@ -1,0 +1,1265 @@
+version: 1
+main_dashboard:
+  title: nf-core/taxprofiler
+  subtitle: "Many classifiers, one community: read QC, per-profiler composition, cross-profiler concordance and containment confidence"
+  project_tag: Taxprofiler Metagenomic Profiling
+  main_tab_name: Read QC
+  tab_icon: /assets/images/logos/multiqc_icon_color.svg
+  tab_icon_color: orange
+  workflow_system: none
+  # Left panel. The sample scope is persistent: taxprofiler runs every profiler
+  # over the same samples, so narrowing to one community has to follow the
+  # viewer through the composition, concordance and confidence tabs.
+  filter_sections:
+  - name: Samples
+    icon: mdi:test-tube
+    color: teal
+    description: Which communities and sequencing platforms every tab is showing
+    persistent: true
+  - name: Read stats
+    icon: mdi:tune
+    color: orange
+    description: Keep only the profiling runs inside a richness or diversity band
+    collapsed: true
+  # Right panel, in reading order: the run-level cards, then the pipeline's own
+  # MultiQC panels from raw reads through host removal to the per-profiler top
+  # taxa. `Reference tables` is persistent and pinned to the bottom so the raw
+  # rows trail every tab.
+  grid_sections:
+  - name: Run at a glance
+    icon: mdi:counter
+    color: orange
+    description: How many communities were profiled, by how many classifiers, and how rich the profiles are
+  - name: Read quality
+    icon: mdi:chart-box-outline
+    color: orange
+    description: FastQC before and after trimming, and what fastp filtered out
+  - name: Host removal and long reads
+    icon: mdi:filter-variant
+    color: cyan
+    description: What the host-genome alignment removed, plus nanopore read stats and coverage redundancy
+  - name: Profiler panels
+    icon: mdi:bacteria-outline
+    color: grape
+    description: The top-taxa panels MultiQC already builds for each classifier
+    collapsed: true
+  - name: Reference tables
+    icon: mdi:table
+    color: gray
+    description: The rows behind every tile, on every tab
+    collapsed: true
+    persistent: true
+    pin: bottom
+  components:
+  # ---------------------------------------------------------------- at a glance
+  - component_type: text
+    tag: tp-intro
+    section: Run at a glance
+    title: One community, many classifiers
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      taxprofiler runs every classifier in the database sheet over the same
+      reads. This tab is the pipeline's own quality report; the Profiles,
+      Concordance and Confidence tabs compare what the classifiers made of it.
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_sample_summary
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: card
+    tag: tp-card-samples
+    section: Run at a glance
+    workflow_tag: taxprofiler
+    data_collection_tag: samplesheet
+    aggregation: nunique
+    column_name: sample
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: instrument_platform
+    display: {icon_name: 'mdi:test-tube', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Samples
+    layout: {x: 0, y: 1, w: 2, h: 2}
+  - component_type: card
+    tag: tp-card-runs
+    section: Run at a glance
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_sample_summary
+    aggregation: nunique
+    column_name: profiler_db
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: profiler
+    top_n_count: 4
+    display: {icon_name: 'mdi:bacteria-outline', icon_color: '#8E44AD', title_color: '#8E44AD', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Profiling runs
+    layout: {x: 2, y: 1, w: 2, h: 2}
+  - component_type: card
+    tag: tp-card-taxa
+    section: Run at a glance
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_sample_summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: taxa_observed
+    column_type: int64
+    display: {icon_name: 'mdi:counter', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Taxa per run
+    layout: {x: 4, y: 1, w: 2, h: 2}
+  - component_type: card
+    tag: tp-card-evenness
+    section: Run at a glance
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_sample_summary
+    aggregation: average
+    column_name: evenness
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 0.6
+    threshold_direction: min
+    threshold_warn: 0.4
+    display: {icon_name: 'mdi:scale-balance', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Evenness
+    layout: {x: 6, y: 1, w: 2, h: 2}
+
+  # --------------------------------------------------------------- read quality
+  - component_type: text
+    tag: tp-qc-intro
+    section: Read quality
+    title: The reads the classifiers were given
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      FastQC before and after trimming, and the fastp filtering summary. Every
+      panel here is the pipeline's own MultiQC output, not a recomputation.
+    workflow_tag: taxprofiler
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    tag: tp-qc-counts
+    section: Read quality
+    workflow_tag: taxprofiler
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Sequence Counts
+    use: multiqc/fastqc
+    title: Sequence counts (pre-trimming)
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 1, w: 4, h: 5}
+  - component_type: multiqc
+    tag: tp-qc-quality
+    section: Read quality
+    workflow_tag: taxprofiler
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Sequence Quality Histograms
+    use: multiqc/fastqc
+    title: Per-base quality (pre-trimming)
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 1, w: 4, h: 5}
+  - component_type: multiqc
+    tag: tp-qc-fastp-filtered
+    section: Read quality
+    workflow_tag: taxprofiler
+    data_collection_tag: multiqc_data
+    selected_module: fastp
+    selected_plot: Filtered Reads
+    use: multiqc/fastp
+    title: fastp filtered reads
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 6, w: 4, h: 5}
+  - component_type: multiqc
+    tag: tp-qc-post-lengths
+    section: Read quality
+    workflow_tag: taxprofiler
+    data_collection_tag: multiqc_data
+    selected_module: fastqc-1
+    selected_plot: Sequence Length Distribution
+    title: Read lengths (post-trimming)
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 6, w: 4, h: 5}
+
+  # ------------------------------------------------- host removal and long reads
+  - component_type: text
+    tag: tp-host-intro
+    section: Host removal and long reads
+    title: What was taken out before profiling
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Reads matching the host reference are aligned away before any classifier
+      sees them. The nanoq and Nonpareil panels cover the long-read half of the
+      run and how much of the community the sequencing effort reached.
+    workflow_tag: taxprofiler
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    tag: tp-host-bowtie2
+    section: Host removal and long reads
+    workflow_tag: taxprofiler
+    data_collection_tag: multiqc_data
+    selected_module: bowtie2
+    selected_plot: Single-end alignments
+    use: multiqc/bowtie2
+    title: Host alignment rate
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 1, w: 4, h: 5}
+  - component_type: multiqc
+    tag: tp-host-samtools
+    section: Host removal and long reads
+    workflow_tag: taxprofiler
+    data_collection_tag: multiqc_data
+    selected_module: samtools
+    selected_plot: Percent mapped
+    use: multiqc/samtools
+    title: Percent mapped to host
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 1, w: 4, h: 5}
+  - component_type: multiqc
+    tag: tp-host-nanoq
+    section: Host removal and long reads
+    workflow_tag: taxprofiler
+    data_collection_tag: multiqc_data
+    selected_module: nanoq
+    selected_plot: Nanoq Summary
+    use: multiqc/nanoq
+    title: Long-read filtering summary
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 6, w: 4, h: 5}
+  - component_type: multiqc
+    tag: tp-host-nonpareil
+    section: Host removal and long reads
+    workflow_tag: taxprofiler
+    data_collection_tag: multiqc_data
+    selected_module: nonpareil
+    selected_plot: Redundancy levels
+    use: multiqc/nonpareil
+    title: Coverage redundancy
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 6, w: 4, h: 5}
+
+  # ------------------------------------------------------------- profiler panels
+  - component_type: text
+    tag: tp-panels-intro
+    section: Profiler panels
+    title: Each classifier's own top taxa
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      MultiQC already summarises what each classifier reported, so these panels
+      stay as the pipeline drew them. The comparison across classifiers is on
+      the Concordance tab, where MultiQC has no equivalent view.
+    workflow_tag: taxprofiler
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    tag: tp-panel-kraken
+    section: Profiler panels
+    workflow_tag: taxprofiler
+    data_collection_tag: multiqc_data
+    selected_module: kraken
+    selected_plot: Top taxa
+    use: multiqc/kraken
+    title: Kraken2 top taxa
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 1, w: 4, h: 5}
+  - component_type: multiqc
+    tag: tp-panel-bracken
+    section: Profiler panels
+    workflow_tag: taxprofiler
+    data_collection_tag: multiqc_data
+    selected_module: bracken
+    selected_plot: Top taxa
+    use: multiqc/bracken
+    title: Bracken top taxa
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 1, w: 4, h: 5}
+  - component_type: multiqc
+    tag: tp-panel-centrifuge
+    section: Profiler panels
+    workflow_tag: taxprofiler
+    data_collection_tag: multiqc_data
+    selected_module: centrifuge
+    selected_plot: Top taxa
+    use: multiqc/centrifuge
+    title: Centrifuge top taxa
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 6, w: 4, h: 5}
+  - component_type: multiqc
+    tag: tp-panel-kaiju
+    section: Profiler panels
+    workflow_tag: taxprofiler
+    data_collection_tag: multiqc_data
+    selected_module: kaiju
+    selected_plot: Top taxa
+    use: multiqc/kaiju
+    title: Kaiju top taxa
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 6, w: 4, h: 5}
+  - component_type: multiqc
+    tag: tp-panel-metaphlan
+    section: Profiler panels
+    workflow_tag: taxprofiler
+    data_collection_tag: multiqc_data
+    selected_module: metaphlan
+    selected_plot: Top taxa
+    use: multiqc/metaphlan
+    title: MetaPhlAn top taxa
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 11, w: 4, h: 5}
+  - component_type: multiqc
+    tag: tp-panel-malt
+    section: Profiler panels
+    workflow_tag: taxprofiler
+    data_collection_tag: multiqc_data
+    selected_module: malt
+    selected_plot: Metagenomic Mappability
+    title: MALT mappability
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 11, w: 4, h: 5}
+
+  # ---------------------------------------------------------- reference tables
+  - component_type: text
+    tag: tp-tables-intro
+    section: Reference tables
+    title: The rows behind every tile
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The long taxpasta frame every cross-profiler tile is computed from, the
+      per-run statistics, and the two sheets that say which sample and which
+      database each profiling run belongs to. Filters picked in the left panel
+      narrow these tables too.
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_profiles
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: table
+    tag: tp-table-profiles
+    section: Reference tables
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_profiles
+    row_selection_enabled: false
+    title: Cross-profiler abundances
+    description: One row per profiler, database, sample and taxon, with the raw count and the within-run share.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 1, w: 8, h: 5}
+  - component_type: table
+    tag: tp-table-summary
+    section: Reference tables
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_sample_summary
+    row_selection_enabled: true
+    row_selection_column: profiler_db
+    title: Per-run profile statistics
+    description: Pick a row to narrow the ordination and the profile tiles to that profiling run.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 6, w: 8, h: 4}
+  - component_type: table
+    tag: tp-table-samplesheet
+    section: Reference tables
+    workflow_tag: taxprofiler
+    data_collection_tag: samplesheet
+    row_selection_enabled: false
+    title: Samplesheet
+    description: The samples, their sequencing runs and their platform.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 10, w: 4, h: 4}
+  - component_type: table
+    tag: tp-table-databases
+    section: Reference tables
+    workflow_tag: taxprofiler
+    data_collection_tag: database_sheet
+    row_selection_enabled: false
+    title: Database sheet
+    description: Which database each classifier ran against, and for which read type.
+    title_size: h3
+    title_align: left
+    layout: {x: 4, y: 10, w: 4, h: 4}
+
+  # -------------------------------------------------------------- left panel
+  - component_type: interactive
+    tag: tp-filter-sample
+    index: tp-sample-filter
+    section: Samples
+    group: Sample scope
+    workflow_tag: taxprofiler
+    data_collection_tag: samplesheet
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:test-tube'}
+    placement: left
+    title: Sample
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: tp-filter-platform
+    index: tp-platform-filter
+    section: Samples
+    group: Sample scope
+    workflow_tag: taxprofiler
+    data_collection_tag: samplesheet
+    interactive_component_type: SegmentedControl
+    column_name: instrument_platform
+    column_type: object
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:dna'}
+    placement: left
+    title: Platform
+    layout: {x: 0, y: 3, w: 1, h: 2}
+  - component_type: interactive
+    tag: tp-filter-richness
+    index: tp-richness-range
+    section: Read stats
+    group: Profile shape
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_sample_summary
+    interactive_component_type: RangeSlider
+    column_name: taxa_observed
+    column_type: int64
+    display: {title_size: md, custom_color: '#F2A93B', icon_name: 'mdi:counter'}
+    placement: left
+    title: Taxa observed
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: tp-filter-shannon
+    index: tp-shannon-range
+    section: Read stats
+    group: Profile shape
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_sample_summary
+    interactive_component_type: RangeSlider
+    column_name: shannon
+    column_type: float64
+    display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:chart-bell-curve'}
+    placement: left
+    title: Shannon diversity
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+tabs:
+# ============================================================== Profiles
+- title: Profiles
+  subtitle: What each classifier says the community is made of
+  tab_order: 1
+  tab_icon: mdi:bacteria-outline
+  tab_icon_color: grape
+  workflow_system: none
+  filter_sections:
+  - name: Profile scope
+    icon: mdi:filter-variant
+    color: grape
+    description: Which classifiers and which taxonomic rank the composition tiles show
+  grid_sections:
+  - name: Composition
+    icon: mdi:chart-bar
+    color: grape
+    description: Per-sample composition, switchable by rank and by classifier
+  - name: Containment composition
+    icon: mdi:waves
+    color: teal
+    description: The same community as sylph reconstructs it from genome containment
+  - name: Genome copies
+    icon: mdi:dna
+    color: lime
+    description: Melon counts genome copies from marker genes rather than reads
+    collapsed: true
+  components:
+  - component_type: text
+    tag: tp-comp-intro
+    section: Composition
+    title: Composition, one classifier at a time
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Every bar is one profiling run, normalised to its own assigned total. Use
+      the classifier filter in the left panel to compare two of them side by
+      side; the rank picker moves the whole chart up and down the taxonomy.
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_profiles
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: tp-av-stacked
+    section: Composition
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_profiles
+    use: taxpasta/stacked_taxonomy
+    config:
+      default_rank: species
+      top_n: 15
+      sort_by: abundance
+      normalise_to_one: true
+      annotation_strips:
+      - column: platform
+        label: Platform
+        position: top
+    title: Community composition
+    description: Per-sample relative abundance; the strip above the bars marks the sequencing platform.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 8, h: 8}
+  - component_type: card
+    tag: tp-comp-card-taxa
+    section: Composition
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_profiles
+    aggregation: nunique
+    column_name: name
+    column_type: object
+    secondary_layout: uniqueness
+    display: {icon_name: 'mdi:bacteria-outline', icon_color: '#8E44AD', title_color: '#8E44AD', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Distinct taxa
+    layout: {x: 0, y: 9, w: 2, h: 2}
+  - component_type: card
+    tag: tp-comp-card-counts
+    section: Composition
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_profiles
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: count
+    column_type: float64
+    display: {icon_name: 'mdi:counter', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Assigned reads
+    layout: {x: 2, y: 9, w: 2, h: 2}
+  - component_type: card
+    tag: tp-comp-card-ranks
+    section: Composition
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_profiles
+    aggregation: nunique
+    column_name: rank
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: rank
+    display: {icon_name: 'mdi:shape-outline', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Ranks reported
+    layout: {x: 4, y: 9, w: 2, h: 2}
+  - component_type: card
+    tag: tp-comp-card-dominant
+    section: Composition
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_profiles
+    aggregation: max
+    column_name: rel_abundance
+    column_type: float64
+    secondary_layout: gauge
+    coverage_max: 1
+    display: {icon_name: 'mdi:chart-donut', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Most dominant taxon
+    layout: {x: 6, y: 9, w: 2, h: 2}
+
+  - component_type: text
+    tag: tp-sylph-intro
+    section: Containment composition
+    title: The community sylph reconstructs
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      sylph does not classify reads. It measures how much of each reference
+      genome is contained in the sample, which gives a composition built from
+      whole genomes rather than from per-read assignments.
+    workflow_tag: taxprofiler
+    data_collection_tag: sylph_profile
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: tp-av-sylph-stacked
+    section: Containment composition
+    workflow_tag: taxprofiler
+    data_collection_tag: sylph_profile
+    use: sylph/stacked_taxonomy
+    config:
+      default_rank: genus
+      top_n: 12
+      sort_by: abundance
+      normalise_to_one: true
+    title: sylph composition
+    description: Relative abundance from genome containment, switchable between domain and strain.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 8, h: 7}
+  - component_type: table
+    tag: tp-table-sylph-profile
+    section: Containment composition
+    workflow_tag: taxprofiler
+    data_collection_tag: sylph_profile
+    row_selection_enabled: false
+    title: sylph clade abundances
+    description: One row per sample and clade, with the full lineage.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 8, w: 8, h: 4}
+
+  - component_type: text
+    tag: tp-melon-intro
+    section: Genome copies
+    title: Genome copies, not read counts
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Melon estimates how many genome copies of each lineage the long reads
+      carry, using prokaryotic marker genes. Its output names the sample only in
+      the file path, so these rings pool the long-read samples.
+    workflow_tag: taxprofiler
+    data_collection_tag: melon_ranks
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: tp-av-melon-sunburst
+    section: Genome copies
+    workflow_tag: taxprofiler
+    data_collection_tag: melon_ranks
+    use: melon/sunburst
+    config:
+      rank_cols: [superkingdom, phylum, class, order, family, genus, species]
+      max_depth: 4
+      palette: tab10
+      # Draw every arc: on a mock community the rare lineages are the result,
+      # and the 0.5% default hides exactly them.
+      min_percent: 0
+    title: Melon genome-copy hierarchy
+    description: Ring size is the share of estimated genome copies; four ranks from the domain outwards.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 8, h: 8}
+  - component_type: figure
+    tag: tp-fig-melon-copies
+    section: Genome copies
+    workflow_tag: taxprofiler
+    data_collection_tag: melon_ranks
+    visu_type: bar
+    dict_kwargs: {x: copy_number, y: species, color: phylum, orientation: h}
+    title: Estimated copies per species
+    description: The lineages melon estimated the most genome copies for.
+    title_size: h3
+    layout: {x: 0, y: 9, w: 8, h: 8}
+  - component_type: table
+    tag: tp-table-melon
+    section: Genome copies
+    workflow_tag: taxprofiler
+    data_collection_tag: melon_ranks
+    row_selection_enabled: false
+    title: Melon lineages
+    description: Seven ranks, the estimated copy number, the pooled share and the mean read identity.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 17, w: 8, h: 4}
+
+  - component_type: interactive
+    tag: tp-filter-profiler
+    index: tp-profiler-filter
+    section: Profile scope
+    group: Classifier
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_profiles
+    interactive_component_type: MultiSelect
+    column_name: profiler
+    column_type: object
+    display: {title_size: md, custom_color: '#8E44AD', icon_name: 'mdi:bacteria-outline'}
+    placement: left
+    title: Classifier
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: tp-filter-database
+    index: tp-database-filter
+    section: Profile scope
+    group: Classifier
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_profiles
+    interactive_component_type: MultiSelect
+    column_name: database
+    column_type: object
+    display: {title_size: md, custom_color: '#8E44AD', icon_name: 'mdi:database-outline'}
+    placement: left
+    title: Database
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: tp-filter-rank
+    index: tp-rank-filter
+    section: Profile scope
+    group: Taxonomy
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_profiles
+    interactive_component_type: MultiSelect
+    column_name: rank
+    column_type: object
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: Rank
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: interactive
+    tag: tp-filter-abundance
+    index: tp-abundance-range
+    section: Profile scope
+    group: Taxonomy
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_profiles
+    interactive_component_type: RangeSlider
+    column_name: rel_abundance
+    column_type: float64
+    display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:chart-donut'}
+    placement: left
+    title: Relative abundance
+    layout: {x: 0, y: 9, w: 1, h: 3}
+
+# ============================================================== Concordance
+- title: Concordance
+  subtitle: Where the classifiers agree, and where each one is on its own
+  tab_order: 2
+  tab_icon: mdi:graph-outline
+  tab_icon_color: indigo
+  workflow_system: none
+  filter_sections:
+  - name: Ordination scope
+    icon: mdi:chart-scatter-plot
+    color: indigo
+    description: Which classifiers and platforms the ordination and the overlap tiles cover
+  grid_sections:
+  - name: Ordination
+    icon: mdi:chart-scatter-plot
+    color: indigo
+    description: Profiling runs that agree on the community land together
+  - name: Shared taxa
+    icon: mdi:set-merge
+    color: teal
+    description: How much of the community every classifier found, and how long its private tail is
+  - name: Taxon by run matrix
+    icon: mdi:chart-box-outline
+    color: orange
+    description: The top taxa clustered across every profiling run
+    collapsed: true
+  components:
+  - component_type: text
+    tag: tp-ord-intro
+    section: Ordination
+    title: One point per profiling run
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Bray-Curtis PCoA over the taxpasta profiles. Distance here is classifier
+      disagreement, not biology: three mock communities profiled twelve ways
+      should cluster by community, and anything that does not is a classifier
+      artefact. Lasso a group of points to narrow the rest of the tab.
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_embedding
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: tp-av-pcoa
+    section: Ordination
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_embedding
+    use: taxpasta/profiler_embedding
+    config:
+      color_col: profiler
+      show_density: false
+    title: Bray-Curtis ordination
+    description: Colour is the classifier; runs of the same community should sit together whatever profiled them.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 8, h: 7}
+  - component_type: figure
+    tag: tp-fig-pcoa-select
+    section: Ordination
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_embedding
+    visu_type: scatter
+    dict_kwargs:
+      x: dim_1
+      y: dim_2
+      color: profiler
+      symbol: platform
+      custom_data: '["profiler_db"]'
+      hover_name: sample_id
+    selection_enabled: true
+    selection_column: profiler_db
+    title: Ordination with selection
+    description: Same coordinates, with the point symbol carrying the platform. Box or lasso a set of runs to filter the tab.
+    title_size: h3
+    layout: {x: 0, y: 8, w: 8, h: 7}
+
+  - component_type: text
+    tag: tp-upset-intro
+    section: Shared taxa
+    title: Which taxa every classifier found
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Each column is a set of classifiers and the bar is how many taxa exactly
+      that set detected. The tallest bar on the far left is the agreed core;
+      single-classifier columns are private tails, and a long one is usually a
+      database difference rather than a discovery.
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_presence
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: tp-av-upset
+    section: Shared taxa
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_presence
+    use: taxpasta/profiler_upset
+    config:
+      sort_by: cardinality
+      sort_order: descending
+      # The set columns are the run's classifiers, discovered at ingest, so no
+      # explicit list can be written in a generic template: the auto-detection
+      # picks exactly the 0/1 columns. `degree`, not `set`, for the same reason
+      # plotly-upset needs an explicit set_colors map in `set` mode.
+      min_size: 2
+      show_set_sizes: true
+      color_intersections_by: degree
+      default_annotation_cols:
+      - taxon
+    title: Classifier detection overlap
+    description: Taxa shared by each combination of classifiers, for the samples selected in the left panel.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 8, h: 8}
+  - component_type: card
+    tag: tp-card-core
+    section: Shared taxa
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_presence
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: n_profilers
+    column_type: int64
+    display: {icon_name: 'mdi:set-merge', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Classifiers per taxon
+    layout: {x: 0, y: 9, w: 2, h: 2}
+  - component_type: card
+    tag: tp-card-detections
+    section: Shared taxa
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_presence
+    aggregation: nunique
+    column_name: taxon
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: rank
+    top_n_count: 4
+    display: {icon_name: 'mdi:shape-outline', icon_color: '#8E44AD', title_color: '#8E44AD', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Detected taxa
+    layout: {x: 2, y: 9, w: 2, h: 2}
+  - component_type: card
+    tag: tp-card-runs-ord
+    section: Shared taxa
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_embedding
+    aggregation: nunique
+    column_name: sample_id
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: platform
+    display: {icon_name: 'mdi:chart-scatter-plot', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Runs ordinated
+    layout: {x: 4, y: 9, w: 2, h: 2}
+  - component_type: card
+    tag: tp-card-shared-frac
+    section: Shared taxa
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_presence
+    aggregation: max
+    column_name: n_profilers
+    column_type: int64
+    secondary_layout: gauge
+    coverage_max: 12
+    display: {icon_name: 'mdi:check-decagram', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Widest agreement
+    layout: {x: 6, y: 9, w: 2, h: 2}
+
+  - component_type: text
+    tag: tp-heat-intro
+    section: Taxon by run matrix
+    title: The same taxa, every classifier at once
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Rows are the most abundant taxa, columns are profiling runs, and the value
+      is the taxon's share of that run. Row z-scores make the pattern readable
+      across taxa whose absolute abundances differ by orders of magnitude.
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_matrix
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: tp-av-heatmap
+    section: Taxon by run matrix
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_matrix
+    use: taxpasta/concordance_heatmap
+    config:
+      row_annotation_cols:
+      - rank
+      cluster_rows: true
+      cluster_cols: true
+      cluster_method: ward
+      cluster_metric: correlation
+      normalize: row_z
+    title: Taxon by run heatmap
+    description: Top taxa clustered across every profiling run, with the rank as a row annotation and the classifier and platform on the column strips.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 8, h: 10}
+
+  - component_type: interactive
+    tag: tp-filter-ord-profiler
+    index: tp-ord-profiler-filter
+    section: Ordination scope
+    group: Ordination
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_embedding
+    interactive_component_type: MultiSelect
+    column_name: profiler
+    column_type: object
+    display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:bacteria-outline'}
+    placement: left
+    title: Classifier
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: tp-filter-ord-platform
+    index: tp-ord-platform-filter
+    section: Ordination scope
+    group: Ordination
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_embedding
+    interactive_component_type: SegmentedControl
+    column_name: platform
+    column_type: object
+    display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:dna'}
+    placement: left
+    title: Platform
+    layout: {x: 0, y: 3, w: 1, h: 2}
+  - component_type: interactive
+    tag: tp-filter-overlap
+    index: tp-overlap-range
+    section: Ordination scope
+    group: Overlap
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_presence
+    interactive_component_type: RangeSlider
+    column_name: n_profilers
+    column_type: int64
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:set-merge'}
+    placement: left
+    title: Classifiers per taxon
+    layout: {x: 0, y: 5, w: 1, h: 3}
+
+# ============================================================== Confidence
+- title: Confidence
+  subtitle: How much to trust a call, from containment ANI and profile shape
+  tab_order: 3
+  tab_icon: mdi:target
+  tab_icon_color: cyan
+  workflow_system: none
+  filter_sections:
+  - name: Confidence ranges
+    icon: mdi:tune
+    color: cyan
+    description: Keep only the containment matches inside an identity or abundance band
+  grid_sections:
+  - name: Containment identity
+    icon: mdi:ruler
+    color: cyan
+    description: How close the reads are to the reference each abundance is attributed to
+  - name: Profile shape
+    icon: mdi:chart-bell-curve
+    color: lime
+    description: How concentrated each classifier's profile is, and how long its tail runs
+  components:
+  - component_type: text
+    tag: tp-ani-intro
+    section: Containment identity
+    title: Abundance is only half the answer
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      sylph reports how much of a reference genome the reads contain and how
+      close they are to it. A high abundance at a low adjusted ANI is a call
+      against a divergent relative, which a read-count classifier reports as a
+      confident species hit.
+    workflow_tag: taxprofiler
+    data_collection_tag: sylph_ani
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: tp-av-ani-dot
+    section: Containment identity
+    workflow_tag: taxprofiler
+    data_collection_tag: sylph_ani
+    use: sylph/ani_dot_plot
+    config:
+      colour_scale: Viridis
+      max_genes: 25
+      gene_sort: mean
+      max_dot_size: 24
+      annotate_top_n: 0
+    title: ANI by genome and sample
+    description: Dot colour is the adjusted ANI, dot size the taxonomic abundance of that genome in the sample.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 8, h: 8}
+  - component_type: figure
+    tag: tp-fig-ani-scatter
+    section: Containment identity
+    workflow_tag: taxprofiler
+    data_collection_tag: sylph_ani
+    visu_type: scatter
+    dict_kwargs: {x: taxonomic_abundance, y: adjusted_ani, color: sample, size: eff_cov, hover_name: genome}
+    title: ANI against abundance
+    description: The bottom-right corner is where a confident-looking abundance rests on a divergent match.
+    title_size: h3
+    layout: {x: 0, y: 9, w: 4, h: 6}
+  - component_type: table
+    tag: tp-table-ani
+    section: Containment identity
+    workflow_tag: taxprofiler
+    data_collection_tag: sylph_ani
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: sylph containment table
+    description: One row per genome sylph detected, with ANI, coverage and both abundance estimates.
+    title_size: h3
+    title_align: left
+    layout: {x: 4, y: 9, w: 4, h: 6}
+  - component_type: card
+    tag: tp-card-ani
+    section: Containment identity
+    workflow_tag: taxprofiler
+    data_collection_tag: sylph_ani
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: adjusted_ani
+    column_type: float64
+    display: {icon_name: 'mdi:ruler', icon_color: '#0097A7', title_color: '#0097A7', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Adjusted ANI
+    layout: {x: 0, y: 15, w: 2, h: 2}
+  - component_type: card
+    tag: tp-card-genomes
+    section: Containment identity
+    workflow_tag: taxprofiler
+    data_collection_tag: sylph_ani
+    aggregation: nunique
+    column_name: genome
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    display: {icon_name: 'mdi:database-outline', icon_color: '#8E44AD', title_color: '#8E44AD', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Genomes detected
+    layout: {x: 2, y: 15, w: 2, h: 2}
+  - component_type: card
+    tag: tp-card-cov
+    section: Containment identity
+    workflow_tag: taxprofiler
+    data_collection_tag: sylph_ani
+    aggregation: median
+    column_name: eff_cov
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 1
+    threshold_direction: min
+    threshold_warn: 0.5
+    display: {icon_name: 'mdi:waves', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Effective coverage
+    layout: {x: 4, y: 15, w: 2, h: 2}
+  - component_type: card
+    tag: tp-card-containment
+    section: Containment identity
+    workflow_tag: taxprofiler
+    data_collection_tag: sylph_ani
+    aggregation: average
+    column_name: containment_frac
+    column_type: float64
+    secondary_layout: gauge
+    coverage_max: 1
+    display: {icon_name: 'mdi:check-decagram', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: K-mer containment
+    layout: {x: 6, y: 15, w: 2, h: 2}
+
+  - component_type: text
+    tag: tp-shape-intro
+    section: Profile shape
+    title: A profile is a shape, not just a list
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Classifiers that report a handful of dominant taxa and classifiers that
+      report a long low-count tail separate on these two views, even when they
+      agree on the community. The accumulation curve is where the tail shows.
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_sample_summary
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: tp-av-richness-dot
+    section: Profile shape
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_sample_summary
+    use: taxpasta/richness_dot_plot
+    config:
+      colour_scale: Plasma
+      max_genes: 20
+      gene_sort: mean
+      max_dot_size: 26
+    title: Diversity by run
+    description: Dot colour is Shannon diversity, dot size the share held by the run's single most abundant taxon.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 8, h: 8}
+  - component_type: figure
+    tag: tp-fig-accumulation
+    section: Profile shape
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_profiles
+    mode: code
+    title: Rank-abundance accumulation
+    description: How much of each profile its top taxa account for. A curve that saturates early is a concentrated profile; one that keeps climbing has a long tail.
+    title_size: h3
+    code_content: |
+      # Rank the taxa inside each profiling run, then accumulate their shares.
+      # Needs a window rank + cumulative sum per run, which the UI builder cannot express.
+      TOP_N = 30
+
+      ranked = (
+          df.filter(pl.col("rel_abundance") > 0)
+          .with_columns(
+              pl.col("rel_abundance")
+              .rank("ordinal", descending=True)
+              .over(["profiler_db", "sample"])
+              .alias("taxon_rank")
+          )
+          .filter(pl.col("taxon_rank") <= TOP_N)
+          .sort(["profiler_db", "sample", "taxon_rank"])
+          .with_columns(
+              pl.col("rel_abundance")
+              .cum_sum()
+              .over(["profiler_db", "sample"])
+              .alias("cumulative_share")
+          )
+          .with_columns(
+              (pl.col("sample") + pl.lit(" | ") + pl.col("profiler_db")).alias("run")
+          )
+      )
+
+      fig = px.line(
+          ranked,
+          x="taxon_rank",
+          y="cumulative_share",
+          color="profiler",
+          line_group="run",
+          hover_name="run",
+          markers=False,
+          labels={
+              "taxon_rank": "taxa, most abundant first",
+              "cumulative_share": "cumulative share of the profile",
+              "profiler": "classifier",
+          },
+      )
+      fig.update_yaxes(range=[0, 1.02])
+      fig.update_layout(legend_title_text="classifier", hovermode="closest")
+    layout: {x: 0, y: 9, w: 8, h: 7}
+
+  - component_type: interactive
+    tag: tp-filter-ani
+    index: tp-ani-range
+    section: Confidence ranges
+    group: Containment
+    workflow_tag: taxprofiler
+    data_collection_tag: sylph_ani
+    interactive_component_type: RangeSlider
+    column_name: adjusted_ani
+    column_type: float64
+    display: {title_size: md, custom_color: '#0097A7', icon_name: 'mdi:ruler'}
+    placement: left
+    title: Adjusted ANI
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: tp-filter-sylph-abundance
+    index: tp-sylph-abundance-range
+    section: Confidence ranges
+    group: Containment
+    workflow_tag: taxprofiler
+    data_collection_tag: sylph_ani
+    interactive_component_type: RangeSlider
+    column_name: taxonomic_abundance
+    column_type: float64
+    display: {title_size: md, custom_color: '#0097A7', icon_name: 'mdi:chart-donut'}
+    placement: left
+    title: Taxonomic abundance
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: tp-filter-top-share
+    index: tp-top-share-range
+    section: Confidence ranges
+    group: Profile shape
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_sample_summary
+    interactive_component_type: RangeSlider
+    column_name: top_taxon_fraction
+    column_type: float64
+    display: {title_size: md, custom_color: '#7CB342', icon_name: 'mdi:chart-bell-curve'}
+    placement: left
+    title: Top-taxon share
+    layout: {x: 0, y: 6, w: 1, h: 3}

@@ -1,0 +1,61 @@
+id: taxpasta_sample_summary
+name: Per-run profile statistics
+mode: merge/summary
+description: >-
+  One row per sample, profiler and database: how many taxa were reported, how
+  many reads were assigned, how concentrated the profile is on its top hit, and
+  Shannon diversity with Pielou evenness.
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/taxpasta/merge
+find: { path_glob: "**/taxpasta/*.tsv" }
+recipe: taxpasta/sample_summary.py
+fixture: sample_summary.tsv
+renders_as:
+  - {
+      id: richness_dot_plot,
+      component: advanced_viz,
+      kind: dot_plot,
+      roles:
+        {
+          cluster: sample,
+          gene: profiler_db,
+          mean_expression: shannon,
+          frac_expressing: top_taxon_fraction,
+        },
+    }
+  - {
+      component: card,
+      column: taxa_observed,
+      aggregation: median,
+      aggregations: [box_plot_stats],
+      secondary_layout: box_plot,
+    }
+  - {
+      component: card,
+      column: shannon,
+      aggregation: average,
+      secondary_layout: gauge,
+      coverage_max: 6,
+    }
+  - {
+      component: card,
+      column: evenness,
+      aggregation: average,
+      secondary_layout: threshold,
+      threshold_value: 0.6,
+      threshold_direction: min,
+      threshold_warn: 0.4,
+    }
+  - {
+      component: card,
+      column: profiler_db,
+      aggregation: nunique,
+      secondary_layout: top_n,
+      breakdown_col: profiler,
+      top_n_count: 4,
+    }
+  - {
+      component: figure,
+      visu_type: scatter,
+      dict_kwargs: { x: taxa_observed, y: shannon, color: profiler, symbol: platform },
+    }
+  - { component: table }
