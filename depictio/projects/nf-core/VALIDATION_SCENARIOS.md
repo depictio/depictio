@@ -6,6 +6,10 @@ executed on the EMBL cluster for this branch.
 Derived analytically from template YAML data collections and pipeline option space.
 Priority order at the bottom.
 
+The scenarios below are what a template *should* be stressed with. `TEST_DATASETS.md`
+lists what nf-core actually ships to stress it with: every `test*` profile of every
+pinned pipeline, its dataset, and whether the 1.10.0 Nextflow trigger can ingest it.
+
 ## Conventions
 
 Each pipeline section opens with two header lines that pin what the template was

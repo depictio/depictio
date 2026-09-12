@@ -9,6 +9,9 @@ pipelines depictio templates or considered templating, taken on 2026-09-05 with
 multi-GB BAM/FASTQ intermediates, no reports) or simply absent, so the resolver
 verifies each run before anything is downloaded.
 
+For the other side of the question, which `-profile test*` datasets could exercise each
+template, with sample counts, metadata and blockers, see `TEST_DATASETS.md`.
+
 **Status column.** `ok` = the release's own prefix is a real run (at least 5 data
 objects outside `pipeline_info/`, at least 5 of them under 50 MB); `empty` = the
 prefix exists but fails that check (failed run or truncated sync); `missing` = no
