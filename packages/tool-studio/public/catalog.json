@@ -2969,7 +2969,7 @@
           "edam_formats": [],
           "edam_operations": [],
           "find": {
-            "path_glob": "**/*.annotatePeaks.txt",
+            "path_glob": "**/*_peaks.annotatePeaks.txt",
             "path_glob_alt": []
           },
           "fixture": "annotate_peaks.tsv",
@@ -2977,8 +2977,8 @@
           "id": "homer_annotated_peaks",
           "mode": "peaks/annotation",
           "name": "Peak annotation",
-          "path_glob": "**/*.annotatePeaks.txt",
-          "rawYaml": "id: homer_annotated_peaks\nname: Peak annotation\nmode: peaks/annotation\ndescription: >-\n  One row per annotated peak: the genomic feature class HOMER assigned it, the\n  signed distance to the nearest transcription start site and the gene that\n  start site belongs to.\nfind:\n  path_glob: \"**/*.annotatePeaks.txt\"\nrecipe: homer/annotate_peaks.py\nfixture: annotate_peaks.tsv\nrenders_as:\n  # Where the peaks land relative to genes, then how far from the TSS.\n  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, color: annotation_class, title: Peak annotation per sample} }\n  - { component: figure, visu_type: histogram, dict_kwargs: {x: distance_to_tss, color: annotation_class, title: Distance to nearest TSS} }\n  - { component: card, column: peak_id, aggregation: count, secondary_layout: top_n, breakdown_col: annotation_class, top_n_count: 3 }\n  - { component: card, column: annotation_class, aggregation: count, secondary_layout: donut, breakdown_col: annotation_class }\n  - { component: card, column: gene_name, aggregation: nunique, secondary_layout: composition, breakdown_col: annotation_class }\n  - { component: card, column: distance_to_tss, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: table, row_selection_enabled: true, row_selection_column: peak_id }\n",
+          "path_glob": "**/*_peaks.annotatePeaks.txt",
+          "rawYaml": "id: homer_annotated_peaks\nname: Peak annotation\nmode: peaks/annotation\ndescription: >-\n  One row per annotated peak: the genomic feature class HOMER assigned it, the\n  signed distance to the nearest transcription start site and the gene that\n  start site belongs to.\nfind:\n  path_glob: \"**/*_peaks.annotatePeaks.txt\"\nrecipe: homer/annotate_peaks.py\nfixture: annotate_peaks.tsv\nrenders_as:\n  # Where the peaks land relative to genes, then how far from the TSS.\n  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, color: annotation_class, title: Peak annotation per sample} }\n  - { component: figure, visu_type: histogram, dict_kwargs: {x: distance_to_tss, color: annotation_class, title: Distance to nearest TSS} }\n  - { component: card, column: peak_id, aggregation: count, secondary_layout: top_n, breakdown_col: annotation_class, top_n_count: 3 }\n  - { component: card, column: annotation_class, aggregation: count, secondary_layout: donut, breakdown_col: annotation_class }\n  - { component: card, column: gene_name, aggregation: nunique, secondary_layout: composition, breakdown_col: annotation_class }\n  - { component: card, column: distance_to_tss, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: table, row_selection_enabled: true, row_selection_column: peak_id }\n",
           "recipe": "homer/annotate_peaks.py",
           "renders_as": [
             {
