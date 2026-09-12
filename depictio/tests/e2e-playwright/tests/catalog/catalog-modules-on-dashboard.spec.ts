@@ -44,6 +44,20 @@ const CONTENT_SELECTOR: Record<string, string> = {
   multiqc: ".js-plotly-plot",
 };
 
+/** How long to wait for CONTENT_SELECTOR, per component type.
+ *
+ * A MultiQC tile does not own its figure: the backend builds every figure of a
+ * report on first request and 202s until they are ready, and MultiQCFigure
+ * polls for that for up to 5 minutes (PREPARE_POLL_MAX_MS), documenting a
+ * 30-75s shimmer on a cold collection. The default budget below sits inside
+ * that window, so the first few MultiQC tiles of a run were failing on a build
+ * that was still legitimately in progress, then passing on retry once the
+ * report was warm. Every other component type computes its own frame and is
+ * held to the shorter budget.
+ */
+const CONTENT_TIMEOUT_MS: Record<string, number> = { multiqc: 150_000 };
+const DEFAULT_CONTENT_TIMEOUT_MS = 60_000;
+
 interface Checked {
   problem: string | null;
   /** Does the tile span its whole grid row? Compared across surfaces. */
@@ -87,7 +101,10 @@ async function checkComponent(
   const selector = CONTENT_SELECTOR[offer.render.component];
   if (selector) {
     try {
-      await pwExpect(cell.locator(selector).first()).toBeVisible({ timeout: 60_000 });
+      await pwExpect(cell.locator(selector).first()).toBeVisible({
+        timeout:
+          CONTENT_TIMEOUT_MS[offer.render.component] ?? DEFAULT_CONTENT_TIMEOUT_MS,
+      });
     } catch {
       const text = (await cell.innerText().catch(() => "")).trim().slice(0, 200);
       return {

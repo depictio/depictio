@@ -1,0 +1,448 @@
+# nf-core/rnaseq Template v3.26.0 - Bulk RNA-seq quantification
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/rnaseq/3.26.0 --data-root /path/to/your/data
+#
+# Tested against the nf-core/rnaseq AWS megatest results:
+#   s3://nf-core-awsmegatests/rnaseq/results-e7ca46272c8f9d5ceee3f71759f4ba551d3217a4/aligner_star_salmon/
+# `megatest.yaml` next to this file lists the exact subset and fetches it
+# (`bash download_test_data.sh [DIR]`); that directory is DATA_ROOT.
+#
+# The run publishes two aligner routes side by side. This template covers the
+# default STAR + Salmon route: DATA_ROOT is the `aligner_star_salmon/` directory,
+# and the Salmon matrices it reads are the ones under `star_salmon/`. The
+# stand-alone pseudo-aligner route writes the same file names under `salmon/`,
+# which is where the catalog recipes look by default; `source_overrides` below
+# point them at the STAR + Salmon copies instead.
+#
+# MultiQC 1.33 wrote this run's data dir as `multiqc/star_salmon/multiqc_report_data/`
+# rather than `multiqc/multiqc_data/`. The MultiQC scan pattern pins that literal
+# path: a bare basename would attach whichever nested report was found first.
+# ============================================================================
+template:
+  template_id: "nf-core/rnaseq/3.26.0"
+  description: "nf-core/rnaseq template for bulk RNA-seq: MultiQC funnel, Salmon expression overview, gene explorer"
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory containing rnaseq pipeline output for one aligner route (multiqc/, star_salmon/, salmon/, trimgalore/)"
+      required: true
+    - name: "SAMPLESHEET_FILE"
+      description: "Path to the rnaseq samplesheet (sample, fastq_1, fastq_2, strandedness). Auto-detected from {DATA_ROOT}/input/ (CSV or TSV) when omitted."
+      required: false
+    - name: "PSEUDOALIGNER_ONLY"
+      description: "Set (--var PSEUDOALIGNER_ONLY=true) for a --skip_alignment run: there is no star_salmon/, so the expression panels read the matrices under salmon/ instead. Matches the run's params.json skip_alignment."
+      required: false
+    - name: "SKIP_MULTIQC"
+      description: "Set (--var SKIP_MULTIQC=true) for a run with --skip_multiqc or --skip_qc. Prunes the MultiQC data collection: no report was written, so the QC tab has nothing to read."
+      required: false
+    - name: "SKIP_QUANTIFICATION_MERGE"
+      description: "Set (--var SKIP_QUANTIFICATION_MERGE=true) for a run with --skip_quantification_merge. The merged salmon.merged.gene_*.tsv matrices are absent, so every expression panel loses its source and only the QC tab survives."
+      required: false
+  # Variables supplied when materialising the BUNDLED reference/demo dataset
+  # (db_init_reference_datasets.resolve_template_for_init). The megatest run is
+  # the STAR + Salmon route, which is what the DC defaults already point at, so
+  # only the samplesheet the fetch drops into input/ is pinned here.
+  reference:
+    vars:
+      SAMPLESHEET_FILE: "{DATA_ROOT}/input/samplesheet.csv"
+  # How this pipeline's run provenance (parameters, references, tool versions)
+  # is collected at ingest, and surfaced in the ingestion report and the
+  # dashboard Settings drawer. Keys not matched by any group rule land in
+  # 'Other'; only exclude_keys are ever omitted.
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "genomes"    # the whole iGenomes catalogue, ~40 KB of reference URIs
+          - "hook_url"   # nf-core runs put a live Slack webhook here
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Alignment & quantification"
+        key_patterns: ["aligner", "pseudo_aligner*", "salmon_*", "kallisto_*", "rsem_*", "star_*", "hisat2_*", "bowtie2_*", "extra_star_align_args", "extra_salmon_quant_args", "extra_kallisto_quant_args", "extra_bowtie2_align_args", "use_parabricks_star", "use_sentieon_star", "use_gpu_ribodetector", "gpu_container_options", "bam_csi_index", "save_align_intermeds", "save_unaligned", "min_mapped_reads", "seq_center", "seq_platform"]
+      - group: "Read trimming & UMI"
+        key_patterns: ["trimmer", "extra_trimgalore_args", "extra_fastp_args", "extra_fqlint_args", "min_trimmed_reads", "skip_trimming", "save_trimmed", "save_merged_fastq", "with_umi", "umi_*", "umitools_*"]
+      - group: "Contamination & rRNA"
+        key_patterns: ["remove_ribo_rna", "ribo_*", "sortmerna_*", "bbsplit_*", "save_bbsplit_reads", "save_non_ribo_reads", "contaminant_screening*", "kraken_db", "bracken_precision", "save_kraken_*", "sylph_*"]
+      - group: "Strandedness"
+        key_patterns: ["stranded_threshold", "unstranded_threshold", "salmon_quant_libtype"]
+      - group: "Annotation & references"
+        key_patterns: ["genome", "fasta", "gtf*", "gff*", "gene_bed", "transcript_fasta", "additional_fasta", "splicesites", "igenomes_*", "featurecounts_*", "prokaryotic", "gencode", "save_reference", "hisat2_build_memory", "pseudo_aligner_kmer_size"]
+      - group: "QC modules"
+        key_patterns: ["rseqc_modules", "deseq2_vst", "skip_*"]
+      - group: "Run context"
+        key_patterns: ["input*", "outdir", "email*", "multiqc_*", "max_multiqc_email_size", "monochrome_logs", "plaintext_email", "publish_dir_mode", "trace_report_suffix", "validate_params", "version", "help*", "show_hidden", "config_profile_*", "custom_config_*", "pipelines_testdata_base_path", "arm", "use_rustqc", "skip_linting"]
+    highlight:
+      - "aligner"
+      - "pseudo_aligner"
+      - "trimmer"
+      - "genome"
+      - "stranded_threshold"
+      - "remove_ribo_rna"
+      - "featurecounts_group_type"
+      - "deseq2_vst"
+  dashboards:
+    - "dashboards/base.yaml"
+  conditional:
+    # --skip_multiqc / --skip_qc: no report is written, so the MultiQC data
+    # collection has no file. Dropping it lets the run ingest its expression
+    # panels instead of aborting on a missing scan.
+    - if_var_present: "SKIP_MULTIQC"
+      remove_dc_tags: ["multiqc_data"]
+      dashboards: ["dashboards/base.yaml"]
+    # --skip_quantification_merge suppresses the merged matrices every
+    # expression panel is built from (the per-sample quant.sf files stay, but
+    # nothing in this template reads them). Drop the whole expression chain.
+    - if_var_present: "SKIP_QUANTIFICATION_MERGE"
+      remove_dc_tags:
+        ["sample_overview", "expression_heatmap", "gene_expression", "gene_counts"]
+      dashboards: ["dashboards/base.yaml"]
+    # --skip_alignment: no star_salmon/ subtree at all. The pseudo-aligner
+    # writes the same file names under salmon/, which is also where the catalog
+    # recipes look by default, so this route only has to undo the STAR + Salmon
+    # repointing the DCs below apply.
+    - if_var_present: "PSEUDOALIGNER_ONLY"
+      override_dcs:
+        - data_collection_tag: "sample_overview"
+          source_overrides:
+            matrix: {path: "salmon/salmon.merged.gene_tpm.tsv"}
+        - data_collection_tag: "expression_heatmap"
+          source_overrides:
+            matrix: {path: "salmon/salmon.merged.gene_tpm.tsv"}
+        - data_collection_tag: "gene_expression"
+          source_overrides:
+            matrix: {path: "salmon/salmon.merged.gene_tpm.tsv"}
+        - data_collection_tag: "gene_counts"
+          scan_filename: "{DATA_ROOT}/salmon/salmon.merged.gene_counts.tsv"
+      dashboards: ["dashboards/base.yaml"]
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "RNA-seq Expression Analysis"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "rnaseq"
+    version: "3.26.0"
+    engine:
+      name: "nextflow"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/rnaseq"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # MultiQC: the whole QC funnel of the run, read from the parquet.
+      # The pattern pins the nested report dir MultiQC 1.33 wrote here
+      # (multiqc/star_salmon/multiqc_report_data/), not a bare basename.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report data for the STAR + Salmon route"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "multiqc/star_salmon/multiqc_report_data/multiqc\\.parquet"
+          dc_specific_properties:
+            modules:
+              - "fastqc_raw"
+              - "cutadapt"
+              - "fastqc_trimmed"
+              - "star"
+              - "salmon"
+              - "samtools"
+              - "picard"
+              - "rseqc"
+              - "qualimap"
+              - "dupradar"
+              - "biotype_counts"
+              - "strandedness"
+              - "sample-relationships"
+            plots:
+              fastqc_raw:
+                - "Sequence Counts"
+                - "Sequence Quality Histograms"
+                - "Per Sequence Quality Scores"
+                - "Per Sequence GC Content":
+                    - "Percentages"
+                    - "Counts"
+                - "Adapter Content"
+                - "Status Checks"
+              cutadapt:
+                - "Filtered Reads"
+                - "Trimmed Sequence Lengths (3')":
+                    - "Counts"
+                    - "Obs/Exp"
+              fastqc_trimmed:
+                - "Sequence Counts"
+                - "Sequence Quality Histograms"
+                - "Sequence Length Distribution"
+                - "Sequence Duplication Levels"
+                - "Status Checks"
+              star:
+                - "Summary Statistics"
+                - "Alignment Scores"
+              salmon:
+                - "salmon-section-1"
+              samtools:
+                - "Percent mapped"
+                - "Alignment stats"
+                - "Flagstat"
+              picard:
+                - "Mark Duplicates"
+              rseqc:
+                - "Read Distribution"
+                - "Inner Distance":
+                    - "Counts"
+                    - "Percentages"
+                - "Infer experiment"
+                - "Junction Annotation":
+                    - "Junctions"
+                    - "Events"
+                - "Junction Saturation":
+                    - "All Junctions"
+                    - "Known Junctions"
+                    - "Novel Junctions"
+                - "Read Duplication"
+                - "Bam Stat"
+              qualimap:
+                - "Genomic origin of reads"
+                - "Gene Coverage Profile":
+                    - "Counts"
+                    - "Normalised"
+              dupradar:
+                - "dupradar-section"
+              biotype_counts:
+                - "featurecounts_biotype"
+              strandedness:
+                - "Strandedness: inference summary"
+                - "Strandedness: read composition"
+              sample-relationships:
+                - "STAR_SALMON DESeq2 PCA plot"
+                - "STAR_SALMON DESeq2 sample similarity"
+
+      # ----------------------------------------------------------------
+      # Samplesheet: the hub every link starts from. The pipeline sheet has
+      # no condition column, so the recipe reads the condition and replicate
+      # out of the <condition>_REP<n> sample names nf-core RNA-seq uses.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samplesheet"
+        description: "Run samplesheet with the condition and replicate its sample names encode"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/rnaseq/samplesheet.py"
+            source_overrides:
+              samplesheet:
+                path: "{SAMPLESHEET_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier, the key every link joins on"
+              "condition": "Biological group, read off the sample name"
+              "replicate": "Replicate index within the condition"
+              "read_type": "paired-end when the sheet declares a second FASTQ, else single-end"
+              "strandedness": "Library strandedness declared in the sheet (auto means the pipeline inferred it)"
+
+      # ----------------------------------------------------------------
+      # Salmon expression: three views of one merged gene-level TPM matrix.
+      # The catalog recipes default to the pseudo-aligner layout (salmon/),
+      # so each one is repointed at the STAR + Salmon copy.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "sample_overview"
+        description: "Per-sample PCA coordinates and library summary from the merged Salmon TPM matrix"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "salmon/sample_pca.py"
+            source_overrides:
+              matrix:
+                path: "star_salmon/salmon.merged.gene_tpm.tsv"
+              samplesheet:
+                path: "{SAMPLESHEET_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample identifier"
+              "dim_1": "First principal component of the log2(TPM + 1) matrix"
+              "dim_2": "Second principal component"
+              "dim_3": "Third principal component"
+              "group": "Condition the sample belongs to"
+              "genes_detected": "Genes with TPM above zero in this sample"
+              "genes_expressed": "Genes with TPM at or above 1 in this sample"
+              "median_tpm": "Median TPM over the genes the sample detects"
+
+      - data_collection_tag: "expression_heatmap"
+        description: "The 500 most variable genes as a log2(TPM + 1) matrix, genes by samples"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "salmon/top_variable_genes.py"
+            source_overrides:
+              matrix:
+                path: "star_salmon/salmon.merged.gene_tpm.tsv"
+              samplesheet:
+                path: "{SAMPLESHEET_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "gene_name": "Gene symbol, the heatmap row identifier"
+              "_col_annotations_json": "Condition annotation strip aligned to the sample columns"
+
+      - data_collection_tag: "gene_expression"
+        description: "Merged Salmon TPMs as one row per gene and sample, expressed genes only"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "salmon/gene_expression_long.py"
+            source_overrides:
+              matrix:
+                path: "star_salmon/salmon.merged.gene_tpm.tsv"
+              samplesheet:
+                path: "{SAMPLESHEET_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "gene_id": "Ensembl gene identifier"
+              "gene_name": "Gene symbol, the key the gene explorer selects on"
+              "sample": "Sample identifier"
+              "tpm": "Transcripts per million"
+              "log2_tpm": "log2(TPM + 1), the scale expression is compared on"
+              "group": "Condition the sample belongs to"
+
+      # ----------------------------------------------------------------
+      # The raw merged count matrix, shown as rows in Reference tables.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "gene_counts"
+        description: "Merged gene-level count matrix (tximport), one estimated count column per sample"
+        config:
+          type: "Table"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{DATA_ROOT}/star_salmon/salmon.merged.gene_counts.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "gene_id": "Ensembl gene identifier"
+              "gene_name": "Gene symbol"
+
+# ============================================================================
+# LINKS
+# The samplesheet is the hub: every panel is filterable by sample, condition
+# and replicate from the persistent left-rail filter. `sample_mapping` resolves
+# the MultiQC sample-name variants (Read 1 / _1 / - Adapter 1) back to the
+# canonical sample; the table targets join directly.
+# `expression_heatmap` and `gene_counts` are wide matrices (samples are
+# columns, not rows), so the link is mirrored as a COLUMN subset by
+# `_narrow_wide_matrix_columns` and `target_field` there is nominal. Nominal
+# means it must name a column the wide matrix does NOT have: an absent column
+# makes `apply_filters_to_scan` skip the row filter, which is what leaves the
+# column mirror to do the work. Point it at a real column of the matrix
+# (`gene_name`, `gene_id`) and the row filter is applied instead, comparing
+# sample names against gene names, and the panel goes empty.
+# ============================================================================
+links:
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample"
+    description: "Filter the MultiQC panels by samplesheet selection"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "sample_overview"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the sample overview by samplesheet selection"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "gene_expression"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the gene explorer by samplesheet selection"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "expression_heatmap"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Narrow the expression heatmap to the selected samples (column subset on a wide matrix)"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "gene_counts"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Narrow the merged count matrix to the selected samples (column subset on a wide matrix)"
+    enabled: true
+
+  # The PCA embedding and the sample table both select on sample_id: this link
+  # is what carries that selection into the gene explorer and the heatmap.
+  - source_dc_tag: "sample_overview"
+    source_column: "sample_id"
+    target_dc_tag: "gene_expression"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the gene explorer by the samples picked in the PCA or the sample table"
+    enabled: true
+
+  - source_dc_tag: "sample_overview"
+    source_column: "sample_id"
+    target_dc_tag: "expression_heatmap"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Narrow the expression heatmap to the samples picked in the PCA (column subset)"
+    enabled: true
+
+  - source_dc_tag: "sample_overview"
+    source_column: "sample_id"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample"
+    description: "Filter the MultiQC panels by the samples picked in the PCA"
+    enabled: true

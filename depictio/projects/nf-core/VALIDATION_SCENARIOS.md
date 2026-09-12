@@ -286,6 +286,37 @@ non-SARS pathogen (no lineage DBs) + metagenomic protocol (no ivar/amplicon mosd
 
 **Ranking by template stress:** F1 > F2 > F3 > F8 > F5 > F7 > F4 > F6 > F9 > F10 > F11
 
+---
+
+## rnaseq 3.26.0
+
+**Megatest:** `s3://nf-core-awsmegatests/rnaseq/results-e7ca46272c8f9d5ceee3f71759f4ba551d3217a4/`
+(tag `e7ca4627`, run_root `aligner_star_salmon/`, manifest megatest.yaml)
+
+**MultiQC:** run wrote 1.33 -> used as-is
+
+**Template requirements:**
+- Always: `multiqc_data` (parquet at the nested `multiqc/star_salmon/multiqc_report_data/`),
+  `samplesheet` (project-local recipe, condition read off `<condition>_REP<n>`)
+- STAR + Salmon route: `sample_overview`, `expression_heatmap`, `gene_expression`,
+  `gene_counts`, all from `star_salmon/salmon.merged.gene_*.tsv` via `source_overrides`
+- `PSEUDOALIGNER_ONLY`: the same four collections repointed at `salmon/`
+- `SKIP_MULTIQC`: prunes `multiqc_data`
+- `SKIP_QUANTIFICATION_MERGE`: prunes the whole expression chain, leaving the QC tab
+
+### Further scenarios (analytical, not yet run)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| R1 | **pseudoaligner-only** | `--skip_alignment --pseudo_aligner salmon` | No `star_salmon/`; matrices under `salmon/` | `PSEUDOALIGNER_ONLY` conditional undoes the STAR + Salmon repointing. The megatest already ships both trees, so this is testable on the fetched data by re-running with the flag. |
+| R2 | **skip-quantification-merge** | `--skip_quantification_merge` | No merged `salmon.merged.gene_*.tsv` | All four expression DCs pruned; only the QC tab survives. Tests that a tab reduced below the minimum is dropped rather than half-rendered. |
+| R3 | **skip-multiqc** | `--skip_multiqc` | No report at all | `multiqc_data` pruned; 19 tiles disappear and the QC tab must still meet the minimum. |
+| R4 | **rsem route** | `--aligner star_rsem` | `aligner_star_rsem/` publishes `rsem.merged.gene_tpm.tsv`, not `salmon.merged.*` | Not covered: the salmon recipes match on file name. Would need an `rsem` catalog tool or a name-tolerant recipe. |
+| R5 | **kallisto pseudo-aligner** | `--pseudo_aligner kallisto --skip_alignment` | Matrices under `kallisto/` | Same gap as R4: `PSEUDOALIGNER_ONLY` hardcodes `salmon/`. |
+| R6 | **non-conventional sample names** | any run whose samplesheet is not `<condition>_REP<n>` | `samplesheet.py` yields one condition per sample | Degrades colouring and the condition cards; nothing errors. Worth a run to confirm. |
+
+**Ranking by template stress:** R2 > R4/R5 > R1 > R3 > R6
+
 ## Priority additions to `generate_validation_runs.sh`
 
 In order of value-per-effort:

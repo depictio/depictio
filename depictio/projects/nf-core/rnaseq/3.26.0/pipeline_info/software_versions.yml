@@ -1,0 +1,5 @@
+CUSTOM_GTFFILTER:
+  python: 3.9.5
+Workflow:
+    nf-core/rnaseq: v3.26.0-ge7ca462
+    Nextflow: 26.04.3
