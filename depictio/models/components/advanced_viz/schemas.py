@@ -420,6 +420,12 @@ ROLE_NAMES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "feature_id": frozenset({"feature_id", "gene", "feature"}),
         "position": frozenset({"position", "pos", "aa_pos", "site"}),
         "category": frozenset({"category", "effect", "type", "consequence"}),
+        # Optional roles are scored against their own name server-side
+        # (`_score_kind` only consults this map for required roles), but the
+        # backend-less picker in Tool Studio ranks every role's candidates
+        # through `role_names`; without these a `label` binding offers the
+        # DC's string columns in alphabetical order.
+        "label": frozenset({"label", "name", "gene_name", "symbol", "gene_symbol"}),
     },
     "qq": {
         "p_value": frozenset({"p_value", "pvalue", "p", "padj", "fdr"}),
@@ -563,6 +569,10 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
     "dot_plot": {},
     "lollipop": {
         "effect": _FLOAT,
+        # Names the stem. `feature_id` is the lane, not the mark, so a lollipop
+        # keyed on a contrast or a chromosome has no way to say which gene a
+        # stem is without this.
+        "label": _STRING,
     },
     "qq": {
         "feature_id": _STRING,
@@ -1098,6 +1108,17 @@ _KIND_ROLE_DESCRIPTIONS: dict[AdvancedVizKind, dict[str, str]] = {
         "end": "Junction acceptor position.",
         "count": "Reads supporting the junction, driving the arc width.",
         "annotation": "Optional junction annotation (known / novel, gene).",
+    },
+    # The flat map reads `feature_id` as "the identifier of each row", which is
+    # the one thing it is not here: it is the lane the stems are drawn on, and
+    # binding it to something with thousands of levels collapses the panel into
+    # a single-value dropdown.
+    "lollipop": {
+        "feature_id": "One subplot lane per distinct value: the track the stems sit on.",
+        "position": "Where each stem stands along the lane's shared x-axis.",
+        "category": "Stem and head colour: consequence, direction, class.",
+        "effect": "Optional magnitude, drawn as the stem height and the head size.",
+        "label": "Optional name for each stem, used in the hover and the top-N labels.",
     },
 }
 
