@@ -1,0 +1,18 @@
+id: fusioncatcher_fusion_genes
+name: FusionCatcher fusion genes
+mode: fusion-genes
+description: >-
+  One row per FusionCatcher candidate fusion, with both partner genes, the
+  annotation labels the pair matched, the read evidence supporting the call and
+  its predicted effect on the coding sequence.
+find: { filename: "*.fusion-genes.txt" }
+recipe: fusioncatcher/fusion_genes.py
+fixture: fusion_genes.tsv
+renders_as:
+  - { id: evidence_dot_plot, component: advanced_viz, kind: dot_plot, roles: {cluster: predicted_effect, gene: fusion, mean_expression: log_support, frac_expressing: unique_fraction} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: predicted_effect, y: supporting_reads, color: finding_method} }
+  - { component: card, column: supporting_reads, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: fusion, aggregation: nunique, secondary_layout: top_n, breakdown_col: predicted_effect, top_n_count: 3 }
+  - { component: card, column: spanning_unique_reads, aggregation: sum, secondary_layout: donut, breakdown_col: finding_method }
+  - { component: card, column: n_annotations, aggregation: average, secondary_layout: histogram }
+  - { component: table, row_selection_enabled: true, row_selection_column: fusion }

@@ -177,6 +177,7 @@ dump.rdb
 # SAMPLESHEET_FILE resolves without network access.
 !depictio/projects/nf-core/differentialabundance/*/input/*.tsv
 !depictio/projects/nf-core/funcscan/*/input/*.csv
+!depictio/projects/nf-core/rnafusion/*/input/*.csv
 # Allow advanced_viz_showcase synthetic fixtures
 !depictio/projects/init/advanced_viz_showcase/data/*.tsv
 # Allow the catalog conformance project's generated data. Every file here is a

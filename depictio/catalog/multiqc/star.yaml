@@ -1,0 +1,15 @@
+id: multiqc_star
+name: Splice-aware alignment summary
+origin_tool: STAR
+mode: star
+description: Splice-aware read alignment summary (uniquely mapped, multi-mapped and unmapped fractions, plus the per-gene count assignment) from STAR, via MultiQC.
+find:
+  path_glob: "**/multiqc/multiqc_data/multiqc.parquet"
+  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/
+    - "**/multiqc/*_data/multiqc.parquet"
+    - "**/multiqc/*/*_data/multiqc.parquet"
+# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);
+# `section` selects this module's plot anchors out of the shared report.
+fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
+renders_as:
+  - { component: multiqc, section: star }

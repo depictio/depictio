@@ -231,6 +231,61 @@ non-SARS pathogen (no lineage DBs) + metagenomic protocol (no ivar/amplicon mosd
 
 ---
 
+---
+
+## rnafusion 4.1.3
+
+**Megatest:** `s3://nf-core-awsmegatests/rnafusion/results-76ad76e7c39b2ba9edc35aa3602e3dc454d842ec/`
+(tag `76ad76e7`, run_root `.`, manifest megatest.yaml)
+
+**MultiQC:** run wrote 1.33 -> used as-is
+
+**Template requirements:**
+- Always: `multiqc_data` (parquet at `multiqc/multiqc_data/`), plus the two fusion-report
+  collections `fusion_consensus` and `caller_evidence`. `fusion_consensus` is the hub every
+  `links:` entry starts from, and both recipes read the same
+  `fusionreport/*/*.fusions.csv`, so they stand or fall together
+- Always: `samplesheet`, read from `{DATA_ROOT}/input/` because rnafusion never publishes
+  the sheet into the results tree. `params.json` `input` points at a nf-core test-datasets
+  URL, so the manifest `post_fetch_help` carries the curl line and the template ships a copy
+- Per caller, pruned by conditional: `arriba_fusions` (`SKIP_ARRIBA`), `starfusion_fusions`
+  (`SKIP_STARFUSION`), `fusioncatcher_fusions` (`SKIP_FUSIONCATCHER`)
+- Per validation step: `fusioninspector_fusions` and `fusion_protein_domains`
+  (`SKIP_FUSIONINSPECTOR`), both read from the same abridged table
+- Per splicing step: `splice_junctions` and `cancer_introns` (`SKIP_CTATSPLICING`).
+  `cancer_introns` is additionally `optional: true` and no tile depends on it
+- Route flags are declared but not auto-detected: `_introspect_pipeline_params` maps only
+  the ampliseq and viralrecon flags, so `SKIP_ARRIBA`, `SKIP_STARFUSION`,
+  `SKIP_FUSIONCATCHER`, `SKIP_FUSIONINSPECTOR`, `SKIP_CTATSPLICING` and `SKIP_QC` must be
+  passed by hand as `--var`. `SAMPLESHEET_FILE` overrides where the sheet is looked for
+- The fusion, not the sample, is the key of every collection. rnafusion writes one file per
+  tool per sample with the sample encoded only in the file name, and `resolve_sources`
+  concatenates the globbed files without their path, so no caller table can carry a sample
+  column. The samplesheet therefore reaches only the MultiQC panels
+- Observed on this megatest (the pipeline's own test profile, one synthetic sample `test`
+  with all three callers, FusionInspector and CTAT-splicing enabled): 20 consensus fusions
+  over 45 caller-evidence rows, Arriba and STAR-Fusion reporting 14 distinct fusions each
+  and FusionCatcher 17, FusionInspector validating 14, 184 Pfam domain rows over 12 fusions,
+  200 scored junctions over 14 chromosomes, and `cancer_introns` header-only
+
+### Further scenarios (analytical, not yet run)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| F1 | **multi-sample cohort** | any samplesheet with more than one row | Each caller writes one file per sample, all matched by the same glob | The highest-stress scenario and the one this megatest cannot reach. `resolve_sources` drops the path, so every caller table silently pools the cohort into one frame with no sample column and no `depictio_run_id` (transformed collections never get one). Counts stay arithmetically correct but stop being per sample, and the same fusion called in two samples collapses to rows that cannot be told apart. Also the only way to exercise the sample axis at all: the persistent `Sample filters` MultiSelect, the `sample_mapping` fan-out and every per-sample MultiQC panel are single-valued here. Needs a run before the template is claimed cohort-safe. |
+| F2 | **single caller** | `--tools arriba` plus the matching `--var SKIP_STARFUSION=true --var SKIP_FUSIONCATCHER=true` | Only one caller directory is written | Two of the three caller collections pruned, so the `Evidence` tab loses two of its three per-caller dot plots and two of its three tables. `caller_evidence` keeps one row per fusion instead of up to three, so the evidence dot plot degenerates to a single column and `evidence_fraction` is 1.0 everywhere. The `Caller concordance` UpSet drops to one set with a single intersection, and `tool_support` becomes a constant, which also flattens the donut on the `Fusions called` card and the colour of the ranking lollipop. Tests conditional pruning and set-based rendering at once. |
+| F3 | **no FusionInspector** | `--var SKIP_FUSIONINSPECTOR=true` | No `fusioninspector/` tree | `fusioninspector_fusions` and `fusion_protein_domains` pruned together, taking two of the three sections of the last tab: `Validated calls` (4 cards, dot plot, allelic-ratio scatter) and `Fusion protein domains` (domain track, lollipop, table). Also removes the tab's second hub, so the two `fusioninspector_fusions -> *` links vanish and only the fusion-consensus fan-out remains. The largest single-flag loss in the template. |
+| F4 | **no CTAT-splicing** | `--var SKIP_CTATSPLICING=true` | No `ctatsplicing/` tree | `splice_junctions` and `cancer_introns` pruned, removing the `Splice junctions` section (4 cards, Manhattan, per-gene bar) and one pinned reference table. Low risk because both collections are deliberately unlinked, so nothing else on the dashboard changes; that is exactly what the scenario should confirm. |
+| F5 | **cancer introns populated** | a run whose junctions survive the CTAT cancer-intron annotation filter | `*.cancer.introns` has rows rather than a bare header | The inverse of what was validated: here the file is header-only, the ingest skips the collection with a message, and the collection is still registered on the project with no Delta table at all, so `deltatables/get`, `/specs` and `/shape` all 404 and `pl.read_delta` raises `TableNotFoundError` rather than returning an empty frame. A run with real candidates is the only way to exercise `cancer_introns.py`, its `cancer_intron_manhattan` render and the TCGA and GTEx prevalence columns. Nothing at the API distinguishes "optional and legitimately empty" from "broken", so a consumer walking the project has to treat a 404 as normal. |
+| F6 | **skip QC** | `--skip_qc` plus `--var SKIP_QC=true` | No FastQC, fastp, STAR or Picard sections reach MultiQC | `multiqc_data` pruned, which empties the whole main tab: 9 MultiQC tiles across three sections, plus the `samplesheet -> multiqc_data` link that is the samplesheet's only consumer. The fusion tabs are untouched, so this is the scenario that shows the funnel still works with its first step removed. |
+| F7 | **real tumour library** | any non-synthetic RNA-seq input | Fusion Indication Index spreads instead of saturating | The megatest is a spike-in: 12 of 20 fusions are textbook cancer fusions that all three callers find and two knowledge bases list, so their index is exactly 1.0, while 7 single-caller IGH and DUX4 artefacts sit at 0.167 and one two-caller call at 0.833. The score is therefore bimodal and saturated, so the `fii_lollipop` reads as two flat plateaux rather than a ranking, the index box plot has its median at the maximum, and the UpSet is dominated by one intersection of size 12. All three panels are correct and simply have nothing to separate. A real library is needed to confirm the ranking, the box plot spread and the `fii` RangeSlider are usable. |
+| F8 | **route flag omitted** | a run that skipped a caller but was ingested without the matching `--var` | The conditional never fires, so the collection stays declared | Because the flags are not read from `params.json`, the recipe runs against a directory that does not exist and the collection fails or empties while the dashboard still carries its tiles. The failure mode differs per collection: the three caller ones are not `optional: true`, so the ingest should stop, whereas `cancer_introns` is and would be skipped quietly. Worth a run that pins which of the two happens, since it is the most likely operator mistake with this template. |
+| F9 | **MultiQC sample-id shapes** | any run where a stage renames its samples | Panel sample ids do not reduce to the samplesheet id | rnafusion runs FastQC twice and names the second pass `<sample>_trimmed_1` / `_trimmed_2`. `build_sample_mapping` strips only a `_1` / `_2` read suffix, so those canonicalise to a second id `test_trimmed` that the samplesheet's `test` can never reach. `resolve_link` returns `["test", "test_1", "test_2"]` with an empty `unmapped_values`, so nothing signals a loss: picking the only sample empties the `fastqc-1` tile and drops the post-trim series from the raw FastQC tiles. Not fixable from the template; the resolver has to report uncovered target ids or canonicalise against the samplesheet rather than a fixed suffix pattern. Any `_trimmed`, `_filtered`, `_dedup` or `_ASSEMBLED` suffix hits it. |
+| F10 | **catalog added after the API started** | any ingest of a template whose catalog tools are newer than the running API process | `use:` handles fail to expand | `load_catalog_entries()` is cached per process, so a tool folder created after start-up does not exist for the API. `_expand_catalog_use` raises, the lite component union keeps the raw dict instead of failing, `validate_schema_online` skips dicts, and the import reports success while storing `viz_kind: null`, `catalog_source: null` and the raw YAML config. The viewer dispatches on `viz_kind` and draws `Unknown advanced viz kind: ""`, so all 9 advanced-viz tiles are blank until the API is restarted and the run repeated. Confirmed by two probe imports through the same endpoint: `fusionreport/caller_upset` stored null, `hamronization/arg_upset` stored `upset_plot` with a full 14-key config. Branch-wide, not rnafusion-specific: ampliseq 11/11, viralrecon 9/9, funcscan 9/9 and airrflow 8/8 have a kind, rnafusion 0/9, rnaseq 0/2, taxprofiler 0/8 and chipseq 3/7 do not. A platform fix, not a scenario run: invalidate the cache on a catalog change, and make a failed `use:` expansion an import error. |
+| F11 | **component addressed by `tag`** | any tooling that reads a shipped dashboard YAML | Only `index` reaches `stored_metadata` | A YAML component may set both `tag` and `index`; `tag` is dropped at import and a missing `index` is replaced by a UUID. 14 of this dashboard's 74 components set both to different values, for example `tag: rnaf-filter-sample` with `index: rnaf-sample-filter`. Anything matching stored components by `tag` finds nothing and reports zero, with no error. Hit while building the tile-verification harness, where it silently skipped the whole persistent-filter test. Either alias `tag` through or reject a YAML that sets the two differently. |
+
+**Ranking by template stress:** F1 > F2 > F3 > F8 > F5 > F7 > F4 > F6 > F9 > F10 > F11
+
 ## Priority additions to `generate_validation_runs.sh`
 
 In order of value-per-effort:
