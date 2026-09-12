@@ -1,0 +1,7 @@
+# HOMER — one output here today (annotatePeaks.pl), but a folder because the
+# suite also produces motif tables that will land next to it. Lightweight:
+# identity comes from the nf-core meta.yml that `nf_core_url` points at.
+id: homer
+name: HOMER
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/homer/annotatepeaks
+biotools_url: https://bio.tools/homer # from nf-core meta.yml identifier
