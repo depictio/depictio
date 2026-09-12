@@ -1,0 +1,79 @@
+# Megatest manifest for nf-core/airrflow 5.1.0 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the tables-only
+# subset of it that the template recipes and MultiQC need. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline airrflow --version 5.1.0 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing
+#
+# Keys are fnmatch globs relative to run_root (here the prefix root) and are
+# mirrored 1:1 below the destination, which becomes the template DATA_ROOT.
+# Timestamped pipeline_info files are renamed to stable names (params.json,
+# software_versions.yml); the newest one wins when a run wrote several.
+#
+# 5.1.1 has no megatest run, so 5.1.0 is the newest validated release.
+pipeline: airrflow
+version: "5.1.0"
+# s3://nf-core-awsmegatests/airrflow/results-<results_sha>/ == the 5.1.0 release tag_sha.
+results_sha: "e69d49e3f23f11a3391755b5fb7aa4283c0a2471"
+run_root: ""
+multiqc:
+  version: "1.34"
+  parquet: multiqc/multiqc_data/multiqc.parquet
+  reprocess: false
+keys:
+  # Pipeline params + software versions: the CLI reads pipeline_info/params.json
+  # for provenance and for the skip_* flags that decide which DCs the template
+  # keeps.
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  # Validated samplesheet written by the pipeline: sample_id, subject_id,
+  # species, pcr_target_locus plus the submitter's biological metadata columns.
+  # This is the template's hub DC, so no external samplesheet fetch is needed.
+  - pipeline_info/samplesheet.valid.tsv
+  # MultiQC parquet (fastp + FastQC modules, raw and post-assembly reads).
+  - multiqc/multiqc_data/multiqc.parquet
+  # enchantR repertoire analysis report: Hill diversity profiles with bootstrap
+  # CIs, the clone size table, pairwise clonal overlap and per-sample clone
+  # counts. clone_sizes_table.tsv is the bulk of the download (about 2.7 MB).
+  - clonal_analysis/repertoire_analysis/repertoire_analysis_report/tables/clonal_diversity.tsv
+  - clonal_analysis/repertoire_analysis/repertoire_analysis_report/tables/clonal_overlap.tsv
+  - clonal_analysis/repertoire_analysis/repertoire_analysis_report/tables/clone_sizes_table.tsv
+  - clonal_analysis/repertoire_analysis/repertoire_analysis_report/tables/num_clones_table.tsv
+  # enchantR find-threshold report: the shazam distance threshold per subject.
+  - clonal_analysis/find_threshold/all_reps_dist_report/tables/all_reps_threshold-summary.tsv
+  # Repertoire comparison report: V family and V gene usage per sample, plus the
+  # Change-O half of the sequence funnel.
+  - repertoire_comparison/V_family/V_family_distribution_data.tsv
+  - repertoire_comparison/V_family/V_gene_distribution_by_sequence_data.tsv
+  - repertoire_comparison/Sequence_numbers_summary/Table_sequences_assembled.tsv
+  # pRESTO half of the sequence funnel (one row per sample, every step).
+  - parsed_logs/Table_sequences_process.tsv
+  #
+  # Deliberately NOT fetched:
+  #   clonal_abundance.tsv (17 MB) is alakazam's bootstrapped rank-abundance
+  #     curve. clone_sizes_table.tsv already carries rank and frequency per
+  #     clone, which is what the dashboard's rank-abundance panel plots; the
+  #     extra file is five times the rest of the subset for a confidence ribbon.
+  #   repertoire_comparison/Sequence_numbers_summary/Table_sequences_assembly.tsv
+  #     is byte-identical to parsed_logs/Table_sequences_process.tsv.
+  #   parsed_logs/Table_all_details_*.tsv and report_file_size/ are the
+  #     per-process and per-file detail behind the same counts; nothing reads them.
+  #   vdj_annotation/*/*_db-pass.tsv (about 20 MB) are the per-sample AIRR
+  #     rearrangement tables. They would add V by J pairing, CDR3 length and
+  #     isotype panels; see VALIDATION_REPORT.md.
+prefix_keys: []
+renames: {}
+post_fetch_help: |
+  === Quick test commands ===
+
+  # The samplesheet is fetched with the run and the dashboard binds only the
+  # columns airrflow's samplesheet schema guarantees, so no --var is needed. The
+  # route flags (SKIP_CLONAL_ANALYSIS, ASSEMBLED_MODE, ...) are not read from
+  # params.json yet: pass them by hand if the run skipped a step.
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli run --template nf-core/airrflow/5.1.0 --data-root {dest} --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli run --template nf-core/airrflow/5.1.0 --data-root {dest}

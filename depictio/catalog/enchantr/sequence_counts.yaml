@@ -1,0 +1,20 @@
+id: enchantr_sequence_counts
+name: Sequence processing counts
+mode: parsed-logs/sequences
+description: >-
+  Sequences left after every pRESTO and Change-O step, one row per sample, with
+  the fraction of raw reads that reach the final annotated repertoire.
+find: { path_glob: "**/parsed_logs/Table_sequences_process.tsv" }
+recipe: enchantr/sequence_counts.py
+fixture: sequence_counts.tsv
+renders_as:
+  # The funnel as a single card: hero = raw reads, strip = every later stage.
+  - component: card
+    column: sequences
+    aggregation: sum
+    secondary_layout: attrition
+    attrition_cols: [quality_filtered, primers_masked, paired, consensus, assembled, representative, productive, collapsed]
+  - { component: card, column: sequences, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: collapsed, aggregation: sum, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: retention, aggregation: median, secondary_layout: gauge, coverage_max: 0.1 }
+  - { component: table }
