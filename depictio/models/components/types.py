@@ -49,6 +49,21 @@ AdvancedVizKind = Literal[
     "roc_pr_curve",
     "confusion_matrix",
     "metric_ci_bars",
+    # Life-science kinds whose shape no existing kind can express. `profile` and
+    # `signal_matrix` are the metagene pair, the rest are one figure each that a
+    # pipeline in the nf-core lot had to fall back to code mode for.
+    "profile",
+    "signal_matrix",
+    "fusion_structure",
+    "gene_arrow_track",
+    "gsea_running_score",
+    "sashimi",
+    # Numeric against numeric. Named `scatter_xy` rather than `scatter` because
+    # `ChartType` below already owns that word for the figure component. It is
+    # the plainest kind here and the most bound: 28 code-mode figures across ten
+    # nf-core templates draw a scatter by hand, every one of them for a size
+    # column, a selection key or a reference line rather than for the shape.
+    "scatter_xy",
 ]
 
 # Map visualization types

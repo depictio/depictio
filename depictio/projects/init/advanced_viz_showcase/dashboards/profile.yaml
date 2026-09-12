@@ -1,0 +1,118 @@
+# Signal profile — one tab of the advanced-visualisation showcase.
+#
+# Regenerate the seed after editing:
+#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'Signal profile'
+subtitle: 'TSS enrichment: one curve per ATAC library over distance to the transcription start site, with bootstrap confidence ribbons.'
+icon: 'mdi:chart-bell-curve'
+icon_color: 'teal'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8d70'
+is_main_tab: false
+tab_order: 28
+parent_dashboard_tag: volcano
+tab_icon: 'mdi:waveform'
+tab_icon_color: 'green'
+
+# Left-panel filter section. Deliberately not `persistent`: the 23 tabs of
+# this family read different collections whose column names collide while their
+# value domains do not overlap, so a control fanned out from one tab would show
+# up everywhere and bite on nothing.
+filter_sections:
+  - name: 'Profile scope'
+    icon: 'mdi:filter-variant'
+    color: 'teal'
+    description: 'Restricts which curves are drawn and over what window'
+
+grid_sections:
+  - name: 'Signal profile'
+    icon: 'mdi:chart-line'
+    color: 'teal'
+    description: 'Enrichment against distance to the transcription start site'
+
+components:
+  - tag: text-profile
+    index: prof-text
+    component_type: text
+    title: 'Signal profile'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Signal profile'
+    body: >
+      Enrichment against distance to the TSS, one curve per ATAC library, ribbon width set by
+      read depth. A good library spikes on the dotted line at zero; CTRL_rep4 and TREAT_rep3
+      stay near 3× background under a ribbon twice as fat. Click a curve to cross-filter.
+    layout: { x: 0, y: 0, w: 8, h: 1 }
+
+  - tag: viz-profile
+    index: 'prof-curve'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'profile_demo'
+    title: 'TSS enrichment profile'
+    description: 'Normalised enrichment over ±2 kb around the TSS, 25 bp bins, 8 libraries across two conditions. Ribbon opacity, line width, log axes and legend placement live in the Settings ⚙ popover.'
+    section: 'Signal profile'
+    viz_kind: 'profile'
+    config:
+      viz_kind: "profile"
+      series_col: "series"
+      x_col: "x"
+      y_col: "y"
+      lower_col: "lower"
+      upper_col: "upper"
+      reference_x: 0
+      reference_label: "TSS"
+      shaded_bands:
+        - [-330, -110, "-1 nucleosome"]
+        - [110, 330, "+1 nucleosome"]
+      log_x: false
+      log_y: false
+      band_opacity: 0.2
+      line_width: 2.0
+      x_title: "Distance to TSS (bp)"
+      y_title: "Normalised enrichment"
+      legend_pos: "right"
+      selection_enabled: true
+      selection_column: "series"
+    layout: { x: 0, y: 1, w: 8, h: 8 }
+
+  - tag: filter-profile-series
+    index: prof-f-series
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'profile_demo'
+    interactive_component_type: MultiSelect
+    column_name: 'series'
+    column_type: 'object'
+    title: 'Library'
+    placement: left
+    section: 'Profile scope'
+    group: 'Profile filters'
+    display:
+      title_size: md
+      custom_color: '#12B886'
+      icon_name: 'mdi:flask'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-profile-distance
+    index: prof-f-distance
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'profile_demo'
+    interactive_component_type: RangeSlider
+    column_name: 'x'
+    column_type: 'int64'
+    title: 'Distance to TSS'
+    placement: left
+    section: 'Profile scope'
+    group: 'Profile filters'
+    display:
+      title_size: md
+      custom_color: '#20C997'
+      icon_name: 'mdi:map-marker-path'
+    layout: { x: 0, y: 3, w: 1, h: 3 }

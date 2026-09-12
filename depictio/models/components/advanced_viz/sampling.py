@@ -43,6 +43,10 @@ KIND_SAMPLING_POLICY: dict[AdvancedVizKind, SamplingPolicy] = {
     "qq": "hash",
     "lollipop": "hash",
     "coverage_track": "hash",
+    # A plain plane: a uniform subset of a cloud is a lower-resolution cloud, and
+    # unlike volcano/ma there is no distinguished tail to preserve, because the
+    # axes carry no fixed meaning.
+    "scatter_xy": "hash",
     # Tail-carrying point clouds.
     "volcano": "tail",
     "ma": "tail",
@@ -66,6 +70,15 @@ KIND_SAMPLING_POLICY: dict[AdvancedVizKind, SamplingPolicy] = {
     "roc_pr_curve": "none",
     "confusion_matrix": "none",
     "metric_ci_bars": "none",
+    # Curves, matrices and tracks all read the frame as an ordered whole: a
+    # uniform subset of a profile is a curve with holes, and a sampled matrix
+    # loses whole regions rather than resolution.
+    "profile": "none",
+    "signal_matrix": "none",
+    "fusion_structure": "none",
+    "gene_arrow_track": "none",
+    "gsea_running_score": "none",
+    "sashimi": "none",
 }
 
 #: The role whose tail a ``tail`` kind must keep, and whether the interesting

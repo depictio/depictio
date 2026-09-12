@@ -1,0 +1,119 @@
+# Scatter (X/Y) — one tab of the advanced-visualisation showcase.
+#
+# Regenerate the seed after editing:
+#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'Scatter (X/Y)'
+subtitle: 'Numeric against numeric: replicate concordance for 900 genes, sized by expression, coloured by regulation, against the identity diagonal.'
+icon: 'mdi:chart-scatter-plot'
+icon_color: 'blue'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8d76'
+is_main_tab: false
+tab_order: 34
+parent_dashboard_tag: volcano
+tab_icon: 'mdi:chart-scatter-plot'
+tab_icon_color: 'blue'
+
+# Left-panel filter section. Deliberately not `persistent`: the tabs of this
+# family read different collections whose column names collide while their
+# value domains do not overlap, so a control fanned out from one tab would show
+# up everywhere and bite on nothing.
+filter_sections:
+  - name: 'Point scope'
+    icon: 'mdi:filter-variant'
+    color: 'blue'
+    description: 'Restricts which genes are drawn, by regulation call and by expression'
+
+grid_sections:
+  - name: 'Replicate concordance'
+    icon: 'mdi:chart-scatter-plot'
+    color: 'blue'
+    description: 'The same measurement made twice, against the identity diagonal'
+
+components:
+  - tag: text-scatter-xy
+    index: sxy-text
+    component_type: text
+    title: 'Scatter (X/Y)'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Replicate concordance'
+    body: >
+      Both axes are the same measurement, taken in two replicates, so the dashed identity
+      line is the reading: a well-behaved pair hugs it and the points that leave it are
+      the regulated genes. Marker size is mean expression, which is what shows the
+      off-diagonal points are not simply the faint ones. Click or box-select to filter the
+      rest of the dashboard by gene.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: viz-scatter-xy
+    index: 'sxy-plane'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'scatter_xy_demo'
+    title: 'Replicate concordance'
+    description: 'One point per gene, replicate A against replicate B, sized by mean expression and coloured by the regulation call. Log axes, the reference line, marker size, opacity and top-N labels all live in the Settings ⚙ popover.'
+    section: 'Replicate concordance'
+    viz_kind: 'scatter_xy'
+    config:
+      viz_kind: "scatter_xy"
+      x_col: "rep_a"
+      y_col: "rep_b"
+      label_col: "gene"
+      color_col: "regulation"
+      size_col: "mean_expression"
+      x_title: "Replicate A (CPM)"
+      y_title: "Replicate B (CPM)"
+      log_x: true
+      log_y: true
+      reference_line: "diagonal"
+      min_size: 4
+      max_size: 20
+      opacity: 0.75
+      marker_outline: true
+      top_n_labels: 6
+      legend_pos: "right"
+      selection_enabled: true
+      selection_column: "gene"
+    layout: { x: 0, y: 2, w: 8, h: 8 }
+
+  - tag: filter-scatter-xy-regulation
+    index: sxy-f-regulation
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'scatter_xy_demo'
+    interactive_component_type: MultiSelect
+    column_name: 'regulation'
+    column_type: 'object'
+    title: 'Regulation'
+    placement: left
+    section: 'Point scope'
+    group: 'Point filters'
+    display:
+      title_size: md
+      custom_color: '#228BE6'
+      icon_name: 'mdi:swap-vertical'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-scatter-xy-expression
+    index: sxy-f-expression
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'scatter_xy_demo'
+    interactive_component_type: RangeSlider
+    column_name: 'mean_expression'
+    column_type: 'float64'
+    title: 'Mean expression'
+    placement: left
+    section: 'Point scope'
+    group: 'Point filters'
+    display:
+      title_size: md
+      custom_color: '#15AABF'
+      icon_name: 'mdi:chart-bell-curve-cumulative'
+    layout: { x: 0, y: 3, w: 1, h: 3 }

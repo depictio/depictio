@@ -508,4 +508,161 @@ workflows:
               recall: "Recall / TPR at threshold (0-1)"
               fpr: "False-positive rate at threshold (0-1) — enables the true ROC case"
 
+      # Life-science advanced-viz kinds: one demo per kind added with the
+      # nf-core template lot, where a template had to fall back to code mode.
+
+      - id: "646b0f3c1e4a2d7f8e5b8d80"
+        data_collection_tag: "profile_demo"
+        description: "TSS enrichment profiles for 8 synthetic ATAC libraries across two conditions (+/-2 kb, 25 bp bins) with bootstrap confidence ribbons; two libraries are deliberately low-enrichment QC failures"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/profile_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              series: "ATAC library identifier (CTRL_rep1-4 / TREAT_rep1-4) - one curve per value"
+              x: "Signed distance to the transcription start site in bp, -2000 to +2000 in 25 bp bins"
+              y: "Normalised enrichment at that offset; 1.0 is the flanking background"
+              lower: "Lower edge of the bootstrap 95% confidence ribbon"
+              upper: "Upper edge of the bootstrap 95% confidence ribbon"
+
+      - id: "646b0f3c1e4a2d7f8e5b8d81"
+        data_collection_tag: "signal_matrix_demo"
+        description: "ATAC-seq signal matrix around peak summits: 300 peaks x 41 offsets (-1000 to +1000 bp, 50 bp bins), classified as promoter / enhancer / background"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/signal_matrix_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              region_id: "Peak identifier - one matrix row per peak"
+              position: "Offset from the peak summit in bp (-1000 to +1000, 50 bp bins) - one matrix column each"
+              value: "Normalised ATAC-seq signal at that peak and offset, drawn as the cell colour"
+              group: "Peak class (promoter / enhancer / background) - splits the matrix into panels"
+
+      - id: "646b0f3c1e4a2d7f8e5b8d82"
+        data_collection_tag: "fusion_structure_demo"
+        description: "Six oncogenic gene fusions with their real protein-domain composition, retained fraction and breakpoint slot"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/fusion_structure_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              fusion_id: "Fusion call, written GENE1--GENE2 with the 5-prime partner first. One small multiple per value."
+              partner: "Partner gene the domain sits on: one lane per partner inside that fusion's facet."
+              feature: "Annotated protein domain contributed by that partner, listed N- to C-terminus."
+              start: "Ordinal domain slot along the fusion, 0-based. Domains are laid end to end in listed order, 5-prime partner first - these are slots, not amino-acid coordinates."
+              end: "End of the domain slot; always start + 1."
+              breakpoint: "Slot of the fusion seam, i.e. the number of domains on the 5-prime partner. Identical on every row of a fusion."
+              retained: "Fraction of the domain the fusion keeps, in [0, 1]: 1.0 if the breakpoint leaves it whole, 0.0 if it removes it entirely, a fraction if it cuts through."
+              domain_class: "Functional class of the domain (Kinase, DNA binding, Oligomerisation, Receptor ectodomain, ...); drives the bar colour and the domain-class filter."
+
+      - id: "646b0f3c1e4a2d7f8e5b8d83"
+        data_collection_tag: "gene_arrow_track_demo"
+        description: "Biosynthetic gene clusters on five bacterial contigs: one antiSMASH-style BGC region per contig with its flanking neighbourhood"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/gene_arrow_track_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              contig: "Contig / scaffold the gene sits on - one lane per distinct value"
+              feature_id: "Locus tag of the coding sequence drawn as an arrow (CTG<n>_<ordinal>)"
+              start: "CDS start position on the contig (1-based inclusive, always <= end)"
+              end: "CDS end position on the contig"
+              strand: "'+' or '-' - sets the arrow direction ('+' points right, '-' left)"
+              gene_class: "antiSMASH-style product class of the BGC region the gene belongs to (NRPS / T1PKS / terpene / RiPP-like / betalactone), or 'flanking' outside the region - drives the arrow colour"
+              label: "Short gene symbol for the cluster's biosynthetic genes, the locus-tag ordinal otherwise - drawn under the arrow"
+              region_start: "Start of the called BGC region on this contig - left edge of the band behind the lane"
+              region_end: "End of the called BGC region on this contig - right edge of the band"
+
+      - id: "646b0f3c1e4a2d7f8e5b8d84"
+        data_collection_tag: "gsea_running_score_demo"
+        description: "GSEA running enrichment score over a ranked list of 800 genes for 5 Hallmark-style sets: two positively enriched, two negatively enriched, one flat"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/gsea_running_score_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              gene_set: "Hallmark-style gene set the curve belongs to - one running-score curve per set."
+              rank: "1-based position in the ranked gene list, ordered by descending ranking metric."
+              running_es: "Weighted Kolmogorov-Smirnov running enrichment score at that rank (scoring scheme 'weighted', p=1). Leaves zero at rank 1 and returns to zero at the last rank; its extremum is the enrichment score."
+              member: "True where the gene at this rank belongs to the set. Drives the hit rug in the middle panel."
+              metric: "The ranking metric the gene list was ordered by. A property of the rank, not of the set, so it repeats identically for every set."
+
+      - id: "646b0f3c1e4a2d7f8e5b8d85"
+        data_collection_tag: "sashimi_demo"
+        description: "Splice junctions across an exon-skipping event: two loci on chr12, 4 samples in two conditions, known and novel junctions"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/sashimi_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              chrom: "Chromosome the junction sits on. Two loci, ~45.7 Mb apart, share chr12 so the renderer clusters them into separate regions."
+              start: "Donor coordinate of the intron - the left foot of the arc."
+              end: "Acceptor coordinate of the intron - the right foot of the arc."
+              count: "Uniquely mapping reads crossing the junction. Drives the arc width (log-scaled by default) and the label at the apex."
+              sample: "Sample the junction was counted in; one lane per value. CTRL_rep1/rep2 and KD_rep1/rep2, two replicates per condition."
+              annotation: "Junction class - known (annotated consecutive-exon intron) or novel (exon-skipping and alternative donor/acceptor sites). Colours the arcs."
+
+      - id: "646b0f3c1e4a2d7f8e5b8d86"
+        data_collection_tag: "scatter_xy_demo"
+        description: "Replicate concordance for 900 genes: the same measurement made twice, with a tenth of the genes moved off the identity diagonal"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/scatter_xy_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              gene: "Gene identifier. Labels each point, and is the column the cross-filter emits when points are selected."
+              rep_a: "Expression in replicate A, on the x axis. Same units as rep_b, which is what makes the identity diagonal meaningful."
+              rep_b: "Expression in replicate B, on the y axis."
+              mean_expression: "Mean of the two replicates. Drives the marker size, so the reader can see the off-diagonal points are not the faint ones."
+              regulation: "up in B, down in B or unchanged. Colours the points; a tenth of the genes are regulated."
+
 # No joins. Filters in each dashboard are scoped to a single DC.

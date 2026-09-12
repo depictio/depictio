@@ -1,0 +1,129 @@
+# Splice junctions (sashimi) — one tab of the advanced-visualisation showcase.
+#
+# Regenerate the seed after editing:
+#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'Splice junctions'
+subtitle: 'Junction arcs on a base-pair axis, arc width scaled by supporting reads. Cassette-exon skipping across two conditions, one lane per sample.'
+icon: 'mdi:dna'
+icon_color: 'violet'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8d75'
+is_main_tab: false
+tab_order: 33
+parent_dashboard_tag: volcano
+tab_icon: 'mdi:vector-curve'
+tab_icon_color: 'cyan'
+
+# Left-panel filter section. Deliberately not `persistent`: the tabs of this
+# family read different collections whose column names collide while their
+# value domains do not overlap, so a control fanned out from one tab would show
+# up everywhere and bite on nothing.
+filter_sections:
+  - name: 'Junction scope'
+    icon: 'mdi:filter-variant'
+    color: 'violet'
+    description: 'Restricts which lanes, which junction class and which read support are drawn'
+
+grid_sections:
+  - name: 'Splice junctions'
+    icon: 'mdi:dna'
+    color: 'violet'
+    description: 'Junction arcs over a gene locus, one lane per sample'
+
+components:
+  - tag: text-sashimi
+    index: sash-text
+    component_type: text
+    title: 'Splice junctions'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Splice junctions'
+    body: >
+      Each intron is an arc from its donor to its acceptor, drawn thicker the more reads
+      support it, one lane per sample. Introns here run from 430 bp to 15 kb, so the arcs
+      are deliberately uneven: a real locus never splices on a regular pitch. Follow the
+      novel arc that bridges exon 2 straight to exon 4. It is a handful of reads in the
+      controls and carries as much support as a constitutive junction in the knockdowns,
+      while the two arcs into and out of exon 3 collapse. That exon is being skipped.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: viz-sashimi
+    index: 'sash-arcs'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'sashimi_demo'
+    title: 'Splice junctions'
+    description: 'Junction arcs over a cassette-exon locus, coloured known vs novel and stacked one lane per sample. Minimum read support, junctions per lane, log-scaled arc width and the region picker all live in the Settings ⚙ popover.'
+    section: 'Splice junctions'
+    viz_kind: 'sashimi'
+    config:
+      viz_kind: "sashimi"
+      chr_col: "chrom"
+      start_col: "start"
+      end_col: "end"
+      count_col: "count"
+      sample_col: "sample"
+      annotation_col: "annotation"
+      min_count: 1
+      top_n: 25
+      log_width: true
+    layout: { x: 0, y: 2, w: 8, h: 8 }
+
+  - tag: filter-sashimi-sample
+    index: sash-f-sample
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'sashimi_demo'
+    interactive_component_type: MultiSelect
+    column_name: 'sample'
+    column_type: 'object'
+    title: 'Sample'
+    placement: left
+    section: 'Junction scope'
+    group: 'Junction filters'
+    display:
+      title_size: md
+      custom_color: '#7950F2'
+      icon_name: 'mdi:flask'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-sashimi-annotation
+    index: sash-f-annotation
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'sashimi_demo'
+    interactive_component_type: MultiSelect
+    column_name: 'annotation'
+    column_type: 'object'
+    title: 'Junction class'
+    placement: left
+    section: 'Junction scope'
+    group: 'Junction filters'
+    display:
+      title_size: md
+      custom_color: '#45B8AC'
+      icon_name: 'mdi:dna'
+    layout: { x: 0, y: 3, w: 1, h: 3 }
+
+  - tag: filter-sashimi-count
+    index: sash-f-count
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'sashimi_demo'
+    interactive_component_type: RangeSlider
+    column_name: 'count'
+    column_type: 'int64'
+    title: 'Read support'
+    placement: left
+    section: 'Junction scope'
+    group: 'Junction filters'
+    display:
+      title_size: md
+      custom_color: '#00BCD4'
+      icon_name: 'mdi:counter'
+    layout: { x: 0, y: 6, w: 1, h: 3 }

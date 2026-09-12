@@ -35,11 +35,14 @@ const SCAN_DIRS = [
 const SCAN_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx']);
 
 // Individual files outside those trees that *declare* icons the UI renders from
-// data. The advanced-viz kind registry lives in the API and its `icon` values
-// reach the browser over the wire, so nothing in the TS sources mentions them
-// and they would resolve against the Iconify API, which the CSP blocks.
+// data. The advanced-viz kind registry's `icon` values reach the browser over
+// the wire, so nothing in the TS sources mentions them and they would resolve
+// against the Iconify API, which the CSP blocks. The registry is KIND_METADATA
+// in the models package: it moved there from the API route so that `depictio
+// dev catalog kinds` could read it without importing FastAPI, and this list has
+// to follow it or every kind in the picker loses its icon in a built bundle.
 const SCAN_FILES = [
-  join(REPO, 'depictio/api/v1/endpoints/advanced_viz_endpoints/routes.py'),
+  join(REPO, 'depictio/models/components/advanced_viz/schemas.py'),
 ];
 
 // Shipped dashboard data. Seeded dashboards name their icons in YAML and in the

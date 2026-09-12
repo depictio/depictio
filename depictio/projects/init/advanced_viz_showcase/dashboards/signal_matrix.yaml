@@ -1,0 +1,130 @@
+# Signal matrix — one tab of the advanced-visualisation showcase.
+#
+# Regenerate the seed after editing:
+#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'Signal matrix'
+subtitle: 'The heatmap half of a metagene plot: one row per ATAC-seq peak, one column per 50 bp offset from the summit, panelled by peak class.'
+icon: 'mdi:grid'
+icon_color: 'teal'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8d71'
+is_main_tab: false
+tab_order: 29
+parent_dashboard_tag: volcano
+tab_icon: 'mdi:blur-linear'
+tab_icon_color: 'teal'
+
+# Left-panel filter section. Deliberately not `persistent`: the 23 tabs of
+# this family read different collections whose column names collide while their
+# value domains do not overlap, so a control fanned out from one tab would show
+# up everywhere and bite on nothing.
+filter_sections:
+  - name: 'Matrix scope'
+    icon: 'mdi:filter-variant'
+    color: 'teal'
+    description: 'Restricts which peaks and which part of the window are drawn'
+
+grid_sections:
+  - name: 'Signal matrix'
+    icon: 'mdi:chart-box-outline'
+    color: 'teal'
+    description: 'Peaks down, offsets across, signal as colour'
+
+components:
+  - tag: text-signal_matrix
+    index: sigm-text
+    component_type: text
+    title: 'Signal matrix'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Signal matrix'
+    body: >
+      One row per ATAC-seq peak, one column per 50 bp offset from the summit, cell colour is
+      the normalised signal. Rows are ordered by total signal and split into a panel per peak
+      class, so the banding is the reading: promoters give a narrow bright stripe with faint
+      nucleosome shoulders either side, enhancers a broad low mound, background peaks almost
+      nothing. Columns are positions and are never reordered; past the row budget rows are
+      averaged into bins rather than truncated, so the weak half never disappears.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: viz-signal_matrix
+    index: 'sigm-matrix'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'signal_matrix_demo'
+    title: 'ATAC-seq signal around peak summits'
+    description: '300 peaks × 41 offsets (-1000 to +1000 bp, 50 bp bins), panelled on the peak class with the mean profile drawn above. Colour scale, row order, row budget and the profile toggle all live in the Settings ⚙ popover; the colour range is a robust 2nd-98th percentile so one saturated peak cannot flatten the rest.'
+    section: 'Signal matrix'
+    viz_kind: 'signal_matrix'
+    config:
+      viz_kind: "signal_matrix"
+      region_id_col: "region_id"
+      position_col: "position"
+      value_col: "value"
+      group_col: "group"
+      reference_position: 0
+      reference_label: "Peak summit"
+      sort_by: "signal"
+      max_rows: 600
+      colour_scale: "Viridis"
+      show_profile: true
+    layout: { x: 0, y: 2, w: 8, h: 12 }
+
+  - tag: filter-signal_matrix-group
+    index: sigm-f-group
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'signal_matrix_demo'
+    interactive_component_type: MultiSelect
+    column_name: 'group'
+    column_type: 'object'
+    title: 'Peak class'
+    placement: left
+    section: 'Matrix scope'
+    group: 'Matrix filters'
+    display:
+      title_size: md
+      custom_color: '#12B886'
+      icon_name: 'mdi:form-select'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-signal_matrix-value
+    index: sigm-f-value
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'signal_matrix_demo'
+    interactive_component_type: RangeSlider
+    column_name: 'value'
+    column_type: 'float64'
+    title: 'Signal'
+    placement: left
+    section: 'Matrix scope'
+    group: 'Matrix filters'
+    display:
+      title_size: md
+      custom_color: '#00BCD4'
+      icon_name: 'mdi:chart-line'
+    layout: { x: 0, y: 3, w: 1, h: 3 }
+
+  - tag: filter-signal_matrix-position
+    index: sigm-f-position
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'signal_matrix_demo'
+    interactive_component_type: RangeSlider
+    column_name: 'position'
+    column_type: 'int64'
+    title: 'Offset (bp)'
+    placement: left
+    section: 'Matrix scope'
+    group: 'Matrix filters'
+    display:
+      title_size: md
+      custom_color: '#45B8AC'
+      icon_name: 'mdi:map-marker-path'
+    layout: { x: 0, y: 6, w: 1, h: 3 }
