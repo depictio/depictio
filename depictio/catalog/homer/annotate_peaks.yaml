@@ -6,7 +6,7 @@ description: >-
   signed distance to the nearest transcription start site and the gene that
   start site belongs to.
 find:
-  path_glob: "**/*.annotatePeaks.txt"
+  path_glob: "**/*_peaks.annotatePeaks.txt"
 recipe: homer/annotate_peaks.py
 fixture: annotate_peaks.tsv
 renders_as:
