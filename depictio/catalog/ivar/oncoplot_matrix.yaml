@@ -14,3 +14,6 @@ renders_as:
   - { component: card, column: sample_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: gene, top_n_count: 3 }
   - { component: card, column: gene, aggregation: nunique, secondary_layout: top_n, breakdown_col: mutation_type, top_n_count: 3 }
   - { component: table }
+  # Metric cards and the row-level table behind them: the readings the
+  # nf-core dashboards were already computing off this output by hand.
+  - { component: card, column: gene, aggregation: nunique, secondary_layout: composition, breakdown_col: mutation_type }

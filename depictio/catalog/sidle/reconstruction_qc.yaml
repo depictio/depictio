@@ -1,0 +1,20 @@
+id: sidle_reconstruction_qc
+name: Reconstruction confidence
+mode: reconstruction-summary
+description: >-
+  How many amplified regions mapped to each reconstructed feature and how much
+  kmer support stood behind them. A feature carried by one region is a
+  different claim from one carried by all of them, and this is the table that
+  separates the two.
+find:
+  path_glob: "**/sidle/**/reconstruction_summary/metadata.tsv"
+recipe: sidle/reconstruction_qc.py
+fixture: reconstruction_qc.tsv
+renders_as:
+  # Support against coverage: the two axes that qualify a reconstructed feature.
+  - { id: reconstruction_support, component: advanced_viz, kind: scatter_xy, roles: {x: num_regions, y: total_kmers_mapped, size: mean_kmer_per_region, label: feature_id} }
+  - { component: figure, visu_type: histogram, dict_kwargs: {x: num_regions, title: Features by regions mapped} }
+  - { component: card, column: num_regions, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: total_kmers_mapped, aggregation: median, secondary_layout: histogram }
+  - { component: card, column: mean_kmer_per_region, aggregation: average, secondary_layout: histogram }
+  - { component: table }

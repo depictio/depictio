@@ -381,7 +381,7 @@ workflows:
           type: "Table"
           source: "transformed"
           transform:
-            recipe: "nf-core/ampliseq/sintax_rel_abundance.py"
+            recipe: "vsearch/sintax_abundance.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -681,7 +681,7 @@ workflows:
           metatype: "Aggregated"
           source: "transformed"
           transform:
-            recipe: "nf-core/ampliseq/sidle_reconstructed.py"
+            recipe: "sidle/reconstructed.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -700,7 +700,7 @@ workflows:
           metatype: "Aggregated"
           source: "transformed"
           transform:
-            recipe: "nf-core/ampliseq/sidle_reconstruction_qc.py"
+            recipe: "sidle/reconstruction_qc.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:

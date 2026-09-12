@@ -11,3 +11,10 @@ renders_as:
   - { component: card, column: pct_genome_covered_10x, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot } # ≥10× breadth
   - { component: card, column: num_variants_total, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot } # variant load
   - { component: table }
+  # Metric cards and the row-level table behind them: the readings the
+  # nf-core dashboards were already computing off this output by hand.
+  - { component: card, column: sample, aggregation: nunique, secondary_layout: top_n, breakdown_col: lineage }
+  - { component: card, column: pct_reads_mapped, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: pct_genome_covered_10x, aggregation: average, secondary_layout: threshold, threshold_value: 80, threshold_direction: min, threshold_warn: 90 }
+  - { component: card, column: lineage, aggregation: nunique, secondary_layout: donut, breakdown_col: lineage }
+  - { component: card, column: pct_genome_covered_1x, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }

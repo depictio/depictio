@@ -87,7 +87,10 @@ class-first hierarchy would collapse into a single "unclassified" wedge.
 **Tool concordance** stacks the five-set UpSet of which tools called each gene over the
 gene-by-sample dot plot (dot size = fraction of tools agreeing, colour = mean identity).
 **Gene detail** is the identity-versus-coverage scatter next to the full hit table, which
-row-selects on `gene_symbol` and drives the dot plot through the template link.
+row-selects on `gene_symbol` and drives the dot plot through the template link. Under both,
+the contig track (`use: hamronization/arg_island_track`) draws one lane per contig and one
+arrow per hit, pointing the way the gene is read: genes packed head to tail on a single
+contig are a resistance island, which no aggregate over drug classes can show.
 
 Filters: `ARG scope` (tool, drug class) and a collapsed `Hit quality`
 (identity slider, tools-agreeing slider).

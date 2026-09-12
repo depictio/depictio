@@ -352,6 +352,70 @@ main_dashboard:
 
   # ---------------------------------------------------------- fragment length
   - component_type: text
+    tag: cr-qc-deeptools-intro
+    section: Enrichment over the control
+    title: "The tables under the deepTools panels"
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The four panels above are pictures MultiQC redraws from its own parquet. nf-core also publishes the three tables behind them, and those are what the tiles below read: the fingerprint metrics, the PCA loadings and the correlation matrix.
+    workflow_tag: cutandrun
+    data_collection_tag: deeptools_fingerprint_metrics
+    layout: {x: 0, y: 11, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: cr-qc-av-fingerprint
+    index: cr-qc-av-fingerprint
+    section: Enrichment over the control
+    workflow_tag: cutandrun
+    data_collection_tag: deeptools_fingerprint_metrics
+    use: deeptools/fingerprint_scatter
+    config:
+      x_title: Area under the observed coverage curve
+      y_title: Divergence from a uniform library
+      marker_size: 12
+      opacity: 0.85
+      marker_outline: true
+      top_n_labels: 4
+      legend_pos: none
+    title: "Coverage concentration per library"
+    description: "plotFingerprint's own quality metrics: the targets sit apart from the IgG controls, which look uniform."
+    title_size: h3
+    layout: {x: 0, y: 12, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: cr-qc-av-pca
+    index: cr-qc-av-pca
+    section: Enrichment over the control
+    workflow_tag: cutandrun
+    data_collection_tag: deeptools_sample_pca
+    use: deeptools/pca_embedding
+    config:
+      color_col: sample
+      point_size: 16
+      marker_outline: true
+      legend_pos: right
+    title: "Samples on the first two components"
+    description: "The PCA deepTools ran over the genome-wide bin counts; replicates of one target cluster, a library that lands with the controls did not enrich."
+    title_size: h3
+    layout: {x: 0, y: 19, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: cr-qc-av-corr
+    index: cr-qc-av-corr
+    section: Enrichment over the control
+    workflow_tag: cutandrun
+    data_collection_tag: deeptools_correlation_matrix
+    use: deeptools/correlation_heatmap
+    config:
+      index_column: sample
+      cluster_rows: false
+      cluster_cols: false
+      colorscale: RdBu
+    title: "Sample correlation matrix"
+    description: "Pairwise correlation of the genome-wide bin counts; a block that spans two targets is a swap or a contamination."
+    title_size: h3
+    layout: {x: 0, y: 26, w: 8, h: 8}
+  - component_type: text
     tag: cr-qc-frag-intro
     section: Fragment lengths
     title: The nucleosomal ladder
@@ -440,6 +504,7 @@ main_dashboard:
     section: Fragment lengths
     workflow_tag: cutandrun
     data_collection_tag: seacr_fragment_lengths
+    use: seacr/fragment_lengths
     mode: code
     visu_type: line
     code_content: |
@@ -758,6 +823,7 @@ tabs:
     section: Signal along the genome
     workflow_tag: cutandrun
     data_collection_tag: seacr_peaks
+    use: seacr/peaks
     mode: code
     visu_type: scatter
     code_content: |
@@ -1137,7 +1203,10 @@ tabs:
     title: Yield and agreement per sample and caller
     description: One dot per sample and caller. Colour is log10 of the peaks called, size the share of them the other caller also called.
     title_size: h3
-    layout: {x: 0, y: 1, w: 8, h: 7}
+    # Four rows, not seven: the y axis holds exactly two callers, and the
+    # renderer fills whatever tile it is given, so the extra height is spent
+    # spreading two rows of dots over half a screen.
+    layout: {x: 0, y: 1, w: 8, h: 4}
   - component_type: figure
     tag: cr-ca-fig-scatter
     index: cr-ca-fig-scatter
@@ -1431,6 +1500,7 @@ tabs:
     section: How reproducible
     workflow_tag: cutandrun
     data_collection_tag: seacr_consensus_peaks
+    use: seacr/consensus_peaks
     mode: code
     visu_type: bar
     code_content: |

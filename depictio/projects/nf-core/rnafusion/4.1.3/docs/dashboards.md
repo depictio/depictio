@@ -167,19 +167,22 @@ The code-mode scatter plots the fusion allelic ratio of the 5' side against the 
 log axes: a call supported on one side only falls off the diagonal, which is the classic
 signature of a mapping artefact rather than a real fusion transcript.
 
-`Fusion protein domains` answers what the fusion protein would keep. The code-mode interval
-track draws one translucent bar per Pfam domain, placed at its amino acid start and as wide
-as the domain, overlaid rather than stacked because Pfam clans report many overlapping hits.
+`Fusion protein domains` answers what the fusion protein would keep. The structure view
+(`use: fusioninspector/fusion_domains`) draws the six busiest fusions as their two partners
+end to end, one lane each, with a bar per Pfam domain along the partner that contributes it.
 The lollipop beside it (`use: fusioninspector/domain_lollipop`) places each domain at its
 start position with the hit strength as the stem, coloured by which partner it came from.
-A domain name ending in `PARTIAL` is one the breakpoint cuts through.
+A domain name ending in `PARTIAL` is one the breakpoint cuts through, and the structure
+shows it as a domain that stops where the partner does.
 
 `Splice junctions` closes the funnel with four cards on `splice_junctions`
 (`use: ctatsplicing/introns`): junctions scored with the top genes beside them, median
 unique read support as a box plot, total reads across junctions as a donut by chromosome,
 and mean intron length as a histogram. Below them, a Manhattan of junction support along the
-genome (`use: ctatsplicing/intron_manhattan`, selectable by gene) and a per-gene support bar
-coloured by strand.
+genome (`use: ctatsplicing/intron_manhattan`, selectable by gene), then the junction arcs
+(`use: ctatsplicing/junction_arcs`), which draw each junction from donor to acceptor with
+the arc thickened by its read support and a locus picker that opens on the busiest cluster,
+and finally a per-gene support bar coloured by strand.
 
 ---
 

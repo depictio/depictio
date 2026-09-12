@@ -14,3 +14,12 @@ renders_as:
   - { component: figure, visu_type: bar, dict_kwargs: {x: label, y: f1} } # f1_by_tool
   - { component: card, column: f1, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot } # best F1
   - { component: table }
+  # Metric cards and the row-level table behind them: the readings the
+  # nf-core dashboards were already computing off this output by hand.
+  - { component: card, column: label, aggregation: nunique, secondary_layout: donut, breakdown_col: caller, top_n_count: 3 }
+  - { component: card, column: f1, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: precision, aggregation: average, secondary_layout: gauge, coverage_max: 1 }
+  - { component: card, column: recall, aggregation: median, secondary_layout: threshold, threshold_value: 0.9, threshold_direction: min, threshold_warn: 0.8 }
+  - { component: card, column: fp, aggregation: sum, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: fn, aggregation: sum, secondary_layout: histogram }
+  - { component: card, column: f1, aggregation: max, aggregations: [min, median, average, max], secondary_layout: grid }

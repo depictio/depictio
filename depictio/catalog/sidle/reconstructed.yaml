@@ -1,0 +1,24 @@
+id: sidle_reconstructed
+name: Reconstructed features
+mode: reconstructed
+description: >-
+  The cross-region reconstructed feature table melted to one row per feature
+  and sample, with the Greengenes lineage split into rank columns. This is the
+  community a multi-region run actually resolves, as opposed to the per-primer
+  tables it starts from.
+find:
+  path_glob: "**/sidle/reconstructed/reconstructed_merged.tsv"
+recipe: sidle/reconstructed.py
+fixture: reconstructed.tsv
+renders_as:
+  # Wide per-rank columns, so the nested view is a sunburst; `stacked_taxonomy`
+  # needs the single long rank column this table lacks.
+  - { id: reconstructed_sunburst, component: advanced_viz, kind: sunburst, roles: {abundance: count} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: count, color: Phylum, title: Composition by phylum} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: count, color: Genus, title: Composition by genus} }
+  # How much was reconstructed, from how many samples, across how many phyla.
+  - { component: card, column: feature_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: Phylum, top_n_count: 3 }
+  - { component: card, column: sample, aggregation: nunique, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: Phylum, aggregation: nunique, secondary_layout: composition, breakdown_col: Phylum }
+  - { component: interactive, interactive_type: MultiSelect, column_name: Phylum }
+  - { component: table }

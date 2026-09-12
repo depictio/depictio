@@ -24,9 +24,10 @@ each.
 > `VALIDATION_REPORT.md`.
 
 > **This is the broad-peak route.** The run was called with `--narrow_peak false`, so the
-> peak files are `*_peaks.broadPeak` (BED6+3, no summit column) and are read by the
-> template's own `recipes/broad_peaks.py` rather than by the catalog's `macs2/peaks`, which
-> reads the narrowPeak shape. Release 1.2.1 is the narrowPeak twin of the same run.
+> peak files are `*_peaks.broadPeak` (BED6+3, no summit column) and are read by the catalog's
+> `macs2/broad_peaks` rather than by `macs2/peaks`, which reads the narrowPeak shape. The two
+> outputs glob on different file names, so a run matches exactly one of them. Release 1.2.1 is
+> the narrowPeak twin of the same run.
 
 ---
 
@@ -85,11 +86,19 @@ reads. Every library appears here more than once, under its raw and trimmed read
 samtools percent mapped and per-contig distribution at both filtering levels the run
 published, then the preseq complexity curve. The doubled samtools entries are the point of
 that section: `mLb.mkD` is duplicate-marked but unfiltered, `mLb.clN` is what the peak caller
-sees, and the pair says how much ATAC filtering removed.
+sees, and the pair says how much ATAC filtering removed. Under them, `use:
+preseq/complexity_ribbon` reads preseq's own output rather than the report and adds the 95%
+confidence band MultiQC drops, so a library whose extrapolation is guesswork shows as a
+ribbon that fans out instead of a line that looks as certain as any other.
 
 `Accessibility signal` is the tab's conclusion: the deepTools fingerprint curve, the FRiP
 scores, the peak counts per library and the featureCounts bars saying how many reads fall
-inside the consensus peaks.
+inside the consensus peaks. Two tiles then read the deepTools tables the report has no panel
+for: `use: deeptools/fingerprint_scatter` puts every library on one plane, coverage
+concentration against divergence from a uniform library, which for ATAC is how much of the
+signal sits in open chromatin; and `use: deeptools/metagene_profile` draws the `plotProfile`
+matrix as one curve per library with the TSS marked at bin 300 and the scaled gene body
+shaded.
 
 The MultiQC General Statistics table is **not** bound on this tab, for the reason chipseq
 documented: samtools stats and flagstat both contribute a column titled "Reads mapped" and
@@ -140,7 +149,11 @@ width histogram in UI mode.
 
 `Where the peaks land` reads the HOMER annotation: four cards (feature classes, genes
 reached, distance to TSS, annotated peaks), the annotation bar per library, and a code-mode
-histogram of the distance to the nearest start site inside a 10 kb window.
+histogram of the distance to the nearest start site inside a 10 kb window. Under it, `use:
+homer/tss_distance` reads the same distances pre-binned by the recipe, one curve per library
+as a share of that library's peaks: the histogram pools libraries and splits by class, the
+profile does the opposite, and being a share rather than a count is what lets libraries of
+different depth be compared.
 
 `Peak tables`, collapsed, holds the MACS2 broad calls and the HOMER annotation, both with row
 selection on `peak_id`, linked to each other in both directions.
