@@ -171,6 +171,11 @@ dump.rdb
 # and committed so init resolver can convert recipe DCs → file_scan instead of
 # pruning them on every fresh deploy)
 !depictio/projects/nf-core/viralrecon/*/*.tsv
+# Allow the nf-core template reference inputs that the megatest never publishes.
+# Each pipeline's megatest.yaml carries the curl lines that mirror these from
+# nf-core/test-datasets; they are committed so the template is self-describing and
+# SAMPLESHEET_FILE resolves without network access.
+!depictio/projects/nf-core/differentialabundance/*/input/*.tsv
 # Allow advanced_viz_showcase synthetic fixtures
 !depictio/projects/init/advanced_viz_showcase/data/*.tsv
 # Allow the catalog conformance project's generated data. Every file here is a

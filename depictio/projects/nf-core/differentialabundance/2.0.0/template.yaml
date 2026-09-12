@@ -1,0 +1,361 @@
+# nf-core/differentialabundance Template v2.0.0 - Differential expression
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/differentialabundance/2.0.0 --data-root /path/to/your/data
+#
+# Tested against nf-core/differentialabundance AWS megatest results:
+#   s3://nf-core-awsmegatests/differentialabundance/results-30ed7741fc392127156c2fb10cfa3d69d216b54b
+#   (24 mouse RNA-seq samples, two contrasts: WT vs KO with a batch blocking
+#    factor, and Control vs Treated. See megatest.yaml for the fetch manifest.)
+# ============================================================================
+#
+# SCOPE
+# This template covers the DESeq2 route (`--differential_method deseq2`, the
+# pipeline default). The limma / propd / dream routes write differently named
+# tables and are not bound here.
+#
+# NO MULTIQC. differentialabundance runs no MultiQC: it ships an R/shinyngs
+# report instead, which is not parquet-backed. There is therefore no
+# `multiqc_data` data collection and no QC tab; the Samples tab plays that role.
+#
+# LAYOUT NOTE. Data collection scans match on FILE NAME, so both the plain
+# layout (`tables/differential/<contrast>.deseq2.results.tsv`) and the megatest's
+# extra parameter-set directory
+# (`tables/differential/<paramset>/<contrast>.deseq2.results.tsv`) are picked up
+# by the same recursive scan. The recipe globs use `**` for the same reason.
+template:
+  template_id: "nf-core/differentialabundance/2.0.0"
+  description: "nf-core/differentialabundance template: DESeq2 differential expression: per-contrast statistics, gene annotation and the variance-stabilised sample space."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory containing differentialabundance output (tables/, other/, pipeline_info/)."
+      required: true
+    - name: "SAMPLESHEET_FILE"
+      description: "Path to the pipeline's --input observation sheet. Auto-detected from {DATA_ROOT}/input/ (CSV or TSV) when omitted; download_test_data.sh puts the megatest's sheet there."
+      required: false
+  # Variables supplied when materialising the bundled reference/demo dataset.
+  # The sheet is the run's own --input file, mirrored under input/ by the
+  # megatest fetch (see megatest.yaml post_fetch_help).
+  reference:
+    vars:
+      SAMPLESHEET_FILE: "{DATA_ROOT}/input/samplesheet.tsv"
+  # How this run's provenance (parameters, thresholds, tool versions) is
+  # collected at ingest, surfaced in the ingestion report and the dashboard
+  # Settings drawer. Keys matched by no group rule land in 'Other'.
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "genomes"            # the whole iGenomes catalogue, ~100 KB of noise
+          - "*_ref_databases*"
+          - "hook_url"           # nf-core runs put a live Slack webhook here
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Study"
+        key_patterns: ["study_*", "observations_*", "features_*", "matrix", "input", "contrasts", "querygse", "paramset_name", "paramsheet", "gtf", "control_features", "sizefactors_from_controls", "feature_length_matrix"]
+      - group: "Abundance filtering"
+        key_patterns: ["filtering_*"]
+      - group: "Exploratory analysis"
+        key_patterns: ["exploratory_*"]
+      - group: "Differential testing"
+        key_patterns: ["differential_*"]
+      - group: "DESeq2"
+        key_patterns: ["deseq2_*"]
+      - group: "Alternative test engines"
+        key_patterns: ["limma_*", "propd_*", "dream_*"]
+      - group: "Functional analysis"
+        key_patterns: ["functional_method", "gene_sets_files", "gsea_*", "gprofiler2_*", "decoupler_*", "grea_*"]
+      - group: "Affy / Proteus input"
+        key_patterns: ["affy_*", "proteus_*"]
+      - group: "Reporting"
+        key_patterns: ["report_*", "shinyngs_*", "skip_reports", "disable_report_modules", "logo_file", "css_file", "citations_file", "plaintext_email", "email*"]
+      - group: "Run context"
+        key_patterns: ["outdir", "seed", "round_digits", "version", "publish_dir_mode", "monochrome_logs", "validate_params", "help*", "show_hidden", "pipelines_testdata_base_path", "trace_report_suffix", "config_profile_*", "custom_config_*", "genome", "igenomes_*"]
+    highlight:
+      - "study_type"
+      - "differential_method"
+      - "differential_min_fold_change"
+      - "differential_max_qval"
+      - "deseq2_test"
+      - "deseq2_shrink_lfc"
+      - "deseq2_vs_method"
+      - "exploratory_n_features"
+      - "contrasts"
+  dashboards:
+    - "dashboards/base.yaml"
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Differential Abundance Analysis"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "differentialabundance"
+    version: "2.0.0"
+    engine:
+      name: "nextflow"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/differentialabundance"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Hub: the observation sheet, normalised, joined to the size factors
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samples"
+        description: "Observation sheet normalised to sample_id / group / size_factor, with every original column kept"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/differentialabundance/samples.py"
+            source_overrides:
+              samplesheet:
+                path: "{SAMPLESHEET_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample identifier, matching the columns of the abundance matrices"
+              "group": "The sheet's most factor-like column (fewest levels >= 2), the default grouping"
+              "size_factor": "DESeq2 library-size normalisation factor for this sample"
+
+      # ----------------------------------------------------------------
+      # Raw DESeq2 tables. These two exist so the tidy collections below can
+      # read them through `dc_ref`: the contrast id lives only in the FILE
+      # NAME, and only a scan carries the path (`include_file_paths`) into the
+      # frame, because the recipe glob loader concatenates files without a label.
+      # `infer_schema_length: 0` reads every column as text: DESeq2 writes `NA`
+      # in numeric columns and `chromosome` mixes 1..19 with MT/X/Y, so
+      # per-file inference disagrees between contrasts and the concat fails.
+      # The recipes recast.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "deseq2_results_raw"
+        description: "Raw per-contrast DESeq2 results tables (input of deseq2_results)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.deseq2\\.results\\.tsv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              null_values: ["NA", "NaN", ""]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "gene_id": "Ensembl gene identifier"
+              "baseMean": "Mean of normalised counts across samples"
+              "log2FoldChange": "Effect size of the contrast"
+              "lfcSE": "Standard error of log2FoldChange"
+              "pvalue": "Raw Wald p-value"
+              "padj": "Benjamini-Hochberg adjusted p-value"
+              "source_path": "File the row came from; the contrast id is derived from it"
+
+      - data_collection_tag: "deseq2_results_annotated_raw"
+        optional: true  # only written when the run supplied a --gtf annotation
+        description: "Raw per-contrast DESeq2 results joined to the GTF annotation (input of deseq2_results_annotated)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*_deseq2\\.annotated\\.tsv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              null_values: ["NA", "NaN", ""]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "gene_id": "Ensembl gene identifier"
+              "gene_name": "Gene symbol from the GTF"
+              "chromosome": "Chromosome the feature sits on"
+              "gene_biotype": "Ensembl biotype (protein_coding, lncRNA, pseudogene …)"
+              "source_path": "File the row came from; the contrast id is derived from it"
+
+      # ----------------------------------------------------------------
+      # Catalog-transformed collections (tool `deseq2`)
+      # ----------------------------------------------------------------
+      - data_collection_tag: "deseq2_results"
+        description: "DESeq2 statistics per contrast and feature, with the significance call and the MA abscissa precomputed"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "deseq2/results_long.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "contrast": "Contrast id, derived from the results file name"
+              "gene_id": "Feature identifier"
+              "base_mean": "Mean of normalised counts across samples"
+              "log2fc": "log2 fold change (volcano / MA effect size)"
+              "lfc_se": "Standard error of log2fc"
+              "pvalue": "Raw Wald p-value (QQ plot)"
+              "padj": "Adjusted p-value; null where DESeq2 filtered the feature out"
+              "log2_base_mean": "log2(baseMean + 1), the MA abscissa"
+              "neg_log10_padj": "-log10(padj), capped at 300 where padj underflowed to 0"
+              "significant": "padj < 0.05 and |log2fc| >= 1"
+              "direction": "up / down / not significant"
+
+      - data_collection_tag: "deseq2_results_annotated"
+        optional: true  # depends on deseq2_results_annotated_raw
+        description: "The same statistics joined to the gene annotation: symbol, chromosome, coordinates, biotype"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "deseq2/results_annotated.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "contrast": "Contrast id, derived from the results file name"
+              "gene_id": "Feature identifier"
+              "gene_name": "Gene symbol (falls back to the id when the GTF has none)"
+              "chromosome": "Chromosome"
+              "start": "Feature start coordinate"
+              "end": "Feature end coordinate"
+              "gene_biotype": "Ensembl biotype"
+              "log2fc": "log2 fold change"
+              "padj": "Adjusted p-value"
+              "neg_log10_padj": "-log10(padj), the Manhattan ordinate"
+              "significant": "padj < 0.05 and |log2fc| >= 1"
+              "direction": "up / down / not significant"
+
+      - data_collection_tag: "deseq2_vst_pca"
+        description: "Principal components of the variance-stabilised matrix, one point per sample"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "deseq2/vst_pca.py"
+            source_overrides:
+              samplesheet:
+                path: "{SAMPLESHEET_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample identifier"
+              "dim_1": "First principal component"
+              "dim_2": "Second principal component"
+              "group": "The sheet's most factor-like column, the default colouring"
+
+      - data_collection_tag: "deseq2_vst_heatmap"
+        description: "The 500 most variable features of the variance-stabilised matrix, features x samples"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "deseq2/vst_top_variable.py"
+            source_overrides:
+              samplesheet:
+                path: "{SAMPLESHEET_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "gene_id": "Feature identifier (the heatmap row index)"
+              "_col_annotations_json": "Serialised categorical column annotations built from the sample sheet"
+
+      - data_collection_tag: "deseq2_sample_distance"
+        description: "Euclidean sample-to-sample distances over the most variable features"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "deseq2/vst_sample_distance.py"
+            source_overrides:
+              samplesheet:
+                path: "{SAMPLESHEET_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier (the heatmap row index)"
+              "_col_annotations_json": "Serialised categorical column annotations built from the sample sheet"
+
+# ============================================================================
+# RUNTIME LINKS CONFIGURATION
+# ============================================================================
+# Two independent join keys. `sample_id` fans the persistent sample filter out
+# from the hub sheet to the two sample-space collections, and carries a PCA
+# lasso on to the distance matrix. Links are directional and resolution never
+# derives a reverse, so a selection source needs its own outgoing link even
+# when the hub already reaches both ends. `gene_id` carries a
+# gene picked in a figure or a table row over to the annotated table (and back),
+# which is what makes the scatter <-> table selection pair work.
+links:
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "deseq2_vst_pca"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the sample PCA by the samples picked on the hub sheet"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "deseq2_sample_distance"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the sample-distance matrix by the samples picked on the hub sheet"
+    enabled: true
+
+  - source_dc_tag: "deseq2_vst_pca"
+    source_column: "sample_id"
+    target_dc_tag: "deseq2_sample_distance"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Carry a cluster lassoed on the PCA over to the sample-distance matrix"
+    enabled: true
+
+  - source_dc_tag: "deseq2_results"
+    source_column: "gene_id"
+    target_dc_tag: "deseq2_results_annotated"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "gene_id"
+    description: "Carry a gene selected on the differential scatter over to the annotated table"
+    enabled: true
+
+  - source_dc_tag: "deseq2_results_annotated"
+    source_column: "gene_id"
+    target_dc_tag: "deseq2_results"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "gene_id"
+    description: "Carry a gene selected in the annotated table back to the differential panels"
+    enabled: true

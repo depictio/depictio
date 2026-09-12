@@ -2,6 +2,11 @@
   "generated_from": "depictio/catalog",
   "project_id": "fc9a651d95d98a4baedb8315",
   "outputs": [
+    "deseq2_results",
+    "deseq2_results_annotated",
+    "deseq2_sample_distance",
+    "deseq2_vst_heatmap",
+    "deseq2_vst_pca",
     "happy_roc",
     "happy_summary",
     "ivar_oncoplot_matrix",
@@ -51,6 +56,11 @@
     "wittyer_summary"
   ],
   "lanes": {
+    "deseq2_results": "recipe",
+    "deseq2_results_annotated": "recipe",
+    "deseq2_sample_distance": "recipe",
+    "deseq2_vst_heatmap": "recipe",
+    "deseq2_vst_pca": "recipe",
     "happy_roc": "recipe",
     "happy_summary": "recipe",
     "ivar_oncoplot_matrix": "recipe",
