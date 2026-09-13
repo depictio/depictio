@@ -23,6 +23,9 @@ from depictio.api.v1.backup_strategy_manager import (
     create_backup_with_strategy,
 )
 
+# MinIO publishes to quay.io; the minio/minio Docker Hub repository is gone.
+MINIO_IMAGE = "quay.io/minio/minio:RELEASE.2025-01-20T14-49-07Z"
+
 
 @pytest.mark.skipif(not testcontainers_available, reason="testcontainers not available")
 class TestS3BackupIntegration:
@@ -32,16 +35,19 @@ class TestS3BackupIntegration:
     def minio_container(self):
         """Start MinIO container for testing.
 
-        testcontainers pins the MinIO image tag itself, and Docker Hub can stop
-        serving a pinned tag at any time: startup then raises ImageNotFound on a
-        machine that is otherwise perfectly able to run the suite. Skip in that
-        case instead of failing, because the suite runs under `-x` and a single
-        unreachable image otherwise aborts every test scheduled after it.
+        The image is named explicitly because ``testcontainers`` defaults to a
+        ``minio/minio`` tag on Docker Hub, and MinIO has withdrawn that
+        repository: the pull now fails with "repository does not exist" on a
+        machine that is otherwise perfectly able to run the suite. quay.io is
+        MinIO's own registry and still serves the same digests.
 
-        The guard wraps `start()` only. Once the container is up, anything the
-        test itself raises must still surface as a failure.
+        The guard around ``start()`` stays as a safety net for a runner with no
+        Docker daemon, because the suite runs under ``-x`` and a single
+        unreachable image otherwise aborts every test scheduled after it. It
+        wraps ``start()`` only: once the container is up, anything the test
+        itself raises must still surface as a failure.
         """
-        container = MinioContainer()
+        container = MinioContainer(image=MINIO_IMAGE)
         try:
             container.start()
         except DockerException as exc:
