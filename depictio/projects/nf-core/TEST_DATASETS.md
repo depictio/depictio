@@ -611,13 +611,17 @@ degrades the dashboard, a failed one aborts the run.
 | atacseq `test` | 19/19 | 🚫 (`MQC`) | ✅ (after the HOMER fix) |
 | airrflow `test` | 12/12 | ✅ | ✅ |
 | ampliseq `test` | 12/23 | ✅ (`DB`) | **⚠️** |
-| rnaseq `test_full` | 6/6 | not predicted | ✅ |
+| rnaseq `test_full` | 6/6 | not predicted | ✅ (reproduces the megatest) |
 
 rnaseq `test_full` is the one full-size run in the campaign: 6 ENCODE cell lines against
-12 CI libraries, 3 hours on 32 cores, and a 138 GB output directory. 831 MB of it reaches
-the showcase. The bulk of the rest is the published STAR index, 31 GB of `SA`, `SAindex`
+2 CI libraries, 3 hours on 32 cores, and a 138 GB output directory, of which 831 MB is
+worth keeping. The bulk of the rest is the published STAR index, 31 GB of `SA`, `SAindex`
 and `Genome` under `star/star/`, which the fetch filter missed because `*.sa` is
 lower case and STAR writes `SA` with no extension at all.
+
+It is not a showcase scenario, because `test_full` is the profile the AWS megatest already
+runs. What it is worth is the comparison: the same profile, one run by nf-core on AWS and
+one by us on SLURM, agrees to five significant digits on every TPM.
 
 ### The defect a megatest could never have caught
 
@@ -808,12 +812,10 @@ template one short of a coverage it already has.
 | **cutandrun 3.1** | megatest | 13/13 | none |
 | | `test_full_small` | 13/13 | none |
 | | **union** | **13/13** | |
-| **rnaseq 3.26.0** | megatest | 5/5 | none |
+| **rnaseq 3.26.0** | megatest (= `test_full`) | 5/5 | none |
 | | `test` | 5/5 | none |
-| | `test_full` | 5/5 | none |
 | | **union** | **5/5** | |
-| **differentialabundance 2.0.0** | megatest | 8/8 | none |
-| | `test_full` | 8/8 | none |
+| **differentialabundance 2.0.0** | megatest (= `test_full`) | 8/8 | none |
 | | **union** | **8/8** | |
 | **rnafusion 4.1.3** | megatest | 9/10 | every one it fills; there is no second scenario |
 | | **union** | **9/10** | never filled: cancer_introns |
@@ -829,6 +831,23 @@ chipseq, cutandrun, rnaseq, differentialabundance and airrflow it buys **robustn
 instead: the same collections, arrived at through a different route, a different sample
 count or a different receptor. Both are worth having on a showcase instance, and they
 answer different questions.
+
+One pair did not survive that reading. A megatest is not a separate profile: nf-core runs
+its AWS megatests on `test_full`, so for any pipeline whose second scenario was `test_full`
+the showcase held the same profile twice. Run on the cluster and compared against the
+fetched megatest, differentialabundance came back **byte for byte identical**, all 31318
+lines of the DESeq2 results table, and rnaseq agreed to five significant digits on every
+TPM across the same eight ENCODE libraries, the difference being a re-run of a
+non-deterministic aligner rather than different data. Both were dropped from the showcase,
+which is 28 scenarios rather than 30, and 992 MB smaller. The runs are kept as what they
+actually are, a reproduction check: a megatest fetched from S3 and the same profile run on
+our own cluster land on the same numbers.
+
+cutandrun looked like the same case and is not. Its megatest and `test_full_small` carry
+the identical six-sample design, `h3k27me3` and `h3k4me3` against `igg_ctrl` in two
+replicates, but the megatest processed 2,984,630 reads per library and `test_full_small`
+10,000. Same design, three hundred times less depth, and the template reaches 13 of 13
+either way, which is a genuine robustness result and not a duplicate.
 
 ampliseq is where the argument is sharpest. Its best single profile reaches 10 of 22, and
 five profiles together reach 19. Note also that the denominator moves: the template prunes

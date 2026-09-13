@@ -100,16 +100,16 @@ SCENARIOS: list[Scenario] = [
     Scenario("chipseq", "1.2.0", "test", note="CI profile; needs the HOMER glob fix"),
     Scenario("cutandrun", "3.1", "megatest", note="MultiQC reprocessed"),
     Scenario("cutandrun", "3.1", "test_full_small", note="MultiQC reprocessed"),
-    Scenario("differentialabundance", "2.0.0", "megatest", note="nf-core AWS megatest"),
-    Scenario("differentialabundance", "2.0.0", "test_full", note="the one S3-free test_full"),
+    # No test_full scenario beside it: the AWS megatest IS the test_full profile.
+    # Run on the cluster, differentialabundance reproduced it byte for byte (31318
+    # identical lines of DESeq2 results) and rnaseq to 5 significant digits, so a
+    # second project would be the same dashboard twice. See TEST_DATASETS.md.
+    Scenario("differentialabundance", "2.0.0", "megatest", note="nf-core AWS megatest (= test_full)"),
     Scenario("funcscan", "4.0.0", "megatest", note="nf-core AWS megatest"),
     Scenario("funcscan", "4.0.0", "test", note="CI profile; several tools not run"),
     Scenario("rnafusion", "4.1.3", "megatest", note="megatest only: no usable test profile"),
     Scenario("rnaseq", "3.26.0", "megatest", note="nf-core AWS megatest"),
     Scenario("rnaseq", "3.26.0", "test", note="CI profile; samplesheet injected"),
-    # The one full-size run in the showcase: 6 ENCODE cell lines, 12 libraries,
-    # a 138 GB output directory that the fetch excludes bring down to 831 MB.
-    Scenario("rnaseq", "3.26.0", "test_full", note="full-size run, 6 cell lines; the CI profile has 2 samples"),
     Scenario("taxprofiler", "2.0.1", "megatest", note="nf-core AWS megatest"),
     Scenario("taxprofiler", "2.0.1", "test", note="CI profile, 2 platforms"),
     # taxprofiler test_malt is deliberately absent. MALT runs and MultiQC reports it,
