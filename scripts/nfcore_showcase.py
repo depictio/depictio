@@ -86,12 +86,14 @@ class Scenario:
 SCENARIOS: list[Scenario] = [
     Scenario("airrflow", "5.1.0", "megatest", note="nf-core AWS megatest (= test_full)"),
     Scenario("airrflow", "5.1.0", "test", note="CI profile, 6 samples"),
+    Scenario("airrflow", "5.1.0", "test_tcr", note="TCR instead of BCR: same collections, different receptor"),
     # ampliseq has no megatest on disk; 2.16.0 carries two locally produced runs
     # and 2.18.0 the cluster CI run. 2.14.0 has no data at all.
     Scenario("ampliseq", "2.18.0", "test", note="CI profile; 7-rank DB, see TEST_DATASETS.md"),
     Scenario("ampliseq", "2.18.0", "test_pacbio_its", note="sintax route, PacBio ITS"),
     Scenario("ampliseq", "2.18.0", "test_iontorrent", note="sintax route, IonTorrent single-end"),
     Scenario("ampliseq", "2.18.0", "test_multiregion", note="SIDLE route: the only one reaching sidle_reconstructed"),
+    Scenario("ampliseq", "2.18.0", "test_pplace", note="phylogenetic placement, a route no other ampliseq scenario takes"),
     Scenario("atacseq", "1.2.2", "megatest", note="MultiQC reprocessed"),
     Scenario("atacseq", "1.2.2", "test", note="CI profile; needs the HOMER glob fix"),
     Scenario("chipseq", "1.2.0", "megatest", note="MultiQC reprocessed"),
@@ -107,6 +109,11 @@ SCENARIOS: list[Scenario] = [
     Scenario("rnaseq", "3.26.0", "test", note="CI profile; samplesheet injected"),
     Scenario("taxprofiler", "2.0.1", "megatest", note="nf-core AWS megatest"),
     Scenario("taxprofiler", "2.0.1", "test", note="CI profile, 2 platforms"),
+    # taxprofiler test_malt is deliberately absent. MALT runs and MultiQC reports it,
+    # but the profile writes no taxpasta/ directory at all, and the template's five
+    # taxpasta collections are the whole point of it: the project would open on a
+    # samplesheet and a MultiQC tab. The route is outside what the template covers,
+    # which is worth recording and not worth showing.
     Scenario("variantbenchmarking", "1.4.0", "germline_small", note="germline route only"),
     Scenario("variantbenchmarking", "1.4.0", "germline_sv", note="SV route, 3 callers; wittyer needs $HOME to exist"),
     # som.py is somatic-only, so these two tables exist on no other route. Writes
