@@ -57,7 +57,7 @@ workflows:
       # Germline small variants (small/) — rtg-tools vcfeval + hap.py
       # ----------------------------------------------------------------
       - data_collection_tag: "germline_vcfeval_summary"
-        optional: true  # absent on every route but small/ and snv/; see the header
+        optional: true  # only the germline route writes small/; see the header
         description: "Germline rtg-tools vcfeval benchmark summary (precision/recall/F1 per sample)"
         config:
           type: "Table"
@@ -65,6 +65,13 @@ workflows:
           source: "transformed"
           transform:
             recipe: "rtgtools/vcfeval_summary.py"
+            source_overrides:
+              rtgtools_summary:
+                # Pinned, not left on the recipe's variant-type wildcard: rtg-tools
+                # runs on the germline and the somatic route alike and writes the
+                # same file name under each, so a data root carrying both (the AWS
+                # megatest does) would otherwise concatenate them into this one.
+                glob_pattern: "small/summary/tables/rtgtools/rtgtools.summary.csv"
           dc_specific_properties:
             format: "CSV"
             columns_description:
@@ -130,7 +137,13 @@ workflows:
             recipe: "rtgtools/vcfeval_summary.py"
             source_overrides:
               rtgtools_summary:
-                path: "indel/summary/tables/rtgtools/rtgtools.summary.csv"
+                # The somatic route is `snv` or `indel` depending on what is being
+                # benchmarked, and a glob cannot spell "either of these two": the
+                # pattern is resolved by `Path.glob`, which has character classes
+                # but no alternation. `[si]n` picks both out of the five variant
+                # types exactly, and matches none of `small`, `structural` or
+                # `copynumber`.
+                glob_pattern: "[si]n*/summary/tables/rtgtools/rtgtools.summary.csv"
           dc_specific_properties:
             format: "CSV"
             columns_description:
