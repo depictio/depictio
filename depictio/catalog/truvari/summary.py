@@ -1,11 +1,14 @@
 """Normalize a Truvari structural-variant benchmark summary into a tidy table.
 
-OPTIONAL — the public megatest does not run the SV profile, so this recipe is not exercised
-by the bundled test data. It targets the pipeline-aggregated
-``sv/summary/tables/truvari/truvari.summary.csv`` (collated from per-sample Truvari
-``summary.json`` by the reporting subworkflow). Column matching is case/format tolerant
-because the exact aggregated header is not pinned against real data yet — adjust once an SV
-run is available.
+Targets the pipeline-aggregated ``summary/tables/truvari/truvari.summary.csv``, collated
+from the per-sample Truvari ``summary.json`` by the reporting subworkflow. The pipeline writes everything under ``<outdir>/<variant_type>/``, and ``variant_type``
+is one of small, snv, indel, structural or copynumber, so the source is anchored on that
+one directory level rather than on a value: naming a value pins the recipe to a single
+route, and two of the values a recipe can meet are not the ones a reader would guess.
+
+Pinned against a real ``germline_sv`` run: the header is
+``Tool,File,Caller,TP_base,TP_comp,FP,FN,Precision,Recall,F1``, one row per sample. Column
+matching stays case and format tolerant.
 """
 
 import polars as pl
@@ -15,7 +18,7 @@ from depictio.models.models.transforms import RecipeSource
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="truvari_summary",
-        path="sv/summary/tables/truvari/truvari.summary.csv",
+        glob_pattern="*/summary/tables/truvari/truvari.summary.csv",
         format="CSV",
     ),
 ]

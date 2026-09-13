@@ -15,7 +15,7 @@ from depictio.models.models.transforms import RecipeSource
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="happy_raw",
-        glob_pattern="small/*/benchmarks/happy/*.summary.csv",
+        glob_pattern="*/*/benchmarks/happy/*.summary.csv",
         format="CSV",
     ),
 ]

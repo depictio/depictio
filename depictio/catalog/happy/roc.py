@@ -14,7 +14,7 @@ from depictio.models.models.transforms import RecipeSource
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="happy_roc",
-        glob_pattern="small/*/benchmarks/happy/*.roc.Locations.SNP.PASS.csv.gz",
+        glob_pattern="*/*/benchmarks/happy/*.roc.Locations.SNP.PASS.csv.gz",
         format="CSV",
     ),
 ]

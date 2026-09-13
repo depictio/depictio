@@ -1,9 +1,15 @@
 """Normalize a Wittyer CNV/SV benchmark summary into a tidy, optionally stratified table.
 
-OPTIONAL — not exercised by the public megatest (no CNV profile). Targets the
-pipeline-aggregated ``cnv/summary/tables/wittyer/wittyer.summary.csv`` (collated from per-sample
-Wittyer ``*.json``, which stratifies precision/recall/F1 by event type and size bin). Column
-matching is case/format tolerant; pin it against a real CNV run when available.
+Targets the pipeline-aggregated ``summary/tables/wittyer/wittyer.summary.csv``, collated
+from the per-sample Wittyer ``*.json``, which stratifies precision/recall/F1 by event type and
+size bin. The pipeline writes everything under ``<outdir>/<variant_type>/``, and ``variant_type``
+is one of small, snv, indel, structural or copynumber, so the source is anchored on that
+one directory level rather than on a value: naming a value pins the recipe to a single
+route, and two of the values a recipe can meet are not the ones a reader would guess.
+
+Wittyer serves the structural route as well as the copy-number one, so this recipe is reached
+by any run that benchmarks with it. Pinned against a real ``germline_sv`` run, whose header
+carries an extra ``StatsType`` column alongside the shared metric columns.
 """
 
 import polars as pl
@@ -13,7 +19,7 @@ from depictio.models.models.transforms import RecipeSource
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="wittyer_summary",
-        path="cnv/summary/tables/wittyer/wittyer.summary.csv",
+        glob_pattern="*/summary/tables/wittyer/wittyer.summary.csv",
         format="CSV",
     ),
 ]
