@@ -357,6 +357,9 @@ RUNS: list[RunSpec] = [
         pipeline="funcscan",
         version="4.0.0",
         profile="test_bakta",
+        # nf-schema is resolved unpinned at launch and 2.7.2 now demands >= 25.10.0,
+        # a floor that did not exist when the first wave ran on 25.04.7.
+        nxf_ver="25.10.7",
         samples=2,
         note="Bakta instead of Prodigal: funcscan reaches only 8 of 15 collections so far",
     ),
@@ -365,6 +368,9 @@ RUNS: list[RunSpec] = [
         pipeline="variantbenchmarking",
         version="1.4.0",
         profile="somatic_snv",
+        # nf-schema is resolved unpinned at launch and 2.7.2 now demands >= 25.10.0,
+        # a floor that did not exist when the first wave ran on 25.04.7.
+        nxf_ver="25.10.7",
         revision="1.4.0",
         samples=3,
         inject_samplesheet=False,
@@ -375,6 +381,9 @@ RUNS: list[RunSpec] = [
         pipeline="taxprofiler",
         version="2.0.1",
         profile="test_malt",
+        # nf-schema is resolved unpinned at launch and 2.7.2 now demands >= 25.10.0,
+        # a floor that did not exist when the first wave ran on 25.04.7.
+        nxf_ver="25.10.7",
         samples=2,
         note="MALT, a profiler no other taxprofiler scenario runs",
     ),
@@ -414,6 +423,9 @@ RUNS: list[RunSpec] = [
         pipeline="rnaseq",
         version="3.26.0",
         profile="test_full",
+        # nf-schema is resolved unpinned at launch and 2.7.2 now demands >= 25.10.0,
+        # a floor that did not exist when the first wave ran on 25.04.7.
+        nxf_ver="25.10.7",
         samples=8,
         note="the real test_full, 8 samples on iGenomes GRCh37, rather than the megatest",
     ),
