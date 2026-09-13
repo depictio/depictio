@@ -300,6 +300,7 @@ workflows:
               "evenness": "Shannon Hill number divided by richness"
 
       - data_collection_tag: "clonal_diversity"
+        optional: true  # see clonal_overlap below: both are route-dependent
         description: "alakazam Hill diversity profile per sample, one row per sample and diversity order"
         config:
           type: "Table"
@@ -348,6 +349,13 @@ workflows:
               "total_sequences": "Sequences in the clone across all samples"
 
       - data_collection_tag: "clonal_overlap"
+        # The repertoire-analysis report does not always write these two tables.
+        # The TCR profile runs the same two subjects as the BCR one and produces
+        # clone_sizes_table and num_clones_table but neither clonal_diversity nor
+        # clonal_overlap, and it reports its threshold under report_threshold/
+        # rather than find_threshold/. Required, they took a run that produced 9 of
+        # the 11 collections and failed it outright.
+        optional: true
         description: "Sample by sample matrix of shared clones (zero diagonal, zero across subjects)"
         config:
           type: "Table"
