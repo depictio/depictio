@@ -128,6 +128,14 @@ SCENARIOS: list[Scenario] = [
         note="CI profile, restructured under run_1/",
         runs=("run_1",),
     ),
+    Scenario(
+        "viralrecon",
+        "3.0.0",
+        "test_sispa",
+        subpath="viralrecon/3.0.0/test_sispa",
+        note="metagenomic route instead of amplicon, no S3",
+        runs=("run_1",),
+    ),
 ]
 
 
