@@ -773,38 +773,76 @@ ratio, because neither is Delta-backed by design (the MultiQC panel reads the re
 parquet and the tree viewer reads the Newick file), so counting them would show every
 template one short of a coverage it already has.
 
-| template | scenarios | best single | union | declared |
-|---|---|---|---|---|
-| ampliseq 2.18.0 | `test`, `test_pplace`, `test_multiregion`, `test_pacbio_its`, `test_iontorrent` | 10 | **19** | 22 |
-| variantbenchmarking 1.4.0 | `germline_small`, `germline_sv`, `somatic_snv` | 3 | **9** | 9 |
-| atacseq 1.2.2 | megatest, `test` | 18 | 18 | 18 |
-| funcscan 4.0.0 | megatest, `test` | 14 | 14 | 14 |
-| chipseq 1.2.0 | megatest, `test` | 14 | 14 | 14 |
-| viralrecon 3.0.0 | `test`, `test_sispa`, illumina + nanopore | 13 | 13 | 13 |
-| cutandrun 3.1 | megatest, `test_full_small` | 13 | 13 | 13 |
-| airrflow 5.1.0 | megatest, `test`, `test_tcr` | 11 | 11 | 11 |
-| taxprofiler 2.0.1 | megatest, `test` | 11 | 11 | 11 |
-| rnafusion 4.1.3 | megatest | 9 | 9 | 10 |
-| differentialabundance 2.0.0 | megatest, `test_full` | 8 | 8 | 8 |
-| rnaseq 3.26.0 | megatest, `test`, `test_full` | 5 | 5 | 5 |
+| template | profile | DCs | the collections only this profile fills |
+|---|---|---|---|
+| **ampliseq 2.18.0** | `test` | 10/21 | alpha_rarefaction, alpha_rarefaction_summary, rarefaction_canonical, alpha_diversity_multi_canonical, sunburst_canonical, sankey_canonical |
+| | `test_pplace` | 10/15 | taxonomy_rel_abundance, taxonomy_heatmap, embedding_pcoa, bray_curtis_canonical, complex_heatmap_canonical, upset_canonical |
+| | `test_multiregion` | 5/5 | sidle_reconstructed, sidle_reconstruction_qc |
+| | `test_pacbio_its` | 3/5 | sintax_rel_abundance |
+| | `test_iontorrent` | 1/4 | none: a second sintax route, and the only one that is single-end |
+| | **union** | **19/22** | never filled: ancombc_results, ma_canonical, stacked_taxonomy_canonical |
+| **variantbenchmarking 1.4.0** | `germline_small` | 3/9 | germline_vcfeval_summary, germline_happy_summary, germline_happy_roc |
+| | `germline_sv` | 3/9 | sv_truvari_summary, sv_svbenchmark_summary, cnv_wittyer_summary |
+| | `somatic_snv` | 3/9 | somatic_vcfeval_summary, somatic_sompy_summary, somatic_sompy_regions |
+| | **union** | **9/9** | three disjoint routes, no overlap at all |
+| **funcscan 4.0.0** | megatest | 14/14 | hamronization_report, hamronization_gene_presence, hamronization_gene_matrix, hamronization_tool_overlap, combgc_summary, combgc_tool_overlap, dbcan_substrates |
+| | `test` | 7/14 | none: the CI profile runs half the screening tools |
+| | **union** | **14/14** | |
+| **taxprofiler 2.0.1** | megatest | 11/11 | database_sheet, sylph_ani |
+| | `test` | 9/11 | none |
+| | **union** | **11/11** | |
+| **viralrecon 3.0.0** | `test` | 13/13 | pangolin_lineages, nextclade_results, sankey_canonical, upset_canonical |
+| | illumina + nanopore | 6/13 | none: two runs in one project, the `sequencing-runs` shape |
+| | `test_sispa` | 6/13 | none: metagenomic rather than amplicon |
+| | **union** | **13/13** | |
+| **airrflow 5.1.0** | megatest | 11/11 | none |
+| | `test` | 11/11 | none |
+| | `test_tcr` | 8/11 | none: TCR rather than BCR, three collections short |
+| | **union** | **11/11** | |
+| **atacseq 1.2.2** | megatest | 18/18 | none |
+| | `test` | 18/18 | none |
+| | **union** | **18/18** | |
+| **chipseq 1.2.0** | megatest | 14/14 | none |
+| | `test` | 14/14 | none |
+| | **union** | **14/14** | |
+| **cutandrun 3.1** | megatest | 13/13 | none |
+| | `test_full_small` | 13/13 | none |
+| | **union** | **13/13** | |
+| **rnaseq 3.26.0** | megatest | 5/5 | none |
+| | `test` | 5/5 | none |
+| | `test_full` | 5/5 | none |
+| | **union** | **5/5** | |
+| **differentialabundance 2.0.0** | megatest | 8/8 | none |
+| | `test_full` | 8/8 | none |
+| | **union** | **8/8** | |
+| **rnafusion 4.1.3** | megatest | 9/10 | every one it fills; there is no second scenario |
+| | **union** | **9/10** | never filled: cancer_introns |
 
 Ten of the twelve templates are fully covered: every collection they declare carries data
-in at least one scenario. The two that are not are the interesting ones.
+in at least one profile.
 
-ampliseq's best single route reaches 10 of 22 and five routes together reach 19, so more
-than half of that template is never exercised by any one run, which is the property the
-multi-scenario showcase exists to make visible. The three it never reaches are
-`ancombc_results`, which needs a differential-abundance comparison no CI profile sets up,
-and `ma_canonical` and `stacked_taxonomy_canonical`, which derive from it and from the
-`taxonomy_rel_abundance` table the `DB` caveat above already accounts for.
+The "only this profile fills" column separates the two reasons to run a second profile,
+which the totals alone hide. On ampliseq, variantbenchmarking, funcscan, taxprofiler and
+viralrecon, a second profile buys **coverage**: it fills collections no other profile
+reaches, and without it that part of the template is never exercised at all. On atacseq,
+chipseq, cutandrun, rnaseq, differentialabundance and airrflow it buys **robustness**
+instead: the same collections, arrived at through a different route, a different sample
+count or a different receptor. Both are worth having on a showcase instance, and they
+answer different questions.
 
-variantbenchmarking goes from 3 to 9 of 9, and only after the defect below was fixed. Its
-three routes are disjoint: no route reaches another route's tables, which is exactly what
-made the hardcoded directories invisible.
+ampliseq is where the argument is sharpest. Its best single profile reaches 10 of 22, and
+five profiles together reach 19. Note also that the denominator moves: the template prunes
+itself against `params.json`, so `test` declares 21 collections and `test_multiregion`
+only 5, and a 5/5 there is a complete route rather than a poor one. The three it never
+reaches are `ancombc_results`, which needs a differential-abundance comparison no CI
+profile sets up, and `ma_canonical` and `stacked_taxonomy_canonical`, which derive from it
+and from the `taxonomy_rel_abundance` table the `DB` caveat above already accounts for.
 
-rnafusion's `cancer_introns` has no scenario at all, because none of its three profiles
-produces usable output: one is a stub, one sets `references_only`, and the third needs
-COSMIC credentials. It runs on its megatest only.
+variantbenchmarking is the extreme case: three routes, three collections each, zero
+overlap, and only after the defect below was fixed. rnafusion is the opposite extreme,
+with no second scenario possible: one profile is a stub, one sets `references_only`, and
+the third needs COSMIC credentials, so it runs on its megatest alone and `cancer_introns`
+has nothing to fill it.
 
 ### The template that could not see two thirds of its own outputs
 
