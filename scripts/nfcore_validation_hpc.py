@@ -472,6 +472,19 @@ RSYNC_EXCLUDES = [
     "/references/",
     "/work/",
     "/.nextflow/",
+    # The published STAR index, and the largest single directory the campaign has
+    # seen: 31 GB of SA / SAindex / Genome on rnaseq test_full, against 7 GB for
+    # everything else that run produced. `*.sa` above does not catch it, because
+    # STAR names the file `SA` with no extension. Anchored, since star/ at the
+    # transfer root holds nothing but the index; a per-sample star/ deeper in the
+    # tree is untouched.
+    "/star/star/",
+    # Secondary alignment products no template reads. MultiQC summarises both, and
+    # the summary is what the templates bind to; the raw trees are 2.6 GB and
+    # 1.2 GB on rnaseq test_full. One level deep so the aligner directory that
+    # holds them can be named anything (star_salmon/, hisat2/ ...).
+    "*/stringtie/",
+    "*/rseqc/",
     "*.h5",
     "*.fast5",
     "*.pod5",
