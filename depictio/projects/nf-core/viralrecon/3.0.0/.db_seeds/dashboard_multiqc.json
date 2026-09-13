@@ -308,7 +308,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "f5a9a603-94b7-4e43-9858-e72085226ce7",
+      "index": "e5ac0ddb-169a-48c3-9a1a-2ba98ac6579d",
       "component_type": "text",
       "title": "Run at a glance",
       "workflow_tag": "viralrecon",
@@ -334,7 +334,7 @@
       "order": 2,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "Per-sample QC aggregated from every stage of the nf-core/viralrecon pipeline. The four cards read the summary table directly; the MultiQC panels below are the reports they were derived from. The two filter sections on the left are persistent, so a sample or a coverage floor picked here narrows the coverage, typing, QC and variant tabs as well.",
+      "body": "Per-sample QC aggregated from every stage of the nf-core/viralrecon pipeline. The four cards read the summary table directly; the [MultiQC](https://multiqc.info) panels below are the reports they were derived from. The two filter sections on the left are persistent, so a sample or a coverage floor picked here narrows the coverage, typing, QC and variant tabs as well.",
       "wf_tag": "nextflow/viralrecon"
     },
     {
@@ -364,6 +364,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "multiqc/summary_metrics",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_summary_metrics",
+        "use": "multiqc/summary_metrics",
+        "description": "Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total variant counts, lineage) parsed from MultiQC's summary_variants_metrics table."
+      },
       "section": "Run at a glance",
       "aggregation": "nunique",
       "column_name": "sample",
@@ -414,6 +422,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "multiqc/summary_metrics",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_summary_metrics",
+        "use": "multiqc/summary_metrics",
+        "description": "Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total variant counts, lineage) parsed from MultiQC's summary_variants_metrics table."
+      },
       "section": "Run at a glance",
       "aggregation": "average",
       "column_name": "pct_reads_mapped",
@@ -466,6 +482,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "multiqc/summary_metrics",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_summary_metrics",
+        "use": "multiqc/summary_metrics",
+        "description": "Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total variant counts, lineage) parsed from MultiQC's summary_variants_metrics table."
+      },
       "section": "Run at a glance",
       "aggregation": "average",
       "column_name": "pct_genome_covered_10x",
@@ -516,6 +540,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "multiqc/summary_metrics",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_summary_metrics",
+        "use": "multiqc/summary_metrics",
+        "description": "Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total variant counts, lineage) parsed from MultiQC's summary_variants_metrics table."
+      },
       "section": "Run at a glance",
       "aggregation": "nunique",
       "column_name": "lineage",
@@ -563,7 +595,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "d37f7e9f-077b-47ea-a5f3-bfac5a5e3009",
+      "index": "7c3d80c4-43cc-46c5-9c37-111139ead354",
       "component_type": "multiqc",
       "title": "MultiQC general statistics",
       "workflow_tag": "viralrecon",
@@ -590,6 +622,14 @@
       "description": "Per-sample KPIs across the full pipeline. The QC triage entry point.",
       "title_size": "h3",
       "title_align": "left",
+      "use": "multiqc/general_stats",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_general_stats",
+        "use": "multiqc/general_stats",
+        "description": "The one table every MultiQC report has: one row per sample, one column per headline metric each module contributed. Not a module's own output, which is why it names no producing tool \u2014 MultiQC assembles it from all of them."
+      },
       "section": "QC overview",
       "selected_module": "general_stats",
       "selected_plot": "general_stats",
@@ -668,7 +708,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "6e0f88ff-9121-45f6-a45a-95fbf7526228",
+      "index": "f56fc0ab-4bb0-46f5-ad96-f09edc396345",
       "component_type": "multiqc",
       "title": "fastp - filtered reads",
       "workflow_tag": "viralrecon",
@@ -709,7 +749,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "27a81252-5e44-4cd7-9ef3-27f00a37f55c",
+      "index": "ae40fe72-972e-47a3-99ff-5616ff0e2c50",
       "component_type": "multiqc",
       "title": "bowtie2 - paired-end alignment",
       "workflow_tag": "viralrecon",
@@ -750,7 +790,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "c8c65190-7ef9-4e14-a555-8bfaffbd9cb2",
+      "index": "33772208-2c30-4ffc-b32e-0bc60df0431f",
       "component_type": "multiqc",
       "title": "mosdepth - cumulative coverage",
       "workflow_tag": "viralrecon",
@@ -810,11 +850,11 @@
       "order": 2,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "FastQC base quality and its status grid, the Kraken2 contamination screen, the post-iVar alignment flagstat, per-contig depth and the primer-trimming counts. Each becomes interesting once a panel above has flagged something.",
+      "body": "[FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) base quality and its status grid, the [Kraken2](https://github.com/DerrickWood/kraken2) contamination screen, the post-[iVar](https://github.com/andersen-lab/ivar) alignment flagstat, per-contig depth and the primer-trimming counts. Each becomes interesting once a panel above has flagged something.",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "82b5decb-5dc3-4ba2-a4b6-fa83d414ec08",
+      "index": "cc6f0bba-4e5c-4896-bed5-c4b75712755b",
       "component_type": "multiqc",
       "title": "FastQC - sequence quality histograms",
       "workflow_tag": "viralrecon",
@@ -855,7 +895,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "f5c2ff09-36f5-44d4-906b-8a03b0484273",
+      "index": "dbaed628-ae21-4659-979c-f24ccaf30de7",
       "component_type": "multiqc",
       "title": "FastQC - status checks",
       "workflow_tag": "viralrecon",
@@ -896,7 +936,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "5a2fba2a-e8a5-4e30-8b56-92dcf391a981",
+      "index": "63b3f894-cd3d-4fb9-acf9-704b1a166aeb",
       "component_type": "multiqc",
       "title": "Kraken2 - top taxa",
       "workflow_tag": "viralrecon",
@@ -1076,11 +1116,11 @@
       "order": 2,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "The iVar calling summary, the snpEff effect and region breakdowns, the bcftools substitution spectrum, the QUAST contig count and the nf-core assembly summary. Read together they say whether the consensus is trustworthy, which is the question the Variants tab then answers call by call.",
+      "body": "The iVar calling summary, the [snpEff](https://pcingola.github.io/SnpEff/) effect and region breakdowns, the [bcftools](https://samtools.github.io/bcftools/) substitution spectrum, the [QUAST](https://github.com/ablab/quast) contig count and the nf-core assembly summary. Read together they say whether the consensus is trustworthy, which is the question the Variants tab then answers call by call.",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "88766fa9-e7f2-405d-877f-632a43d25108",
+      "index": "3edff37a-f795-414d-b24d-f7e0e64d1385",
       "component_type": "multiqc",
       "title": "iVar - variant counts",
       "workflow_tag": "viralrecon",
@@ -1121,7 +1161,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "92ad78a7-3f91-41ad-88e0-15f8b96a5dce",
+      "index": "41794c33-e454-4a96-a2c7-aee81c14a6f9",
       "component_type": "multiqc",
       "title": "snpEff - effects by impact",
       "workflow_tag": "viralrecon",
@@ -1202,7 +1242,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "46112f57-17c7-4d4d-9dff-f103cc5da5bc",
+      "index": "e25034bd-ba6b-4011-bc7b-f175a1688b31",
       "component_type": "multiqc",
       "title": "bcftools - substitution types",
       "workflow_tag": "viralrecon",
@@ -1243,7 +1283,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "40aab51a-0bf1-4a3e-86a1-28437d0f57e9",
+      "index": "6092c0b9-56c8-4149-8326-1a15e74d8a1a",
       "component_type": "multiqc",
       "title": "QUAST - number of contigs",
       "workflow_tag": "viralrecon",
@@ -1385,7 +1425,7 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-f5a9a603-94b7-4e43-9858-e72085226ce7",
+      "i": "box-e5ac0ddb-169a-48c3-9a1a-2ba98ac6579d",
       "x": 0,
       "y": 0,
       "w": 8,
@@ -1447,7 +1487,7 @@
       ]
     },
     {
-      "i": "box-d37f7e9f-077b-47ea-a5f3-bfac5a5e3009",
+      "i": "box-7c3d80c4-43cc-46c5-9c37-111139ead354",
       "x": 0,
       "y": 2,
       "w": 8,
@@ -1492,7 +1532,7 @@
       ]
     },
     {
-      "i": "box-6e0f88ff-9121-45f6-a45a-95fbf7526228",
+      "i": "box-f56fc0ab-4bb0-46f5-ad96-f09edc396345",
       "x": 4,
       "y": 10,
       "w": 4,
@@ -1507,7 +1547,7 @@
       ]
     },
     {
-      "i": "box-27a81252-5e44-4cd7-9ef3-27f00a37f55c",
+      "i": "box-ae40fe72-972e-47a3-99ff-5616ff0e2c50",
       "x": 0,
       "y": 14,
       "w": 4,
@@ -1522,7 +1562,7 @@
       ]
     },
     {
-      "i": "box-c8c65190-7ef9-4e14-a555-8bfaffbd9cb2",
+      "i": "box-33772208-2c30-4ffc-b32e-0bc60df0431f",
       "x": 4,
       "y": 14,
       "w": 4,
@@ -1552,7 +1592,7 @@
       ]
     },
     {
-      "i": "box-82b5decb-5dc3-4ba2-a4b6-fa83d414ec08",
+      "i": "box-cc6f0bba-4e5c-4896-bed5-c4b75712755b",
       "x": 0,
       "y": 1,
       "w": 8,
@@ -1567,7 +1607,7 @@
       ]
     },
     {
-      "i": "box-f5c2ff09-36f5-44d4-906b-8a03b0484273",
+      "i": "box-dbaed628-ae21-4659-979c-f24ccaf30de7",
       "x": 0,
       "y": 6,
       "w": 8,
@@ -1582,7 +1622,7 @@
       ]
     },
     {
-      "i": "box-5a2fba2a-e8a5-4e30-8b56-92dcf391a981",
+      "i": "box-63b3f894-cd3d-4fb9-acf9-704b1a166aeb",
       "x": 0,
       "y": 11,
       "w": 4,
@@ -1657,7 +1697,7 @@
       ]
     },
     {
-      "i": "box-88766fa9-e7f2-405d-877f-632a43d25108",
+      "i": "box-3edff37a-f795-414d-b24d-f7e0e64d1385",
       "x": 0,
       "y": 1,
       "w": 4,
@@ -1672,7 +1712,7 @@
       ]
     },
     {
-      "i": "box-92ad78a7-3f91-41ad-88e0-15f8b96a5dce",
+      "i": "box-41794c33-e454-4a96-a2c7-aee81c14a6f9",
       "x": 4,
       "y": 1,
       "w": 4,
@@ -1702,7 +1742,7 @@
       ]
     },
     {
-      "i": "box-46112f57-17c7-4d4d-9dff-f103cc5da5bc",
+      "i": "box-e25034bd-ba6b-4011-bc7b-f175a1688b31",
       "x": 4,
       "y": 5,
       "w": 4,
@@ -1717,7 +1757,7 @@
       ]
     },
     {
-      "i": "box-40aab51a-0bf1-4a3e-86a1-28437d0f57e9",
+      "i": "box-6092c0b9-56c8-4149-8326-1a15e74d8a1a",
       "x": 0,
       "y": 9,
       "w": 4,
@@ -1853,7 +1893,7 @@
   },
   "is_public": true,
   "last_saved_ts": "2026-08-29 00:00:00",
-  "creation_time": "2026-08-29 15:00:13",
+  "creation_time": "2026-09-05 04:48:08",
   "screenshot_ts": "",
   "project_id": {
     "$oid": "746b0f3c1e4a2d7f8e5b9ca2"

@@ -140,7 +140,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "7a6e8c82-e2f0-49d5-86f3-109824d3942d",
+      "index": "041ffff1-53bd-45ca-bb48-f99f8903c130",
       "component_type": "text",
       "title": "QC at a glance",
       "workflow_tag": "viralrecon",
@@ -170,7 +170,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "474cf782-0a1e-4f8b-82bf-d5d1c93c29ef",
+      "index": "016addc4-9833-42a5-a2ac-df5213fd79fc",
       "component_type": "card",
       "title": "Avg % Genome >= 10x",
       "workflow_tag": "viralrecon",
@@ -196,6 +196,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "multiqc/summary_metrics",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_summary_metrics",
+        "use": "multiqc/summary_metrics",
+        "description": "Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total variant counts, lineage) parsed from MultiQC's summary_variants_metrics table."
+      },
       "section": "QC at a glance",
       "aggregation": "average",
       "column_name": "pct_genome_covered_10x",
@@ -222,7 +230,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "efb46aa0-a5d0-44d2-a90f-a8c956ca1eb2",
+      "index": "3220a27a-0fa5-41d4-9765-f2faa50fc6a9",
       "component_type": "card",
       "title": "Median Variants / Sample",
       "workflow_tag": "viralrecon",
@@ -248,6 +256,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "multiqc/summary_metrics",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_summary_metrics",
+        "use": "multiqc/summary_metrics",
+        "description": "Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total variant counts, lineage) parsed from MultiQC's summary_variants_metrics table."
+      },
       "section": "QC at a glance",
       "aggregation": "median",
       "column_name": "num_variants_total",
@@ -300,6 +316,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "multiqc/summary_metrics",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_summary_metrics",
+        "use": "multiqc/summary_metrics",
+        "description": "Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total variant counts, lineage) parsed from MultiQC's summary_variants_metrics table."
+      },
       "section": "QC at a glance",
       "aggregation": "average",
       "column_name": "pct_reads_mapped",
@@ -352,6 +376,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "nextclade/report",
+      "catalog_source": {
+        "toolId": "nextclade",
+        "toolName": "Nextclade",
+        "outputId": "nextclade_report",
+        "use": "nextclade/report",
+        "description": "Per-sample clade assignment + sequence QC."
+      },
       "section": "QC at a glance",
       "aggregation": "median",
       "column_name": "totalMissing",
@@ -397,11 +429,11 @@
       "order": 2,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "Coverage against variant count separates a genuinely divergent sample from one that is simply under-sequenced: both produce few calls, but only one of them is well covered. The Nextclade panel beside it says the same thing from the consensus side.",
+      "body": "Coverage against variant count separates a genuinely divergent sample from one that is simply under-sequenced: both produce few calls, but only one of them is well covered. The [Nextclade](https://github.com/nextstrain/nextclade) panel beside it says the same thing from the consensus side.",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "95dcce9e-4afb-4e0c-9e5e-cca77d714ff8",
+      "index": "abafd56d-34cd-4e8d-9e67-47b440ce0f65",
       "component_type": "figure",
       "title": "Median coverage vs total variants",
       "workflow_tag": "viralrecon",
@@ -428,6 +460,14 @@
       "description": "Spot low-coverage samples with inflated / deflated variant counts.",
       "title_size": "h3",
       "title_align": "left",
+      "use": "multiqc/summary_metrics",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_summary_metrics",
+        "use": "multiqc/summary_metrics",
+        "description": "Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total variant counts, lineage) parsed from MultiQC's summary_variants_metrics table."
+      },
       "section": "Diagnostics",
       "visu_type": "scatter",
       "dict_kwargs": {},
@@ -444,7 +484,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "695cf98d-1ae3-4edc-b021-e977920decba",
+      "index": "a1cd511b-2af8-49d0-a09c-2169c97a9ac5",
       "component_type": "figure",
       "title": "Nextclade substitutions vs deletions",
       "workflow_tag": "viralrecon",
@@ -471,6 +511,14 @@
       "description": "Per-sample mutation profile shape. Outliers signal clade-specific patterns.",
       "title_size": "h3",
       "title_align": "left",
+      "use": "nextclade/report",
+      "catalog_source": {
+        "toolId": "nextclade",
+        "toolName": "Nextclade",
+        "outputId": "nextclade_report",
+        "use": "nextclade/report",
+        "description": "Per-sample clade assignment + sequence QC."
+      },
       "section": "Diagnostics",
       "visu_type": "scatter",
       "dict_kwargs": {},
@@ -510,7 +558,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "27d43d47-b3ea-4f43-ac80-4869ac4860b1",
+      "index": "f6f82b05-7be3-480c-9258-2099ef49e98f",
       "component_type": "figure",
       "title": "Genome coverage per sample (>=10x)",
       "workflow_tag": "viralrecon",
@@ -537,6 +585,14 @@
       "description": "Per-sample %-genome >=10x, sorted. Red = 80% reliability cut-off.",
       "title_size": "h3",
       "title_align": "left",
+      "use": "multiqc/summary_metrics",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_summary_metrics",
+        "use": "multiqc/summary_metrics",
+        "description": "Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total variant counts, lineage) parsed from MultiQC's summary_variants_metrics table."
+      },
       "section": "Per-sample coverage",
       "visu_type": "bar",
       "dict_kwargs": {},
@@ -602,6 +658,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "multiqc/summary_metrics",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_summary_metrics",
+        "use": "multiqc/summary_metrics",
+        "description": "Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total variant counts, lineage) parsed from MultiQC's summary_variants_metrics table."
+      },
       "section": "Sample metadata",
       "aggregation": "nunique",
       "column_name": "sample",
@@ -652,6 +716,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "multiqc/summary_metrics",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_summary_metrics",
+        "use": "multiqc/summary_metrics",
+        "description": "Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total variant counts, lineage) parsed from MultiQC's summary_variants_metrics table."
+      },
       "section": "Sample metadata",
       "aggregation": "average",
       "column_name": "num_reads_mapped",
@@ -706,6 +778,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "multiqc/summary_metrics",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_summary_metrics",
+        "use": "multiqc/summary_metrics",
+        "description": "Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total variant counts, lineage) parsed from MultiQC's summary_variants_metrics table."
+      },
       "section": "Sample metadata",
       "aggregation": "average",
       "column_name": "pct_genome_covered_1x",
@@ -758,6 +838,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "multiqc/summary_metrics",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_summary_metrics",
+        "use": "multiqc/summary_metrics",
+        "description": "Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total variant counts, lineage) parsed from MultiQC's summary_variants_metrics table."
+      },
       "section": "Sample metadata",
       "aggregation": "nunique",
       "column_name": "lineage",
@@ -782,7 +870,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "185daed7-6524-4958-9d68-7aaedc9836ac",
+      "index": "19830d8f-9336-4466-971b-c5b777e8bb8b",
       "component_type": "table",
       "title": "Summary metrics",
       "workflow_tag": "viralrecon",
@@ -809,6 +897,14 @@
       "description": "Per-sample alignment, coverage, and variant calling summary - QC backbone for downstream tabs.",
       "title_size": "h3",
       "title_align": "left",
+      "use": "multiqc/summary_metrics",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_summary_metrics",
+        "use": "multiqc/summary_metrics",
+        "description": "Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total variant counts, lineage) parsed from MultiQC's summary_variants_metrics table."
+      },
       "section": "Sample metadata",
       "columns": [],
       "page_size": 100,
@@ -849,7 +945,7 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-7a6e8c82-e2f0-49d5-86f3-109824d3942d",
+      "i": "box-041ffff1-53bd-45ca-bb48-f99f8903c130",
       "x": 0,
       "y": 0,
       "w": 8,
@@ -864,7 +960,7 @@
       ]
     },
     {
-      "i": "box-474cf782-0a1e-4f8b-82bf-d5d1c93c29ef",
+      "i": "box-016addc4-9833-42a5-a2ac-df5213fd79fc",
       "x": 0,
       "y": 1,
       "w": 2,
@@ -872,7 +968,7 @@
       "static": true
     },
     {
-      "i": "box-efb46aa0-a5d0-44d2-a90f-a8c956ca1eb2",
+      "i": "box-3220a27a-0fa5-41d4-9765-f2faa50fc6a9",
       "x": 2,
       "y": 1,
       "w": 2,
@@ -911,7 +1007,7 @@
       ]
     },
     {
-      "i": "box-95dcce9e-4afb-4e0c-9e5e-cca77d714ff8",
+      "i": "box-abafd56d-34cd-4e8d-9e67-47b440ce0f65",
       "x": 0,
       "y": 1,
       "w": 4,
@@ -926,7 +1022,7 @@
       ]
     },
     {
-      "i": "box-695cf98d-1ae3-4edc-b021-e977920decba",
+      "i": "box-a1cd511b-2af8-49d0-a09c-2169c97a9ac5",
       "x": 4,
       "y": 1,
       "w": 4,
@@ -956,7 +1052,7 @@
       ]
     },
     {
-      "i": "box-27d43d47-b3ea-4f43-ac80-4869ac4860b1",
+      "i": "box-f6f82b05-7be3-480c-9258-2099ef49e98f",
       "x": 0,
       "y": 1,
       "w": 8,
@@ -1018,7 +1114,7 @@
       "static": true
     },
     {
-      "i": "box-185daed7-6524-4958-9d68-7aaedc9836ac",
+      "i": "box-19830d8f-9336-4466-971b-c5b777e8bb8b",
       "x": 0,
       "y": 4,
       "w": 8,
@@ -1121,7 +1217,7 @@
   },
   "is_public": true,
   "last_saved_ts": "2026-08-29 00:00:00",
-  "creation_time": "2026-08-29 15:00:13",
+  "creation_time": "2026-09-05 04:48:08",
   "screenshot_ts": "",
   "project_id": {
     "$oid": "746b0f3c1e4a2d7f8e5b9ca2"

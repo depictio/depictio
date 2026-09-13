@@ -117,11 +117,11 @@
       "order": 2,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "MultiQC aggregates the per-sample FastQC and Cutadapt reports for this run. The four panels here answer the questions asked first: how many reads survived trimming, how evenly they are spread across samples, and whether base quality holds to the end of the read. The remaining ten panels are folded into *QC details* below. Pick a sample on the left to narrow every panel at once.",
+      "body": "[MultiQC](https://multiqc.info) aggregates the per-sample [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) and [Cutadapt](https://cutadapt.readthedocs.io) reports for this run. The four panels here answer the questions asked first: how many reads survived trimming, how evenly they are spread across samples, and whether base quality holds to the end of the read. The remaining ten panels are folded into *QC details* below. Pick a sample on the left to narrow every panel at once.",
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "a679a6a9-c4e6-4a4d-b5cd-a120c842fb78",
+      "index": "888a37d7-a293-4d2b-9472-0f978fbab531",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -147,13 +147,21 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "multiqc/general_stats",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_general_stats",
+        "use": "multiqc/general_stats",
+        "description": "The one table every MultiQC report has: one row per sample, one column per headline metric each module contributed. Not a module's own output, which is why it names no producing tool \u2014 MultiQC assembles it from all of them."
+      },
       "section": "QC overview",
       "selected_module": "general_stats",
       "selected_plot": "general_stats",
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "9de261de-1730-46fa-a0b1-5f3a39a603b0",
+      "index": "f14268d4-d3d6-4f40-85e8-04e49b45b8ff",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -193,7 +201,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "f107c9e0-ae02-4f72-8b69-7939c6896b67",
+      "index": "d32723a6-1e08-40d8-b65a-32b719c69521",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -233,7 +241,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "29ee57e4-4c08-40de-9c62-78d2f56b5932",
+      "index": "3c29dcc2-5a8e-49ae-804d-fac43864e65a",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -296,7 +304,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "93beccd8-b868-4ca7-aa8e-347d099eac62",
+      "index": "2568ed4a-1a98-4e4e-a0d5-ecefc47b6221",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -336,7 +344,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "97d24527-1c36-445f-8db1-3b7c2dd7707d",
+      "index": "7b66652d-f2f7-43b2-87a2-c0db946c19a5",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -376,7 +384,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "00504d86-9d09-4cc4-9379-aac727720158",
+      "index": "75a3072a-33a5-4fa0-8539-64daf22c19d8",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -416,7 +424,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "47500892-1f96-4319-9009-6e00ed4b496c",
+      "index": "80f824f3-573a-4c42-bb35-2984142f0953",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -456,7 +464,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "a26f5798-48e9-45e5-a26e-08428e3e9066",
+      "index": "27be2684-5510-420d-92ae-e62eadbead56",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -496,7 +504,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "e9122459-077b-43e6-84c8-622b214fcf06",
+      "index": "6480b98d-e983-4088-8de0-34e2de8216ce",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -536,7 +544,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "b70125ff-e3b6-4d15-88d9-d06339da8ec2",
+      "index": "8e6fb441-20f9-4140-a93a-849fd38343db",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -576,7 +584,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "07438fbb-aa75-4e8f-98ac-805aaec5c4dd",
+      "index": "e3021d84-ad1b-4b32-b0da-4f9247f9e9cf",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -616,7 +624,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "2ea20b8c-956a-4728-8783-b842ac707a8b",
+      "index": "47e64163-1669-484e-8628-6237cf8c4245",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -879,7 +887,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "fd34fbe1-b839-4d14-8701-ff04a647a035",
+      "index": "e0dd6d44-1fe3-4bee-a2dc-33f34ea7b684",
       "component_type": "table",
       "title": "Sample Metadata",
       "workflow_tag": "ampliseq",
@@ -1325,7 +1333,7 @@
       ]
     },
     {
-      "i": "box-a679a6a9-c4e6-4a4d-b5cd-a120c842fb78",
+      "i": "box-888a37d7-a293-4d2b-9472-0f978fbab531",
       "x": 0,
       "y": 2,
       "w": 8,
@@ -1340,7 +1348,7 @@
       ]
     },
     {
-      "i": "box-9de261de-1730-46fa-a0b1-5f3a39a603b0",
+      "i": "box-f14268d4-d3d6-4f40-85e8-04e49b45b8ff",
       "x": 0,
       "y": 7,
       "w": 8,
@@ -1355,7 +1363,7 @@
       ]
     },
     {
-      "i": "box-f107c9e0-ae02-4f72-8b69-7939c6896b67",
+      "i": "box-d32723a6-1e08-40d8-b65a-32b719c69521",
       "x": 0,
       "y": 11,
       "w": 4,
@@ -1370,7 +1378,7 @@
       ]
     },
     {
-      "i": "box-29ee57e4-4c08-40de-9c62-78d2f56b5932",
+      "i": "box-3c29dcc2-5a8e-49ae-804d-fac43864e65a",
       "x": 4,
       "y": 11,
       "w": 4,
@@ -1400,7 +1408,7 @@
       ]
     },
     {
-      "i": "box-93beccd8-b868-4ca7-aa8e-347d099eac62",
+      "i": "box-2568ed4a-1a98-4e4e-a0d5-ecefc47b6221",
       "x": 4,
       "y": 2,
       "w": 4,
@@ -1415,7 +1423,7 @@
       ]
     },
     {
-      "i": "box-97d24527-1c36-445f-8db1-3b7c2dd7707d",
+      "i": "box-7b66652d-f2f7-43b2-87a2-c0db946c19a5",
       "x": 0,
       "y": 2,
       "w": 4,
@@ -1430,7 +1438,7 @@
       ]
     },
     {
-      "i": "box-00504d86-9d09-4cc4-9379-aac727720158",
+      "i": "box-75a3072a-33a5-4fa0-8539-64daf22c19d8",
       "x": 4,
       "y": 7,
       "w": 4,
@@ -1445,7 +1453,7 @@
       ]
     },
     {
-      "i": "box-47500892-1f96-4319-9009-6e00ed4b496c",
+      "i": "box-80f824f3-573a-4c42-bb35-2984142f0953",
       "x": 0,
       "y": 7,
       "w": 4,
@@ -1460,7 +1468,7 @@
       ]
     },
     {
-      "i": "box-a26f5798-48e9-45e5-a26e-08428e3e9066",
+      "i": "box-27be2684-5510-420d-92ae-e62eadbead56",
       "x": 4,
       "y": 12,
       "w": 4,
@@ -1475,7 +1483,7 @@
       ]
     },
     {
-      "i": "box-e9122459-077b-43e6-84c8-622b214fcf06",
+      "i": "box-6480b98d-e983-4088-8de0-34e2de8216ce",
       "x": 0,
       "y": 12,
       "w": 4,
@@ -1490,7 +1498,7 @@
       ]
     },
     {
-      "i": "box-b70125ff-e3b6-4d15-88d9-d06339da8ec2",
+      "i": "box-8e6fb441-20f9-4140-a93a-849fd38343db",
       "x": 4,
       "y": 17,
       "w": 4,
@@ -1505,7 +1513,7 @@
       ]
     },
     {
-      "i": "box-07438fbb-aa75-4e8f-98ac-805aaec5c4dd",
+      "i": "box-e3021d84-ad1b-4b32-b0da-4f9247f9e9cf",
       "x": 0,
       "y": 17,
       "w": 4,
@@ -1520,7 +1528,7 @@
       ]
     },
     {
-      "i": "box-2ea20b8c-956a-4728-8783-b842ac707a8b",
+      "i": "box-47e64163-1669-484e-8628-6237cf8c4245",
       "x": 0,
       "y": 22,
       "w": 8,
@@ -1582,7 +1590,7 @@
       "static": true
     },
     {
-      "i": "box-fd34fbe1-b839-4d14-8701-ff04a647a035",
+      "i": "box-e0dd6d44-1fe3-4bee-a2dc-33f34ea7b684",
       "x": 0,
       "y": 5,
       "w": 8,

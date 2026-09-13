@@ -268,7 +268,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "9ecb1ecf-90f9-463a-ad2e-906e9db31e05",
+      "index": "22d2e697-9833-448f-b2cf-538df9fbf139",
       "component_type": "figure",
       "title": "Temperature \u00d7 conductivity",
       "workflow_tag": "ampliseq",
@@ -352,7 +352,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "fc08a18a-0858-486a-bb43-415b502dca77",
+      "index": "ba4ce9ce-57c9-4fa0-916e-5c74577fb259",
       "component_type": "figure",
       "title": "Nitrate \u00d7 dissolved carbon",
       "workflow_tag": "ampliseq",
@@ -525,7 +525,7 @@
       ]
     },
     {
-      "i": "box-9ecb1ecf-90f9-463a-ad2e-906e9db31e05",
+      "i": "box-22d2e697-9833-448f-b2cf-538df9fbf139",
       "x": 0,
       "y": 2,
       "w": 4,
@@ -555,7 +555,7 @@
       ]
     },
     {
-      "i": "box-fc08a18a-0858-486a-bb43-415b502dca77",
+      "i": "box-ba4ce9ce-57c9-4fa0-916e-5c74577fb259",
       "x": 0,
       "y": 8,
       "w": 8,

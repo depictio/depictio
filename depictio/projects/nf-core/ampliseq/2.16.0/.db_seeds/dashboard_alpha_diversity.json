@@ -117,7 +117,7 @@
       "order": 2,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "Four alpha-diversity indices computed by QIIME 2 on the rarefied feature table, one row per sample. Shannon weights richness by evenness, Faith's PD weights it by branch length on the phylogeny, and evenness isolates the balance between taxa. Each card carries the distribution behind its median rather than the median alone.",
+      "body": "Four alpha-diversity indices computed by [QIIME 2](https://qiime2.org) on the rarefied feature table, one row per sample. Shannon weights richness by evenness, Faith's PD weights it by branch length on the phylogeny, and evenness isolates the balance between taxa. Each card carries the distribution behind its median rather than the median alone.",
       "wf_tag": "nextflow/ampliseq"
     },
     {
@@ -147,6 +147,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "qiime2/alpha_diversity",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_alpha_diversity",
+        "use": "qiime2/alpha_diversity",
+        "description": "Multi-metric alpha-diversity per sample (shannon, evenness, faith_pd\u2026)."
+      },
       "section": "Diversity at a glance",
       "aggregation": "nunique",
       "column_name": "sample_id",
@@ -197,6 +205,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "qiime2/alpha_diversity",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_alpha_diversity",
+        "use": "qiime2/alpha_diversity",
+        "description": "Multi-metric alpha-diversity per sample (shannon, evenness, faith_pd\u2026)."
+      },
       "section": "Diversity at a glance",
       "aggregation": "median",
       "column_name": "shannon",
@@ -249,6 +265,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "qiime2/alpha_diversity",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_alpha_diversity",
+        "use": "qiime2/alpha_diversity",
+        "description": "Multi-metric alpha-diversity per sample (shannon, evenness, faith_pd\u2026)."
+      },
       "section": "Diversity at a glance",
       "aggregation": "median",
       "column_name": "faith_pd",
@@ -301,6 +325,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "qiime2/alpha_diversity",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_alpha_diversity",
+        "use": "qiime2/alpha_diversity",
+        "description": "Multi-metric alpha-diversity per sample (shannon, evenness, faith_pd\u2026)."
+      },
       "section": "Diversity at a glance",
       "aggregation": "median",
       "column_name": "evenness",
@@ -454,6 +486,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "qiime2/alpha_diversity",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_alpha_diversity",
+        "use": "qiime2/alpha_diversity",
+        "description": "Multi-metric alpha-diversity per sample (shannon, evenness, faith_pd\u2026)."
+      },
       "section": "Per-Habitat comparison",
       "visu_type": "box",
       "dict_kwargs": {
@@ -521,6 +561,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "qiime2/alpha_diversity",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_alpha_diversity",
+        "use": "qiime2/alpha_diversity",
+        "description": "Multi-metric alpha-diversity per sample (shannon, evenness, faith_pd\u2026)."
+      },
       "section": "Per-sample table",
       "columns": [],
       "page_size": 12,

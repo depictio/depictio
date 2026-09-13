@@ -189,6 +189,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "qiime2/embedding_pcoa",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_embedding_pcoa",
+        "use": "qiime2/embedding_pcoa",
+        "description": "Two-dimensional PCoA ordination of the samples, computed from the relative-abundance table. One point per sample."
+      },
       "section": "Ordination summary",
       "aggregation": "nunique",
       "column_name": "sample_id",
@@ -239,6 +247,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "qiime2/embedding_pcoa",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_embedding_pcoa",
+        "use": "qiime2/embedding_pcoa",
+        "description": "Two-dimensional PCoA ordination of the samples, computed from the relative-abundance table. One point per sample."
+      },
       "section": "Ordination summary",
       "aggregation": "nunique",
       "column_name": "habitat",
@@ -289,6 +305,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "qiime2/embedding_pcoa",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_embedding_pcoa",
+        "use": "qiime2/embedding_pcoa",
+        "description": "Two-dimensional PCoA ordination of the samples, computed from the relative-abundance table. One point per sample."
+      },
       "section": "Ordination summary",
       "aggregation": "median",
       "column_name": "dim_1",
@@ -341,6 +365,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "qiime2/embedding_pcoa",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_embedding_pcoa",
+        "use": "qiime2/embedding_pcoa",
+        "description": "Two-dimensional PCoA ordination of the samples, computed from the relative-abundance table. One point per sample."
+      },
       "section": "Ordination summary",
       "aggregation": "median",
       "column_name": "dim_2",
@@ -416,6 +448,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "qiime2/embedding",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_embedding_pcoa",
+        "use": "qiime2/embedding",
+        "description": "Two-dimensional PCoA ordination of the samples, computed from the relative-abundance table. One point per sample."
+      },
       "section": "Sample relationships",
       "viz_kind": "embedding",
       "config": {
@@ -515,6 +555,8 @@
             "SRR10102394": "Soil"
           }
         },
+        "col_annotation_cols": [],
+        "annotation_source_dc_tag": null,
         "col_annotation_colors": {
           "habitat": {
             "Groundwater": "#45B8AC",
@@ -621,6 +663,8 @@
             "SRR10102394": "Soil"
           }
         },
+        "col_annotation_cols": [],
+        "annotation_source_dc_tag": null,
         "col_annotation_colors": {
           "habitat": {
             "Groundwater": "#45B8AC",
