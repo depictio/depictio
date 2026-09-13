@@ -79,6 +79,9 @@ HPC_APPTAINER_TMP = f"{HPC_ROOT}/apptainer_tmp"
 HPC_NXF_HOME = f"{HPC_ROOT}/nxf_home"
 # A TMPDIR inside the bind mount; see scripts/nfcore_validation.config.
 HPC_TMPDIR = f"{HPC_ROOT}/tmp"
+# An empty directory bound over $HOME for the one container that needs $HOME to
+# exist. Nextflow runs singularity with --no-home, so nothing is mounted there.
+HPC_CONTAINER_HOME = f"{HPC_ROOT}/container_home"
 # Campaign overrides, shipped from the repo and loaded after nf_slurm.config.
 VALIDATION_CONFIG = _REPO_ROOT / "scripts" / "nfcore_validation.config"
 HPC_VALIDATION_CONFIG = f"{HPC_ROOT}/nfcore_validation.config"
@@ -497,7 +500,7 @@ echo "nextflow: $(nextflow -v 2>&1 | head -1)"
 echo "launch  : $(pwd)"
 date
 
-mkdir -p {HPC_APPTAINER_CACHE} {HPC_APPTAINER_TMP} {HPC_NXF_HOME} {HPC_TMPDIR}
+mkdir -p {HPC_APPTAINER_CACHE} {HPC_APPTAINER_TMP} {HPC_NXF_HOME} {HPC_TMPDIR} {HPC_CONTAINER_HOME}
 
 status=1
 for attempt in $(seq 1 {HEAD_ATTEMPTS}); do

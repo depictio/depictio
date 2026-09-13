@@ -91,6 +91,7 @@ SCENARIOS: list[Scenario] = [
     Scenario("ampliseq", "2.18.0", "test", note="CI profile; 7-rank DB, see TEST_DATASETS.md"),
     Scenario("ampliseq", "2.18.0", "test_pacbio_its", note="sintax route, PacBio ITS"),
     Scenario("ampliseq", "2.18.0", "test_iontorrent", note="sintax route, IonTorrent single-end"),
+    Scenario("ampliseq", "2.18.0", "test_multiregion", note="SIDLE route: the only one reaching sidle_reconstructed"),
     Scenario("atacseq", "1.2.2", "megatest", note="MultiQC reprocessed"),
     Scenario("atacseq", "1.2.2", "test", note="CI profile; needs the HOMER glob fix"),
     Scenario("chipseq", "1.2.0", "megatest", note="MultiQC reprocessed"),
@@ -107,6 +108,7 @@ SCENARIOS: list[Scenario] = [
     Scenario("taxprofiler", "2.0.1", "megatest", note="nf-core AWS megatest"),
     Scenario("taxprofiler", "2.0.1", "test", note="CI profile, 2 platforms"),
     Scenario("variantbenchmarking", "1.4.0", "germline_small", note="germline route only"),
+    Scenario("variantbenchmarking", "1.4.0", "germline_sv", note="SV route, 3 callers; wittyer needs $HOME to exist"),
     # sequencing-runs: DATA_ROOT is the PARENT of the run_* directories, so this
     # single project holds both runs. Pointing it at one run_* directory instead
     # would match runs_regex against that run's own subdirectories and find none.
