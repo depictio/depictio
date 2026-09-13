@@ -14,7 +14,7 @@
   "stored_children_data": [],
   "stored_metadata": [
     {
-      "index": "34c0eee4-ce9a-4053-962b-2378f868fdca",
+      "index": "7b388391-4b91-41c7-bf48-92a2c4c11735",
       "component_type": "interactive",
       "title": "Sample ID",
       "workflow_tag": "ampliseq",
@@ -56,7 +56,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "18ae2217-1f3f-41c7-9b27-69fe206eecb5",
+      "index": "4eed0ed8-d3ed-49da-a10f-b4045aa6faca",
       "component_type": "interactive",
       "title": "Habitat",
       "workflow_tag": "ampliseq",
@@ -98,7 +98,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "883a9ec3-3980-4f63-8ec2-f014a686b613",
+      "index": "f39b3195-ce9d-480f-a892-57c1b67ae49a",
       "component_type": "interactive",
       "title": "Kingdom",
       "workflow_tag": "ampliseq",
@@ -140,7 +140,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "e70322a9-b6da-49bc-9c7e-aa7d736f5d3d",
+      "index": "5fd6c47d-e97f-4b0e-b96e-7bca04bfdfe1",
       "component_type": "interactive",
       "title": "Phylum",
       "workflow_tag": "ampliseq",
@@ -243,11 +243,11 @@
       "order": 2,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "Relative abundance per sample from the QIIME 2 taxonomic classification. The cards report how much of the table the current filters leave: how many distinct taxa remain, how the samples split across Habitat, how the abundances are distributed, and what the phyla are made of.",
+      "body": "Relative abundance per sample from the [QIIME 2](https://qiime2.org) taxonomic classification. The cards report how much of the table the current filters leave: how many distinct taxa remain, how the samples split across Habitat, how the abundances are distributed, and what the phyla are made of.",
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "2996b8cf-bafe-4f00-8757-bb9aa5261062",
+      "index": "b2fa87b5-67ff-4ed9-905d-6cf6c60fdf14",
       "component_type": "card",
       "title": "Rel. abundance (distribution)",
       "workflow_tag": "ampliseq",
@@ -273,6 +273,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "qiime2/rel_abundance",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_rel_abundance",
+        "use": "qiime2/rel_abundance",
+        "description": "Per-sample relative-abundance table with taxonomy ranks."
+      },
       "section": "Overview",
       "aggregation": "median",
       "column_name": "rel_abundance",
@@ -299,7 +307,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "87c023eb-f3c3-45af-be74-57d222eb2907",
+      "index": "838d5f8d-68de-44a4-aa88-bbe31bb7c841",
       "component_type": "card",
       "title": "Distinct taxa",
       "workflow_tag": "ampliseq",
@@ -325,6 +333,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "qiime2/rel_abundance",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_rel_abundance",
+        "use": "qiime2/rel_abundance",
+        "description": "Per-sample relative-abundance table with taxonomy ranks."
+      },
       "section": "Overview",
       "aggregation": "nunique",
       "column_name": "taxonomy",
@@ -349,7 +365,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "96ae0bf1-10dd-47d7-8e28-9454d62e1647",
+      "index": "2ab1fe91-e73c-47cf-a42a-aefaaf923df7",
       "component_type": "card",
       "title": "Habitat groups",
       "workflow_tag": "ampliseq",
@@ -425,6 +441,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "qiime2/rel_abundance",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_rel_abundance",
+        "use": "qiime2/rel_abundance",
+        "description": "Per-sample relative-abundance table with taxonomy ranks."
+      },
       "section": "Overview",
       "aggregation": "nunique",
       "column_name": "Phylum",
@@ -472,7 +496,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "21b375c2-80a8-4b7e-a7fc-592de1824a33",
+      "index": "8c148f40-0556-45b8-863d-55c6a210fd3d",
       "component_type": "figure",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -498,6 +522,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "qiime2/rel_abundance",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_rel_abundance",
+        "use": "qiime2/rel_abundance",
+        "description": "Per-sample relative-abundance table with taxonomy ranks."
+      },
       "section": "Composition",
       "visu_type": "bar",
       "dict_kwargs": {
@@ -822,7 +854,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "9b8b57b7-c002-4e82-b0de-f0ac984e7a01",
+      "index": "beda60bd-169d-47cf-9bc0-465fbe2547b6",
       "component_type": "table",
       "title": "Taxonomy Relative Abundance",
       "workflow_tag": "ampliseq",
@@ -848,6 +880,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "qiime2/rel_abundance",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_rel_abundance",
+        "use": "qiime2/rel_abundance",
+        "description": "Per-sample relative-abundance table with taxonomy ranks."
+      },
       "section": "Tables",
       "columns": [],
       "page_size": 100,
@@ -862,7 +902,7 @@
   "stored_edit_dashboard_mode_button": [],
   "left_panel_layout_data": [
     {
-      "i": "box-34c0eee4-ce9a-4053-962b-2378f868fdca",
+      "i": "box-7b388391-4b91-41c7-bf48-92a2c4c11735",
       "x": 0,
       "y": 0,
       "w": 1,
@@ -870,7 +910,7 @@
       "static": false
     },
     {
-      "i": "box-18ae2217-1f3f-41c7-9b27-69fe206eecb5",
+      "i": "box-4eed0ed8-d3ed-49da-a10f-b4045aa6faca",
       "x": 0,
       "y": 3,
       "w": 1,
@@ -878,7 +918,7 @@
       "static": false
     },
     {
-      "i": "box-883a9ec3-3980-4f63-8ec2-f014a686b613",
+      "i": "box-f39b3195-ce9d-480f-a892-57c1b67ae49a",
       "x": 0,
       "y": 5,
       "w": 1,
@@ -886,7 +926,7 @@
       "static": false
     },
     {
-      "i": "box-e70322a9-b6da-49bc-9c7e-aa7d736f5d3d",
+      "i": "box-5fd6c47d-e97f-4b0e-b96e-7bca04bfdfe1",
       "x": 0,
       "y": 7,
       "w": 1,
@@ -919,7 +959,7 @@
       ]
     },
     {
-      "i": "box-2996b8cf-bafe-4f00-8757-bb9aa5261062",
+      "i": "box-b2fa87b5-67ff-4ed9-905d-6cf6c60fdf14",
       "x": 0,
       "y": 1,
       "w": 2,
@@ -927,7 +967,7 @@
       "static": true
     },
     {
-      "i": "box-87c023eb-f3c3-45af-be74-57d222eb2907",
+      "i": "box-838d5f8d-68de-44a4-aa88-bbe31bb7c841",
       "x": 2,
       "y": 1,
       "w": 2,
@@ -935,7 +975,7 @@
       "static": true
     },
     {
-      "i": "box-96ae0bf1-10dd-47d7-8e28-9454d62e1647",
+      "i": "box-2ab1fe91-e73c-47cf-a42a-aefaaf923df7",
       "x": 4,
       "y": 1,
       "w": 2,
@@ -966,7 +1006,7 @@
       ]
     },
     {
-      "i": "box-21b375c2-80a8-4b7e-a7fc-592de1824a33",
+      "i": "box-8c148f40-0556-45b8-863d-55c6a210fd3d",
       "x": 0,
       "y": 1,
       "w": 8,
@@ -1086,7 +1126,7 @@
       ]
     },
     {
-      "i": "box-9b8b57b7-c002-4e82-b0de-f0ac984e7a01",
+      "i": "box-beda60bd-169d-47cf-9bc0-465fbe2547b6",
       "x": 0,
       "y": 61,
       "w": 8,

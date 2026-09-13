@@ -140,7 +140,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "48439876-a0ee-40fd-84ae-b8cf8f2ae116",
+      "index": "f539d42d-31b3-4cc8-9540-4be2120e498c",
       "component_type": "text",
       "title": "Coverage at a glance",
       "workflow_tag": "viralrecon",
@@ -166,11 +166,11 @@
       "order": 2,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "Depth from mosdepth, per amplicon and per genome position. The amplicon view is the one that finds primer dropout: a scheme drops one amplicon in a handful of samples long before whole-genome breadth moves. The threshold card counts how many amplicon measurements sit under 20x, which is the floor a consensus base call needs.",
+      "body": "Depth from [mosdepth](https://github.com/brentp/mosdepth), per amplicon and per genome position. The amplicon view is the one that finds primer dropout: a scheme drops one amplicon in a handful of samples long before whole-genome breadth moves. The threshold card counts how many amplicon measurements sit under 20x, which is the floor a consensus base call needs.",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "8aae6858-e668-4905-9ea3-ba97a001eda2",
+      "index": "336bb8a2-3fea-443a-a3c6-2f3082ba8c81",
       "component_type": "card",
       "title": "Amplicons Tracked",
       "workflow_tag": "viralrecon",
@@ -196,6 +196,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "mosdepth/amplicon_coverage",
+      "catalog_source": {
+        "toolId": "mosdepth",
+        "toolName": "mosdepth",
+        "outputId": "mosdepth_amplicon_coverage",
+        "use": "mosdepth/amplicon_coverage",
+        "description": "Per-amplicon coverage depth, aggregated across all samples (bindable as-is)."
+      },
       "section": "Coverage at a glance",
       "aggregation": "nunique",
       "column_name": "region",
@@ -220,7 +228,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "b1696eda-a523-4a95-9659-954e3c505f24",
+      "index": "80ab7c3b-2b2f-4172-ab22-adc79b426784",
       "component_type": "card",
       "title": "Amplicon Coverage",
       "workflow_tag": "viralrecon",
@@ -246,6 +254,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "mosdepth/amplicon_coverage",
+      "catalog_source": {
+        "toolId": "mosdepth",
+        "toolName": "mosdepth",
+        "outputId": "mosdepth_amplicon_coverage",
+        "use": "mosdepth/amplicon_coverage",
+        "description": "Per-amplicon coverage depth, aggregated across all samples (bindable as-is)."
+      },
       "section": "Coverage at a glance",
       "aggregation": "average",
       "column_name": "coverage",
@@ -269,7 +285,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "9c61d185-e4e4-4efd-9b71-0907790ee1c1",
+      "index": "687368c4-0f2f-4caf-bf6f-77f01eeb53db",
       "component_type": "card",
       "title": "Genome Coverage",
       "workflow_tag": "viralrecon",
@@ -295,6 +311,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "mosdepth/genome_coverage",
+      "catalog_source": {
+        "toolId": "mosdepth",
+        "toolName": "mosdepth",
+        "outputId": "mosdepth_genome_coverage",
+        "use": "mosdepth/genome_coverage",
+        "description": "Genome-wide coverage in windows, aggregated across all samples."
+      },
       "section": "Coverage at a glance",
       "aggregation": "average",
       "column_name": "coverage",
@@ -344,6 +368,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "mosdepth/amplicon_coverage",
+      "catalog_source": {
+        "toolId": "mosdepth",
+        "toolName": "mosdepth",
+        "outputId": "mosdepth_amplicon_coverage",
+        "use": "mosdepth/amplicon_coverage",
+        "description": "Per-amplicon coverage depth, aggregated across all samples (bindable as-is)."
+      },
       "section": "Coverage at a glance",
       "aggregation": "median",
       "column_name": "coverage",
@@ -552,6 +584,8 @@
         "value_columns": null,
         "row_annotation_cols": [],
         "col_annotations": null,
+        "col_annotation_cols": [],
+        "annotation_source_dc_tag": null,
         "col_annotation_colors": null,
         "cluster_rows": true,
         "cluster_cols": false,
@@ -586,7 +620,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "5d487ea3-564b-451b-8247-acfd4754f99e",
+      "index": "f71a7ff5-a1e5-4ddc-9966-495151e50cc3",
       "component_type": "table",
       "title": "Amplicon coverage table",
       "workflow_tag": "viralrecon",
@@ -613,6 +647,14 @@
       "description": "Per-amplicon median coverage depth for each sample.",
       "title_size": "h3",
       "title_align": "left",
+      "use": "mosdepth/amplicon_coverage",
+      "catalog_source": {
+        "toolId": "mosdepth",
+        "toolName": "mosdepth",
+        "outputId": "mosdepth_amplicon_coverage",
+        "use": "mosdepth/amplicon_coverage",
+        "description": "Per-amplicon coverage depth, aggregated across all samples (bindable as-is)."
+      },
       "section": "Coverage tables",
       "columns": [],
       "page_size": 100,
@@ -653,7 +695,7 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-48439876-a0ee-40fd-84ae-b8cf8f2ae116",
+      "i": "box-f539d42d-31b3-4cc8-9540-4be2120e498c",
       "x": 0,
       "y": 0,
       "w": 8,
@@ -668,7 +710,7 @@
       ]
     },
     {
-      "i": "box-8aae6858-e668-4905-9ea3-ba97a001eda2",
+      "i": "box-336bb8a2-3fea-443a-a3c6-2f3082ba8c81",
       "x": 0,
       "y": 2,
       "w": 2,
@@ -676,7 +718,7 @@
       "static": true
     },
     {
-      "i": "box-b1696eda-a523-4a95-9659-954e3c505f24",
+      "i": "box-80ab7c3b-2b2f-4172-ab22-adc79b426784",
       "x": 2,
       "y": 2,
       "w": 2,
@@ -684,7 +726,7 @@
       "static": true
     },
     {
-      "i": "box-9c61d185-e4e4-4efd-9b71-0907790ee1c1",
+      "i": "box-687368c4-0f2f-4caf-bf6f-77f01eeb53db",
       "x": 4,
       "y": 2,
       "w": 2,
@@ -775,7 +817,7 @@
       ]
     },
     {
-      "i": "box-5d487ea3-564b-451b-8247-acfd4754f99e",
+      "i": "box-f71a7ff5-a1e5-4ddc-9966-495151e50cc3",
       "x": 0,
       "y": 24,
       "w": 8,
@@ -869,7 +911,7 @@
   },
   "is_public": true,
   "last_saved_ts": "2026-08-29 00:00:00",
-  "creation_time": "2026-08-29 15:00:13",
+  "creation_time": "2026-09-05 04:48:08",
   "screenshot_ts": "",
   "project_id": {
     "$oid": "746b0f3c1e4a2d7f8e5b9ca2"

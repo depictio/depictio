@@ -182,7 +182,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "166b54e9-e1e3-4d49-adad-61f507104952",
+      "index": "578ccfcb-c1f8-4bac-822c-a5ed6ec1a3f6",
       "component_type": "text",
       "title": "Typing at a glance",
       "workflow_tag": "viralrecon",
@@ -208,11 +208,11 @@
       "order": 2,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "Pangolin assigns a lineage, Nextclade assigns a clade and scores the consensus it was called from. They disagree usefully: a confident lineage on a consensus Nextclade marks as bad is a call to distrust, and the two QC selectors on the left are there to isolate exactly that case.",
+      "body": "[Pangolin](https://github.com/cov-lineages/pangolin) assigns a lineage, [Nextclade](https://github.com/nextstrain/nextclade) assigns a clade and scores the consensus it was called from. They disagree usefully: a confident lineage on a consensus Nextclade marks as bad is a call to distrust, and the two QC selectors on the left are there to isolate exactly that case.",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "fa7c6fac-6396-4b81-a64c-bc976a58575a",
+      "index": "042203d4-d9fb-46b5-a60c-48e56c1ecc62",
       "component_type": "card",
       "title": "Unique Lineages",
       "workflow_tag": "viralrecon",
@@ -238,6 +238,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "pangolin/report",
+      "catalog_source": {
+        "toolId": "pangolin",
+        "toolName": "Pangolin",
+        "outputId": "pangolin_report",
+        "use": "pangolin/report",
+        "description": "Per-sample PANGO lineage report."
+      },
       "section": "Typing at a glance",
       "aggregation": "nunique",
       "column_name": "lineage",
@@ -262,7 +270,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "266485ad-d36e-46b0-bc72-517482b8beec",
+      "index": "634b76db-ca05-447e-a79a-ad75867fdb3f",
       "component_type": "card",
       "title": "Unique Clades",
       "workflow_tag": "viralrecon",
@@ -288,6 +296,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "nextclade/report",
+      "catalog_source": {
+        "toolId": "nextclade",
+        "toolName": "Nextclade",
+        "outputId": "nextclade_report",
+        "use": "nextclade/report",
+        "description": "Per-sample clade assignment + sequence QC."
+      },
       "section": "Typing at a glance",
       "aggregation": "nunique",
       "column_name": "clade",
@@ -338,6 +354,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "nextclade/report",
+      "catalog_source": {
+        "toolId": "nextclade",
+        "toolName": "Nextclade",
+        "outputId": "nextclade_report",
+        "use": "nextclade/report",
+        "description": "Per-sample clade assignment + sequence QC."
+      },
       "section": "Typing at a glance",
       "aggregation": "average",
       "column_name": "coverage",
@@ -390,6 +414,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "pangolin/report",
+      "catalog_source": {
+        "toolId": "pangolin",
+        "toolName": "Pangolin",
+        "outputId": "pangolin_report",
+        "use": "pangolin/report",
+        "description": "Per-sample PANGO lineage report."
+      },
       "section": "Typing at a glance",
       "aggregation": "nunique",
       "column_name": "qc_status",
@@ -437,7 +469,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "856a578d-6908-4579-97b6-3d1477a78898",
+      "index": "bcdce4e3-047b-43ca-b4f7-e3ef57f3eb9f",
       "component_type": "figure",
       "title": "Pangolin lineage distribution",
       "workflow_tag": "viralrecon",
@@ -464,6 +496,14 @@
       "description": "Number of samples per PANGO lineage, sorted by frequency.",
       "title_size": "h3",
       "title_align": "left",
+      "use": "pangolin/report",
+      "catalog_source": {
+        "toolId": "pangolin",
+        "toolName": "Pangolin",
+        "outputId": "pangolin_report",
+        "use": "pangolin/report",
+        "description": "Per-sample PANGO lineage report."
+      },
       "section": "Lineage distribution",
       "visu_type": "bar",
       "dict_kwargs": {},
@@ -480,7 +520,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "e21e3ec2-0630-4bd9-9158-289254fe7c88",
+      "index": "a0a7cb95-77b0-49ea-9f76-02ce04fa3702",
       "component_type": "figure",
       "title": "Nextclade clade distribution",
       "workflow_tag": "viralrecon",
@@ -507,6 +547,14 @@
       "description": "WHO-style clade designations, complementary to Pangolin lineage.",
       "title_size": "h3",
       "title_align": "left",
+      "use": "nextclade/report",
+      "catalog_source": {
+        "toolId": "nextclade",
+        "toolName": "Nextclade",
+        "outputId": "nextclade_report",
+        "use": "nextclade/report",
+        "description": "Per-sample clade assignment + sequence QC."
+      },
       "section": "Lineage distribution",
       "visu_type": "bar",
       "dict_kwargs": {},
@@ -682,7 +730,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "93d588a3-f28b-4243-bf4e-f615be7c2a85",
+      "index": "f3533b46-ac27-44be-b370-56d0acaef41b",
       "component_type": "table",
       "title": "Pangolin lineage assignments",
       "workflow_tag": "viralrecon",
@@ -709,6 +757,14 @@
       "description": "Per-sample lineage, conflict, scorpio, QC status.",
       "title_size": "h3",
       "title_align": "left",
+      "use": "pangolin/report",
+      "catalog_source": {
+        "toolId": "pangolin",
+        "toolName": "Pangolin",
+        "outputId": "pangolin_report",
+        "use": "pangolin/report",
+        "description": "Per-sample PANGO lineage report."
+      },
       "section": "Typing tables",
       "columns": [],
       "page_size": 100,
@@ -720,7 +776,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "b72347bf-3afd-4eb9-bb02-af012b78f347",
+      "index": "89506171-f629-4170-ab3a-e9ab5e10aba8",
       "component_type": "table",
       "title": "Nextclade clade assignments",
       "workflow_tag": "viralrecon",
@@ -747,6 +803,14 @@
       "description": "Per-sample clade, substitutions, deletions, QC.",
       "title_size": "h3",
       "title_align": "left",
+      "use": "nextclade/report",
+      "catalog_source": {
+        "toolId": "nextclade",
+        "toolName": "Nextclade",
+        "outputId": "nextclade_report",
+        "use": "nextclade/report",
+        "description": "Per-sample clade assignment + sequence QC."
+      },
       "section": "Typing tables",
       "columns": [],
       "page_size": 100,
@@ -795,7 +859,7 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-166b54e9-e1e3-4d49-adad-61f507104952",
+      "i": "box-578ccfcb-c1f8-4bac-822c-a5ed6ec1a3f6",
       "x": 0,
       "y": 0,
       "w": 8,
@@ -810,7 +874,7 @@
       ]
     },
     {
-      "i": "box-fa7c6fac-6396-4b81-a64c-bc976a58575a",
+      "i": "box-042203d4-d9fb-46b5-a60c-48e56c1ecc62",
       "x": 0,
       "y": 1,
       "w": 2,
@@ -818,7 +882,7 @@
       "static": true
     },
     {
-      "i": "box-266485ad-d36e-46b0-bc72-517482b8beec",
+      "i": "box-634b76db-ca05-447e-a79a-ad75867fdb3f",
       "x": 2,
       "y": 1,
       "w": 2,
@@ -857,7 +921,7 @@
       ]
     },
     {
-      "i": "box-856a578d-6908-4579-97b6-3d1477a78898",
+      "i": "box-bcdce4e3-047b-43ca-b4f7-e3ef57f3eb9f",
       "x": 0,
       "y": 1,
       "w": 4,
@@ -872,7 +936,7 @@
       ]
     },
     {
-      "i": "box-e21e3ec2-0630-4bd9-9158-289254fe7c88",
+      "i": "box-a0a7cb95-77b0-49ea-9f76-02ce04fa3702",
       "x": 4,
       "y": 1,
       "w": 4,
@@ -934,7 +998,7 @@
     {
       "i": "box-lin-tables-header",
       "x": 0,
-      "y": 24,
+      "y": 0,
       "w": 8,
       "h": 1,
       "static": false,
@@ -947,10 +1011,10 @@
       ]
     },
     {
-      "i": "box-93d588a3-f28b-4243-bf4e-f615be7c2a85",
+      "i": "box-f3533b46-ac27-44be-b370-56d0acaef41b",
       "x": 0,
-      "y": 25,
-      "w": 4,
+      "y": 1,
+      "w": 8,
       "h": 5,
       "static": false,
       "resizeHandles": [
@@ -962,10 +1026,10 @@
       ]
     },
     {
-      "i": "box-b72347bf-3afd-4eb9-bb02-af012b78f347",
-      "x": 4,
-      "y": 25,
-      "w": 4,
+      "i": "box-89506171-f629-4170-ab3a-e9ab5e10aba8",
+      "x": 0,
+      "y": 6,
+      "w": 8,
       "h": 5,
       "static": false,
       "resizeHandles": [
@@ -1065,7 +1129,7 @@
   },
   "is_public": true,
   "last_saved_ts": "2026-08-29 00:00:00",
-  "creation_time": "2026-08-29 15:00:13",
+  "creation_time": "2026-09-05 04:48:08",
   "screenshot_ts": "",
   "project_id": {
     "$oid": "746b0f3c1e4a2d7f8e5b9ca2"

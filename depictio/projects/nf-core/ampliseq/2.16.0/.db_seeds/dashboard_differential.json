@@ -243,7 +243,7 @@
       "order": 2,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "ANCOM-BC tests each taxon for a difference in abundance between two groups, correcting for compositional bias and for the number of tests. Pick a contrast on the left first: every number on this tab is conditional on it. The cards count what was tested, what survives FDR, and how large the effects are.",
+      "body": "[ANCOM-BC](https://bioconductor.org/packages/ANCOMBC) tests each taxon for a difference in abundance between two groups, correcting for compositional bias and for the number of tests. Pick a contrast on the left first: every number on this tab is conditional on it. The cards count what was tested, what survives FDR, and how large the effects are.",
       "wf_tag": "nextflow/ampliseq"
     },
     {
@@ -273,6 +273,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "qiime2/ancombc",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_ancombc",
+        "use": "qiime2/ancombc",
+        "description": "ANCOM-BC differential-abundance results. The tool writes one CSV per statistic per contrast; the recipe joins + melts them into a long table."
+      },
       "section": "Summary",
       "aggregation": "nunique",
       "column_name": "id",
@@ -323,6 +331,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "qiime2/ancombc",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_ancombc",
+        "use": "qiime2/ancombc",
+        "description": "ANCOM-BC differential-abundance results. The tool writes one CSV per statistic per contrast; the recipe joins + melts them into a long table."
+      },
       "section": "Summary",
       "aggregation": "nunique",
       "column_name": "id",
@@ -373,6 +389,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "qiime2/ancombc",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_ancombc",
+        "use": "qiime2/ancombc",
+        "description": "ANCOM-BC differential-abundance results. The tool writes one CSV per statistic per contrast; the recipe joins + melts them into a long table."
+      },
       "section": "Summary",
       "aggregation": "median",
       "column_name": "q_val",
@@ -423,6 +447,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "qiime2/ancombc",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_ancombc",
+        "use": "qiime2/ancombc",
+        "description": "ANCOM-BC differential-abundance results. The tool writes one CSV per statistic per contrast; the recipe joins + melts them into a long table."
+      },
       "section": "Summary",
       "aggregation": "median",
       "column_name": "lfc",
@@ -623,6 +655,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "qiime2/ancombc",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_ancombc",
+        "use": "qiime2/ancombc",
+        "description": "ANCOM-BC differential-abundance results. The tool writes one CSV per statistic per contrast; the recipe joins + melts them into a long table."
+      },
       "section": "Results table",
       "columns": [],
       "page_size": 100,

@@ -147,6 +147,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "qiime2/tree_metadata",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_tree_metadata",
+        "use": "qiime2/tree_metadata",
+        "description": "Per-ASV classification: the assigned taxon, its rank columns and the classifier confidence. Annotates the phylogenetic tree, and stands on its own as the taxonomy assignment table."
+      },
       "section": "Tree at a glance",
       "aggregation": "nunique",
       "column_name": "taxon",
@@ -197,6 +205,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "qiime2/tree_metadata",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_tree_metadata",
+        "use": "qiime2/tree_metadata",
+        "description": "Per-ASV classification: the assigned taxon, its rank columns and the classifier confidence. Annotates the phylogenetic tree, and stands on its own as the taxonomy assignment table."
+      },
       "section": "Tree at a glance",
       "aggregation": "count",
       "column_name": "Genus",
@@ -247,6 +263,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "qiime2/tree_metadata",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_tree_metadata",
+        "use": "qiime2/tree_metadata",
+        "description": "Per-ASV classification: the assigned taxon, its rank columns and the classifier confidence. Annotates the phylogenetic tree, and stands on its own as the taxonomy assignment table."
+      },
       "section": "Tree at a glance",
       "aggregation": "average",
       "column_name": "confidence",
@@ -299,6 +323,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "qiime2/tree_metadata",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_tree_metadata",
+        "use": "qiime2/tree_metadata",
+        "description": "Per-ASV classification: the assigned taxon, its rank columns and the classifier confidence. Annotates the phylogenetic tree, and stands on its own as the taxonomy assignment table."
+      },
       "section": "Tree at a glance",
       "aggregation": "nunique",
       "column_name": "Genus",
@@ -462,6 +494,14 @@
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
+      "use": "qiime2/tree_metadata",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_tree_metadata",
+        "use": "qiime2/tree_metadata",
+        "description": "Per-ASV classification: the assigned taxon, its rank columns and the classifier confidence. Annotates the phylogenetic tree, and stands on its own as the taxonomy assignment table."
+      },
       "section": "Tip taxonomy",
       "columns": [],
       "page_size": 12,
