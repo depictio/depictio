@@ -12,7 +12,7 @@ from depictio.models.models.transforms import RecipeSource
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="sompy_regions",
-        path="indel/summary/tables/sompy/sompy.regions.csv",
+        glob_pattern="*/summary/tables/sompy/sompy.regions.csv",
         format="CSV",
     ),
 ]

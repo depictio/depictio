@@ -1,9 +1,13 @@
 """Normalize an SVanalyzer (svbenchmark) structural-variant summary into a tidy table.
 
-OPTIONAL — not exercised by the public megatest (no SV profile). Targets the
-pipeline-aggregated ``sv/summary/tables/svbenchmark/svbenchmark.summary.csv`` (collated from
-per-sample SVanalyzer ``*.report``). Column matching is case/format tolerant; pin it against a
-real SV run when available.
+Targets the pipeline-aggregated ``summary/tables/svbenchmark/svbenchmark.summary.csv``,
+collated from the per-sample SVanalyzer ``*.report``. The pipeline writes everything under ``<outdir>/<variant_type>/``, and ``variant_type``
+is one of small, snv, indel, structural or copynumber, so the source is anchored on that
+one directory level rather than on a value: naming a value pins the recipe to a single
+route, and two of the values a recipe can meet are not the ones a reader would guess.
+
+Pinned against a real ``germline_sv`` run. SVanalyzer reports no ``TP_comp``, so that column
+is absent from the output where Truvari has it.
 """
 
 import polars as pl
@@ -13,7 +17,7 @@ from depictio.models.models.transforms import RecipeSource
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="svbenchmark_summary",
-        path="sv/summary/tables/svbenchmark/svbenchmark.summary.csv",
+        glob_pattern="*/summary/tables/svbenchmark/svbenchmark.summary.csv",
         format="CSV",
     ),
 ]

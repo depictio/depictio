@@ -1,9 +1,13 @@
 """Normalize an rtg-tools vcfeval aggregated summary into a tidy benchmark table.
 
 Consumes the pipeline-aggregated ``summary/tables/rtgtools/rtgtools.summary.csv``
-(``RTGTOOLS_VCFEVAL`` outputs collated per category). The same recipe serves both the
-germline (``small/``) and the somatic (``indel/``) categories — repoint the source via
-``source_overrides`` in the data-collection config.
+(``RTGTOOLS_VCFEVAL`` outputs collated per category). The pipeline writes everything under ``<outdir>/<variant_type>/``, and ``variant_type``
+is one of small, snv, indel, structural or copynumber, so the source is anchored on that
+one directory level rather than on a value: naming a value pins the recipe to a single
+route, and two of the values a recipe can meet are not the ones a reader would guess.
+
+The same recipe therefore serves the germline and the somatic categories without a
+``source_overrides`` entry per route.
 
 In the germline table the ``Tool`` column carries the *sample* id (test1/test2/test3) and
 ``Caller`` the truth-set version; in the somatic table ``Tool``/``Caller`` carry the variant
@@ -19,7 +23,7 @@ from depictio.models.models.transforms import RecipeSource
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="rtgtools_summary",
-        path="small/summary/tables/rtgtools/rtgtools.summary.csv",
+        glob_pattern="*/summary/tables/rtgtools/rtgtools.summary.csv",
         format="CSV",
     ),
 ]

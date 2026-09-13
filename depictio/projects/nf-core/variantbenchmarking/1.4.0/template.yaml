@@ -8,12 +8,15 @@
 #   (most recent release-line run, 2026-04-22 — the only megatest covering both
 #    germline `small/` and somatic `indel/` categories).
 #
-# The public megatest exercises only two profiles:
-#   - small/  : germline SNP/INDEL (HG002/GIAB) — hap.py + rtg-tools vcfeval
-#   - indel/  : somatic indels (SEQC2)          — som.py (sompy) + rtg-tools vcfeval
-# No megatest contains sv/, cnv/ or multiqc/, so the SV/CNV data collections are
-# declared optional (non-data-backed) to cover those pipeline scenarios when a user
-# runs the corresponding profiles. Generic, core-facility compatible.
+# A run writes everything under <outdir>/<variant_type>/, and variant_type is one
+# of small, snv, indel, structural or copynumber. One run picks one value, so a run
+# only ever produces one family of summary tables:
+#   - small/      : germline SNP/INDEL (HG002/GIAB) - hap.py + rtg-tools vcfeval
+#   - indel/      : somatic indels (SEQC2)          - som.py (sompy) + rtg-tools vcfeval
+#   - structural/ : SV callers vs a GIAB SV truth set - truvari, SVanalyzer, Wittyer
+# No data collection can therefore be required: whichever one is, every run on
+# another route fails to ingest. They are all optional, and the scan reports which
+# ones a given run reached. Generic, core-facility compatible.
 # ============================================================================
 
 # Template metadata (parsed and removed before Project model validation)
@@ -54,6 +57,7 @@ workflows:
       # Germline small variants (small/) — rtg-tools vcfeval + hap.py
       # ----------------------------------------------------------------
       - data_collection_tag: "germline_vcfeval_summary"
+        optional: true  # absent on every route but small/ and snv/; see the header
         description: "Germline rtg-tools vcfeval benchmark summary (precision/recall/F1 per sample)"
         config:
           type: "Table"
