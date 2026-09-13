@@ -107,6 +107,9 @@ SCENARIOS: list[Scenario] = [
     Scenario("rnafusion", "4.1.3", "megatest", note="megatest only: no usable test profile"),
     Scenario("rnaseq", "3.26.0", "megatest", note="nf-core AWS megatest"),
     Scenario("rnaseq", "3.26.0", "test", note="CI profile; samplesheet injected"),
+    # The one full-size run in the showcase: 6 ENCODE cell lines, 12 libraries,
+    # a 138 GB output directory that the fetch excludes bring down to 831 MB.
+    Scenario("rnaseq", "3.26.0", "test_full", note="full-size run, 6 cell lines; the CI profile has 2 samples"),
     Scenario("taxprofiler", "2.0.1", "megatest", note="nf-core AWS megatest"),
     Scenario("taxprofiler", "2.0.1", "test", note="CI profile, 2 platforms"),
     # taxprofiler test_malt is deliberately absent. MALT runs and MultiQC reports it,

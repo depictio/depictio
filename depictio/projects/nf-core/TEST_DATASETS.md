@@ -611,6 +611,13 @@ degrades the dashboard, a failed one aborts the run.
 | atacseq `test` | 19/19 | 🚫 (`MQC`) | ✅ (after the HOMER fix) |
 | airrflow `test` | 12/12 | ✅ | ✅ |
 | ampliseq `test` | 12/23 | ✅ (`DB`) | **⚠️** |
+| rnaseq `test_full` | 6/6 | not predicted | ✅ |
+
+rnaseq `test_full` is the one full-size run in the campaign: 6 ENCODE cell lines against
+12 CI libraries, 3 hours on 32 cores, and a 138 GB output directory. 831 MB of it reaches
+the showcase. The bulk of the rest is the published STAR index, 31 GB of `SA`, `SAindex`
+and `Genome` under `star/star/`, which the fetch filter missed because `*.sa` is
+lower case and STAR writes `SA` with no extension at all.
 
 ### The defect a megatest could never have caught
 
@@ -759,26 +766,45 @@ sintax or SIDLE, viralrecon runs amplicon or metagenomic, airrflow sequences BCR
 variantbenchmarking benchmarks germline or somatic or structural variants, and the
 collections a template declares are not the collections any single route produces.
 
-Eighteen further runs were submitted on that basis, choosing the route that shares the
-least with the one already measured. Counted per project, in collections that actually
-carry a Delta table rather than collections the run reported as processed:
+Nineteen further runs were submitted on that basis, choosing the route that shares the
+least with the one already measured. Counted per template, in collections that carry a
+Delta table: the `multiqc` and `phylogeny` collections are left out of both sides of the
+ratio, because neither is Delta-backed by design (the MultiQC panel reads the report's
+parquet and the tree viewer reads the Newick file), so counting them would show every
+template one short of a coverage it already has.
 
 | template | scenarios | best single | union | declared |
 |---|---|---|---|---|
-| ampliseq 2.18.0 | `test`, `test_pplace`, `test_multiregion`, `test_pacbio_its`, `test_iontorrent` | 10 | **19** | 24 |
+| ampliseq 2.18.0 | `test`, `test_pplace`, `test_multiregion`, `test_pacbio_its`, `test_iontorrent` | 10 | **19** | 22 |
 | variantbenchmarking 1.4.0 | `germline_small`, `germline_sv`, `somatic_snv` | 3 | **9** | 9 |
-| airrflow 5.1.0 | megatest, `test`, `test_tcr` | 11 | **11** | 12 |
-| viralrecon 3.0.0 | `test`, `test_sispa`, illumina + nanopore | 13 | **13** | 14 |
-| atacseq 1.2.2 | megatest, `test` | 18 | 18 | 19 |
-| chipseq 1.2.0 | megatest, `test` | 14 | 14 | 15 |
-| funcscan 4.0.0 | megatest, `test` | 14 | 14 | 15 |
-| taxprofiler 2.0.1 | megatest, `test` | 11 | 11 | 12 |
+| atacseq 1.2.2 | megatest, `test` | 18 | 18 | 18 |
+| funcscan 4.0.0 | megatest, `test` | 14 | 14 | 14 |
+| chipseq 1.2.0 | megatest, `test` | 14 | 14 | 14 |
+| viralrecon 3.0.0 | `test`, `test_sispa`, illumina + nanopore | 13 | 13 | 13 |
+| cutandrun 3.1 | megatest, `test_full_small` | 13 | 13 | 13 |
+| airrflow 5.1.0 | megatest, `test`, `test_tcr` | 11 | 11 | 11 |
+| taxprofiler 2.0.1 | megatest, `test` | 11 | 11 | 11 |
+| rnafusion 4.1.3 | megatest | 9 | 9 | 10 |
+| differentialabundance 2.0.0 | megatest, `test_full` | 8 | 8 | 8 |
+| rnaseq 3.26.0 | megatest, `test`, `test_full` | 5 | 5 | 5 |
 
-The two lines worth reading are the first two. ampliseq's best single route reaches 10 of
-24 and three routes together reach 19: more than half of that template has never been
-exercised by any one run, which is the property the multi-scenario showcase exists to
-make visible. variantbenchmarking goes from 3 to 9 of 9, and only after the defect below
-was fixed.
+Ten of the twelve templates are fully covered: every collection they declare carries data
+in at least one scenario. The two that are not are the interesting ones.
+
+ampliseq's best single route reaches 10 of 22 and five routes together reach 19, so more
+than half of that template is never exercised by any one run, which is the property the
+multi-scenario showcase exists to make visible. The three it never reaches are
+`ancombc_results`, which needs a differential-abundance comparison no CI profile sets up,
+and `ma_canonical` and `stacked_taxonomy_canonical`, which derive from it and from the
+`taxonomy_rel_abundance` table the `DB` caveat above already accounts for.
+
+variantbenchmarking goes from 3 to 9 of 9, and only after the defect below was fixed. Its
+three routes are disjoint: no route reaches another route's tables, which is exactly what
+made the hardcoded directories invisible.
+
+rnafusion's `cancer_introns` has no scenario at all, because none of its three profiles
+produces usable output: one is a stub, one sets `references_only`, and the third needs
+COSMIC credentials. It runs on its megatest only.
 
 ### The template that could not see two thirds of its own outputs
 
