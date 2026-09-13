@@ -747,3 +747,130 @@ which is true biologically and false for nf-core.
 `main.nf:377` with "Channel `design_multiple_samples` has been used as an input by more
 than a process or an operator": a DSL1 rule that tightened after the pipeline was
 written. `NXF_VER=21.10.6` runs it. chipseq 1.2.0 has no such problem on 22.10.6.
+
+---
+
+## What a second and a third route through each pipeline turned up
+
+The measured table above is one profile per pipeline. That answers "does the template
+work", and it cannot answer "does the template work on the routes the pipeline actually
+offers". Several of these pipelines branch hard: ampliseq classifies through QIIME2 or
+sintax or SIDLE, viralrecon runs amplicon or metagenomic, airrflow sequences BCR or TCR,
+variantbenchmarking benchmarks germline or somatic or structural variants, and the
+collections a template declares are not the collections any single route produces.
+
+Eighteen further runs were submitted on that basis, choosing the route that shares the
+least with the one already measured. Counted per project, in collections that actually
+carry a Delta table rather than collections the run reported as processed:
+
+| template | scenarios | best single | union | declared |
+|---|---|---|---|---|
+| ampliseq 2.18.0 | `test`, `test_pplace`, `test_multiregion`, `test_pacbio_its`, `test_iontorrent` | 10 | **19** | 24 |
+| variantbenchmarking 1.4.0 | `germline_small`, `germline_sv`, `somatic_snv` | 3 | **9** | 9 |
+| airrflow 5.1.0 | megatest, `test`, `test_tcr` | 11 | **11** | 12 |
+| viralrecon 3.0.0 | `test`, `test_sispa`, illumina + nanopore | 13 | **13** | 14 |
+| atacseq 1.2.2 | megatest, `test` | 18 | 18 | 19 |
+| chipseq 1.2.0 | megatest, `test` | 14 | 14 | 15 |
+| funcscan 4.0.0 | megatest, `test` | 14 | 14 | 15 |
+| taxprofiler 2.0.1 | megatest, `test` | 11 | 11 | 12 |
+
+The two lines worth reading are the first two. ampliseq's best single route reaches 10 of
+24 and three routes together reach 19: more than half of that template has never been
+exercised by any one run, which is the property the multi-scenario showcase exists to
+make visible. variantbenchmarking goes from 3 to 9 of 9, and only after the defect below
+was fixed.
+
+### The template that could not see two thirds of its own outputs
+
+nf-core/variantbenchmarking writes everything under `<outdir>/<variant_type>/`, where
+`variant_type` is one of `small`, `snv`, `indel`, `structural`, `copynumber`. Six of the
+nine recipes hardcoded that directory, and four of them hardcoded a value the pipeline
+never emits:
+
+| recipe | hardcoded | the pipeline writes |
+|---|---|---|
+| `truvari/summary.py`, `svanalyzer/svbenchmark.py` | `sv/` | `structural/` |
+| `wittyer/summary.py` | `cnv/` | `structural/` or `copynumber/` |
+| `sompy/summary.py`, `sompy/regions.py` | `indel/` | `snv/` on the sSNV route |
+| `rtgtools/vcfeval_summary.py`, `happy/*` | `small/` | whatever the route sets |
+
+They were written against the AWS megatest, which exercises `small/` and `indel/` and
+nothing else, so no megatest-based check could ever have reached them: the same blind
+spot as the HOMER glob above, from the opposite direction. `sv` and `cnv` are not even
+members of the `variant_type` enum.
+
+The recipes now glob the variant-type level rather than naming it. The two rtg-tools
+collections need the opposite treatment on top of that, because rtg-tools runs on the
+germline and the somatic route alike and writes the same file name under each: once both
+resolved through the same wildcard, the germline collection swallowed the somatic table
+and a somatic benchmark appeared under a germline tag. `germline_vcfeval_summary` is
+pinned to `small/` and `somatic_vcfeval_summary` globs `[si]n*/`, which picks exactly
+`snv` and `indel` out of the five variant types. The pattern is resolved by `Path.glob`,
+which has character classes but no alternation, so there is no way to spell "either of
+these two" more plainly.
+
+`germline_vcfeval_summary` also stops being required. It was the template's one required
+collection, which meant every run on a route other than germline small failed to ingest
+outright instead of opening with the collections it did produce.
+
+### A container that needs a home directory to exist
+
+wittyer is the one container in the campaign that does not run under Nextflow's defaults.
+Nextflow passes `--no-home` to Singularity, so `$HOME` is not mounted and does not exist
+inside the container; wittyer 0.5.2.0 resolves a path against it in the static
+initializer of `Ilmn.Das.Std.AppUtils.Misc.MiscUtils`, gets an empty string, and dies with
+`System.ArgumentException: The path is empty` before reading a single VCF.
+
+Bisected inside the container, one variable at a time: `--no-home` alone fails with exit
+255; `--no-home` plus a bind over `$HOME` succeeds with exit 0, and the bound directory
+can be empty; no `--no-home` succeeds. So it is the absence of the directory, not
+anything in it. `scripts/nfcore_validation.config` binds a scratch directory over `$HOME`
+for that one process:
+
+```groovy
+process {
+    withName: 'WITTYER' {
+        containerOptions = "-B /scratch/<user>/NF_CORE/container_home:${System.getenv('HOME')}"
+    }
+}
+```
+
+This belongs in the run configuration and not in a template: it is a property of the
+container image, it affects any Nextflow pipeline that calls wittyer, and it is invisible
+to Depictio, which only ever sees the summary table the process failed to produce.
+
+### Routes that write less than the template requires
+
+Two scenarios ingest fewer collections than their profile suggests, and in both cases the
+route is genuinely different rather than broken.
+
+**airrflow `test_tcr`** runs the same two subjects as the BCR profile through the TCR
+receptor and produces `clone_sizes_table` and `num_clones_table` but neither
+`clonal_diversity` nor `clonal_overlap`, and it reports its threshold under
+`report_threshold/` rather than `find_threshold/`. Required, those two collections failed
+a run that had produced 9 of the 11 others. They are now `optional: true`, with the reason
+recorded next to them, and `test_tcr` ingests 8 of 12.
+
+**taxprofiler `test_malt`** is the one profile deliberately absent from the showcase.
+MALT runs, and MultiQC reports it, but the profile writes no `taxpasta/` directory at all,
+and the template's five taxpasta collections are the whole point of it: the project opens
+on a samplesheet and a MultiQC tab, 1 collection of 12. That is a route outside what the
+template covers, which is worth recording and not worth showing.
+
+### Two traps that only appear on a second run
+
+**A plugin release can raise a pipeline's Nextflow floor retroactively.** funcscan and
+taxprofiler resolve nf-schema unpinned at launch. nf-schema 2.7.2 requires Nextflow
+>= 25.10.0, so profiles that had run days earlier on the same conda environment started
+failing with `Plugin nf-schema@2.7.2 requires Nextflow version >=25.10.0` without a single
+line of the pipeline changing. The affected runs now pin `NXF_VER` explicitly. Anything
+that records "this pipeline needs Nextflow X" is recording a lower bound with a
+publication date on it.
+
+**funcscan `test_bakta` cannot complete.** `bakta_db download --type light` fails its own
+integrity check with `Error: corrupt database file! MD5 should be
+'4a6e059ded39e9c5537ef4137d2f5648' but is 'dda6a9bf091d412cbdc2226ce3eb1059'`. Identical
+on two attempts, so it is a version skew between the client's expected checksum and what
+the mirror now serves, not a truncated download. It is upstream of Depictio entirely and
+of nf-core/funcscan too; the three `test*_bakta` profiles stay at ⚠️ until it is fixed
+upstream.
