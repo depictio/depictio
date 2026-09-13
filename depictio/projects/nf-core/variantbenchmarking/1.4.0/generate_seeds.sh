@@ -20,7 +20,11 @@ set -euo pipefail
 DATA_ROOT="${1:-${HOME}/Data/variantbenchmarking/variantbenchmarking-testdata}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SEEDS_DIR="${SCRIPT_DIR}/.db_seeds"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
+# Ask git rather than counting "..": this script sits five levels below the
+# repo root, the previous four-level climb landed on depictio/, and nothing
+# there is named .env.instance. The Mongo lookup below then fell through to
+# port 27018 and exported from whichever OTHER stack happened to answer.
+REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || (cd "${SCRIPT_DIR}/../../../../.." && pwd))"
 
 if [ ! -d "$DATA_ROOT" ]; then
     echo "ERROR: variantbenchmarking test-data not found at $DATA_ROOT" >&2
@@ -59,7 +63,21 @@ for dashboard_id in "${!DASH_FILES[@]}"; do
             quit(1);
         }
         printjson(doc);
-    " > "$out_file"
+    " > "${out_file}.tmp"
+    if grep -q '^ERROR:' "${out_file}.tmp"; then
+        cat "${out_file}.tmp" >&2
+        rm -f "${out_file}.tmp"
+        exit 1
+    fi
+    # Redirection truncates its target before mongosh runs, and mongosh reports
+    # connection failures on stderr, so writing straight to $out_file left the
+    # committed seed empty on any error. Stage, then move.
+    if [ ! -s "${out_file}.tmp" ]; then
+        echo "ERROR: export for ${dashboard_id} is empty, keeping the committed seed" >&2
+        rm -f "${out_file}.tmp"
+        exit 1
+    fi
+    mv "${out_file}.tmp" "$out_file"
 done
 
 # 3. Activate the seeds on fresh boot (currently a manual relay step — see
