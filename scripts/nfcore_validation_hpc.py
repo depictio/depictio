@@ -347,6 +347,76 @@ RUNS: list[RunSpec] = [
         inject_samplesheet=False,
         note="SV route, 3 callers; germline_small reached only 3 of 9 collections",
     ),
+    # --- third wave ------------------------------------------------------------
+    # The audience is the pipelines' own maintainers, who look for a profile they
+    # know by name. So these are picked for the name as much as for the route:
+    # each one is a profile a lead dev would ask about, and each takes a branch no
+    # scenario in the instance takes yet.
+    RunSpec(
+        key="funcscan-bakta",
+        pipeline="funcscan",
+        version="4.0.0",
+        profile="test_bakta",
+        samples=2,
+        note="Bakta instead of Prodigal: funcscan reaches only 8 of 15 collections so far",
+    ),
+    RunSpec(
+        key="variantbench-somatic",
+        pipeline="variantbenchmarking",
+        version="1.4.0",
+        profile="somatic_snv",
+        revision="1.4.0",
+        samples=3,
+        inject_samplesheet=False,
+        note="the only route to the three somatic collections; SEQC2 truth is fetched live",
+    ),
+    RunSpec(
+        key="taxprofiler-malt",
+        pipeline="taxprofiler",
+        version="2.0.1",
+        profile="test_malt",
+        samples=2,
+        note="MALT, a profiler no other taxprofiler scenario runs",
+    ),
+    RunSpec(
+        key="viralrecon-sispa",
+        pipeline="viralrecon",
+        version="3.0.0",
+        profile="test_sispa",
+        samples=4,
+        run_subdir="run_1",
+        inject_samplesheet=False,
+        note="metagenomic route instead of amplicon, and one of two viralrecon profiles needing no S3",
+    ),
+    RunSpec(
+        key="airrflow-tcr",
+        pipeline="airrflow",
+        version="5.1.0",
+        profile="test_tcr",
+        revision="5.1.0",
+        nxf_ver="26.04.6",
+        samples=2,
+        inject_samplesheet=False,
+        note="TCR instead of BCR: same collections, a different receptor and metadata",
+    ),
+    RunSpec(
+        key="ampliseq-pplace",
+        pipeline="ampliseq",
+        version="2.18.0",
+        profile="test_pplace",
+        nxf_ver="25.10.7",
+        samples=3,
+        inject_samplesheet=False,
+        note="phylogenetic placement, a route none of the four ampliseq scenarios takes",
+    ),
+    RunSpec(
+        key="rnaseq-full",
+        pipeline="rnaseq",
+        version="3.26.0",
+        profile="test_full",
+        samples=8,
+        note="the real test_full, 8 samples on iGenomes GRCh37, rather than the megatest",
+    ),
 ]
 
 RUNS_BY_KEY = {spec.key: spec for spec in RUNS}
@@ -383,6 +453,11 @@ RSYNC_EXCLUDES = [
     # the whole-genome coverage table the template scans for; the collection then
     # skips as "no files" and the run looks degraded for a reason that is ours.
     "/genome/",
+    # Same reasoning, and the single biggest saving of the campaign: the rtg-tools
+    # SDF index variantbenchmarking publishes under references/ is 1.1 GB on its
+    # own, more than a quarter of everything the showcase holds, and no template
+    # reads a byte of it. Anchored so a per-sample references/ stays.
+    "/references/",
     "/work/",
     "/.nextflow/",
     "*.h5",
