@@ -11,6 +11,7 @@ import pytest
 
 # Check if testcontainers is available
 try:
+    from docker.errors import DockerException
     from testcontainers.minio import MinioContainer
 
     testcontainers_available = True
@@ -29,9 +30,26 @@ class TestS3BackupIntegration:
 
     @pytest.fixture
     def minio_container(self):
-        """Start MinIO container for testing."""
-        with MinioContainer() as minio:
-            yield minio
+        """Start MinIO container for testing.
+
+        testcontainers pins the MinIO image tag itself, and Docker Hub can stop
+        serving a pinned tag at any time: startup then raises ImageNotFound on a
+        machine that is otherwise perfectly able to run the suite. Skip in that
+        case instead of failing, because the suite runs under `-x` and a single
+        unreachable image otherwise aborts every test scheduled after it.
+
+        The guard wraps `start()` only. Once the container is up, anything the
+        test itself raises must still surface as a failure.
+        """
+        container = MinioContainer()
+        try:
+            container.start()
+        except DockerException as exc:
+            pytest.skip(f"MinIO container unavailable: {exc}")
+        try:
+            yield container
+        finally:
+            container.stop()
 
     @pytest.fixture
     def s3_config(self, minio_container):
