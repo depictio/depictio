@@ -109,6 +109,9 @@ SCENARIOS: list[Scenario] = [
     Scenario("taxprofiler", "2.0.1", "test", note="CI profile, 2 platforms"),
     Scenario("variantbenchmarking", "1.4.0", "germline_small", note="germline route only"),
     Scenario("variantbenchmarking", "1.4.0", "germline_sv", note="SV route, 3 callers; wittyer needs $HOME to exist"),
+    # som.py is somatic-only, so these two tables exist on no other route. Writes
+    # under snv/, a third variant_type after small/ and structural/+copynumber/.
+    Scenario("variantbenchmarking", "1.4.0", "somatic_snv", note="somatic route: the som.py tables the other two scenarios cannot reach"),
     # sequencing-runs: DATA_ROOT is the PARENT of the run_* directories, so this
     # single project holds both runs. Pointing it at one run_* directory instead
     # would match runs_regex against that run's own subdirectories and find none.
