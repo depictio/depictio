@@ -39,7 +39,7 @@ services:
     restart: unless-stopped
 
   minio:
-    image: minio/minio:RELEASE.2025-01-20T14-49-07Z
+    image: quay.io/minio/minio:RELEASE.2025-01-20T14-49-07Z
     container_name: minio
     # Bundled local object storage (internal-only, no host port). For external
     # S3, point DEPICTIO_MINIO_* at your endpoint and `docker compose up -d --scale minio=0`.

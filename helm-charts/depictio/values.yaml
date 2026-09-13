@@ -180,7 +180,7 @@ redis:
 minio:
   enabled: true
   image:
-    repository: minio/minio
+    repository: quay.io/minio/minio
     # Pin to a specific MinIO release. The :latest tag is mutable and was
     # flagged as a supply-chain risk; override per-deployment when MinIO
     # publishes a security update you want to roll out deliberately.
