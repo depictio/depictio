@@ -31,6 +31,10 @@ interface UpsetPlotConfig {
   matrix_wf_id?: string;
   matrix_dc_id?: string;
   set_columns?: string[] | null;
+  /** Regex naming the set columns, for a matrix with one column per sample of
+   *  the run. The worker resolves it against the frame's binary columns;
+   *  mutually exclusive with set_columns. */
+  set_columns_pattern?: string | null;
   /** Optional per-set colour overrides (set name → hex). Forwarded to the
    *  plotly-upset library so set-size bars + dots + intersection bars use
    *  the project's domain palette (e.g. habitat → Set1). */
@@ -96,14 +100,29 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
     };
   }, [metadata.dc_id]);
 
+  // The declared sets, or the columns a pattern names. The worker resolves the
+  // pattern against the frame's binary columns; the schema is the nearest thing
+  // here, enough to keep the sets out of the annotation picker and to seed the
+  // data preview. A pattern the browser cannot compile names nothing.
+  const setColumns = useMemo(() => {
+    if (config.set_columns) return config.set_columns;
+    if (!config.set_columns_pattern || !dcSchema) return [] as string[];
+    try {
+      const pattern = new RegExp(config.set_columns_pattern);
+      return Object.keys(dcSchema).filter((c) => pattern.test(c));
+    } catch {
+      return [] as string[];
+    }
+  }, [config.set_columns, config.set_columns_pattern, dcSchema]);
+
   // Non-set DC columns are candidate annotation tracks. Filter out set
   // columns (already used as the binary matrix) and obvious identifier
   // columns (the library would error on a high-cardinality string ID).
   const annotationOptions = useMemo(() => {
     if (!dcSchema) return [] as string[];
-    const setCols = new Set(config.set_columns ?? []);
+    const setCols = new Set(setColumns);
     return Object.keys(dcSchema).filter((c) => !setCols.has(c));
-  }, [dcSchema, config.set_columns]);
+  }, [dcSchema, setColumns]);
 
   const effectiveAnnotationCols = showAnnotations ? annotationCols : [];
 
@@ -132,6 +151,9 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
       wf_id: metadata.wf_id,
       dc_id: metadata.dc_id,
       set_columns: config.set_columns ?? null,
+      // Sent only when set: the cache key hashes the whole payload, so an
+      // always-present null would recompute every UpSet cached before it.
+      ...(config.set_columns_pattern ? { set_columns_pattern: config.set_columns_pattern } : {}),
       set_colors: config.set_colors ?? null,
       annotation_cols: effectiveAnnotationCols.length > 0 ? effectiveAnnotationCols : null,
       sort_by: sortBy,
@@ -210,14 +232,12 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
     showValues,
     JSON.stringify(effectiveAnnotationCols),
     JSON.stringify(config.set_columns),
+    config.set_columns_pattern,
     config.max_degree,
   ]);
 
   // Best-effort preview of the underlying binary table for the Show-data popover.
-  const previewCols = useMemo(
-    () => (config.set_columns ?? []).slice(0, 12),
-    [config.set_columns],
-  );
+  const previewCols = useMemo(() => setColumns.slice(0, 12), [setColumns]);
   useEffect(() => {
     if (!metadata.wf_id || !metadata.dc_id || previewCols.length < 1) return;
     let cancelled = false;
