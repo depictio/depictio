@@ -102,12 +102,19 @@ def merge_existing_ids(existing_entry: dict, project_config: dict) -> dict:
     project_name = project_config["name"]
     # existing_entry = next((entry for entry in local_metadata if entry["name"] == project_name), None)
 
-    # Check if the project exists and is owned by the same user
+    # Check if the project exists and the CLI user is one of its owners
     if existing_entry:
         logger.info(f"Project : {project_config}")
         user_id = project_config["permissions"]["owners"][0]["id"]
-        logger.info(f"Existing entry user ID: {existing_entry['permissions']['owners'][0]['id']}")
-        if existing_entry["permissions"]["owners"][0]["id"] != user_id:
+        # Membership, not position: a project shared with several owners has no
+        # meaningful "first" owner, and the stored order is whatever the last
+        # write happened to produce. Comparing `owners[0]` made an ordinary
+        # co-owned project fail as if it belonged to a stranger.
+        existing_owner_ids = {
+            str(owner["id"]) for owner in existing_entry["permissions"]["owners"] if owner.get("id")
+        }
+        logger.info(f"Existing entry owner IDs: {existing_owner_ids}")
+        if str(user_id) not in existing_owner_ids:
             raise ValueError(f"Project '{project_name}' exists but is owned by a different user.")
 
         logger.info(f"Project owner is the same for '{project_name}' - Owner ID: {user_id}")
