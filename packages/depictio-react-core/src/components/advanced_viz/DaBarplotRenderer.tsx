@@ -9,6 +9,7 @@ import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragm
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
+import { useReportGroupColouring } from '../../groupReach';
 
 interface DaBarplotConfig {
   feature_id_col: string;
@@ -221,20 +222,30 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
     };
   };
 
-  // One recolour point for both call sites: `buildPanel` is what the faceted
-  // view and the single-contrast view both go through. The join is on values,
-  // so a group built from sample ids leaves this per-feature plot alone.
-  // Slot 0 of `customdata` is the feature id.
-  const buildGroupedPanel = (contrastName: string) => {
-    const panel = buildPanel(contrastName);
-    if (!panel) return null;
-    return splitFigureByGroups(panel, {
+  // One recolour point for both views: the contrasts on screen, built and
+  // recoloured once per render, which the faceted view and the single-contrast
+  // view both draw from. The join is on values, so a group built from sample
+  // ids leaves this per-feature plot alone. Slot 0 of `customdata` is the
+  // feature id.
+  let drawnContrasts: string[] = [];
+  if (activeTab === ALL_TAB) drawnContrasts = contrastNames;
+  else if (activeTab) drawnContrasts = [activeTab];
+  const drawnPanels = drawnContrasts.flatMap((contrast) => {
+    const panel = buildPanel(contrast);
+    if (!panel) return [];
+    const grouped = splitFigureByGroups(panel, {
       groupRender,
       identitySlot: 0,
       facetable: false,
       showLegend: true,
     }) as typeof panel;
-  };
+    return [{ contrast, panel, grouped }];
+  });
+  // Whether any bar matched, for the dispatch's "not grouped" badge. Every
+  // panel is recoloured by the same groups, so one drawn contrast that took
+  // them is enough for the tile to count as grouped.
+  const reportedPanel = drawnPanels.find((p) => p.grouped !== p.panel) ?? drawnPanels[0];
+  useReportGroupColouring(groupRender, reportedPanel?.panel, reportedPanel?.grouped);
 
   // Memoised so AdvancedVizFrame's `extras` useMemo doesn't invalidate on every
   // render — an unmemoised element re-fires the frame's publish effect and loops
@@ -273,9 +284,7 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
   const renderAllFaceted = () => (
     <ScrollArea style={{ width: '100%', height: '100%' }}>
       <Stack gap="md" p="xs">
-        {contrastNames.map((c) => {
-          const panel = buildGroupedPanel(c);
-          if (!panel) return null;
+        {drawnPanels.map(({ contrast: c, grouped: panel }) => {
           const layout = {
             ...panel.layout,
             title: { text: c, font: { size: 12 } },
@@ -299,7 +308,7 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
 
   const renderSinglePanel = () => {
     if (!activeTab || activeTab === ALL_TAB) return null;
-    const panel = buildGroupedPanel(activeTab);
+    const panel = drawnPanels[0]?.grouped;
     if (!panel) return null;
     return (
       <Plot

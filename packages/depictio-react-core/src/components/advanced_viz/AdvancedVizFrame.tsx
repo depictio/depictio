@@ -3,6 +3,7 @@ import { Alert, Badge, Group, Paper, Stack, Text, Tooltip } from '@mantine/core'
 
 import ErrorBoundary from '../ErrorBoundary';
 import ComponentSkeleton from '../ComponentSkeleton';
+import { GroupStatusBadgeContext } from '../GroupStatusBadge';
 import { ComponentIndexContext, useReportLoadStatus } from '../DashboardLoadingProvider';
 import {
   AdvancedVizExtrasContext,
@@ -135,6 +136,9 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   estimated,
 }) => {
   const publish = useContext(AdvancedVizExtrasContext);
+  // "not grouped", when the dispatch found the analysis groups cannot reach
+  // this component. Null otherwise, and with no provider.
+  const groupBadge = useContext(GroupStatusBadgeContext);
 
   // Report this panel's load status to the dashboard registry (drives the
   // header progress bar). Index arrives via context from AdvancedVizDispatch so
@@ -219,7 +223,12 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
           borderWidth: 1.5,
         }}
       >
-        {title || subtitle || (counts && Object.keys(counts).length > 0) || showReduction || estimated ? (
+        {title ||
+        subtitle ||
+        (counts && Object.keys(counts).length > 0) ||
+        showReduction ||
+        estimated ||
+        groupBadge ? (
           <Stack gap={2} mb="xs">
             {title ? (
               <Text fw={600} size="sm" lineClamp={1}>
@@ -289,6 +298,11 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
                     estimated
                   </Badge>
                 </Tooltip>
+              </Group>
+            ) : null}
+            {groupBadge ? (
+              <Group gap={4} wrap="nowrap" mt={2}>
+                {groupBadge}
               </Group>
             ) : null}
           </Stack>

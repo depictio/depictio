@@ -29,6 +29,7 @@ import {
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
+import { useReportGroupColouring } from '../../groupReach';
 
 interface LollipopConfig {
   feature_id_col: string;
@@ -547,6 +548,8 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gro
         : figure,
     [figure, groupRender],
   );
+  // Whether any point matched, for the dispatch's "not grouped" badge.
+  useReportGroupColouring(groupRender, figure, groupedFigure);
 
   return (
     <AdvancedVizFrame

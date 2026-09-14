@@ -22,6 +22,7 @@ import {
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
+import { useReportGroupColouring } from '../../groupReach';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
 import { GenomeAnnotation, resolveAnnotation } from './genome_annotations';
 import { usePersistedVizControl, useVizConfigWriter } from './usePersistedVizControl';
@@ -670,6 +671,8 @@ const CoverageTrackRenderer: React.FC<Props> = ({
         : figureSpec,
     [figureSpec, groupRender],
   );
+  // Whether any point matched, for the dispatch's "not grouped" badge.
+  useReportGroupColouring(groupRender, figureSpec, groupedFigure);
 
   const controls = useMemo(
     () => (

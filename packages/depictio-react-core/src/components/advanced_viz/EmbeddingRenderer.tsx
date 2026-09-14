@@ -36,6 +36,7 @@ import { applyDataTheme, applyLayoutTheme, plotlyThemeColors } from './plotlyThe
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
+import { useReportGroupColouring } from '../../groupReach';
 
 type ComputeMethod = 'pca' | 'umap' | 'tsne' | 'pcoa';
 
@@ -856,6 +857,8 @@ const EmbeddingRenderer: React.FC<Props> = ({
       showLegend: legendPos !== 'hidden',
     });
   }, [figure, groupRender, selectionSlot, legendPos]);
+  // Whether any point matched, for the dispatch's "not grouped" badge.
+  useReportGroupColouring(groupRender, figure, groupedFigure);
 
   // Colour-by candidates: every column of the DC, not only the two configured
   // roles. A computed cluster column, any annotation column and any numeric

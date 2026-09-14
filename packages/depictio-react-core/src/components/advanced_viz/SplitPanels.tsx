@@ -21,29 +21,15 @@ import type { AdvancedVizExtrasPayload } from './AdvancedVizExtras';
  * group's filter appended. The renderer is handed nothing new and needs to
  * know nothing: a per-group sunburst is a sunburst of that group's rows. That
  * makes every `viz_kind` splittable, including the ones the server computes.
+ * Which kinds are actually dealt into panels is a policy, not a capability:
+ * see `groupingModeForKind`.
  *
  * What it costs is one fetch per panel, which is why `MAX_PANELS` is low: past
  * a handful of groups small multiples stop being readable anyway.
  */
 
-/** Above this many groups the split is refused and the component renders whole.
- *  One fetch per panel, and small multiples stop being legible well before
- *  this. Deliberately well under the server's `MAX_FACET_CATEGORIES` (12),
- *  which faces a single query rather than one per panel. */
-export const MAX_PANELS = 6;
-
 /** Cells per row before wrapping. Past this a panel is too narrow to read. */
 export const PANEL_COL_WRAP = 3;
-
-/** Kinds that refuse the split and take grouping as colour instead.
- *
- * An ordination is the whole case: it means one thing only, where each sample
- * falls relative to every other sample in one shared space. Dealing that cloud
- * into per-group panels answers a question nobody asked of it, and each panel
- * would in fact be a *different* ordination, recomputed from its group's rows
- * alone — the axes would not even be comparable. Colour says the same thing
- * without either cost. */
-const NO_SPLIT_KINDS = new Set(['embedding']);
 
 export interface SplitPanelsProps {
   /** The cells to draw. Where they came from — saved groups, a column's
@@ -79,13 +65,6 @@ function rowsSignature(rows: Record<string, unknown[]> | undefined): string | nu
   return parts.join('|');
 }
 
-/** Whether the dashboard is asking for this split, and it is small enough to
- *  honour. Read by the dispatch before it decides how to render. */
-export function shouldSplitIntoPanels(panels: PanelSpec[], vizKind: string): boolean {
-  if (NO_SPLIT_KINDS.has(vizKind)) return false;
-  return panels.length > 1 && panels.length <= MAX_PANELS;
-}
-
 const SplitPanels: React.FC<SplitPanelsProps> = ({
   panels,
   filters,
@@ -108,8 +87,8 @@ const SplitPanels: React.FC<SplitPanelsProps> = ({
   // closure per render would re-fire that effect, which calls `outerPublish`,
   // which setStates in the dispatch, which re-renders this — an update loop
   // React aborts with "Maximum update depth exceeded", leaving the tile
-  // half-drawn. Keyed on the count rather than the array: `panels` is rebuilt
-  // by the dispatch on every render.
+  // half-drawn. Keyed on the count rather than the array, so a caller that
+  // rebuilds `panels` on every render cannot rebuild these with it.
   const panelCount = panels.length;
   const publishers = React.useMemo(
     () =>
@@ -131,10 +110,17 @@ const SplitPanels: React.FC<SplitPanelsProps> = ({
     [outerPublish, onIneffective, panelCount],
   );
 
+  // Forget what the panels reported once they are asked for different data.
+  // Keyed on content, not on `filters` itself: the dashboard hands a fresh
+  // array on every re-render, so an identity key wiped the signatures on
+  // unrelated re-renders, and panels whose data had not changed never
+  // reported again, so the fallback could not fire. Mirrors `panelKey` in the
+  // dispatch.
+  const resetKey = JSON.stringify([filters, panels]);
   React.useEffect(() => {
     signatures.current = [];
     settled.current = false;
-  }, [panels.length, filters]);
+  }, [resetKey]);
 
   if (panels.length === 0) return null;
 

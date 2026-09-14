@@ -13,14 +13,25 @@ from depictio.api.v1 import filter_links
 pytestmark = pytest.mark.no_db
 
 
-def _link(link_id, source, target, source_column="sample_id", enabled=True):
+def _link(
+    link_id,
+    source,
+    target,
+    source_column="sample_id",
+    enabled=True,
+    resolver="direct",
+    target_field=None,
+):
+    link_config = {"resolver": resolver}
+    if target_field:
+        link_config["target_field"] = target_field
     return {
         "id": link_id,
         "source_dc_id": source,
         "target_dc_id": target,
         "source_column": source_column,
         "enabled": enabled,
-        "link_config": {"resolver": "direct"},
+        "link_config": link_config,
     }
 
 
@@ -88,9 +99,9 @@ def test_walk_composes_hops(monkeypatch):
     seen = []
 
     def fake_resolve(
-        *, project_id, source_dc_id, source_column, filter_values, target_dc_id, token
+        *, project_id, source_dc_id, source_column, filter_values, target_dc_id, token, reverse
     ):
-        seen.append((source_dc_id, source_column, tuple(filter_values), target_dc_id))
+        seen.append((source_dc_id, source_column, tuple(filter_values), target_dc_id, reverse))
         return {"resolved_values": [f"{v}@{target_dc_id}" for v in filter_values]}
 
     monkeypatch.setattr(filter_links, "resolve_link_values", fake_resolve)
@@ -106,9 +117,9 @@ def test_walk_composes_hops(monkeypatch):
     )
 
     assert seen == [
-        ("A", "habitat", ("Groundwater",), "B"),
+        ("A", "habitat", ("Groundwater",), "B", False),
         # hop 2 filters on the link's join column, not the user's column
-        ("B", "sample_id", ("Groundwater@B",), "C"),
+        ("B", "sample_id", ("Groundwater@B",), "C", False),
     ]
     assert column == "sample_id"
     assert values == ["Groundwater@B@C"]
@@ -310,3 +321,141 @@ def test_no_match_filter_yields_no_rows():
     ordinary: list = []
     add_filter(ordinary, "MultiSelect", "sample_id", [])
     assert ordinary == []
+
+
+# --------------------------------------------------------------------------
+# Walking a direct link backwards (selection groups only)
+# --------------------------------------------------------------------------
+
+
+def _hops(paths):
+    return [[(link["id"], filter_links._is_reversed(link)) for link in p] for p in paths]
+
+
+def test_reverse_edge_only_when_allowed():
+    links = [_link("l1", "B", "A")]
+    assert filter_links._link_paths(links, "A", "B") == []
+    assert _hops(filter_links._link_paths(links, "A", "B", allow_reverse=True)) == [[("l1", True)]]
+
+
+def test_reversing_leaves_the_declared_link_untouched():
+    link = _link("l1", "B", "A")
+    filter_links._link_paths([link], "A", "B", allow_reverse=True)
+    assert not filter_links._is_reversed(link)
+
+
+def test_declared_direction_wins_at_equal_length():
+    links = [_link("rev", "B", "A"), _link("fwd", "A", "B")]
+    paths = filter_links._link_paths(links, "A", "B", allow_reverse=True)
+    assert _hops(paths) == [[("fwd", False)], [("rev", True)]]
+
+
+def test_fewer_reversed_hops_win_over_discovery_order():
+    # Breadth-first reaches C through B first, a route that walks l2 backwards.
+    # The all-declared route through E is found second and must still lead.
+    links = [
+        _link("l1", "A", "B"),
+        _link("l3", "A", "E"),
+        _link("l2", "C", "B"),
+        _link("l4", "E", "C"),
+    ]
+    paths = filter_links._link_paths(links, "A", "C", allow_reverse=True)
+    assert _hops(paths) == [[("l3", False), ("l4", False)], [("l1", False), ("l2", True)]]
+
+
+def test_a_shorter_reversed_route_beats_a_longer_declared_one():
+    links = [_link("l1", "A", "B"), _link("l2", "B", "C"), _link("l3", "C", "A")]
+    paths = filter_links._link_paths(links, "A", "C", allow_reverse=True)
+    assert _hops(paths) == [[("l3", True)], [("l1", False), ("l2", False)]]
+
+
+def test_non_direct_resolvers_are_never_reversed():
+    links = [_link("l1", "B", "A", resolver="sample_mapping")]
+    assert filter_links._link_paths(links, "A", "B", allow_reverse=True) == []
+
+
+def test_disabled_links_are_not_reversed_either():
+    links = [_link("l1", "B", "A", enabled=False)]
+    assert filter_links._link_paths(links, "A", "B", allow_reverse=True) == []
+
+
+def _star_links():
+    """hub.merged_library -> peaks (named ``sample`` there), and hub.sample -> qc."""
+    return [
+        _link("l1", "hub", "peaks", source_column="merged_library", target_field="sample"),
+        _link("l2", "hub", "qc", source_column="sample"),
+    ]
+
+
+def test_walking_a_reversed_hop(monkeypatch):
+    """Backwards, a hop asks with ``reverse=True`` and lands on the link's source_column."""
+    seen = []
+
+    def fake_resolve(*, source_dc_id, source_column, target_dc_id, reverse, filter_values, **kw):
+        seen.append((source_dc_id, source_column, target_dc_id, reverse))
+        return {"resolved_values": [f"{v}@{target_dc_id}" for v in filter_values]}
+
+    monkeypatch.setattr(filter_links, "resolve_link_values", fake_resolve)
+
+    (path,) = filter_links._link_paths(_star_links(), "peaks", "qc", allow_reverse=True)
+    column, values = filter_links._walk_link_path(
+        path=path,
+        project_id="p1",
+        origin_column="peak_id",
+        origin_values=["peak_1"],
+        access_token="tok",
+        component_type="figure",
+    )
+
+    assert seen == [
+        ("peaks", "peak_id", "hub", True),
+        # the hub's own name for the join, not the peak table's `sample`
+        ("hub", "merged_library", "qc", False),
+    ]
+    assert column == "sample"
+    assert values == ["peak_1@hub@qc"]
+
+
+def test_a_chain_ending_backwards_reports_the_link_source_column(monkeypatch):
+    monkeypatch.setattr(filter_links, "resolve_link_values", lambda **kw: {"resolved_values": []})
+    (path,) = filter_links._link_paths(_star_links(), "peaks", "hub", allow_reverse=True)
+    assert filter_links._walk_link_path(
+        path=path,
+        project_id="p1",
+        origin_column="peak_id",
+        origin_values=["peak_1"],
+        access_token="tok",
+        component_type="figure",
+    ) == ("merged_library", [])
+
+
+def test_dashboard_filters_never_walk_a_link_backwards(monkeypatch):
+    def boom(**kwargs):
+        raise AssertionError("a dashboard filter walked a link against its direction")
+
+    monkeypatch.setattr(filter_links, "resolve_link_values", boom)
+    out = filter_links.extend_filters_via_links(
+        target_dc_id="hub",
+        filters_by_dc={
+            "peaks": [{"index": "i1", "value": ["peak_1"], "metadata": {"column_name": "peak_id"}}]
+        },
+        project_metadata=_project(_star_links()),
+        access_token="tok",
+        component_type="figure",
+    )
+    assert out == []
+
+
+def test_groups_walk_a_link_backwards(monkeypatch):
+    monkeypatch.setattr(
+        filter_links, "resolve_link_values", lambda **kw: {"resolved_values": ["LIB1"]}
+    )
+    hop = filter_links.resolve_values_via_links(
+        project_metadata=_project(_star_links()),
+        origin_dc_id="peaks",
+        origin_column="peak_id",
+        values=["peak_1"],
+        target_dc_id="hub",
+        access_token="tok",
+    )
+    assert hop == ("merged_library", ["LIB1"])

@@ -79,11 +79,40 @@ def _link_target_column(link: dict, resolved: dict | None = None) -> str | None:
     )
 
 
+# Marks a path hop that walks its link against the declared direction. A private
+# key on a copy of the link dict: it never reaches the API or the database.
+_REVERSED = "_depictio_reversed"
+
+
+def _is_reversed(hop: dict) -> bool:
+    return bool(hop.get(_REVERSED))
+
+
+def _hop_ends(hop: dict) -> tuple[str, str]:
+    """``(from_dc, to_dc)`` for a path hop, in the direction it is walked."""
+    source = str(hop.get("source_dc_id", ""))
+    target = str(hop.get("target_dc_id", ""))
+    return (target, source) if _is_reversed(hop) else (source, target)
+
+
+def _hop_target_column(hop: dict, resolved: dict | None = None) -> str | None:
+    """The column a hop's resolved values name on the DC the hop arrives at.
+
+    Walked forwards, that is ``_link_target_column``. Walked backwards, the
+    values arrive on the link's *source*, whose join column is ``source_column``
+    by definition; ``target_field`` names the other end and must not be used.
+    """
+    if _is_reversed(hop):
+        return hop.get("source_column")
+    return _link_target_column(hop, resolved)
+
+
 def _link_paths(
     project_links: list[dict],
     origin_dc: str,
     target_dc_id: str,
     max_hops: int = MAX_LINK_HOPS,
+    allow_reverse: bool = False,
 ) -> list[list[dict]]:
     """Every enabled link path from ``origin_dc`` to ``target_dc_id``.
 
@@ -95,15 +124,31 @@ def _link_paths(
     Breadth-first so the shortest path to a target is found first, and a DC is
     never revisited within a path (cycles in the link graph are legal to declare
     and would otherwise loop forever).
+
+    ``allow_reverse`` also lets a path walk a ``direct`` link from its target
+    back to its source, as a hop marked reversed (see ``_hop_ends``). A direct
+    link joins equal values, so it answers the question in both directions; the
+    other resolvers rename or expand values one way and have no inverse. Only
+    selection groups ask for this: in a star-shaped project a group drawn on one
+    leaf otherwise reaches none of its siblings. Dashboard filters keep the
+    declared direction.
+
+    Returned shortest first; at equal length, paths with fewer reversed hops
+    come first, so a declared route always wins over an inferred one.
     """
     if origin_dc == target_dc_id:
         return []
 
-    by_source: dict[str, list[dict]] = {}
-    for link in project_links:
-        if not link.get("enabled", True):
-            continue
-        by_source.setdefault(str(link.get("source_dc_id", "")), []).append(link)
+    edges: dict[str, list[dict]] = {}
+    enabled = [link for link in project_links if link.get("enabled", True)]
+    for link in enabled:
+        edges.setdefault(str(link.get("source_dc_id", "")), []).append(link)
+    if allow_reverse:
+        for link in enabled:
+            if (link.get("link_config") or {}).get("resolver", "direct") != "direct":
+                continue
+            reversed_hop = {**link, _REVERSED: True}
+            edges.setdefault(str(link.get("target_dc_id", "")), []).append(reversed_hop)
 
     paths: list[list[dict]] = []
     # (current DC, path taken, DCs already on that path)
@@ -112,14 +157,16 @@ def _link_paths(
         dc, path, seen = queue.pop(0)
         if len(path) >= max_hops:
             continue
-        for link in by_source.get(dc, []):
-            nxt = str(link.get("target_dc_id", ""))
+        for hop in edges.get(dc, []):
+            _, nxt = _hop_ends(hop)
             if not nxt or nxt in seen:
                 continue
             if nxt == target_dc_id:
-                paths.append(path + [link])
+                paths.append(path + [hop])
             else:
-                queue.append((nxt, path + [link], seen | {nxt}))
+                queue.append((nxt, path + [hop], seen | {nxt}))
+    # Stable, so a forward-only graph keeps its breadth-first order exactly.
+    paths.sort(key=lambda p: (len(p), sum(_is_reversed(hop) for hop in p)))
     return paths
 
 
@@ -149,11 +196,14 @@ def _walk_link_path(
 
     A failed resolution does not return at all — ``resolve_link_values`` raises
     ``LinkResolutionError`` so a timeout can never masquerade as "no filter".
+
+    A hop marked reversed (see ``_link_paths``) walks its link from target to
+    source: the resolver is asked with ``reverse=True``, and the values it
+    returns name the link's ``source_column`` (see ``_hop_target_column``).
     """
     column, values = origin_column, origin_values
     for hop, link in enumerate(path):
-        source_dc = str(link.get("source_dc_id", ""))
-        next_dc = str(link.get("target_dc_id", ""))
+        source_dc, next_dc = _hop_ends(link)
         resolved = resolve_link_values(
             project_id=project_id,
             source_dc_id=source_dc,
@@ -161,8 +211,9 @@ def _walk_link_path(
             filter_values=values,
             target_dc_id=next_dc,
             token=access_token,
+            reverse=_is_reversed(link),
         )
-        final_column = _link_target_column(path[-1])
+        final_column = _hop_target_column(path[-1])
         if resolved is None:
             # No link declared for this hop (404). Nothing to translate through.
             logger.info(
@@ -179,7 +230,7 @@ def _walk_link_path(
             )
             return final_column, []
         values = resolved["resolved_values"]
-        column = _link_target_column(link, resolved)
+        column = _hop_target_column(link, resolved)
         if not column:
             logger.warning(
                 f"[{component_type}] Skipping link {link.get('id')!r} at hop {hop + 1}: "
@@ -220,8 +271,14 @@ def resolve_link_values(
     target_dc_id: str,
     token: str | None,
     use_cache: bool = True,
+    reverse: bool = False,
 ) -> Optional[Dict[str, Any]]:
-    """Resolve filtered values from source DC to target DC via link."""
+    """Resolve filtered values from source DC to target DC via link.
+
+    ``reverse`` asks for a ``direct`` link declared ``target_dc_id ->
+    source_dc_id`` to be walked backwards (see ``_link_paths``). The endpoint
+    answers 404 for any other resolver, which reads here as "no link".
+    """
     if not token:
         logger.warning("No token provided for link resolution")
         return None
@@ -235,8 +292,9 @@ def resolve_link_values(
     # pre-update resolution for its full 5-minute TTL and the affected rows were
     # simply absent from every linked component — with nothing to indicate it.
     versions = f"{_agg_hash(source_dc_id)}_{_agg_hash(target_dc_id)}"
+    direction = "rev" if reverse else "fwd"
     cache_key = (
-        f"link_{project_id}_{source_dc_id}_{target_dc_id}_{versions}_"
+        f"link_{project_id}_{source_dc_id}_{target_dc_id}_{direction}_{versions}_"
         f"{hash(tuple(sorted(str(v) for v in filter_values)))}"
     )
 
@@ -252,6 +310,7 @@ def resolve_link_values(
         "source_column": source_column,
         "filter_values": filter_values,
         "target_dc_id": target_dc_id,
+        "reverse": reverse,
     }
 
     try:
@@ -428,11 +487,12 @@ def resolve_values_via_links(
     ``_walk_link_path``): an empty ``target_values`` means the route resolved,
     to nothing — the values are satisfiable on the origin but name no row here.
 
-    ``target_column`` is whatever ``_link_target_column`` decides — the
-    resolver's explicit column, else the link's ``target_field``, else the
-    link's ``source_column`` (the join column). Never ``origin_column``: that
-    names something the target DC may not have, and a caller that used it would
-    match nothing or, worse, everything.
+    ``target_column`` is whatever ``_hop_target_column`` decides for the last
+    hop: forwards, the resolver's explicit column, else the link's
+    ``target_field``, else its ``source_column`` (the join column); backwards,
+    the link's ``source_column``. Never ``origin_column``: that names something
+    the target DC may not have, and a caller that used it would match nothing
+    or, worse, everything.
 
     Raises ``LinkResolutionError`` when a hop could not be resolved at all.
     """
@@ -445,7 +505,10 @@ def resolve_values_via_links(
     if not project_id or not project_links:
         return None
 
-    for path in sorted(_link_paths(project_links, origin_dc_id, target_dc_id), key=len):
+    # Unlike dashboard filters, groups may walk ``direct`` links backwards (see
+    # ``_link_paths``): projected that way, a group becomes the rows of the link's
+    # source that carry its values.
+    for path in _link_paths(project_links, origin_dc_id, target_dc_id, allow_reverse=True):
         target_column, resolved_values = _walk_link_path(
             path=path,
             project_id=project_id,

@@ -20,6 +20,7 @@ import {
 import { Icon } from '@iconify/react';
 
 import type { InteractiveFilter, StoredMetadata } from '../../api';
+import { noTileReceivesGroups, useGroupReach } from '../../groupReach';
 import type { ColorByColumn } from '../../hooks/useColorByColumns';
 import {
   COLOR_BY_NONE,
@@ -175,6 +176,12 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
   // How many tiles here could ever feed a group — quoted by the guide's first
   // step, so it speaks about this dashboard rather than the feature at large.
   const selectableCount = useMemo(() => selectionCapableCount(components), [components]);
+  // Tiles report whether the groups reached them (see `groupReach`). When every
+  // one that answered said no, the groups do nothing on this tab, and a reader
+  // looking here rather than at each tile's badge should be told.
+  const groupReach = useGroupReach();
+  const groupsReachNothing =
+    groups.length > 0 && colorBy.kind === 'groups' && noTileReceivesGroups(groupReach);
 
   // Column options, grouped per dataset when the dashboard spans several data
   // collections — a bare column name is ambiguous there ("which dataset's
@@ -382,6 +389,11 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
             />
           </span>
         </Tooltip>
+      )}
+      {groupsReachNothing && (
+        <Text size="xs" c="dimmed" mt={6}>
+          None of the components on this tab can receive these groups.
+        </Text>
       )}
 
       {/* ── Section 2: on-the-fly groups (creation + list) ──────────────── */}

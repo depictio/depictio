@@ -8,6 +8,8 @@
 // Realtime highlight keyframes (depictio-row-new / depictio-card-new). Imported
 // once here so consumers don't need to add the stylesheet manually.
 import './styles/realtime-highlight.css';
+// Before any Plot mounts: re-attach Plotly listeners after StrictMode's remount.
+import './plotlyStrictMode';
 
 // Grid + top-level renderer
 export { default as DashboardGrid } from './components/DashboardGrid';
