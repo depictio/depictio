@@ -1691,13 +1691,7 @@ tabs:
     data_collection_tag: macs2_consensus_fc
     use: macs2/consensus_signal_heatmap
     config:
-      value_columns:
-        - GM12878_FAST_R1.mLb.clN
-        - GM12878_FAST_R2.mLb.clN
-        - GM12878_OMNI_R1.mLb.clN
-        - GM12878_OMNI_R2.mLb.clN
-        - GM12878_STD_R1.mLb.clN
-        - GM12878_STD_R2.mLb.clN
+      value_columns_pattern: '\.mLb\.clN$'
       row_annotation_cols: [support]
       cluster_rows: true
       cluster_cols: true

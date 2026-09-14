@@ -1407,7 +1407,7 @@ tabs:
     data_collection_tag: macs2_consensus_fc
     use: macs2/consensus_signal_heatmap
     config:
-      value_columns: [EZH2_IP_NTKO_R1, EZH2_IP_NTKO_R2, EZH2_IP_TKO_R1, EZH2_IP_TKO_R2, FOXA1_IP_E2_R1, FOXA1_IP_E2_R2, FOXA1_IP_VEH_R1, FOXA1_IP_VEH_R2]
+      value_columns_pattern: '_R\d+$'
       row_annotation_cols: [consensus_set, support]
       cluster_rows: true
       cluster_cols: true
