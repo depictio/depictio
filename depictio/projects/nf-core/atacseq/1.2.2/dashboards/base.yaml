@@ -1655,13 +1655,8 @@ tabs:
     data_collection_tag: macs2_consensus_boolean
     use: macs2/consensus_upset
     config:
-      set_columns:
-        - GM12878_FAST_R1.mLb.clN
-        - GM12878_FAST_R2.mLb.clN
-        - GM12878_OMNI_R1.mLb.clN
-        - GM12878_OMNI_R2.mLb.clN
-        - GM12878_STD_R1.mLb.clN
-        - GM12878_STD_R2.mLb.clN
+      # Library columns of the run, whatever the samples; the replicate-level `.mRp.clN` set is left out.
+      set_columns_pattern: '\.mLb\.clN$'
       color_intersections_by: degree
       show_set_sizes: true
       show_values: true

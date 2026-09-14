@@ -1371,7 +1371,8 @@ tabs:
     data_collection_tag: macs2_consensus_boolean
     use: macs2/consensus_upset
     config:
-      set_columns: [EZH2_IP_NTKO_R1, EZH2_IP_NTKO_R2, EZH2_IP_TKO_R1, EZH2_IP_TKO_R2, FOXA1_IP_E2_R1, FOXA1_IP_E2_R2, FOXA1_IP_VEH_R1, FOXA1_IP_VEH_R2]
+      # Every sample column of the run: the pipeline names samples <group>_R<replicate>.
+      set_columns_pattern: '_R\d+$'
       color_intersections_by: degree
       show_set_sizes: true
       show_values: true

@@ -1751,6 +1751,36 @@ def _detect_upset_set_columns(df) -> list[str]:
     return detected
 
 
+def _resolve_upset_set_columns(
+    df, set_columns: list[str] | None, set_columns_pattern: str | None
+) -> list[str] | None:
+    """The set columns to draw, with a name pattern resolved against the frame.
+
+    A template whose sets are one column per sample of the run cannot list
+    them, so it names them by pattern. The pattern is matched with `re.search`
+    against the frame's binary columns only, in frame order, so a count or
+    coordinate column whose name happens to match never becomes a set. Without
+    a pattern `set_columns` passes through unchanged (None still auto-detects).
+    """
+    import re
+
+    if not set_columns_pattern:
+        return set_columns
+    if set_columns:
+        raise ValueError(
+            "compute_upset: set_columns and set_columns_pattern are mutually exclusive"
+        )
+    matcher = re.compile(set_columns_pattern)
+    binary = _detect_upset_set_columns(df)
+    matched = [c for c in binary if matcher.search(c)]
+    if not matched:
+        raise ValueError(
+            f"compute_upset: set_columns_pattern {set_columns_pattern!r} matches none of "
+            f"the {len(binary)} binary column(s) of the data collection: {binary[:20]}"
+        )
+    return matched
+
+
 def _upset_result_from_frame(
     df,
     *,
@@ -1772,6 +1802,18 @@ def _upset_result_from_frame(
     plot off a bundled fixture, where there is no Delta table to dispatch
     against. The caller owns loading, set narrowing and its own ``load_ms``.
     """
+    # A row in none of the drawn sets is the all-zero pattern, and plotly-upset
+    # draws it as a degree-0 bar: `exclude_empty` only drops patterns with no
+    # rows. It happens whenever the sets are a subset of the matrix, such as a
+    # pattern picking one of two consensus sets or a filter narrowing the sets.
+    # Missing columns are left for the library to report by name.
+    present_sets = [c for c in set_columns or [] if c in df.columns]
+    if present_sets:
+        import polars as pl
+
+        df = df.filter(
+            pl.any_horizontal([pl.col(c).cast(pl.Int64, strict=False) == 1 for c in present_sets])
+        )
     pdf = df.to_pandas()
     compute_started = time.monotonic()
     from plotly_upset import UpSetPlot
@@ -1925,6 +1967,7 @@ def compute_upset(payload: dict) -> dict:
         {
           "wf_id": str, "dc_id": str,
           "set_columns": [str] | null,
+          "set_columns_pattern": str | null,
           "sort_by": "cardinality" | "degree" | "degree-cardinality" | "input",
           "sort_order": "descending" | "ascending",
           "min_size": int, "max_degree": int | null,
@@ -1939,6 +1982,7 @@ def compute_upset(payload: dict) -> dict:
     wf_id = payload.get("wf_id")
     dc_id = payload.get("dc_id")
     set_columns = payload.get("set_columns")
+    set_columns_pattern = payload.get("set_columns_pattern") or None
     sort_by = str(payload.get("sort_by") or "cardinality")
     sort_order = str(payload.get("sort_order") or "descending")
     min_size = int(payload.get("min_size", 1))
@@ -1999,6 +2043,10 @@ def compute_upset(payload: dict) -> dict:
     # `set_columns` is usually null (the library auto-detects). Gating the
     # narrowing on an explicit `set_columns` made it a no-op for every
     # dashboard that didn't spell the sets out.
+    #
+    # A pattern names the sets without knowing the run's samples. It resolves
+    # first, so a filter over set names narrows the columns the pattern matched.
+    set_columns = _resolve_upset_set_columns(df, set_columns, set_columns_pattern)
     candidate_sets = list(set_columns) if set_columns else _detect_upset_set_columns(df)
     set_columns = _narrow_wide_matrix_columns(candidate_sets, filter_metadata) or set_columns
 

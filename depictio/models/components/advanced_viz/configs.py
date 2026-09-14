@@ -8,9 +8,10 @@ its ``config`` field; Pydantic discriminates by ``viz_kind``.
 
 from __future__ import annotations
 
+import re
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # The continuous colour scales every viz kind that exposes one offers. Single
 # definition on the Python side; its React twin lives in
@@ -588,6 +589,16 @@ class UpsetPlotConfig(_BaseVizConfig):
         default=None,
         description="Explicit list of set columns. None → auto-detect binary columns.",
     )
+    set_columns_pattern: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Regular expression naming the set columns, for a matrix whose set "
+            "columns are only known at ingest (one per sample of the run). Matched "
+            "with ``re.search`` against the binary columns of the loaded frame and "
+            "kept in frame order. Mutually exclusive with ``set_columns``."
+        ),
+    )
     sort_by: Literal["cardinality", "degree", "degree-cardinality", "input"] = Field(
         default="cardinality"
     )
@@ -622,6 +633,27 @@ class UpsetPlotConfig(_BaseVizConfig):
         default=True,
         description="Master toggle for the set-size bars and annotation tracks",
     )
+
+    @field_validator("set_columns_pattern")
+    @classmethod
+    def _set_columns_pattern_compiles(cls, v: str | None) -> str | None:
+        if v is not None:
+            try:
+                re.compile(v)
+            except re.error as exc:
+                raise ValueError(
+                    f"set_columns_pattern is not a valid regular expression: {exc}"
+                ) from exc
+        return v
+
+    @model_validator(mode="after")
+    def _sets_named_one_way(self) -> UpsetPlotConfig:
+        if self.set_columns is not None and self.set_columns_pattern is not None:
+            raise ValueError(
+                "set_columns and set_columns_pattern are mutually exclusive: list the "
+                "sets or name them by pattern, not both"
+            )
+        return self
 
 
 class PhylogeneticConfig(_BaseVizConfig):

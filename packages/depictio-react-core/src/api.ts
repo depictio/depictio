@@ -1270,6 +1270,8 @@ export interface UpsetPayload {
   wf_id: string;
   dc_id: string;
   set_columns?: string[] | null;
+  /** Regex picking the set columns by name; exclusive with `set_columns`. */
+  set_columns_pattern?: string | null;
   annotation_cols?: string[] | null;
   sort_by?: 'cardinality' | 'degree' | 'degree-cardinality' | 'input';
   sort_order?: 'descending' | 'ascending';
