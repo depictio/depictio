@@ -19,6 +19,8 @@
  *   CATALOG_E2E_RENDERS=first  only the first render of each output (fast smoke)
  *   CATALOG_E2E_BATCH=N        components per throwaway dashboard (default 6)
  *   CATALOG_E2E_LIMIT=N        stop after N renders per project (smoke run)
+ *   CATALOG_E2E_SHARD=K
+ *   CATALOG_E2E_SHARDS=N       walk only shard K of N (see SHARD below)
  */
 import { Page, expect as pwExpect } from "@playwright/test";
 import { test, expect, apiLogin } from "../../fixtures/auth";
@@ -40,6 +42,33 @@ const BATCH = Number(process.env.CATALOG_E2E_BATCH ?? 6);
 const FIRST_RENDER_ONLY = process.env.CATALOG_E2E_RENDERS === "first";
 // Smoke-run cap: exercise the first N renders of each project instead of all.
 const LIMIT = Number(process.env.CATALOG_E2E_LIMIT ?? 0);
+
+/**
+ * Which slice of the catalog this job owns.
+ *
+ * The walk is auth-mode independent — nothing on the catalog -> builder ->
+ * viewer path branches on public / demo / single-user mode — so the CI matrix's
+ * three legs were each re-walking the identical several hundred renders. They
+ * now take a shard each: the union is still the whole catalog, once per run, at
+ * a third of the wall clock, because the legs already run in parallel on
+ * separate stacks.
+ *
+ * Defaults to 1 of 1, i.e. the whole catalog, so a local run and any leg that
+ * does not set these keep full coverage.
+ */
+const SHARD = Number(process.env.CATALOG_E2E_SHARD ?? 1);
+const SHARDS = Number(process.env.CATALOG_E2E_SHARDS ?? 1);
+if (
+  !Number.isInteger(SHARD) ||
+  !Number.isInteger(SHARDS) ||
+  SHARDS < 1 ||
+  SHARD < 1 ||
+  SHARD > SHARDS
+) {
+  // Loud on purpose: a shard silently out of range is a third of the catalog
+  // quietly going unwalked while CI stays green.
+  throw new Error(`bad CATALOG_E2E_SHARD=${SHARD} of CATALOG_E2E_SHARDS=${SHARDS}`);
+}
 
 /**
  * Where a component of each type is *supposed* to render.
@@ -288,14 +317,26 @@ test.describe("catalog modules are usable on a dashboard", () => {
     const problems: string[] = [];
     let added = 0;
 
+    // Runs across projects, not per project, so each project is split evenly
+    // between the shards rather than by where its boundary happens to fall.
+    let seq = 0;
+
     for (const project of projects) {
-      let offers = flattenOffers(project.modules);
+      let offers = flattenOffers(project.modules)
+        // A stable order is what makes the union of the shards provably the
+        // whole catalog. Compose ordering is derived from the project document
+        // and is deterministic today; sorting removes the dependency on that.
+        .sort((a, b) => a.label.localeCompare(b.label));
       if (FIRST_RENDER_ONLY) offers = offers.filter((o) => o.renderIndex === 0);
       if (LIMIT > 0) offers = offers.slice(0, LIMIT);
+      // Round-robin rather than a contiguous slice: renders come grouped by
+      // tool and by type, so a contiguous third would hand one leg all the
+      // cheap cards and another all the MultiQC cold builds. A no-op at 1 of 1.
+      offers = offers.filter(() => seq++ % SHARDS === SHARD - 1);
 
       for (let start = 0; start < offers.length; start += BATCH) {
         const batch = offers.slice(start, start + BATCH);
-        const title = `e2e catalog ${project.id.slice(-6)} ${start / BATCH + 1}`;
+        const title = `e2e catalog ${project.id.slice(-6)} s${SHARD} ${start / BATCH + 1}`;
         // A full walk outlives an access token, and an expired one turns the
         // cleanup at the end of each batch into a silent 401 that leaves the
         // throwaway dashboards behind. One login per batch is cheap.
@@ -366,7 +407,10 @@ test.describe("catalog modules are usable on a dashboard", () => {
     }
 
     // eslint-disable-next-line no-console
-    console.log(`added ${added} catalog renders across ${projects.length} project(s)`);
+    const scope = SHARDS > 1 ? ` (shard ${SHARD} of ${SHARDS})` : "";
+    console.log(
+      `added ${added} catalog renders across ${projects.length} project(s)${scope}`,
+    );
     expect(added, "no catalog render was added at all").toBeGreaterThan(0);
     expect(problems, `\n${problems.join("\n")}\n`).toEqual([]);
   });
