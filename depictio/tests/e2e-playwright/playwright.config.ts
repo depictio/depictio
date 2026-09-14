@@ -50,13 +50,36 @@ export default defineConfig({
       // It runs in its own project below, gated to start only once every
       // other spec here has finished — otherwise its restore can silently
       // drop a data collection another spec is still relying on mid-run.
-      testIgnore: /admin\/backup-restore\.spec\.ts$/,
+      testIgnore: [
+        /admin\/backup-restore\.spec\.ts$/,
+        /catalog\/catalog-modules-on-dashboard\.spec\.ts$/,
+      ],
+    },
+    {
+      // The catalog walk: one test, an hour long, adding every render the
+      // catalog offers through the real picker. It gets its own project for two
+      // reasons that the shared settings get wrong.
+      //
+      // retries: a deterministic walk cannot pass on a second attempt, so the
+      // suite-wide 2 retries only ever tripled an already long failure — three
+      // attempts, two of them guaranteed to fail the same way. The genuinely
+      // flaky short specs keep their retries.
+      //
+      // video: a 55-minute 1080p screencast, encoded next to a full docker
+      // stack on a 4-vCPU runner, that nobody opens. Every failure is already a
+      // labelled line in the walk's own report.
+      name: "chromium-catalog-walk",
+      use: { ...devices["Desktop Chrome"], video: "off" },
+      testMatch: /catalog\/catalog-modules-on-dashboard\.spec\.ts$/,
+      retries: 0,
     },
     {
       name: "chromium-destructive",
       use: { ...devices["Desktop Chrome"] },
       testMatch: /admin\/backup-restore\.spec\.ts$/,
-      dependencies: ["chromium"],
+      // Both of the above, not just the first: the restore wipes every
+      // collection, so it must not start while the walk is still adding to one.
+      dependencies: ["chromium", "chromium-catalog-walk"],
     },
     // Uncomment to add cross-browser coverage:
     // { name: "firefox",  use: { ...devices["Desktop Firefox"] } },
