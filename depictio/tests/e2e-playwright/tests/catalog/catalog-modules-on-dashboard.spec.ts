@@ -444,6 +444,16 @@ test.describe("catalog modules are usable on a dashboard", () => {
         } finally {
           await deleteDashboard(request, tokens, dashboardId);
         }
+        // The list reporter writes a line only when a *test* ends, and this
+        // walk is one test that owns its worker for twenty minutes, so the CI
+        // log sat silent the whole time and a run in flight was indistinguish-
+        // able from a hung one. One line per throwaway dashboard is enough to
+        // tell them apart, and cheap next to the six page loads it follows.
+        // eslint-disable-next-line no-console
+        console.log(
+          `  … ${Math.min(start + BATCH, offers.length)}/${offers.length} of ${project.name}` +
+            `, ${problems.length} problem(s) so far`,
+        );
       }
     }
 
