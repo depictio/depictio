@@ -321,11 +321,12 @@ test.describe("catalog modules are usable on a dashboard", () => {
       projects.length === 0,
       "no ingested tool output on this stack — nothing for the catalog to match",
     );
-    // Still generous — the walk is one browser doing a full add cycle per
-    // render — but a shard split across lanes is a fraction of the old whole,
-    // and an hour of budget is an hour of budget actually spent when the walk
-    // hangs rather than fails.
-    test.setTimeout(30 * 60_000);
+    // A shard is a third of the catalog, around 18 minutes of steady walking,
+    // and a slow MultiQC report can add several minutes of legitimate waiting
+    // on top. 40 leaves room for that without the old hour, which was an hour
+    // actually spent whenever the walk hung rather than failed — the job's own
+    // timeout-minutes is the backstop for a genuine hang.
+    test.setTimeout(40 * 60_000);
 
     // Programmatic login only seeds storage — the SPA reads it on first load.
     await page.addInitScript(
