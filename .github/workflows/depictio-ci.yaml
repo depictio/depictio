@@ -2853,6 +2853,7 @@ jobs:
           CATALOG_CONFORMANCE_REQUIRED=1 \
           CATALOG_E2E_SHARD=${{ matrix.catalog_shard }} \
           CATALOG_E2E_SHARDS=3 \
+          CATALOG_E2E_LANES=2 \
           PLAYWRIGHT_BASE_URL=http://localhost:5080 \
           PLAYWRIGHT_API_URL=http://localhost:8058 \
           npx playwright test
