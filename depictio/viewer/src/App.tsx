@@ -1332,6 +1332,7 @@ const App: React.FC = () => {
             onClose={() => setFunnelViewOpen(false)}
             dashboardId={dashboardId}
             filters={deferredFilters}
+            groups={groupsApi.groups}
           />
         )}
         {dashboard && dashboardId && !inspectorEnabled && (
