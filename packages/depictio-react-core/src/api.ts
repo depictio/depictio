@@ -4039,12 +4039,15 @@ export interface MonitoringIngestionRun {
   project_config_path?: string | null;
   data_root?: string | null;
   data_collections?: MonitoringIngestionDataCollection[];
-  status: 'running' | 'success' | 'partial' | 'failed';
+  /** `abandoned`: still `running` when no write arrived within the stale threshold. */
+  status: 'running' | 'success' | 'partial' | 'failed' | 'interrupted' | 'abandoned';
   steps?: { name: string; status: string; detail?: string | null }[];
   /** Step currently running (live async ingestion); null for finished runs. */
   current_step?: string | null;
   error?: string | null;
   started_at?: string;
+  /** Last write to the record; what the stale sweep measures from. */
+  updated_at?: string | null;
   finished_at?: string | null;
 }
 

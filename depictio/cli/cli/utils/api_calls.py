@@ -481,8 +481,13 @@ def api_monitoring_ingestion_finish(
     error: str | None = None,
     project_id: str | None = None,
     data_collections: list[dict] | None = None,
+    timeout: float = 30.0,
 ) -> None:
-    """Close a server-side ingestion-run record. Best-effort; never raises."""
+    """Close a server-side ingestion-run record. Best-effort; never raises.
+
+    ``timeout`` is shortened on error exits so an unreachable server cannot hold
+    up a Ctrl-C or a failed run for long.
+    """
     if not run_id:
         return
     try:
@@ -495,7 +500,7 @@ def api_monitoring_ingestion_finish(
             "data_collections": data_collections or [],
         }
         get_http_client().post(
-            url, json=payload, headers=generate_api_headers(CLI_config), timeout=30.0
+            url, json=payload, headers=generate_api_headers(CLI_config), timeout=timeout
         )
     except Exception as exc:
         logger.debug(f"Monitoring ingestion finish failed (non-fatal): {exc}")

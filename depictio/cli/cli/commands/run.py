@@ -1,3 +1,8 @@
+import functools
+import os
+import signal
+from collections.abc import Callable
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Annotated
 
@@ -115,6 +120,164 @@ def _ingestion_data_collections(project_config) -> list[dict]:
     return out
 
 
+# How long an error exit waits for the server to record the outcome. Short, so
+# a Ctrl-C against an unreachable server still returns promptly.
+_ERROR_REPORT_TIMEOUT = 5.0
+
+
+class _TerminatedBySignal(SystemExit):
+    """SIGTERM turned into an exception, so the run can report before it exits.
+
+    A ``SystemExit`` so the steps' ``except Exception`` blocks let it through,
+    carrying ``128 + signum`` so the process still exits with the status a
+    scheduler expects from a terminated job.
+    """
+
+
+class _IngestionRecord:
+    """The server-side monitoring record of one ``run`` invocation.
+
+    ``run`` fills it in as it goes (run id once opened, steps, project id) and
+    closes it with the final tally at the summary. ``_closes_ingestion_record``
+    closes it on every other way out, so an error exit, a Ctrl-C or a SIGTERM no
+    longer leaves the run "running" forever.
+    """
+
+    def __init__(self) -> None:
+        self.run_id: str | None = None
+        self.CLI_config = None
+        self.project_config = None
+        self.project_id: str | None = None
+        self.steps: list[dict] = []
+        # Last step entered, so an interruption can name what it cut short.
+        self.current_step: str | None = None
+        self.closed = False
+
+    def close(self, status: str, error: str | None = None, timeout: float = 30.0) -> None:
+        """Report the outcome, once. Best-effort: never raises."""
+        if self.closed or not self.run_id:
+            return
+        self.closed = True
+        try:
+            api_monitoring_ingestion_finish(
+                CLI_config=self.CLI_config,
+                run_id=self.run_id,
+                status=status,
+                steps=self.steps,
+                error=error,
+                project_id=self.project_id,
+                data_collections=_ingestion_data_collections(self.project_config),
+                timeout=timeout,
+            )
+        except Exception as exc:
+            logger.debug(f"Could not close the monitoring ingestion record (non-fatal): {exc}")
+
+
+def _describe_abnormal_exit(
+    exc: BaseException, record: _IngestionRecord
+) -> tuple[str, str, dict | None]:
+    """Status, error message and optional extra step for a run that never
+    reached its summary."""
+    if isinstance(exc, (KeyboardInterrupt, typer.Abort, _TerminatedBySignal)):
+        cause = "Terminated (SIGTERM)" if isinstance(exc, _TerminatedBySignal) else "Interrupted"
+        step = record.current_step
+        # Steps are recorded when they end, so an unrecorded current step is
+        # the one the interruption cut short.
+        if step and not any(s.get("name") == step for s in record.steps):
+            return (
+                "interrupted",
+                f"{cause} during step '{step}'",
+                {"name": step, "status": "interrupted", "detail": cause},
+            )
+        return "interrupted", cause, None
+    if isinstance(exc, (typer.Exit, SystemExit)):
+        for s in reversed(record.steps):
+            if s.get("status") == "failed":
+                return (
+                    "failed",
+                    f"Step '{s['name']}' failed: {s.get('detail') or 'no detail'}",
+                    None,
+                )
+        code = exc.exit_code if isinstance(exc, typer.Exit) else exc.code
+        return "failed", f"Exited with code {code}", None
+    return "failed", f"{type(exc).__name__}: {exc}", None
+
+
+def _raise_on_sigterm() -> Callable[[], None]:
+    """Turn SIGTERM into ``_TerminatedBySignal`` until the returned undo runs.
+
+    Schedulers and containers stop a job with SIGTERM, whose default action
+    ends Python without unwinding, so the record would stay open. SIGKILL cannot
+    be caught; the server's stale-run sweep covers that. Only the main thread
+    may install handlers, so elsewhere this does nothing.
+    """
+    owner_pid = os.getpid()
+    try:
+        previous = signal.getsignal(signal.SIGTERM)
+        restored = previous if previous is not None else signal.SIG_DFL
+
+        def _handler(signum, frame):
+            if os.getpid() != owner_pid:
+                # A forked worker (the MultiQC parse pool) inherited this
+                # handler: die the default way instead of unwinding the run.
+                signal.signal(signum, signal.SIG_DFL)
+                os.kill(os.getpid(), signum)
+                return
+            # Restore first, so a second SIGTERM while reporting ends it at once.
+            signal.signal(signum, restored)
+            raise _TerminatedBySignal(128 + signum)
+
+        signal.signal(signal.SIGTERM, _handler)
+    except (ValueError, OSError):
+        return lambda: None
+
+    def _restore() -> None:
+        try:
+            signal.signal(signal.SIGTERM, restored)
+        except (ValueError, OSError):
+            pass
+
+    return _restore
+
+
+_active_ingestion_record: ContextVar[_IngestionRecord | None] = ContextVar(
+    "depictio_active_ingestion_record", default=None
+)
+
+
+def _closes_ingestion_record(command: Callable[..., None]) -> Callable[..., None]:
+    """Close the run's monitoring record however ``command`` exits.
+
+    Wraps the whole command rather than adding a try/finally inside it: every
+    step exits on its own with ``typer.Exit``, and a Ctrl-C or SIGTERM can land
+    anywhere. The exception is always re-raised unchanged, so the exit code is
+    what it would have been without monitoring.
+    """
+
+    @functools.wraps(command)
+    def wrapper(*args, **kwargs):
+        record = _IngestionRecord()
+        token = _active_ingestion_record.set(record)
+        restore_sigterm = _raise_on_sigterm()
+        try:
+            return command(*args, **kwargs)
+        except BaseException as exc:
+            if record.run_id and not record.closed:
+                try:
+                    status, error, step = _describe_abnormal_exit(exc, record)
+                    if step:
+                        record.steps.append(step)
+                    record.close(status, error, timeout=_ERROR_REPORT_TIMEOUT)
+                except Exception as report_exc:
+                    logger.debug(f"Could not report the run's exit (non-fatal): {report_exc}")
+            raise
+        finally:
+            restore_sigterm()
+            _active_ingestion_record.reset(token)
+
+    return wrapper
+
+
 def _write_provisioned_cli_config(base_raw_config: dict, provision: dict) -> str:
     """Write a temporary CLI config that runs the pipeline as the provisioned user.
 
@@ -218,6 +381,7 @@ def attach_run_to_project(project_config, remote_project: dict) -> dict:
 
 def register_run_command(app: typer.Typer):
     @app.command("run")
+    @_closes_ingestion_record
     def run(
         CLI_config_path: Annotated[
             str, typer.Option("--CLI-config-path", help="Path to the configuration file")
@@ -588,15 +752,16 @@ def register_run_command(app: typer.Typer):
             total_steps += 1
 
         # Server-side monitoring record for this ingestion run (best-effort).
-        ingestion_run_id: str | None = None
+        # ``_closes_ingestion_record`` owns it, so every exit path reports how the
+        # run ended; the body fills in the run id, project and steps as it goes.
+        # Its ``project_id`` is the server-side id, resolved once available
+        # (post-sync) and patched onto the record at finish.
+        ingestion = _active_ingestion_record.get() or _IngestionRecord()
         # Per-phase step ledger sent to the monitoring endpoint at finish. Populated
         # by ``_rec`` from the very start so successful phases that ran before the
         # record is opened (server/S3/validate) are still reported. Best-effort:
         # recording must never affect the ingestion itself.
-        run_steps: list[dict] = []
-        # Server-side project id, resolved once available (post-sync); patched onto
-        # the monitoring record at finish.
-        resolved_project_id: str | None = None
+        run_steps = ingestion.steps
 
         def _rec(name: str, status: str, detail: str | None = None) -> None:
             run_steps.append({"name": name, "status": status, "detail": detail})
@@ -881,7 +1046,9 @@ def register_run_command(app: typer.Typer):
         if not dry_run:
             try:
                 _proj = locals().get("project_config")
-                ingestion_run_id = api_monitoring_ingestion_start(
+                ingestion.CLI_config = CLI_config
+                ingestion.project_config = _proj
+                ingestion.run_id = api_monitoring_ingestion_start(
                     CLI_config=CLI_config,
                     command="run",
                     project_name=getattr(_proj, "name", None),
@@ -892,13 +1059,14 @@ def register_run_command(app: typer.Typer):
                     data_root=str(data_root) if data_root else None,
                 )
             except Exception:
-                ingestion_run_id = None
+                ingestion.run_id = None
 
         # Step 4: Sync project configuration to server
         if not skip_sync:
             rich_print_section_separator(
                 f"Step 4/{total_steps}: Syncing project configuration to server"
             )
+            ingestion.current_step = "sync_project"
             try:
                 if not dry_run:
                     project_config_dict = convert_model_to_dict(project_config)
@@ -952,9 +1120,9 @@ def register_run_command(app: typer.Typer):
                                 remote = api_get_project_from_id(pid, CLI_config)
                         if remote.status_code == 200:
                             proj_data = remote.json()
-                            resolved_project_id = (
+                            ingestion.project_id = (
                                 str(proj_data.get("_id") or proj_data.get("id") or "")
-                                or resolved_project_id
+                                or ingestion.project_id
                             )
                             tag_to_id: dict[str, str] = {}
                             for wf in proj_data.get("workflows", []):
@@ -1011,6 +1179,7 @@ def register_run_command(app: typer.Typer):
         # Step 5: Scan data files
         if not skip_scan:
             rich_print_section_separator(f"Step 5/{total_steps}: Scanning data files")
+            ingestion.current_step = "scan"
             try:
                 if not dry_run:
                     # Get remote project configuration to compare hashes
@@ -1023,9 +1192,9 @@ def register_run_command(app: typer.Typer):
                         remote_json = remote_project_config.json()
                         local_hash = project_config.hash
                         remote_hash = remote_json.get("hash", None)
-                        resolved_project_id = (
+                        ingestion.project_id = (
                             str(remote_json.get("_id") or remote_json.get("id") or "")
-                            or resolved_project_id
+                            or ingestion.project_id
                         )
                         logger.info(f"Local & Remote hashes: {local_hash} & {remote_hash}")
 
@@ -1069,6 +1238,7 @@ def register_run_command(app: typer.Typer):
         # Step 6: Process data collections
         if not skip_process:
             rich_print_section_separator(f"Step 6/{total_steps}: Processing data collections")
+            ingestion.current_step = "process"
             try:
                 if not dry_run:
                     # Get remote project configuration again for processing
@@ -1133,6 +1303,7 @@ def register_run_command(app: typer.Typer):
         # Step 7: Execute table joins
         if not skip_join:
             rich_print_section_separator(f"Step 7/{total_steps}: Executing table joins")
+            ingestion.current_step = "joins"
             try:
                 if not dry_run:
                     # Check if project has joins defined
@@ -1191,6 +1362,7 @@ def register_run_command(app: typer.Typer):
         # Step 8: Import dashboards (from the template, or from --dashboard)
         if not skip_dashboard_import and template_dashboard_paths:
             rich_print_section_separator(f"Step {total_steps}/{total_steps}: Importing dashboards")
+            ingestion.current_step = "dashboard_import"
             try:
                 if not dry_run:
                     from depictio.cli.cli.utils.templates import (
@@ -1206,7 +1378,7 @@ def register_run_command(app: typer.Typer):
                     if remote_project.status_code == 200:
                         remote_project_data = remote_project.json()
                         project_id = remote_project_data.get("_id") or remote_project_data.get("id")
-                        resolved_project_id = str(project_id or "") or resolved_project_id
+                        ingestion.project_id = str(project_id or "") or ingestion.project_id
 
                     results = import_dashboards_from_template(
                         dashboard_paths=template_dashboard_paths,
@@ -1307,9 +1479,9 @@ def register_run_command(app: typer.Typer):
             # Best effort by design: a missing link must never fail a run that
             # otherwise worked, and an older server simply does not report it.
             logger.debug(f"Could not resolve the viewer URL: {e}")
-        if viewer_url and resolved_project_id:
+        if viewer_url and ingestion.project_id:
             rich_print_checked_statement(
-                f"Project: {viewer_url}/projects/{resolved_project_id}", "info"
+                f"Project: {viewer_url}/projects/{ingestion.project_id}", "info"
             )
         for dashboard_title, dashboard_id in imported_dashboards:
             if viewer_url:
@@ -1333,20 +1505,11 @@ def register_run_command(app: typer.Typer):
                 "warning",
             )
 
-        # Close the monitoring ingestion record (best-effort).
-        if ingestion_run_id:
-            final_status = "success" if success_count == total_steps else "partial"
-            # Send the per-phase step ledger recorded by ``_rec`` throughout the run.
-            # The overall status rides on ``status`` (shown as the header badge in
-            # the admin UI), so no separate summary row is needed.
-            api_monitoring_ingestion_finish(
-                CLI_config=CLI_config,
-                run_id=ingestion_run_id,
-                status=final_status,
-                steps=run_steps,
-                project_id=resolved_project_id,
-                data_collections=_ingestion_data_collections(locals().get("project_config")),
-            )
+        # Close the monitoring ingestion record (best-effort; a no-op when it
+        # was never opened). Sends the per-phase step ledger recorded by ``_rec``
+        # throughout the run. The overall status rides on ``status`` (shown as
+        # the header badge in the admin UI), so no separate summary row is needed.
+        ingestion.close("success" if success_count == total_steps else "partial")
 
         # A run that did not complete every step is a failure for automation
         # purposes — exit non-zero so CI can detect it (even under

@@ -966,6 +966,13 @@ class MonitoringConfig(BaseSettings):
         description="Push live task/ingestion status changes over the events WebSocket "
         "(only active when events.enabled is also true)",
     )
+    ingestion_stale_after_hours: int = Field(
+        default=24,
+        description="Mark a 'running' ingestion run as 'abandoned' once its record has seen no "
+        "write for this many hours (the CLI was killed or lost its connection). The CLI "
+        "sends no heartbeat during a run, so keep this above your longest ingestion. "
+        "0 disables the sweep.",
+    )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_MONITORING_")
 

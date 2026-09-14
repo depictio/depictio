@@ -26,6 +26,7 @@ import { CodeHighlight } from '@mantine/code-highlight';
 import { Icon } from '@iconify/react';
 
 import {
+  INGESTION_STATUSES,
   fetchAppLogs,
   fetchIngestionRuns,
   fetchLogCaptureLevel,
@@ -33,9 +34,12 @@ import {
   fetchMonitoringTasks,
   setLogCaptureLevel,
   useMonitoringEvents,
+  type IngestionFilters,
+  type IngestionStatusFilter,
   type MonitoringAppLog,
   type MonitoringHealth,
   type MonitoringIngestionRun,
+  type MonitoringPane,
   type MonitoringTaskEvent,
 } from 'depictio-react-core';
 
@@ -51,9 +55,11 @@ import { useCurrentUser } from '../hooks/useCurrentUser';
  *
  * Hidden in public/demo mode (no real admin surface) — the parent AdminApp
  * already gates on `is_admin`, and we additionally bail in those modes here.
+ *
+ * The open pane and the Ingestion filters are owned by AdminApp, which keeps
+ * them in the URL (`/admin/<pane>?status=...`) so a refresh, Back/Forward or a
+ * shared link restores the view.
  */
-
-type Pane = 'tasks' | 'ingestion' | 'logs' | 'health';
 
 const REFRESH_MS = 8000;
 
@@ -67,6 +73,8 @@ const STATUS_COLORS: Record<string, string> = {
   revoked: 'gray',
   pending: 'gray',
   partial: 'orange',
+  interrupted: 'pink',
+  abandoned: 'gray',
 };
 
 const KIND_COLORS: Record<string, string> = {
@@ -318,26 +326,34 @@ function usePolling<T>(
   const [error, setError] = useState<string | null>(null);
   const loadRef = useRef(load);
   loadRef.current = load;
+  // Only the latest request may land: after a filter change, a slower response
+  // for the previous filters must not overwrite the new list.
+  const latestRequest = useRef(0);
 
   const refresh = useCallback(async () => {
+    const request = ++latestRequest.current;
     setLoading(true);
     try {
       const result = await loadRef.current();
+      if (request !== latestRequest.current) return;
       setData(result);
       setError(null);
     } catch (err) {
+      if (request !== latestRequest.current) return;
       setError(err instanceof Error ? err.message : 'Failed to load');
     } finally {
-      setLoading(false);
+      if (request === latestRequest.current) setLoading(false);
     }
   }, []);
 
+  // `load` is a dependency so a filter change refetches at once, instead of
+  // waiting for the next tick (or forever, with Auto off).
   useEffect(() => {
     void refresh();
     if (!auto) return undefined;
     const id = setInterval(() => void refresh(), REFRESH_MS);
     return () => clearInterval(id);
-  }, [auto, refresh]);
+  }, [auto, refresh, load]);
 
   // Live push: refresh on each signal bump (skip the initial 0 to avoid a
   // duplicate of the mount fetch above).
@@ -543,18 +559,108 @@ const TasksPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
 
 // ── Ingestion pane ──────────────────────────────────────────────────────────
 
-const IngestionPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
+/** Instance labels and project names seen in ingestion runs, for the Ingestion
+ *  pane's selects. `projects` maps project id to name. */
+interface RunFilterOptions {
+  instances: string[];
+  projects: Record<string, string>;
+}
+
+/** Fold `runs` into `prev`, returning `prev` itself when nothing is new so a
+ *  poll that brings no new instance or project doesn't re-render. */
+function mergeRunFilterOptions(
+  prev: RunFilterOptions,
+  runs: MonitoringIngestionRun[],
+): RunFilterOptions {
+  let { instances, projects } = prev;
+  for (const r of runs) {
+    const label = r.cli_instance_label;
+    if (label && !instances.includes(label)) instances = [...instances, label];
+    if (r.project_id) {
+      const name = r.project_name || projects[r.project_id] || r.project_id;
+      if (projects[r.project_id] !== name) projects = { ...projects, [r.project_id]: name };
+    }
+  }
+  return instances === prev.instances && projects === prev.projects
+    ? prev
+    : { instances, projects };
+}
+
+/** Instance select entries, sorted. The selected value stays listed even when
+ *  no fetched run carries it (a shared link to a quiet instance). */
+function instanceSelectData(options: RunFilterOptions, selected: string | null): string[] {
+  const values = new Set(options.instances);
+  if (selected) values.add(selected);
+  return [...values].sort((a, b) => a.localeCompare(b));
+}
+
+/** Project select entries sorted by name, the id's tail appended when several
+ *  projects share a name. The selected id stays listed, as above. */
+function projectSelectData(
+  options: RunFilterOptions,
+  selected: string | null,
+): { value: string; label: string }[] {
+  const entries = Object.entries(options.projects);
+  if (selected && !(selected in options.projects)) entries.push([selected, selected]);
+  const counts = new Map<string, number>();
+  for (const [, name] of entries) counts.set(name, (counts.get(name) ?? 0) + 1);
+  return entries
+    .map(([id, name]) => ({
+      value: id,
+      label: (counts.get(name) ?? 0) > 1 ? `${name} (${id.slice(-6)})` : name,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+const IngestionPane: React.FC<{
+  liveSignal: number;
+  filters: IngestionFilters;
+  onFiltersChange: (next: IngestionFilters) => void;
+}> = ({ liveSignal, filters, onFiltersChange }) => {
+  const { status, instance, projectId, q } = filters;
   const [auto, setAuto] = useState(true);
-  const [q, setQ] = useState('');
   // Controlled open rows: only the expanded run mounts its field grid + steps
   // table, keeping a large run list light on load and on refresh.
   const [open, setOpen] = useState<string[]>([]);
-  const load = useCallback(() => fetchIngestionRuns({ limit: 200 }), []);
+  // Status, instance and project filter server-side, so matches older than the
+  // 200 newest runs still show; the text search narrows what came back.
+  const load = useCallback(
+    () =>
+      fetchIngestionRuns({
+        status: status || undefined,
+        instance: instance || undefined,
+        projectId: projectId || undefined,
+        limit: 200,
+      }),
+    [status, instance, projectId],
+  );
   const { data, loading, error, refresh } = usePolling<MonitoringIngestionRun[]>(
     load,
     auto,
     liveSignal,
   );
+
+  // Select options accumulate over every response, seeded by one unfiltered
+  // fetch, so narrowing to one instance doesn't shrink the list to that one.
+  const [options, setOptions] = useState<RunFilterOptions>({ instances: [], projects: {} });
+  useEffect(() => {
+    let cancelled = false;
+    fetchIngestionRuns({ limit: 500 })
+      .then((all) => {
+        if (!cancelled) setOptions((prev) => mergeRunFilterOptions(prev, all));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  useEffect(() => {
+    if (data) setOptions((prev) => mergeRunFilterOptions(prev, data));
+  }, [data]);
+
+  const setFilter = (patch: Partial<IngestionFilters>) =>
+    onFiltersChange({ ...filters, ...patch });
+  const filtered = Boolean(status || instance || projectId || q.trim());
   const runs = (data ?? []).filter((r) =>
     matchesQuery(
       q,
@@ -577,7 +683,41 @@ const IngestionPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
         auto={auto}
         onAuto={setAuto}
         onRefresh={() => void refresh()}
-        extra={<SearchInput value={q} onChange={setQ} />}
+        extra={
+          <Group gap="xs" wrap="nowrap">
+            <SearchInput value={q} onChange={(v) => setFilter({ q: v })} />
+            <Select
+              size="xs"
+              placeholder="Status"
+              clearable
+              w={120}
+              value={status}
+              onChange={(v) => setFilter({ status: v as IngestionStatusFilter | null })}
+              data={[...INGESTION_STATUSES]}
+            />
+            <Select
+              size="xs"
+              placeholder="Instance"
+              clearable
+              searchable
+              w={150}
+              value={instance}
+              onChange={(v) => setFilter({ instance: v })}
+              data={instanceSelectData(options, instance)}
+            />
+            <Select
+              size="xs"
+              placeholder="Project"
+              clearable
+              searchable
+              w={190}
+              value={projectId}
+              onChange={(v) => setFilter({ projectId: v })}
+              data={projectSelectData(options, projectId)}
+              nothingFoundMessage="No matching project"
+            />
+          </Group>
+        }
       />
       {error && (
         <Alert color="red" variant="light" icon={<Icon icon="mdi:alert-circle" />}>
@@ -586,7 +726,7 @@ const IngestionPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
       )}
       {!loading && runs.length === 0 && !error ? (
         <Text size="xs" c="dimmed">
-          No ingestion runs recorded.
+          {filtered ? 'No ingestion runs match these filters.' : 'No ingestion runs recorded.'}
         </Text>
       ) : (
         <ScrollArea h={PANE_SCROLL_H} type="auto">
@@ -602,7 +742,8 @@ const IngestionPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
             <Accordion.Item key={r.run_id} value={r.run_id}>
               <Accordion.Control>
                 <Group gap="sm" wrap="nowrap">
-                  <Box w={84} style={{ flexShrink: 0 }}>
+                  {/* Wider than the Tasks column: fits "interrupted". */}
+                  <Box w={96} style={{ flexShrink: 0 }}>
                     <Badge
                       size="xs"
                       fullWidth
@@ -1075,9 +1216,22 @@ const HealthPane: React.FC = () => {
 
 // ── Panel shell ──────────────────────────────────────────────────────────────
 
-const AdminMonitoringPanel: React.FC = () => {
+interface AdminMonitoringPanelProps {
+  /** Open pane; AdminApp mirrors it in the path (`/admin/<pane>`). */
+  pane: MonitoringPane;
+  onPaneChange: (pane: MonitoringPane) => void;
+  /** Ingestion pane filters; AdminApp mirrors them in the query string. */
+  ingestionFilters: IngestionFilters;
+  onIngestionFiltersChange: (filters: IngestionFilters) => void;
+}
+
+const AdminMonitoringPanel: React.FC<AdminMonitoringPanelProps> = ({
+  pane,
+  onPaneChange,
+  ingestionFilters,
+  onIngestionFiltersChange,
+}) => {
   const { isPublicMode, isDemoMode, isSingleUserMode } = useCurrentUser();
-  const [pane, setPane] = useState<Pane>('tasks');
   const [liveSignal, setLiveSignal] = useState(0);
 
   // Match AdminApp's gate: single-user always allowed; only pure public/demo hides.
@@ -1114,7 +1268,13 @@ const AdminMonitoringPanel: React.FC = () => {
   const body = useMemo(() => {
     switch (pane) {
       case 'ingestion':
-        return <IngestionPane liveSignal={liveSignal} />;
+        return (
+          <IngestionPane
+            liveSignal={liveSignal}
+            filters={ingestionFilters}
+            onFiltersChange={onIngestionFiltersChange}
+          />
+        );
       case 'logs':
         return <LogsPane />;
       case 'health':
@@ -1122,7 +1282,7 @@ const AdminMonitoringPanel: React.FC = () => {
       default:
         return <TasksPane liveSignal={liveSignal} />;
     }
-  }, [pane, liveSignal]);
+  }, [pane, liveSignal, ingestionFilters, onIngestionFiltersChange]);
 
   if (!visible) {
     return (
@@ -1138,7 +1298,7 @@ const AdminMonitoringPanel: React.FC = () => {
         <SegmentedControl
           size="xs"
           value={pane}
-          onChange={(v) => setPane(v as Pane)}
+          onChange={(v) => onPaneChange(v as MonitoringPane)}
           data={[
             { value: 'tasks', label: 'Tasks' },
             { value: 'ingestion', label: 'Ingestion' },

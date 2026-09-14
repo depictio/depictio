@@ -85,7 +85,11 @@ class TaskEvent(BaseModel):
 
 # ── CLI ingestion ledger ────────────────────────────────────────────────────
 
-IngestionStatus = Literal["running", "success", "partial", "failed"]
+# ``interrupted``: the CLI reported a Ctrl-C or termination signal before
+# finishing. ``abandoned``: the server swept a ``running`` record that saw no
+# write for ``monitoring.ingestion_stale_after_hours`` (killed process, lost
+# connection); a late ``finish`` from the client still overwrites it.
+IngestionStatus = Literal["running", "success", "partial", "failed", "interrupted", "abandoned"]
 
 
 class IngestionStep(BaseModel):
@@ -172,6 +176,10 @@ class IngestionRun(BaseModel):
     error: Optional[str] = Field(default=None, description="Failure message if the run failed")
     started_at: datetime = Field(default_factory=datetime.now)
     finished_at: Optional[datetime] = Field(default=None, description="When the run completed")
+    updated_at: Optional[datetime] = Field(
+        default=None,
+        description="Last write to the record (start, step, finish); the stale-run sweep keys on it",
+    )
 
     model_config = ConfigDict(extra="forbid")
 

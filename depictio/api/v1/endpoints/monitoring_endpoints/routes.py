@@ -109,7 +109,7 @@ class IngestionStartRequest(BaseModel):
 
 
 class IngestionFinishRequest(BaseModel):
-    status: str = Field(default="success", description="running|success|partial|failed")
+    status: str = Field(default="success", description="running|success|partial|failed|interrupted")
     steps: list[IngestionStep] = Field(default_factory=list)
     error: Optional[str] = None
     # Resolved mid-run (the CLI often only learns the server-side project id after
@@ -238,6 +238,7 @@ def list_ingestion(
 ):
     """List CLI ingestion runs, newest-first, with optional filters."""
     _require_admin(current_user)
+    store.mark_stale_ingestion_runs()
     return {
         "runs": store.query_ingestion_runs(
             instance=instance, status=status, project_id=project_id, limit=limit, skip=skip
@@ -248,6 +249,7 @@ def list_ingestion(
 @monitoring_endpoint_router.get("/ingestion/{run_id}")
 def get_ingestion(run_id: str, current_user: User = Depends(get_current_user)):
     _require_admin(current_user)
+    store.mark_stale_ingestion_runs()
     run = store.get_ingestion_run(run_id)
     if not run:
         raise HTTPException(status_code=404, detail="Ingestion run not found.")
