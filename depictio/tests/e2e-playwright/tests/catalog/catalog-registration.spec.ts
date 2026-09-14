@@ -38,6 +38,13 @@ test.describe("catalog registration", () => {
   let projects: CatalogProject[] = [];
 
   test.beforeAll(async ({ request }) => {
+    // Hooks take their budget from the project timeout (60s), not from the
+    // test's own setTimeout, and describe.configure({ timeout }) does not reach
+    // them either — so this has to be set here. One login plus a compose call
+    // per catalog project on the stack does not fit in 60s once the login
+    // limiter makes apiLogin back off, and the whole suite then failed before
+    // the first assertion ran.
+    test.setTimeout(180_000);
     tokens = await apiLogin(request, credentials.adminUser.email, credentials.adminUser.password);
     projects = await findCatalogProjects(request, tokens);
   });

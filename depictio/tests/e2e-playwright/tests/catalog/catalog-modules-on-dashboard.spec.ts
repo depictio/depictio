@@ -29,6 +29,7 @@ import {
   deleteDashboard,
   findCatalogProjects,
   flattenOffers,
+  MULTIQC_WARM_TIMEOUT_MS,
   storedComponentIds,
   waitForMultiqcOptions,
   CatalogProject,
@@ -229,6 +230,15 @@ test.describe("catalog modules are usable on a dashboard", () => {
   let projects: CatalogProject[] = [];
 
   test.beforeAll(async ({ request }) => {
+    // Hooks take their budget from the project timeout (60s), not from the
+    // test's own setTimeout, and describe.configure({ timeout }) does not reach
+    // them either — so this has to be set here. The dominant term is the
+    // MultiQC warm-up at the bottom of this hook, so the budget is derived from
+    // it: a hook that expires first reports a bare hook timeout and fails every
+    // lane at 0ms, hiding the collection that actually never warmed up. The
+    // slack on top covers the login (up to ~52s of limiter backoff) and one
+    // compose call per catalog project on the stack.
+    test.setTimeout(MULTIQC_WARM_TIMEOUT_MS + 120_000);
     tokens = await apiLogin(request, credentials.adminUser.email, credentials.adminUser.password);
     projects = await findCatalogProjects(request, tokens);
 

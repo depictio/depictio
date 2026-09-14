@@ -305,11 +305,19 @@ export async function addCatalogRender(
  * real one: a data collection that never warms up is reported, and the walk
  * runs anyway so the non-MultiQC renders are still covered.
  */
+/**
+ * How long the warm-up below waits for the whole set. Exported because a
+ * caller's hook timeout has to be derived from it rather than guessed: a hook
+ * that expires first turns a readable "never came up" report into a bare hook
+ * timeout, and costs the attempt on top.
+ */
+export const MULTIQC_WARM_TIMEOUT_MS = 300_000;
+
 export async function waitForMultiqcOptions(
   request: APIRequestContext,
   tokens: TokenBundle,
   dcIds: string[],
-  timeoutMs = 300_000,
+  timeoutMs = MULTIQC_WARM_TIMEOUT_MS,
 ): Promise<string[]> {
   const cold: string[] = [];
   // One deadline for the whole set, not one per collection: on a stack where
