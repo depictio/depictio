@@ -136,13 +136,19 @@ const CONTENT_SELECTOR: Record<string, string> = {
  * A MultiQC tile does not own its figure: the backend builds every figure of a
  * report on first request and 202s until they are ready, and MultiQCFigure
  * polls for that for up to 5 minutes (PREPARE_POLL_MAX_MS), documenting a
- * 30-75s shimmer on a cold collection. The default budget below sits inside
- * that window, so the first few MultiQC tiles of a run were failing on a build
- * that was still legitimately in progress, then passing on retry once the
- * report was warm. Every other component type computes its own frame and is
- * held to the shorter budget.
+ * 30-75s shimmer on a cold collection.
+ *
+ * So the MultiQC budget is that same ceiling, not a midpoint inside it. A
+ * shorter one gives up while the component is still doing exactly what it is
+ * designed to do, and then measures the backend's load rather than the
+ * product: with two lanes walking at once, one report's build queues behind
+ * another's on a single-worker backend, and a 150s budget failed renders here
+ * that the app itself would have rendered. Waiting past the app's own ceiling
+ * would be pointless — beyond it the tile gives up and says so, which is a
+ * real failure and reads as one. Every other component type computes its own
+ * frame and is held to the shorter budget.
  */
-const CONTENT_TIMEOUT_MS: Record<string, number> = { multiqc: 150_000 };
+const CONTENT_TIMEOUT_MS: Record<string, number> = { multiqc: 300_000 };
 const DEFAULT_CONTENT_TIMEOUT_MS = 60_000;
 
 interface Checked {
