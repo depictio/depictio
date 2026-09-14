@@ -469,6 +469,16 @@ class EnrichmentConfig(_BaseVizConfig):
     marker_outline: bool = Field(default=False, description="Draw an outline around each dot")
 
 
+def _pattern_compiles(field: str, v: str | None) -> str | None:
+    """Reject a column-name pattern that is not a valid regular expression."""
+    if v is not None:
+        try:
+            re.compile(v)
+        except re.error as exc:
+            raise ValueError(f"{field} is not a valid regular expression: {exc}") from exc
+    return v
+
+
 class ComplexHeatmapConfig(_BaseVizConfig):
     """ComplexHeatmap-style clustered heatmap with dendrograms + annotations.
 
@@ -497,6 +507,17 @@ class ComplexHeatmapConfig(_BaseVizConfig):
     value_columns: list[str] | None = Field(
         default=None,
         description="Subset of numeric columns to include in the heatmap. None → all numeric.",
+    )
+    value_columns_pattern: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Regular expression naming the value columns, for a matrix whose columns "
+            "are only known at ingest (one per sample of the run). Matched with "
+            "``re.search`` against the numeric columns of the loaded frame, less "
+            "``index_column`` and ``row_annotation_cols``, and kept in frame order. "
+            "Mutually exclusive with ``value_columns``."
+        ),
     )
     row_annotation_cols: list[str] = Field(
         default_factory=list,
@@ -559,6 +580,20 @@ class ComplexHeatmapConfig(_BaseVizConfig):
     cluster_metric: Literal["euclidean", "correlation", "cosine"] = Field(default="euclidean")
     normalize: Literal["none", "row_z", "col_z", "log1p"] = Field(default="none")
     colorscale: str | None = Field(default=None, description="Plotly colorscale name override")
+
+    @field_validator("value_columns_pattern")
+    @classmethod
+    def _value_columns_pattern_compiles(cls, v: str | None) -> str | None:
+        return _pattern_compiles("value_columns_pattern", v)
+
+    @model_validator(mode="after")
+    def _value_columns_named_one_way(self) -> ComplexHeatmapConfig:
+        if self.value_columns is not None and self.value_columns_pattern is not None:
+            raise ValueError(
+                "value_columns and value_columns_pattern are mutually exclusive: list the "
+                "columns or name them by pattern, not both"
+            )
+        return self
 
 
 class UpsetPlotConfig(_BaseVizConfig):
@@ -637,14 +672,7 @@ class UpsetPlotConfig(_BaseVizConfig):
     @field_validator("set_columns_pattern")
     @classmethod
     def _set_columns_pattern_compiles(cls, v: str | None) -> str | None:
-        if v is not None:
-            try:
-                re.compile(v)
-            except re.error as exc:
-                raise ValueError(
-                    f"set_columns_pattern is not a valid regular expression: {exc}"
-                ) from exc
-        return v
+        return _pattern_compiles("set_columns_pattern", v)
 
     @model_validator(mode="after")
     def _sets_named_one_way(self) -> UpsetPlotConfig:

@@ -21,6 +21,7 @@ import {
   StoredMetadata,
 } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { namedColumns } from './namedColumns';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
 
@@ -31,6 +32,10 @@ interface ComplexHeatmapConfig {
   matrix_dc_id?: string;
   index_column: string;
   value_columns?: string[] | null;
+  /** Regex naming the value columns, for a matrix with one column per sample of
+   *  the run. The worker resolves it against the frame's numeric columns;
+   *  mutually exclusive with value_columns. */
+  value_columns_pattern?: string | null;
   row_annotation_cols?: string[];
   /** Per-column categorical annotations rendered as a top strip.
    *  Shape: ``{annotation_name: {column_label: category_value}}``.
@@ -133,6 +138,9 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
       dc_id: metadata.dc_id,
       index_column: config.index_column,
       value_columns: config.value_columns ?? null,
+      // Sent only when set: the cache key hashes the whole payload, so an
+      // always-present null would recompute every heatmap cached before it.
+      ...(config.value_columns_pattern ? { value_columns_pattern: config.value_columns_pattern } : {}),
       row_annotation_cols: rowAnnotationCols,
       col_annotations: config.col_annotations ?? null,
       col_annotation_cols: colAnnotationCols,
@@ -212,6 +220,7 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
     clusterMethod,
     config.index_column,
     JSON.stringify(config.value_columns),
+    config.value_columns_pattern,
     JSON.stringify(rowAnnotationCols),
     JSON.stringify(colAnnotationCols),
   ]);
@@ -232,8 +241,13 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
     };
   }, [metadata.dc_id]);
 
+  const valueColumns = useMemo(
+    () => namedColumns(config.value_columns, config.value_columns_pattern, schema),
+    [config.value_columns, config.value_columns_pattern, schema],
+  );
+
   const annotationOptions = useMemo(() => {
-    const valueSet = new Set(config.value_columns ?? []);
+    const valueSet = new Set(valueColumns);
     const opts: string[] = [];
     if (schema) {
       for (const col of Object.keys(schema)) {
@@ -245,7 +259,7 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
     // Always include current selections even if schema-fetch failed.
     for (const c of rowAnnotationCols) if (!opts.includes(c)) opts.push(c);
     return opts;
-  }, [schema, config.index_column, config.value_columns, rowAnnotationCols]);
+  }, [schema, config.index_column, valueColumns, rowAnnotationCols]);
 
   // What the column-annotation picker shows selected: the requested columns
   // that the server could actually paint. A template names the fields worth
@@ -273,8 +287,8 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
   // Best-effort fetch of a small data sample (max 200 rows) for the
   // Show-data popover — separate from the heatmap dispatch.
   const previewCols = useMemo(
-    () => [config.index_column, ...(config.value_columns ?? []).slice(0, 12)],
-    [config.index_column, config.value_columns],
+    () => [config.index_column, ...valueColumns.slice(0, 12)],
+    [config.index_column, valueColumns],
   );
   useEffect(() => {
     if (!metadata.wf_id || !metadata.dc_id || previewCols.length < 1) return;

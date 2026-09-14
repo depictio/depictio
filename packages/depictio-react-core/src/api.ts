@@ -1240,6 +1240,7 @@ export interface ComplexHeatmapPayload {
   dc_id: string;
   index_column: string;
   value_columns?: string[] | null;
+  value_columns_pattern?: string | null;
   row_annotation_cols?: string[];
   cluster_rows?: boolean;
   cluster_cols?: boolean;

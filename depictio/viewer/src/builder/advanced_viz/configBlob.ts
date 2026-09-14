@@ -34,6 +34,12 @@ const IRREGULAR_BINDINGS: readonly { kind?: string; role: string; key: string }[
 
 const scoped = (b: { kind?: string }, vizKind: string | undefined) => !b.kind || b.kind === vizKind;
 
+/** List fields and the pattern field each one excludes in configs.py. */
+const COLUMN_PATTERN_KEYS: readonly [string, string][] = [
+  ['value_columns', 'value_columns_pattern'],
+  ['set_columns', 'set_columns_pattern'],
+];
+
 export function buildAdvancedVizConfigBlob(
   vizKind: string | undefined,
   columnMapping: Record<string, string | string[]>,
@@ -61,11 +67,18 @@ export function buildAdvancedVizConfigBlob(
   //    made in the builder and therefore win,
   //  - the viz-control extras (manhattan score_threshold, top_n_labels, marker
   //    sizes...) the preview rendered with.
-  return {
+  const merged: Record<string, unknown> = {
     ...extractRoleDerivedFallbacks(presetConfig, blob),
     ...blob,
     ...extractVizControlExtras(presetConfig),
   };
+  // A template names its columns by pattern, and the pattern rides along as an
+  // extra. Once the author picks a list the model rejects both, so the pick,
+  // the newer intent, drops the pattern.
+  for (const [list, pattern] of COLUMN_PATTERN_KEYS) {
+    if (merged[list] != null) delete merged[pattern];
+  }
+  return merged;
 }
 
 const IRREGULAR_BINDING_KEYS: readonly string[] = IRREGULAR_BINDINGS.map((b) => b.key);

@@ -1318,6 +1318,7 @@ def compute_complex_heatmap(payload: dict) -> dict:
           "dc_id": str,                # the matrix DC
           "index_column": str,         # row-label column
           "value_columns": [str] | null,
+          "value_columns_pattern": str | null,  # exclusive with value_columns
           "row_annotation_cols": [str],
           "cluster_rows": bool,
           "cluster_cols": bool,
@@ -1396,28 +1397,15 @@ def compute_complex_heatmap(payload: dict) -> dict:
     logger.info("compute_complex_heatmap: loaded %d rows in %dms", df.height, load_ms)
 
     # Convert polars → pandas for plotly-complexheatmap (it accepts both but
-    # pandas is its primary input). Drop non-numeric columns from the value
-    # set if value_columns wasn't supplied.
+    # pandas is its primary input).
     import polars as pl
 
-    numeric_dtypes = {
-        pl.Float32,
-        pl.Float64,
-        pl.Int8,
-        pl.Int16,
-        pl.Int32,
-        pl.Int64,
-        pl.UInt8,
-        pl.UInt16,
-        pl.UInt32,
-        pl.UInt64,
-    }
-    if value_columns is None:
-        value_columns = [
-            c
-            for c in df.columns
-            if c != index_column and c not in row_annotation_cols and df[c].dtype in numeric_dtypes
-        ]
+    value_columns = _resolve_heatmap_value_columns(
+        df,
+        value_columns,
+        payload.get("value_columns_pattern") or None,
+        excluded={index_column, *row_annotation_cols},
+    )
     if not value_columns:
         raise ValueError("compute_complex_heatmap: no numeric value columns found")
 
@@ -1730,6 +1718,53 @@ def _narrow_wide_matrix_columns(
         )
         return narrowed
     return None
+
+
+def _resolve_heatmap_value_columns(
+    df,
+    value_columns: list[str] | None,
+    value_columns_pattern: str | None,
+    *,
+    excluded: set[str],
+) -> list[str]:
+    """The matrix columns a heatmap draws: the listed ones, else the numeric ones.
+
+    The numeric candidates are the frame's integer and float columns outside
+    `excluded` (the row labels and row annotations), in frame order. A template
+    whose columns are one per sample of the run cannot list them, so it names
+    them by pattern, matched with `re.search` against those candidates.
+    """
+    import re
+
+    import polars as pl
+
+    if value_columns_pattern and value_columns:
+        raise ValueError(
+            "compute_complex_heatmap: value_columns and value_columns_pattern are mutually exclusive"
+        )
+    numeric_dtypes = {
+        pl.Float32,
+        pl.Float64,
+        pl.Int8,
+        pl.Int16,
+        pl.Int32,
+        pl.Int64,
+        pl.UInt8,
+        pl.UInt16,
+        pl.UInt32,
+        pl.UInt64,
+    }
+    numeric = [c for c in df.columns if c not in excluded and df[c].dtype in numeric_dtypes]
+    if not value_columns_pattern:
+        return numeric if value_columns is None else list(value_columns)
+    matcher = re.compile(value_columns_pattern)
+    matched = [c for c in numeric if matcher.search(c)]
+    if not matched:
+        raise ValueError(
+            f"compute_complex_heatmap: value_columns_pattern {value_columns_pattern!r} matches "
+            f"none of the {len(numeric)} numeric column(s) of the data collection: {numeric[:20]}"
+        )
+    return matched
 
 
 def _detect_upset_set_columns(df) -> list[str]:
