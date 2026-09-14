@@ -1,0 +1,15 @@
+{
+  "name": "harness",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "plotly.js-dist-min": "^2.35.3"
+  }
+}
