@@ -2847,13 +2847,20 @@ jobs:
           echo "🔍 Auth mode reported by API:"
           curl -s http://localhost:8058/depictio/api/v1/auth/me/optional || true
 
+      # CATALOG_E2E_LANES=1 is measured, not assumed. A second walker has to
+      # share one FastAPI worker and 4 vCPU with mongo, redis, minio, celery
+      # and the viewer, and MultiQC is the one render whose figures the backend
+      # builds on demand: with two lanes those builds queue behind each other,
+      # and two of the three legs failed on nothing else. One walker per leg is
+      # the only shape a full walk has ever finished clean in. Raise it when the
+      # backend has room, not before.
       - name: Run Playwright tests (${{ matrix.auth_mode }})
         run: |
           cd depictio/tests/e2e-playwright
           CATALOG_CONFORMANCE_REQUIRED=1 \
           CATALOG_E2E_SHARD=${{ matrix.catalog_shard }} \
           CATALOG_E2E_SHARDS=3 \
-          CATALOG_E2E_LANES=2 \
+          CATALOG_E2E_LANES=1 \
           PLAYWRIGHT_BASE_URL=http://localhost:5080 \
           PLAYWRIGHT_API_URL=http://localhost:8058 \
           npx playwright test
