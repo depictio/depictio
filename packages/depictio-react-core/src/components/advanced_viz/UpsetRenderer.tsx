@@ -22,7 +22,9 @@ import {
   UpsetResult,
 } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { namedColumns } from './namedColumns';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
+import { emphasizeUpsetColumn, upsetHoverColumn, withUpsetHoverTargets } from './upsetHover';
 import { usePersistedVizControl } from './usePersistedVizControl';
 
 interface UpsetPlotConfig {
@@ -100,20 +102,12 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
     };
   }, [metadata.dc_id]);
 
-  // The declared sets, or the columns a pattern names. The worker resolves the
-  // pattern against the frame's binary columns; the schema is the nearest thing
-  // here, enough to keep the sets out of the annotation picker and to seed the
-  // data preview. A pattern the browser cannot compile names nothing.
-  const setColumns = useMemo(() => {
-    if (config.set_columns) return config.set_columns;
-    if (!config.set_columns_pattern || !dcSchema) return [] as string[];
-    try {
-      const pattern = new RegExp(config.set_columns_pattern);
-      return Object.keys(dcSchema).filter((c) => pattern.test(c));
-    } catch {
-      return [] as string[];
-    }
-  }, [config.set_columns, config.set_columns_pattern, dcSchema]);
+  // The declared sets, or the columns a pattern names (the worker resolves it
+  // against the frame's binary columns).
+  const setColumns = useMemo(
+    () => namedColumns(config.set_columns, config.set_columns_pattern, dcSchema),
+    [config.set_columns, config.set_columns_pattern, dcSchema],
+  );
 
   // Non-set DC columns are candidate annotation tracks. Filter out set
   // columns (already used as the binary matrix) and obvious identifier
@@ -127,6 +121,9 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   const effectiveAnnotationCols = showAnnotations ? annotationCols : [];
 
   const [figure, setFigure] = useState<UpsetResult['figure'] | null>(null);
+  // One per figure received, as the plot's `uirevision` (see plotLayout).
+  const [figureRevision, setFigureRevision] = useState(0);
+  const [hoveredColumn, setHoveredColumn] = useState<number | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [computeStatus, setComputeStatus] = useState<string | null>(null);
@@ -170,6 +167,9 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
     const accept = (result: UpsetResult) => {
       if (cancelled) return;
       setFigure(result.figure);
+      setFigureRevision((n) => n + 1);
+      // Column indices belong to the previous figure's intersection order.
+      setHoveredColumn(null);
       setRowCount(result.row_count);
       setComputeMs(result.compute_ms ?? null);
       setComputeStatus(null);
@@ -379,6 +379,50 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
     ],
   );
 
+  const themedData = useMemo(
+    () =>
+      figure
+        ? withUpsetHoverTargets(
+            applyDataTheme(figure.data, isDark, theme) as Record<string, unknown>[],
+            figure.layout as Record<string, unknown>,
+          )
+        : null,
+    [figure, isDark, theme],
+  );
+  // Hovering an intersection dims everything outside it, as the UpSet Shiny
+  // app does.
+  const plotData = useMemo(
+    () =>
+      themedData && figure && hoveredColumn != null
+        ? emphasizeUpsetColumn(themedData, figure.layout as Record<string, unknown>, hoveredColumn)
+        : themedData,
+    [themedData, figure, hoveredColumn],
+  );
+  // plotly-upset bakes its default width=900/height=700 into the figure
+  // layout; strip so the chart fills the panel responsively (same fix applied
+  // to ComplexHeatmap). applyLayoutTheme retints every axis / legend /
+  // annotation / colorbar baked by plotly-upset so dark/light flips reliably
+  // without depending on Plotly's template precedence. Every hover re-renders
+  // the plot, and a constant `uirevision` until the next figure is what keeps
+  // the reader's zoom and legend toggles through those re-renders.
+  const plotLayout = useMemo(
+    () =>
+      figure
+        ? applyLayoutTheme(
+            {
+              ...(figure.layout as Record<string, unknown>),
+              width: undefined,
+              height: undefined,
+              autosize: true,
+              uirevision: figureRevision,
+            },
+            isDark,
+            theme,
+          )
+        : null,
+    [figure, figureRevision, isDark, theme],
+  );
+
   return (
     <AdvancedVizFrame
       title={metadata.title || 'UpSet plot'}
@@ -390,27 +434,12 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
       dataRows={dataRows ?? undefined}
       dataColumns={previewCols}
     >
-      {figure ? (
+      {plotData && plotLayout ? (
         <Plot
-          data={applyDataTheme(figure.data, isDark, theme) as any}
-          // plotly-upset bakes its default width=900/height=700 into the
-          // figure layout; strip so the chart fills the panel responsively
-          // (same fix applied to ComplexHeatmap). applyLayoutTheme retints
-          // every axis / legend / annotation / colorbar baked by plotly-upset
-          // so dark/light flips reliably without depending on Plotly's
-          // template precedence.
-          layout={
-            applyLayoutTheme(
-              {
-                ...(figure.layout as Record<string, unknown>),
-                width: undefined,
-                height: undefined,
-                autosize: true,
-              },
-              isDark,
-              theme,
-            ) as any
-          }
+          data={plotData as any}
+          layout={plotLayout as any}
+          onHover={(e) => setHoveredColumn(upsetHoverColumn(e.points[0] as any))}
+          onUnhover={() => setHoveredColumn(null)}
           useResizeHandler
           style={{ width: '100%', height: '100%' }}
           config={{ displaylogo: false, responsive: true } as any}

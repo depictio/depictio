@@ -49,6 +49,25 @@ class TestUpSetPlotBasic:
         assert fig.layout.width == 1200
         assert fig.layout.height == 800
 
+    def test_set_names_and_set_size_title_grow_the_margins(self, binary_df: pd.DataFrame) -> None:
+        # Set names can be as long as a sample id. The fixed margins clipped
+        # them and drew the set-size title over its own tick labels.
+        layout = UpSetPlot(binary_df).to_plotly().to_dict()["layout"]
+        name_axes = [v for k, v in layout.items() if k.startswith("yaxis") and "ticktext" in v]
+        assert len(name_axes) == 2
+        assert all(ax.get("automargin") for ax in name_axes)
+        size_axes = [
+            v for k, v in layout.items() if k.startswith("xaxis") and v.get("title", {}).get("text") == "Set Size"
+        ]
+        assert len(size_axes) == 1
+        assert size_axes[0].get("automargin")
+
+    def test_set_names_grow_the_margin_without_set_sizes(self, binary_df: pd.DataFrame) -> None:
+        layout = UpSetPlot(binary_df, show_set_sizes=False).to_plotly().to_dict()["layout"]
+        name_axes = [v for k, v in layout.items() if k.startswith("yaxis") and "ticktext" in v]
+        assert len(name_axes) == 1
+        assert name_axes[0].get("automargin")
+
     def test_set_columns_explicit(self, annotated_df: pd.DataFrame) -> None:
         plot = UpSetPlot(annotated_df, set_columns=["SetA", "SetB", "SetC", "SetD"])
         fig = plot.to_plotly()

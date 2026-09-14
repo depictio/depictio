@@ -613,6 +613,8 @@ class UpSetPlot:
                     "showgrid": False,
                     "zeroline": False,
                     "range": [-0.5, n_sets - 0.5],
+                    # Carries the set names when there are no set-size bars.
+                    "automargin": True,
                 },
             }
         )
@@ -629,6 +631,9 @@ class UpSetPlot:
                         "title": {"text": "Set Size", "font": {"size": 11, "family": FONT_FAMILY}},
                         "showgrid": True,
                         "gridcolor": "rgba(0,0,0,0.1)",
+                        # The fixed bottom margin fits the tick labels or the
+                        # title, not both, so the title was drawn over the ticks.
+                        "automargin": True,
                     },
                     ss_y: {
                         "tickvals": list(range(n_sets)),
@@ -636,6 +641,9 @@ class UpSetPlot:
                         "showgrid": False,
                         "zeroline": False,
                         "range": [-0.5, n_sets - 0.5],
+                        # Set names can be long (one per sample of a run): grow the
+                        # left margin to the longest instead of clipping at it.
+                        "automargin": True,
                     },
                 }
             )
