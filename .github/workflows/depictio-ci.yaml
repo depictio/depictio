@@ -2702,6 +2702,10 @@ jobs:
     # docker-build consumers in this workflow.
     if: always() && needs.docker-build.result == 'success'
     runs-on: ubuntu-22.04
+    # No job in this workflow had one, so the only backstop was GitHub's 6h
+    # default — and a leg of this job has run for 3h. A green leg is ~60min
+    # today; tighten this once the catalog walk is sharded across the legs.
+    timeout-minutes: 90
     permissions:
       contents: read
       packages: read
