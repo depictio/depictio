@@ -2847,6 +2847,37 @@ jobs:
           echo "🔍 Auth mode reported by API:"
           curl -s http://localhost:8058/depictio/api/v1/auth/me/optional || true
 
+      # /health going green only means the API is answering. Reference datasets
+      # are still being scanned and processed in the background at that point,
+      # and the catalog is not stable while that runs: `_multiqc_sections` in
+      # catalog_endpoints/routes.py cannot filter a report whose document does
+      # not exist yet, so `compose` offers every section of it, then stops once
+      # extraction lands. The catalog walk freezes its list of renders once, at
+      # the very start, and then walks it for twenty minutes — so it was walking
+      # a list the picker no longer agreed with, and reporting renders as
+      # unaddable that simply were not offered any more. Same wait the backup
+      # job above already does, same reason.
+      - name: Wait for reference dataset processing to finish
+        run: |
+          for i in {1..40}; do
+            bg_status=$(docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env \
+              exec -T mongo mongosh localhost:27018/depictioDB \
+              --eval "var doc = db.initialization.findOne({_id: 'reference_datasets_metadata'}); \
+                      print(doc ? (doc.background_processing_complete ? 'complete' : (doc.background_processing_failed ? 'failed' : 'pending')) : 'missing')" \
+              --quiet 2>&1 | tail -1)
+            echo "📊 Reference dataset processing (attempt $i/40): $bg_status"
+            if [ "$bg_status" = "complete" ]; then
+              echo "✅ Catalog is stable, starting the suite"
+              break
+            elif [ "$bg_status" = "failed" ]; then
+              echo "❌ Background processing failed:"
+              docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env logs --tail=50 depictio-backend
+              exit 1
+            fi
+            [ "$i" = "40" ] && echo "⚠️  Still $bg_status after 10 minutes — running anyway, the catalog walk will report what it finds"
+            sleep 15
+          done
+
       # CATALOG_E2E_LANES=1 is measured, not assumed. A second walker has to
       # share one FastAPI worker and 4 vCPU with mongo, redis, minio, celery
       # and the viewer, and MultiQC is the one render whose figures the backend
