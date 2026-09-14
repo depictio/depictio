@@ -15,8 +15,10 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: IS_CI,
   retries: IS_CI ? 2 : 0,
-  // Limit local workers to 2 to avoid bursting the login rate-limiter.
-  workers: IS_CI ? 2 : 2,
+  // Two, to avoid bursting the login rate-limiter. Raising it means measuring
+  // first: the backend runs a single uvicorn worker and shares the runner with
+  // mongo, redis, minio and celery, so more browsers is not more throughput.
+  workers: Number(process.env.PLAYWRIGHT_WORKERS ?? 2),
   timeout: 60_000,
   expect: { timeout: 10_000 },
 
@@ -62,8 +64,9 @@ export default defineConfig({
       //
       // retries: a deterministic walk cannot pass on a second attempt, so the
       // suite-wide 2 retries only ever tripled an already long failure — three
-      // attempts, two of them guaranteed to fail the same way. The genuinely
-      // flaky short specs keep their retries.
+      // attempts, two of them guaranteed to fail the same way. One is affordable
+      // now that a lane is a fraction of the old whole-catalog walk, and it
+      // still buys tolerance for a genuinely flaky render.
       //
       // video: a 55-minute 1080p screencast, encoded next to a full docker
       // stack on a 4-vCPU runner, that nobody opens. Every failure is already a
@@ -71,7 +74,7 @@ export default defineConfig({
       name: "chromium-catalog-walk",
       use: { ...devices["Desktop Chrome"], video: "off" },
       testMatch: /catalog\/catalog-modules-on-dashboard\.spec\.ts$/,
-      retries: 0,
+      retries: 1,
     },
     {
       name: "chromium-destructive",

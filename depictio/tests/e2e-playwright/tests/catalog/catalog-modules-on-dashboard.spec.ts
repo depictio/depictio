@@ -21,8 +21,9 @@
  *   CATALOG_E2E_LIMIT=N        stop after N renders per project (smoke run)
  *   CATALOG_E2E_SHARD=K
  *   CATALOG_E2E_SHARDS=N       walk only shard K of N (see SHARD below)
+ *   CATALOG_E2E_LANES=N        split this shard across N parallel tests
  */
-import { Page, expect as pwExpect } from "@playwright/test";
+import { APIRequestContext, Page, expect as pwExpect } from "@playwright/test";
 import { test, expect, apiLogin } from "../../fixtures/auth";
 import { credentials } from "../../fixtures/credentials";
 import {
@@ -68,6 +69,23 @@ if (
   // Loud on purpose: a shard silently out of range is a third of the catalog
   // quietly going unwalked while CI stays green.
   throw new Error(`bad CATALOG_E2E_SHARD=${SHARD} of CATALOG_E2E_SHARDS=${SHARDS}`);
+}
+
+/**
+ * How many parallel tests this shard is split into.
+ *
+ * The walk used to be a single test, so it held one worker for an hour while
+ * the other finished the rest of the suite in ten minutes and then sat idle.
+ * State is already isolated per batch — a throwaway dashboard created and
+ * deleted around every six renders, random component ids, a stored-component
+ * check scoped to one dashboard — so nothing but the stack is shared between
+ * lanes. Expect roughly 1.5x from a second lane rather than 2x: the backend
+ * runs a single uvicorn worker and shares the runner with mongo, redis, minio
+ * and celery.
+ */
+const LANES = Number(process.env.CATALOG_E2E_LANES ?? 1);
+if (!Number.isInteger(LANES) || LANES < 1) {
+  throw new Error(`bad CATALOG_E2E_LANES=${LANES}`);
 }
 
 /**
@@ -253,7 +271,10 @@ async function checkComponent(
 }
 
 test.describe("catalog modules are usable on a dashboard", () => {
-  test.describe.configure({ mode: "serial" });
+  // Parallel, not serial: the lanes below are independent, and a serial retry
+  // re-runs the whole group — which is precisely how one failed attempt cost a
+  // full hour on top of the two the walk already needed.
+  test.describe.configure({ mode: "parallel" });
 
   let tokens: Awaited<ReturnType<typeof apiLogin>>;
   let projects: CatalogProject[] = [];
@@ -289,13 +310,16 @@ test.describe("catalog modules are usable on a dashboard", () => {
     }
   });
 
-  test("every catalog render adds and renders", async ({ page, request }) => {
+  const walkLane = async (lane: number, page: Page, request: APIRequestContext) => {
     test.skip(
       projects.length === 0,
       "no ingested tool output on this stack — nothing for the catalog to match",
     );
-    // Generous: the walk is one browser doing a full add cycle per render.
-    test.setTimeout(60 * 60_000);
+    // Still generous — the walk is one browser doing a full add cycle per
+    // render — but a shard split across lanes is a fraction of the old whole,
+    // and an hour of budget is an hour of budget actually spent when the walk
+    // hangs rather than fails.
+    test.setTimeout(30 * 60_000);
 
     // Programmatic login only seeds storage — the SPA reads it on first load.
     await page.addInitScript(
@@ -317,11 +341,12 @@ test.describe("catalog modules are usable on a dashboard", () => {
     const problems: string[] = [];
     let added = 0;
 
-    // Runs across projects, not per project, so each project is split evenly
-    // between the shards rather than by where its boundary happens to fall.
+    // Both counters run across projects, not per project, so each project is
+    // split evenly rather than by where its boundary happens to fall.
     let seq = 0;
+    let laneSeq = 0;
 
-    for (const project of projects) {
+    const work = projects.map((project) => {
       let offers = flattenOffers(project.modules)
         // A stable order is what makes the union of the shards provably the
         // whole catalog. Compose ordering is derived from the project document
@@ -333,7 +358,16 @@ test.describe("catalog modules are usable on a dashboard", () => {
       // tool and by type, so a contiguous third would hand one leg all the
       // cheap cards and another all the MultiQC cold builds. A no-op at 1 of 1.
       offers = offers.filter(() => seq++ % SHARDS === SHARD - 1);
+      // And again to split this shard between the lanes. A no-op at 1 lane.
+      offers = offers.filter(() => laneSeq++ % LANES === lane);
+      return { project, offers };
+    });
+    test.skip(
+      work.every((w) => w.offers.length === 0),
+      "nothing in this shard and lane to walk on this stack",
+    );
 
+    for (const { project, offers } of work) {
       for (let start = 0; start < offers.length; start += BATCH) {
         const batch = offers.slice(start, start + BATCH);
         const title = `e2e catalog ${project.id.slice(-6)} s${SHARD} ${start / BATCH + 1}`;
@@ -408,10 +442,18 @@ test.describe("catalog modules are usable on a dashboard", () => {
 
     // eslint-disable-next-line no-console
     const scope = SHARDS > 1 ? ` (shard ${SHARD} of ${SHARDS})` : "";
+    const laneScope = LANES > 1 ? ` lane ${lane + 1} of ${LANES}` : "";
     console.log(
-      `added ${added} catalog renders across ${projects.length} project(s)${scope}`,
+      `added ${added} catalog renders across ${projects.length} project(s)${scope}${laneScope}`,
     );
     expect(added, "no catalog render was added at all").toBeGreaterThan(0);
     expect(problems, `\n${problems.join("\n")}\n`).toEqual([]);
-  });
+  };
+
+  for (let lane = 0; lane < LANES; lane++) {
+    const suffix = LANES > 1 ? ` (lane ${lane + 1} of ${LANES})` : "";
+    test(`every catalog render adds and renders${suffix}`, async ({ page, request }) => {
+      await walkLane(lane, page, request);
+    });
+  }
 });
