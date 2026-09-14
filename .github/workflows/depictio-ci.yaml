@@ -249,6 +249,9 @@ jobs:
       (needs.quality.result == 'success' ||
        (needs.quality.result == 'skipped' && needs.check-quality-cache.outputs.cache-hit == 'true'))
     runs-on: ubuntu-22.04
+    # Builds and pushes images, ~8min observed; a stalled registry push would
+    # otherwise sit here for six hours.
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
@@ -458,6 +461,8 @@ jobs:
     needs: docker-build
     if: always() && needs.docker-build.result == 'success'
     runs-on: ubuntu-22.04
+    # Boots containers and can hang on a health loop (stack boot + init, ~3min observed).
+    timeout-minutes: 20
     permissions:
       contents: read
       packages: read
@@ -910,6 +915,8 @@ jobs:
     needs: [docker-build]
     if: always() && needs.docker-build.result == 'success'
     runs-on: ubuntu-22.04
+    # Boots containers and can hang on a health loop (~4min observed).
+    timeout-minutes: 20
     permissions:
       contents: read
       packages: read
@@ -1740,6 +1747,8 @@ jobs:
     needs: [docker-build]
     if: always() && needs.docker-build.result == 'success'
     runs-on: ubuntu-22.04
+    # Boots containers and can hang on a health loop (~3min observed).
+    timeout-minutes: 20
     permissions:
       contents: read
       packages: read
