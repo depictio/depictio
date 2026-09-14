@@ -21,9 +21,6 @@ import typer
 from typer.testing import CliRunner
 
 from depictio.cli.cli.commands.run import register_run_command
-from depictio.models.models.projects import Project
-
-OWNER = {"id": "507f1f77bcf86cd799439011", "email": "owner@example.org"}
 
 
 @pytest.fixture
@@ -61,96 +58,6 @@ def nextflow_run_dir(tmp_path):
     return root
 
 
-def _project(locations: list[str]) -> Project:
-    return Project.model_validate(
-        {
-            "name": "Ampliseq Microbial Community Analysis",
-            "project_type": "advanced",
-            "permissions": {"owners": [OWNER], "editors": [], "viewers": []},
-            "workflows": [
-                {
-                    "name": "ampliseq",
-                    "engine": {"name": "nextflow"},
-                    "catalog": {"name": "nf-core", "url": "https://nf-co.re"},
-                    "data_location": {"structure": "flat", "locations": list(locations)},
-                    "data_collections": [
-                        {
-                            "data_collection_tag": "asv_table",
-                            "config": {
-                                "type": "Table",
-                                "scan": {
-                                    "mode": "recursive",
-                                    "scan_parameters": {
-                                        "regex_config": {"pattern": "asv_table.tsv$"}
-                                    },
-                                },
-                                "dc_specific_properties": {
-                                    "format": "TSV",
-                                    "polars_kwargs": {"separator": "\t"},
-                                },
-                            },
-                        }
-                    ],
-                }
-            ],
-        }
-    )
-
-
-class _Harness:
-    """Every mock the run pipeline needs, plus the recorded call arguments."""
-
-    def __init__(self, data_root, remote_locations: list[str], project_found: bool = True):
-        self.project = _project([str(data_root)])
-        self.remote_doc = {
-            "name": self.project.name,
-            "hash": None,
-            "workflows": [
-                {
-                    "workflow_tag": self.project.workflows[0].workflow_tag,
-                    "data_location": {"structure": "flat", "locations": remote_locations},
-                    "data_collections": [],
-                }
-            ],
-        }
-        self.project_found = project_found
-        self.sync = MagicMock(return_value={"action": "updated"})
-        self.scan = MagicMock(return_value={"result": "success"})
-        self.process = MagicMock(return_value={"total_failed": 0})
-        self.import_dashboards = MagicMock(return_value=[])
-
-    def _get_project(self, *args, **kwargs):
-        response = MagicMock()
-        response.status_code = 200 if self.project_found else 404
-        response.json.return_value = self.remote_doc
-        return response
-
-    def patches(self):
-        template_meta = MagicMock()
-        template_meta.template_id = "nf-core/ampliseq/2.16.0"
-        resolve = getattr(self, "resolve", None) or MagicMock(
-            return_value=({"name": self.project.name, "workflows": []}, template_meta, {}, [], {})
-        )
-        validate = MagicMock(
-            return_value=(MagicMock(), {"success": True, "project_config": self.project})
-        )
-        return [
-            patch("depictio.cli.cli.utils.templates.resolve_template", resolve),
-            patch("depictio.cli.cli.utils.config.validate_template_project_config", validate),
-            patch("depictio.cli.cli.commands.run.api_get_project_from_name", self._get_project),
-            patch("depictio.cli.cli.commands.run.api_sync_project_config_to_server", self.sync),
-            patch("depictio.cli.cli.commands.run.scan_project_files", self.scan),
-            patch("depictio.cli.cli.commands.run.process_project_helper", self.process),
-            patch("depictio.cli.cli.commands.run.api_monitoring_ingestion_start", MagicMock()),
-            patch("depictio.cli.cli.commands.run.api_monitoring_ingestion_finish", MagicMock()),
-            patch("depictio.cli.cli.commands.run.generate_api_headers", MagicMock(return_value={})),
-            patch(
-                "depictio.cli.cli.utils.templates.import_dashboards_from_template",
-                self.import_dashboards,
-            ),
-        ]
-
-
 def _invoke(app, runner, harness, extra_args):
     with_patches = harness.patches()
     for p in with_patches:
@@ -175,9 +82,9 @@ def _invoke(app, runner, harness, extra_args):
 
 class TestAttachRunFlags:
     def test_attach_updates_scans_incrementally_and_overwrites_the_tables(
-        self, app, runner, data_root
+        self, app, runner, data_root, make_harness
     ):
-        harness = _Harness(data_root, remote_locations=["/data/run_a"])
+        harness = make_harness(data_root, remote_locations=["/data/run_a"])
         result = _invoke(app, runner, harness, {"data_root": data_root, "flags": ["--attach-run"]})
         assert result.exit_code == 0, result.output
 
@@ -194,9 +101,11 @@ class TestAttachRunFlags:
             "locations"
         ] == ["/data/run_a", str(data_root)]
 
-    def test_overwrite_alone_still_implies_a_full_rescan(self, app, runner, data_root):
+    def test_overwrite_alone_still_implies_a_full_rescan(
+        self, app, runner, data_root, make_harness
+    ):
         """Only attach mode decouples the two; the normal --overwrite is unchanged."""
-        harness = _Harness(data_root, remote_locations=["/data/run_a"])
+        harness = make_harness(data_root, remote_locations=["/data/run_a"])
         result = _invoke(
             app,
             runner,
@@ -206,8 +115,10 @@ class TestAttachRunFlags:
         assert result.exit_code == 0, result.output
         assert harness.scan.call_args.kwargs["command_parameters"]["rescan_folders"] is True
 
-    def test_attach_to_a_missing_project_stops_before_writing(self, app, runner, data_root):
-        harness = _Harness(data_root, remote_locations=[], project_found=False)
+    def test_attach_to_a_missing_project_stops_before_writing(
+        self, app, runner, data_root, make_harness
+    ):
+        harness = make_harness(data_root, remote_locations=[], project_found=False)
         result = _invoke(app, runner, harness, {"data_root": data_root, "flags": ["--attach-run"]})
         assert result.exit_code == 2
         assert "no project named" in " ".join(result.output.split())
@@ -215,10 +126,10 @@ class TestAttachRunFlags:
         harness.scan.assert_not_called()
 
     def test_without_attach_an_existing_project_is_reported_not_silently_skipped(
-        self, app, runner, data_root
+        self, app, runner, data_root, make_harness
     ):
         """The regression: this used to exit 1 with an empty error message."""
-        harness = _Harness(data_root, remote_locations=["/data/run_a"])
+        harness = make_harness(data_root, remote_locations=["/data/run_a"])
         harness.sync = MagicMock(return_value={"action": "exists"})
         result = _invoke(app, runner, harness, {"data_root": data_root, "flags": []})
         assert result.exit_code == 2
@@ -255,8 +166,8 @@ class TestProvenanceStamping:
         return result
 
     @pytest.fixture
-    def harness(self, nextflow_run_dir):
-        harness = _Harness(nextflow_run_dir, remote_locations=[])
+    def harness(self, nextflow_run_dir, make_harness):
+        harness = make_harness(nextflow_run_dir, remote_locations=[])
         template_meta = MagicMock()
         template_meta.template_id = "nf-core/ampliseq/2.16.0"
         # A single workflow dict, so the stamping has somewhere to land.
@@ -301,14 +212,14 @@ class TestTriggeredByStamp:
     first creation would be missing from every project that ever ran twice.
     """
 
-    def test_defaults_to_manual(self, app, runner, data_root):
-        harness = _Harness(data_root, remote_locations=[])
+    def test_defaults_to_manual(self, app, runner, data_root, make_harness):
+        harness = make_harness(data_root, remote_locations=[])
         result = _invoke(app, runner, harness, {"data_root": data_root, "flags": []})
         assert result.exit_code == 0, result.output
         assert harness.sync.call_args.kwargs["ProjectConfig"]["triggered_by"] == "manual"
 
-    def test_the_trigger_value_reaches_the_server(self, app, runner, data_root):
-        harness = _Harness(data_root, remote_locations=[])
+    def test_the_trigger_value_reaches_the_server(self, app, runner, data_root, make_harness):
+        harness = make_harness(data_root, remote_locations=[])
         result = _invoke(
             app,
             runner,
@@ -318,8 +229,8 @@ class TestTriggeredByStamp:
         assert result.exit_code == 0, result.output
         assert harness.sync.call_args.kwargs["ProjectConfig"]["triggered_by"] == "nextflow"
 
-    def test_it_survives_an_attach(self, app, runner, data_root):
-        harness = _Harness(data_root, remote_locations=["/data/run_a"])
+    def test_it_survives_an_attach(self, app, runner, data_root, make_harness):
+        harness = make_harness(data_root, remote_locations=["/data/run_a"])
         result = _invoke(
             app,
             runner,
@@ -340,8 +251,8 @@ class TestServerCheckHonoursTheVerdict:
     nothing about authentication.
     """
 
-    def test_a_rejected_config_fails_the_run(self, app, runner, data_root):
-        harness = _Harness(data_root, remote_locations=[])
+    def test_a_rejected_config_fails_the_run(self, app, runner, data_root, make_harness):
+        harness = make_harness(data_root, remote_locations=[])
         patches = harness.patches()
         patches.append(
             patch(
@@ -373,8 +284,8 @@ class TestServerCheckHonoursTheVerdict:
         harness.sync.assert_not_called()
         harness.scan.assert_not_called()
 
-    def test_an_accepted_config_proceeds(self, app, runner, data_root):
-        harness = _Harness(data_root, remote_locations=[])
+    def test_an_accepted_config_proceeds(self, app, runner, data_root, make_harness):
+        harness = make_harness(data_root, remote_locations=[])
         patches = harness.patches()
         patches.append(
             patch(
