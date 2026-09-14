@@ -1501,6 +1501,27 @@ def _container_repo_path(path: str) -> str | None:
     return rewritten if rewritten != path else None
 
 
+def _phylogeny_s3_client():
+    """boto3 client for the backend's bucket, shared by both Newick reads below.
+
+    Every Newick request tries S3 first, so an unreachable endpoint must fail
+    fast and fall through to the stored paths instead of waiting on retries.
+    """
+    import boto3
+    from botocore.config import Config
+
+    from depictio.api.v1.configs.config import settings
+
+    return boto3.client(
+        "s3",
+        endpoint_url=settings.minio.endpoint_url,
+        aws_access_key_id=settings.minio.aws_access_key_id,
+        aws_secret_access_key=settings.minio.aws_secret_access_key,
+        verify=settings.minio.verify_tls,
+        config=Config(connect_timeout=3, retries={"total_max_attempts": 2}),
+    )
+
+
 @advanced_viz_endpoint_router.get(
     "/phylogeny/{data_collection_id}/newick", response_class=PlainTextResponse
 )
@@ -1510,7 +1531,12 @@ def get_phylogeny_newick(
 ) -> str:
     """Return the raw Newick string for a phylogeny DC.
 
-    Resolves the file location in three ways: (1) prefer the file registered
+    First tries the copy the CLI uploads at ingest, at
+    ``s3://<bucket>/phylogeny/<dc_id>/tree.nwk``: it is readable by any backend,
+    whichever machine ran the CLI. Any miss there falls through to the stored
+    paths below, which is what reference seeds and older ingests rely on.
+
+    Those stored paths are tried in three ways: (1) prefer the file registered
     by the CLI scan in ``files_collection``; (2) for reference datasets
     (seeded via db_init, never CLI-scanned), traverse the project document
     to find the matching DC under ``workflows[].data_collections[]`` and
@@ -1533,6 +1559,22 @@ def get_phylogeny_newick(
     # Same vulnerability class as /advanced_viz/data: caller-supplied dc_id
     # returning raw data — gate on project-level access before any file read.
     _assert_dc_access(dc_oid, current_user)
+
+    # Ingest-time copy (CLI `process_phylogeny_data_collection`); a miss falls through.
+    from depictio.api.v1.configs.config import settings
+    from depictio.models.models.data_collections_types.phylogeny import phylogeny_s3_key
+
+    s3_key = phylogeny_s3_key(str(dc_oid))
+    try:
+        obj = _phylogeny_s3_client().get_object(Bucket=settings.minio.bucket, Key=s3_key)
+        return obj["Body"].read().decode("utf-8")
+    except Exception as exc:
+        logger.debug(
+            "phylogeny newick not read from s3://%s/%s (%s); trying stored paths",
+            settings.minio.bucket,
+            s3_key,
+            exc,
+        )
 
     # Build a list of candidate paths and try each. The CLI scan records the
     # *host* path it saw when the user ran depictio-cli on their laptop
@@ -1611,17 +1653,7 @@ def get_phylogeny_newick(
 
     try:
         if file_path.startswith("s3://"):
-            import boto3
-
-            from depictio.api.v1.configs.config import settings
-
-            s3 = boto3.client(
-                "s3",
-                endpoint_url=settings.minio.endpoint_url,
-                aws_access_key_id=settings.minio.aws_access_key_id,
-                aws_secret_access_key=settings.minio.aws_secret_access_key,
-                verify=settings.minio.verify_tls,
-            )
+            s3 = _phylogeny_s3_client()
             _, _, rest = file_path.partition("s3://")
             bucket, _, key = rest.partition("/")
             obj = s3.get_object(Bucket=bucket, Key=key)

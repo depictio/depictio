@@ -68,3 +68,42 @@ def test_the_run_model_really_has_no_collection_key():
 
     assert "data_collection_id" not in WorkflowRun.model_fields
     assert "workflow_id" in WorkflowRun.model_fields
+
+
+def test_phylogeny_trees_are_collected_for_deletion():
+    """The CLI uploads a tree under a key derived from the DC id, with no document
+    recording it, so only the embedded DC config can say it exists."""
+    from depictio.api.v1.endpoints.migrate_endpoints.routes import (
+        _collect_s3_locations_for_project,
+    )
+    from depictio.models.models.data_collections_types.phylogeny import phylogeny_s3_key
+
+    tree_dc, table_dc, other_project_tree = ObjectId(), ObjectId(), ObjectId()
+    projects = MagicMock()
+    projects.find.return_value = [
+        {
+            "workflows": [
+                {
+                    "data_collections": [
+                        {"_id": tree_dc, "config": {"type": "phylogeny"}},
+                        {"_id": table_dc, "config": {"type": "table"}},
+                        {"_id": other_project_tree, "config": {"type": "phylogeny"}},
+                    ]
+                }
+            ]
+        }
+    ]
+    empty = MagicMock()
+    empty.find.return_value = []
+    migrate = "depictio.api.v1.endpoints.migrate_endpoints.routes"
+
+    with (
+        patch(f"{migrate}.projects_collection", projects),
+        patch(f"{migrate}.deltatables_collection", empty),
+        patch(f"{migrate}.data_collections_collection", empty),
+        patch(f"{migrate}.multiqc_collection", empty),
+        patch(f"{migrate}.jbrowse_collection", empty),
+    ):
+        locations = _collect_s3_locations_for_project([tree_dc, table_dc], "bucket")
+
+    assert locations == [phylogeny_s3_key(str(tree_dc))]

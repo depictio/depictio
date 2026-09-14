@@ -17,6 +17,7 @@ from depictio.cli.cli_logging import logger
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.cli import CLIConfig
 from depictio.models.models.data_collections import DataCollection
+from depictio.models.models.data_collections_types.phylogeny import phylogeny_s3_key
 from depictio.models.models.files import File
 from depictio.models.models.s3 import PolarsStorageOptions
 from depictio.models.s3_utils import turn_S3_config_into_polars_storage_options
@@ -595,17 +596,9 @@ def client_aggregate_data(
     if data_collection.config.type.lower() == "geojson":
         return process_geojson_data_collection(data_collection, CLI_config, overwrite)
 
-    # Phylogeny DCs are file-backed; the scan phase registers the .nwk in
-    # `files`, and the Newick-serving endpoint reads it on demand. No delta
-    # table, no further processing.
+    # Phylogeny DCs have no delta table; the tree is copied to S3 for the Newick endpoint.
     if data_collection.config.type.lower() == "phylogeny":
-        return {
-            "result": "success",
-            "message": (
-                "Phylogeny DC registered; tree file served on demand "
-                "(no delta-table materialisation needed)."
-            ),
-        }
+        return process_phylogeny_data_collection(data_collection, CLI_config, overwrite)
 
     # Handle transformed (recipe-based) data collections. A `materialized`
     # transform keeps the recipe for lineage but ships a pre-computed seed file,
@@ -920,16 +913,7 @@ def process_geojson_data_collection(
     # Upload the GeoJSON file to S3 if it's local
     if not file_path.startswith("s3://"):
         try:
-            import boto3
-
-            storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
-            s3_client = boto3.client(
-                "s3",
-                endpoint_url=storage_options.endpoint_url,
-                aws_access_key_id=storage_options.aws_access_key_id,
-                aws_secret_access_key=storage_options.aws_secret_access_key,
-                region_name=storage_options.region,
-            )
+            s3_client = _s3_client(CLI_config)
 
             # Upload to S3 under the DC ID
             s3_key = f"{dc_id}/geojson_data.geojson"
@@ -969,6 +953,79 @@ def process_geojson_data_collection(
     return {
         "result": "success",
         "message": f"GeoJSON uploaded to {s3_location}",
+    }
+
+
+def _s3_client(CLI_config: CLIConfig):
+    """boto3 S3 client for the CLI's configured storage (GeoJSON and phylogeny uploads)."""
+    import boto3
+
+    storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
+    return boto3.client(
+        "s3",
+        endpoint_url=storage_options.endpoint_url,
+        aws_access_key_id=storage_options.aws_access_key_id,
+        aws_secret_access_key=storage_options.aws_secret_access_key,
+        region_name=storage_options.region,
+    )
+
+
+def process_phylogeny_data_collection(
+    data_collection: DataCollection,
+    CLI_config: CLIConfig,
+    overwrite: bool = False,
+) -> dict[str, str]:
+    """Upload a phylogeny DC's Newick file to S3 so any backend can serve it.
+
+    The scan registers the tree under the path the CLI saw, which a containerised
+    or remote backend cannot read. The copy lands at ``phylogeny_s3_key``, where
+    the Newick endpoint looks first. The location is not registered through
+    /deltatables/upsert, which would try to scan the file as a delta table.
+
+    Args:
+        data_collection: Phylogeny DataCollection object.
+        CLI_config: CLI configuration with API URL, credentials and S3 storage.
+        overwrite: Accepted for parity with the other processors. The upload
+            always replaces the stored tree, since the scan decides which file
+            is current.
+
+    Returns:
+        Result dict with success/error status.
+    """
+    logger.info(f"Processing phylogeny data collection: {data_collection.data_collection_tag}")
+
+    dc_id = str(data_collection.id)
+
+    try:
+        files = fetch_file_data(dc_id, CLI_config)
+    except Exception as e:
+        return {"result": "error", "message": f"No files found for phylogeny DC: {e}"}
+
+    if not files:
+        return {"result": "error", "message": "No files found for phylogeny data collection"}
+
+    file_path = files[0].file_location
+    logger.info(f"Phylogeny tree location: {file_path}")
+
+    if file_path.startswith("s3://"):
+        s3_location = file_path
+    else:
+        bucket = CLI_config.s3_storage.bucket
+        s3_key = phylogeny_s3_key(dc_id)
+        try:
+            logger.info(f"Uploading phylogeny tree to S3: {file_path} -> {s3_key}")
+            _s3_client(CLI_config).upload_file(file_path, bucket, s3_key)
+        except Exception as e:
+            return {"result": "error", "message": f"Failed to upload phylogeny tree to S3: {e}"}
+        s3_location = f"s3://{bucket}/{s3_key}"
+
+    rich_print_checked_statement(
+        f"Phylogeny data collection processed: {data_collection.data_collection_tag}", "success"
+    )
+
+    return {
+        "result": "success",
+        "message": f"Phylogeny tree available at {s3_location}",
     }
 
 

@@ -40,6 +40,7 @@ from depictio.api.v1.endpoints.backup_endpoints.routes import _convert_complex_o
 from depictio.api.v1.endpoints.user_endpoints.routes import (
     get_user_or_anonymous,
 )
+from depictio.models.models.data_collections_types.phylogeny import phylogeny_s3_key
 from depictio.models.models.users import User
 
 migrate_endpoint_router = APIRouter()
@@ -146,6 +147,18 @@ def _collect_s3_locations_for_project(dc_ids: list[ObjectId], source_bucket: str
             uri = track.get("uri", "")
             if uri.startswith("s3://"):
                 add(_normalize_s3_path(uri, source_bucket))
+
+    # Phylogeny trees: no document records where the CLI uploaded them, the key
+    # is derived from the DC id, so tell the phylogenies apart by their config.
+    wanted = set(dc_ids)
+    for project in projects_collection.find(
+        {"workflows.data_collections._id": {"$in": dc_ids}},
+        {"workflows.data_collections._id": 1, "workflows.data_collections.config.type": 1},
+    ):
+        for wf in project.get("workflows") or []:
+            for dc in wf.get("data_collections") or []:
+                if dc.get("_id") in wanted and (dc.get("config") or {}).get("type") == "phylogeny":
+                    add(phylogeny_s3_key(str(dc["_id"])))
 
     return locations
 
