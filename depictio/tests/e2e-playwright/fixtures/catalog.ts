@@ -313,6 +313,11 @@ export async function addCatalogRender(
  */
 export const MULTIQC_WARM_TIMEOUT_MS = 300_000;
 
+// Under uvicorn's 5s default keep-alive, so the next poll usually lands on a
+// connection the server has not yet decided to close. This only narrows the
+// window — the catch in the loop is what actually closes it.
+const POLL_INTERVAL_MS = 3_000;
+
 export async function waitForMultiqcOptions(
   request: APIRequestContext,
   tokens: TokenBundle,
@@ -328,21 +333,34 @@ export async function waitForMultiqcOptions(
   for (const dcId of dcIds) {
     const startedAt = Date.now();
     let plottable = false;
+    let dropped = 0;
     for (;;) {
-      const res = await request.get(
-        `${API_URL}${API_PREFIX}/multiqc/builder_options?data_collection_id=${dcId}`,
-        { headers: auth(tokens) },
-      );
-      if (res.ok()) {
-        const opts = (await res.json()) as { plots?: Record<string, string[]> };
-        plottable = Object.values(opts.plots ?? {}).some((list) => (list?.length ?? 0) > 0);
+      try {
+        const res = await request.get(
+          `${API_URL}${API_PREFIX}/multiqc/builder_options?data_collection_id=${dcId}`,
+          { headers: auth(tokens) },
+        );
+        if (res.ok()) {
+          const opts = (await res.json()) as { plots?: Record<string, string[]> };
+          plottable = Object.values(opts.plots ?? {}).some((list) => (list?.length ?? 0) > 0);
+        }
+      } catch {
+        // A dropped connection is this loop's subject matter, not a verdict on
+        // it. The poll idles between attempts by design, and uvicorn closes an
+        // idle keep-alive connection on its own schedule — reusing one it has
+        // just closed surfaces as "socket hang up" and, uncaught, killed the
+        // whole hook and both lanes before a single render was walked.
+        // The deadline is what bounds this loop; a backend that is really gone
+        // still reports every collection cold, which the caller reports.
+        dropped++;
       }
       if (plottable || Date.now() >= deadline) break;
-      await new Promise((r) => setTimeout(r, 5_000));
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
     }
     const waited = Math.round((Date.now() - startedAt) / 1000);
+    const note = dropped ? ` (${dropped} dropped connection(s))` : "";
     if (!plottable) cold.push(dcId);
-    else if (waited >= 5) console.log(`multiqc options for ${dcId} ready after ${waited}s`);
+    else if (waited >= 5) console.log(`multiqc options for ${dcId} ready after ${waited}s${note}`);
   }
   return cold;
 }
