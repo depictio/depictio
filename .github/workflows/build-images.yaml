@@ -346,7 +346,21 @@ jobs:
           # nothing else. No .env, no COMPOSE_PROFILES, no extra args.
           cp docker-compose.yaml "$work/docker-compose.yaml"
           cd "$work"
-          docker compose up -d
+
+          # Registry pulls occasionally hit a transient 5xx (e.g. a gateway
+          # timeout mid-layer on quay.io/Docker Hub) while `up` pulls six
+          # images at once; retry a few times before failing the whole run
+          # over what is usually a blip, not a real break.
+          up_ok=false
+          for attempt in 1 2 3; do
+            if docker compose up -d; then
+              up_ok=true
+              break
+            fi
+            echo "::warning::docker compose up -d failed (attempt $attempt/3) — retrying"
+            sleep 15
+          done
+          $up_ok || { echo "::error::docker compose up -d failed after 3 attempts"; exit 1; }
 
           echo "::group::Wait for backend health"
           ok=false
