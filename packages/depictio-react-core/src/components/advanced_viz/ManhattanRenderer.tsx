@@ -29,6 +29,7 @@ import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragm
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
+import { useReportGroupColouring } from '../../groupReach';
 
 type Highlight = 'above' | 'below' | 'none';
 
@@ -58,6 +59,8 @@ interface ManhattanConfig {
 /** Sentinel values for the Colour-by Select that aren't real DC columns. */
 const COLOR_BY_CHROMOSOME = '__chromosome__';
 const COLOR_BY_SCORE = '__score__';
+
+const PLOT_CONFIG = { displaylogo: false, responsive: true } as any;
 
 interface Props {
   metadata: StoredMetadata & { viz_kind?: string; config?: ManhattanConfig };
@@ -940,6 +943,8 @@ const ManhattanRenderer: React.FC<Props> = ({
       showLegend: true,
     });
   }, [figure, groupRender]);
+  // Whether any point matched, for the dispatch's "not grouped" badge.
+  useReportGroupColouring(groupRender, figure, groupedFigure);
 
   // ``selectedOrder`` drives which tier gets the "selected" treatment in the
   // top counts chips AND the Show-data table row highlighting. Follow the
@@ -971,13 +976,27 @@ const ManhattanRenderer: React.FC<Props> = ({
   // MAX_GROUP_VALUES (25k distinct values) is refused by
   // `groupFromSelectionFilter` when the user tries to save it as a group. It
   // still cross-filters at any size.
+  //
+  // Only a gesture may empty the selection. Each `Plotly.react` re-applies the
+  // drawn box or lasso to the traces and emits `plotly_selected` again, and on
+  // the WebGL trace that re-selection comes back with no points: unguarded, the
+  // filter a gesture sets is cleared by the very re-render it causes, a fraction
+  // of a second later. `plotly_selecting` fires while a box or lasso is dragged.
+  const gestureInProgress = React.useRef(false);
   const emitSelection = (values: string[]) => {
     if (!onFilterChange || !selectionColumn) return;
     onFilterChange(advancedVizSelectionFilter(metadata, selectionColumn, values));
   };
+  const handleSelecting = () => {
+    gestureInProgress.current = true;
+  };
   const handleSelected = (event: any) => {
     if (!selectionEnabled) return;
-    emitSelection(extractScatterSelection(event, 0));
+    const fromGesture = gestureInProgress.current;
+    gestureInProgress.current = false;
+    const values = extractScatterSelection(event, 0);
+    if (values.length === 0 && !fromGesture) return;
+    emitSelection(values);
   };
   // A single click is a one-point selection, which is how the scatter figures
   // and the Dash viewer have always read it.
@@ -989,6 +1008,21 @@ const ManhattanRenderer: React.FC<Props> = ({
     if (!selectionEnabled) return;
     emitSelection([]);
   };
+
+  // Stable figure props. react-plotly compares data, layout and config by
+  // identity and calls `Plotly.react` on any change, so a render that draws
+  // nothing new (the selection's own filter landing back in `filters`) must
+  // hand it the same objects, or it redraws and re-selects for nothing.
+  const plotFigure = useMemo(
+    () =>
+      groupedFigure
+        ? {
+            data: applyDataTheme(groupedFigure.data, isDark, theme) as any,
+            layout: applyLayoutTheme(groupedFigure.layout as any, isDark, theme) as any,
+          }
+        : null,
+    [groupedFigure, isDark, theme],
+  );
 
   return (
     <AdvancedVizFrame
@@ -1003,13 +1037,14 @@ const ManhattanRenderer: React.FC<Props> = ({
       counts={counts}
       tierAnnotation={tierAnnotation}
     >
-      {groupedFigure ? (
+      {plotFigure ? (
         <Plot
-          data={applyDataTheme(groupedFigure.data, isDark, theme) as any}
-          layout={applyLayoutTheme(groupedFigure.layout as any, isDark, theme) as any}
+          data={plotFigure.data}
+          layout={plotFigure.layout}
           useResizeHandler
           style={{ width: '100%', height: '100%' }}
-          config={{ displaylogo: false, responsive: true } as any}
+          config={PLOT_CONFIG}
+          onSelecting={selectionEnabled ? handleSelecting : undefined}
           onSelected={selectionEnabled ? handleSelected : undefined}
           onClick={selectionEnabled ? handleClick : undefined}
           onDeselect={selectionEnabled ? handleDeselect : undefined}

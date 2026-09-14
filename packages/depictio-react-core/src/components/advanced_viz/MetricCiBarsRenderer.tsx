@@ -6,6 +6,7 @@ import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../a
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
+import { useReportGroupColouring } from '../../groupReach';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 import { COLORSCALE_NAMES, plotlyColorscale } from '../../utils/colorScale';
 
@@ -180,6 +181,8 @@ const MetricCiBarsRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
         : figure,
     [figure, groupRender],
   );
+  // Whether any label matched, for the dispatch's "not grouped" badge.
+  useReportGroupColouring(groupRender, figure, groupedFigure);
 
   const controls = useMemo(
     () => (

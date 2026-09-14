@@ -3,9 +3,10 @@
  *
  * A split is one idea: cut the rows into named subsets and draw the whole
  * component once per subset. Nothing in that sentence mentions what is being
- * drawn, which is why it works for a sunburst and an UpSet as readily as for a
- * scatter — the renderer is asked for nothing, it is simply built again against
- * less data.
+ * drawn, which is why it works for a sunburst as readily as for a QQ plot:
+ * the renderer is asked for nothing, it is simply built again against less
+ * data. Whether a given kind *should* be split is a separate question, answered
+ * per kind by `groupingModeForKind` at the end of this file.
  *
  * Every subset is expressed as extra `InteractiveFilter` entries appended to
  * the dashboard's own. That is the whole generalisation: because a cell is a
@@ -20,7 +21,7 @@
  * component reading another.
  */
 
-import type { InteractiveFilter } from './api';
+import type { AdvancedVizKind, InteractiveFilter } from './api';
 import { GROUP_FILTER_INDEX_PREFIX, GROUP_FILTER_SOURCE } from './selectionGroups';
 import type { GroupRenderDef, GroupRenderState } from './selectionGroups';
 
@@ -164,4 +165,92 @@ export function panelsForGrouping(
   // which is a different column wearing the same name. Split on nothing.
   if (values.length === 0) return [];
   return panelsFromColumnValues(column.columnName, values, column.colorMap);
+}
+
+/** Above this many groups the split is refused and the component renders whole.
+ *  One fetch per panel, and small multiples stop being legible well before
+ *  this. Deliberately well under the server's `MAX_FACET_CATEGORIES` (12),
+ *  which faces a single query rather than one per panel. */
+export const MAX_PANELS = 6;
+
+/** What a chart type does when the dashboard asks to split by groups: deal
+ *  itself into panels, colour its marks by group in one panel, or neither. */
+export type GroupingMode = 'split' | 'colour' | 'none';
+
+/**
+ * The split policy, per kind.
+ *
+ * Keyed on the kind rather than on anything the rows could reveal, because the
+ * answer is about what the chart means, not about what it was fed. Typed over
+ * every kind the client knows, so a new kind does not compile until someone
+ * has placed it.
+ */
+export const GROUPING_MODE_BY_KIND: Readonly<Record<AdvancedVizKind, GroupingMode>> = {
+  // Split. A group is a subset of the rows the chart summarises, so the chart
+  // rebuilt from each subset is a real answer, and side by side is how those
+  // distributions are compared.
+  qq: 'split',
+  rarefaction: 'split',
+  coverage_track: 'split',
+  stacked_taxonomy: 'split',
+  sunburst: 'split',
+  sankey: 'split',
+  oncoplot: 'split',
+  signal_matrix: 'split',
+
+  // Colour in one panel. The marks share one coordinate space, and panels cost
+  // the comparison the chart exists for: an ordination rebuilt per group is a
+  // different ordination with incomparable axes, a Manhattan loses its
+  // genome-wide axis. Drawn whole these also keep their selection tool, which
+  // read-only panels drop, and they are where groups are drawn in the first
+  // place. Each renderer colours by group itself.
+  embedding: 'colour',
+  manhattan: 'colour',
+  scatter_xy: 'colour',
+  profile: 'colour',
+  volcano: 'colour',
+  ma: 'colour',
+  lollipop: 'colour',
+  da_barplot: 'colour',
+  metric_ci_bars: 'colour',
+
+  // Neither. Either the rows are not samples a group can name (terms, truth-set
+  // results, one locus's structure), or a subset re-derives the layout itself
+  // (a tree, a clustered matrix, set intersections), so panels would not be
+  // comparable. Drawn whole and badged, so the tile does not pass for one that
+  // honoured the split. Whatever they already do with filters is untouched.
+  phylogenetic: 'none',
+  complex_heatmap: 'none',
+  dot_plot: 'none',
+  upset_plot: 'none',
+  enrichment: 'none',
+  pr_benchmark: 'none',
+  roc_pr_curve: 'none',
+  confusion_matrix: 'none',
+  fusion_structure: 'none',
+  gene_arrow_track: 'none',
+  gsea_running_score: 'none',
+  sashimi: 'none',
+};
+
+/** The policy for `vizKind`.
+ *
+ *  A kind missing from the map (one the server knows and this client does not
+ *  yet) is split, which is what every kind did before the policy existed: a
+ *  new chart keeps the generic behaviour until someone decides otherwise.
+ *  `ancombc_differentials` is the legacy name of `da_barplot`, still carried by
+ *  dashboards saved before the two were merged. */
+export function groupingModeForKind(vizKind: string): GroupingMode {
+  const kind = vizKind === 'ancombc_differentials' ? 'da_barplot' : vizKind;
+  return Object.prototype.hasOwnProperty.call(GROUPING_MODE_BY_KIND, kind)
+    ? GROUPING_MODE_BY_KIND[kind as AdvancedVizKind]
+    : 'split';
+}
+
+/** Whether the dashboard is asking for this split, the kind takes it, and it
+ *  is small enough to honour. Read by the dispatch before it decides how to
+ *  render. */
+export function shouldSplitIntoPanels(panels: PanelSpec[], vizKind: string): boolean {
+  if (groupingModeForKind(vizKind) !== 'split') return false;
+  return panels.length > 1 && panels.length <= MAX_PANELS;
 }

@@ -37,6 +37,7 @@ import {
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
+import { useReportGroupColouring } from '../../groupReach';
 
 type LegendPos = 'right' | 'bottom' | 'none';
 type ReferenceLine = 'none' | 'diagonal' | 'horizontal' | 'vertical';
@@ -690,6 +691,8 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
         : figure,
     [figure, groupRender],
   );
+  // Whether any point matched, for the dispatch's "not grouped" badge.
+  useReportGroupColouring(groupRender, figure, groupedFigure);
 
   return (
     <AdvancedVizFrame

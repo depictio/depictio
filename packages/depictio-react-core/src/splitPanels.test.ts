@@ -2,11 +2,15 @@ import { describe, expect, it } from 'vitest';
 
 import type { GroupRenderState } from './selectionGroups';
 import {
+  GROUPING_MODE_BY_KIND,
+  MAX_PANELS,
   crossPanels,
+  groupingModeForKind,
   panelFilters,
   panelsForGrouping,
   panelsFromColumnValues,
   panelsFromGroups,
+  shouldSplitIntoPanels,
 } from './splitPanels';
 
 const GROUPS = [
@@ -85,6 +89,85 @@ describe('splitPanels', () => {
     expect(
       panelsForGrouping({ ...column, colorByColumn: { columnName: 'habitat' } }),
     ).toEqual([]);
+  });
+
+  describe('the split policy', () => {
+    // Every kind in `AdvancedVizKind` (depictio/models/components/types.py),
+    // by the bucket it was placed in. The map is typed over the client's copy
+    // of that enum, so a kind missing here and there fails to compile; this
+    // pins where each one landed.
+    const SPLIT = [
+      'qq',
+      'rarefaction',
+      'coverage_track',
+      'stacked_taxonomy',
+      'sunburst',
+      'sankey',
+      'oncoplot',
+      'signal_matrix',
+    ];
+    const COLOUR = [
+      'embedding',
+      'manhattan',
+      'scatter_xy',
+      'profile',
+      'volcano',
+      'ma',
+      'lollipop',
+      'da_barplot',
+      'metric_ci_bars',
+    ];
+    const NONE = [
+      'phylogenetic',
+      'complex_heatmap',
+      'dot_plot',
+      'upset_plot',
+      'enrichment',
+      'pr_benchmark',
+      'roc_pr_curve',
+      'confusion_matrix',
+      'fusion_structure',
+      'gene_arrow_track',
+      'gsea_running_score',
+      'sashimi',
+    ];
+
+    it('places every model kind in its bucket, and no kind twice', () => {
+      const all = [...SPLIT, ...COLOUR, ...NONE];
+      expect(new Set(all).size).toBe(all.length);
+      expect(Object.keys(GROUPING_MODE_BY_KIND).sort()).toEqual([...all].sort());
+      for (const kind of SPLIT) expect(groupingModeForKind(kind), kind).toBe('split');
+      for (const kind of COLOUR) expect(groupingModeForKind(kind), kind).toBe('colour');
+      for (const kind of NONE) expect(groupingModeForKind(kind), kind).toBe('none');
+    });
+
+    it('splits a kind it has never heard of, as every kind did before', () => {
+      expect(groupingModeForKind('some_future_kind')).toBe('split');
+      expect(groupingModeForKind('')).toBe('split');
+      // Not fooled by names every object inherits.
+      expect(groupingModeForKind('constructor')).toBe('split');
+    });
+
+    it('reads the legacy differential kind as the bar plot it became', () => {
+      expect(groupingModeForKind('ancombc_differentials')).toBe('colour');
+    });
+
+    it('deals only split kinds into panels', () => {
+      const panels = panelsFromGroups(GROUPS);
+      for (const kind of SPLIT) expect(shouldSplitIntoPanels(panels, kind), kind).toBe(true);
+      // One shared space, and the lasso groups are drawn with: as read-only
+      // panels it could no longer create or refine a group.
+      for (const kind of COLOUR) expect(shouldSplitIntoPanels(panels, kind), kind).toBe(false);
+      for (const kind of NONE) expect(shouldSplitIntoPanels(panels, kind), kind).toBe(false);
+      expect(shouldSplitIntoPanels(panels, 'some_future_kind')).toBe(true);
+    });
+  });
+
+  it('splits only between two and MAX_PANELS cells', () => {
+    const many = Array.from({ length: MAX_PANELS + 1 }, (_, i) => ({ ...GROUPS[0], name: `G${i}` }));
+    expect(shouldSplitIntoPanels(panelsFromGroups(GROUPS), 'qq')).toBe(true);
+    expect(shouldSplitIntoPanels(panelsFromGroups(GROUPS.slice(0, 1)), 'qq')).toBe(false);
+    expect(shouldSplitIntoPanels(panelsFromGroups(many), 'qq')).toBe(false);
   });
 
   describe('narrowing by an active filter', () => {

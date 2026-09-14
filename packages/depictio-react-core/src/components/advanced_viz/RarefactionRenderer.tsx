@@ -22,6 +22,7 @@ import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
+import { useReportGroupColouring } from '../../groupReach';
 import {
   applyDataTheme,
   applyLayoutTheme,
@@ -496,6 +497,8 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, 
         : figure,
     [figure, groupRender],
   );
+  // Whether any curve matched, for the dispatch's "not grouped" badge.
+  useReportGroupColouring(groupRender, figure, groupedFigure);
 
   const controls = (
     <Stack gap="xs">

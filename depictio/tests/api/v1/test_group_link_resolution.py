@@ -612,6 +612,117 @@ class TestCardComparisonReportsOmissions:
         assert "omitted" not in out
 
 
+class TestReversedDirectLinks:
+    """(e) A group drawn on one leaf of a star-shaped project reaches the others.
+
+    The nf-core atacseq shape: ``sample_design`` links out to the peak table
+    (``merged_library`` onto its ``sample``) and to the ATAC QC metrics (on
+    ``sample``), and the peak table links on to its annotation (on
+    ``peak_id``). Peaks lassoed off a Manhattan plot have no declared route to
+    the QC metrics, only one back up to the hub and down again. A ``direct``
+    link joins equal values, so groups may walk it backwards; the peaks then
+    stand for the libraries that carry them.
+    """
+
+    DESIGN_DC = "6a19541470f089f587c39ca1"
+    PEAKS_DC = "6a19541470f089f587c39ca2"
+    ATAQV_DC = "6a19541470f089f587c39ca3"
+    HOMER_DC = "6a19541470f089f587c39ca4"
+
+    @classmethod
+    def _star(cls):
+        def link(link_id, source, source_column, target, target_field):
+            return {
+                "id": link_id,
+                "enabled": True,
+                "source_dc_id": source,
+                "source_column": source_column,
+                "target_dc_id": target,
+                "target_type": "table",
+                "link_config": {"resolver": "direct", "target_field": target_field},
+            }
+
+        return {
+            "project": {
+                "_id": "fcf60afdea2241b493b9c473",
+                "links": [
+                    link("l_peaks", cls.DESIGN_DC, "merged_library", cls.PEAKS_DC, "sample"),
+                    link("l_ataqv", cls.DESIGN_DC, "sample", cls.ATAQV_DC, "sample"),
+                    link("l_homer", cls.PEAKS_DC, "peak_id", cls.HOMER_DC, "peak_id"),
+                ],
+            }
+        }
+
+    def _peak_group(self):
+        return _groups(column="peak_id", dc_id=self.PEAKS_DC, values=("peak_1", "peak_7"))
+
+    def test_a_peak_group_reaches_a_sample_keyed_collection_through_the_hub(self):
+        calls = []
+
+        def fake_resolve(**kwargs):
+            calls.append(kwargs)
+            if kwargs["reverse"]:
+                # The libraries carrying the selected peaks, as the hub names them.
+                return {"resolved_values": ["LIB1.mLb.clN"], "resolver_used": "direct"}
+            return {"resolved_values": ["LIB1_REP1", "LIB1_REP2"], "resolver_used": "direct"}
+
+        with patch("depictio.api.v1.filter_links.resolve_link_values", side_effect=fake_resolve):
+            resolved, statuses = resolve_group_defs_for_dc(
+                self._peak_group(),
+                self.ATAQV_DC,
+                ["sample", "tss_enrichment"],
+                translate=_translator(self._star(), target_dc_id=self.ATAQV_DC),
+            )
+
+        hops = [
+            (c["source_dc_id"], c["source_column"], c["target_dc_id"], c["reverse"]) for c in calls
+        ]
+        assert hops == [
+            # Up to the hub against the declared direction, asked about the peak ids,
+            (self.PEAKS_DC, "peak_id", self.DESIGN_DC, True),
+            # then down a declared link, carrying the hub's own column.
+            (self.DESIGN_DC, "merged_library", self.ATAQV_DC, False),
+        ]
+        assert resolved[0]["column_name"] == "sample"
+        assert resolved[0]["values"] == ["LIB1_REP1", "LIB1_REP2"]
+        assert statuses[0]["status"] == GROUP_LINKED
+
+    def test_a_route_ending_on_a_reversed_hop_names_the_link_source_column(self):
+        # The hub carries a `sample` column too. `target_field` names the peak
+        # table's side of the link, so annotating on it here would label the
+        # wrong rows without any error.
+        with patch(
+            "depictio.api.v1.filter_links.resolve_link_values",
+            return_value={"resolved_values": ["LIB1.mLb.clN"], "resolver_used": "direct"},
+        ):
+            resolved, statuses = resolve_group_defs_for_dc(
+                self._peak_group(),
+                self.DESIGN_DC,
+                ["merged_library", "sample"],
+                translate=_translator(self._star(), target_dc_id=self.DESIGN_DC),
+            )
+        assert resolved[0]["column_name"] == "merged_library"
+        assert statuses[0]["status"] == GROUP_LINKED
+
+    def test_a_declared_route_is_walked_forwards(self):
+        with patch(
+            "depictio.api.v1.filter_links.resolve_link_values",
+            return_value={"resolved_values": ["peak_1"], "resolver_used": "direct"},
+        ) as mock_resolve:
+            hop = resolve_values_via_links(
+                project_metadata=self._star(),
+                origin_dc_id=self.PEAKS_DC,
+                origin_column="peak_id",
+                values=["peak_1"],
+                target_dc_id=self.HOMER_DC,
+                access_token="fake-token",
+            )
+        mock_resolve.assert_called_once()
+        assert mock_resolve.call_args.kwargs["reverse"] is False
+        assert mock_resolve.call_args.kwargs["source_dc_id"] == self.PEAKS_DC
+        assert hop == ("peak_id", ["peak_1"])
+
+
 def _never_called(*_args):
     raise AssertionError(
         "translate() must not be consulted when the column is already present "

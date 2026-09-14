@@ -23,6 +23,7 @@ import { COLOUR_SCALES, type ColourScale } from './colourScales';
 import { dotSizeKey, dotSizes, type DotSizeKeyEntry } from './dotSizes';
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
+import { useReportGroupColouring } from '../../groupReach';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
 
@@ -562,6 +563,8 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
         : figure,
     [figure, groupRender],
   );
+  // Whether any dot matched, for the dispatch's "not grouped" badge.
+  useReportGroupColouring(groupRender, figure, groupedFigure);
 
   return (
     <AdvancedVizFrame

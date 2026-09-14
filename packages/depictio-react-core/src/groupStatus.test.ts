@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
-import { groupBadgeLabel, summarizeGroupStatus, type GroupStatusEntry } from './groupStatus';
+import {
+  GROUP_DECLINED_REASONS,
+  advancedVizGroupOutcome,
+  groupBadgeLabel,
+  groupBadgeReasons,
+  groupKindNotSplitReasons,
+  groupUnmatchedReasons,
+  groupUnreachableReasons,
+  summarizeGroupStatus,
+  type AdvancedVizGroupInputs,
+  type GroupStatusEntry,
+} from './groupStatus';
 
 const applied = (name: string): GroupStatusEntry => ({ name, status: 'applied', applied: true });
 const linked = (name: string): GroupStatusEntry => ({ name, status: 'linked', applied: true });
@@ -74,9 +85,142 @@ describe('groupBadgeLabel', () => {
     expect(groupBadgeLabel(false, null)).toBeNull();
   });
 
-  it('stays silent when the groups landed but the figure declined the override', () => {
-    // `group_colored: false` with every group applied is a visu type refusing
-    // the repaint, not a group that missed — the tile is not "not grouped".
-    expect(groupBadgeLabel(false, summarizeGroupStatus([applied('Soil')]))).toBeNull();
+  it('says so when the groups landed but the figure declined the override', () => {
+    // `group_colored: false` with every group applied is a code figure that
+    // ignores `depictio_group_kwargs`, or a visu type refusing the repaint.
+    // Either way the reader sees an ungrouped tile, and silence would read as
+    // a tile that simply ignores the feature.
+    expect(groupBadgeLabel(false, summarizeGroupStatus([applied('Soil')]))).toBe('not grouped');
+  });
+});
+
+describe('groupBadgeReasons', () => {
+  it('has nothing to explain when every group landed and the figure repainted', () => {
+    expect(groupBadgeReasons(true, summarizeGroupStatus([applied('Soil')]), 'unused')).toEqual([]);
+  });
+
+  it('lists each group that missed', () => {
+    const s = summarizeGroupStatus([applied('Soil'), missed('River', 'no_link')]);
+    expect(groupBadgeReasons(true, s, GROUP_DECLINED_REASONS.code)).toEqual([
+      'River: no declared link joins this dataset to the one it was drawn on',
+    ]);
+  });
+
+  it("names the figure's code when the groups landed but nothing was drawn", () => {
+    const s = summarizeGroupStatus([applied('Soil')]);
+    expect(groupBadgeReasons(false, s, GROUP_DECLINED_REASONS.code)).toEqual([
+      "This figure's code does not use analysis groups.",
+    ]);
+  });
+
+  it('does not blame the code when no group reached the frame at all', () => {
+    const s = summarizeGroupStatus([missed('River', 'column_absent')]);
+    expect(groupBadgeReasons(false, s, GROUP_DECLINED_REASONS.code)).toEqual([
+      'River: the column it was drawn on is not in this dataset',
+    ]);
+  });
+});
+
+describe('groupUnreachableReasons', () => {
+  it('explains a component the groups cannot narrow', () => {
+    expect(groupUnreachableReasons()).toEqual([
+      'The groups were drawn on another dataset and no declared link reaches this one.',
+    ]);
+  });
+});
+
+describe('groupKindNotSplitReasons', () => {
+  it('blames the chart type, not a missing link', () => {
+    // A reader who sees the link reason would go and declare a link, which
+    // would change nothing for a kind that is never split.
+    expect(groupKindNotSplitReasons()).toEqual([
+      'This chart type is not split or coloured by analysis groups.',
+    ]);
+    expect(groupKindNotSplitReasons()).not.toEqual(groupUnreachableReasons());
+  });
+});
+
+describe('groupUnmatchedReasons', () => {
+  it('blames the rows, not a missing link or the chart type', () => {
+    // The groups may come from this very dataset, drawn on a column this plot
+    // is not keyed by: neither a link nor another chart type would help.
+    expect(groupUnmatchedReasons()).toEqual([
+      "None of this figure's points belong to a group: its rows carry no value the groups were drawn on.",
+    ]);
+    expect(groupUnmatchedReasons()).not.toEqual(groupUnreachableReasons());
+    expect(groupUnmatchedReasons()).not.toEqual(groupKindNotSplitReasons());
+  });
+});
+
+describe('advancedVizGroupOutcome', () => {
+  const whole: AdvancedVizGroupInputs = {
+    groupsActive: true,
+    split: false,
+    declinedByKind: false,
+    splitIneffective: false,
+    coloured: null,
+    drawnHere: false,
+  };
+
+  it('says nothing when no groups are active', () => {
+    expect(advancedVizGroupOutcome({ ...whole, groupsActive: false, coloured: false })).toEqual({
+      badge: null,
+      reach: null,
+    });
+  });
+
+  it('blames the chart type for a kind that declines, whatever else is known', () => {
+    expect(advancedVizGroupOutcome({ ...whole, declinedByKind: true, drawnHere: true })).toEqual({
+      badge: 'kind',
+      reach: false,
+    });
+  });
+
+  it('counts a drawing split as reached', () => {
+    expect(advancedVizGroupOutcome({ ...whole, split: true })).toEqual({
+      badge: null,
+      reach: true,
+    });
+  });
+
+  it('counts a whole render whose recolour matched, wherever the groups were drawn', () => {
+    expect(advancedVizGroupOutcome({ ...whole, coloured: true })).toEqual({
+      badge: null,
+      reach: true,
+    });
+  });
+
+  it('badges a whole render whose recolour matched nothing, even on its own dataset', () => {
+    // Groups of samples drawn on this dataset still miss a plot keyed per
+    // peak: the dataset guess must not outvote what the renderer saw.
+    expect(advancedVizGroupOutcome({ ...whole, coloured: false, drawnHere: true })).toEqual({
+      badge: 'unmatched',
+      reach: false,
+    });
+  });
+
+  it('keeps the link reason for a split that proved ineffective', () => {
+    expect(advancedVizGroupOutcome({ ...whole, splitIneffective: true })).toEqual({
+      badge: 'unreachable',
+      reach: false,
+    });
+    expect(
+      advancedVizGroupOutcome({ ...whole, splitIneffective: true, coloured: false }),
+    ).toEqual({ badge: 'unreachable', reach: false });
+  });
+
+  it('does not badge a tile that did colour after an ineffective split', () => {
+    expect(advancedVizGroupOutcome({ ...whole, splitIneffective: true, coloured: true })).toEqual({
+      badge: null,
+      reach: true,
+    });
+  });
+
+  it('falls back to the dataset guess when the renderer reports nothing', () => {
+    expect(advancedVizGroupOutcome({ ...whole, drawnHere: true })).toEqual({
+      badge: null,
+      reach: true,
+    });
+    expect(advancedVizGroupOutcome(whole)).toEqual({ badge: null, reach: null });
   });
 });

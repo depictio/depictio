@@ -235,6 +235,16 @@ class LinkResolutionRequest(BaseModel):
         description="Target data collection ID to resolve values for",
     )
 
+    reverse: bool = Field(
+        default=False,
+        description=(
+            "Walk the link against its declared direction. The link is looked up as "
+            "target_dc_id -> source_dc_id, source_column is read on the link's target, "
+            "and the resolved values name the link's source_column. Only links using "
+            "the 'direct' resolver can be walked this way; any other answers 404."
+        ),
+    )
+
     model_config = ConfigDict(extra="forbid")
 
 

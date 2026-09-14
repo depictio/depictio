@@ -36,6 +36,7 @@ import {
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
+import { useReportGroupColouring } from '../../groupReach';
 
 type LegendPos = 'right' | 'bottom' | 'none';
 
@@ -646,6 +647,8 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
         : figure,
     [figure, groupRender],
   );
+  // Whether any series matched, for the dispatch's "not grouped" badge.
+  useReportGroupColouring(groupRender, figure, groupedFigure);
 
   return (
     <AdvancedVizFrame

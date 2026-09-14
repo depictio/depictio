@@ -41,9 +41,29 @@ import { useAdvancedVizInspector } from './AdvancedVizInspectorBridge';
 import LoadAllButton from '../chrome/LoadAllButton';
 import { ComponentIndexContext } from '../DashboardLoadingProvider';
 import type { GroupRenderState } from '../../selectionGroups';
-import SplitPanels, { shouldSplitIntoPanels } from './SplitPanels';
-import { panelsForGrouping } from '../../splitPanels';
+import SplitPanels from './SplitPanels';
+import { groupingModeForKind, panelsForGrouping, shouldSplitIntoPanels } from '../../splitPanels';
 import type { PanelSpec } from '../../splitPanels';
+import {
+  advancedVizGroupOutcome,
+  groupKindNotSplitReasons,
+  groupUnmatchedReasons,
+  groupUnreachableReasons,
+} from '../../groupStatus';
+import type { AdvancedVizGroupBadge } from '../../groupStatus';
+import {
+  GroupColouringReportContext,
+  groupColouringActive,
+  useReportGroupReach,
+} from '../../groupReach';
+import GroupStatusBadge, { GroupStatusBadgeContext } from '../GroupStatusBadge';
+
+/** The hover line behind each way an advanced viz ends up "not grouped". */
+const NOT_GROUPED_REASONS: Record<AdvancedVizGroupBadge, () => string[]> = {
+  kind: groupKindNotSplitReasons,
+  unreachable: groupUnreachableReasons,
+  unmatched: groupUnmatchedReasons,
+};
 
 interface AdvancedVizDispatchProps {
   metadata: StoredMetadata;
@@ -171,8 +191,8 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
 
   const vizKind = (metadata.viz_kind as string) || '';
   const Renderer = RENDERERS[vizKind];
-  // "Split" is one component per group, each built from that group's rows —
-  // see GroupSplitPanels for why it is not a cut through the finished figure.
+  // "Split" is one component per group, each built from that group's rows;
+  // see SplitPanels for why it is not a cut through the finished figure.
   // Panels are read-only: a lasso inside one would be a selection over an
   // already-narrowed frame, which is not what saving a group means.
   // Panels that turn out to hold identical data mean the group filter found
@@ -188,6 +208,72 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   React.useEffect(() => setSplitIneffective(false), [metadata.dc_id, panelKey]);
   const split = Boolean(Renderer) && !splitIneffective && shouldSplitIntoPanels(panels, vizKind);
   const handleIneffective = React.useCallback(() => setSplitIneffective(true), []);
+  // A kind that takes the groups neither as panels nor as colour (see
+  // `groupingModeForKind`). Only a Split display asks the question: in the
+  // colour overlay every kind is drawn whole with the groups, as before.
+  const kindDeclinesSplit =
+    groupRender?.display === 'facet' && groupingModeForKind(vizKind) === 'none';
+  // Not handed the groups either, so the tile matches its badge: a renderer
+  // that could still colour on its own would otherwise contradict it.
+  const wholeGroupRender = kindDeclinesSplit ? undefined : groupRender;
+
+  // What the renderer drawn whole reported after recolouring its figure by the
+  // groups (see `useReportGroupColouring`): whether any point belonged to one.
+  // Dropped when the dataset or the panel set changes, like `splitIneffective`,
+  // but by tagging the report with both rather than resetting it from an
+  // effect: the renderer's own report effect runs first in the same commit, so
+  // a reset after it would erase the fresh answer. A new key also hands the
+  // renderer a new callback, which is what makes it report again.
+  const colouringKey = `${metadata.dc_id}|${panelKey}`;
+  const [colouring, setColouring] = React.useState<{ key: string; matched: boolean | null }>({
+    key: colouringKey,
+    matched: null,
+  });
+  const reportColouring = React.useCallback(
+    (matched: boolean | null) =>
+      setColouring((prev) =>
+        prev.key === colouringKey && prev.matched === matched ? prev : { key: colouringKey, matched },
+      ),
+    [colouringKey],
+  );
+  const colouringMatched = colouring.key === colouringKey ? colouring.matched : null;
+
+  // Saying so when the groups do not reach this component. A split that came
+  // back identical in every panel falls back to the whole render above, which
+  // on its own looks exactly like a component that ignores grouping, and so
+  // does a kind that is never split, or a whole render whose recolour matched
+  // no point. The badge is the figure's "not grouped", handed to the frame
+  // through context, with the reason that applies.
+  //
+  // What the Analysis panel pools comes out of the same decision: a drawing
+  // split counts as reached until it proves ineffective, a kind that is never
+  // split never counts, and a whole render counts as its recolour reported.
+  // Only a renderer that reports nothing falls back to vouching for groups
+  // drawn on its own dataset.
+  const groupsActive = groupColouringActive(groupRender);
+  const drawnHere =
+    groupsActive &&
+    (groupRender?.groups ?? []).some((g) => Boolean(g.dc_id) && g.dc_id === metadata.dc_id);
+  const groupOutcome = advancedVizGroupOutcome({
+    groupsActive,
+    split,
+    declinedByKind: kindDeclinesSplit,
+    splitIneffective,
+    coloured: colouringMatched,
+    drawnHere,
+  });
+  const groupBadge = React.useMemo(
+    () =>
+      groupOutcome.badge ? (
+        <GroupStatusBadge
+          label="not grouped"
+          colored={false}
+          reasons={NOT_GROUPED_REASONS[groupOutcome.badge]()}
+        />
+      ) : null,
+    [groupOutcome.badge],
+  );
+  useReportGroupReach(metadata.index, groupOutcome.reach);
   // Memoised so that `published` changing — which is this component's own
   // state, and says nothing about what the renderer should draw — hands React
   // the same element and it skips the whole subtree. Without that, every
@@ -222,7 +308,7 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
           filters={filters}
           refreshTick={refreshTick}
           onFilterChange={onFilterChange}
-          groupRender={groupRender}
+          groupRender={wholeGroupRender}
         />
       ),
     [
@@ -235,7 +321,7 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
       metadata,
       refreshTick,
       onFilterChange,
-      groupRender,
+      wholeGroupRender,
     ],
   );
 
@@ -252,7 +338,11 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
     undefined,
     <AdvancedVizExtrasProvider onChange={setPublished}>
       <ComponentIndexContext.Provider value={metadata.index}>
-        {inner}
+        <GroupStatusBadgeContext.Provider value={groupBadge}>
+          <GroupColouringReportContext.Provider value={reportColouring}>
+            {inner}
+          </GroupColouringReportContext.Provider>
+        </GroupStatusBadgeContext.Provider>
       </ComponentIndexContext.Provider>
     </AdvancedVizExtrasProvider>,
     { extraActions: combinedExtras, showDragHandle },

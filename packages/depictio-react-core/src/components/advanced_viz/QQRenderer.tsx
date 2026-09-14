@@ -21,6 +21,7 @@ import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
+import { useReportGroupColouring } from '../../groupReach';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
 
@@ -371,19 +372,18 @@ const QQRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, groupRend
   const groupedFigure = useMemo(
     () =>
       figure
-        ? splitFigureByGroups(
-            { data: figure.data, layout: figure.layout },
-            {
-              groupRender,
-              identitySlot: 0,
-              facetable: false,
-              contextTraces: 'drop',
-              showLegend: true,
-            },
-          )
+        ? splitFigureByGroups(figure, {
+            groupRender,
+            identitySlot: 0,
+            facetable: false,
+            contextTraces: 'drop',
+            showLegend: true,
+          })
         : null,
     [figure, groupRender],
   );
+  // Whether any point matched, for the dispatch's "not grouped" badge.
+  useReportGroupColouring(groupRender, figure, groupedFigure);
 
   const controls = useMemo(
     () => (

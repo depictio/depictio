@@ -113,13 +113,16 @@ def _find_link_by_id(project: dict, link_id: str) -> tuple[DCLink | None, int]:
     return None, -1
 
 
-def _find_link_for_resolution(project: dict, source_dc_id: str, target_dc_id: str) -> DCLink | None:
+def _find_link_for_resolution(
+    project: dict, source_dc_id: str, target_dc_id: str, resolver: str | None = None
+) -> DCLink | None:
     """Find a link between source and target DCs.
 
     Args:
         project: Project document
         source_dc_id: Source DC ID
         target_dc_id: Target DC ID
+        resolver: When set, only a link using this resolver matches
 
     Returns:
         DCLink if found and enabled, None otherwise
@@ -131,6 +134,10 @@ def _find_link_for_resolution(project: dict, source_dc_id: str, target_dc_id: st
             str(link_data.get("source_dc_id")) == source_dc_id
             and str(link_data.get("target_dc_id")) == target_dc_id
             and link_data.get("enabled", True)
+            and (
+                resolver is None
+                or (link_data.get("link_config") or {}).get("resolver", "direct") == resolver
+            )
         ):
             return DCLink(**link_data)
     return None
@@ -643,6 +650,65 @@ async def delete_link(
 # ============================================================================
 
 
+async def _resolve_link_reverse(
+    project: dict, request: LinkResolutionRequest
+) -> LinkResolutionResponse:
+    """Resolve values against a link's declared direction, from its target to its source.
+
+    ``request.source_dc_id`` is the link's TARGET here and ``request.target_dc_id``
+    its source. Only ``direct`` links qualify: they join equal values, so they
+    invert. Other resolvers expand or rename values one way and answer 404, as a
+    missing link does.
+
+    The join column on the target side follows the forward rule (``target_field``,
+    else ``source_column``); a filter on another column is first translated onto
+    it by querying the target. The resolved values name the link's ``source_column``.
+    """
+    link = _find_link_for_resolution(
+        project, request.target_dc_id, request.source_dc_id, resolver="direct"
+    )
+    if link is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"No enabled direct link found from {request.target_dc_id} to "
+                f"{request.source_dc_id} to resolve in reverse"
+            ),
+        )
+
+    join_column = link.link_config.target_field or link.source_column
+    values_to_resolve = request.filter_values
+    if request.source_column != join_column:
+        values_to_resolve = await _translate_filter_values(
+            source_dc_id=request.source_dc_id,
+            filter_column=request.source_column,
+            filter_values=request.filter_values,
+            link_column=join_column,
+        )
+
+    resolved_values, unmapped_values = get_resolver(link.link_config.resolver).resolve(
+        source_values=values_to_resolve,
+        link_config=link.link_config,
+    )
+    logger.info(
+        f"Reverse link resolution {link.id}: {request.source_dc_id}:{request.source_column} "
+        f"-> {request.target_dc_id}:{link.source_column}, "
+        f"{len(request.filter_values)} source values -> {len(resolved_values)} resolved values"
+    )
+    return LinkResolutionResponse(
+        resolved_values=resolved_values,
+        link_id=str(link.id),
+        resolver_used=link.link_config.resolver,
+        match_count=len(resolved_values),
+        # A link records only its target's type, so its source has none to
+        # report. It is read the way `_translate_filter_values` reads any
+        # source: as a Delta table.
+        target_type="table",
+        source_count=len(request.filter_values),
+        unmapped_values=unmapped_values,
+    )
+
+
 @links_endpoint_router.post(
     "/{project_id}/resolve",
     response_model=LinkResolutionResponse,
@@ -678,6 +744,9 @@ async def resolve_link(
         HTTPException: 404 if no link found between source and target DCs
     """
     project = _get_project_or_404(project_id, current_user)
+
+    if request.reverse:
+        return await _resolve_link_reverse(project, request)
 
     # Find link between source and target
     link = _find_link_for_resolution(project, request.source_dc_id, request.target_dc_id)
