@@ -255,10 +255,27 @@ export async function addCatalogRender(
   // A match row cannot exist before the tab's own compose call has returned,
   // and that call walks the whole catalog (see COMPOSE_TIMEOUT_MS). 15s was
   // less than the static search box above is given, which had it backwards:
-  // the box is chrome that paints immediately, the rows are the slow part. On
-  // a busy stack the wait expired first and the walk reported "add failed" for
-  // whichever renders happened to be next.
-  await expect(row).toBeVisible({ timeout: COMPOSE_TIMEOUT_MS });
+  // the box is chrome that paints immediately, the rows are the slow part.
+  try {
+    await expect(row).toBeVisible({ timeout: COMPOSE_TIMEOUT_MS });
+  } catch {
+    // "element(s) not found" cannot tell a match the tab never rendered from
+    // one rendered under a different collection tag, and on a stack carrying
+    // two MultiQC collections that difference is the whole diagnosis. The
+    // search box is already filtered to this output id, so what is listed here
+    // is every row the picker has for it.
+    const shown = page.locator("[data-testid='catalog-match']");
+    const listed = await shown.evaluateAll((els) =>
+      els
+        .slice(0, 12)
+        .map((e) => `${e.getAttribute("data-output-id")}@${e.getAttribute("data-dc-tag")}`),
+    );
+    throw new Error(
+      `${offer.match.output_id}@${offer.match.dc_tag} is not in the picker; ` +
+        `it lists ${await shown.count()} row(s) for that search` +
+        (listed.length ? `: ${listed.join(", ")}` : ""),
+    );
+  }
 
   // Click-then-verify, retried: the row list re-renders as the search filter
   // settles, and a click that lands on a node being replaced is swallowed —
