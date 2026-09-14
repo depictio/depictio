@@ -18,7 +18,6 @@ from typer.testing import CliRunner
 
 from depictio.cli.cli.commands import run as run_module
 from depictio.cli.cli.commands.run import register_run_command
-from depictio.tests.cli.commands.test_run_attach_flow import _Harness
 
 
 @pytest.fixture
@@ -79,15 +78,15 @@ def _closed_with(finish: MagicMock) -> dict:
 
 
 class TestNormalCompletion:
-    def test_a_successful_run_is_closed_once_as_success(self, data_root):
+    def test_a_successful_run_is_closed_once_as_success(self, data_root, make_harness):
         finish = MagicMock()
-        result = _invoke(_Harness(data_root, remote_locations=[]), data_root, finish)
+        result = _invoke(make_harness(data_root, remote_locations=[]), data_root, finish)
 
         assert result.exit_code == 0, result.output
         assert _closed_with(finish)["status"] == "success"
 
-    def test_nothing_is_reported_when_the_record_never_opened(self, data_root):
-        harness = _Harness(data_root, remote_locations=[])
+    def test_nothing_is_reported_when_the_record_never_opened(self, data_root, make_harness):
+        harness = make_harness(data_root, remote_locations=[])
         harness.scan = MagicMock(return_value={"result": "failed"})
         finish = MagicMock()
         result = _invoke(harness, data_root, finish, start=MagicMock(return_value=None))
@@ -97,8 +96,8 @@ class TestNormalCompletion:
 
 
 class TestErrorExits:
-    def test_a_failed_step_closes_the_run_as_failed_naming_the_step(self, data_root):
-        harness = _Harness(data_root, remote_locations=[])
+    def test_a_failed_step_closes_the_run_as_failed_naming_the_step(self, data_root, make_harness):
+        harness = make_harness(data_root, remote_locations=[])
         harness.scan = MagicMock(return_value={"result": "failed"})
         finish = MagicMock()
         result = _invoke(harness, data_root, finish)
@@ -112,8 +111,8 @@ class TestErrorExits:
         assert closed["timeout"] == run_module._ERROR_REPORT_TIMEOUT
         harness.process.assert_not_called()
 
-    def test_a_deliberate_exit_keeps_its_own_code(self, data_root):
-        harness = _Harness(data_root, remote_locations=[])
+    def test_a_deliberate_exit_keeps_its_own_code(self, data_root, make_harness):
+        harness = make_harness(data_root, remote_locations=[])
         harness.sync = MagicMock(return_value={"action": "exists"})
         finish = MagicMock()
         result = _invoke(harness, data_root, finish)
@@ -123,8 +122,8 @@ class TestErrorExits:
         assert closed["status"] == "failed"
         assert "sync_project" in closed["error"]
 
-    def test_an_unexpected_exception_is_reported_and_still_raised(self, data_root):
-        harness = _Harness(data_root, remote_locations=[])
+    def test_an_unexpected_exception_is_reported_and_still_raised(self, data_root, make_harness):
+        harness = make_harness(data_root, remote_locations=[])
         finish = MagicMock()
         # Separators: step 0, 3, 4 and 5 print; step 6's raises, after the
         # record opened (before step 4) and outside any step's own handler.
@@ -141,8 +140,8 @@ class TestErrorExits:
 
 
 class TestInterruptions:
-    def test_ctrl_c_closes_the_run_as_interrupted_during_its_step(self, data_root):
-        harness = _Harness(data_root, remote_locations=[])
+    def test_ctrl_c_closes_the_run_as_interrupted_during_its_step(self, data_root, make_harness):
+        harness = make_harness(data_root, remote_locations=[])
         harness.process = MagicMock(side_effect=KeyboardInterrupt)
         finish = MagicMock()
         result = _invoke(harness, data_root, finish)
@@ -157,8 +156,8 @@ class TestInterruptions:
             "detail": "Interrupted",
         }
 
-    def test_sigterm_closes_the_run_and_exits_143(self, data_root):
-        harness = _Harness(data_root, remote_locations=[])
+    def test_sigterm_closes_the_run_and_exits_143(self, data_root, make_harness):
+        harness = make_harness(data_root, remote_locations=[])
         harness.process = MagicMock(
             side_effect=run_module._TerminatedBySignal(128 + signal.SIGTERM)
         )
@@ -206,9 +205,9 @@ class TestReportingNeverMasksTheExit:
         ],
     )
     def test_a_failing_report_leaves_the_exit_untouched(
-        self, data_root, break_step, expected_code, expected_output
+        self, data_root, make_harness, break_step, expected_code, expected_output
     ):
-        harness = _Harness(data_root, remote_locations=[])
+        harness = make_harness(data_root, remote_locations=[])
         for name, mock in break_step.items():
             setattr(harness, name, mock)
         finish = MagicMock(side_effect=RuntimeError("monitoring is down"))
