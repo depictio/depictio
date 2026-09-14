@@ -1031,6 +1031,66 @@ def collect_run_provenance(
     return entries, files_read
 
 
+def _infer_phylum_level(data_root: str, params: dict) -> int | None:
+    """Depth at which an ampliseq run's QIIME2 collapsed taxonomy ends in the Phylum.
+
+    QIIME2 names ``barplot/level-N.csv`` and ``rel-table-N.tsv`` by depth, and a
+    rank's depth depends on the reference database: ``sbdi-gtdb`` leads with a
+    Domain, so its Phylum sits at 3 where a 7-rank database's sits at 2. Evidence,
+    in order: rank-prefixed lineages in the barplot (``k__Bacteria;p__Firmicutes``);
+    the rank columns of the DADA2 taxonomy table; the DADA2 database's taxlevels
+    from params. Capped at ``tax_agglom_max``. None when nothing names a Phylum.
+    """
+    qiime2 = Path(data_root) / "qiime2"
+
+    def header(path: Path, sep: str) -> list[str]:
+        try:
+            with open(path) as fh:
+                return [cell.strip().strip('"') for cell in fh.readline().split(sep)]
+        except OSError:
+            return []
+
+    level: int | None = None
+    for depth in range(1, 16):
+        barplot = qiime2 / "barplot" / f"level-{depth}.csv"
+        if not barplot.is_file():
+            break
+        if any(cell.rsplit(";", 1)[-1].strip().startswith("p__") for cell in header(barplot, ",")):
+            level = depth
+            break
+
+    # DADA2 lineages carry no rank prefix, so the ranks come from its taxonomy
+    # table (column 0 is the ASV ID, so a rank's column index is its depth), and
+    # only when DADA2 is what QIIME2 collapsed: ampliseq prefers SIDLE and
+    # phylogenetic placement over it.
+    dada2_collapsed = not params or (
+        bool(params.get("dada_ref_taxonomy"))
+        and not params.get("skip_dada_taxonomy")
+        and not params.get("skip_taxonomy")
+        and not params.get("multiregion")
+        and not (params.get("pplace_tree") and params.get("pplace_taxonomy"))
+    )
+    if level is None and dada2_collapsed:
+        tax_table = qiime2 / "rel_abundance_tables" / "rel-table-ASV_with-DADA2-tax.tsv"
+        ranks = header(tax_table, "\t")[1:]
+        if not ranks and params:
+            # ampliseq's precedence: --dada_assign_taxlevels, the database's
+            # taxlevels, then DADA2's 7-rank default.
+            databases = params.get("dada_ref_databases") or {}
+            database = databases.get(params["dada_ref_taxonomy"]) or {}
+            taxlevels = params.get("dada_assign_taxlevels") or database.get("taxlevels")
+            ranks = (taxlevels or "Kingdom,Phylum,Class,Order,Family,Genus,Species").split(",")
+        if "Phylum" in ranks:
+            level = ranks.index("Phylum") + 1
+
+    # The pipeline collapses no deeper than tax_agglom_max, so a deeper table
+    # was never written.
+    agglom_max = params.get("tax_agglom_max")
+    if level is not None and type(agglom_max) is int and 0 < agglom_max < level:
+        level = agglom_max
+    return level
+
+
 def _introspect_pipeline_params(data_root: str, variables: dict[str, str]) -> None:
     """Read the run's nf-core ``params.json`` and set synthesized template flags.
 
@@ -1038,7 +1098,8 @@ def _introspect_pipeline_params(data_root: str, variables: dict[str, str]) -> No
     into present/absent flag variables so they compose with the existing
     ``if_var_present``/``if_var_absent`` conditionals (no model change), and auto-fill
     ``METADATA_FILE`` when the run shipped a metadata file — so the common cases need
-    no ``--var``. Best-effort: silently no-ops when no params file is found/parseable.
+    no ``--var``. Best-effort: silently no-ops when no params file is found/parseable,
+    except for ``PHYLUM_LEVEL``, which the run's outputs can settle on their own.
 
     Flags set (only when applicable; never overrides an explicit ``--var``):
       - ``SKIP_QIIME``     — ampliseq ITS/sintax runs without QIIME2 outputs
@@ -1050,6 +1111,12 @@ def _introspect_pipeline_params(data_root: str, variables: dict[str, str]) -> No
       - ``IS_NANOPORE``    — viralrecon nanopore/artic runs
       - ``IS_MULTIREGION`` — ampliseq multiregion/SIDLE runs (per-region ASVs
         reconstructed into one cross-region feature table under ``sidle/``)
+      - ``PPLACE_TREE_FILE``: ampliseq phylogenetic-placement runs (``pplace_tree``
+        set); the path of the grafted tree under ``pplace/``, the route's only Newick
+      - ``PHYLUM_LEVEL``: ampliseq's QIIME2 collapse depth of the Phylum (see
+        ``_infer_phylum_level``), with ``CLASS_LEVEL``, ``ORDER_LEVEL``,
+        ``FAMILY_LEVEL`` and ``GENUS_LEVEL`` one depth deeper each; the ranks also
+        follow an explicit ``--var PHYLUM_LEVEL``
     """
     # Locate the run's params.json. For "flat" projects (e.g. ampliseq, one run =
     # one DATA_ROOT) it sits directly under DATA_ROOT. For "sequencing-runs" projects
@@ -1085,6 +1152,17 @@ def _introspect_pipeline_params(data_root: str, variables: dict[str, str]) -> No
             break
         except (OSError, ValueError):
             continue
+
+    # Ahead of the no-params return: the outputs alone can name the Phylum depth.
+    # The deeper ranks follow whichever value wins, an explicit --var included.
+    phylum_level = str(variables.get("PHYLUM_LEVEL") or _infer_phylum_level(data_root, params))
+    if phylum_level.isdigit():
+        variables.setdefault("PHYLUM_LEVEL", phylum_level)
+        for offset, name in enumerate(
+            ("CLASS_LEVEL", "ORDER_LEVEL", "FAMILY_LEVEL", "GENUS_LEVEL"), start=1
+        ):
+            variables.setdefault(name, str(int(phylum_level) + offset))
+
     if not params:
         return
 
@@ -1110,6 +1188,14 @@ def _introspect_pipeline_params(data_root: str, variables: dict[str, str]) -> No
     # SIDLE reference taxonomy (standard runs leave 'multiregion' null).
     if params.get("multiregion") and params.get("sidle_ref_taxonomy"):
         variables.setdefault("IS_MULTIREGION", "true")
+    # ampliseq phylogenetic placement never writes qiime2/phylogenetic_tree/tree.nwk;
+    # the tree is the EPA-ng graft under pplace/. Keyed on the reference tree input
+    # because run_pplace stays false on runs that pass the pplace_* inputs directly.
+    # Top level of pplace/ only: gappa/ keeps a copy that must not be picked.
+    if params.get("pplace_tree"):
+        grafts = sorted((Path(data_root) / "pplace").glob("*.graft.*.epa_result.newick"))
+        if grafts:
+            variables.setdefault("PPLACE_TREE_FILE", str(grafts[0]))
 
     # Auto-fill METADATA_FILE from the run's input/ when the run used metadata
     # (params 'metadata' is the source URL; the local copy lands in input/).

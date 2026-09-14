@@ -27,6 +27,9 @@ template:
     - name: "TREE_FILE"
       description: "Path to the Newick tree to serve. Defaults to {DATA_ROOT}/qiime2/phylogenetic_tree/tree.nwk. A run with far more ASVs than a tree renders readably should point this at the output of scripts/prune_newick.py, which cuts the tree to the same taxa the tip-metadata recipe keeps."
       required: false
+    - name: "PPLACE_TREE_FILE"
+      description: "Auto-set from params.json (pplace_tree): the grafted tree pplace/<name>.graft.<name>.epa_result.newick. Serves it as the phylogenetic tree on the phylogenetic-placement route, which writes no qiime2/phylogenetic_tree/tree.nwk. An explicit TREE_FILE takes precedence."
+      required: false
     - name: "METADATA_FILE"
       description: "Path to sample metadata TSV (--metadata in ampliseq run). Optional. All non-ID columns become annotations."
       required: false
@@ -53,6 +56,21 @@ template:
       required: false
     - name: "SKIP_ANCOM"
       description: "Auto-set from params.json (skip_ancom). Prunes the ANCOM-BC differential-abundance DCs (qiime2/ancombc/ is absent)."
+      required: false
+    - name: "PHYLUM_LEVEL"
+      description: "Auto-set: the QIIME2 collapse depth of the Phylum (barplot level-N.csv, rel-table-N.tsv, ANCOM-BC level-N slices), read from the run's outputs (rank-prefixed lineages, the DADA2 taxonomy header) or params.json (the DADA2 database's taxlevels, capped at tax_agglom_max). Defaults to 3, the Phylum depth of the default sbdi-gtdb database (Domain,Kingdom,Phylum,...); 7-rank databases (gtdb, silva, rdp, unite) put it at 2."
+      required: false
+    - name: "CLASS_LEVEL"
+      description: "Auto-set: PHYLUM_LEVEL + 1, the Class depth for the stacked-taxonomy DC. Defaults to 4."
+      required: false
+    - name: "ORDER_LEVEL"
+      description: "Auto-set: PHYLUM_LEVEL + 2, the Order depth for the stacked-taxonomy DC. Defaults to 5."
+      required: false
+    - name: "FAMILY_LEVEL"
+      description: "Auto-set: PHYLUM_LEVEL + 3, the Family depth for the stacked-taxonomy DC. Defaults to 6."
+      required: false
+    - name: "GENUS_LEVEL"
+      description: "Auto-set: PHYLUM_LEVEL + 4, the Genus depth for the stacked-taxonomy DC. Defaults to 7."
       required: false
   # Variables supplied when materialising the BUNDLED reference/demo dataset
   # (db_init_reference_datasets.resolve_template_for_init). The reference run is
@@ -195,6 +213,53 @@ template:
     - if_var_present: "SKIP_ANCOM"
       remove_dc_tags: ["ancombc_results", "ma_canonical"]
       dashboards: ["dashboards/base.yaml"]
+    # QIIME2 names its collapsed taxonomy by depth, and the Phylum's depth follows
+    # the reference database's ranks. The DC paths stay pinned at the default
+    # database's depths (Phylum 3), which the reference seeds were built from;
+    # PHYLUM_LEVEL and the ranks below it, auto-set from the run's outputs or
+    # params.json, repoint them (Phylum 2 on a 7-rank gtdb/silva/rdp run).
+    - if_var_present: "PHYLUM_LEVEL"
+      override_dcs:
+        - data_collection_tag: "taxonomy_composition"
+          source_overrides:
+            barplot_csv:
+              path: "qiime2/barplot/level-{PHYLUM_LEVEL}.csv"
+        - data_collection_tag: "taxonomy_rel_abundance"
+          source_overrides:
+            rel_table:
+              path: "qiime2/rel_abundance_tables/rel-table-{PHYLUM_LEVEL}.tsv"
+        - data_collection_tag: "ancombc_results"
+          source_overrides:
+            lfc:
+              path: "qiime2/ancombc/differentials/Category-{GROUP_COL}-level-{PHYLUM_LEVEL}/lfc_slice.csv"
+            p_val:
+              path: "qiime2/ancombc/differentials/Category-{GROUP_COL}-level-{PHYLUM_LEVEL}/p_val_slice.csv"
+            q_val:
+              path: "qiime2/ancombc/differentials/Category-{GROUP_COL}-level-{PHYLUM_LEVEL}/q_val_slice.csv"
+            w:
+              path: "qiime2/ancombc/differentials/Category-{GROUP_COL}-level-{PHYLUM_LEVEL}/w_slice.csv"
+            se:
+              path: "qiime2/ancombc/differentials/Category-{GROUP_COL}-level-{PHYLUM_LEVEL}/se_slice.csv"
+        - data_collection_tag: "stacked_taxonomy_canonical"
+          source_overrides:
+            phylum:
+              path: "qiime2/rel_abundance_tables/rel-table-{PHYLUM_LEVEL}.tsv"
+            class_:
+              path: "qiime2/rel_abundance_tables/rel-table-{CLASS_LEVEL}.tsv"
+            order:
+              path: "qiime2/rel_abundance_tables/rel-table-{ORDER_LEVEL}.tsv"
+            family:
+              path: "qiime2/rel_abundance_tables/rel-table-{FAMILY_LEVEL}.tsv"
+            genus:
+              path: "qiime2/rel_abundance_tables/rel-table-{GENUS_LEVEL}.tsv"
+    # The phylogenetic-placement route writes no qiime2/phylogenetic_tree/tree.nwk;
+    # its tree is the EPA-ng graft under pplace/. PPLACE_TREE_FILE is auto-set from
+    # params.json (pplace_tree). Listed before TREE_FILE so an explicit --var
+    # TREE_FILE still wins (overrides are last-write-wins per tag).
+    - if_var_present: "PPLACE_TREE_FILE"
+      override_dcs:
+        - data_collection_tag: "phylogenetic_tree_canonical"
+          scan_filename: "{PPLACE_TREE_FILE}"
     # A cohort large enough to need a pruned tree supplies its own Newick; the
     # DC's default path stays the pipeline's, which is never written to.
     - if_var_present: "TREE_FILE"
@@ -337,8 +402,8 @@ workflows:
           # sit at level 2 now sits at level 3. The override below pins that
           # depth for this template version; the recipe reads the ranks from the
           # tail of the lineage, so it needs no other change.
-          # A run that overrides --dada_ref_taxonomy with a 7-rank database
-          # (rdp, silva, unite…) must point these back at level 2.
+          # A run on a database with another rank layout (7-rank gtdb, rdp,
+          # silva, unite) is repointed by the PHYLUM_LEVEL conditional.
           transform:
             recipe: "qiime2/taxonomy_composition.py"
             source_overrides:
@@ -363,7 +428,7 @@ workflows:
             source_overrides:
               rel_table:
                 # Phylum depth for this release's default database (see the
-                # taxonomy_composition note above).
+                # taxonomy_composition note above); PHYLUM_LEVEL repoints it.
                 path: "qiime2/rel_abundance_tables/rel-table-3.tsv"
           dc_specific_properties:
             format: "TSV"
@@ -406,7 +471,7 @@ workflows:
 
       - data_collection_tag: "ancombc_results"
         # Optional: ampliseq computes ANCOM-BC only for *categorical* metadata
-        # columns, so the Category-{GROUP_COL}-level-2/ dir is absent when GROUP_COL
+        # columns, so the Category-{GROUP_COL}-level-N/ dir is absent when GROUP_COL
         # auto-resolved to a non-categorical column (e.g. a per-sample label) or
         # ANCOM-BC simply didn't run for it. Skip the Differential tab rather than
         # aborting ingestion; the import-time prune drops the now-empty components.
@@ -418,7 +483,7 @@ workflows:
           transform:
             recipe: "qiime2/ancombc.py"
             # level-3 is the Phylum for this release's default database (see
-            # the taxonomy_composition note above).
+            # the taxonomy_composition note above); PHYLUM_LEVEL repoints it.
             source_overrides:
               lfc:
                 path: "qiime2/ancombc/differentials/Category-{GROUP_COL}-level-3/lfc_slice.csv"
@@ -461,7 +526,8 @@ workflows:
             # note above). rel-table-7 does not exist — ampliseq collapses to
             # level 6 — so the Genus source resolves to nothing and the recipe
             # drops that rank: under an 8-rank database the deepest collapsed
-            # rank the pipeline emits is the Family.
+            # rank the pipeline emits is the Family. PHYLUM_LEVEL and the ranks
+            # below it repoint all five for other rank layouts.
             source_overrides:
               phylum:
                 path: "qiime2/rel_abundance_tables/rel-table-3.tsv"
