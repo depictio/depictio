@@ -2722,8 +2722,15 @@ jobs:
       # One failing mode must not cancel the others — each leg is independent.
       fail-fast: false
       matrix:
+        # catalog_shard: the catalog walk is auth-mode independent, so all three
+        # legs used to re-walk the identical several hundred renders, an hour
+        # each. They now take a third apiece and the union is the whole catalog,
+        # once per run. Keep these numbered 1..N with CATALOG_E2E_SHARDS below
+        # equal to N: adding or removing a leg means renumbering them, and a leg
+        # that disappears takes its third of the coverage with it.
         include:
           - auth_mode: standard
+            catalog_shard: "1"
             single_user_mode: "false"
             public_mode: "false"
             demo_mode: "false"
@@ -2731,10 +2738,12 @@ jobs:
           # mode (DEMO_MODE requires PUBLIC_MODE=true), and the specs only
           # branch on is_public_mode — one stack covers both.
           - auth_mode: public-demo
+            catalog_shard: "2"
             single_user_mode: "false"
             public_mode: "true"
             demo_mode: "true"
           - auth_mode: single-user
+            catalog_shard: "3"
             single_user_mode: "true"
             public_mode: "false"
             demo_mode: "false"
@@ -2842,6 +2851,8 @@ jobs:
         run: |
           cd depictio/tests/e2e-playwright
           CATALOG_CONFORMANCE_REQUIRED=1 \
+          CATALOG_E2E_SHARD=${{ matrix.catalog_shard }} \
+          CATALOG_E2E_SHARDS=3 \
           PLAYWRIGHT_BASE_URL=http://localhost:5080 \
           PLAYWRIGHT_API_URL=http://localhost:8058 \
           npx playwright test
