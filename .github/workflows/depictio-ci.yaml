@@ -2714,7 +2714,10 @@ jobs:
     # No job in this workflow had one, so the only backstop was GitHub's 6h
     # default — and a leg of this job has run for 3h. A green leg is ~60min
     # today; tighten this once the catalog walk is sharded across the legs.
-    timeout-minutes: 90
+    # Two walk attempts at 30 minutes, plus setup, plus the rest of the suite.
+    # Sized so Playwright always reaches its own end-of-run summary: a job the
+    # runner kills here skips every `if: always()` step, report included.
+    timeout-minutes: 120
     permissions:
       contents: read
       packages: read
