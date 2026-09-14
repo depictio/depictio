@@ -14,27 +14,37 @@ from depictio.models.utils import get_config, validate_model_config
 
 
 @validate_call
-def validate_project_config_and_check_S3_storage(CLI_config_path: str, project_config_path: str):
+def validate_project_config_and_check_S3_storage(
+    CLI_config_path: str, project_config_path: str, offline: bool = False
+):
     """
     Validate the project configuration and check S3 storage.
+
+    ``offline`` skips every server call (the login and the remote id merge).
+    That is what ``--dry-run`` needs: the merged ids only matter to a run that
+    is going to write, and a dry run that demanded a reachable server could no
+    longer be used to sanity-check a config before touching anything.
     """
     logger.info(f"Creating workflow from {CLI_config_path}...")
     logger.info(f"Validating pipeline configuration from {project_config_path}...")
 
-    response = api_login(CLI_config_path)
-    logger.info(response)
+    if not offline:
+        response = api_login(CLI_config_path)
+        logger.info(response)
 
-    if response["success"]:
-        # Reload the config from the YAML rather than from api_login's return:
-        # that payload is a ``mode="json"`` dump whose SecretStr S3 secret is
-        # MASKED ('**********') — rebuilding CLIConfig from it silently breaks
-        # every downstream direct-to-S3 Delta write (SignatureDoesNotMatch).
-        CLI_config = load_depictio_config(yaml_config_path=CLI_config_path)
-        # Validate the project configuration
-        response_validation = local_validate_project_config(CLI_config, project_config_path)
-        return CLI_config, response_validation
-    else:
-        raise typer.Exit(code=1)
+        if not response["success"]:
+            raise typer.Exit(code=1)
+
+    # Reload the config from the YAML rather than from api_login's return:
+    # that payload is a ``mode="json"`` dump whose SecretStr S3 secret is
+    # MASKED ('**********') — rebuilding CLIConfig from it silently breaks
+    # every downstream direct-to-S3 Delta write (SignatureDoesNotMatch).
+    CLI_config = load_depictio_config(yaml_config_path=CLI_config_path)
+    # Validate the project configuration
+    response_validation = local_validate_project_config(
+        CLI_config, project_config_path, offline=offline
+    )
+    return CLI_config, response_validation
 
 
 def find_matching_entry(collection, new_item):
@@ -148,9 +158,14 @@ def load_and_prepare_config(CLI_config: CLIConfig, project_yaml_config_path: str
 
 
 @validate_call
-def local_validate_project_config(CLI_config: CLIConfig, project_yaml_config_path: str) -> dict:
+def local_validate_project_config(
+    CLI_config: CLIConfig, project_yaml_config_path: str, offline: bool = False
+) -> dict:
     """
     Validate the pipeline configuration locally and update the metadata.
+
+    ``offline`` skips the lookup that reconciles ids with the project already on
+    the server, leaving freshly generated ids in place.
     """
     try:
         logger.info("Validating pipeline configuration...")
@@ -164,16 +179,17 @@ def local_validate_project_config(CLI_config: CLIConfig, project_yaml_config_pat
 
         # Load existing metadata and merge IDs if necessary
         # local_metadata = load_metadata()
-        response = api_get_project_from_name(project_config["name"], CLI_config)
-        if response.status_code == 200:
-            remote_project = response.json()
-            logger.info(f"Remote project : {remote_project}")
-            logger.info(f"Validated config : {validated_config}")
-            logger.info(f"Validated config : {validated_config}")
-            validated_config = merge_existing_ids(
-                remote_project, convert_objectid_to_str(validated_config.model_dump())
-            )
-            validated_config = Project.from_mongo(validated_config)
+        if not offline:
+            response = api_get_project_from_name(project_config["name"], CLI_config)
+            if response.status_code == 200:
+                remote_project = response.json()
+                logger.info(f"Remote project : {remote_project}")
+                logger.info(f"Validated config : {validated_config}")
+                logger.info(f"Validated config : {validated_config}")
+                validated_config = merge_existing_ids(
+                    remote_project, convert_objectid_to_str(validated_config.model_dump())
+                )
+                validated_config = Project.from_mongo(validated_config)
 
         logger.info(f"Pipeline configuration validated: {validated_config}")
 
@@ -191,6 +207,7 @@ def local_validate_project_config(CLI_config: CLIConfig, project_yaml_config_pat
 def validate_template_project_config(
     CLI_config_path: str,
     resolved_config: dict[str, Any],
+    offline: bool = False,
 ) -> tuple[CLIConfig, dict[str, Any]]:
     """Validate a template-resolved config dict (already resolved, not from YAML file).
 
@@ -201,6 +218,8 @@ def validate_template_project_config(
     Args:
         CLI_config_path: Path to CLI config YAML.
         resolved_config: Template-resolved project config dict.
+        offline: Skip every server call (login and the remote id merge), as
+            ``--dry-run`` does.
 
     Returns:
         Tuple of (CLIConfig, validation_response dict).
@@ -208,11 +227,12 @@ def validate_template_project_config(
     Raises:
         typer.Exit: If login fails.
     """
-    response = api_login(CLI_config_path)
-    logger.info(response)
+    if not offline:
+        response = api_login(CLI_config_path)
+        logger.info(response)
 
-    if not response["success"]:
-        raise typer.Exit(code=1)
+        if not response["success"]:
+            raise typer.Exit(code=1)
 
     # Reload from YAML — api_login's returned payload carries a MASKED
     # SecretStr S3 secret (see validate_project_config_and_check_S3_storage).
@@ -237,16 +257,17 @@ def validate_template_project_config(
         validated_config = validate_model_config(resolved_config, Project)
 
         # Merge existing IDs if project already exists on server
-        api_response = api_get_project_from_name(resolved_config["name"], CLI_config)
-        if api_response.status_code == 200:
-            remote_project = api_response.json()
-            validated_config_dict = merge_existing_ids(
-                remote_project, convert_objectid_to_str(validated_config.model_dump())
-            )
-            validated_config = Project.from_mongo(validated_config_dict)
+        if not offline:
+            api_response = api_get_project_from_name(resolved_config["name"], CLI_config)
+            if api_response.status_code == 200:
+                remote_project = api_response.json()
+                validated_config_dict = merge_existing_ids(
+                    remote_project, convert_objectid_to_str(validated_config.model_dump())
+                )
+                validated_config = Project.from_mongo(validated_config_dict)
 
-            # Re-resolve link tags now that we have real DC IDs
-            _resolve_link_tags_after_id_assignment(validated_config)
+                # Re-resolve link tags now that we have real DC IDs
+                _resolve_link_tags_after_id_assignment(validated_config)
 
         logger.info(f"Template project configuration validated: {validated_config}")
         return CLI_config, {
