@@ -235,7 +235,12 @@ def query_ingestion_runs(
 ) -> list[dict[str, Any]]:
     query: dict[str, Any] = {}
     if instance:
-        query["cli_instance_label"] = instance
+        # An instance is the CLI's `instance_label`, else its hostname: most CLI
+        # configs set no label, and the admin pane shows the hostname then.
+        query["$or"] = [
+            {"cli_instance_label": instance},
+            {"cli_instance_label": {"$in": [None, ""]}, "cli_hostname": instance},
+        ]
     if status:
         query["status"] = status
     if project_id:
