@@ -1,7 +1,11 @@
 /**
  * The catalog picker's *usability* contract: every render the catalog offers
  * can be added to a dashboard through the real picker, and the component it
- * produces renders — in the editor and in the viewer.
+ * produces renders on its home surface — in the editor and in the viewer.
+ *
+ * "Home surface" is load-bearing. Not every component takes a grid tile:
+ * interactive ones never do, and live in the left filter panel instead. See
+ * HOME below.
  *
  * Data-driven off the compose endpoint, like its companion registration spec,
  * so a newly-authored module is covered the moment it matches a collection.
@@ -36,13 +40,47 @@ const FIRST_RENDER_ONLY = process.env.CATALOG_E2E_RENDERS === "first";
 // Smoke-run cap: exercise the first N renders of each project instead of all.
 const LIMIT = Number(process.env.CATALOG_E2E_LIMIT ?? 0);
 
-/** What "it rendered" means, per component type. */
+/**
+ * Where a component of each type is *supposed* to render.
+ *
+ * `interactive` never takes a grid tile, by design: both apps filter it out of
+ * the grid and route it to the left filter panel — placement 'left', the model
+ * default — or to the top band, which is allow-listed to Timeline. Looking for
+ * one on the grid was asserting the opposite of the product contract, which is
+ * why the MultiSelect renders the catalog offers could only ever fail on the
+ * viewer. Reach for this table, not for the walk, when a new component type
+ * turns up somewhere other than the grid.
+ *
+ * placement 'top' is unreachable from the catalog — the catalog's Render model
+ * declares no placement field and forbids extras — so "filter panel" covers
+ * every interactive render this walk can produce.
+ */
+type Home = "grid" | "filter panel";
+const HOME: Record<string, Home> = { interactive: "filter panel" };
+const homeOf = (offer: RenderOffer): Home => HOME[offer.render.component] ?? "grid";
+const HOME_ROOT: Record<Home, string> = {
+  grid: "[data-testid='dashboard-content']",
+  "filter panel": "[data-tour-id='filter-panel']",
+};
+
+/** The frame a renderer owns, whatever it managed to draw inside it. */
+const CHROME_SELECTOR = ".depictio-component-chrome";
+
+/** What "it rendered" means, per component type.
+ *
+ * image, jbrowse, map and text have no entry because the catalog offers none
+ * of them today. They are all grid-homed, so only the content assertion is
+ * missing for them, and the stuck-skeleton check below stands in for it.
+ */
 const CONTENT_SELECTOR: Record<string, string> = {
   card: ".depictio-card",
   table: ".ag-root-wrapper",
   figure: ".js-plotly-plot",
   advanced_viz: ".js-plotly-plot",
   multiqc: ".js-plotly-plot",
+  // The panel emits the cell wrapper whether or not the renderer produced
+  // anything, so the chrome is the first DOM the component itself owns.
+  interactive: CHROME_SELECTOR,
 };
 
 /** How long to wait for CONTENT_SELECTOR, per component type.
@@ -76,11 +114,39 @@ async function checkComponent(
   offer: RenderOffer,
   surface: string,
 ): Promise<Checked> {
-  const cell = page.locator(`[data-component-id='${componentId}']`);
+  const home = homeOf(offer);
+  // .first(): data-tour-id="filter-panel" sits on both the collapsed rail and
+  // the expanded panel, and a narrow viewport mounts a second copy in a Drawer.
+  // Only one of them is ever in the DOM at this viewport; .first() makes which
+  // one not matter.
+  const root = page.locator(HOME_ROOT[home]).first();
+  const cell = root.locator(`[data-component-id='${componentId}']`);
   try {
     await pwExpect(cell).toBeVisible({ timeout: 30_000 });
   } catch {
-    return { problem: `${offer.label}: not on the ${surface} grid at all` };
+    // "Absent" and "ambiguous" need different answers. A duplicated id fails
+    // strict mode, and reporting that as "not there at all" is how a real bug
+    // hides behind a message about a missing one.
+    const found = await cell.count().catch(() => 0);
+    return {
+      problem:
+        found === 0
+          ? `${offer.label}: not in the ${surface} ${home} at all`
+          : `${offer.label}: ${found} nodes carry this component id in the ${surface} ${home}`,
+    };
+  }
+
+  // The other half of the placement contract. If the interactive filter in the
+  // two apps' grid lists were ever dropped, a filter control would start
+  // claiming a tile — and, carrying no layout entry, would be auto-placed on
+  // top of another one — while still passing the check above.
+  if (home !== "grid") {
+    const strays = await page
+      .locator(`${HOME_ROOT.grid} [data-component-id='${componentId}']`)
+      .count();
+    if (strays > 0) {
+      return { problem: `${offer.label}: also took a tile on the ${surface} grid` };
+    }
   }
 
   // Advanced-viz, MultiQC and JBrowse cells are behind a viewport gate
@@ -92,12 +158,24 @@ async function checkComponent(
   // How wide the tile is relative to its grid — the editor and the viewer must
   // agree. They size their grids from different containers, so compare the
   // spans-the-row verdict rather than the pixels.
-  const fullWidth = await cell.evaluate((node) => {
-    const item = (node as HTMLElement).closest(".react-grid-item") ?? (node as HTMLElement);
-    const grid = item.closest(".react-grid-layout");
-    if (!grid) return false;
-    return item.getBoundingClientRect().width >= grid.getBoundingClientRect().width - 24;
-  });
+  //
+  // Grid-homed components only: "spans the row" is a grid property. The filter
+  // panel is one column wide and every control spans it, and in the viewer the
+  // panel has no react-grid ancestor at all (its grid is edit-mode only), so
+  // measuring there would read true in the editor and false in the viewer and
+  // flag every filter as a cross-surface disagreement.
+  const fullWidth =
+    home === "grid"
+      ? await cell.evaluate((node) => {
+          const item =
+            (node as HTMLElement).closest(".react-grid-item") ?? (node as HTMLElement);
+          const grid = item.closest(".react-grid-layout");
+          if (!grid) return false;
+          return (
+            item.getBoundingClientRect().width >= grid.getBoundingClientRect().width - 24
+          );
+        })
+      : undefined;
 
   const selector = CONTENT_SELECTOR[offer.render.component];
   if (selector) {
@@ -115,6 +193,22 @@ async function checkComponent(
         : `nothing matching '${selector}' rendered`;
       return {
         problem: `${offer.label}: ${why} on the ${surface} — cell reads: ${text || "(empty)"}`,
+        fullWidth,
+      };
+    }
+  }
+
+  // A chrome proves a frame exists, not that the first load finished: a
+  // renderer puts its loading skeleton *inside* that frame. A real content
+  // selector (a plotly div, an ag-grid root) already implies the load landed;
+  // the chrome and no-selector-at-all do not, so those are checked explicitly.
+  // Every skeleton, and only a skeleton, carries aria-busy.
+  if (!selector || selector === CHROME_SELECTOR) {
+    try {
+      await pwExpect(cell.locator("[aria-busy]")).toHaveCount(0, { timeout: 30_000 });
+    } catch {
+      return {
+        problem: `${offer.label}: still showing a loading skeleton on the ${surface}`,
         fullWidth,
       };
     }
