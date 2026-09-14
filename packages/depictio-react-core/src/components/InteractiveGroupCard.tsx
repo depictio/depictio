@@ -135,14 +135,20 @@ const InteractiveGroupCard: React.FC<InteractiveGroupCardProps> = ({
           {members.map((m, i) => (
             <React.Fragment key={m.index}>
               {i > 0 && <Divider />}
-              <ComponentRenderer
-                metadata={m}
-                filters={filters}
-                onFilterChange={onFilterChange}
-                refreshTick={refreshTick}
-                extraActions={renderMemberActions?.(m)}
-                compact
-              />
+              {/* The card itself is addressed by `group:<name>`, so without this
+                  wrapper a grouped member's own index reached no DOM attribute on
+                  either surface. The Divider stays outside it so Stack keeps
+                  spacing divider and control identically. */}
+              <div data-component-id={m.index}>
+                <ComponentRenderer
+                  metadata={m}
+                  filters={filters}
+                  onFilterChange={onFilterChange}
+                  refreshTick={refreshTick}
+                  extraActions={renderMemberActions?.(m)}
+                  compact
+                />
+              </div>
             </React.Fragment>
           ))}
         </Stack>

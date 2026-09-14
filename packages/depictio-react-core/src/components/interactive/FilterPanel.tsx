@@ -484,7 +484,15 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
       return (
         <Stack gap="sm">
           {section.groups.map((g) => (
-            <React.Fragment key={g.key}>{renderGroup(g, readOnly)}</React.Fragment>
+            // Same attribute the edit-mode row carries below, so a control is
+            // addressable by its component index on whichever surface it renders
+            // on. Without it the viewer's DOM held no trace of an interactive
+            // component's identity at all. No data-group-key here on purpose:
+            // that one only exists to hang the edit-mode ResizeObserver ref, and
+            // view mode measures nothing.
+            <div key={g.key} data-component-id={g.key}>
+              {renderGroup(g, readOnly)}
+            </div>
           ))}
         </Stack>
       );
