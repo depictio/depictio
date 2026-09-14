@@ -21,6 +21,7 @@ import { Icon } from '@iconify/react';
 
 import type { FilterSectionSpec, InteractiveFilter, StoredMetadata } from '../../api';
 import { countActiveFilters } from '../../activeFilters';
+import { useGroupingColor } from '../../selectionGroups';
 import { PANEL_RESIZE_END_EVENT, isPanelResizing } from '../../utils/panelToggle';
 import { useCollapseState } from '../../hooks/useCollapseState';
 import type { InteractiveSection } from '../../utils/groupInteractive';
@@ -192,6 +193,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   funnel,
   groupSummaryRows,
 }) => {
+  const groupingColor = useGroupingColor();
   const [density, setDensity] = useState<FilterPanelDensity>(readDensity);
   const [search, setSearch] = useState('');
 
@@ -767,7 +769,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
               >
                 <ActionIcon
                   variant={funnel.enabled ? 'filled' : 'default'}
-                  color={funnel.enabled ? 'teal' : 'gray'}
+                  color={funnel.enabled ? groupingColor : 'gray'}
                   size="sm"
                   aria-label="Toggle funnel filtering"
                   aria-pressed={funnel.enabled}

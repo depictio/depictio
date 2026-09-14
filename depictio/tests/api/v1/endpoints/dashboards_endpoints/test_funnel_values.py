@@ -7,6 +7,8 @@ Pins the core contract:
   (and no query runs for it);
 - ``include_stages`` returns the cumulative per-DC row counts that back the
   funnel overview;
+- ``stage_column`` (column mode) adds the column's distinct values per stage,
+  and refuses a column or DC the overview cannot chart;
 - unknown targets are ``unsupported``.
 """
 
@@ -107,14 +109,17 @@ def patched_env():
         client.close()
 
 
-def _call(filters, target_indexes, include_stages=False):
+def _call(filters, target_indexes, include_stages=False, stage_column=None):
+    request = {
+        "filters": filters,
+        "target_indexes": target_indexes,
+        "include_stages": include_stages,
+    }
+    if stage_column is not None:
+        request["stage_column"] = stage_column
     return funnel_values_endpoint(
         dashboard_id=DASHBOARD_ID,  # type: ignore[arg-type]
-        request={
-            "filters": filters,
-            "target_indexes": target_indexes,
-            "include_stages": include_stages,
-        },
+        request=request,
         current_user=object(),  # permission check is patched out
         access_token=None,
     )
@@ -170,6 +175,10 @@ def test_stages_report_cumulative_counts(patched_env):
     assert stages[0]["rows_by_dc"] == {DC1: 2}  # habitat=Groundwater
     assert stages[1]["rows_by_dc"] == {DC1: 0}  # + depth=3 → nothing left
     assert result["filter_count"] == 2
+    # Callers that don't ask for column mode get the response they always had.
+    assert "stage_column_status" not in result
+    assert "initial_values" not in result
+    assert "values" not in stages[0]
 
 
 def test_inactive_filters_are_ignored(patched_env):
@@ -214,3 +223,68 @@ def test_reset_range_filter_is_not_a_stage(patched_env):
     result = _call(filters, [], include_stages=True)
     assert result["filter_count"] == 1
     assert len(result["stages"]) == 1
+
+
+def test_stage_column_reports_distinct_values_per_stage(patched_env):
+    """Column mode: each stage carries the column's surviving distinct values."""
+    filters = [
+        _filter("comp-habitat", "habitat", ["Groundwater"]),
+        _filter("comp-depth", "depth", ["1"]),
+    ]
+    result = _call(
+        filters,
+        [],
+        include_stages=True,
+        stage_column={"dc_id": DC1, "column_name": "depth"},
+    )
+    assert result["stage_column_status"] == "ok"
+    assert result["stage_column"] == {"dc_id": DC1, "column_name": "depth"}
+    assert result["stage_dcs"] == [DC1]
+    assert result["initial_rows_by_dc"] == {DC1: 3}
+    assert result["initial_values"] == {"count": 3, "values": ["1", "2", "3"], "truncated": False}
+    stages = result["stages"]
+    assert [s["values"]["values"] for s in stages] == [["1", "2"], ["1"]]
+    assert [s["values"]["count"] for s in stages] == [2, 1]
+    assert [s["rows_by_dc"] for s in stages] == [{DC1: 2}, {DC1: 1}]
+
+
+def test_stage_column_values_are_capped_but_counted(patched_env):
+    """The value list is capped; ``count`` still covers every distinct value."""
+    routes_mod = "depictio.api.v1.endpoints.dashboards_endpoints.routes"
+    with patch(f"{routes_mod}.FUNNEL_MAX_VALUES", 2):
+        result = _call(
+            [_filter("comp-habitat", "habitat", ["Groundwater", "Riverwater"])],
+            [],
+            include_stages=True,
+            stage_column={"dc_id": DC1, "column_name": "depth"},
+        )
+    assert result["initial_values"] == {"count": 3, "values": ["1", "2"], "truncated": True}
+
+
+def test_stage_column_unknown_column_is_unsupported(patched_env):
+    filters = [_filter("comp-habitat", "habitat", ["Groundwater"])]
+    result = _call(
+        filters,
+        [],
+        include_stages=True,
+        stage_column={"dc_id": DC1, "column_name": "nope"},
+    )
+    assert result["stage_column_status"] == "unsupported"
+    assert result["stage_column"] is None
+    assert result["initial_values"] is None
+    # Falls back to the plain per-DC row counts.
+    assert result["stages"][0]["rows_by_dc"] == {DC1: 2}
+    assert "values" not in result["stages"][0]
+
+
+def test_stage_column_on_uncharted_dc_is_unsupported(patched_env):
+    filters = [_filter("comp-habitat", "habitat", ["Groundwater"])]
+    result = _call(
+        filters,
+        [],
+        include_stages=True,
+        stage_column={"dc_id": str(ObjectId()), "column_name": "depth"},
+    )
+    assert result["stage_column_status"] == "unsupported"
+    assert result["stage_dcs"] == [DC1]
+    assert result["stages"][0]["rows_by_dc"] == {DC1: 2}

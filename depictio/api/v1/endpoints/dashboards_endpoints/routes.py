@@ -6879,9 +6879,19 @@ def _funnel_target_values(
 
     if column not in df.columns:
         return {"status": "unsupported"}
+    distinct = _funnel_distinct_values(df, column)
+    return {"status": "ok", "values": distinct["values"], "truncated": distinct["truncated"]}
+
+
+def _funnel_distinct_values(df: Any, column: str) -> dict:
+    """Distinct non-null values of ``column`` in ``df``, as sorted strings.
+
+    ``count`` is the full distinct count; ``values`` is capped at
+    ``FUNNEL_MAX_VALUES`` and ``truncated`` says whether the cap cut it.
+    """
     values = sorted({str(v) for v in df[column].drop_nulls().unique().to_list()})
     return {
-        "status": "ok",
+        "count": len(values),
         "values": values[:FUNNEL_MAX_VALUES],
         "truncated": len(values) > FUNNEL_MAX_VALUES,
     }
@@ -6893,12 +6903,21 @@ def _funnel_stage_counts(
     access_token: str | None,
     active_filters: list[dict],
     stage_dcs: list[str],
-) -> tuple[dict[str, int | None], list[dict]]:
+    stage_column: str | None = None,
+) -> tuple[dict[str, int | None], list[dict], dict | None] | None:
     """Cumulative row counts per DC as each active filter is applied in turn.
 
-    Returns ``(initial_rows_by_dc, stages)`` where each stage carries the
-    filter it added and the per-DC row counts after applying filters[0..k].
-    ``None`` counts mark DCs whose load failed at that stage.
+    Returns ``(initial_rows_by_dc, stages, initial_values)`` where each stage
+    carries the filter it added and the per-DC row counts after applying
+    filters[0..k]. ``None`` counts mark DCs whose load failed at that stage.
+
+    ``stage_column`` is column mode, with ``stage_dcs`` narrowed to the one DC
+    that carries it: every load is projected onto that column, and each stage
+    also carries ``values``, the column's distinct values after that stage
+    (``_funnel_distinct_values``). ``initial_values`` is the same for the
+    unfiltered state, and ``None`` outside column mode. Returns ``None`` when
+    the unfiltered frame loads without that column, so the caller can report it
+    unsupported.
     """
     from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
@@ -6906,7 +6925,7 @@ def _funnel_stage_counts(
         str(m.get("index")): m for m in (dashboard_data.get("stored_metadata") or [])
     }
 
-    def count_rows(dc_id: str, cumulative: list[dict]) -> int | None:
+    def load_stage(dc_id: str, cumulative: list[dict]) -> Any:
         # As in _funnel_target_values: a raised LinkResolutionError here would
         # abort the whole batch, so a failed stage degrades to an unknown count.
         try:
@@ -6932,34 +6951,71 @@ def _funnel_stage_counts(
         if not wf_id:
             return None
         try:
-            df = load_deltatable_lite(
+            return load_deltatable_lite(
                 workflow_id=wf_id if isinstance(wf_id, ObjectId) else ObjectId(str(wf_id)),
                 data_collection_id=dc_id,
                 metadata=filter_metadata,
                 init_data=_funnel_init_data(dashboard_data, dc_id),
+                select_columns=[stage_column] if stage_column else None,
             )
-            return int(df.height)
         except Exception as e:
             logger.debug(f"funnel: stage count failed for {dc_id}: {e}")
             return None
 
-    initial = {dc: count_rows(dc, []) for dc in stage_dcs}
+    initial: dict[str, int | None] = {}
+    initial_values: dict | None = None
+    for dc in stage_dcs:
+        df = load_stage(dc, [])
+        if df is None:
+            initial[dc] = None
+            continue
+        if stage_column:
+            # The loader drops projected columns the schema lacks rather than
+            # raising, so a missing column shows up here as an absent one.
+            if stage_column not in df.columns:
+                return None
+            initial_values = _funnel_distinct_values(df, stage_column)
+        initial[dc] = int(df.height)
 
     stages: list[dict] = []
     for k, f in enumerate(active_filters[:FUNNEL_MAX_STAGES]):
         cumulative = active_filters[: k + 1]
         meta = stored_meta_index.get(str(f.get("index") or "")) or {}
-        stages.append(
-            {
-                "index": f.get("index"),
-                "label": meta.get("title") or meta.get("column_name") or f.get("column_name"),
-                "column_name": f.get("column_name") or meta.get("column_name"),
-                "dc_id": str(meta.get("dc_id") or (f.get("metadata") or {}).get("dc_id") or ""),
-                "value": f.get("value"),
-                "rows_by_dc": {dc: count_rows(dc, cumulative) for dc in stage_dcs},
-            }
-        )
-    return initial, stages
+        rows_by_dc: dict[str, int | None] = {}
+        stage_values: dict | None = None
+        for dc in stage_dcs:
+            df = load_stage(dc, cumulative)
+            rows_by_dc[dc] = None if df is None else int(df.height)
+            if stage_column and df is not None and stage_column in df.columns:
+                stage_values = _funnel_distinct_values(df, stage_column)
+        stage = {
+            "index": f.get("index"),
+            "label": meta.get("title") or meta.get("column_name") or f.get("column_name"),
+            "column_name": f.get("column_name") or meta.get("column_name"),
+            "dc_id": str(meta.get("dc_id") or (f.get("metadata") or {}).get("dc_id") or ""),
+            "value": f.get("value"),
+            "rows_by_dc": rows_by_dc,
+        }
+        if stage_column:
+            stage["values"] = stage_values
+        stages.append(stage)
+    return initial, stages, initial_values
+
+
+def _funnel_stage_column(raw: Any, stage_dcs: list[str]) -> tuple[str, str] | None:
+    """The request's ``stage_column`` as ``(dc_id, column_name)``, or ``None``.
+
+    Only a DC the overview already charts qualifies: anything else (a MultiQC
+    DC, a DC no component on this tab reads, a malformed body) is refused
+    rather than loaded.
+    """
+    if not isinstance(raw, dict):
+        return None
+    dc_id = str(raw.get("dc_id") or "")
+    column = raw.get("column_name")
+    if dc_id not in stage_dcs or not isinstance(column, str) or not column.strip():
+        return None
+    return dc_id, column
 
 
 @dashboards_endpoint_router.post("/funnel_values/{dashboard_id}")
@@ -6983,7 +7039,8 @@ def funnel_values_endpoint(
         {
             "filters": [...],                # current filter list (viewer shape)
             "target_indexes": ["...", ...],  # interactive components to compute
-            "include_stages": bool           # also compute the funnel overview
+            "include_stages": bool,          # also compute the funnel overview
+            "stage_column": {"dc_id": str, "column_name": str}  # optional, column mode
         }
 
     Response:
@@ -6996,6 +7053,14 @@ def funnel_values_endpoint(
             "dc_labels": {"<dc_id>": str},
             "filter_count": int
         }
+
+    Column mode: when the request sends ``stage_column``, the response also
+    carries ``stage_column_status`` ("ok"|"unsupported"), ``stage_column``
+    (the column charted, or None), ``initial_values`` and ``stage_dcs`` (every
+    DC the overview can chart). On "ok", stages cover that one DC and each
+    carries ``values: {"count", "values", "truncated"}``; on "unsupported",
+    the stages are the plain per-DC counts. Without ``stage_column`` the
+    response is unchanged.
     """
     dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
     if not dashboard_data:
@@ -7053,6 +7118,16 @@ def funnel_values_endpoint(
     stages = None
     initial_rows_by_dc = None
     dc_labels: dict[str, str] = {}
+    raw_stage_column = request.get("stage_column")
+    # Column-mode keys, added only for callers that asked for column mode.
+    stage_column_fields: dict[str, Any] = {}
+    if raw_stage_column is not None:
+        stage_column_fields = {
+            "stage_column_status": "unsupported",
+            "stage_column": None,
+            "initial_values": None,
+            "stage_dcs": [],
+        }
     if include_stages:
         # The DCs worth charting: every delta-backed DC referenced by data
         # components or active filters. MultiQC DCs are skipped — they have no
@@ -7069,9 +7144,34 @@ def funnel_values_endpoint(
             seen_dcs.add(dc)
             stage_dcs.append(dc)
 
-        initial_rows_by_dc, stages = _funnel_stage_counts(
+        column_counts = None
+        if raw_stage_column is not None:
+            stage_column_fields["stage_dcs"] = stage_dcs
+            column = _funnel_stage_column(raw_stage_column, stage_dcs)
+            if column is not None:
+                column_dc, column_name = column
+                column_counts = _funnel_stage_counts(
+                    dashboard_data,
+                    project_id,
+                    access_token,
+                    active_filters,
+                    [column_dc],
+                    stage_column=column_name,
+                )
+                if column_counts is not None:
+                    stage_column_fields.update(
+                        stage_column_status="ok",
+                        stage_column={"dc_id": column_dc, "column_name": column_name},
+                        initial_values=column_counts[2],
+                    )
+
+        # A refused column still gets the plain overview, so the client can
+        # keep drawing something while it tells the reader why.
+        counts = column_counts or _funnel_stage_counts(
             dashboard_data, project_id, access_token, active_filters, stage_dcs
         )
+        if counts is not None:  # the rows overview always returns counts
+            initial_rows_by_dc, stages, _ = counts
 
         # Human-readable DC names for the funnel view.
         try:
@@ -7090,4 +7190,5 @@ def funnel_values_endpoint(
         "initial_rows_by_dc": initial_rows_by_dc,
         "dc_labels": dc_labels,
         "filter_count": len(active_filters),
+        **stage_column_fields,
     }

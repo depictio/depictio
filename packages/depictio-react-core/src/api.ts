@@ -624,6 +624,21 @@ export interface FunnelTargetResult {
   truncated?: boolean;
 }
 
+/** Distinct values of the funnel overview's stage column at one stage. */
+export interface FunnelColumnValues {
+  /** Every distinct non-null value, even past the server's list cap. */
+  count: number;
+  /** Sorted and stringified; shorter than `count` when `truncated`. */
+  values: string[];
+  truncated: boolean;
+}
+
+/** The column the funnel overview charts in "values of a column" mode. */
+export interface FunnelStageColumn {
+  dc_id: string;
+  column_name: string;
+}
+
 /** One stage of the funnel overview: the filter applied at this step and the
  *  per-DC row counts after applying every filter up to and including it. */
 export interface FunnelStage {
@@ -633,6 +648,9 @@ export interface FunnelStage {
   dc_id?: string;
   value?: unknown;
   rows_by_dc: Record<string, number | null>;
+  /** Column mode only: the stage column's values after this stage (null when
+   *  the load failed). */
+  values?: FunnelColumnValues | null;
 }
 
 export interface FunnelValuesResponse {
@@ -641,17 +659,28 @@ export interface FunnelValuesResponse {
   initial_rows_by_dc: Record<string, number | null> | null;
   dc_labels: Record<string, string>;
   filter_count: number;
+  /** The keys below are present only when the request sent a stage column.
+   *  "unsupported" means the stages are the plain per-DC row counts. */
+  stage_column_status?: 'ok' | 'unsupported';
+  /** The column actually charted, or null when it was refused. */
+  stage_column?: FunnelStageColumn | null;
+  initial_values?: FunnelColumnValues | null;
+  /** Every DC the overview can chart. Column mode narrows
+   *  `initial_rows_by_dc` to one DC, so this is where the full list lives. */
+  stage_dcs?: string[];
 }
 
 /** Compute funnel-filtering data: per-component available values under the
  *  current filters minus each component's own selection, and (optionally) the
- *  cumulative per-DC row counts backing the funnel overview. */
+ *  cumulative per-DC row counts backing the funnel overview. `stageColumn`
+ *  switches the overview to one column's distinct values per stage. */
 export async function fetchFunnelValues(
   dashboardId: string,
   filters: unknown[],
   targetIndexes: string[],
   includeStages = false,
   signal?: AbortSignal,
+  stageColumn?: FunnelStageColumn | null,
 ): Promise<FunnelValuesResponse> {
   const res = await authFetch(`${API_BASE}/dashboards/funnel_values/${dashboardId}`, {
     method: 'POST',
@@ -659,6 +688,7 @@ export async function fetchFunnelValues(
       filters,
       target_indexes: targetIndexes,
       include_stages: includeStages,
+      ...(stageColumn ? { stage_column: stageColumn } : {}),
     }),
     signal,
   });
