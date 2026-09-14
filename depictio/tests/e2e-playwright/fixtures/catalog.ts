@@ -252,7 +252,13 @@ export async function addCatalogRender(
         `[data-dc-tag='${offer.match.dc_tag}']`,
     )
     .first();
-  await expect(row).toBeVisible({ timeout: 15_000 });
+  // A match row cannot exist before the tab's own compose call has returned,
+  // and that call walks the whole catalog (see COMPOSE_TIMEOUT_MS). 15s was
+  // less than the static search box above is given, which had it backwards:
+  // the box is chrome that paints immediately, the rows are the slow part. On
+  // a busy stack the wait expired first and the walk reported "add failed" for
+  // whichever renders happened to be next.
+  await expect(row).toBeVisible({ timeout: COMPOSE_TIMEOUT_MS });
 
   // Click-then-verify, retried: the row list re-renders as the search filter
   // settles, and a click that lands on a node being replaced is swallowed —
