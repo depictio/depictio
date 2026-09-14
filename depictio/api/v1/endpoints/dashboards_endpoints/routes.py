@@ -4657,8 +4657,23 @@ def render_multiqc_endpoint(
                     rebuild_lock_key = f"multiqc:prerender_build_lock:dc={dc_id}"
                     if dc_id and cache.get(rebuild_lock_key) is None:
                         from depictio.api.celery_app import build_multiqc_prerender
+                        from depictio.api.v1.db import multiqc_prerender_collection
 
                         try:
+                            # The task refuses to act on precisely the state
+                            # this branch has just established. It returns
+                            # ``already_ready`` when the ledger says ready and
+                            # the report hash is unchanged, and binding a new
+                            # component to an existing report does not move
+                            # that hash — so enqueueing on its own does nothing
+                            # at all, while the 202 below sends the viewer
+                            # polling for the full five minutes against a build
+                            # nobody started. Mark the ledger stale first, the
+                            # same way an upload does, so the task rebuilds
+                            # what we have just proved is missing.
+                            multiqc_prerender_collection.update_one(
+                                {"dc_id": str(dc_id)}, {"$set": {"status": "pending"}}
+                            )
                             build_multiqc_prerender.delay(str(dc_id))
                             logger.info(
                                 f"render_multiqc cid={component_id} dc={dc_id}: "
