@@ -93,6 +93,17 @@ export function flattenOffers(modules: CatalogModule[]): RenderOffer[] {
   return offers;
 }
 
+/**
+ * Composing a project matches every render in the catalog against every data
+ * collection the project has, so its cost tracks the size of the catalog, not
+ * the size of the project. The catalog went from 96 renders to 553 with the
+ * nf-core stack and the call started passing 10s, which is where the config's
+ * actionTimeout put it: a budget written for a click on a button, inherited by
+ * an API call because Playwright applies it to both. State a budget that
+ * belongs to this request instead.
+ */
+const COMPOSE_TIMEOUT_MS = 60_000;
+
 export async function fetchCompose(
   request: APIRequestContext,
   tokens: TokenBundle,
@@ -100,7 +111,7 @@ export async function fetchCompose(
 ): Promise<CatalogModule[]> {
   const res = await request.get(
     `${API_URL}${API_PREFIX}/catalog/project/${projectId}/compose`,
-    { headers: auth(tokens) },
+    { headers: auth(tokens), timeout: COMPOSE_TIMEOUT_MS },
   );
   if (!res.ok()) return [];
   const body = (await res.json()) as { modules?: CatalogModule[] };
@@ -338,7 +349,11 @@ export async function waitForMultiqcOptions(
       try {
         const res = await request.get(
           `${API_URL}${API_PREFIX}/multiqc/builder_options?data_collection_id=${dcId}`,
-          { headers: auth(tokens) },
+          // Same reason as COMPOSE_TIMEOUT_MS, and load-bearing here: under the
+          // config's 10s action budget a backend answering in 12s would be
+          // retried until the deadline and then reported cold, which reads as
+          // "this collection never warmed up" when it warmed up every time.
+          { headers: auth(tokens), timeout: 30_000 },
         );
         if (res.ok()) {
           const opts = (await res.json()) as { plots?: Record<string, string[]> };
