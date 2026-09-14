@@ -559,11 +559,18 @@ const TasksPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
 
 // ── Ingestion pane ──────────────────────────────────────────────────────────
 
-/** Instance labels and project names seen in ingestion runs, for the Ingestion
+/** Instances and project names seen in ingestion runs, for the Ingestion
  *  pane's selects. `projects` maps project id to name. */
 interface RunFilterOptions {
   instances: string[];
   projects: Record<string, string>;
+}
+
+/** What a run's instance badge shows and the instance filter matches: the
+ *  configured label, else the CLI's hostname (the label is optional and most
+ *  CLI configs leave it unset). */
+function runInstance(r: MonitoringIngestionRun): string | null {
+  return r.cli_instance_label || r.cli_hostname || null;
 }
 
 /** Fold `runs` into `prev`, returning `prev` itself when nothing is new so a
@@ -574,7 +581,7 @@ function mergeRunFilterOptions(
 ): RunFilterOptions {
   let { instances, projects } = prev;
   for (const r of runs) {
-    const label = r.cli_instance_label;
+    const label = runInstance(r);
     if (label && !instances.includes(label)) instances = [...instances, label];
     if (r.project_id) {
       const name = r.project_name || projects[r.project_id] || r.project_id;
@@ -701,9 +708,12 @@ const IngestionPane: React.FC<{
               clearable
               searchable
               w={150}
+              // Hostnames outgrow the input; let the list show them whole.
+              comboboxProps={{ width: 280, position: 'bottom-end' }}
               value={instance}
               onChange={(v) => setFilter({ instance: v })}
               data={instanceSelectData(options, instance)}
+              nothingFoundMessage="No matching instance"
             />
             <Select
               size="xs"
@@ -766,10 +776,14 @@ const IngestionPane: React.FC<{
                       {r.source === 'ui' ? 'UI' : 'CLI'}
                     </Badge>
                   </Box>
-                  <Box w={130} style={{ flexShrink: 0 }}>
-                    <Badge size="xs" fullWidth color="blue" variant="outline">
-                      {r.cli_instance_label || r.cli_hostname || 'unknown'}
-                    </Badge>
+                  {/* Sized for a typical hostname and not uppercased, which
+                      widens it; a longer one truncates and the tooltip has it whole. */}
+                  <Box w={190} style={{ flexShrink: 0 }}>
+                    <Tooltip label={runInstance(r) ?? 'unknown'} openDelay={400}>
+                      <Badge size="xs" fullWidth tt="none" color="blue" variant="outline">
+                        {runInstance(r) ?? 'unknown'}
+                      </Badge>
+                    </Tooltip>
                   </Box>
                   <Text
                     size="xs"
