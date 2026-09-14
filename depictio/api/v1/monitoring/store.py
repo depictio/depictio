@@ -131,9 +131,11 @@ def get_task_event(task_id: str) -> Optional[dict[str, Any]]:
 
 
 def create_ingestion_run(run: IngestionRun) -> None:
+    doc = run.model_dump()
+    doc["updated_at"] = doc.get("updated_at") or datetime.now()
     ingestion_runs_collection.update_one(
         {"run_id": run.run_id},
-        {"$set": run.model_dump()},
+        {"$set": doc},
         upsert=True,
     )
 
@@ -141,8 +143,58 @@ def create_ingestion_run(run: IngestionRun) -> None:
 def finish_ingestion_run(run_id: str, **fields: Any) -> bool:
     """Patch a run on completion. Returns False if the run_id is unknown."""
     fields.setdefault("finished_at", datetime.now())
+    fields.setdefault("updated_at", datetime.now())
     result = ingestion_runs_collection.update_one({"run_id": run_id}, {"$set": fields})
     return result.matched_count > 0
+
+
+ABANDONED_RUN_ERROR = (
+    "No update from the client for over {hours} h: the process most likely exited "
+    "without reporting (killed, crashed or lost its connection)."
+)
+
+
+def stale_ingestion_query(cutoff: datetime) -> dict[str, Any]:
+    """Mongo filter for ``running`` records with no write since ``cutoff``.
+
+    Records written before ``updated_at`` existed fall back to ``started_at``.
+    """
+    return {
+        "status": "running",
+        "$or": [
+            {"updated_at": {"$lt": cutoff}},
+            {"updated_at": None, "started_at": {"$lt": cutoff}},
+        ],
+    }
+
+
+def mark_stale_ingestion_runs(now: Optional[datetime] = None) -> int:
+    """Flip stale ``running`` runs to ``abandoned``. Returns how many changed.
+
+    Called on the admin read paths rather than from a background loop: the
+    status only matters when someone looks, and sweeping before the query keeps
+    the ``status`` filter truthful. ``finished_at`` stays unset, since nobody
+    knows when the process actually died. Never raises.
+    """
+    hours = settings.monitoring.ingestion_stale_after_hours
+    if hours <= 0:
+        return 0
+    now = now or datetime.now()
+    try:
+        result = ingestion_runs_collection.update_many(
+            stale_ingestion_query(now - timedelta(hours=hours)),
+            {
+                "$set": {
+                    "status": "abandoned",
+                    "current_step": None,
+                    "error": ABANDONED_RUN_ERROR.format(hours=hours),
+                }
+            },
+        )
+        return result.modified_count
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning(f"monitoring: stale ingestion sweep failed: {exc}")
+        return 0
 
 
 def upsert_ingestion_step(
@@ -168,7 +220,7 @@ def upsert_ingestion_step(
         steps.append(step)
     result = ingestion_runs_collection.update_one(
         {"run_id": run_id},
-        {"$set": {"steps": steps, "current_step": current_step}},
+        {"$set": {"steps": steps, "current_step": current_step, "updated_at": datetime.now()}},
     )
     return result.matched_count > 0
 

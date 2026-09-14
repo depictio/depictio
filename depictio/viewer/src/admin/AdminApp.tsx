@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActionIcon,
   AppShell,
@@ -14,6 +14,8 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { Icon } from '@iconify/react';
+import { ADMIN_TABS, adminUrl, parseAdminUrl } from 'depictio-react-core';
+import type { AdminRoute, AdminTab } from 'depictio-react-core';
 
 import { AppSidebar } from '../chrome';
 import { useCurrentUser } from '../hooks/useCurrentUser';
@@ -26,36 +28,37 @@ import AdminMaintenancePanel from './AdminMaintenancePanel';
 import AdminMonitoringPanel from './AdminMonitoringPanel';
 import { usePageTitle } from '../branding';
 
-type AdminTab =
-  | 'users'
-  | 'projects'
-  | 'dashboards'
-  | 'branding'
-  | 'monitoring'
-  | 'backups'
-  | 'maintenance';
-
-/** Persist the active tab so a refresh keeps the admin where they left off. */
+/** Remember the last tab, so a bare `/admin` reopens where the admin left off.
+ *  A tab or pane named in the URL always wins. */
 const TAB_KEY = 'admin-active-tab';
 
-function readInitialTab(): AdminTab {
+function readStoredTab(): AdminTab {
   try {
     const raw = localStorage.getItem(TAB_KEY);
-    if (
-      raw === 'users' ||
-      raw === 'projects' ||
-      raw === 'dashboards' ||
-      raw === 'branding' ||
-      raw === 'monitoring' ||
-      raw === 'backups' ||
-      raw === 'maintenance'
-    ) {
-      return raw;
-    }
+    if ((ADMIN_TABS as readonly (string | null)[]).includes(raw)) return raw as AdminTab;
   } catch {
     /* ignore */
   }
   return 'users';
+}
+
+/** The view the address bar describes: `/admin/<tab>`, or `/admin/<pane>` for
+ *  a Log & Task pane, with the Ingestion filters in the query string (codec:
+ *  `adminUrlState` in depictio-react-core). */
+function readAdminRoute(): AdminRoute {
+  const parsed = parseAdminUrl(window.location.pathname, window.location.search);
+  return { ...parsed, tab: parsed.tab ?? readStoredTab() };
+}
+
+/** Point the address bar at `route`, keeping the hash. Switching tab or pane
+ *  is a navigation (`push`, so Back returns to it); a filter change is not
+ *  (`replace`, so typing in the search box doesn't bury the previous page). */
+function writeAdminUrl(route: AdminRoute, mode: 'push' | 'replace'): void {
+  const next = adminUrl(route);
+  if (next === `${window.location.pathname}${window.location.search}`) return;
+  const url = `${next}${window.location.hash}`;
+  if (mode === 'push') window.history.pushState(window.history.state, '', url);
+  else window.history.replaceState(window.history.state, '', url);
 }
 
 const AdminApp: React.FC = () => {
@@ -68,17 +71,37 @@ const AdminApp: React.FC = () => {
   const showBackups = showMonitoring;
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
-  const [activeTab, setActiveTab] = useState<AdminTab>(readInitialTab);
+  const [route, setRoute] = useState<AdminRoute>(readAdminRoute);
+  // Monitoring and Backups aren't rendered in public/demo mode; a URL naming
+  // them falls back to Users instead of an empty panel.
+  const activeTab: AdminTab =
+    !showMonitoring && (route.tab === 'monitoring' || route.tab === 'backups')
+      ? 'users'
+      : route.tab;
 
   usePageTitle('Administration');
 
+  // Canonicalise the arrival URL (a bare `/admin` gains the remembered tab,
+  // `/admin/monitoring` becomes `/admin/tasks`) and follow Back/Forward.
+  useEffect(() => {
+    writeAdminUrl(readAdminRoute(), 'replace');
+    const onPopState = () => setRoute(readAdminRoute());
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
   useEffect(() => {
     try {
-      localStorage.setItem(TAB_KEY, activeTab);
+      localStorage.setItem(TAB_KEY, route.tab);
     } catch {
       /* ignore */
     }
-  }, [activeTab]);
+  }, [route.tab]);
+
+  const navigate = useCallback((next: AdminRoute, mode: 'push' | 'replace') => {
+    setRoute(next);
+    writeAdminUrl(next, mode);
+  }, []);
 
   const renderBody = () => {
     if (loading) {
@@ -116,7 +139,7 @@ const AdminApp: React.FC = () => {
     return (
       <Tabs
         value={activeTab}
-        onChange={(v) => v && setActiveTab(v as AdminTab)}
+        onChange={(v) => v && navigate({ ...route, tab: v as AdminTab }, 'push')}
         keepMounted={false}
       >
         <Tabs.List>
@@ -171,7 +194,12 @@ const AdminApp: React.FC = () => {
         </Tabs.Panel>
         {showMonitoring && (
           <Tabs.Panel value="monitoring" pt="md">
-            <AdminMonitoringPanel />
+            <AdminMonitoringPanel
+              pane={route.pane}
+              onPaneChange={(pane) => navigate({ ...route, pane }, 'push')}
+              ingestionFilters={route.ingestion}
+              onIngestionFiltersChange={(ingestion) => navigate({ ...route, ingestion }, 'replace')}
+            />
           </Tabs.Panel>
         )}
         {showBackups && (

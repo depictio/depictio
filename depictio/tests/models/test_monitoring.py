@@ -65,10 +65,19 @@ class TestIngestionRun:
         assert run.command == "run"
         assert run.steps[0].name == "sync"
         assert run.finished_at is None
+        assert run.updated_at is None
 
     def test_rejects_extra_fields(self):
         with pytest.raises(ValidationError):
             IngestionRun(run_id="r1", bogus=1)
+
+    @pytest.mark.parametrize("status", ["interrupted", "abandoned"])
+    def test_statuses_for_runs_that_never_finished(self, status):
+        assert IngestionRun(run_id="r1", status=status).status == status
+
+    def test_invalid_status_rejected(self):
+        with pytest.raises(ValidationError):
+            IngestionRun(run_id="r1", status="exploded")
 
 
 class TestAppLogRecord:
