@@ -202,6 +202,12 @@ def cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def _default_cli() -> str:
+    """The repo's own CLI venv when it is built, otherwise whatever is on PATH."""
+    local = _REPO_ROOT / "depictio" / "cli" / ".venv" / "bin" / "depictio-cli"
+    return str(local) if local.is_file() else "depictio-cli"
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     cases = discover_cases(include_negative=not args.templates_only)
     if args.case:
@@ -214,6 +220,21 @@ def cmd_run(args: argparse.Namespace) -> int:
             f"no Depictio Nextflow config at {args.config}; "
             "generate one with `depictio-cli config nextflow` and pass --config"
         )
+    # dry-run mode only means anything if the CLI it wraps can actually run. When
+    # it cannot, every case exits non-zero: the must-resolve ones fail loudly, but
+    # the must-fail ones pass for the wrong reason, and `--templates-only` inverted
+    # would report a clean run that checked nothing at all.
+    if args.mode == "dry-run":
+        resolved = shutil.which(args.cli) or (
+            str(Path(args.cli)) if Path(args.cli).is_file() and os.access(args.cli, os.X_OK) else None
+        )
+        if resolved is None:
+            raise SystemExit(
+                f"--mode dry-run needs a runnable CLI; {args.cli!r} is not on PATH and is "
+                "not an executable file. Pass --cli /path/to/depictio-cli (in this repo: "
+                "depictio/cli/.venv/bin/depictio-cli) or set DEPICTIO_CLI_BIN."
+            )
+        args.cli = resolved
     failures = 0
     for case in cases:
         ok, body = run_case(case, args)
@@ -271,7 +292,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_run.add_argument(
         "--cli",
-        default=os.environ.get("DEPICTIO_CLI_BIN", "depictio-cli"),
+        default=os.environ.get("DEPICTIO_CLI_BIN") or _default_cli(),
         help="the CLI used by --mode dry-run",
     )
     p_run.add_argument("--timeout", type=int, default=300, help="seconds per case")
