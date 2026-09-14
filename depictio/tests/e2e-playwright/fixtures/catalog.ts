@@ -19,6 +19,10 @@ export interface CatalogRender {
   aggregations?: string[];
   secondary_layout?: string;
   section?: string;
+  /** interactive: the control, and the column it filters on. The compose
+   *  endpoint has always emitted both; they were just never declared here. */
+  interactive_type?: string;
+  column_name?: string;
 }
 
 export interface CatalogMatch {
@@ -79,7 +83,8 @@ export function flattenOffers(modules: CatalogModule[]): RenderOffer[] {
           renderIndex,
           label:
             `${mod.tool_id}/${match.output_id}[${renderIndex}] ` +
-            `${render.component}${render.kind ? `:${render.kind}` : ""} ` +
+            `${render.component}${render.kind ? `:${render.kind}` : ""}` +
+            `${render.interactive_type ? `:${render.interactive_type}` : ""} ` +
             `on ${match.dc_tag}`,
         });
       });
