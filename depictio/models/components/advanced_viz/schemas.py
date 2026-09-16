@@ -114,6 +114,13 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "pos": _INT,
         "score": _FLOAT,
     },
+    # Same three roles as `manhattan`, drawn by GenomeSpy on a locus scale. Kept
+    # identical on purpose so any DC a Manhattan binds renders here unchanged.
+    "genomespy_track": {
+        "chr": _STRING,
+        "pos": _INT,
+        "score": _FLOAT,
+    },
     "stacked_taxonomy": {
         "sample_id": _STRING,
         "taxon": _STRING,
@@ -308,6 +315,24 @@ ROLE_NAMES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
                 "neg_log_p",
                 "minus_log10_p",
                 "af",
+            }
+        ),
+    },
+    "genomespy_track": {
+        "chr": frozenset({"chr", "chrom", "chromosome", "#chrom", "contig"}),
+        "pos": frozenset({"pos", "position", "bp", "start", "chromstart"}),
+        "score": frozenset(
+            {
+                "score",
+                "p_value",
+                "pvalue",
+                "neg_log_p",
+                "minus_log10_p",
+                "af",
+                "coverage",
+                "depth",
+                "value",
+                "signal",
             }
         ),
     },
@@ -543,6 +568,10 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
     "manhattan": {
         "feature": _STRING,
         "effect": _FLOAT,
+    },
+    "genomespy_track": {
+        "feature": _STRING,
+        "end": _INT,
     },
     "stacked_taxonomy": {},
     "phylogenetic": {
@@ -1206,6 +1235,15 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         "label": "Manhattan plot",
         "description": "chr / pos / score scatter — works for true GWAS, peak qvalues, and variant AF.",
         "icon": "tabler:chart-histogram",
+        "category": "tool",
+    },
+    "genomespy_track": {
+        "label": "GenomeSpy track",
+        "description": (
+            "chr / pos / score drawn by GenomeSpy on a chromosome-aware locus axis: "
+            "native genome zoom, points or intervals, click-to-filter. Spike for #1083."
+        ),
+        "icon": "tabler:dna-2",
         "category": "tool",
     },
     "stacked_taxonomy": {

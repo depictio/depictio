@@ -1019,7 +1019,8 @@ export type AdvancedVizKind =
   | 'gene_arrow_track'
   | 'gsea_running_score'
   | 'sashimi'
-  | 'scatter_xy';
+  | 'scatter_xy'
+  | 'genomespy_track';
 
 /** Accepted dtypes for one role, plus whether the role is required. Sourced
  *  from the backend canonical schema so the builder never duplicates the

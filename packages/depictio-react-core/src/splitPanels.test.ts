@@ -130,6 +130,7 @@ describe('splitPanels', () => {
       'gene_arrow_track',
       'gsea_running_score',
       'sashimi',
+      'genomespy_track',
     ];
 
     it('places every model kind in its bucket, and no kind twice', () => {

@@ -64,6 +64,11 @@ AdvancedVizKind = Literal[
     # nf-core templates draw a scatter by hand, every one of them for a size
     # column, a selection key or a reference line rather than for the shape.
     "scatter_xy",
+    # Declarative genome track rendered by GenomeSpy (issue #1083). The same
+    # chr / pos / score roles as `manhattan`, drawn on a `locus` scale that
+    # GenomeSpy concatenates and zooms itself. `end_col` turns points into
+    # intervals. Spike: see docs/design/genomespy-eval.md.
+    "genomespy_track",
 ]
 
 # Map visualization types

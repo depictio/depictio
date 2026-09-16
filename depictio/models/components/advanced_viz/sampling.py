@@ -51,6 +51,7 @@ KIND_SAMPLING_POLICY: dict[AdvancedVizKind, SamplingPolicy] = {
     "volcano": "tail",
     "ma": "tail",
     "manhattan": "tail",
+    "genomespy_track": "tail",
     # Client-side aggregation — a sample is a wrong answer.
     "stacked_taxonomy": "none",
     "rarefaction": "none",
@@ -97,6 +98,7 @@ TAIL_ROLE: dict[AdvancedVizKind, tuple[str, TailDirection]] = {
     "volcano": ("significance", "auto"),
     "ma": ("log2_fold_change", "both"),
     "manhattan": ("score", "auto"),
+    "genomespy_track": ("score", "auto"),
 }
 
 # Both tables are declared over ``AdvancedVizKind`` so a new kind that forgets

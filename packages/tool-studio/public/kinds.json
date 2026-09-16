@@ -893,6 +893,101 @@
       "viz_kind": "gene_arrow_track"
     },
     {
+      "category": "tool",
+      "description": "chr / pos / score drawn by GenomeSpy on a chromosome-aware locus axis: native genome zoom, points or intervals, click-to-filter. Spike for #1083.",
+      "heavy": false,
+      "icon": "tabler:dna-2",
+      "label": "GenomeSpy track",
+      "required_roles": [
+        "chr",
+        "pos",
+        "score"
+      ],
+      "role_names": {
+        "chr": [
+          "#chrom",
+          "chr",
+          "chrom",
+          "chromosome",
+          "contig"
+        ],
+        "pos": [
+          "bp",
+          "chromstart",
+          "pos",
+          "position",
+          "start"
+        ],
+        "score": [
+          "af",
+          "coverage",
+          "depth",
+          "minus_log10_p",
+          "neg_log_p",
+          "p_value",
+          "pvalue",
+          "score",
+          "signal",
+          "value"
+        ]
+      },
+      "roles": {
+        "chr": {
+          "description": "Chromosome / contig name.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "end": {
+          "description": "End coordinate of the interval.",
+          "dtypes": [
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "feature": {
+          "description": "Optional feature annotation.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "pos": {
+          "description": "Genomic or sequence position (integer).",
+          "dtypes": [
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "score": {
+          "description": "Value plotted on the y-axis (e.g. -log10 p, signal).",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "genomespy_track"
+    },
+    {
       "category": "plot",
       "description": "The enrichment-score curve over the ranked list, its hit rug and the ranked metric, with the leading edge shaded.",
       "heavy": false,

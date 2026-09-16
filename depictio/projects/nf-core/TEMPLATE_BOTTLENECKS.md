@@ -273,6 +273,11 @@ rnafusion today, oncoanalyser when it lands, nothing else in sight.
 
 ### Where the boundary with JBrowse sits
 
+> **Re-examined in `docs/design/genomespy-eval.md` (#1083).** GenomeSpy draws tabular
+> tracks on a real locus axis inside `advanced_viz`, and has lazy BAM / BigWig / VCF / GFF3
+> sources that could take the file-backed side too; the paragraphs below describe the
+> boundary as it stood before that evaluation.
+
 Depictio already carries a `jbrowse2` data-collection type whose allowed formats are BAM,
 CRAM, BigWig, BED, GFF3, VCF and their indices, plus a JBrowse component in the React
 viewer. That is the line, and it is worth stating because two of the kinds in this lot sit

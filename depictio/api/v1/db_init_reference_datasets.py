@@ -238,6 +238,7 @@ STATIC_IDS = {
             "advanced_viz_gsea_running_score": "646b0f3c1e4a2d7f8e5b8d74",
             "advanced_viz_sashimi": "646b0f3c1e4a2d7f8e5b8d75",
             "advanced_viz_scatter_xy": "646b0f3c1e4a2d7f8e5b8d76",
+            "advanced_viz_genomespy_track": "646b0f3c1e4a2d7f8e5b8d77",
         },
     },
     # nf-core/viralrecon 3.0.0 viral-genome analysis template — five-tab

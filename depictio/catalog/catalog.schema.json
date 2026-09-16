@@ -246,7 +246,8 @@
                 "gene_arrow_track",
                 "gsea_running_score",
                 "sashimi",
-                "scatter_xy"
+                "scatter_xy",
+                "genomespy_track"
               ],
               "type": "string"
             },

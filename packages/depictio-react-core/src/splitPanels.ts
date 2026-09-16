@@ -231,6 +231,10 @@ export const GROUPING_MODE_BY_KIND: Readonly<Record<AdvancedVizKind, GroupingMod
   gene_arrow_track: 'none',
   gsea_running_score: 'none',
   sashimi: 'none',
+  // Same genome-wide axis as the Manhattan, so splitting is out for the same
+  // reason; the GenomeSpy spike colours by chromosome only and does not take
+  // the dashboard's groups yet, so it is honest about doing neither.
+  genomespy_track: 'none',
 };
 
 /** The policy for `vizKind`.

@@ -38,6 +38,8 @@ Curated from a 14-item survey across nf-core pipelines, Bioconductor Shiny apps,
 | 9 | Spatial scatter + simple image overlay | spatial transcriptomics, IF imaging (small images) | image opacity, colour-by, ROI lasso | gene set, cell-type filter | ROI cells (sample IDs) | plotly.js image annotation, or deck.gl BitmapLayer + ScatterplotLayer |
 | 10 | Pathway / network (STRING/KEGG) | enrichment, sc, multi-omic | layout algo, edge-confidence slider, colour-by logFC, expand neighbours | gene-set from #1/#3 | selected node → drill-back | cytoscape.js |
 
+**Note on #8:** the igv.js / jbrowse-react framing above predates the `advanced_viz` family. GenomeSpy — a declarative, coordinate-bound track grammar — was evaluated against it in `docs/design/genomespy-eval.md` (#1083) and landed as the `genomespy_track` kind; that document also lists which of the hand-built genome renderers it could replace.
+
 **Note on #9:** kept deliberately lightweight. Single image (PNG/JPG) as background, scatter overlay, lasso ROI. No pyramid / no zarr / no Vitessce. If imaging requirements grow later, swap the renderer for deck.gl + viv without touching the coordination contract.
 
 ### 2.1 Input schema per viz (required vs optional roles)

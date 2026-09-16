@@ -1607,6 +1607,68 @@ class SashimiConfig(_BaseVizConfig):
     )
 
 
+class GenomeSpyTrackConfig(_BaseVizConfig):
+    """One genomic track drawn by GenomeSpy on a chromosome-aware ``locus`` axis.
+
+    The spike for issue #1083. Binds the same ``chr / pos / score`` roles as
+    ``manhattan`` so every DC a Manhattan reads renders here unchanged, but the
+    genome axis, the locus zoom and the point picking are GenomeSpy's own rather
+    than rebuilt from Plotly primitives. ``end_col`` turns each row into an
+    interval (``rect`` mark), which covers coverage bins and peak calls.
+    """
+
+    viz_kind: Literal["genomespy_track"] = "genomespy_track"
+
+    chr_col: str = Field(default="chr", description="Column with chromosome / contig name")
+    pos_col: str = Field(default="pos", description="Column with the genomic start position")
+    score_col: str = Field(default="score", description="Column with the y-axis value")
+    feature_col: str | None = Field(
+        default=None, description="Optional column naming the row (SNP, peak, gene) for hover"
+    )
+    end_col: str | None = Field(
+        default=None,
+        description=(
+            "Optional column with the interval end. When set the track draws one "
+            "rectangle per row from pos to end instead of a point."
+        ),
+    )
+    mark: Literal["point", "rect"] = Field(
+        default="point",
+        description="Mark type. ``rect`` needs ``end_col``; without it the renderer falls back to points.",
+    )
+    assembly: str | None = Field(
+        default=None,
+        description=(
+            "GenomeSpy built-in assembly (hg38, hg19, hg18, mm10, mm9, dm6). Null derives "
+            "the contig list and sizes from the data itself, which is what a viral "
+            "reference or a draft assembly needs."
+        ),
+    )
+    score_title: str = Field(default="score", description="Y-axis label")
+    score_threshold: float | None = Field(
+        default=None, description="Horizontal reference rule; None hides it"
+    )
+    point_size: int = Field(default=5, ge=1, le=30, description="Point diameter in pixels")
+    opacity: float = Field(default=0.85, ge=0.05, le=1.0)
+
+    # --- Selection as a cross-filter (same contract as ManhattanConfig) -----
+    selection_enabled: bool = Field(
+        default=False,
+        description=(
+            "Let a click on a mark emit a dashboard filter the Analysis panel can "
+            "turn into a group. Requires ``selection_column``."
+        ),
+    )
+    selection_column: str | None = Field(
+        default=None,
+        description=(
+            "Column the emitted selection values belong to. No default, for the "
+            "same reason as the Manhattan plot: a row here is one feature at one "
+            "locus and the dashboard has to say what a pick means."
+        ),
+    )
+
+
 VizConfig = Annotated[
     ScatterXyConfig
     | VolcanoConfig
@@ -1636,6 +1698,7 @@ VizConfig = Annotated[
     | FusionStructureConfig
     | GeneArrowTrackConfig
     | GseaRunningScoreConfig
-    | SashimiConfig,
+    | SashimiConfig
+    | GenomeSpyTrackConfig,
     Field(discriminator="viz_kind"),
 ]
