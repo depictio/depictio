@@ -1,0 +1,17 @@
+id: cellranger_metrics_summary
+name: Cell Ranger metrics
+mode: count/metrics
+description: >-
+  Cell Ranger count's headline per-sample metrics: cells called, sequencing
+  depth and saturation, mapping rates and the QC-thresholds (Q30) behind
+  them, typed and de-commafied.
+find:
+  path_glob: "**/metrics_summary.csv"
+recipe: cellranger/metrics_summary.py
+fixture: metrics_summary.tsv
+renders_as:
+  - { component: card, column: estimated_cells, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: median_genes_per_cell, aggregation: max }
+  - { component: card, column: sequencing_saturation_pct, aggregation: average, secondary_layout: gauge, coverage_max: 100.0 }
+  - { component: card, column: fraction_reads_in_cells_pct, aggregation: average, secondary_layout: gauge, coverage_max: 100.0 }
+  - { component: table }

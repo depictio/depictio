@@ -1,0 +1,350 @@
+# nf-core/sarek Template v3.10.0 - Germline variant calling, five callers side by side
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/sarek/3.10.0 --data-root /path/to/your/data
+#
+# Tested against the nf-core/sarek 3.10.0 AWS megatest run's
+# `test_full_germline_ncbench_agilent/` profile:
+#   s3://nf-core-awsmegatests/sarek/results-8ccac7ad37b05dd792447763bf9671b719824587/
+#   (NA12878, two read depths, five germline callers. See megatest.yaml.)
+# ============================================================================
+#
+# SCOPE: GERMLINE ONLY, ONE PATIENT, TWO SAMPLES.
+# This megatest profile never runs a somatic route: there is no
+# tumor/normal pair, and ASCAT / ControlFREEC / MSIsensor(pro) never execute,
+# so those outputs do not exist anywhere under DATA_ROOT. `status` is 0
+# (normal) for both samples; the `status`/`status_label` columns on the
+# `samples` hub exist for forward-compatibility with a somatic run, not
+# because this run varies them.
+#
+# FIVE CALLERS, NO PER-VARIANT DATA.
+# `--tools deepvariant,freebayes,haplotypecaller,manta,strelka,snpeff,vep`.
+# The megatest manifest does not fetch the VCFs themselves (225 MB, and
+# `variant_calling/`/`annotation/` are excluded on purpose, see
+# megatest.yaml), only bcftools stats, vcftools stats and the snpEff/VEP
+# summaries survive per caller. There is therefore no per-variant position
+# table anywhere in this template: no manhattan/lollipop/oncoplot panel is
+# possible without re-fetching the VCFs. The per-caller comparison lives at
+# the bcftools-stats level (record counts, Ts/Tv), not the variant level.
+#
+# MANTA IS A CALLER HERE TOO, AND ITS BCFTOOLS STATS LOOK DEGENERATE.
+# Manta is a structural-variant caller; its output VCF has almost no
+# SNPs, so `bcftools stats` reports `ts=0 tv=0 ts/tv=0.0` for it and most of
+# its records land in bcftools' "others" bucket rather than "indels"/"SNPs".
+# That is Manta doing its job, not a data gap, see VALIDATION_REPORT.md.
+#
+# NATIVE MULTIQC 1.35, NOT REPROCESSED.
+# Unlike several other lot templates, this run already ships MultiQC 1.35
+# with a native parquet (`multiqc/multiqc_data/multiqc.parquet`), so no
+# `multiqc_reprocess` step is needed. `modules` / `plots` below were read off
+# `multiqc.list_plots()` against this exact file, not guessed from another
+# pipeline's report.
+template:
+  template_id: "nf-core/sarek/3.10.0"
+  description: "nf-core/sarek template: germline variant calling with five callers (DeepVariant, FreeBayes, HaplotypeCaller, Manta, Strelka) on the same two samples, compared at the bcftools-stats level, on top of the native MultiQC 1.35 report."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory containing sarek output (reports/, csv/, multiqc/, pipeline_info/) for the test_full_germline_ncbench_agilent/ profile, plus input/ holding the samplesheet."
+      required: true
+  # The bundled reference dataset needs no variable beyond DATA_ROOT: the
+  # samplesheet ships in input/ alongside this template.
+  reference:
+    vars: {}
+  # How this run's provenance is collected at ingest, surfaced in the
+  # ingestion report and the dashboard Settings drawer. sarek's params.json
+  # has ~140 keys; keys matched by no group rule land in 'Other'.
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "genomes.*" # bundled genome catalog, identical every run
+          - "hook_url" # nf-core runs put a live Slack webhook here
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Variant calling"
+        key_patterns: ["tools", "step", "wes", "joint_germline", "joint_mutect2", "no_intervals", "intervals", "nucleotides_per_second", "concatenate_vcfs", "filter_vcfs", "normalize_vcfs", "only_paired_variant_calling", "*_consensus_calling", "consensus_min_count", "freebayes_filter", "gatk_pcr_indel_model"]
+      - group: "Reference genome"
+        key_patterns: ["genome", "igenomes_base", "igenomes_ignore", "fasta*", "dict", "chr_dir", "dbsnp*", "known_indels*", "known_snps*", "germline_resource*", "pon*", "intervals", "mappability", "snpeff_*", "vep_*", "dbnsfp*", "condel_config", "spliceai_*", "mastermind_*", "ngscheckmate_bed", "cnvkit_reference"]
+      - group: "Read processing"
+        key_patterns: ["aligner", "trim_fastq", "clip_r*", "three_prime_clip_r*", "trim_nextseq", "length_required", "save_trimmed", "save_split_fastqs", "split_fastq", "umi_*", "group_by_umi_strategy", "bbsplit_*", "save_bbsplit_reads"]
+      - group: "Alignment and recalibration"
+        key_patterns: ["use_gatk_spark", "save_mapped", "save_output_as_bam", "save_reference", "markduplicates_pixel_distance", "bwa", "bwamem2", "dragmap", "seq_platform", "seq_center", "ignore_soft_clipped_bases"]
+      - group: "Skipped steps"
+        key_patterns: ["skip_tools"]
+      - group: "Run context"
+        key_patterns: ["input*", "outdir*", "version", "email*", "config_profile_*", "custom_config_*", "multiqc_*", "max_multiqc_email_size", "monochrome_logs", "validate_params", "help*", "show_hidden", "publish_dir_mode", "*testdata_base_path", "trace_report_suffix", "plaintext_email", "hook_url", "download_cache", "build_only_index"]
+    highlight:
+      - "tools"
+      - "wes"
+      - "genome"
+      - "aligner"
+      - "step"
+      - "joint_germline"
+  dashboards:
+    - "dashboards/base.yaml"
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Sarek Germline Variant Calling"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "sarek"
+    version: "3.10.0"
+    engine:
+      name: "nextflow"
+      version: "24.10.5"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/sarek"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Hub: one row per sample. Derives the read-depth condition and a
+      # human-readable status label from the samplesheet the pipeline
+      # validated; see recipes/samples.py.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samples"
+        description: "Per-sample hub: patient, tumor/normal status and the read-depth condition the sample name encodes"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/sarek/samples.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample name, the key every other collection is linked on"
+              "patient": "Patient/individual identifier from the samplesheet"
+              "status": "0 = normal, 1 = tumor (sarek convention); always 0 on this germline-only run"
+              "status_label": "Normal or Tumor, derived from status"
+              "read_depth_millions": "Approximate input read depth in millions, parsed from the sample name"
+              "n_lanes": "Sequencing lanes merged into the sample"
+
+      - data_collection_tag: "samplesheet"
+        description: "The samplesheet the pipeline validated against, one row per patient/sample/lane"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "NA12878_Agilent_full_test\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "patient": "Patient/individual identifier"
+              "status": "0 = normal, 1 = tumor"
+              "sample": "Sample identifier"
+              "lane": "Sequencing lane"
+              "fastq_1": "Read 1 FASTQ URL"
+              "fastq_2": "Read 2 FASTQ URL"
+
+      # ----------------------------------------------------------------
+      # MultiQC. Native MultiQC 1.35 (not reprocessed). Module and plot
+      # names come from multiqc.list_plots() run against this run's own
+      # parquet.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        description: "Native MultiQC 1.35 report: read QC, alignment, base recalibration, coverage, variant-call QC and annotation, ten modules"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "multiqc/multiqc_data/multiqc.parquet"
+          dc_specific_properties:
+            s3_location: null
+            modules:
+              - "fastqc"
+              - "fastp"
+              - "samtools"
+              - "picard"
+              - "gatk"
+              - "mosdepth"
+              - "bcftools"
+              - "vcftools"
+              - "snpeff"
+              - "vep"
+            plots:
+              fastqc:
+                - "Sequence Counts"
+                - "Sequence Quality Histograms"
+                - "Per Sequence GC Content":
+                    - "Percentages"
+                    - "Counts"
+              fastp:
+                - "Filtered Reads"
+                - "Insert Sizes"
+              samtools:
+                - "Percent mapped"
+                - "Insert size distribution"
+              picard:
+                - "Mark Duplicates"
+              gatk:
+                - "Reported Quality vs. Empirical Quality"
+              mosdepth:
+                - "Cumulative coverage distribution"
+                - "Average coverage per contig"
+              bcftools:
+                - "Variant Substitution Types"
+                - "Indel Distribution"
+                - "Variant depths"
+              vcftools:
+                - "TsTv by Count"
+                - "TsTv by Qual"
+              snpeff:
+                - "Variant Effects by Impact"
+                - "Variants by Effect Types"
+                - "Variants by Genomic Region"
+              vep:
+                - "General Statistics"
+                - "Variant classes"
+                - "SIFT summary"
+                - "PolyPhen summary"
+
+      # ----------------------------------------------------------------
+      # bcftools stats: raw scan + recipe two-step. The caller and the
+      # sample both live only in the directory path
+      # (reports/bcftools/<caller>/<sample>/...), never in the file's own
+      # content (its `ID 0 <filename>` line is not helpful either), so a
+      # scan carries the path into the frame via `include_file_paths` and
+      # the two recipes below read it off with a regex.
+      #
+      # bcftools stats' record types are different widths (SN is 4 tab
+      # fields, TSTV is 8, SiS/AF are wider still), and `has_header: false`
+      # infers the column count from the file's first data row, which is
+      # always an SN row (4 fields), truncating every wider row before a
+      # `new_columns` list could ever see its columns 5-8. Scanning with a
+      # separator that never appears in the file (`\x1e`) sidesteps that:
+      # every full line (tabs and all) lands in one `raw_line` text column,
+      # which the recipes split themselves after filtering to the record
+      # type they read.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "bcftools_stats_raw"
+        description: "Raw per-caller, per-sample bcftools stats reports (input of bcftools_stats_summary and bcftools_stats_tstv)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.bcftools_stats\\.txt$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1e"
+              has_header: false
+              comment_prefix: "#"
+              new_columns: ["raw_line"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw_line": "One full tab-separated bcftools stats data line (record type first: SN, TSTV, SiS, AF, QUAL, ...), comments already stripped"
+              "source_path": "File the row came from; caller and sample are derived from it"
+
+      - data_collection_tag: "bcftools_stats_summary"
+        description: "Per-sample, per-caller variant record counts (SNPs, indels, multiallelic sites) from bcftools stats"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "bcftools/stats_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the VCF was called on"
+              "caller": "Germline caller (deepvariant, freebayes, haplotypecaller, manta, strelka)"
+              "n_records": "Total VCF records"
+              "n_no_alts": "Reference-only sites"
+              "n_snps": "Records with a SNP"
+              "n_mnps": "Records with a multi-nucleotide substitution"
+              "n_indels": "Records with an indel"
+              "n_others": "Records of another type (e.g. a structural-variant symbolic allele)"
+              "n_multiallelic_sites": "Sites with more than one ALT allele"
+              "n_multiallelic_snp_sites": "Multiallelic sites where every ALT is a SNP"
+
+      - data_collection_tag: "bcftools_stats_tstv"
+        description: "Per-sample, per-caller transition/transversion ratio from bcftools stats"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "bcftools/stats_tstv.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the VCF was called on"
+              "caller": "Germline caller (deepvariant, freebayes, haplotypecaller, manta, strelka)"
+              "ts": "Transitions"
+              "tv": "Transversions"
+              "ts_tv": "Ts/Tv ratio; 0.0 for a caller with no scoreable SNPs (e.g. manta)"
+              "ts_1st_alt": "Transitions, counting only the first ALT allele of a site"
+              "tv_1st_alt": "Transversions, counting only the first ALT allele of a site"
+              "ts_tv_1st_alt": "Ts/Tv ratio, first-ALT-only"
+
+links:
+  # Hub -> MultiQC. sarek's per-tool sample names carry caller/stage suffixes
+  # the file NAME itself never has (NA12878_75M.deepvariant, NA12878_75M.md,
+  # NA12878_75M-1_1, ...); see VALIDATION_REPORT.md SK-D1 for where the
+  # generic sample_mapping canonicalisation does and does not collapse them
+  # back to the hub's plain `NA12878_75M` / `NA12878_200M`.
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Filter the MultiQC panels by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "bcftools_stats_summary"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the per-caller variant counts by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "bcftools_stats_tstv"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the per-caller Ts/Tv ratios by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "bcftools_stats_summary"
+    source_column: "sample"
+    target_dc_tag: "bcftools_stats_tstv"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Carry a sample selected on the variant counts table over to its Ts/Tv rows"
+    enabled: true

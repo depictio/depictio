@@ -86,14 +86,29 @@ class Scenario:
 SCENARIOS: list[Scenario] = [
     Scenario("airrflow", "5.1.0", "megatest", note="nf-core AWS megatest (= test_full)"),
     Scenario("airrflow", "5.1.0", "test", note="CI profile, 6 samples"),
-    Scenario("airrflow", "5.1.0", "test_tcr", note="TCR instead of BCR: same collections, different receptor"),
+    Scenario(
+        "airrflow",
+        "5.1.0",
+        "test_tcr",
+        note="TCR instead of BCR: same collections, different receptor",
+    ),
     # ampliseq has no megatest on disk; 2.16.0 carries two locally produced runs
     # and 2.18.0 the cluster CI run. 2.14.0 has no data at all.
     Scenario("ampliseq", "2.18.0", "test", note="CI profile; 7-rank DB, see TEST_DATASETS.md"),
     Scenario("ampliseq", "2.18.0", "test_pacbio_its", note="sintax route, PacBio ITS"),
     Scenario("ampliseq", "2.18.0", "test_iontorrent", note="sintax route, IonTorrent single-end"),
-    Scenario("ampliseq", "2.18.0", "test_multiregion", note="SIDLE route: the only one reaching sidle_reconstructed"),
-    Scenario("ampliseq", "2.18.0", "test_pplace", note="phylogenetic placement, a route no other ampliseq scenario takes"),
+    Scenario(
+        "ampliseq",
+        "2.18.0",
+        "test_multiregion",
+        note="SIDLE route: the only one reaching sidle_reconstructed",
+    ),
+    Scenario(
+        "ampliseq",
+        "2.18.0",
+        "test_pplace",
+        note="phylogenetic placement, a route no other ampliseq scenario takes",
+    ),
     Scenario("atacseq", "1.2.2", "megatest", note="MultiQC reprocessed"),
     Scenario("atacseq", "1.2.2", "test", note="CI profile; needs the HOMER glob fix"),
     Scenario("chipseq", "1.2.0", "megatest", note="MultiQC reprocessed"),
@@ -102,14 +117,43 @@ SCENARIOS: list[Scenario] = [
     Scenario("cutandrun", "3.1", "test_full_small", note="MultiQC reprocessed"),
     Scenario("differentialabundance", "2.0.0", "megatest", note="nf-core AWS megatest"),
     Scenario("differentialabundance", "2.0.0", "test_full", note="the one S3-free test_full"),
+    Scenario(
+        "eager",
+        "2.4.5",
+        "megatest",
+        note="DSL1 run, MultiQC reprocessed; 2.5.x megatests are empty",
+    ),
     Scenario("funcscan", "4.0.0", "megatest", note="nf-core AWS megatest"),
     Scenario("funcscan", "4.0.0", "test", note="CI profile; several tools not run"),
+    Scenario(
+        "hic", "2.0.0", "megatest", note="MultiQC reprocessed; 2.1.0 megatest is a truncated sync"
+    ),
+    Scenario("mag", "5.4.2", "megatest", note="nf-core AWS megatest; 5.5.0 is partial"),
+    Scenario(
+        "methylseq",
+        "2.3.0",
+        "megatest",
+        note="bismark route, MultiQC reprocessed; 3.x/4.x megatests are empty",
+    ),
+    Scenario("nanoseq", "3.0.0", "megatest", note="MultiQC reprocessed; 3.1.0 megatest is empty"),
     Scenario("rnafusion", "4.1.3", "megatest", note="megatest only: no usable test profile"),
     Scenario("rnaseq", "3.26.0", "megatest", note="nf-core AWS megatest"),
     Scenario("rnaseq", "3.26.0", "test", note="CI profile; samplesheet injected"),
     # The one full-size run in the showcase: 6 ENCODE cell lines, 12 libraries,
     # a 138 GB output directory that the fetch excludes bring down to 831 MB.
-    Scenario("rnaseq", "3.26.0", "test_full", note="full-size run, 6 cell lines; the CI profile has 2 samples"),
+    Scenario(
+        "rnaseq",
+        "3.26.0",
+        "test_full",
+        note="full-size run, 6 cell lines; the CI profile has 2 samples",
+    ),
+    Scenario(
+        "sarek",
+        "3.10.0",
+        "megatest",
+        note="germline NCBench Agilent exome route; no somatic profile published",
+    ),
+    Scenario("scrnaseq", "4.2.0", "megatest", note="Cell Ranger route (aligner_cellranger/)"),
     Scenario("taxprofiler", "2.0.1", "megatest", note="nf-core AWS megatest"),
     Scenario("taxprofiler", "2.0.1", "test", note="CI profile, 2 platforms"),
     # taxprofiler test_malt is deliberately absent. MALT runs and MultiQC reports it,
@@ -118,10 +162,20 @@ SCENARIOS: list[Scenario] = [
     # samplesheet and a MultiQC tab. The route is outside what the template covers,
     # which is worth recording and not worth showing.
     Scenario("variantbenchmarking", "1.4.0", "germline_small", note="germline route only"),
-    Scenario("variantbenchmarking", "1.4.0", "germline_sv", note="SV route, 3 callers; wittyer needs $HOME to exist"),
+    Scenario(
+        "variantbenchmarking",
+        "1.4.0",
+        "germline_sv",
+        note="SV route, 3 callers; wittyer needs $HOME to exist",
+    ),
     # som.py is somatic-only, so these two tables exist on no other route. Writes
     # under snv/, a third variant_type after small/ and structural/+copynumber/.
-    Scenario("variantbenchmarking", "1.4.0", "somatic_snv", note="somatic route: the som.py tables the other two scenarios cannot reach"),
+    Scenario(
+        "variantbenchmarking",
+        "1.4.0",
+        "somatic_snv",
+        note="somatic route: the som.py tables the other two scenarios cannot reach",
+    ),
     # sequencing-runs: DATA_ROOT is the PARENT of the run_* directories, so this
     # single project holds both runs. Pointing it at one run_* directory instead
     # would match runs_regex against that run's own subdirectories and find none.
@@ -179,7 +233,9 @@ def _existing_projects(cli_config: Path | None, api_url: str | None) -> set[str]
     text = cli_config.read_text()
     token = re.search(r"^\s*access_token:\s*['\"]?([^'\"\s]+)", text, re.M)
     base = api_url or (
-        m.group(1) if (m := re.search(r"^\s*api_base_url:\s*['\"]?([^'\"\s]+)", text, re.M)) else None
+        m.group(1)
+        if (m := re.search(r"^\s*api_base_url:\s*['\"]?([^'\"\s]+)", text, re.M))
+        else None
     )
     if not token or not base:
         return None
@@ -227,7 +283,9 @@ def cmd_list(args: argparse.Namespace) -> int:
             state = "ingested"
         else:
             state = "to ingest"
-        _log(f"{scenario.key:<44} {scenario.template_id:<34} {size:>7}  {state:<12} {scenario.note}")
+        _log(
+            f"{scenario.key:<44} {scenario.template_id:<34} {size:>7}  {state:<12} {scenario.note}"
+        )
     _log("-" * len(header))
     _log(f"{len(_select(args))} scenarios, {missing_data} without data on disk")
     return 1 if missing_data else 0
@@ -278,27 +336,41 @@ def cmd_ingest(args: argparse.Namespace) -> int:
             _log(f"! {project}: depictio-cli run exited {code}")
             failed.append(project)
     _log("")
-    _log(f"{len(scenarios) - len(failed) - skipped} ingested, {skipped} skipped, {len(failed)} failed")
+    _log(
+        f"{len(scenarios) - len(failed) - skipped} ingested, {skipped} skipped, {len(failed)} failed"
+    )
     for project in failed:
         _log(f"  failed: {project}")
     return 1 if failed else 0
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--root", type=Path, default=DEFAULT_ROOT, help="local data root")
-    parser.add_argument("--only", action="append", default=[], help="scenario key or pipeline; repeatable")
-    parser.add_argument("--cli-config", type=Path, default=None, help="depictio CLI config (token + api_base_url)")
-    parser.add_argument("--api-url", default=None, help="override the API base URL read from the CLI config")
+    parser.add_argument(
+        "--only", action="append", default=[], help="scenario key or pipeline; repeatable"
+    )
+    parser.add_argument(
+        "--cli-config", type=Path, default=None, help="depictio CLI config (token + api_base_url)"
+    )
+    parser.add_argument(
+        "--api-url", default=None, help="override the API base URL read from the CLI config"
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    listing = sub.add_parser("list", help="show every scenario, its data and whether it is already ingested")
+    listing = sub.add_parser(
+        "list", help="show every scenario, its data and whether it is already ingested"
+    )
     listing.set_defaults(func=cmd_list)
 
     ingest = sub.add_parser("ingest", help="create one project per scenario")
     ingest.add_argument("--cli", type=Path, default=DEFAULT_CLI, help="depictio-cli executable")
     ingest.add_argument("--project-prefix", default="", help="prefix for every project name")
-    ingest.add_argument("--skip-existing", action="store_true", help="skip names already in the instance")
+    ingest.add_argument(
+        "--skip-existing", action="store_true", help="skip names already in the instance"
+    )
     ingest.add_argument("--dry-run", action="store_true")
     ingest.set_defaults(func=cmd_ingest)
 

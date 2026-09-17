@@ -1,0 +1,73 @@
+BCFTOOLS_SORT:
+  bcftools: 1.23.1
+BCFTOOLS_STATS:
+  bcftools: 1.23.1
+BWAMEM1_MEM:
+  bwa: 0.7.19-r1273
+  samtools: 1.22.1
+CNNSCOREVARIANTS:
+  gatk4: 4.5.0.0
+CREATE_INTERVALS_BED:
+  gawk: 5.3.0
+DEEPVARIANT_RUNDEEPVARIANT:
+  deepvariant: 1.10.0
+ENSEMBLVEP_VEP:
+  ensemblvep: '116.0'
+  perl-math-cdf: '0.1'
+  tabix: 1.23.1
+FASTP:
+  fastp: 1.1.0
+FASTQC:
+  fastqc: 0.12.1
+FILTERVARIANTTRANCHES:
+  gatk4: 4.6.2.0
+FREEBAYES:
+  freebayes: 1.3.10
+GATK4_APPLYBQSR:
+  gatk4: 4.6.2.0
+GATK4_BASERECALIBRATOR:
+  gatk4: 4.6.2.0
+GATK4_HAPLOTYPECALLER:
+  gatk4: 4.6.2.0
+GATK4_MARKDUPLICATES:
+  gatk4: 4.6.2.0
+  samtools: '1.21'
+HTSLIB_BGZIPTABIX:
+  htslib: '1.24'
+  xz: 5.8.3
+INDEX_CRAM:
+  samtools: '1.24'
+MANTA_GERMLINE:
+  manta: 1.6.0
+MOSDEPTH:
+  gzip: '1.14'
+  mosdepth: 0.3.14
+SAMTOOLS_STATS:
+  samtools: '1.24'
+SNPEFF_SNPEFF:
+  snpeff: 5.4c
+STRELKA_SINGLE:
+  strelka: 2.9.10
+TABIX_BGZIPTABIX_INTERVAL_COMBINED:
+  htslib: '1.24'
+  xz: 5.8.3
+TABIX_BGZIPTABIX_INTERVAL_SPLIT:
+  htslib: '1.24'
+  xz: 5.8.3
+TABIX_VC_FREEBAYES:
+  htslib: '1.24'
+  xz: 5.8.3
+TABIX_VC_FREEBAYES_FILT:
+  htslib: '1.24'
+  xz: 5.8.3
+VCFLIB_VCFFILTER:
+  vcflib: 1.0.14
+VCFTOOLS_SUMMARY:
+  vcftools: 0.1.17
+VCFTOOLS_TSTV_COUNT:
+  vcftools: 0.1.17
+VCFTOOLS_TSTV_QUAL:
+  vcftools: 0.1.17
+Workflow:
+    nf-core/sarek: v3.10.0
+    Nextflow: 26.04.6

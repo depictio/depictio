@@ -1064,6 +1064,21 @@ class CoverageTrackConfig(_BaseVizConfig):
     show_individuals: bool = Field(
         default=True, description="Draw the per-sample traces under the aggregate"
     )
+    mark: Literal["line", "rect", "point"] = Field(
+        default="line",
+        description=(
+            "Trace geometry: a continuous line (default, today's rendering), "
+            "filled rects per bin, or discrete points. Recorded so a later "
+            "GenomeSpy spec can bind the same rows to an equivalent mark."
+        ),
+    )
+    facet_by_sample: bool = Field(
+        default=False,
+        description=(
+            "Force one lane per sample regardless of view_mode / sample count. "
+            "Optional, defaults keep today's rendering."
+        ),
+    )
 
 
 class SankeyConfig(_BaseVizConfig):
@@ -1607,6 +1622,95 @@ class SashimiConfig(_BaseVizConfig):
     )
 
 
+class ContactMapConfig(_BaseVizConfig):
+    """Binned Hi-C style contact matrix: one row per (bin1, bin2) pair.
+
+    Coordinate-bound like ``coverage_track``, and on the same side of the
+    JBrowse boundary: it draws a binned matrix of counts, never per-read
+    pairs. Only one triangle of the matrix needs to be present in the data;
+    the renderer mirrors it across the diagonal.
+    """
+
+    viz_kind: Literal["contact_map"] = "contact_map"
+
+    chrom1_col: str = Field(default="chrom1", description="Chromosome of the first bin")
+    start1_col: str = Field(default="start1", description="Start of the first bin")
+    chrom2_col: str = Field(default="chrom2", description="Chromosome of the second bin")
+    start2_col: str = Field(default="start2", description="Start of the second bin")
+    count_col: str = Field(default="count", description="Contact count / interaction score")
+    end1_col: str | None = Field(default=None, description="Optional end of the first bin")
+    end2_col: str | None = Field(default=None, description="Optional end of the second bin")
+    sample_col: str | None = Field(
+        default=None, description="Optional column selecting a sample when a DC holds several"
+    )
+
+    chrom: str | None = Field(
+        default=None,
+        description="Chromosome to display (intra-chromosomal view); null picks the first seen",
+    )
+    log_scale: bool = Field(default=True, description="Log-transform counts before colouring")
+    colour_scale: ColourScale = Field(default="Viridis")
+    balance: bool = Field(
+        default=False,
+        description="Single-pass row/column coverage normalisation before display (not iterative ICE)",
+    )
+    max_bins: int = Field(
+        default=500,
+        ge=10,
+        le=5000,
+        description="Guard on the matrix side length; larger requests are rejected client-side",
+    )
+
+
+class KneePlotConfig(_BaseVizConfig):
+    """Barcode-rank ("knee") curve: UMI count vs rank, descending, per sample."""
+
+    viz_kind: Literal["knee_plot"] = "knee_plot"
+
+    sample_col: str = Field(default="sample", description="Column naming each curve / library")
+    rank_col: str = Field(default="rank", description="Barcode rank, ascending from 1")
+    umi_count_col: str = Field(default="umi_count", description="UMI count at that rank")
+    is_cell_col: str | None = Field(
+        default=None,
+        description="Optional boolean column marking called cells; else the cutoff is estimated",
+    )
+
+    log_x: bool = Field(default=True, description="Log-scale the rank axis")
+    log_y: bool = Field(default=True, description="Log-scale the UMI-count axis")
+    show_cutoff: bool = Field(
+        default=True, description="Draw the cell-calling threshold as a reference line"
+    )
+
+
+class DamageProfileConfig(_BaseVizConfig):
+    """Ancient-DNA misincorporation profile: substitution frequency by read-end position."""
+
+    viz_kind: Literal["damage_profile"] = "damage_profile"
+
+    sample_col: str = Field(default="sample", description="Column naming each sample / library")
+    end_col: str = Field(
+        default="end", description="Read end the position is measured from: 5p or 3p"
+    )
+    position_col: str = Field(default="position", description="Distance from the read end")
+    base_change_col: str = Field(
+        default="base_change", description="Substitution, e.g. C>T, G>A, other"
+    )
+    frequency_col: str = Field(
+        default="frequency", description="Substitution frequency at that position"
+    )
+
+    ends: Literal["both", "5p", "3p"] = Field(
+        default="both", description="Which read end(s) to draw a panel for"
+    )
+    max_position: int = Field(
+        default=25, ge=1, le=200, description="Furthest distance from the read end to display"
+    )
+    highlight: list[str] = Field(
+        default_factory=lambda: ["C>T", "G>A"],
+        description="Substitutions drawn in the deamination colours; others render muted",
+    )
+
+
 VizConfig = Annotated[
     ScatterXyConfig
     | VolcanoConfig
@@ -1636,6 +1740,9 @@ VizConfig = Annotated[
     | FusionStructureConfig
     | GeneArrowTrackConfig
     | GseaRunningScoreConfig
-    | SashimiConfig,
+    | SashimiConfig
+    | ContactMapConfig
+    | KneePlotConfig
+    | DamageProfileConfig,
     Field(discriminator="viz_kind"),
 ]

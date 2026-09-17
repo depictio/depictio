@@ -213,6 +213,34 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "lower": _FLOAT,
         "upper": _FLOAT,
     },
+    # One binned resolution of a Hi-C matrix, one row per (bin, bin) pair,
+    # intra- or inter-chromosomal. Coordinate-bound and below the JBrowse
+    # boundary: bins, never per-read pairs. Only a triangle needs to be
+    # present; the renderer mirrors it (`symmetric`).
+    "contact_map": {
+        "chrom1": _STRING,
+        "start1": _NUMERIC,
+        "chrom2": _STRING,
+        "start2": _NUMERIC,
+        "count": _NUMERIC,
+    },
+    # Barcode-rank ("knee") curve: one row per barcode rank per sample, UMI
+    # count descending with rank. The cell-calling threshold comes from the
+    # optional `is_cell` flag, or is estimated from the curve.
+    "knee_plot": {
+        "sample": _STRING,
+        "rank": _NUMERIC,
+        "umi_count": _NUMERIC,
+    },
+    # Ancient-DNA misincorporation profile: frequency of each base change at
+    # each position from a read end, for both ends. `end` is "5p" or "3p".
+    "damage_profile": {
+        "sample": _STRING,
+        "end": _STRING,
+        "position": _NUMERIC,
+        "base_change": _STRING,
+        "frequency": _NUMERIC,
+    },
 }
 
 # Per-role column-name aliases used by `suggest_viz_kinds`. The suggester
@@ -526,6 +554,29 @@ ROLE_NAMES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "end": frozenset({"end", "stop", "acceptor", "intron_end", "junction_end"}),
         "count": frozenset({"count", "reads", "n_reads", "unique_reads", "support", "depth"}),
     },
+    "contact_map": {
+        "chrom1": frozenset({"chrom1", "chr1", "chromosome1", "chrom_1", "chr_1", "chrom_a"}),
+        "start1": frozenset({"start1", "start_1", "pos1", "bin1", "bin1_start", "start_a"}),
+        "chrom2": frozenset({"chrom2", "chr2", "chromosome2", "chrom_2", "chr_2", "chrom_b"}),
+        "start2": frozenset({"start2", "start_2", "pos2", "bin2", "bin2_start", "start_b"}),
+        "count": frozenset({"count", "contacts", "value", "score", "balanced", "iced", "n"}),
+        "sample": frozenset({"sample", "sample_id", "library", "replicate"}),
+        "end1": frozenset({"end1", "end_1", "bin1_end", "end_a"}),
+        "end2": frozenset({"end2", "end_2", "bin2_end", "end_b"}),
+    },
+    "knee_plot": {
+        "sample": frozenset({"sample", "sample_id", "library", "run"}),
+        "rank": frozenset({"rank", "barcode_rank", "index", "order"}),
+        "umi_count": frozenset({"umi_count", "umis", "umi", "total_umi", "counts", "total"}),
+        "is_cell": frozenset({"is_cell", "cell", "called", "filtered", "in_filtered"}),
+    },
+    "damage_profile": {
+        "sample": frozenset({"sample", "sample_id", "library", "run"}),
+        "end": frozenset({"end", "read_end", "side", "terminus", "strand_end"}),
+        "position": frozenset({"position", "pos", "offset", "distance", "cycle"}),
+        "base_change": frozenset({"base_change", "change", "substitution", "mutation", "type"}),
+        "frequency": frozenset({"frequency", "freq", "rate", "fraction", "value", "damage"}),
+    },
 }
 
 
@@ -634,6 +685,15 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "sample": _STRING,
         "annotation": _STRING,
     },
+    "contact_map": {
+        "sample": _STRING,
+        "end1": _NUMERIC,
+        "end2": _NUMERIC,
+    },
+    "knee_plot": {
+        "is_cell": _BOOLEAN,
+    },
+    "damage_profile": {},
 }
 
 
@@ -1352,6 +1412,31 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
             "reads: splicing evidence per locus."
         ),
         "icon": "tabler:chart-arcs",
+    },
+    "contact_map": {
+        "label": "Contact map",
+        "description": (
+            "Binned Hi-C style contact matrix, symmetric heatmap with log "
+            "colour scale, chromosome selector and optional row/column "
+            "balancing."
+        ),
+        "icon": "tabler:layout-grid",
+    },
+    "knee_plot": {
+        "label": "Knee plot",
+        "description": (
+            "Barcode-rank curve, UMI count vs rank on log-log axes, one line "
+            "per sample, cell-calling cutoff marked."
+        ),
+        "icon": "tabler:trending-down",
+    },
+    "damage_profile": {
+        "label": "Damage profile",
+        "description": (
+            "Ancient-DNA misincorporation frequency by position from the read "
+            "end, 5p and 3p panels, C>T / G>A substitutions highlighted."
+        ),
+        "icon": "tabler:dna-2",
     },
 }
 

@@ -231,6 +231,12 @@ export const GROUPING_MODE_BY_KIND: Readonly<Record<AdvancedVizKind, GroupingMod
   gene_arrow_track: 'none',
   gsea_running_score: 'none',
   sashimi: 'none',
+  // A binned matrix re-derived per group would rebuild its own bins and axes,
+  // same bucket as complex_heatmap. Neither renderer takes a `groupRender`
+  // prop (no selection/grouping wiring; see the kind's renderer docstring).
+  contact_map: 'none',
+  knee_plot: 'none',
+  damage_profile: 'none',
 };
 
 /** The policy for `vizKind`.

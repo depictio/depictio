@@ -1,0 +1,4 @@
+id: simpleaf
+name: simpleaf (alevin-fry)
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/simpleaf/quant
+homepage: https://github.com/COMBINE-lab/simpleaf

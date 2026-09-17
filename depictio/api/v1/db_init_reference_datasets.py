@@ -200,6 +200,10 @@ STATIC_IDS = {
             "sashimi_demo": "646b0f3c1e4a2d7f8e5b8d85",
             "scatter_xy_demo": "646b0f3c1e4a2d7f8e5b8d86",
             "sashimi_coverage_demo": "646b0f3c1e4a2d7f8e5b8d87",
+            # nf-core template lot 2: contact_map, knee_plot, damage_profile.
+            "contact_map_demo": "646b0f3c1e4a2d7f8e5b8d88",
+            "knee_plot_demo": "646b0f3c1e4a2d7f8e5b8d89",
+            "damage_profile_demo": "646b0f3c1e4a2d7f8e5b8d8a",
         },
         "dashboards": {
             # Main tab reuses the project_id so get_child_tabs(main_id) finds
@@ -238,6 +242,9 @@ STATIC_IDS = {
             "advanced_viz_gsea_running_score": "646b0f3c1e4a2d7f8e5b8d74",
             "advanced_viz_sashimi": "646b0f3c1e4a2d7f8e5b8d75",
             "advanced_viz_scatter_xy": "646b0f3c1e4a2d7f8e5b8d76",
+            "advanced_viz_contact_map": "646b0f3c1e4a2d7f8e5b8d77",
+            "advanced_viz_knee_plot": "646b0f3c1e4a2d7f8e5b8d78",
+            "advanced_viz_damage_profile": "646b0f3c1e4a2d7f8e5b8d79",
         },
     },
     # nf-core/viralrecon 3.0.0 viral-genome analysis template — five-tab

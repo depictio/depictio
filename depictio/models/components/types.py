@@ -64,6 +64,14 @@ AdvancedVizKind = Literal[
     # nf-core templates draw a scatter by hand, every one of them for a size
     # column, a selection key or a reference line rather than for the shape.
     "scatter_xy",
+    # nf-core lot 2. Each one exists because a megatest output needed it and no
+    # existing kind could bind it. `contact_map` is coordinate-bound like
+    # `coverage_track`, and sits on the JBrowse boundary recorded in
+    # depictio/projects/nf-core/TEMPLATE_BOTTLENECKS.md: it draws a binned
+    # matrix, never per-base signal.
+    "contact_map",
+    "knee_plot",
+    "damage_profile",
 ]
 
 # Map visualization types

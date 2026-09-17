@@ -1,0 +1,5 @@
+sample	stage	total_reads	mapped_reads	mapped_pct	duplicate_reads	properly_paired_reads	properly_paired_pct	singleton_pct
+COD076E1bL1	post-filter	16801402	16801402	100.0	0	0		
+COD076E1bL1	pre-filter	71388991	25154106	35.24	0	0		
+COD092E1bL1i69	post-filter	16298931	16298931	100.0	0	0		
+COD092E1bL1i69	pre-filter	69615709	25225923	36.24	0	0		

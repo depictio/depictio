@@ -1,0 +1,4 @@
+id: cellranger
+name: Cell Ranger
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/cellranger/count
+homepage: https://www.10xgenomics.com/support/software/cell-ranger

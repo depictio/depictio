@@ -474,6 +474,223 @@ collapses them and answers 500). See chipseq VALIDATION_REPORT.md CS-D3.
 
 **Ranking by template stress:** C3 > C1 > C7 > C2 > C5 > C4 > C6
 
+## sarek 3.10.0
+
+**Megatest:** `s3://nf-core-awsmegatests/sarek/results-8ccac7ad37b05dd792447763bf9671b719824587/`
+(tag 3.10.0, run_root `test_full_germline_ncbench_agilent/`, manifest megatest.yaml)
+
+**MultiQC:** run wrote 1.35 -> used as-is
+
+**Template requirements:**
+- Always: `samples` (hub, pipeline-local), `samplesheet`, `multiqc_data` (native 1.35 parquet,
+  10 modules), `bcftools_stats_raw` (scan, feeds the next two via `dc_ref`),
+  `bcftools_stats_summary`, `bcftools_stats_tstv` (the new `bcftools` catalog tool)
+- Germline-only route: 5 callers (DeepVariant, FreeBayes, HaplotypeCaller, Manta, Strelka) x
+  2 samples, both annotators (SnpEff, VEP)
+- No somatic profile is published by this megatest, so ASCAT / ControlFREEC / MSIsensor
+  outputs never appear
+
+### Further scenarios (analytical, not yet run)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| SK1 | **germline NCBench Agilent (validated)** | `test_full_germline_ncbench_agilent` | none | All 6 DCs populate: 10 `bcftools_stats_*` rows (2 samples x 5 callers). |
+| SK2 | **`sample_mapping` canonicalisation gap** | any run | sarek's per-tool MultiQC sample names carry stage/caller/annotator suffixes (`.md`, `.recal`, `.deepvariant`, `.freebayes.filtered`, ...) | SK-D1: the shared `sample_mapping` regex only strips a trailing `_1`/`_2` or `" - annotation"` suffix, so the hub's Sample filter rarely narrows the MultiQC panels even though they render correctly unfiltered. The `bcftools_stats_*` links are unaffected (their `sample` column is path-derived, not MultiQC-name-derived). |
+| SK3 | **single caller** | `--tools haplotypecaller` | Four callers' `bcftools stats` reports absent | `bcftools_stats_summary`/`_tstv` narrow to 2 rows (1 caller x 2 samples); the caller-comparison `dot_plot` degenerates to two points. |
+| SK4 | **annotation skipped** | `--skip_tools snpeff,vep` | No SnpEff/VEP output | `gatk`, `vcftools` and `vep` MultiQC panels empty; the Annotation portion of the MultiQC tab loses its data. |
+| SK5 | **somatic pairs (tumor/normal)** | a tumor/normal design | ASCAT / ControlFREEC / MSIsensor outputs would appear for the first time in this repo | Not published by this megatest, so untestable against it; no somatic-specific catalog output exists yet either: the germline-only `bcftools_stats_*` binding (SN-record based) would still apply to whatever callers run. |
+| SK6 | **Manta's near-zero SNP counts** | present in the validated run | Manta is the one structural-variant caller among the five | SK-D4: `ts=0 tv=0 n_snps=0` for both samples is correct behaviour, not a data gap, easy to misdiagnose as broken without the dashboard's own caller-labelled description. |
+
+**Ranking by template stress:** SK1 > SK2 > SK5 > SK4 > SK3 > SK6
+
+---
+
+## scrnaseq 4.2.0
+
+**Megatest:** `s3://nf-core-awsmegatests/scrnaseq/results-3fc17b4f971a89e47c88337de71d0e777ffad8cc/aligner_cellranger/`
+(tag 4.2.0, run_root `aligner_cellranger/`, manifest megatest.yaml)
+
+**MultiQC:** run wrote 1.35 -> used as-is
+
+**Template requirements:**
+- Always: `samples` (hub), `cellranger_metrics_summary`, `cellranger_barcode_rank` (`knee_plot`
+  kind), `cellranger_embedding` (three `embedding`-kind renders sharing one table: UMAP, t-SNE,
+  PCA), `cellranger_diffexp` (`da_barplot` kind), `cellranger_pca_variance` (code-mode scree
+  figure), `cellbender_metrics`, `multiqc_data` (native 1.35)
+- One 10x Genomics v2 lane, `pbmc8k`, GRCh38 (8,767 cells out of 499,387 raw barcodes); Cell
+  Ranger route only
+
+### Further scenarios (analytical, not yet run)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| SC1 | **Cell Ranger route, single lane (validated)** | `aligner_cellranger` | none | All 7 DCs populate; `knee_plot`, the 3 `embedding` renders and `da_barplot` all render. |
+| SC2 | **STARsolo / kallisto / simpleaf route** | `--aligner star\|kallisto\|simpleaf` | None of the `cellranger`/`cellbender` file-name patterns match another aligner's output | Every `cellranger_*`/`cellbender_*` collection empty; `aligner_star` also publishes no MultiQC at all for this run. |
+| SC3 | **CellBender not run** | older config / CellBender skipped | No CellBender metrics | `cellbender_metrics` empty; CellBender is documented as pass-through provenance here, so nothing else degrades. |
+| SC4 | **multi-lane run** | a samplesheet with more than one 10x lane | More than one `sample` value | `cellranger_diffexp`'s top-100-genes-per-cluster cap (open question 2 in the report) would need revisiting for more clusters; `barcode_rank`/`embedding` just gain rows. |
+| SC5 | **MultiQC's own barcode-rank export used instead of the raw-matrix recipe** | hypothetical | MultiQC packs `(rank, count)` tuples as strings inside table cells | SC-D3: not a table a recipe can read cleanly; the fresh streaming sum off the raw matrix is what is actually bound, with the MultiQC panel kept alongside it, labelled as Cell Ranger's own rendering. |
+
+**Ranking by template stress:** SC1 > SC2 > SC4 > SC3 > SC5
+
+---
+
+## mag 5.4.2
+
+**Megatest:** `s3://nf-core-awsmegatests/mag/results-5dabb0159ac0104885e09f301db22126e8fcb394/`
+(tag 5.4.2, run_root `.`, manifest megatest.yaml)
+
+**MultiQC:** run wrote 1.31 -> used as-is
+
+**Template requirements:**
+- Always: `samples` (hub, pipeline-local), `mag_contig_to_bin_raw` -> `bin_summary`,
+  `binner_comparison` (both `dc_ref`, pipeline-local recipes with no catalog `use:`),
+  `multiqc_data` (native 1.31, general-stats only)
+- Three samples, hybrid short+long read, co-assembled with up to 4 assemblers, binned with 5
+  binners (up to 60 assembler/binner combinations, 53 actually produced bins, 1,283 bins total)
+- This run publishes **no** `Taxonomy/`, `QC_shortreads/`, `QC_longreads/` or `Assembly/`
+  directory: no bin QC (CheckM/BUSCO/GUNC beyond what MultiQC's general-stats carries), no
+  GTDB-Tk classification, no standalone QUAST report, no per-binner depth table
+
+### Further scenarios (analytical, not yet run)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| MG1 | **default megatest (validated)** | none | none | `bin_summary` (1,283 rows) and `binner_comparison` (53 rows) populate; MultiQC general-stats is the only bound panel. |
+| MG2 | **a run publishing `Taxonomy/`/`QC_shortreads/`** | an older or differently-configured mag run | GTDB-Tk / Kraken2 / standalone read-QC files would exist | Would re-enable the manifest keys MG-D2 removed; no catalog output exists yet to bind them even if the directories return. |
+| MG3 | **`Annotation/` (Prokka) fetched into `DATA_ROOT`** | a larger/different fetch | 917 files exist on S3 (per the task brief) but were not pulled locally | MG-D4: Prokka's numbers currently reach the dashboard only through MultiQC general-stats columns (`Coding_Density`, `CDS`, ...). |
+| MG4 | **fewer binners run** | e.g. `--skip_maxbin2`/`--skip_metabat2` | Fewer binner rows in the contig-to-bin map | `binner_comparison`'s per-binner rows shrink one-for-one; `bin_summary` is unaffected, it reads the same map regardless of which binners contributed. |
+| MG5 | **COMEBin embeddings bound to a derived per-bin centroid view** | not built | The raw per-contig embeddings are real (9.5-38 MB/file) but per-**contig**, not per-sample | MG-D3: out of scale for the `embedding` kind's intended per-sample-run usage as-is; a bin-centroid + shared-PCA follow-up was scoped but not implemented. |
+
+**Ranking by template stress:** MG1 > MG3 > MG2 > MG4 > MG5
+
+---
+
+## nanoseq 3.0.0
+
+**Megatest:** `s3://nf-core-awsmegatests/nanoseq/results-1e60482a2c4621234393a6eef8e9a104309c20ae/`
+(tag 3.0.0, run_root `.`, manifest megatest.yaml)
+
+**MultiQC:** run wrote 1.11 -> reprocessed with 1.35
+
+**Template requirements:**
+- Always: `samples` (hub), `multiqc_data` (REPROCESSED parquet: `fastqc`, `nanostat`,
+  `samtools`), `bambu_counts_gene`, `bambu_counts_transcript` (`complex_heatmap` x2),
+  `deseq2_results_raw` -> `deseq2_results` (`dc_ref`, `volcano`/`ma`/`qq`), `dexseq_results`
+  (`volcano`/`qq`)
+- SG-NEx A549 and K562 cell lines, direct-cDNA and cDNA Nanopore RNA-seq, 3 replicates each (6
+  samples)
+- This run publishes no pycoQC, no featureCounts, no JAFFAL fusion calls and no
+  `variant_calling/` output for its parameter set
+
+### Further scenarios (analytical, not yet run)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| NS1 | **default direct-cDNA/cDNA megatest (validated)** | none | none | All collections populate; all 7 kind-bound `advanced_viz` tiles render. |
+| NS2 | **MultiQC not reprocessed** | omit the reprocess step | 1.11 wrote no parquet | `multiqc_data` finds nothing, whole QC tab empty, mandatory as for chipseq/atacseq/cutandrun. |
+| NS3 | **pycoQC enabled** | an older/differently-configured run | Not produced by this run | Would add a pycoQC panel; NS-D1 removed the dead manifest key rather than binding one, since this run's parameter set never produces it. |
+| NS4 | **fusion detection or variant calling enabled** | `is_transcripts`, `nanopolish_fast5` set | Not this run's parameters | JAFFAL fusion calls and `variant_calling/` would appear; NS-D3 removed the corresponding manifest keys since neither is triggered here. |
+| NS5 | **Bambu row-id granularity on a richer reference GTF** | a non-minimal test GTF | This megatest's minimal GTF makes Bambu's `gene_id` an exon-granular GTF-attribute string, not a clean `ENSG…` id | NS-D5: only the `bambu` recipes' own regex extraction is unaffected; the reused `deseq2_results` collection keeps the raw descriptor string verbatim, so hover labels on the Differential expression tab are long strings rather than clean gene ids. |
+
+**Ranking by template stress:** NS1 > NS2 > NS5 > NS3 > NS4
+
+---
+
+## eager 2.4.5
+
+**Megatest:** `s3://nf-core-awsmegatests/eager/results-42c9d5f8602e5e88fdcec28f194d2cd4cff61c75/`
+(tag 2.4.5, run_root `.`, manifest megatest.yaml)
+
+**MultiQC:** run wrote 1.13.dev0 -> reprocessed with 1.35
+
+**Template requirements:**
+- Always: `samples` (hub, fixed-path samplesheet, EA-D2), `samtools_flagstat`,
+  `qualimap_bamqc_genome_results`, `damageprofiler_misincorporation` (`damage_profile` kind),
+  `preseq_complexity_curve` (`profile` kind, pipeline-local override recipe, EA-D4),
+  `multiqc_data` (REPROCESSED parquet)
+- Two Atlantic cod libraries (`COD076E1bL1`, `COD092E1bL1i69`), BWA mapping, Picard
+  MarkDuplicates (not DeDup), DamageProfiler, GATK HaplotypeCaller genotyping
+- `bcftools/stats_*` is referenced from sarek, not owned here; only the MultiQC `bcftools`
+  panels are bound
+
+### Further scenarios (analytical, not yet run)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| EA1 | **default megatest (validated)** | none | none | All 5 owned collections populate; `damage_profile` and `profile` kinds both render. |
+| EA2 | **MultiQC not reprocessed** | omit the reprocess step | 1.13.dev0 wrote no parquet (pre-parquet MultiQC era, like cutandrun/nanoseq) | `multiqc_data` finds nothing, whole QC tab empty. |
+| EA3 | **samplesheet not placed by hand** | default fetch only | EA-D1: eager's AWS bucket carries no `input/` prefix and no `params.json` to recover `--input` from | The hand-reconstructed `input/benchmarking_vikingfish.tsv` must be copied into `DATA_ROOT` manually or the `samples` hub is empty. |
+| EA4 | **samplesheet renamed** | any filename not containing `samplesheet` | EA-D2: the `samples` recipe reads a fixed path rather than auto-detecting via `SAMPLESHEET_FILE` (the auto-detect regex only matches filenames containing `samplesheet`) | A renamed manifest silently breaks the hub. |
+| EA5 | **sex determination / MTNucRatio / mapDamage / bedtools enabled** | not this run's config | None of those directories exist in the validated run | No catalog output binds them yet; enabling them on a future run needs new template work, not just new data. |
+| EA6 | **DeDup instead of Picard MarkDuplicates** | `--dedupper dedup` | Deduplication tool's report shape changes | Not exercised: this megatest used Picard. |
+
+**Ranking by template stress:** EA1 > EA2 > EA3 > EA4 > EA5 > EA6
+
+---
+
+## methylseq 2.3.0
+
+**Megatest:** `s3://nf-core-awsmegatests/methylseq/results-93bc5811603c287c766a0ff7e03b5b41f4483895/bismark/`
+(tag 2.3.0, run_root `bismark/`, manifest megatest.yaml)
+
+**MultiQC:** run wrote 1.13 -> reprocessed with 1.35
+
+**Template requirements:**
+- Always: `samples` (hub, `input/*.csv`, MS-D1), `bismark_alignment_summary`,
+  `bismark_deduplication_summary`, `bismark_methylation_context_summary`,
+  `bismark_mbias_curve` (`profile` kind, CpG context only), `multiqc_data` (REPROCESSED
+  parquet); the Coverage section references the existing `multiqc/qualimap.yaml` panel rather
+  than a new recipe
+- Seven E-MTAB-6511 hESC samples (MShef11 x3 low-oxygen replicates, MShef4 bulk + 3
+  passage/differentiation conditions), Bismark route only
+- This run has no usable Preseq output (`PRESEQ_LCEXTRAP` FAILED for 6 of 7 samples) and no
+  `picard_metrics/`
+
+### Further scenarios (analytical, not yet run)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| MS1 | **Bismark route, both cell lines (validated)** | none | none | Every collection populates, dashboard funnel intact. |
+| MS2 | **single cell line** | Sample filter narrowed to one `cell_line` value | none | MultiQC panels, alignment/dedup/methylation tables and the M-bias curve all narrow together through the project links; no tile empties (no collection is `optional: true` in this template). |
+| MS3 | **`bismark_hisat` / `bwameth` route** | `--aligner bismark_hisat` or `--aligner bwameth` | Out of scope for this template (Bismark route only) | `bismark/` file-name patterns would not match either alternate route's output names, so ingestion reports 0 rows for every Bismark-tagged collection rather than erroring. |
+| MS4 | **Preseq succeeds for every sample** | a future/different run | MS-D2: this run's `PRESEQ_LCEXTRAP` failed for 6 of 7 samples, so no Preseq collection is declared | The existing `preseq/complexity_curve.py` recipe would bind directly with no pipeline-specific change if a future run succeeds for every sample. |
+| MS5 | **deduplicated bedGraph read as a `coverage_track`** | not built | MS-D4: `*.deduplicated.bedGraph.gz` is fetched but unread | A natural `coverage_track` fit (per-base methylation), left out to keep this lot's Bismark tool to the four report-derived summaries the brief named. |
+
+**Ranking by template stress:** MS1 > MS2 > MS4 > MS5 > MS3
+
+---
+
+## hic 2.0.0
+
+**Megatest:** `s3://nf-core-awsmegatests/hic/results-b4d89cfacf97a5835fba804887cf0fc7e0449e8d/`
+(tag 2.0.0, run_root `.`, manifest megatest.yaml)
+
+**MultiQC:** run wrote 1.13 -> reprocessed with 1.35
+
+**Template requirements:**
+- Always: `samples`/`samplesheet` (hub), `multiqc_data` (REPROCESSED parquet: `fastqc`,
+  `hicpro`), `contact_matrix` (`contact_map` kind), `eigenvector`/`eigenvalues`
+  (compartments), `insulation` (`coverage_track` kind, TADs), `distance_decay` (`profile`
+  kind, hicexplorer)
+- One mouse ES-cell sample (`HIC_ES_4`), three FASTQ pairs HiC-Pro merges before mapping
+- Contact maps fetched at the two coarsest resolutions only (the `contact_map` tile
+  downsamples further)
+
+### Further scenarios (analytical, not yet run)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| HC1 | **default megatest (validated)** | none | none | All 4 dedicated tabs populate; all 4 `advanced_viz` kind-bound tiles render, no code-mode figure anywhere in this template. |
+| HC2 | **MultiQC not reprocessed** | omit the reprocess step | 1.13 wrote `mqc_*.txt` only | `multiqc_data` finds nothing, QC tab empty. |
+| HC3 | **finer contact-map resolution fetched** | a fetch with more resolutions | Only the two coarsest resolutions were fetched here | The `contact_map` tile's own downsampling would need re-checking against a denser bin count; not exercised. |
+| HC4 | **multi-sample HiC run** | a samplesheet with more than one sample | Every dedicated-tab collection currently keys off `HIC_ES_4` alone | The hub-driven sample filter would need re-validating against more than one value. |
+| HC5 | **two-resolution window mismatch in insulation** | present in the validated run (20 kb vs 40 kb windows) | HC-D8: the two resolution files scan different, only partially-overlapping window sizes | The recipe discovers windows dynamically from `df.columns` rather than assuming a fixed 3-window tuple, exactly to survive this. |
+| HC6 | **pipeline-local HiCExplorer module cited by `source_url`, not `nf_core_url`** | present in the validated run | HC-D5: `_check_identity_urls()` only enforces the nf-core/modules authority on `nf_core_url` | A pipeline-local module (`HIC_PLOT_DIST_VS_COUNTS`) needs `source_url` instead, a modelling constraint rather than a data-availability scenario. |
+
+**Ranking by template stress:** HC1 > HC2 > HC5 > HC4 > HC3 > HC6
+
+---
+
 ## Priority additions to `generate_validation_runs.sh`
 
 In order of value-per-effort:
