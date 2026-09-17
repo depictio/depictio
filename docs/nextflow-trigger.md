@@ -125,7 +125,27 @@ later disappears, Nextflow still parses, the handler reports that it cannot find
 
 `$NXF_HOME/config` covers all your pipelines at once. Set
 `params.depictio_enabled = false` in a pipeline's own config to opt one of them
-back out.
+back out, or pass `--depictio_enabled false` on that particular `nextflow run` —
+either always wins over whatever `--install` set up, no matter which way.
+
+By default `--install` makes every pipeline opt-out, as above. Add
+`--default-disabled` to install it opt-in instead:
+
+```bash
+depictio-cli config nextflow --install --default-disabled
+```
+
+```bash
+# silent: no --depictio_enabled, so the installed default (disabled) applies
+nextflow run nf-core/ampliseq -profile test,docker --outdir results
+
+# triggers Depictio for this run only
+nextflow run nf-core/ampliseq -profile test,docker --outdir results --depictio_enabled true
+```
+
+`--default-enabled` is the explicit spelling of the default and exists for
+symmetry. Re-running `--install` with a different default overwrites the
+installed handler with the new one.
 
 Having installed it globally and *also* passing `-c $(depictio-cli config
 nextflow)`, or running a pipeline that includes the snippet itself, ingests
@@ -556,7 +576,7 @@ stayed green, as designed.
 
 | Parameter | Default | CLI option it drives |
 | --- | --- | --- |
-| `depictio_enabled` | `true` | none, set to `false` to disable the trigger |
+| `depictio_enabled` | `true`, or whatever `--install --default-disabled` set | none, set to `false`/`true` to disable/force the trigger for one run |
 | `depictio_data_root` | `params.outdir` | `--data-root` |
 | `depictio_cli_config` | `$DEPICTIO_CLI_CONFIG_PATH`, else `~/.depictio/CLI.yaml` | `--CLI-config-path` |
 | `depictio_template` | none | `--template` |

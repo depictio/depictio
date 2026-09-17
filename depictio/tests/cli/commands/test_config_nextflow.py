@@ -134,6 +134,68 @@ class TestInstallEnablesTheTriggerGlobally:
         assert result.exit_code == 1
 
 
+class TestInstallDefaultToggle:
+    """`--default-enabled`/`--default-disabled` picks the fallback --install writes.
+
+    The per-run override (`--depictio_enabled true/false` on `nextflow run`) is
+    read from `params` inside the handler itself and is untouched by this flag
+    either way; only the value used when a run sets neither changes.
+    """
+
+    def _run(self, monkeypatch, home, *args):
+        monkeypatch.delenv("NXF_HOME", raising=False)
+        monkeypatch.setenv("HOME", str(home))
+        monkeypatch.setattr(
+            Path, "expanduser", lambda self: Path(str(self).replace("~", str(home), 1))
+        )
+        return runner.invoke(app, ["nextflow", *args])
+
+    def test_install_defaults_to_enabled(self, monkeypatch, tmp_path):
+        result = self._run(monkeypatch, tmp_path, "--install")
+
+        assert result.exit_code == 0
+        copied = (tmp_path / ".depictio" / "nextflow.config").read_text()
+        assert "cfg.call('depictio_enabled', true)" in copied
+
+    def test_default_disabled_flips_the_installed_fallback(self, monkeypatch, tmp_path):
+        result = self._run(monkeypatch, tmp_path, "--install", "--default-disabled")
+
+        assert result.exit_code == 0
+        copied = (tmp_path / ".depictio" / "nextflow.config").read_text()
+        assert "cfg.call('depictio_enabled', false)" in copied
+        assert "cfg.call('depictio_enabled', true)" not in copied
+
+    def test_default_disabled_does_not_touch_other_params(self, monkeypatch, tmp_path):
+        """Only the depictio_enabled fallback changes; every other default stays put."""
+        import depictio.cli
+
+        source = (
+            Path(depictio.cli.__file__).parent / "configs" / "nextflow" / "depictio.config"
+        ).read_text()
+
+        self._run(monkeypatch, tmp_path, "--install", "--default-disabled")
+
+        copied = (tmp_path / ".depictio" / "nextflow.config").read_text()
+        for line in source.splitlines():
+            if "depictio_enabled" in line:
+                continue
+            assert line in copied
+
+    def test_default_enabled_is_explicit_too(self, monkeypatch, tmp_path):
+        result = self._run(monkeypatch, tmp_path, "--install", "--default-enabled")
+
+        assert result.exit_code == 0
+        copied = (tmp_path / ".depictio" / "nextflow.config").read_text()
+        assert "cfg.call('depictio_enabled', true)" in copied
+
+    def test_reinstall_with_a_different_default_overwrites_the_handler(self, monkeypatch, tmp_path):
+        self._run(monkeypatch, tmp_path, "--install")
+        self._run(monkeypatch, tmp_path, "--install", "--default-disabled")
+
+        copied = (tmp_path / ".depictio" / "nextflow.config").read_text()
+        assert "cfg.call('depictio_enabled', false)" in copied
+
+
 class TestTheHandlerForwardsDashboards:
     """`params.depictio_dashboard` reaches the CLI as `--dashboard`.
 
