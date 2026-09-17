@@ -6,11 +6,39 @@ S3 storage location, and relationship to data collections.
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 from pydantic import BaseModel, Field
 
 from depictio.models.models.base import MongoModel
+
+# The anchor a MultiQC parquet stores its general-statistics rows under, and the
+# per-pipeline anchors that stand in for it (nf-core/viralrecon publishes the
+# same table as a custom-content plot; the nanopore route suffixes it `_table`).
+# Shared so the render path, ingestion and the builder all agree on what "the
+# report has a general-statistics table" means.
+GENERAL_STATS_ANCHOR = "general_stats_table"
+GENERAL_STATS_FALLBACK_ANCHORS = (
+    "summary_variants_metrics_plot",
+    "summary_assembly_metrics_plot",
+    "summary_variants_metrics_plot_table",
+    "summary_assembly_metrics_plot_table",
+)
+
+
+def general_stats_available(flags: Iterable[Optional[bool]]) -> bool:
+    """Whether a General Stats tile can render over a set of reports.
+
+    ``flags`` are the reports' ``metadata.has_general_stats``. One report that
+    has the table is enough, because a render concatenates every parquet of the
+    data collection. The tile is only withheld when every report is known to
+    lack it: a report ingested before the flag existed carries None, and hiding
+    on that would drop working tiles on data nobody re-ingested.
+    """
+    values = list(flags)
+    if any(f is True for f in values):
+        return True
+    return not (values and all(f is False for f in values))
 
 
 class MultiQCMetadata(BaseModel):
@@ -35,6 +63,13 @@ class MultiQCMetadata(BaseModel):
         default_factory=list,
         description="List of normalized canonical sample IDs (without suffixes or annotations). "
         "Used for joining with external metadata tables.",
+    )
+    has_general_stats: Optional[bool] = Field(
+        None,
+        description="Whether the parquet carries general-statistics rows. MultiQC assembles "
+        "that table from every module that ran, so it appears in neither `modules` nor "
+        "`plots` and can only be read from the parquet's anchors. None on reports ingested "
+        "before this was recorded, which callers treat as unknown rather than absent.",
     )
 
     class Config:

@@ -66,13 +66,17 @@ const MultiQCBuilder: React.FC = () => {
       .finally(() => setLoading(false));
   }, [dcId, config.s3_locations, patchConfig]);
 
-  // Always offer "General Stats Table" at the top of the module list — this
-  // mirrors the Dash design callback (depictio/dash/modules/multiqc_component/
-  // callbacks/design.py:124) which prepends it unconditionally. The MultiQC
-  // report's ``modules`` array doesn't include ``general_stats`` even when the
-  // table is available, so we synthesise the entry client-side.
+  // "General Stats Table" sits at the top of the module list, synthesised
+  // client-side: the report's ``modules`` array never lists ``general_stats``,
+  // because MultiQC assembles that table from every module that ran. It is only
+  // offered when the API says the reports actually carry it — a run whose
+  // ``multiqc_config`` drops the table would otherwise be given a tile that can
+  // only fail at render time.
+  const hasGeneralStats = (opts?.general_stats?.length ?? 0) > 0;
   const moduleOptions = [
-    { value: 'general_stats', label: '⊞ General Stats Table' },
+    ...(hasGeneralStats
+      ? [{ value: 'general_stats', label: '⊞ General Stats Table' }]
+      : []),
     ...(opts?.modules ?? [])
       .filter((m) => m !== 'general_stats')
       .map((m) => ({ value: m, label: m })),

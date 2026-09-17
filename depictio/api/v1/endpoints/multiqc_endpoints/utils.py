@@ -13,7 +13,7 @@ from depictio.api.v1.s3 import s3_client
 # Import build_sample_mapping from CLI utils to avoid code duplication
 # This function is now shared between API and CLI without circular dependencies
 from depictio.cli.cli.utils.sample_mapping import build_sample_mapping
-from depictio.models.models.multiqc_reports import MultiQCReport
+from depictio.models.models.multiqc_reports import MultiQCReport, general_stats_available
 
 # Re-export for backward compatibility
 __all__ = ["build_sample_mapping"]
@@ -32,6 +32,7 @@ def _compute_multiqc_builder_options(reports: list[dict]) -> dict:
     datasets: dict[str, set[str]] = {}
     s3_locations: list[str] = []
     general_stats: list[dict[str, str]] = []
+    gs_flags: list[bool | None] = []
 
     for report in reports:
         s3_loc = report.get("s3_location") or report.get("delta_table_location")
@@ -39,6 +40,7 @@ def _compute_multiqc_builder_options(reports: list[dict]) -> dict:
             s3_locations.append(s3_loc)
 
         meta = report.get("metadata") or {}
+        gs_flags.append(meta.get("has_general_stats"))
         for module in meta.get("modules", []) or []:
             modules.add(str(module))
         plots_meta = meta.get("plots") or {}
@@ -62,7 +64,7 @@ def _compute_multiqc_builder_options(reports: list[dict]) -> dict:
                     if isinstance(ds_list, list):
                         datasets.setdefault(str(plot_name), set()).update(str(d) for d in ds_list)
 
-    if "general_stats" in modules:
+    if general_stats_available(gs_flags):
         general_stats.append({"module": "general_stats", "plot": "general_stats"})
 
     return {

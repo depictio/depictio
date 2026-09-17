@@ -30,6 +30,7 @@ from depictio.catalog.payload import (
     multiqc_module,
 )
 from depictio.models.components.advanced_viz.catalog import load_catalog_entries
+from depictio.models.models.multiqc_reports import general_stats_available
 from depictio.models.models.users import User
 
 logger = logging.getLogger(__name__)
@@ -158,7 +159,8 @@ def _multiqc_sections(dc_id: str) -> set[str] | None:
     it renders through its own stub path and needs no plot.
     """
     doc = multiqc_collection.find_one(
-        {"data_collection_id": dc_id}, {"metadata.modules": 1, "metadata.plots": 1}
+        {"data_collection_id": dc_id},
+        {"metadata.modules": 1, "metadata.plots": 1, "metadata.has_general_stats": 1},
     )
     if not doc:
         return None
@@ -186,10 +188,15 @@ def _multiqc_sections(dc_id: str) -> set[str] | None:
     # The general-statistics table is not one of the report's modules: MultiQC
     # assembles it from every module that ran, so it appears in neither
     # `metadata.modules` nor `metadata.plots`, and an intersection could never
-    # keep it. It is also always present, and renders through its own stub path
-    # rather than through a plot anchor, so it is added to the answer instead of
-    # to the set being intersected.
-    return (present & plottable) | {multiqc_module("general_stats")}
+    # keep it. It renders through its own stub path rather than through a plot
+    # anchor, so it is added to the answer instead of to the set being
+    # intersected — but only when the parquet actually carries the table.
+    # A report whose `multiqc_config` drops it (nf-core/chipseq 2.x) would
+    # otherwise be offered a tile that can only fail at render time.
+    sections = present & plottable
+    if general_stats_available([metadata.get("has_general_stats")]):
+        sections |= {multiqc_module("general_stats")}
+    return sections
 
 
 def _keep_present_multiqc_sections(

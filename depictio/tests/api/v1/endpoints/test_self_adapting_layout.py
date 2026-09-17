@@ -225,13 +225,35 @@ def _mqc(module, plot):
     }
 
 
-def _mqc_meta(modules, plots):
-    return {"multiqc_data": {"type": "MultiQC", "mqc_modules": modules, "mqc_plots": plots}}
+def _mqc_meta(modules, plots, general_stats=True):
+    return {
+        "multiqc_data": {
+            "type": "MultiQC",
+            "mqc_modules": modules,
+            "mqc_plots": plots,
+            "mqc_general_stats": general_stats,
+        }
+    }
 
 
-def test_mqc_general_stats_always_kept():
-    # Synthetic module is exempt even with empty module/plot metadata.
+def test_mqc_general_stats_kept_when_the_report_has_the_table():
+    # The synthetic module is in no `modules` array, so the module/plot checks
+    # cannot speak for it: presence of the table is what decides.
     assert _component_has_data(_mqc("general_stats", "general_stats"), _mqc_meta(set(), {})) is True
+
+
+def test_mqc_general_stats_kept_when_presence_is_unknown():
+    # Reports ingested before `has_general_stats` existed record nothing, and a
+    # working tile must not be dropped on that.
+    meta = {"multiqc_data": {"type": "MultiQC", "mqc_modules": None, "mqc_plots": None}}
+    assert _component_has_data(_mqc("general_stats", "general_stats"), meta) is True
+
+
+def test_mqc_general_stats_hidden_when_the_report_lacks_the_table():
+    # nf-core/chipseq 2.x: the run's `multiqc_config` drops the table, so the
+    # tile can only fail at render time and is pruned instead.
+    meta = _mqc_meta({"fastqc", "samtools"}, {}, general_stats=False)
+    assert _component_has_data(_mqc("general_stats", "general_stats"), meta) is False
 
 
 def test_mqc_absent_module_hidden():
