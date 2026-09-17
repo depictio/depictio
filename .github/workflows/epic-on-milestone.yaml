@@ -1,0 +1,51 @@
+name: open epic on milestone creation
+
+# Every milestone in this repo is meant to have one "[Epic] <milestone title>"
+# issue driving it, but that's been a manual step maintainers forget half the
+# time (see #842/#844, which shipped with no milestone attached at all). This
+# closes the gap: the moment a milestone is created, its epic exists too.
+on:
+  milestone:
+    types: [created]
+
+permissions:
+  issues: write
+
+jobs:
+  open-epic:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Create epic issue for the new milestone
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const milestone = context.payload.milestone;
+            const title = `[Epic] ${milestone.title}`;
+
+            // Idempotent: re-running (e.g. a milestone edited/recreated) must not
+            // spawn a second epic for the same milestone.
+            const { data: search } = await github.rest.search.issuesAndPullRequests({
+              q: `repo:${context.repo.owner}/${context.repo.repo} is:issue label:epic milestone:"${milestone.title}"`,
+            });
+            if (search.items.length > 0) {
+              core.info(`Epic already exists for "${milestone.title}": #${search.items[0].number}`);
+              return;
+            }
+
+            const body = [
+              `Tracking epic for milestone [${milestone.title}](${milestone.html_url}).`,
+              "",
+              milestone.description || "_No milestone description yet — fill in scope here._",
+            ].join("\n");
+
+            const { data: issue } = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              labels: ["epic"],
+              milestone: milestone.number,
+              assignees: milestone.creator ? [milestone.creator.login] : [],
+            });
+
+            core.info(`Opened epic #${issue.number} for milestone #${milestone.number}`);
