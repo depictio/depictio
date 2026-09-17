@@ -1,0 +1,15 @@
+id: simpleaf_mapping_metrics
+name: Mapping headline numbers (simpleaf/alevin-fry)
+mode: simpleaf_quant/mapping_metrics
+description: >-
+  Reads processed and mapped by piscem/alevin-fry and the barcodes
+  alevin-fry quantified, one row per sample.
+find:
+  path_glob: "**/simpleaf_quant/af_map/map_info.json"
+recipe: simpleaf/mapping_metrics.py
+fixture: mapping_metrics.tsv
+renders_as:
+  - { component: card, column: mapping_rate, aggregation: average, secondary_layout: gauge, coverage_max: 1.0 }
+  - { component: card, column: num_processed, aggregation: max }
+  - { component: card, column: num_cells, aggregation: max }
+  - { component: table }

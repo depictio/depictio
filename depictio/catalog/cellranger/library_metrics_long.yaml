@@ -1,0 +1,13 @@
+id: cellranger_library_metrics_long
+name: Library QC metrics, thresholded
+mode: count/library_metrics_long
+description: >-
+  The 5 headline Cell Ranger metrics 10x's QC guidance gives a pass/warn/fail
+  band for, one row per (sample, metric), with the threshold and the status
+  it crosses.
+find:
+  path_glob: "**/metrics_summary.csv"
+recipe: cellranger/library_metrics_long.py
+fixture: library_metrics_long.tsv
+renders_as:
+  - { component: table }

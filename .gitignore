@@ -183,10 +183,21 @@ dump.rdb
 !depictio/projects/nf-core/chipseq/*/input/*.csv
 !depictio/projects/nf-core/atacseq/*/input/*.csv
 !depictio/projects/nf-core/cutandrun/*/input/*.csv
+# Lot 2 templates (sarek, scrnaseq, mag, nanoseq, eager, methylseq, hic).
+!depictio/projects/nf-core/sarek/*/input/*.csv
+!depictio/projects/nf-core/scrnaseq/*/input/*.csv
+!depictio/projects/nf-core/mag/*/input/*.csv
+!depictio/projects/nf-core/nanoseq/*/input/*.csv
+!depictio/projects/nf-core/eager/*/input/*.csv
+!depictio/projects/nf-core/eager/*/input/*.tsv
+!depictio/projects/nf-core/methylseq/*/input/*.csv
+!depictio/projects/nf-core/hic/*/input/*.csv
 # chipseq is pre-DSL2 and publishes its software versions as CSV, not YAML.
 !depictio/projects/nf-core/chipseq/*/pipeline_info/*.csv
 # atacseq 1.2.2 is pre-DSL2 too and publishes the same CSV shape.
 !depictio/projects/nf-core/atacseq/*/pipeline_info/*.csv
+# eager 2.4.5 is pre-DSL2 as well (TSV input, CSV software versions).
+!depictio/projects/nf-core/eager/*/pipeline_info/*.csv
 # Allow advanced_viz_showcase synthetic fixtures
 !depictio/projects/init/advanced_viz_showcase/data/*.tsv
 # Allow the catalog conformance project's generated data. Every file here is a

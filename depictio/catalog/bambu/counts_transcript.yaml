@@ -1,0 +1,13 @@
+id: bambu_counts_transcript
+name: Transcript-level quantification
+mode: quantification/transcript
+description: >-
+  Bambu transcript-level read counts, the top 50 transcripts by total count
+  across samples, features x samples.
+find: { path_glob: "**/bambu/counts_transcript.txt" }
+recipe: bambu/counts_transcript.py
+fixture: counts_transcript.tsv
+renders_as:
+  - { id: top_expressed_transcripts_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: transcript_id} }
+  - { component: card, column: transcript_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: gene_id, top_n_count: 3 }
+  - { component: table }

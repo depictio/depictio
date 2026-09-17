@@ -1,0 +1,10 @@
+# Bismark, bisulfite-read aligner and methylation caller at the core of
+# nf-core/methylseq's default (and only fully-supported) route. One folder for
+# the four stages a run always writes beside the BAMs: alignment, deduplication,
+# per-context methylation and the M-bias curves that say whether the extraction
+# window needs trimming. Coverage depth is Qualimap's job, not Bismark's, see
+# `depictio/catalog/multiqc/qualimap.yaml` (owned by nf-core/eager) for that.
+id: bismark
+name: Bismark
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/bismark/align
+homepage: https://github.com/FelixKrueger/Bismark
