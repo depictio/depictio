@@ -497,7 +497,7 @@ const OutputView: React.FC<{
                 its edge: at a third of the width, hugging the left reads as a
                 component that failed to fill its box. */}
             <Box
-              mih={activeHeight}
+              h={activeHeight}
               maw={PREVIEW_MAX_WIDTH[active.component_type]}
               mx={PREVIEW_MAX_WIDTH[active.component_type] ? 'auto' : undefined}
             >
