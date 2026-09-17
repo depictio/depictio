@@ -1,0 +1,16 @@
+id: qcatch_metrics_summary
+name: QC summary (QCatch)
+mode: qcatch/metrics_summary
+description: >-
+  QCatch's per-sample headline numbers for an alevin-fry / simpleaf
+  quantification: retained cells, sequencing depth and saturation, mapping
+  rate, the same shape as Cell Ranger's metrics_summary.csv.
+find:
+  path_glob: "**/qcatch/*_metrics_summary.csv"
+recipe: qcatch/metrics_summary.py
+fixture: metrics_summary.tsv
+renders_as:
+  - { component: card, column: retained_cells, aggregation: max }
+  - { component: card, column: mapping_rate_pct, aggregation: average, secondary_layout: gauge, coverage_max: 100.0 }
+  - { component: card, column: sequencing_saturation_pct, aggregation: average, secondary_layout: gauge, coverage_max: 100.0 }
+  - { component: table }

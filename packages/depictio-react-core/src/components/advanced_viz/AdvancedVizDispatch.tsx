@@ -31,6 +31,9 @@ import GeneArrowTrackRenderer from './GeneArrowTrackRenderer';
 import GseaRunningScoreRenderer from './GseaRunningScoreRenderer';
 import SashimiRenderer from './SashimiRenderer';
 import ScatterXyRenderer from './ScatterXyRenderer';
+import ContactMapRenderer from './ContactMapRenderer';
+import KneePlotRenderer from './KneePlotRenderer';
+import DamageProfileRenderer from './DamageProfileRenderer';
 import {
   AdvancedVizDataPopover,
   AdvancedVizExtrasProvider,
@@ -123,6 +126,9 @@ const RENDERERS: Record<string, React.ComponentType<any>> = {
   gsea_running_score: GseaRunningScoreRenderer,
   sashimi: SashimiRenderer,
   scatter_xy: ScatterXyRenderer,
+  contact_map: ContactMapRenderer,
+  knee_plot: KneePlotRenderer,
+  damage_profile: DamageProfileRenderer,
 };
 
 /**

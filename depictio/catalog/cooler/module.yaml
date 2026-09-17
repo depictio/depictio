@@ -1,0 +1,4 @@
+id: cooler
+name: cooler
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/cooler/cload
+homepage: https://cooler.readthedocs.io/

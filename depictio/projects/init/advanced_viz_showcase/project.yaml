@@ -686,4 +686,71 @@ workflows:
               mean_expression: "Mean of the two replicates. Drives the marker size, so the reader can see the off-diagonal points are not the faint ones."
               regulation: "up in B, down in B or unchanged. Colours the points; a tenth of the genes are regulated."
 
+      # nf-core template lot 2: each kind exists because a megatest output
+      # needed it and no existing kind could bind it (contact_map sits on the
+      # JBrowse boundary: a binned matrix, never per-base signal).
+      - id: "646b0f3c1e4a2d7f8e5b8d88"
+        data_collection_tag: "contact_map_demo"
+        description: "Binned Hi-C style contact matrix over 3 synthetic chromosomes: diagonal decay plus two TAD blocks"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/contact_map_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              chrom1: "Chromosome of the first bin."
+              start1: "Start of the first 10 kb bin."
+              end1: "End of the first bin."
+              chrom2: "Chromosome of the second bin. Equal to chrom1 throughout; only intra-chromosomal contacts are in this demo."
+              start2: "Start of the second 10 kb bin."
+              end2: "End of the second bin."
+              count: "Contact count for the (bin1, bin2) pair. Decays with genomic distance; two TAD blocks (bins 5-15 and 25-35) carry a 3x boost regardless of distance."
+
+      - id: "646b0f3c1e4a2d7f8e5b8d89"
+        data_collection_tag: "knee_plot_demo"
+        description: "Two barcode-rank curves: a called-cell plateau followed by a power-law drop into the empty-droplet background"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/knee_plot_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              sample: "Sample / library the curve belongs to."
+              rank: "Barcode rank, ascending from 1 (highest UMI count first)."
+              umi_count: "UMI count at that rank."
+              is_cell: "Whether this rank was called a cell. The boundary between true and false is the cutoff the renderer draws."
+
+      - id: "646b0f3c1e4a2d7f8e5b8d8a"
+        data_collection_tag: "damage_profile_demo"
+        description: "Ancient-DNA misincorporation profile for 2 samples: C>T at the 5' end and G>A at the 3' end, both decaying from ~0.3 at position 1"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/damage_profile_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              sample: "Sample / library the profile belongs to."
+              end: "Read end the position is measured from: 5p or 3p."
+              position: "Distance from the read end, 1 to 25."
+              base_change: "Substitution class: C>T, G>A, T>C, A>G or other."
+              frequency: "Substitution frequency at that position. C>T at 5p and G>A at 3p are the deamination signature; every other class sits near background."
+
 # No joins. Filters in each dashboard are scoped to a single DC.

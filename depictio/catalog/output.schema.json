@@ -110,7 +110,10 @@
                 "gene_arrow_track",
                 "gsea_running_score",
                 "sashimi",
-                "scatter_xy"
+                "scatter_xy",
+                "contact_map",
+                "knee_plot",
+                "damage_profile"
               ],
               "type": "string"
             },

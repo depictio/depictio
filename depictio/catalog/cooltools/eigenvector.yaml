@@ -1,0 +1,18 @@
+id: cooltools_eigenvector
+name: A/B compartment track
+mode: eigs-cis
+description: >-
+  Per-bin first eigenvector (E1) of the intra-chromosomal correlation matrix ,
+  the A/B compartment track. Sign marks the compartment, zero-crossings are
+  compartment boundaries.
+find:
+  path_glob: "**/*.cis.vecs.tsv"
+recipe: cooltools/eigenvector.py
+fixture: eigenvector.tsv
+renders_as:
+  - id: compartment_track
+    component: advanced_viz
+    kind: coverage_track
+    roles: {chromosome: chrom, position: start, value: E1}
+  - { component: card, column: E1, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

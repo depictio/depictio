@@ -145,6 +145,188 @@
     },
     {
       "category": "plot",
+      "description": "Binned Hi-C style contact matrix, symmetric heatmap with log colour scale, chromosome selector and optional row/column balancing.",
+      "heavy": false,
+      "icon": "tabler:layout-grid",
+      "label": "Contact map",
+      "required_roles": [
+        "chrom1",
+        "start1",
+        "chrom2",
+        "start2",
+        "count"
+      ],
+      "role_names": {
+        "chrom1": [
+          "chr1",
+          "chr_1",
+          "chrom1",
+          "chrom_1",
+          "chrom_a",
+          "chromosome1"
+        ],
+        "chrom2": [
+          "chr2",
+          "chr_2",
+          "chrom2",
+          "chrom_2",
+          "chrom_b",
+          "chromosome2"
+        ],
+        "count": [
+          "balanced",
+          "contacts",
+          "count",
+          "iced",
+          "n",
+          "score",
+          "value"
+        ],
+        "end1": [
+          "bin1_end",
+          "end1",
+          "end_1",
+          "end_a"
+        ],
+        "end2": [
+          "bin2_end",
+          "end2",
+          "end_2",
+          "end_b"
+        ],
+        "sample": [
+          "library",
+          "replicate",
+          "sample",
+          "sample_id"
+        ],
+        "start1": [
+          "bin1",
+          "bin1_start",
+          "pos1",
+          "start1",
+          "start_1",
+          "start_a"
+        ],
+        "start2": [
+          "bin2",
+          "bin2_start",
+          "pos2",
+          "start2",
+          "start_2",
+          "start_b"
+        ]
+      },
+      "roles": {
+        "chrom1": {
+          "description": "",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "chrom2": {
+          "description": "",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "count": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "end1": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "end2": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "sample": {
+          "description": "Optional sample column for faceting.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "start1": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "start2": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "contact_map"
+    },
+    {
+      "category": "plot",
       "description": "Read depth / signal along a coordinate axis. Optional per-sample faceting and categorical annotation lane (gene region, peak class, \u2026).",
       "heavy": false,
       "icon": "tabler:chart-area-line",
@@ -318,6 +500,116 @@
         }
       },
       "viz_kind": "da_barplot"
+    },
+    {
+      "category": "plot",
+      "description": "Ancient-DNA misincorporation frequency by position from the read end, 5p and 3p panels, C>T / G>A substitutions highlighted.",
+      "heavy": false,
+      "icon": "tabler:dna-2",
+      "label": "Damage profile",
+      "required_roles": [
+        "sample",
+        "end",
+        "position",
+        "base_change",
+        "frequency"
+      ],
+      "role_names": {
+        "base_change": [
+          "base_change",
+          "change",
+          "mutation",
+          "substitution",
+          "type"
+        ],
+        "end": [
+          "end",
+          "read_end",
+          "side",
+          "strand_end",
+          "terminus"
+        ],
+        "frequency": [
+          "damage",
+          "fraction",
+          "freq",
+          "frequency",
+          "rate",
+          "value"
+        ],
+        "position": [
+          "cycle",
+          "distance",
+          "offset",
+          "pos",
+          "position"
+        ],
+        "sample": [
+          "library",
+          "run",
+          "sample",
+          "sample_id"
+        ]
+      },
+      "roles": {
+        "base_change": {
+          "description": "",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "end": {
+          "description": "End coordinate of the interval.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "frequency": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "position": {
+          "description": "Genomic or sequence position (integer).",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "sample": {
+          "description": "Optional sample column for faceting.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "damage_profile"
     },
     {
       "category": "plot",
@@ -985,6 +1277,105 @@
         }
       },
       "viz_kind": "gsea_running_score"
+    },
+    {
+      "category": "plot",
+      "description": "Barcode-rank curve, UMI count vs rank on log-log axes, one line per sample, cell-calling cutoff marked.",
+      "heavy": false,
+      "icon": "tabler:trending-down",
+      "label": "Knee plot",
+      "required_roles": [
+        "sample",
+        "rank",
+        "umi_count"
+      ],
+      "role_names": {
+        "is_cell": [
+          "called",
+          "cell",
+          "filtered",
+          "in_filtered",
+          "is_cell"
+        ],
+        "rank": [
+          "barcode_rank",
+          "index",
+          "order",
+          "rank"
+        ],
+        "sample": [
+          "library",
+          "run",
+          "sample",
+          "sample_id"
+        ],
+        "umi_count": [
+          "counts",
+          "total",
+          "total_umi",
+          "umi",
+          "umi_count",
+          "umis"
+        ]
+      },
+      "roles": {
+        "is_cell": {
+          "description": "",
+          "dtypes": [
+            "Boolean",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "rank": {
+          "description": "Taxonomic rank / level (e.g. Phylum, Genus).",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "sample": {
+          "description": "Optional sample column for faceting.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "umi_count": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "knee_plot"
     },
     {
       "category": "plot",

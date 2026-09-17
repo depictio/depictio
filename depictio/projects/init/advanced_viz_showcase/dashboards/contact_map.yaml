@@ -1,0 +1,94 @@
+# Contact map: one tab of the advanced-visualisation showcase.
+#
+# Regenerate the seed after editing:
+#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'Contact map'
+subtitle: 'Binned Hi-C style contact matrix over 3 synthetic chromosomes: contact frequency decays with genomic distance, with two TAD blocks standing out as squares along the diagonal.'
+icon: 'mdi:grid'
+icon_color: 'grape'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8d77'
+is_main_tab: false
+tab_order: 35
+parent_dashboard_tag: volcano
+tab_icon: 'mdi:grid'
+tab_icon_color: 'grape'
+
+# Left-panel filter section. Deliberately not `persistent`: the tabs of this
+# family read different collections whose column names collide while their
+# value domains do not overlap, so a control fanned out from one tab would show
+# up everywhere and bite on nothing.
+filter_sections:
+  - name: 'Matrix scope'
+    icon: 'mdi:filter-variant'
+    color: 'grape'
+    description: 'Restricts which chromosome the matrix is built from'
+
+grid_sections:
+  - name: 'Contact matrix'
+    icon: 'mdi:chart-box-outline'
+    color: 'grape'
+    description: 'Binned intra-chromosomal contact frequency'
+
+components:
+  - tag: text-contact-map
+    index: cmap-text
+    component_type: text
+    title: 'Contact map'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Contact matrix'
+    body: >
+      One triangle of (bin1, bin2) contacts is enough: the heatmap mirrors it across the
+      diagonal. Contact frequency falls off with genomic distance, and the two TAD blocks read
+      as brighter squares astride the diagonal, regardless of that fall-off. The chromosome
+      selector, log colour scale and row/column balancing all live in the Settings ⚙ popover.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: viz-contact-map
+    index: 'cmap-matrix'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'contact_map_demo'
+    title: 'Contact matrix'
+    description: '10 kb bins across 3 synthetic chromosomes, diagonal decay plus two TAD blocks. Chromosome, log colour scale and balancing live in the Settings ⚙ popover.'
+    section: 'Contact matrix'
+    viz_kind: 'contact_map'
+    config:
+      viz_kind: "contact_map"
+      chrom1_col: "chrom1"
+      start1_col: "start1"
+      end1_col: "end1"
+      chrom2_col: "chrom2"
+      start2_col: "start2"
+      end2_col: "end2"
+      count_col: "count"
+      chrom: "chr1"
+      log_scale: true
+      colour_scale: "Viridis"
+      balance: false
+      max_bins: 500
+    layout: { x: 0, y: 2, w: 8, h: 8 }
+
+  - tag: filter-contact-map-chrom
+    index: cmap-f-chrom
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'contact_map_demo'
+    interactive_component_type: MultiSelect
+    column_name: 'chrom1'
+    column_type: 'object'
+    title: 'Chromosome'
+    placement: left
+    section: 'Matrix scope'
+    group: 'Matrix filters'
+    display:
+      title_size: md
+      custom_color: '#AE3EC9'
+      icon_name: 'mdi:dna'
+    layout: { x: 0, y: 0, w: 1, h: 3 }

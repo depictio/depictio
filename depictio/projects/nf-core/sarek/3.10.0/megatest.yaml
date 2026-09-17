@@ -1,0 +1,93 @@
+# Megatest manifest for nf-core/sarek 3.10.0 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the tables-only
+# subset of it that the template recipes and MultiQC need. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline sarek --version 3.10.0 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing
+#
+# The run publishes several profiles side by side (test_full_germline_aws/,
+# test_full_germline_ncbench_agilent/, ...); the template covers the germline
+# NCBench Agilent exome route, so run_root is test_full_germline_ncbench_agilent/
+# and the keys below are relative to it. They are mirrored 1:1 below the
+# destination, which becomes the template DATA_ROOT. No somatic profile is
+# published, so ASCAT / ControlFREEC / MSIsensor outputs do not exist here.
+#
+# One patient (NA12878), two samples (the same exome at 75M and 200M reads),
+# five germline callers (DeepVariant, FreeBayes, HaplotypeCaller, Manta,
+# Strelka), both annotators (snpEff, VEP). `reports/` nests every QC file under
+# <tool>/[<caller>/]<sample>/, and the sample name lives only in the file name.
+#
+# Not fetched on purpose: preprocessing/ (16 GB of CRAM), variant_calling/ and
+# annotation/ (the VCFs themselves, 225 MB), the mosdepth per-base beds
+# (219-587 MB each; the 200 MB cap skips them anyway), every HTML report
+# (fastp, FastQC, snpEff, VEP: MultiQC already parsed them, and VEP publishes
+# nothing but HTML, see VALIDATION_REPORT.md SK-D3) and the bed indices.
+#
+# The samplesheet is not part of the run output: pipeline_info/params.json names
+# it (`input`), and the fetch help below downloads it into <dest>/input/ where
+# the template's `samplesheet` collection scans for it.
+pipeline: sarek
+version: "3.10.0"
+# s3://nf-core-awsmegatests/sarek/results-<results_sha>/ == the 3.10.0 release tag_sha.
+results_sha: "8ccac7ad37b05dd792447763bf9671b719824587"
+run_root: "test_full_germline_ncbench_agilent/"
+multiqc:
+  version: "1.35"
+  parquet: multiqc/multiqc_data/multiqc.parquet
+  reprocess: false
+keys:
+  # Pipeline params (the samplesheet URL, the tool list, --wes), software
+  # versions, the trace, and the CSV manifests the pipeline writes for its own
+  # resume points (csv/variantcalled.csv is the per-caller VCF list).
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  - pipeline_info/execution_trace_*.txt
+  - csv/*.csv
+  # MultiQC 1.35 parquet + the per-module tables exported next to it.
+  - multiqc/multiqc_data/multiqc.parquet
+  - multiqc/multiqc_data/*.txt
+  - multiqc/multiqc_data/*.json
+  - multiqc/multiqc_data/*.log
+  # --- per-caller variant statistics (bcftools stats, vcftools) --------------
+  - reports/bcftools/*/*/*.bcftools_stats.txt
+  - reports/vcftools/*/*/*.TsTv.qual
+  - reports/vcftools/*/*/*.TsTv.count
+  - reports/vcftools/*/*/*.FILTER.summary
+  # --- coverage (mosdepth, once on the duplicate-marked and once on the
+  # recalibrated CRAM). The regions bed is the per-target mean depth of the
+  # Agilent exome (2.4 MB gz each); per-base beds are left out.
+  - reports/mosdepth/*/*.mosdepth.summary.txt
+  - reports/mosdepth/*/*.mosdepth.region.dist.txt
+  - reports/mosdepth/*/*.mosdepth.global.dist.txt
+  - reports/mosdepth/*/*.regions.bed.gz
+  # --- alignment QC MultiQC parsed (kept for provenance / reprocessing) -------
+  - reports/samtools/*/*.cram.stats
+  - reports/markduplicates/*/*.md.cram.metrics
+  - reports/fastp/*/*.fastp.json
+  - reports/fastp/*/*.fastp.log
+  - reports/fastqc/*/*_fastqc.zip
+  # --- annotation summaries: snpEff's CSV stats + per-gene effect counts. VEP
+  # writes only *_VEP.ann.summary.html, which MultiQC parses and nothing else can.
+  - reports/snpeff/*/*/*_snpEff.csv
+  - reports/snpeff/*/*/*_snpEff.genes.txt
+prefix_keys: []
+renames: {}
+post_fetch_help: |
+  === Fetch the samplesheet the run was launched with ===
+
+  The run output carries no samplesheet; pipeline_info/params.json names it.
+  The template's `samplesheet` collection scans <dest>/input/ for it:
+
+  mkdir -p {dest}/input
+  curl -fsSL -o {dest}/input/NA12878_Agilent_full_test.csv \
+    https://raw.githubusercontent.com/nf-core/test-datasets/sarek/testdata/csv/NA12878_Agilent_full_test.csv
+  # (a copy ships in depictio/projects/nf-core/sarek/3.10.0/input/)
+
+  === Quick test commands ===
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli run --template nf-core/sarek/3.10.0 --data-root {dest} --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli run --template nf-core/sarek/3.10.0 --data-root {dest}

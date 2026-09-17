@@ -418,6 +418,31 @@ def _tail_sample(
     return frame
 
 
+def _log_rank_sample(scan: Any, roles: dict[str, str], available: set[str], cap: int) -> Any | None:
+    """Keep the log-spaced ranks of a rank-ordered curve (the ``log_rank`` policy).
+
+    Rows are kept by rank value, not position, so every sample's curve keeps the
+    same ranks and the budget is split across samples. Returns None when the rank
+    column is unbound or absent, which drops the caller back to a uniform sample.
+    """
+    import polars as pl
+
+    from depictio.models.components.advanced_viz.sampling import log_spaced_rank_thin
+
+    rank_col = roles.get("rank")
+    if not rank_col or rank_col not in available:
+        return None
+    sample_col = roles.get("sample")
+    n_curves = 1
+    if sample_col and sample_col in available:
+        n_curves = max(1, int(scan.select(pl.col(sample_col).n_unique()).collect().item()))
+    max_rank = scan.select(pl.col(rank_col).max()).collect().item()
+    if max_rank is None:
+        return None
+    keep = [pos + 1 for pos in log_spaced_rank_thin(int(max_rank), max(2, cap // n_curves))]
+    return scan.filter(pl.col(rank_col).is_in(keep)).collect()
+
+
 def _load_reduced(
     wf_oid,
     dc_oid,
@@ -498,6 +523,11 @@ def _load_reduced(
             frame = _tail_sample(scan, projection, total, cap, spec) if spec else None
             if frame is not None:
                 return _reduced(frame, total, "tail")
+
+        if policy == "log_rank":
+            frame = _log_rank_sample(scan, roles or {}, set(projection), cap)
+            if frame is not None:
+                return _reduced(frame, total, "log_rank")
 
         frame = _hash_sample(scan, projection, total, cap)
         if frame is None:

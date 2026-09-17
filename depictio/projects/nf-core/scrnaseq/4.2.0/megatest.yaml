@@ -1,0 +1,139 @@
+# Megatest manifest for nf-core/scrnaseq 4.2.0 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the tables-only
+# subset of it that the template recipes and MultiQC need. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline scrnaseq --version 4.2.0 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing
+#
+# The run publishes one route per aligner (aligner_cellranger/, aligner_kallisto/,
+# aligner_simpleaf/, aligner_star/). DATA_ROOT is now the megatest RESULTS ROOT
+# itself (`run_root: ""`), holding one directory per route the template touches;
+# every key below is prefixed with its route (aligner_cellranger/, aligner_simpleaf/
+# or aligner_kallisto/) instead of being relative to a single run_root, so the
+# dashboard's optional "Aligner concordance" tab (simpleaf, kallisto vs. Cell
+# Ranger) can read all three routes from one DATA_ROOT. aligner_star/ publishes
+# no MultiQC and is not used.
+#
+# One sample: pbmc8k (10x v2, GRCh38), 8 767 cells called out of 499 387 raw
+# barcodes on the Cell Ranger route (8 779 on simpleaf, 8 514 on kallisto).
+# Timestamped pipeline_info files are renamed to stable names (params.json) by
+# the fetch; DEFAULT_RENAMES no longer applies once every key is route-prefixed,
+# so each route gets its own `renames` entry below.
+#
+# Cell Ranger (aligner_cellranger/) publishes everything under
+# cellranger/count/<sample>/outs/. Fetched: the per-sample metrics_summary.csv,
+# web_summary.html, the barcode / feature lists of both matrices, the two
+# matrix.mtx.gz (raw 96 MB, filtered 65 MB; both under the 300 MB cap and both
+# read by the barcode-rank recipe: the raw one carries the background droplets,
+# the filtered one says which barcodes are cells), and the analysis/ tables
+# (graph-based clusters, UMAP / t-SNE / PCA projections, PCA variance, per-cluster
+# marker genes). CellBender's metrics and cell-barcode list ride along for
+# provenance.
+#
+# Not fetched on purpose (any route): possorted_genome_bam.bam / output*.bus
+# (tens of GB), the .h5 / .h5ad / .cloupe / .rds / molecule_info binaries, the
+# mkref/ index references, the alevin-fry map.rad / map.collated.rad and kallisto
+# matrix.ec / transcripts.txt intermediates, CellBender's checkpoint and
+# posterior h5, and the k-means clusterings (the graph-based one is the one Cell
+# Ranger reports on).
+#
+# simpleaf/alevin-fry (aligner_simpleaf/) and kallisto|bustools (aligner_kallisto/)
+# are tables-and-JSON only, no matrices: alevin-fry's per-barcode feature dump
+# (the knee-curve input), its mapping/quant JSON headline numbers, QCatch's
+# metrics_summary.csv (simpleaf's own cell call), kallisto's run_info.json /
+# inspect.json headline numbers and its kb count --filter cell-barcode list, and
+# both routes' CellBender metrics + cell-barcode list. Neither route's
+# multiqc/multiqc_data/multiqc.parquet is fetched: both only add FastQC data the
+# aligner_cellranger parquet (the one the template's MultiQC DC scans) already
+# carries for this sample; see the note in template.yaml.
+pipeline: scrnaseq
+version: "4.2.0"
+# s3://nf-core-awsmegatests/scrnaseq/results-<results_sha>/ == the 4.2.0 release tag_sha.
+results_sha: "3fc17b4f971a89e47c88337de71d0e777ffad8cc"
+run_root: ""
+multiqc:
+  version: "1.34"
+  parquet: aligner_cellranger/multiqc/multiqc_data/multiqc.parquet
+  reprocess: false
+keys:
+  # ------------------------------------------------------------------------
+  # Cell Ranger route (aligner_cellranger/), unchanged file set, every key
+  # now prefixed with the route directory since run_root is "".
+  # ------------------------------------------------------------------------
+  - aligner_cellranger/pipeline_info/params_*.json
+  - aligner_cellranger/pipeline_info/*software*versions*.yml
+  - aligner_cellranger/pipeline_info/execution_trace_*.txt
+  - aligner_cellranger/multiqc/multiqc_data/multiqc.parquet
+  - aligner_cellranger/multiqc/multiqc_data/*.txt
+  - aligner_cellranger/multiqc/multiqc_data/*.json
+  - aligner_cellranger/multiqc/multiqc_data/*.log
+  - aligner_cellranger/fastqc/*_fastqc.zip
+  - aligner_cellranger/cellranger/count/*/outs/metrics_summary.csv
+  - aligner_cellranger/cellranger/count/*/outs/web_summary.html
+  - aligner_cellranger/cellranger/count/*/outs/raw_feature_bc_matrix/barcodes.tsv.gz
+  - aligner_cellranger/cellranger/count/*/outs/raw_feature_bc_matrix/features.tsv.gz
+  - aligner_cellranger/cellranger/count/*/outs/raw_feature_bc_matrix/matrix.mtx.gz
+  - aligner_cellranger/cellranger/count/*/outs/filtered_feature_bc_matrix/barcodes.tsv.gz
+  - aligner_cellranger/cellranger/count/*/outs/filtered_feature_bc_matrix/features.tsv.gz
+  - aligner_cellranger/cellranger/count/*/outs/filtered_feature_bc_matrix/matrix.mtx.gz
+  - aligner_cellranger/cellranger/count/*/outs/analysis/clustering/gene_expression_graphclust/clusters.csv
+  - aligner_cellranger/cellranger/count/*/outs/analysis/umap/*/projection.csv
+  - aligner_cellranger/cellranger/count/*/outs/analysis/tsne/*/projection.csv
+  - aligner_cellranger/cellranger/count/*/outs/analysis/pca/*/projection.csv
+  - aligner_cellranger/cellranger/count/*/outs/analysis/pca/*/variance.csv
+  - aligner_cellranger/cellranger/count/*/outs/analysis/diffexp/gene_expression_graphclust/differential_expression.csv
+  - aligner_cellranger/cellranger/*/cellbender_removebackground/*_metrics.csv
+  - aligner_cellranger/cellranger/*/cellbender_removebackground/*_cell_barcodes.csv
+  # ------------------------------------------------------------------------
+  # simpleaf/alevin-fry route (aligner_simpleaf/). Tables and JSON only: the
+  # per-barcode feature dump (knee curve), af_map/af_quant headline JSON,
+  # QCatch's metrics_summary.csv, and CellBender's metrics + cell list. No
+  # matrix (quants_mat.mtx, quants.h5ad), no map.rad / map.collated.rad, no
+  # CellBender h5/checkpoint.
+  # ------------------------------------------------------------------------
+  - aligner_simpleaf/pipeline_info/params_*.json
+  - aligner_simpleaf/simpleaf/*/simpleaf_quant/af_quant/featureDump.txt
+  - aligner_simpleaf/simpleaf/*/simpleaf_quant/af_quant/quant.json
+  - aligner_simpleaf/simpleaf/*/simpleaf_quant/af_quant/generate_permit_list.json
+  - aligner_simpleaf/simpleaf/*/simpleaf_quant/af_map/map_info.json
+  - aligner_simpleaf/simpleaf/*/qcatch/*_metrics_summary.csv
+  - aligner_simpleaf/simpleaf/*/cellbender_removebackground/*_metrics.csv
+  - aligner_simpleaf/simpleaf/*/cellbender_removebackground/*_cell_barcodes.csv
+  # ------------------------------------------------------------------------
+  # kallisto|bustools route (aligner_kallisto/). Tables and JSON only: kb's
+  # run_info.json / inspect.json / kb_info.json headline numbers, the
+  # kb count --filter cell-barcode list, and CellBender's metrics + cell
+  # list. No matrices (cells_x_genes.mtx, *.h5ad), no *.bus, no matrix.ec /
+  # transcripts.txt, no CellBender h5/checkpoint.
+  # ------------------------------------------------------------------------
+  - aligner_kallisto/pipeline_info/params_*.json
+  - aligner_kallisto/kallisto/*.count/counts_filtered/cells_x_genes.barcodes.txt
+  - aligner_kallisto/kallisto/*.count/inspect.json
+  - aligner_kallisto/kallisto/*.count/run_info.json
+  - aligner_kallisto/kallisto/*.count/kb_info.json
+  - aligner_kallisto/kallisto/*/cellbender_removebackground/*_metrics.csv
+  - aligner_kallisto/kallisto/*/cellbender_removebackground/*_cell_barcodes.csv
+prefix_keys: []
+renames:
+  # DEFAULT_RENAMES ("pipeline_info/params_*.json" -> ".../params.json") is a
+  # whole-key fnmatch and no longer matches once every key is route-prefixed
+  # (run_root: ""), so each route needs its own entry to the same effect.
+  "aligner_cellranger/pipeline_info/params_*.json": "aligner_cellranger/pipeline_info/params.json"
+  "aligner_cellranger/pipeline_info/*software*versions*.yml": "aligner_cellranger/pipeline_info/software_versions.yml"
+  "aligner_simpleaf/pipeline_info/params_*.json": "aligner_simpleaf/pipeline_info/params.json"
+  "aligner_kallisto/pipeline_info/params_*.json": "aligner_kallisto/pipeline_info/params.json"
+post_fetch_help: |
+  === Quick test commands ===
+
+  # The samplesheet is not part of the published run: fetch the one named by
+  # pipeline_info/params.json ("input") into {dest}/input/ first, e.g.
+  #   mkdir -p {dest}/input && curl -fsSL "$(python3 -c 'import json;print(json.load(open("{dest}/aligner_cellranger/pipeline_info/params.json"))["input"])')" \
+  #     -o {dest}/input/samplesheet.csv
+  # SAMPLESHEET_FILE is then auto-detected from input/.
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli run --template nf-core/scrnaseq/4.2.0 --data-root {dest} --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli run --template nf-core/scrnaseq/4.2.0 --data-root {dest}

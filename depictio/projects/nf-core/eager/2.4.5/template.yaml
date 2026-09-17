@@ -1,0 +1,442 @@
+# nf-core/eager Template 2.4.5 - ancient DNA (paleogenomics) analysis
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/eager/2.4.5 --data-root /path/to/your/data
+#
+# Tested against nf-core/eager AWS megatest results (2.4.5 pinned; see
+# megatest.yaml for why every 2.5.x prefix holds pipeline_info/ only):
+#   s3://nf-core-awsmegatests/eager/results-42c9d5f8602e5e88fdcec28f194d2cd4cff61c75/
+#   Two Atlantic cod libraries (COD076E1bL1, COD092E1bL1i69; three lanes each),
+#   mapped with BWA, deduplicated with Picard MarkDuplicates, damage-profiled
+#   with DamageProfiler and genotyped with GATK HaplotypeCaller.
+# ============================================================================
+#
+# SCOPE
+# eager 2.x is a DSL1 pipeline with many optional branches (sex determination,
+# MTNucRatio, mapDamage, bedtools, MALT/Kraken metagenomic screening). None of
+# those ran in this megatest, so none of those collections are declared ,
+# adding them is a template variant, not a fix to this one.
+#
+# MULTIQC WAS REPROCESSED.
+# The run shipped MultiQC 1.13.dev0, which writes `multiqc_data.json` and no
+# parquet. Depictio reads only the parquet (MultiQC >= 1.31), so the report
+# bound below is NOT the one the run published: it is produced by re-running
+# the pinned MultiQC 1.35 over the run's raw tool outputs,
+#
+#   python -m depictio.dev_scripts.multiqc_reprocess --src DATA_ROOT --dest DATA_ROOT
+#
+# which writes `multiqc/multiqc_data/multiqc.parquet` next to a REPROCESSED.json
+# recording both versions. `modules` / `plots` below are the 1.35 section names.
+#
+# NO params.json. eager 2.x predates the nf-core params dump, so the run's
+# parameters survive only in `pipeline_info/software_versions.csv` (a flat
+# `tool<TAB>version` table, not the DSL2 `CUSTOM_DUMPSOFTWAREVERSIONS` YAML) and
+# the execution report. Provenance below reads that CSV as a 2-column TSV.
+#
+# THE SAMPLESHEET IS NOT PART OF THE MEGATEST FETCH.
+# Unlike ampliseq or rnaseq, eager's AWS test data carries no `input/` prefix
+# and no `pipeline_info/params.json` to recover the run's `--input` TSV from
+# (see megatest.yaml). `input/benchmarking_vikingfish.tsv` here is therefore a
+# hand-reconstructed manifest (sample/library/lane against the six ENA runs the
+# megatest fetched, s3://nf-core-awsmegatests/eager/ENA_Data_Fish/), not a
+# fetched artifact, a real `--data-root` needs it copied to
+# `{DATA_ROOT}/input/benchmarking_vikingfish.tsv` by hand (see VALIDATION_REPORT.md).
+#
+# LAYOUT NOTE. Every scan regex matches on file NAME, never on the per-sample
+# directory names (`<library>_rmdup/`, `<library>_rmdup_stats/`) three of the
+# recipes below have to parse instead, nf-core/eager publishes those names
+# from `--dedupper` (`markduplicates` here; `dedup` writes a different suffix),
+# so a run with `--dedupper dedup` still ingests.
+template:
+  template_id: "nf-core/eager/2.4.5"
+  description: "nf-core/eager template: ancient-DNA QC funnel from raw reads to authenticated damage, endogenous DNA, duplication, coverage and the C-to-T and G-to-A misincorporation signature, next to the called genotypes."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory containing eager output (fastqc/, adapterremoval/, samtools/, deduplication/, damageprofiler/, qualimap/, preseq/, endorspy/, bcftools/, pipeline_info/) plus the reprocessed multiqc/multiqc_data/multiqc.parquet, and input/benchmarking_vikingfish.tsv (see the LAYOUT NOTE above)."
+      required: true
+  reference:
+    vars: {}
+  provenance:
+    sources:
+      - name: "software_versions"
+        glob: "pipeline_info/software_versions.csv"
+        format: "tsv"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Software versions"
+        key_patterns: ["*"]
+  dashboards:
+    - "dashboards/base.yaml"
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Ancient DNA Authentication"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "eager"
+    version: "2.4.5"
+    engine:
+      name: "nextflow"
+      version: "21.04.0"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/eager"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Hub: one row per eager LIBRARY (`Library_ID`), the name every
+      # downstream output uses once eager has merged its lanes. See
+      # recipes/samples.py for why the hub keys on Library_ID, not the
+      # samplesheet's Sample_Name.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samples"
+        description: "Per-library hub: the library id every eager output uses, its biological sample, organism and how many sequencing lanes were merged into it"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/eager/samples.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Library_ID, the key every other collection is linked on"
+              "sample_name": "Sample_Name, the biological sample the library was prepared from"
+              "organism": "Samplesheet Organism"
+              "seq_type": "SE or PE"
+              "udg_treatment": "UDG treatment applied before library prep (none, half, full)"
+              "n_lanes": "Sequencing lanes merged into the library"
+              "lane_ids": "Those lanes' numbers, comma separated"
+
+      # ----------------------------------------------------------------
+      # MultiQC. Reprocessed with MultiQC 1.35: the module and plot names
+      # below are the 1.35 ones, not the 1.13.dev0 ones the run published.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report, re-generated with MultiQC 1.35 from the run's raw tool outputs (the run itself wrote MultiQC 1.13.dev0, which ships no parquet)"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "multiqc/multiqc_data/multiqc.parquet"
+          dc_specific_properties:
+            s3_location: null
+            modules:
+              - "general_stats"
+              - "fastqc"
+              - "adapterremoval"
+              - "samtools"
+              - "picard"
+              - "preseq"
+              - "qualimap"
+              - "damageprofiler"
+              - "bcftools"
+            plots:
+              fastqc:
+                - "Sequence Counts"
+                - "Sequence Quality Histograms"
+                - "Per Sequence Quality Scores"
+                - "Per Base Sequence Content"
+                - "Per Sequence GC Content"
+                - "Per Base N Content"
+                - "Sequence Length Distribution"
+                - "Sequence Duplication Levels"
+                - "Adapter Content"
+                - "Status Checks"
+              adapterremoval:
+                - "Retained and Discarded Reads"
+                - "Length Distribution"
+              samtools:
+                - "Flagstat"
+                - "Flagstat: Percentage of total"
+              picard:
+                - "Mark Duplicates"
+              preseq:
+                - "Complexity curve (molecule count)"
+              qualimap:
+                - "Coverage histogram"
+                - "Cumulative genome coverage"
+                - "GC content distribution"
+              damageprofiler:
+                - "3P misincorporation plot"
+                - "5P misincorporation plot"
+                - "Forward read length distribution"
+                - "Reverse read length distribution"
+              bcftools:
+                - "Variant Substitution Types"
+                - "Variant Quality"
+                - "Indel Distribution"
+                - "Variant depths"
+
+      # ----------------------------------------------------------------
+      # Preseq library complexity. Catalog-owned recipe (preseq/complexity_curve.py)
+      # is NOT reused directly: eager's lc_extrap writes `<library>.filtered.preseq`
+      # with only total_reads/distinct_reads and no bootstrap CI, which the shared
+      # recipe's sample-id helper cannot parse (see recipes/complexity_curve.py).
+      # This DC keeps the catalog's RAW_DC_TAG and `use: preseq/complexity_curve`
+      # binding; only the pipeline-local recipe differs.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "preseq_ccurve_raw"
+        description: "Raw per-library preseq lc_extrap curves (input of preseq_complexity_curve)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.filtered\\.preseq$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "total_reads": "Sequencing depth the row extrapolates to"
+              "distinct_reads": "Unique molecules expected at that depth"
+              "source_path": "File the row came from; the library id is derived from it"
+
+      - data_collection_tag: "preseq_complexity_curve"
+        description: "Library complexity curve with its extrapolation, one row per read depth per library"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/eager/complexity_curve.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library preseq ran on"
+              "total_reads": "Sequencing depth the row extrapolates to"
+              "expected_distinct": "Unique molecules expected at that depth"
+              "lower_ci": "Lower bound of the 95% interval (null: this run wrote no bootstrap CI)"
+              "upper_ci": "Upper bound of the 95% interval (null, same reason)"
+              "ci_width": "upper_ci - lower_ci (null, same reason)"
+
+      # ----------------------------------------------------------------
+      # samtools flagstat, before and after eager's mapping-quality filter.
+      # Both directories write files literally named `*flagstat.stats`; the
+      # sample and the stage live only in the path, never in the report text,
+      # so the raw scan reads it one LINE per row (see catalog/samtools/flagstat.py).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samtools_flagstat_raw"
+        description: "Raw samtools flagstat reports, pre- and post-filter, one line per row (input of samtools_flagstat)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*flagstat\\.stats$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1f"
+              has_header: false
+              new_columns: ["raw"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw": "One line of the flagstat report"
+              "source_path": "File the line came from; sample and filter stage are derived from it"
+
+      - data_collection_tag: "samtools_flagstat"
+        description: "Alignment flagstat, one row per (library, filter stage)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "samtools/flagstat.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library the report was written for"
+              "stage": "pre-filter or post-filter"
+              "total_reads": "QC-passed + QC-failed reads"
+              "mapped_reads": "Reads flagged mapped"
+              "mapped_pct": "mapped / total, as flagstat reports it"
+              "duplicate_reads": "Reads flagged duplicate"
+              "properly_paired_reads": "Reads in a properly paired pair"
+              "properly_paired_pct": "properly paired / total"
+              "singleton_pct": "singletons / total"
+
+      # ----------------------------------------------------------------
+      # Qualimap BamQC genome_results.txt. The report never names the
+      # sample (titled "BamQC report" regardless of input); the library
+      # lives only in the parent directory, so this is the same raw-scan
+      # idiom as flagstat (see catalog/qualimap/bamqc_genome_results.py).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "qualimap_bamqc_genome_results_raw"
+        description: "Raw Qualimap genome_results.txt reports, one line per row (input of qualimap_bamqc_genome_results)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*_stats/genome_results\\.txt$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1f"
+              has_header: false
+              new_columns: ["raw"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw": "One line of the genome_results.txt report"
+              "source_path": "File the line came from; the library id is derived from its parent directory"
+
+      - data_collection_tag: "qualimap_bamqc_genome_results"
+        description: "Per-library depth, mapping quality, error rate and duplication from Qualimap BamQC"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "qualimap/bamqc_genome_results.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library Qualimap ran on"
+              "total_reads": "Reads Qualimap was given"
+              "mapped_reads": "Reads it placed"
+              "percentage_aligned": "mapped_reads / total_reads, Qualimap's own number"
+              "mean_coverage": "Mean depth over the reference, X"
+              "mean_mapping_quality": "Mean MAPQ of mapped reads"
+              "general_error_rate": "Mismatches / mapped bases"
+              "gc_percentage": "GC content of mapped bases"
+              "duplication_rate": "Qualimap's own duplicate estimate, percent"
+
+      # ----------------------------------------------------------------
+      # DamageProfiler misincorporation. A real TSV (three `#` comment
+      # lines then a header), so the raw scan reads it as such; only the
+      # library, which lives in the parent directory, not the file, and
+      # the read end, in the filename, not a column, need the recipe.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "damageprofiler_misincorporation_raw"
+        description: "Raw DamageProfiler misincorporation tables, both read ends (input of damageprofiler_misincorporation)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*_freq_misincorporations\\.txt$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              comment_prefix: "#"
+              include_file_paths: "source_path"
+            columns_description:
+              "Pos": "Distance from the read end"
+              "source_path": "File the row came from; the library and the read end are derived from it"
+
+      - data_collection_tag: "damageprofiler_misincorporation"
+        description: "Misincorporation frequency by position, both read ends, C to T and G to A kept apart from every other substitution"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "damageprofiler/misincorporation.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library DamageProfiler ran on"
+              "end": "5p or 3p"
+              "position": "Distance from that read end"
+              "base_change": "C>T, G>A, or other (the twelve remaining substitution types, summed)"
+              "frequency": "Substitution frequency at that position"
+
+links:
+  # Hub -> everything, keyed on the library id.
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Filter the MultiQC panels by the libraries picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "preseq_complexity_curve"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the complexity curves by the libraries picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "samtools_flagstat"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the flagstat table by the libraries picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "qualimap_bamqc_genome_results"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the coverage table by the libraries picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "damageprofiler_misincorporation"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the damage profile by the libraries picked in the left panel"
+    enabled: true
+
+  # Reverse links: pick a library on the damage profile, carry it to the
+  # coverage and complexity tables that explain whether it is trustworthy.
+  - source_dc_tag: "damageprofiler_misincorporation"
+    source_column: "sample"
+    target_dc_tag: "qualimap_bamqc_genome_results"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Carry a library selected on the damage profile over to its coverage row"
+    enabled: true
+
+  - source_dc_tag: "damageprofiler_misincorporation"
+    source_column: "sample"
+    target_dc_tag: "preseq_complexity_curve"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Carry a library selected on the damage profile over to its complexity curve"
+    enabled: true

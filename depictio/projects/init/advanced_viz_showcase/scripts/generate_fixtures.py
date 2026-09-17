@@ -26,6 +26,7 @@ rather than four hand-crafted scatter plots.
 
 from __future__ import annotations
 
+import math
 import random
 import sys
 from pathlib import Path
@@ -1834,3 +1835,142 @@ def generate_scatter_xy_demo() -> None:
 
 
 generate_scatter_xy_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN. Contact map: a 3-chromosome binned Hi-C matrix.
+# columns: chrom1, start1, end1, chrom2, start2, end2, count
+# ---------------------------------------------------------------------------
+# Intra-chromosomal only (the showcase's chromosome selector switches between
+# the three), 10 kb bins, 40 bins per chromosome. Two ingredients make the
+# heatmap read as a real contact map rather than a diagonal smear: a log-decay
+# of contact frequency with genomic distance, and two TAD blocks (bins 5-15
+# and 25-35) where contacts within the block are boosted regardless of
+# distance, the signature square-along-the-diagonal shape of a real matrix.
+# Only the upper triangle is written; the renderer mirrors it.
+_CONTACT_MAP_CHROMS = ("chr1", "chr2", "chr3")
+_CONTACT_MAP_BIN_SIZE = 10_000
+_CONTACT_MAP_N_BINS = 40
+_CONTACT_MAP_DECAY_BINS = 6.0
+_CONTACT_MAP_TADS = ((5, 15), (25, 35))
+
+
+def generate_contact_map_demo() -> None:
+    """Write contact_map_demo.tsv: 3 chromosomes, diagonal decay + 2 TADs."""
+    header = ["chrom1", "start1", "end1", "chrom2", "start2", "end2", "count"]
+    rows: list[list] = []
+    rng = random.Random(20260517)
+
+    for chrom in _CONTACT_MAP_CHROMS:
+        for i in range(_CONTACT_MAP_N_BINS):
+            for j in range(i, _CONTACT_MAP_N_BINS):
+                distance = j - i
+                base = 200.0 * math.exp(-distance / _CONTACT_MAP_DECAY_BINS)
+                in_same_tad = any(lo <= i <= hi and lo <= j <= hi for lo, hi in _CONTACT_MAP_TADS)
+                boost = 3.0 if in_same_tad else 1.0
+                count = base * boost * rng.uniform(0.85, 1.15)
+                # A sparse matrix, like a real one: drop the long, near-zero
+                # off-diagonal tail rather than write rows that round to nothing.
+                if distance > 0 and count < 0.5:
+                    continue
+                start1 = i * _CONTACT_MAP_BIN_SIZE
+                start2 = j * _CONTACT_MAP_BIN_SIZE
+                rows.append(
+                    [
+                        chrom,
+                        start1,
+                        start1 + _CONTACT_MAP_BIN_SIZE,
+                        chrom,
+                        start2,
+                        start2 + _CONTACT_MAP_BIN_SIZE,
+                        round(count, 2),
+                    ]
+                )
+
+    write_tsv(OUT / "contact_map_demo.tsv", header, rows)
+
+
+generate_contact_map_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN. Knee plot: two barcode-rank curves.
+# columns: sample, rank, umi_count, is_cell
+# ---------------------------------------------------------------------------
+# Each sample's curve has the classic two-regime shape: a gently declining
+# plateau over the called cells, then a power-law drop into the flat
+# empty-droplet background. `is_cell` marks the boundary directly, so the
+# renderer's cutoff line demo doesn't depend on its own estimator.
+_KNEE_SAMPLES = (
+    # name, n_cells, n_total, plateau, background level, decay exponent
+    ("sample_A", 800, 4000, 15000.0, 200.0, 1.5),
+    ("sample_B", 500, 4000, 9000.0, 120.0, 1.3),
+)
+
+
+def generate_knee_plot_demo() -> None:
+    """Write knee_plot_demo.tsv: two barcode-rank curves with a cell cutoff."""
+    header = ["sample", "rank", "umi_count", "is_cell"]
+    rows: list[list] = []
+    rng = random.Random(20260518)
+
+    for sample, n_cells, n_total, plateau, background, alpha in _KNEE_SAMPLES:
+        for rank in range(1, n_total + 1):
+            is_cell = rank <= n_cells
+            if is_cell:
+                # Gentle decline across the cell population.
+                mean = plateau * (1.0 - 0.3 * (rank / n_cells))
+            else:
+                # Power-law decay into the background, anchored so the curve
+                # is continuous across the cutoff.
+                mean = background + (plateau - background) * (n_cells / rank) ** alpha
+            umi = max(1.0, mean * rng.uniform(0.85, 1.15))
+            rows.append([sample, rank, round(umi, 1), "true" if is_cell else "false"])
+
+    write_tsv(OUT / "knee_plot_demo.tsv", header, rows)
+
+
+generate_knee_plot_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN. Damage profile: ancient-DNA misincorporation, two samples.
+# columns: sample, end, position, base_change, frequency
+# ---------------------------------------------------------------------------
+# The deamination signature: C>T enriched near the 5' read end, G>A enriched
+# near the 3' read end, both decaying from ~0.3 at position 1 to a low
+# background within ~10 bp. Every other substitution sits flat near the
+# background rate throughout, which is what makes the two damage curves stand
+# out when the renderer highlights them.
+_DAMAGE_SAMPLES = ("sample_A", "sample_B")
+_DAMAGE_BASE_CHANGES = ("C>T", "G>A", "T>C", "A>G", "other")
+_DAMAGE_MAX_POSITION = 25
+_DAMAGE_START_FREQ = 0.3
+_DAMAGE_DECAY_POSITIONS = 4.0
+_DAMAGE_BACKGROUND = 0.01
+
+
+def generate_damage_profile_demo() -> None:
+    """Write damage_profile_demo.tsv: 5p C>T / 3p G>A deamination curves."""
+    header = ["sample", "end", "position", "base_change", "frequency"]
+    rows: list[list] = []
+    rng = random.Random(20260519)
+
+    for sample in _DAMAGE_SAMPLES:
+        for end in ("5p", "3p"):
+            damage_change = "C>T" if end == "5p" else "G>A"
+            for position in range(1, _DAMAGE_MAX_POSITION + 1):
+                for base_change in _DAMAGE_BASE_CHANGES:
+                    if base_change == damage_change:
+                        mean = _DAMAGE_BACKGROUND + _DAMAGE_START_FREQ * math.exp(
+                            -(position - 1) / _DAMAGE_DECAY_POSITIONS
+                        )
+                    else:
+                        mean = _DAMAGE_BACKGROUND
+                    freq = max(0.0, mean * rng.uniform(0.8, 1.2))
+                    rows.append([sample, end, position, base_change, round(freq, 4)])
+
+    write_tsv(OUT / "damage_profile_demo.tsv", header, rows)
+
+
+generate_damage_profile_demo()

@@ -1,0 +1,18 @@
+id: cooltools_insulation
+name: TAD insulation score
+mode: insulation
+description: >-
+  Per-bin insulation score and cooltools' own boundary calls at every window
+  size the run scanned, low insulation marks a TAD boundary.
+find:
+  path_glob: "**/*_balanced_insulation.tsv"
+recipe: cooltools/insulation.py
+fixture: insulation.tsv
+renders_as:
+  - id: insulation_track
+    component: advanced_viz
+    kind: coverage_track
+    roles: {chromosome: chrom, position: start, value: log2_insulation_score}
+  - { component: card, column: log2_insulation_score, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: is_boundary, aggregation: count, secondary_layout: donut, breakdown_col: is_boundary }
+  - { component: table }

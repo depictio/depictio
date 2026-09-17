@@ -1,0 +1,9 @@
+# Qualimap BamQC, one output here (the genome_results.txt summary). The raw
+# per-base histograms under raw_data_qualimapReport/ (coverage_across_reference,
+# mapping_quality_histogram, ...) are ingested for MultiQC's own Qualimap panel
+# but are not tidied into a second catalog output here; nothing needed a
+# coverage_track view of them yet.
+id: qualimap
+name: Qualimap
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qualimap/bamqc
+homepage: http://qualimap.conesalab.org

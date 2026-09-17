@@ -21,22 +21,36 @@ that. See ``TAIL_ROLE``.
 
 from __future__ import annotations
 
+import math
 from typing import Literal
 
 from depictio.models.components.types import AdvancedVizKind
 
-SamplingPolicy = Literal["hash", "none", "tail"]
+SamplingPolicy = Literal["hash", "none", "tail", "log_rank"]
 
 #: Which reduction each kind's renderer can survive.
 #:
-#: ``hash``  — uniform scan-level sample. The renderer draws one mark per row
-#:             and reads no aggregate off the frame, so a uniform subset is a
-#:             faithful (if lower-resolution) picture.
-#: ``none``  — never sample. The renderer aggregates client-side, so any subset
-#:             changes the reported values rather than their resolution.
-#: ``tail``  — keep the distribution's tail whole, stride the dense middle. For
-#:             the DE-style plots the tail *is* the content: a uniform 10 k of
-#:             17 M rows keeps ~0.06 % of the significant hits, i.e. none.
+#: ``hash``     : uniform scan-level sample. The renderer draws one mark per
+#:                row and reads no aggregate off the frame, so a uniform
+#:                subset is a faithful (if lower-resolution) picture.
+#: ``none``     : never sample. The renderer aggregates client-side, so any
+#:                subset changes the reported values rather than their
+#:                resolution.
+#: ``tail``     : keep the distribution's tail whole, stride the dense middle.
+#:                For the DE-style plots the tail *is* the content: a uniform
+#:                10 k of 17 M rows keeps ~0.06 % of the significant hits,
+#:                i.e. none.
+#: ``log_rank`` : keep a log-spaced subset of an already rank-ordered curve
+#:                (a barcode-rank / knee plot). Each row's rank and value are
+#:                kept exactly as read, nothing is binned or recomputed,
+#:                only the point density changes, denser near rank 1 (the
+#:                cell/background inflection every knee plot exists to show)
+#:                and sparser across the flat empty-droplet tail. A uniform
+#:                ``hash`` sample would waste most of its budget on that flat
+#:                tail, since it is the overwhelming majority of ranks. See
+#:                ``log_spaced_rank_thin``; the ``/data`` endpoint keeps those
+#:                ranks for every sample and falls back to ``hash`` when no
+#:                ``rank`` column is bound.
 KIND_SAMPLING_POLICY: dict[AdvancedVizKind, SamplingPolicy] = {
     # Point clouds — uniform is faithful.
     "embedding": "hash",
@@ -79,6 +93,17 @@ KIND_SAMPLING_POLICY: dict[AdvancedVizKind, SamplingPolicy] = {
     "gene_arrow_track": "none",
     "gsea_running_score": "none",
     "sashimi": "none",
+    # A binned contact matrix reads client-side as a whole grid (row/column
+    # balancing, symmetric fill): a sample would leave holes in the heatmap
+    # rather than lowering its resolution. ``ContactMapConfig.max_bins``
+    # guards the request size before it reaches this table.
+    "contact_map": "none",
+    # See the ``log_rank`` docstring above.
+    "knee_plot": "log_rank",
+    # An already-aggregated (sample, end, position, base_change) frequency
+    # table: tiny (positions capped at ~25 either end) and read as a whole
+    # curve per panel, same reasoning as ``profile``.
+    "damage_profile": "none",
 }
 
 #: The role whose tail a ``tail`` kind must keep, and whether the interesting
@@ -151,3 +176,31 @@ def resolve_tail_direction(
     if lo is None or hi is None:
         return "low"
     return "low" if 0.0 <= lo and hi <= 1.0 else "high"
+
+
+def log_spaced_rank_thin(n: int, cap: int) -> list[int]:
+    """0-based positions to keep from an ``n``-long rank-ordered sequence.
+
+    For the ``log_rank`` policy. Positions are spaced evenly in *log-index*
+    space rather than linear index space, so the kept subset is dense near
+    position 0 (small rank, the cell/background inflection a knee plot
+    exists to show) and sparse near position ``n - 1`` (the flat
+    empty-droplet tail, which is most of the curve and none of its content).
+    Each returned position names a row to pass through unchanged: this thins
+    the curve, it does not bin or recompute it.
+
+    Returns every position when ``n <= cap``. Always includes position 0 and
+    ``n - 1`` so the curve's endpoints are never dropped.
+    """
+    if n <= 0:
+        return []
+    if cap <= 0 or n <= cap:
+        return list(range(n))
+    if cap == 1:
+        return [0]
+
+    log_n = math.log(n)
+    positions = {min(n - 1, round(math.exp(t / (cap - 1) * log_n)) - 1) for t in range(cap)}
+    positions.add(0)
+    positions.add(n - 1)
+    return sorted(positions)

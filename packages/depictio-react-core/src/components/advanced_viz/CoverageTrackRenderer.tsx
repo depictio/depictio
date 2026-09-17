@@ -46,6 +46,14 @@ interface CoverageTrackConfig {
   annotation_id?: string | null;
   chromosomes_filter?: string[] | null;
   samples_filter?: string[] | null;
+  /** Trace geometry for the overlay/facet path. Optional, defaults ('line')
+   *  keep today's rendering. Ignored in aggregate view, whose median+IQR
+   *  ribbon has no single-mark equivalent. */
+  mark?: 'line' | 'rect' | 'point';
+  /** Force per-sample facets regardless of the sample-count auto-default.
+   *  Optional, false keeps today's rendering. The user's own Segmented
+   *  Control pick (`view_mode`, persisted separately) still wins once made. */
+  facet_by_sample?: boolean;
 }
 
 interface Props {
@@ -111,8 +119,15 @@ const CoverageTrackRenderer: React.FC<Props> = ({
   // sets it too: an auto-detected default is not a choice anyone made, and
   // writing it to the config would freeze one run's sample count into the
   // component. Only the author's own pick is persisted, on the control itself.
-  const [viewMode, setViewMode] = useState<ViewMode | null>(config.view_mode ?? null);
+  const [viewMode, setViewMode] = useState<ViewMode | null>(
+    config.view_mode ?? (config.facet_by_sample ? 'facet' : null),
+  );
   const writeConfig = useVizConfigWriter(metadata);
+  const [mark, setMark] = usePersistedVizControl<NonNullable<CoverageTrackConfig['mark']>>(
+    metadata,
+    'mark',
+    config.mark ?? 'line',
+  );
   const [showAnnotationStrip, setShowAnnotationStrip] = usePersistedVizControl(metadata, 'show_annotation_lane', true);
   const [showIndividuals, setShowIndividuals] = usePersistedVizControl(metadata, 'show_individuals', true);
   const [selectedChromosomes, setSelectedChromosomes] = useState<string[]>(
@@ -443,9 +458,10 @@ const CoverageTrackRenderer: React.FC<Props> = ({
             ? idxs.map((i) => categoryColor[categoriesArr[i]] || palette[0])
             : undefined;
         const yaxis = useFacets && sampleIdx > 0 ? `y${sampleIdx + 1}` : 'y';
-        traces.push({
-          type: 'scattergl',
-          mode: markerColor ? 'lines+markers' : 'lines',
+        // `mark` only shapes this overlay/facet trace; the aggregate view's
+        // median+IQR ribbon above has no single-mark equivalent and ignores it.
+        // 'line' (the default) reproduces the pre-`mark` trace byte for byte.
+        const shared = {
           name: sample,
           x: xs,
           y: ys,
@@ -456,16 +472,36 @@ const CoverageTrackRenderer: React.FC<Props> = ({
           // `customdata`, so it renders exactly as it did before.
           customdata: idxs.map(() => [sample]),
           hovertemplate: `%{text}<br>pos %{x:,}<br>cov %{y:,.2f}<extra></extra>`,
-          line: { color: traceColor, width: 1.4 },
-          ...(markerColor
-            ? { marker: { color: markerColor, size: 4, line: { width: 0 } } }
-            : {}),
-          fill: useFacets ? 'tozeroy' : 'none',
-          fillcolor: useFacets ? `${traceColor}33` : undefined,
           xaxis: 'x',
           yaxis,
           showlegend: !useFacets,
-        });
+        };
+        if (mark === 'point') {
+          traces.push({
+            ...shared,
+            type: 'scattergl',
+            mode: 'markers',
+            marker: { color: markerColor ?? traceColor, size: 4, line: { width: 0 } },
+          });
+        } else if (mark === 'rect') {
+          traces.push({
+            ...shared,
+            type: 'bar',
+            marker: { color: markerColor ?? traceColor },
+          });
+        } else {
+          traces.push({
+            ...shared,
+            type: 'scattergl',
+            mode: markerColor ? 'lines+markers' : 'lines',
+            line: { color: traceColor, width: 1.4 },
+            ...(markerColor
+              ? { marker: { color: markerColor, size: 4, line: { width: 0 } } }
+              : {}),
+            fill: useFacets ? 'tozeroy' : 'none',
+            fillcolor: useFacets ? `${traceColor}33` : undefined,
+          });
+        }
       });
     }
 
@@ -636,6 +672,7 @@ const CoverageTrackRenderer: React.FC<Props> = ({
     yScale,
     colorBy,
     viewMode,
+    mark,
     showAnnotationStrip,
     showIndividuals,
     annotation,
@@ -727,6 +764,20 @@ const CoverageTrackRenderer: React.FC<Props> = ({
           data={SMOOTHING_CHOICES}
         />
         {viewMode !== 'aggregate' ? (
+          <Select
+            size="xs"
+            label="Mark"
+            value={mark}
+            onChange={(v) => setMark((v as typeof mark) || 'line')}
+            data={[
+              { value: 'line', label: 'Line' },
+              { value: 'rect', label: 'Rect (bar per bin)' },
+              { value: 'point', label: 'Point' },
+            ]}
+            allowDeselect={false}
+          />
+        ) : null}
+        {viewMode !== 'aggregate' ? (
           <Stack gap={4}>
             <Text size="xs" fw={500}>
               Colour by
@@ -812,6 +863,7 @@ const CoverageTrackRenderer: React.FC<Props> = ({
       yScale,
       smoothingWindow,
       colorBy,
+      mark,
       showAnnotationStrip,
       showIndividuals,
       annotation,

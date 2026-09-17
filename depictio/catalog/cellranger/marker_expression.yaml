@@ -1,0 +1,15 @@
+id: cellranger_marker_expression
+name: Marker gene expression per cluster
+mode: analysis/marker_expression
+description: >-
+  Mean log-normalised expression and detection rate of the top graph-based
+  cluster marker genes, for every cluster, so the dot plot shows
+  cluster-specificity.
+find:
+  path_glob: "**/filtered_feature_bc_matrix/matrix.mtx.gz"
+recipe: cellranger/marker_expression.py
+fixture: marker_expression.tsv
+renders_as:
+  - { id: marker_dotplot, component: advanced_viz, kind: dot_plot, roles: {cluster: cluster_label, gene: gene, mean_expression: mean_expression, frac_expressing: frac_expressing} }
+  - { component: card, column: gene, aggregation: nunique, secondary_layout: top_n, breakdown_col: cluster_label, top_n_count: 3 }
+  - { component: table }

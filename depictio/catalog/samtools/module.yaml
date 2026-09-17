@@ -1,0 +1,10 @@
+# SAMtools, one output here (flagstat), because that is the only samtools
+# report every pipeline needing this catalog entry publishes without a BAM in
+# hand. `samtools/stats` (the -s report: error rate, insert size, GC) is a
+# separate, richer output; nothing in this catalog needed it yet, so it is not
+# stubbed out speculatively, a pipeline that does should add
+# `depictio/catalog/samtools/stats.yaml` next to this one, not fork the tool.
+id: samtools
+name: SAMtools
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/samtools/flagstat
+homepage: https://www.htslib.org

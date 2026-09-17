@@ -1,0 +1,509 @@
+# nf-core/hic Template v2.0.0 - Hi-C chromatin architecture (HiC-Pro + cooler + cooltools)
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/hic/2.0.0 --data-root /path/to/your/data
+#
+# Tested against nf-core/hic AWS megatest results:
+#   s3://nf-core-awsmegatests/hic/results-b4d89cfacf97a5835fba804887cf0fc7e0449e8d
+#   (mESC Hi-C, one sample (HIC_ES_4) merged from three sequencing runs. See megatest.yaml.)
+# ============================================================================
+#
+# SCOPE
+# The run this template was validated against is a single-sample Hi-C
+# experiment: HIC_ES_4 (mouse ES cells), three FASTQ pairs merged by HiC-Pro
+# before mapping. Every collection below is therefore one row (or a handful)
+# per sample rather than a cohort. `samples` still carries the persistent
+# sample filter, so the dashboard is ready for a multi-sample run without any
+# change.
+#
+# MULTIQC WAS REPROCESSED.
+# The run shipped MultiQC 1.13, which writes `mqc_*.txt` plot-data files and no
+# parquet. Depictio reads only the parquet (MultiQC >= 1.31), so the report
+# bound below is NOT the one the run published: it is produced by re-running
+# the pinned MultiQC 1.35 over the same raw tool outputs,
+#
+#   python -m depictio.dev_scripts.multiqc_reprocess --src DATA_ROOT --dest DATA_ROOT
+#
+# which writes `multiqc/multiqc_data/multiqc.parquet` next to a REPROCESSED.json
+# recording both versions. Only fastqc and hicpro produced a MultiQC section in
+# this run (`REPROCESSED.json` lists `fastqc`, `hicpro`,
+# `multiqc_software_versions`); `modules` / `plots` below are the 1.35 section
+# names, not the plot config's display title (see docs/dashboards.md).
+#
+# HIC-PRO'S OWN STATS ARE NOT DUPLICATED OUTSIDE MULTIQC.
+# HiC-Pro ships a full native MultiQC module (mapping, pairing, filtering,
+# contact statistics), so those numbers are read through `multiqc/hicpro`
+# rather than through a second, dedicated collection built from
+# `hicpro/stats/<sample>/*`. The pipeline outputs that have no MultiQC module
+# at all - the binned contact matrix (cooler), the A/B compartment track and
+# eigenvalues (cooltools eigs-cis), the TAD insulation score (cooltools
+# insulation) and the contact-probability-vs-distance curve (hicexplorer) -
+# are what the three new catalog tools in this lot cover.
+#
+# THREE RESOLUTIONS, PICKED PER OUTPUT.
+# The run dumped contact maps at two resolutions (500 kb, 1 Mb) and ran
+# cooltools at a third pair for compartments/insulation (250 kb / 500 kb for
+# eigs-cis, 20 kb / 40 kb for insulation). `cooler/contact_matrix.py` keeps
+# only the finest contact-map resolution (500 kb); `cooltools/eigenvector.py`
+# and `cooltools/insulation.py` keep every resolution the run wrote and add a
+# `resolution` column, because unlike the contact matrix a compartment or an
+# insulation track at two resolutions is not drawn on the same axes.
+#
+# NO params.json. hic 2.0.0's megatest predates the params dump, so the run's
+# parameters survive only in `pipeline_info/software_versions.yml`. Provenance
+# therefore collects tool versions and nothing else, and no template variable
+# is auto-set from pipeline parameters.
+template:
+  template_id: "nf-core/hic/2.0.0"
+  description: "nf-core/hic template: the reprocessed MultiQC report (FastQC, HiC-Pro mapping/pairing/filtering/contact stats), the binned intra-chromosomal contact matrix, the A/B compartment track and the TAD insulation score, plus the contact-probability-vs-distance curve."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory containing hic output (compartments/, contact_maps/, distance_decay/, fastqc/, hicpro/, tads/, pipeline_info/) plus the reprocessed multiqc/multiqc_data/multiqc.parquet."
+      required: true
+  reference:
+    vars: {}
+  provenance:
+    sources:
+      - name: "software_versions"
+        glob: "pipeline_info/software_versions.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Software versions"
+        key_patterns: ["*"]
+  dashboards:
+    - "dashboards/base.yaml"
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Hi-C Genome Architecture"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "hic"
+    version: "2.0.0"
+    engine:
+      name: "nextflow"
+      version: "22.10.5"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/hic"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Hub: one row per Hi-C sample, built from the samplesheet the
+      # pipeline validated (one row per FASTQ pair; HiC-Pro merges the
+      # pairs of one sample before mapping).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samples"
+        description: "Per-sample hub: the sample name every HiC-Pro/cooler/cooltools output uses and how many FASTQ pairs were merged into it"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/hic/samples.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample name every other collection is linked on"
+              "n_libraries": "FASTQ read-pair rows merged into the sample"
+              "single_end": "True when every merged library is single-end"
+
+      - data_collection_tag: "samplesheet"
+        description: "The samplesheet the pipeline validated, one row per FASTQ read pair"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "samplesheet\\.valid\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "sample": "Sample name HiC-Pro merges this read pair into"
+              "single_end": "True for a single-end read pair"
+              "fastq_1": "Read 1 FASTQ"
+              "fastq_2": "Read 2 FASTQ"
+
+      # ----------------------------------------------------------------
+      # MultiQC. Reprocessed with MultiQC 1.35: the module and section
+      # names below are the 1.35 ones, not the 1.13 ones the run
+      # published. Only fastqc and hicpro contributed a section to this
+      # run (REPROCESSED.json).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report, re-generated with MultiQC 1.35 from the run's raw tool outputs (the run itself wrote MultiQC 1.13, which ships no parquet)"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "multiqc/multiqc_data/multiqc.parquet"
+          dc_specific_properties:
+            s3_location: null
+            modules:
+              - "general_stats"
+              - "fastqc"
+              - "hicpro"
+            plots:
+              fastqc:
+                - "Sequence Counts"
+                - "Sequence Quality Histograms"
+                - "Per Sequence Quality Scores"
+                - "Per Sequence GC Content":
+                    - "Percentages"
+                    - "Counts"
+                - "Per Base N Content"
+                - "Sequence Duplication Levels"
+                - "Status Checks"
+              hicpro:
+                - "Read Mapping"
+                - "Read Pairing"
+                - "Read Pair Filtering"
+                - "Contact Statistics"
+
+      # ----------------------------------------------------------------
+      # cooler: binned contact matrix. The sample name and the resolution
+      # live only in the two files' NAMEs, so both are scanned raw with
+      # `include_file_paths` and joined by `cooler/contact_matrix.py`,
+      # which also keeps only the finest resolution and only
+      # intra-chromosomal pairs.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "cooler_contacts_raw"
+        description: "Raw balanced contact dump, every resolution (input of contact_matrix)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*_balanced\\.txt$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              has_header: false
+              new_columns: ["bin1_id", "bin2_id", "count"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "bin1_id": "0-based row bin index into the matching cooler_bins_<resolution>.bed"
+              "bin2_id": "0-based column bin index"
+              "count": "ICE-balanced contact value"
+              "source_path": "File the row came from; sample and resolution are derived from it"
+
+      - data_collection_tag: "cooler_bins_raw"
+        description: "Bin definitions for every dumped resolution (input of contact_matrix)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "cooler_bins_\\d+\\.bed$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              has_header: false
+              new_columns: ["chrom", "start", "end"]
+              include_file_paths: "source_path"
+            columns_description:
+              "chrom": "Chromosome"
+              "start": "Bin start"
+              "end": "Bin end"
+              "source_path": "File the row came from; the resolution is derived from it"
+
+      - data_collection_tag: "contact_matrix"
+        description: "Binned, ICE-balanced intra-chromosomal contact matrix at the finest resolution the run dumped"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cooler/contact_matrix.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the matrix was dumped for"
+              "resolution": "Bin size in bp (the finest resolution present)"
+              "chrom1": "Chromosome of the row bin"
+              "start1": "Row bin start"
+              "end1": "Row bin end"
+              "chrom2": "Chromosome of the column bin (== chrom1)"
+              "start2": "Column bin start"
+              "end2": "Column bin end"
+              "count": "ICE-balanced contact value"
+
+      # ----------------------------------------------------------------
+      # cooltools eigs-cis: A/B compartments. Neither file carries the
+      # sample or the resolution as a column, so both are scanned raw
+      # with `include_file_paths`.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "cooltools_eigenvector_raw"
+        description: "Raw per-bin compartment eigenvectors, every resolution (input of compartment_eigenvector)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.cis\\.vecs\\.tsv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "chrom": "Chromosome"
+              "start": "Bin start"
+              "end": "Bin end"
+              "weight": "cooler balancing weight for the bin (empty on blacklisted bins)"
+              "E1": "First eigenvector, the A/B compartment track"
+              "E2": "Second eigenvector"
+              "E3": "Third eigenvector"
+              "source_path": "File the row came from; sample and resolution are derived from it"
+
+      - data_collection_tag: "compartment_eigenvector"
+        description: "Per-bin A/B compartment track (E1), every resolution the run scanned"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cooltools/eigenvector.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the compartments were called for"
+              "resolution": "Bin size in bp"
+              "chrom": "Chromosome"
+              "start": "Bin start"
+              "end": "Bin end"
+              "weight": "cooler balancing weight for the bin (null on blacklisted bins)"
+              "E1": "First eigenvector, the A/B compartment track"
+              "E2": "Second eigenvector"
+              "E3": "Third eigenvector"
+
+      - data_collection_tag: "cooltools_eigenvalues_raw"
+        description: "Raw per-chromosome compartment eigenvalues, every resolution (input of compartment_eigenvalues)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.cis\\.lam\\.txt$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "chrom": "Chromosome (`start`/`end`/`name` all repeat it in the raw file)"
+              "start": "0"
+              "end": "Chromosome length"
+              "name": "Chromosome, repeated"
+              "eigval1": "Eigenvalue of E1, the A/B compartment track"
+              "eigval2": "Eigenvalue of E2"
+              "eigval3": "Eigenvalue of E3"
+              "source_path": "File the row came from; sample and resolution are derived from it"
+
+      - data_collection_tag: "compartment_eigenvalues"
+        description: "Per-chromosome eigenvalues behind the A/B compartment track, every resolution the run scanned"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cooltools/eigenvalues.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the compartments were called for"
+              "resolution": "Bin size in bp"
+              "chrom": "Chromosome"
+              "eigval1": "Eigenvalue of E1, the A/B compartment track"
+              "eigval2": "Eigenvalue of E2"
+              "eigval3": "Eigenvalue of E3"
+
+      # ----------------------------------------------------------------
+      # cooltools insulation: TAD boundaries. Two files at two
+      # resolutions, each scanning a different trio of window sizes; the
+      # recipe discovers which windows a row actually has (see its
+      # module docstring).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "cooltools_insulation_raw"
+        description: "Raw per-bin insulation score, every resolution and window the run scanned (input of tad_insulation)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*_balanced_insulation\\.tsv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "chrom": "Chromosome"
+              "start": "Bin start"
+              "end": "Bin end"
+              "region": "cooltools region label (chromosome arm)"
+              "is_bad_bin": "True for a masked / unmappable bin"
+              "source_path": "File the row came from; sample and resolution are derived from it"
+
+      - data_collection_tag: "tad_insulation"
+        description: "Per-bin TAD insulation score and boundary calls, one row per bin per window size the run scanned"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cooltools/insulation.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample insulation was scanned for"
+              "resolution": "Bin size in bp"
+              "chrom": "Chromosome"
+              "start": "Bin start"
+              "end": "Bin end"
+              "region": "cooltools region label (chromosome arm)"
+              "is_bad_bin": "True for a masked / unmappable bin"
+              "window": "Insulation window size in bp"
+              "log2_insulation_score": "log2 insulation score at this window (null on a masked bin)"
+              "n_valid_pixels": "Valid pixels behind the score at this window"
+              "boundary_strength": "cooltools' boundary-strength statistic (null except at a called local minimum)"
+              "is_boundary": "cooltools' own boundary call at this window"
+
+      # ----------------------------------------------------------------
+      # hicexplorer: contact probability vs genomic distance.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "hicexplorer_distance_decay_raw"
+        description: "Raw distance-decay curve (input of distance_decay)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*_distcount\\.txt$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "Matrix": "Cooler matrix file the curve was computed from; sample and resolution are derived from it"
+              "Chromosome": "\"all\" (pooled) or a single chromosome"
+              "Distance": "Genomic distance in bp"
+              "Contacts": "Mean contact frequency at that distance"
+              "Number_bins": "Bin pairs averaged into this row"
+              "Scale_factor": "Matrix-wide normalisation factor hicexplorer applied"
+              "source_path": "File the row came from"
+
+      - data_collection_tag: "distance_decay"
+        description: "Contact probability against genomic distance, hicexplorer's hicPlotDistVsCounts curve"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "hicexplorer/distance_decay.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the matrix was dumped for"
+              "resolution": "Bin size in bp, read off the Matrix column"
+              "chromosome": "\"all\" (pooled) or a single chromosome"
+              "distance": "Genomic distance in bp"
+              "contacts": "Mean contact frequency at that distance"
+              "number_bins": "Bin pairs averaged into this row"
+              "scale_factor": "Matrix-wide normalisation factor hicexplorer applied"
+
+links:
+  # Hub -> everything keyed on the sample name.
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Filter the MultiQC panels by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "contact_matrix"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the contact matrix by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "compartment_eigenvector"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the compartment track by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "compartment_eigenvalues"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the compartment eigenvalues by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "tad_insulation"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the insulation track by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "distance_decay"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the distance-decay curve by the samples picked in the left panel"
+    enabled: true

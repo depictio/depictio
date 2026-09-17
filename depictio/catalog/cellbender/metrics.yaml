@@ -1,0 +1,16 @@
+id: cellbender_metrics
+name: Ambient-RNA removal metrics
+mode: removebackground/metrics
+description: >-
+  CellBender's per-sample accounting of ambient-RNA removal: counts removed,
+  cells found against the expected count, and the training convergence
+  parameters.
+find:
+  path_glob: "**/cellbender_removebackground/*_metrics.csv"
+recipe: cellbender/metrics.py
+fixture: metrics.tsv
+renders_as:
+  - { component: card, column: fraction_counts_removed, aggregation: average, secondary_layout: gauge, coverage_max: 1.0 }
+  - { component: card, column: found_cells, aggregation: max }
+  - { component: card, column: ratio_of_found_cells_to_expected_cells, aggregation: average, secondary_layout: threshold, threshold_value: 1.0 }
+  - { component: table }

@@ -1,0 +1,7 @@
+# bcftools, multi-output tool → a folder. Lightweight: identity is derived
+# from the nf-core meta.yml that `nf_core_url` points at.
+id: bcftools
+name: BCFtools
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/bcftools/stats
+homepage: https://samtools.github.io/bcftools/
+biotools_url: https://bio.tools/bcftools

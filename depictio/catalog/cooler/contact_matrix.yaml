@@ -1,0 +1,17 @@
+id: cooler_contact_matrix
+name: Binned contact matrix
+mode: dump+balance
+description: >-
+  Binned, ICE-balanced intra-chromosomal contact matrix from a cooler dump,
+  joined to its bins at the finest resolution the run dumped.
+find:
+  path_glob: "**/*_balanced.txt"
+recipe: cooler/contact_matrix.py
+fixture: contact_matrix.tsv
+renders_as:
+  - id: binned_contact_map
+    component: advanced_viz
+    kind: contact_map
+    roles: {chrom1: chrom1, start1: start1, chrom2: chrom2, start2: start2, count: count}
+  - { component: card, column: count, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

@@ -1,0 +1,14 @@
+# DEXSeq, differential exon/transcript usage. nf-core/nanoseq calls it from a
+# LOCAL module (modules/local/dexseq.nf) on top of Bambu's transcript counts,
+# not a shared nf-core/modules entry, so identity is declared in full here
+# (the same documented exception as enchantr / QIIME2). Not to be confused
+# with the `deseq2` catalog tool: DESeq2 tests differential gene EXPRESSION,
+# DEXSeq tests differential feature (exon/transcript) USAGE within a gene.
+id: dexseq
+name: DEXSeq
+description: >-
+  Differential exon / transcript usage testing, run by nf-core/nanoseq on
+  Bambu's transcript-level counts to find genes whose isoform usage shifts
+  between conditions.
+homepage: https://bioconductor.org/packages/release/bioc/html/DEXSeq.html
+source_url: https://github.com/nf-core/nanoseq/blob/3.0.0/modules/local/dexseq.nf

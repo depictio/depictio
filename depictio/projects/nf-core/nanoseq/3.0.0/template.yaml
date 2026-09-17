@@ -1,0 +1,308 @@
+# nf-core/nanoseq Template v3.0.0 - Nanopore DNA/RNA sequencing QC, alignment
+# and long-read RNA quantification / differential expression
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/nanoseq/3.0.0 --data-root /path/to/your/data
+#
+# Tested against nf-core/nanoseq AWS megatest results:
+#   s3://nf-core-awsmegatests/nanoseq/results-1e60482a2c4621234393a6eef8e9a104309c20ae
+#   (SG-NEx A549 and K562 cell lines, direct cDNA / cDNA nanopore RNA-seq,
+#    3 replicates each. See megatest.yaml.)
+# ============================================================================
+#
+# SCOPE
+# The megatest run is a directRNA/cDNA transcript-quantification run: minimap2
+# alignment (no genome variant calling), Bambu gene/transcript counting and a
+# Bambu-count-based DESeq2 / DEXSeq differential step. It carries NEITHER
+# pycoQC NOR JAFFAL fusion calls NOR a variant_calling/ directory, the
+# manifest (megatest.yaml, before this session) assumed all three; none exist
+# on disk. See VALIDATION_REPORT.md §Discrepancies (NS-D1..NS-D4) for the full
+# list of manifest keys fixed against the real layout.
+#
+# MULTIQC WAS ALREADY REPROCESSED.
+# The run shipped MultiQC 1.11 (multiqc/minimap2/multiqc_data/, JSON only, no
+# parquet); depictio/multiqc/multiqc_data/multiqc.parquet next to it was
+# already produced by
+#   python -m depictio.dev_scripts.multiqc_reprocess --src DATA_ROOT --dest DATA_ROOT
+# before this session started (REPROCESSED.json: reprocessed_with 1.35,
+# modules fastqc, multiqc_software_versions, nanostat, samtools). `modules` /
+# `plots` below are the 1.35 names.
+#
+# NO params.json. As with cutandrun, this run predates the nf-core params
+# dump; provenance collects only pipeline_info/software_versions.yml.
+#
+# LAYOUT NOTE. bambu/, dexseq/ and deseq2/ sit under a single BAMBU/ output
+# stage rather than per-sample directories: bambu/counts_gene.txt and
+# counts_transcript.txt are single files covering every sample as columns;
+# bambu/deseq2/deseq2.results.txt and bambu/dexseq/dexseq.results.txt are each
+# a single file for the run's one A549-vs-K562 comparison (no per-contrast
+# file naming to key a `contrast` column on, unlike differentialabundance /
+# chipseq's per-contrast DESeq2 outputs).
+#
+# CATALOG NOTE. `deseq2_results` reuses the pipeline-agnostic `deseq2` catalog
+# tool (depictio/catalog/deseq2/results.yaml, NOT edited here) through a raw
+# scan tagged `deseq2_results_raw`, the two-step idiom its own recipe
+# docstring describes. `bambu` and `dexseq` are new catalog tools this
+# template owns (neither existed before); `multiqc/nanostat.yaml` is a new
+# MultiQC panel this template owns. `multiqc/fastqc.yaml` and
+# `multiqc/samtools.yaml` already existed and are only referenced.
+template:
+  template_id: "nf-core/nanoseq/3.0.0"
+  description: "nf-core/nanoseq template: Nanopore long-read QC (NanoStat, FastQC, samtools via MultiQC), Bambu gene/transcript quantification, and the DESeq2 / DEXSeq differential expression and usage results computed on top of it."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory containing nanoseq output (bambu/, fastqc/, minimap2/, nanoplot/, pipeline_info/) plus the reprocessed multiqc/multiqc_data/multiqc.parquet."
+      required: true
+  reference:
+    vars: {}
+  provenance:
+    sources:
+      - name: "software_versions"
+        glob: "pipeline_info/software_versions.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Software versions"
+        key_patterns: ["*"]
+  dashboards:
+    - "dashboards/base.yaml"
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Nanopore RNA-Seq"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "nanoseq"
+    version: "3.0.0"
+    engine:
+      name: "nextflow"
+      version: "22.04.3"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/nanoseq"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Hub: one row per sample. nanoseq's samplesheet `sample` column
+      # already is the name every output file uses (unlike cutandrun's
+      # library-level sheet), so the recipe only tidies condition / replicate
+      # out of `<condition>_R<replicate>` and casts the reference/flag columns.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samples"
+        description: "Per-sample hub: condition, replicate, reference genome and whether the input was already a transcriptome"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/nanoseq/samples.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "The samplesheet sample name, used by every output file"
+              "condition": "Biological condition (the samplesheet group, `<condition>_R<replicate>`)"
+              "replicate": "Replicate number inside the condition"
+              "reference": "Genome/transcriptome build used for alignment (the samplesheet `fasta` column)"
+              "is_transcripts": "True when the input FASTQ is already a transcriptome, not reads to align"
+              "has_fast5": "True when a nanopolish fast5 directory was supplied for this sample"
+
+      - data_collection_tag: "samplesheet"
+        description: "The samplesheet the pipeline validated, one row per sample with its input FASTQ, reference and nanopolish inputs"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "samplesheet\\.valid\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "sample": "Sample identifier, used by every output file"
+              "barcode": "Nanopore barcode number, empty when the run was not multiplexed"
+              "input_file": "Input FASTQ (or transcriptome FASTA) location the pipeline read"
+              "fasta": "Reference genome/transcriptome build"
+              "gtf": "Reference annotation, empty when the run supplied none"
+              "is_transcripts": "1 when input_file is already a transcriptome"
+              "nanopolish_fast5": "Nanopolish fast5 directory, empty when methylation calling was not requested"
+
+      # ----------------------------------------------------------------
+      # MultiQC. Already reprocessed with MultiQC 1.35 before this session
+      # (the run itself wrote MultiQC 1.11, JSON only, no parquet): see the
+      # module-level comment above and REPROCESSED.json next to the parquet.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report, re-generated with MultiQC 1.35 from the run's raw tool outputs (the run itself wrote MultiQC 1.11, which ships no parquet)"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "multiqc/multiqc_data/multiqc.parquet"
+          dc_specific_properties:
+            s3_location: null
+            modules:
+              - "general_stats"
+              - "fastqc"
+              - "nanostat"
+              - "samtools"
+            plots:
+              fastqc:
+                - "Sequence Counts"
+                - "Sequence Quality Histograms"
+                - "Per Sequence Quality Scores"
+                - "Per Sequence GC Content":
+                    - "Percentages"
+                    - "Counts"
+                - "Per Base N Content"
+                - "Sequence Length Distribution"
+                - "Sequence Duplication Levels"
+                - "Top overrepresented sequences"
+                - "Status Checks"
+              nanostat:
+                - "Summary Statistics (FASTQ)"
+                - "Reads by quality"
+              samtools:
+                - "Percent mapped"
+                - "Alignment stats"
+                - "Flagstat"
+                - "Flagstat: Percentage of total"
+                - "XY counts"
+                - "Mapped reads per contig":
+                    - "Normalised Counts"
+                    - "Observed over Expected Counts"
+                    - "Raw Counts"
+
+      # ----------------------------------------------------------------
+      # Bambu gene / transcript quantification. New catalog tool `bambu`
+      # (depictio/catalog/bambu/): direct glob_pattern reads, no raw DC.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "bambu_counts_gene"
+        description: "Bambu gene-level counts, the top 50 genes by total count across samples"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "bambu/counts_gene.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "gene_id": "Ensembl gene id, extracted from Bambu's GTF-attribute row label"
+              "gene_biotype": "Ensembl biotype (protein_coding, Mt_rRNA, ...)"
+
+      - data_collection_tag: "bambu_counts_transcript"
+        description: "Bambu transcript-level counts, the top 50 transcripts by total count across samples"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "bambu/counts_transcript.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "transcript_id": "Ensembl transcript id (Bambu TXNAME)"
+              "gene_id": "Ensembl gene id, extracted from Bambu's GTF-attribute GENEID column"
+
+      # ----------------------------------------------------------------
+      # DESeq2 differential expression, on Bambu's gene counts. Reuses the
+      # pipeline-agnostic `deseq2` catalog tool (results_long.py) through the
+      # raw-scan two-step its own module docstring describes; the tool folder
+      # itself is not edited. Only one comparison file exists for this run
+      # (no per-contrast naming), so `include_file_paths` is intentionally
+      # left off: the recipe's fallback labels every row `contrast: "all"`.
+      # `format: CSV, separator: ","`: nanoseq's DESeq2 output is R
+      # `write.csv` (comma, quoted), unlike the TSV other pipelines write.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "deseq2_results_raw"
+        description: "Raw DESeq2 results table on Bambu gene counts (input of deseq2_results)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "bambu/deseq2/deseq2\\.results\\.txt$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              null_values: ["NA", "NaN", ""]
+              infer_schema_length: 0
+            columns_description:
+              "baseMean": "Mean of normalised counts across samples"
+              "log2FoldChange": "Effect size (A549 vs K562)"
+              "lfcSE": "Standard error of log2FoldChange"
+              "pvalue": "Raw Wald p-value"
+              "padj": "Benjamini-Hochberg adjusted p-value"
+
+      - data_collection_tag: "deseq2_results"
+        description: "DESeq2 statistics per gene, with the significance call and the MA abscissa precomputed"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "deseq2/results_long.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "contrast": "Always \"all\": nanoseq writes one comparison file, no per-contrast naming"
+              "gene_id": "Feature identifier (Bambu's GTF-attribute row label; not a clean Ensembl id, see NS-D5)"
+              "base_mean": "Mean of normalised counts across samples"
+              "log2fc": "log2 fold change, A549 vs K562 (volcano / MA effect size)"
+              "lfc_se": "Standard error of log2fc"
+              "pvalue": "Raw Wald p-value (QQ plot)"
+              "padj": "Adjusted p-value; null where DESeq2 filtered the feature out"
+              "log2_base_mean": "log2(baseMean + 1), the MA abscissa"
+              "neg_log10_padj": "-log10(padj), capped at 300 where padj underflowed to 0"
+              "significant": "padj < 0.05 and |log2fc| >= 1"
+              "direction": "up / down / not significant"
+
+      # ----------------------------------------------------------------
+      # DEXSeq differential exon/transcript usage, on Bambu's transcript
+      # counts. New catalog tool `dexseq` (depictio/catalog/dexseq/): direct
+      # glob_pattern read, no raw DC.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "dexseq_results"
+        description: "DEXSeq per-transcript usage statistics, with the significance call precomputed on the gene-level adjusted q-value"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "dexseq/results.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "feature_id": "DEXSeq featureID (a Bambu transcript id)"
+              "gene_id": "Ensembl gene id, extracted from DEXSeq's groupID"
+              "log2fc": "log2 fold change of the feature's relative usage, A549 vs K562"
+              "pvalue": "Raw DEXSeq p-value"
+              "padj": "Gene-level Benjamini-Hochberg adjusted q-value (dex.padj$gene)"
+              "significant": "padj < 0.05"
+              "direction": "up / down / not significant"
+
+links:
+  # Hub -> MultiQC, keyed on the sample name.
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Filter the MultiQC panels by the samples picked in the left panel"
+    enabled: true

@@ -1,0 +1,16 @@
+id: cellranger_diffexp
+name: Cluster marker genes
+mode: analysis/diffexp
+description: >-
+  Top marker genes per graph-based cluster (cluster vs every other cell),
+  ranked by adjusted p-value: log2 fold change, mean counts and
+  significance.
+find:
+  path_glob: "**/analysis/diffexp/gene_expression_graphclust/differential_expression.csv"
+recipe: cellranger/diffexp.py
+fixture: diffexp.tsv
+renders_as:
+  - { id: cluster_markers, component: advanced_viz, kind: da_barplot, roles: {feature_id: gene, contrast: cluster, lfc: log2fc, significance: adjusted_pvalue, label: gene} }
+  - { id: cluster_volcano, component: advanced_viz, kind: volcano, roles: {feature_id: gene, effect_size: log2fc, significance: adjusted_pvalue, category: cluster_label, label: gene} }
+  - { component: card, column: gene, aggregation: nunique, secondary_layout: top_n, breakdown_col: cluster, top_n_count: 3 }
+  - { component: table, row_selection_enabled: true, row_selection_column: gene }

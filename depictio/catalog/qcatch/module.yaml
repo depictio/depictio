@@ -1,0 +1,4 @@
+id: qcatch
+name: QCatch
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qcatch
+homepage: https://github.com/COMBINE-lab/qcatch
