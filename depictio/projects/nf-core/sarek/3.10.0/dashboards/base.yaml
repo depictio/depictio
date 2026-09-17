@@ -1,0 +1,772 @@
+version: 1
+# nf-core/sarek 3.10.0 reference dashboard.
+#
+# Funnel: read/alignment/recalibration QC (the native MultiQC 1.35 report) ->
+# what the five germline callers each called, compared at the bcftools-stats
+# level (no per-variant table exists in this megatest; the VCFs themselves
+# were not fetched, see megatest.yaml and VALIDATION_REPORT.md).
+#
+# The sample hub is the anchor: two samples, the same exome at 75M and 200M
+# reads. The persistent Sample filters section reaches the MultiQC panels and
+# both bcftools-stats tables through the project links.
+#
+# The MultiQC tab holds MultiQC panels only. Everything computed from the
+# per-caller bcftools stats (record counts, Ts/Tv) lives on the Variant
+# calling tab, next to the rows it summarises.
+#
+# Manta is a structural-variant caller running alongside four SNP/indel
+# callers: its bcftools stats read ts=0 tv=0 and almost no SNPs/indels, which
+# is Manta doing its job, not missing data. The Variant calling tab's intro
+# says so.
+main_dashboard:
+  title: nf-core/sarek
+  subtitle: "nf-core/sarek 3.10.0 megatest: NA12878 exome at 75M and 200M reads, five germline callers"
+  project_tag: Sarek Germline Variant Calling
+  main_tab_name: MultiQC
+  tab_icon: /assets/images/logos/multiqc_icon_color.svg
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Sample filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Applies to every tab through the project links
+    persistent: true
+    pin: top
+  - name: QC thresholds
+    icon: mdi:tune
+    color: cyan
+    description: Ts/Tv floor on the per-caller variant-call summary
+    collapsed: true
+    persistent: true
+    pin: bottom
+  grid_sections:
+  - name: Run at a glance
+    icon: mdi:counter
+    color: teal
+    description: One row per sample, pooling the headline numbers of every module
+  - name: Read quality
+    icon: mdi:chart-bell-curve
+    color: blue
+    description: FastQC and fastp as MultiQC reports them
+  - name: Alignment and recalibration
+    icon: mdi:chart-bar
+    color: indigo
+    description: Mapping rate, duplication, base-quality recalibration and coverage
+  - name: Variant-call QC
+    icon: mdi:check-decagram
+    color: cyan
+    description: bcftools and VCFtools summaries of the variant calls, before any per-caller comparison
+  - name: Annotation
+    icon: mdi:dna
+    color: violet
+    description: SnpEff and VEP functional-effect summaries
+  # Pinned to the top and carried by every tab: the design the whole
+  # dashboard is filtered by should be one collapse away wherever the viewer
+  # lands.
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: teal
+    description: The sample hub every other tab is filtered by
+    collapsed: true
+    persistent: true
+    pin: top
+  - name: Reference tables
+    icon: mdi:table
+    color: gray
+    description: The per-caller variant-call summary, on every tab
+    collapsed: true
+    persistent: true
+    pin: bottom
+  components:
+  # ------------------------------------------------------------- at a glance
+  - component_type: text
+    tag: sk-qc-intro
+    section: Run at a glance
+    title: A germline run, from reads to annotated calls
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The native MultiQC 1.35 report, module by module: general statistics
+      first, then read quality, alignment and recalibration, the variant-call
+      QC bcftools and VCFtools compute per caller, and the SnpEff/VEP
+      annotation summaries. The five-caller comparison itself is on the
+      Variant calling tab.
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    tag: sk-qc-general-stats
+    section: Run at a glance
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    use: multiqc/general_stats
+    selected_module: general_stats
+    selected_plot: general_stats
+    title: General statistics
+    description: One row per sample and per tool run, pooling the FastQC, fastp, samtools, mosdepth, bcftools, SnpEff and VEP headline numbers.
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 1, w: 8, h: 5}
+
+  # ------------------------------------------------------------ read quality
+  - component_type: text
+    tag: sk-qc-reads-intro
+    section: Read quality
+    title: Raw and filtered reads
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) on
+      the raw libraries, and what
+      [fastp](https://github.com/OpenGene/fastp) filtered before alignment.
+      Each library carries a lane and a read-pair suffix, so a sample appears
+      here once per read.
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    tag: sk-qc-fastqc-counts
+    section: Read quality
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Sequence Counts
+    use: multiqc/fastqc
+    title: Sequence counts
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 1, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sk-qc-fastqc-quality
+    section: Read quality
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Sequence Quality Histograms
+    use: multiqc/fastqc
+    title: Per-base sequence quality
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 1, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sk-qc-fastqc-gc
+    section: Read quality
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Per Sequence GC Content
+    use: multiqc/fastqc
+    title: GC content
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 6, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sk-qc-fastp-filtered
+    section: Read quality
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: fastp
+    selected_plot: Filtered Reads
+    use: multiqc/fastp
+    title: Reads kept after filtering
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 6, w: 4, h: 5}
+
+  # ----------------------------------------------- alignment / recalibration
+  - component_type: text
+    tag: sk-qc-align-intro
+    section: Alignment and recalibration
+    title: Mapping, duplication and base-quality recalibration
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      [Samtools](http://www.htslib.org) reports the mapping rate, GATK4
+      MarkDuplicates the duplication level, GATK4 BQSR how well the
+      recalibration model fit, and [mosdepth](https://github.com/brentp/mosdepth)
+      the coverage distribution over the Agilent exome target.
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    tag: sk-qc-samtools-mapped
+    section: Alignment and recalibration
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: samtools
+    selected_plot: Percent mapped
+    use: multiqc/samtools
+    title: Percent mapped
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 1, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sk-qc-picard-dup
+    section: Alignment and recalibration
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: picard
+    selected_plot: Mark Duplicates
+    use: multiqc/picard
+    title: Duplication
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 1, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sk-qc-gatk-bqsr
+    section: Alignment and recalibration
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: gatk
+    selected_plot: Reported Quality vs. Empirical Quality
+    use: multiqc/gatk
+    title: BQSR calibration fit
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 6, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sk-qc-mosdepth-cov
+    section: Alignment and recalibration
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: mosdepth
+    selected_plot: Cumulative coverage distribution
+    use: multiqc/mosdepth
+    title: Cumulative coverage distribution
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 6, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sk-qc-mosdepth-contig
+    section: Alignment and recalibration
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: mosdepth
+    selected_plot: Average coverage per contig
+    use: multiqc/mosdepth
+    title: Average coverage per contig
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 11, w: 8, h: 5}
+
+  # -------------------------------------------------------- variant-call QC
+  - component_type: text
+    tag: sk-qc-varqc-intro
+    section: Variant-call QC
+    title: What bcftools and VCFtools see across every caller pooled together
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      [bcftools stats](https://samtools.github.io/bcftools/) and
+      [VCFtools](https://vcftools.github.io/) here pool every caller's VCF
+      into one MultiQC panel per plot. The per-caller breakdown these panels
+      cannot show is the Variant calling tab.
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    tag: sk-qc-bcftools-subs
+    section: Variant-call QC
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: bcftools
+    selected_plot: Variant Substitution Types
+    use: multiqc/bcftools
+    title: Variant substitution types
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 1, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sk-qc-bcftools-indels
+    section: Variant-call QC
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: bcftools
+    selected_plot: Indel Distribution
+    use: multiqc/bcftools
+    title: Indel length distribution
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 1, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sk-qc-bcftools-depths
+    section: Variant-call QC
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: bcftools
+    selected_plot: Variant depths
+    use: multiqc/bcftools
+    title: Variant depths
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 6, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sk-qc-vcftools-count
+    section: Variant-call QC
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: vcftools
+    selected_plot: TsTv by Count
+    use: multiqc/vcftools
+    title: Ts/Tv by allele count
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 6, w: 4, h: 5}
+
+  # --------------------------------------------------------------- annotation
+  - component_type: text
+    tag: sk-qc-annot-intro
+    section: Annotation
+    title: What kind of variants were called
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      [SnpEff](https://pcingola.github.io/SnpEff/) and
+      [VEP](https://www.ensembl.org/info/docs/tools/vep/index.html) both
+      annotate the same calls with different vocabularies; SnpEff's impact
+      classes and VEP's SIFT/PolyPhen predictions are two lenses on the same
+      set of consequences.
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    tag: sk-qc-snpeff-impact
+    section: Annotation
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: snpeff
+    selected_plot: Variant Effects by Impact
+    use: multiqc/snpeff
+    title: Effects by impact
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 1, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sk-qc-snpeff-region
+    section: Annotation
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: snpeff
+    selected_plot: Variants by Genomic Region
+    use: multiqc/snpeff
+    title: Variants by genomic region
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 1, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sk-qc-vep-general
+    section: Annotation
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: vep
+    selected_plot: General Statistics
+    use: multiqc/vep
+    title: VEP general statistics
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 6, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sk-qc-vep-sift
+    section: Annotation
+    workflow_tag: sarek
+    data_collection_tag: multiqc_data
+    selected_module: vep
+    selected_plot: SIFT summary
+    use: multiqc/vep
+    title: SIFT summary
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 6, w: 4, h: 5}
+
+  # ------------------------------------------------------------ sample sheet
+  - component_type: text
+    tag: sk-sheet-intro
+    section: Sample sheet
+    title: The design behind every panel
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One row per sample: the patient it belongs to, its tumor/normal status
+      and the read-depth condition its name encodes. This is the collection
+      the sample filter in the left panel is sourced on.
+    workflow_tag: sarek
+    data_collection_tag: samples
+    layout: {x: 0, y: 0, w: 6, h: 2}
+  - component_type: card
+    tag: sk-sheet-card-depth
+    index: sk-sheet-card-depth
+    section: Sample sheet
+    workflow_tag: sarek
+    data_collection_tag: samples
+    aggregation: count
+    column_name: sample_id
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: read_depth_millions
+    display: {icon_name: 'mdi:test-tube', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Samples by depth
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: table
+    tag: sk-sheet-table-samples
+    section: Sample sheet
+    workflow_tag: sarek
+    data_collection_tag: samples
+    row_selection_enabled: false
+    title: Sample hub
+    description: One row per sample, with patient, status and read-depth condition.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 2, w: 8, h: 4}
+
+  # -------------------------------------------------------- reference tables
+  - component_type: text
+    tag: sk-ref-intro
+    section: Reference tables
+    title: The rows behind every panel
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The per-sample, per-caller variant-count summary the Ts/Tv slider in
+      the left panel reads. The five-caller comparison itself is on the
+      Variant calling tab.
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_summary
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: table
+    tag: sk-ref-table-summary
+    section: Reference tables
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_summary
+    use: bcftools/stats_summary
+    row_selection_enabled: false
+    title: Per-caller variant counts
+    description: SNPs, indels and multiallelic sites, one row per sample and caller.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 1, w: 8, h: 4}
+
+  # ---------------------------------------------------------------- filters
+  - component_type: interactive
+    tag: sk-filter-sample
+    index: sk-sample-filter
+    section: Sample filters
+    group: Sample scope
+    workflow_tag: sarek
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample_id
+    column_type: object
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:test-tube'}
+    placement: left
+    title: Sample
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: sk-filter-tstv
+    index: sk-tstv-range
+    section: QC thresholds
+    group: Variant-call scope
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_tstv
+    interactive_component_type: RangeSlider
+    column_name: ts_tv
+    column_type: float64
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:scale-balance'}
+    placement: left
+    title: Ts/Tv ratio
+    layout: {x: 0, y: 0, w: 1, h: 3}
+
+tabs:
+# ============================================================================
+# Variant calling
+# ============================================================================
+# Everything the five callers' bcftools stats reports carry, compared caller
+# against caller. No per-variant position table exists in this megatest (the
+# VCFs were not fetched), so the comparison stops at the bcftools-stats
+# summary level: record counts and Ts/Tv, per sample and per caller.
+- title: Variant calling
+  subtitle: What each of the five germline callers called on the same two samples, compared at the bcftools-stats level
+  tab_order: 2
+  tab_icon: mdi:dna
+  tab_icon_color: violet
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Caller scope
+    icon: mdi:tune
+    color: grape
+    description: Which caller to keep in view
+  grid_sections:
+  - name: Caller yield
+    icon: mdi:counter
+    color: grape
+    description: Total variant, SNP and indel counts, pooled across callers and samples
+  - name: SNPs and indels by caller
+    icon: mdi:chart-bar
+    color: indigo
+    description: Every caller's record counts side by side
+  - name: Ts/Tv by caller
+    icon: mdi:scale-balance
+    color: red
+    description: How close each caller's calls sit to the germline WES Ts/Tv expectation
+  - name: Variant tables
+    icon: mdi:table
+    color: gray
+    description: The rows behind the panels on this tab
+    collapsed: true
+  components:
+  # ----------------------------------------------------------------- yield
+  - component_type: text
+    tag: sk-vc-intro
+    section: Caller yield
+    title: Five callers, one set of samples
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      DeepVariant, FreeBayes, HaplotypeCaller and Strelka call SNPs and
+      indels; Manta calls structural variants and reports almost none of
+      either, which is why its cards below read close to zero rather than
+      missing.
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_summary
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: card
+    tag: sk-vc-card-snps
+    index: sk-vc-card-snps
+    section: Caller yield
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_summary
+    use: bcftools/stats_summary
+    aggregation: sum
+    column_name: n_snps
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: caller
+    top_n_count: 3
+    display: {icon_name: 'mdi:counter', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: SNPs called
+    layout: {x: 0, y: 1, w: 2, h: 2}
+  - component_type: card
+    tag: sk-vc-card-indels
+    index: sk-vc-card-indels
+    section: Caller yield
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_summary
+    use: bcftools/stats_summary
+    aggregation: sum
+    column_name: n_indels
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: caller
+    top_n_count: 3
+    display: {icon_name: 'mdi:counter', icon_color: '#5C6BC0', title_color: '#5C6BC0', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Indels called
+    layout: {x: 2, y: 1, w: 2, h: 2}
+  - component_type: card
+    tag: sk-vc-card-multi
+    index: sk-vc-card-multi
+    section: Caller yield
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_summary
+    use: bcftools/stats_summary
+    aggregation: sum
+    column_name: n_multiallelic_sites
+    column_type: int64
+    secondary_layout: donut
+    breakdown_col: caller
+    display: {icon_name: 'mdi:chart-donut', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Multiallelic sites
+    layout: {x: 4, y: 1, w: 2, h: 2}
+  - component_type: card
+    tag: sk-vc-card-tstv
+    index: sk-vc-card-tstv
+    section: Caller yield
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_tstv
+    use: bcftools/stats_tstv
+    aggregation: average
+    column_name: ts_tv
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 1.8
+    threshold_direction: min
+    threshold_warn: 1.5
+    display: {icon_name: 'mdi:scale-balance', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Mean Ts/Tv (SNP/indel callers)
+    layout: {x: 6, y: 1, w: 2, h: 2}
+
+  # -------------------------------------------------------- snps and indels
+  - component_type: text
+    tag: sk-vc-counts-intro
+    section: SNPs and indels by caller
+    title: Record counts, caller by caller
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      DeepVariant and HaplotypeCaller call the most SNPs; FreeBayes also
+      reports MNPs, which lowers its indel count. The dot plot puts all five
+      on one plane: size is the SNP fraction of each caller's records (0 for
+      manta), colour is log10(records).
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_summary
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: sk-vc-av-dotplot
+    index: sk-vc-av-dotplot
+    section: SNPs and indels by caller
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_summary
+    use: bcftools/stats_summary
+    config:
+      cluster_col: sample
+      gene_col: caller
+      mean_expression_col: log10_n_records
+      frac_expressing_col: snp_fraction
+      colour_scale: Viridis
+      gene_sort: name
+      cluster_sort: name
+      max_dot_size: 30
+      annotate_top_n: 0
+    title: Caller yield and SNP fraction, per sample
+    description: One dot per sample and caller. Colour is log10 of the total record count, size the fraction of those records that are SNPs.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 8, h: 4}
+  - component_type: figure
+    tag: sk-vc-fig-snps
+    section: SNPs and indels by caller
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_summary
+    use: bcftools/stats_summary
+    visu_type: bar
+    dict_kwargs: {x: caller, y: n_snps, color: sample, barmode: group}
+    title: SNPs called per caller
+    description: One bar per sample; a structural-variant caller (manta) reports almost no SNPs, which is expected.
+    title_size: h3
+    layout: {x: 0, y: 5, w: 4, h: 6}
+  - component_type: figure
+    tag: sk-vc-fig-indels
+    section: SNPs and indels by caller
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_summary
+    visu_type: bar
+    dict_kwargs: {x: caller, y: n_indels, color: sample, barmode: group}
+    title: Indels called per caller
+    description: One bar per sample. FreeBayes' MNP calls are counted separately from its indels, which is why they do not add up to its SNP + indel total.
+    title_size: h3
+    layout: {x: 4, y: 5, w: 4, h: 6}
+
+  # ------------------------------------------------------------- ts/tv
+  - component_type: text
+    tag: sk-vc-tstv-intro
+    section: Ts/Tv by caller
+    title: How close each caller sits to the expected ratio
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Germline WES calls typically land close to Ts/Tv 2.0-2.1. Manta reads
+      0.0 here because it calls almost no SNPs to score a ratio on, not
+      because its calls are poor quality.
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_tstv
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: figure
+    tag: sk-vc-fig-tstv
+    section: Ts/Tv by caller
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_tstv
+    use: bcftools/stats_tstv
+    visu_type: bar
+    dict_kwargs: {x: caller, y: ts_tv, color: sample, barmode: group}
+    title: Ts/Tv ratio per caller
+    description: One bar per sample; the SNP/indel callers cluster together, Manta (structural variants) reads zero.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 8, h: 6}
+
+  # --------------------------------------------------------- variant tables
+  - component_type: text
+    tag: sk-vc-tables-intro
+    section: Variant tables
+    title: The rows behind the panels above
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Both tables filtered by the sample and caller pickers in the left
+      panel and by the Ts/Tv floor pinned at the bottom of every tab.
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_summary
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: table
+    tag: sk-vc-table-summary
+    section: Variant tables
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_summary
+    use: bcftools/stats_summary
+    row_selection_enabled: false
+    title: Per-caller variant counts
+    description: SNPs, indels, MNPs, others and multiallelic sites, one row per sample and caller.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 1, w: 8, h: 5}
+  - component_type: table
+    tag: sk-vc-table-tstv
+    section: Variant tables
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_tstv
+    use: bcftools/stats_tstv
+    row_selection_enabled: false
+    title: Per-caller Ts/Tv
+    description: Transitions, transversions and their ratio, one row per sample and caller.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 6, w: 8, h: 5}
+
+  # ---------------------------------------------------------------- filters
+  - component_type: interactive
+    tag: sk-vc-filter-caller
+    index: sk-vc-caller-filter
+    section: Caller scope
+    group: Callers
+    workflow_tag: sarek
+    data_collection_tag: bcftools_stats_summary
+    interactive_component_type: MultiSelect
+    column_name: caller
+    column_type: object
+    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:dna'}
+    placement: left
+    title: Caller
+    layout: {x: 0, y: 0, w: 1, h: 3}

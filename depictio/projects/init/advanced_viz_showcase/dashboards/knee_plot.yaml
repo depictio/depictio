@@ -1,0 +1,90 @@
+# Knee plot: one tab of the advanced-visualisation showcase.
+#
+# Regenerate the seed after editing:
+#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'Knee plot'
+subtitle: 'Barcode-rank curves for 2 synthetic single-cell libraries: a called-cell plateau followed by a power-law drop into the empty-droplet background.'
+icon: 'mdi:chart-line-variant'
+icon_color: 'orange'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8d78'
+is_main_tab: false
+tab_order: 36
+parent_dashboard_tag: volcano
+tab_icon: 'mdi:chart-line-variant'
+tab_icon_color: 'orange'
+
+# Left-panel filter section. Deliberately not `persistent`: the tabs of this
+# family read different collections whose column names collide while their
+# value domains do not overlap, so a control fanned out from one tab would show
+# up everywhere and bite on nothing.
+filter_sections:
+  - name: 'Curve scope'
+    icon: 'mdi:filter-variant'
+    color: 'orange'
+    description: 'Restricts which sample curves are drawn'
+
+grid_sections:
+  - name: 'Barcode rank'
+    icon: 'mdi:chart-line'
+    color: 'orange'
+    description: 'UMI count against barcode rank, log-log, with the cell-calling cutoff'
+
+components:
+  - tag: text-knee-plot
+    index: knee-text
+    component_type: text
+    title: 'Knee plot'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Barcode rank'
+    body: >
+      Rank barcodes by UMI count and the curve drops in two regimes: a gently declining plateau
+      over the called cells, then a steep power-law fall into the empty-droplet background. The
+      dotted cutoff line marks where sample_A and sample_B's `is_cell` flag switches off; sample_B
+      calls fewer, noisier cells than sample_A. Log axes and the cutoff line toggle live in the
+      Settings ⚙ popover.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: viz-knee-plot
+    index: 'knee-curve'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'knee_plot_demo'
+    title: 'Barcode-rank curve'
+    description: 'UMI count against barcode rank, log-log, one line per sample. The cell-calling cutoff is read straight from the is_cell column. Log axes and the cutoff toggle live in the Settings ⚙ popover.'
+    section: 'Barcode rank'
+    viz_kind: 'knee_plot'
+    config:
+      viz_kind: "knee_plot"
+      sample_col: "sample"
+      rank_col: "rank"
+      umi_count_col: "umi_count"
+      is_cell_col: "is_cell"
+      log_x: true
+      log_y: true
+      show_cutoff: true
+    layout: { x: 0, y: 2, w: 8, h: 8 }
+
+  - tag: filter-knee-plot-sample
+    index: knee-f-sample
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'knee_plot_demo'
+    interactive_component_type: MultiSelect
+    column_name: 'sample'
+    column_type: 'object'
+    title: 'Sample'
+    placement: left
+    section: 'Curve scope'
+    group: 'Curve filters'
+    display:
+      title_size: md
+      custom_color: '#F76707'
+      icon_name: 'mdi:test-tube'
+    layout: { x: 0, y: 0, w: 1, h: 3 }

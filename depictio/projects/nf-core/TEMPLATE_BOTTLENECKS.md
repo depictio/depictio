@@ -141,6 +141,15 @@ No new `advanced_viz` kind was added in this lot. Every tile either binds one of
 existing kinds or falls back to a code-mode figure, and the 27 code-mode figures across
 the nine templates are the evidence for what is missing.
 
+Lot 2 (sarek 3.10.0, scrnaseq 4.2.0, mag 5.4.2, nanoseq 3.0.0, eager 2.4.5, methylseq 2.3.0,
+hic 2.0.0) is the lot that closed part of that gap: three new kinds, `contact_map`,
+`knee_plot` and `damage_profile`, plus a new `mark` setting on `coverage_track`. All four
+were designed GenomeSpy-ready from the start (issue #1083: coordinate-bound rows carry a
+chromosome/start pair now, so a later GenomeSpy track renderer needs no schema change), see
+`dev/advanced_viz_kinds/genomespy_handoff.md` for the row contracts and the mark mapping,
+including the two kinds (`knee_plot`, `damage_profile`) that are out of GenomeSpy's scope
+because their rows are not coordinate-bound.
+
 ### Per pipeline
 
 | pipeline | kinds bound | code-mode figures | what a kind would replace |
@@ -154,6 +163,13 @@ the nine templates are the evidence for what is missing.
 | chipseq 1.2.0 | volcano, ma, qq, da_barplot, manhattan, complex_heatmap, upset_plot | 2 | nothing in the template, because the deepTools profile is left in MultiQC |
 | atacseq 1.2.2 | volcano, ma, qq, da_barplot, complex_heatmap, dot_plot, upset_plot | 6 | TSS signal profile, fragment-length ladder |
 | cutandrun 3.1 | manhattan x2, upset_plot, dot_plot | 4 | fragment-length ladder |
+| sarek 3.10.0 | dot_plot (caller-comparison, `bcftools/stats_summary`) | 3 | nothing, the three per-caller SNP/indel/Ts-Tv bars are plain grouped bars |
+| scrnaseq 4.2.0 | `knee_plot` (new), embedding x3, da_barplot | 1 | nothing, the PCA scree plot is a plain bar |
+| mag 5.4.2 | none | 1 | nothing renders as a kind at all here: the bin-count bar is plain, and the contig-to-bin tables are pipeline-local aggregation with no catalog owner, not a missing kind |
+| nanoseq 3.0.0 | complex_heatmap x2, volcano/ma/qq, volcano/qq | 0 | n/a, every dense tile already binds an existing kind |
+| eager 2.4.5 | profile (preseq complexity curve), `damage_profile` (new) | 3 | nothing for two of the three (mapped-reads and mean-coverage bars are plain); the misincorporation line duplicates the `damage_profile` advanced-viz tile in the same section, display redundancy rather than a missing kind |
+| methylseq 2.3.0 | profile (Bismark M-bias, CpG context) | 3 | nothing, three plain grouped bars (alignment efficiency, dedup rate, per-context methylation) |
+| hic 2.0.0 | `contact_map` (new), profile (distance decay), coverage_track x2 (new `mark` setting: A/B compartment track, insulation score) | 0 | n/a, hic has no plotly-express figure tile at all: every dedicated-tab visualisation is a kind or a MultiQC panel |
 
 ### What those 27 figures are
 

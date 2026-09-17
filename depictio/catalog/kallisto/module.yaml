@@ -1,0 +1,4 @@
+id: kallisto
+name: kallisto | bustools (kb-python)
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/kallistobustools/count
+homepage: https://www.kallistobus.tools/

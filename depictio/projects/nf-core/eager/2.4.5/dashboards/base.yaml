@@ -1,0 +1,897 @@
+version: 1
+# nf-core/eager 2.4.5 reference dashboard.
+#
+# Funnel: sequencing and trimming QC (the reprocessed MultiQC report) -> how
+# many reads mapped and were removed as duplicates -> how much of the genome
+# they cover and how much more sequencing would buy -> whether the damage
+# pattern at the read ends says the DNA is ancient -> the genotypes called from
+# it. The library hub is the anchor: the library filter in the left panel
+# reaches the MultiQC panels and every per-library table through the project
+# links, and the damage tab carries a selection forward to the coverage and
+# complexity tables that say whether that library's read is trustworthy.
+#
+# The MultiQC tab holds MultiQC panels only. Everything drawn from a table
+# eager or this template's own recipes published beside the report (the
+# library hub, the flagstat and BamQC summaries, the complexity curve, the
+# misincorporation profile) lives on its own tab. Two pinned sections are the
+# exception: the library sheet and the coverage/duplication reference table
+# ride along on every tab, MultiQC included, because the whole dashboard is
+# filtered by them.
+#
+# No bcftools stats table is bound here: `bcftools/stats_*` catalog outputs are
+# nf-core/sarek's (see the pipeline's CLAUDE.md ownership split), so the
+# Genotyping tab reads the bcftools MultiQC panels only.
+#
+# The MultiQC report bound here was re-generated with MultiQC 1.35 from the
+# run's raw tool outputs; the run itself published MultiQC 1.13.dev0, which
+# writes no parquet. Module and plot names are therefore the 1.35 ones.
+main_dashboard:
+  title: nf-core/eager
+  subtitle: "nf-core/eager 2.4.5 megatest: two Atlantic cod libraries, BWA-mapped, Picard-deduplicated and damage-profiled"
+  project_tag: Ancient DNA Authentication
+  main_tab_name: MultiQC
+  tab_icon: /assets/images/logos/multiqc_icon_color.svg
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Sample filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Applies to every tab through the project links
+    persistent: true
+    pin: top
+  - name: QC thresholds
+    icon: mdi:tune
+    color: cyan
+    description: Coverage and duplication floors on the per-library BamQC summary
+    collapsed: true
+    persistent: true
+    pin: bottom
+  grid_sections:
+  - name: Run at a glance
+    icon: mdi:counter
+    color: teal
+    description: One row per library, pooling the headline numbers of every module
+  - name: Read quality and trimming
+    icon: mdi:chart-bell-curve
+    color: blue
+    description: FastQC and AdapterRemoval as MultiQC reports them
+  # Pinned to the top and carried by every tab: the design the whole dashboard
+  # is filtered by should be one collapse away wherever the viewer lands.
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: teal
+    description: The library hub every other tab is filtered by
+    collapsed: true
+    persistent: true
+    pin: top
+  - name: Reference metrics
+    icon: mdi:table
+    color: gray
+    description: Per-library coverage and duplication, on every tab
+    collapsed: true
+    persistent: true
+    pin: bottom
+  components:
+  # ------------------------------------------------------------- at a glance
+  - component_type: text
+    tag: ea-qc-intro
+    section: Run at a glance
+    title: An ancient-DNA run, from reads to authentication
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The reprocessed [MultiQC](https://multiqc.info) report, module by
+      module: the general statistics table first, then read quality and
+      trimming. Mapping, duplication, coverage, library complexity and the
+      damage signature each have their own tab.
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    tag: ea-qc-general-stats
+    section: Run at a glance
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    use: multiqc/general_stats
+    selected_module: general_stats
+    selected_plot: general_stats
+    title: General statistics
+    description: One row per library, pooling the headline numbers of every module that ran, including endorSpy's endogenous DNA percentage, which has no panel of its own.
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 1, w: 8, h: 5}
+
+  # ------------------------------------------------------ read quality
+  - component_type: text
+    tag: ea-qc-reads-intro
+    section: Read quality and trimming
+    title: Raw reads, trimming and collapsing
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) on
+      the raw lanes, plus what
+      [AdapterRemoval](https://github.com/MikkelSchubert/adapterremoval)
+      trimmed and collapsed into single merged reads, ancient DNA fragments
+      are usually shorter than the read length, so a high collapse rate is
+      expected, not a warning sign.
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    tag: ea-qc-fastqc-counts
+    section: Read quality and trimming
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Sequence Counts
+    use: multiqc/fastqc
+    title: Sequence counts
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 1, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ea-qc-fastqc-quality
+    section: Read quality and trimming
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Sequence Quality Histograms
+    use: multiqc/fastqc
+    title: Per-base sequence quality
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 1, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ea-qc-fastqc-gc
+    section: Read quality and trimming
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Per Sequence GC Content
+    use: multiqc/fastqc
+    title: GC content
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 6, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ea-qc-fastqc-adapter
+    section: Read quality and trimming
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Adapter Content
+    use: multiqc/fastqc
+    title: Adapter content
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 6, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ea-qc-ar-retained
+    section: Read quality and trimming
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    selected_module: adapterremoval
+    selected_plot: Retained and Discarded Reads
+    use: multiqc/adapterremoval
+    title: Retained, discarded and collapsed reads
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 11, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ea-qc-ar-length
+    section: Read quality and trimming
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    selected_module: adapterremoval
+    selected_plot: Length Distribution
+    use: multiqc/adapterremoval
+    title: Collapsed-read length distribution
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 11, w: 4, h: 5}
+
+  # ------------------------------------------------------------ sample sheet
+  - component_type: text
+    tag: ea-sheet-intro
+    section: Sample sheet
+    title: The design behind every panel
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One row per library, with the biological sample it was prepared from,
+      the organism and how many sequencing lanes eager merged into it. This
+      is the collection the library filter in the left panel is sourced on,
+      so it is what narrows every other tab.
+    workflow_tag: eager
+    data_collection_tag: samples
+    layout: {x: 0, y: 0, w: 6, h: 2}
+  - component_type: card
+    tag: ea-sheet-card-lanes
+    index: ea-sheet-card-lanes
+    section: Sample sheet
+    workflow_tag: eager
+    data_collection_tag: samples
+    aggregation: sum
+    column_name: n_lanes
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: sample_id
+    top_n_count: 2
+    display: {icon_name: 'mdi:layers-outline', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Lanes merged
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: table
+    tag: ea-sheet-table
+    section: Sample sheet
+    workflow_tag: eager
+    data_collection_tag: samples
+    row_selection_enabled: false
+    title: Library hub
+    description: One row per library, with its sample, organism and lane count.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 2, w: 8, h: 4}
+
+  # -------------------------------------------------------- reference metrics
+  - component_type: text
+    tag: ea-ref-intro
+    section: Reference metrics
+    title: Coverage and duplication behind every panel
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The per-library [Qualimap](http://qualimap.conesalab.org) BamQC summary
+      the two left-panel sliders read. The design each library belongs to is
+      in the Sample sheet section, pinned to the top of every tab; the
+      coverage figure and cards are on the Coverage & complexity tab.
+    workflow_tag: eager
+    data_collection_tag: qualimap_bamqc_genome_results
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: table
+    tag: ea-ref-table-qualimap
+    section: Reference metrics
+    workflow_tag: eager
+    data_collection_tag: qualimap_bamqc_genome_results
+    use: qualimap/bamqc_genome_results
+    row_selection_enabled: false
+    title: BamQC summary
+    description: Mean coverage, mapping quality, error rate and duplication per library.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 1, w: 8, h: 4}
+
+  # ---------------------------------------------------------------- filters
+  - component_type: interactive
+    tag: ea-filter-sample
+    index: ea-sample-filter
+    section: Sample filters
+    group: Sample scope
+    workflow_tag: eager
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample_id
+    column_type: object
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:test-tube'}
+    placement: left
+    title: Library
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: ea-filter-udg
+    index: ea-udg-filter
+    section: Sample filters
+    group: Sample scope
+    workflow_tag: eager
+    data_collection_tag: samples
+    interactive_component_type: Select
+    column_name: udg_treatment
+    column_type: object
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:flask-outline'}
+    placement: left
+    title: UDG treatment
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: ea-filter-coverage
+    index: ea-coverage-range
+    section: QC thresholds
+    group: Coverage and duplication
+    workflow_tag: eager
+    data_collection_tag: qualimap_bamqc_genome_results
+    interactive_component_type: RangeSlider
+    column_name: mean_coverage
+    column_type: float64
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:waves'}
+    placement: left
+    title: Mean coverage
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: ea-filter-duprate
+    index: ea-duprate-range
+    section: QC thresholds
+    group: Coverage and duplication
+    workflow_tag: eager
+    data_collection_tag: qualimap_bamqc_genome_results
+    interactive_component_type: RangeSlider
+    column_name: duplication_rate
+    column_type: float64
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:set-merge'}
+    placement: left
+    title: Duplication rate
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+tabs:
+# ============================================================================
+# Mapping & duplication
+# ============================================================================
+- title: Mapping & duplication
+  subtitle: How many reads placed before and after the mapping-quality filter, and how many were removed as PCR duplicates
+  tab_order: 2
+  tab_icon: mdi:chart-bar
+  tab_icon_color: indigo
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  grid_sections:
+  - name: Alignment
+    icon: mdi:chart-bar
+    color: indigo
+    description: Reads placed before and after eager's mapping-quality filter
+  - name: Duplication
+    icon: mdi:set-merge
+    color: grape
+    description: PCR duplicates Picard MarkDuplicates removed
+  components:
+  # ------------------------------------------------------------- alignment
+  - component_type: text
+    tag: ea-map-intro
+    section: Alignment
+    title: What placed, and what the filter kept
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      [samtools flagstat](http://www.htslib.org/) before and after eager's
+      mapping-quality filter. A low pre-filter mapped percentage is normal
+      here, most of a sediment or bone extract's DNA is environmental, not
+      the target organism's.
+    workflow_tag: eager
+    data_collection_tag: samtools_flagstat
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: figure
+    tag: ea-map-fig-bar
+    index: ea-map-fig-bar
+    section: Alignment
+    workflow_tag: eager
+    data_collection_tag: samtools_flagstat
+    use: samtools/flagstat
+    visu_type: bar
+    dict_kwargs: {x: sample, y: mapped_reads, color: stage}
+    title: Mapped reads before and after the filter
+    description: Reads flagged mapped by samtools flagstat, per library and stage.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 8, h: 6}
+  - component_type: card
+    tag: ea-map-card-mapped
+    index: ea-map-card-mapped
+    section: Alignment
+    workflow_tag: eager
+    data_collection_tag: samtools_flagstat
+    use: samtools/flagstat
+    aggregation: sum
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 2
+    column_name: mapped_reads
+    column_type: int64
+    display: {icon_name: 'mdi:chart-bar', icon_color: '#5C6BC0', title_color: '#5C6BC0', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Mapped reads
+    layout: {x: 0, y: 7, w: 2, h: 2}
+  - component_type: card
+    tag: ea-map-card-pct
+    index: ea-map-card-pct
+    section: Alignment
+    workflow_tag: eager
+    data_collection_tag: samtools_flagstat
+    use: samtools/flagstat
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: mapped_pct
+    column_type: float64
+    display: {icon_name: 'mdi:percent-outline', icon_color: '#5C6BC0', title_color: '#5C6BC0', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Mapped percentage
+    layout: {x: 2, y: 7, w: 2, h: 2}
+  - component_type: multiqc
+    tag: ea-map-mqc-flagstat
+    section: Alignment
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    selected_module: samtools
+    selected_plot: Flagstat
+    use: multiqc/samtools
+    title: Flagstat (MultiQC)
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 7, w: 4, h: 5}
+  - component_type: table
+    tag: ea-map-table
+    section: Alignment
+    workflow_tag: eager
+    data_collection_tag: samtools_flagstat
+    use: samtools/flagstat
+    row_selection_enabled: false
+    title: Flagstat, pre- and post-filter
+    description: One row per (library, stage), total, mapped, duplicate and properly-paired counts.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 12, w: 8, h: 7}
+
+  # ------------------------------------------------------------ duplication
+  - component_type: text
+    tag: ea-dup-intro
+    section: Duplication
+    title: PCR duplicates
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      [Picard MarkDuplicates](https://broadinstitute.github.io/picard/)
+      flags PCR duplicates on the mapped, filtered BAM. Low-input ancient DNA
+      libraries commonly run higher duplication than a modern shotgun
+      library at the same depth.
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    tag: ea-dup-mqc-picard
+    section: Duplication
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    selected_module: picard
+    selected_plot: Mark Duplicates
+    use: multiqc/picard
+    title: Mark Duplicates (MultiQC)
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 1, w: 8, h: 6}
+  - component_type: card
+    tag: ea-dup-card-rate
+    index: ea-dup-card-rate
+    section: Duplication
+    workflow_tag: eager
+    data_collection_tag: qualimap_bamqc_genome_results
+    use: qualimap/bamqc_genome_results
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: duplication_rate
+    column_type: float64
+    display: {icon_name: 'mdi:set-merge', icon_color: '#AB47BC', title_color: '#AB47BC', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Duplication rate (Qualimap)
+    layout: {x: 0, y: 7, w: 2, h: 2}
+
+# ============================================================================
+# Coverage & complexity
+# ============================================================================
+- title: Coverage & complexity
+  subtitle: How much of the genome each library covers, and how much more sequencing would still buy
+  tab_order: 3
+  tab_icon: mdi:waves
+  tab_icon_color: cyan
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  grid_sections:
+  - name: Genome coverage
+    icon: mdi:waves
+    color: cyan
+    description: Depth, mapping quality and GC content from Qualimap BamQC
+  - name: Library complexity
+    icon: mdi:chart-line
+    color: blue
+    description: How many new molecules the next million reads would buy, from preseq
+  components:
+  # ------------------------------------------------------------ coverage
+  - component_type: text
+    tag: ea-cov-intro
+    section: Genome coverage
+    title: How deep, and how even
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      [Qualimap](http://qualimap.conesalab.org) BamQC on the mapped,
+      deduplicated BAM. Ancient shotgun libraries are usually shallow (well
+      under 1X here); the coverage histogram on the MultiQC panel shows how
+      that depth is distributed across the genome.
+    workflow_tag: eager
+    data_collection_tag: qualimap_bamqc_genome_results
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: figure
+    tag: ea-cov-fig-bar
+    index: ea-cov-fig-bar
+    section: Genome coverage
+    workflow_tag: eager
+    data_collection_tag: qualimap_bamqc_genome_results
+    use: qualimap/bamqc_genome_results
+    visu_type: bar
+    dict_kwargs: {x: sample, y: mean_coverage, color: sample}
+    title: Mean genome coverage per library
+    description: Mean depth over the reference, from Qualimap BamQC.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 8, h: 6}
+  - component_type: card
+    tag: ea-cov-card-mean
+    index: ea-cov-card-mean
+    section: Genome coverage
+    workflow_tag: eager
+    data_collection_tag: qualimap_bamqc_genome_results
+    use: qualimap/bamqc_genome_results
+    aggregation: average
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 2
+    column_name: mean_coverage
+    column_type: float64
+    display: {icon_name: 'mdi:waves', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Mean coverage
+    layout: {x: 0, y: 7, w: 2, h: 2}
+  - component_type: card
+    tag: ea-cov-card-gc
+    index: ea-cov-card-gc
+    section: Genome coverage
+    workflow_tag: eager
+    data_collection_tag: qualimap_bamqc_genome_results
+    use: qualimap/bamqc_genome_results
+    aggregation: average
+    secondary_layout: donut
+    breakdown_col: sample
+    column_name: gc_percentage
+    column_type: float64
+    display: {icon_name: 'mdi:chart-donut', icon_color: '#26A69A', title_color: '#26A69A', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: GC content
+    layout: {x: 2, y: 7, w: 2, h: 2}
+  - component_type: multiqc
+    tag: ea-cov-mqc-hist
+    section: Genome coverage
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    selected_module: qualimap
+    selected_plot: Coverage histogram
+    use: multiqc/qualimap
+    title: Coverage histogram (MultiQC)
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 7, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ea-cov-mqc-cumulative
+    section: Genome coverage
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    selected_module: qualimap
+    selected_plot: Cumulative genome coverage
+    use: multiqc/qualimap
+    title: Cumulative genome coverage (MultiQC)
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 12, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ea-cov-mqc-gc
+    section: Genome coverage
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    selected_module: qualimap
+    selected_plot: GC content distribution
+    use: multiqc/qualimap
+    title: GC content distribution (MultiQC)
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 12, w: 4, h: 5}
+  - component_type: table
+    tag: ea-cov-table
+    section: Genome coverage
+    workflow_tag: eager
+    data_collection_tag: qualimap_bamqc_genome_results
+    use: qualimap/bamqc_genome_results
+    row_selection_enabled: false
+    title: BamQC summary
+    description: Mean coverage, mapping quality, error rate and duplication per library.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 17, w: 8, h: 7}
+
+  # -------------------------------------------------------- library complexity
+  - component_type: text
+    tag: ea-complex-intro
+    section: Library complexity
+    title: Is this library sequenced out?
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      [preseq lc_extrap](http://smithlabresearch.org/software/preseq/)
+      extrapolates how many additional unique molecules the next reads would
+      buy. A curve still climbing steeply means the library has more to give;
+      one that has flattened means the extract, not the sequencing, is the
+      limit.
+    workflow_tag: eager
+    data_collection_tag: preseq_complexity_curve
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: ea-complex-av-curve
+    section: Library complexity
+    workflow_tag: eager
+    data_collection_tag: preseq_complexity_curve
+    use: preseq/complexity_curve
+    config: {series_col: sample, x_col: total_reads, y_col: expected_distinct, lower_col: lower_ci, upper_col: upper_ci}
+    title: Library complexity curve
+    description: Expected distinct molecules against total reads, extrapolated per library. This run's preseq step wrote no bootstrap confidence interval, so the ribbon is flat.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 8, h: 7}
+  - component_type: card
+    tag: ea-complex-card-distinct
+    index: ea-complex-card-distinct
+    section: Library complexity
+    workflow_tag: eager
+    data_collection_tag: preseq_complexity_curve
+    use: preseq/complexity_curve
+    aggregation: max
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 2
+    column_name: expected_distinct
+    column_type: float64
+    display: {icon_name: 'mdi:chart-line', icon_color: '#42A5F5', title_color: '#42A5F5', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Peak expected distinct
+    layout: {x: 0, y: 8, w: 2, h: 2}
+  - component_type: multiqc
+    tag: ea-complex-mqc
+    section: Library complexity
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    selected_module: preseq
+    selected_plot: Complexity curve (molecule count)
+    use: multiqc/preseq
+    title: Complexity curve (MultiQC)
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 8, w: 6, h: 5}
+  - component_type: table
+    tag: ea-complex-table
+    section: Library complexity
+    workflow_tag: eager
+    data_collection_tag: preseq_complexity_curve
+    use: preseq/complexity_curve
+    row_selection_enabled: false
+    title: Complexity curve, per library
+    description: total_reads / expected_distinct pairs the curve above is drawn from.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 13, w: 8, h: 7}
+
+# ============================================================================
+# Damage authentication
+# ============================================================================
+- title: Damage authentication
+  subtitle: The C>T / G>A misincorporation signature at the read ends, the ancient-DNA authenticity read
+  tab_order: 4
+  tab_icon: mdi:dna
+  tab_icon_color: red
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  grid_sections:
+  - name: Misincorporation signature
+    icon: mdi:dna
+    color: red
+    description: Substitution frequency by distance from the read end, from DamageProfiler
+  components:
+  - component_type: text
+    tag: ea-dmg-intro
+    section: Misincorporation signature
+    title: Does this library look ancient?
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      [DamageProfiler](https://github.com/Integrative-Transcriptomics/DamageProfiler)
+      counts, at each position from a read end, how often the reference base
+      was read as something else. Authentic ancient DNA shows C>T
+      substitutions rising sharply at the 5' end and the complementary G>A
+      rise at the 3' end, both well above the flat background every other
+      substitution type traces out. A run with no such rise, on fresh
+      material, is not damage, it is contamination or a library-prep
+      artefact.
+    workflow_tag: eager
+    data_collection_tag: damageprofiler_misincorporation
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: ea-dmg-av-profile
+    section: Misincorporation signature
+    workflow_tag: eager
+    data_collection_tag: damageprofiler_misincorporation
+    use: damageprofiler/misincorporation
+    config: {}
+    title: Misincorporation profile, 5' and 3'
+    description: C>T and G>A frequency by position from the read end, every other substitution pooled as the background it is read against.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 7}
+  - component_type: figure
+    tag: ea-dmg-fig-line
+    index: ea-dmg-fig-line
+    section: Misincorporation signature
+    workflow_tag: eager
+    data_collection_tag: damageprofiler_misincorporation
+    use: damageprofiler/misincorporation
+    visu_type: line
+    dict_kwargs: {x: position, y: frequency, color: base_change}
+    title: Misincorporation frequency by position
+    description: One line per substitution class, pooled across libraries and read ends.
+    title_size: h3
+    layout: {x: 0, y: 9, w: 8, h: 6}
+  - component_type: card
+    tag: ea-dmg-card-ct
+    index: ea-dmg-card-ct
+    section: Misincorporation signature
+    workflow_tag: eager
+    data_collection_tag: damageprofiler_misincorporation
+    use: damageprofiler/misincorporation
+    aggregation: max
+    secondary_layout: top_n
+    breakdown_col: base_change
+    top_n_count: 3
+    column_name: frequency
+    column_type: float64
+    display: {icon_name: 'mdi:dna', icon_color: '#EF5350', title_color: '#EF5350', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Peak substitution frequency
+    layout: {x: 0, y: 15, w: 2, h: 2}
+  - component_type: multiqc
+    tag: ea-dmg-mqc-5p
+    section: Misincorporation signature
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    selected_module: damageprofiler
+    selected_plot: 5P misincorporation plot
+    use: multiqc/damageprofiler
+    title: 5' misincorporation (MultiQC)
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 15, w: 3, h: 5}
+  - component_type: multiqc
+    tag: ea-dmg-mqc-3p
+    section: Misincorporation signature
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    selected_module: damageprofiler
+    selected_plot: 3P misincorporation plot
+    use: multiqc/damageprofiler
+    title: 3' misincorporation (MultiQC)
+    title_size: sm
+    title_align: left
+    layout: {x: 5, y: 15, w: 3, h: 5}
+  - component_type: table
+    tag: ea-dmg-table
+    section: Misincorporation signature
+    workflow_tag: eager
+    data_collection_tag: damageprofiler_misincorporation
+    use: damageprofiler/misincorporation
+    row_selection_enabled: false
+    title: Misincorporation table
+    description: One row per (library, read end, position, substitution class).
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 20, w: 8, h: 7}
+
+# ============================================================================
+# Genotyping
+# ============================================================================
+- title: Genotyping
+  subtitle: Variant calls from GATK HaplotypeCaller, summarised by bcftools stats
+  tab_order: 5
+  tab_icon: mdi:scale-balance
+  tab_icon_color: grape
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  grid_sections:
+  - name: Variant calls
+    icon: mdi:scale-balance
+    color: grape
+    description: bcftools stats over the HaplotypeCaller VCFs, no per-variant table is bound here, only the MultiQC summary (bcftools/stats_* is nf-core/sarek's catalog output)
+  components:
+  - component_type: text
+    tag: ea-geno-intro
+    section: Variant calls
+    title: What GATK called
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      [bcftools stats](https://samtools.github.io/bcftools/) over the
+      GATK HaplotypeCaller VCFs. Read this next to the coverage tab: a
+      shallow, damaged library calls far fewer confident variants than its
+      raw read count alone would suggest.
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    tag: ea-geno-mqc-subtypes
+    section: Variant calls
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    selected_module: bcftools
+    selected_plot: Variant Substitution Types
+    use: multiqc/bcftools
+    title: Substitution types (MultiQC)
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 1, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ea-geno-mqc-quality
+    section: Variant calls
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    selected_module: bcftools
+    selected_plot: Variant Quality
+    use: multiqc/bcftools
+    title: Variant quality (MultiQC)
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 1, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ea-geno-mqc-indels
+    section: Variant calls
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    selected_module: bcftools
+    selected_plot: Indel Distribution
+    use: multiqc/bcftools
+    title: Indel length distribution (MultiQC)
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 6, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ea-geno-mqc-depths
+    section: Variant calls
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    selected_module: bcftools
+    selected_plot: Variant depths
+    use: multiqc/bcftools
+    title: Variant depths (MultiQC)
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 6, w: 4, h: 5}

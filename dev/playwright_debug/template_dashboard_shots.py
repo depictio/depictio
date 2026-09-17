@@ -200,11 +200,15 @@ async def run_one(
     settle_ms: int,
     panel_timeout_ms: int,
     headless: bool,
+    project_prefix: str = "",
 ) -> None:
     version_dir = PROJECTS_DIR / template
     base = version_dir / "dashboards" / "base.yaml"
     doc = yaml.safe_load(base.read_text())
     project_tag = doc["main_dashboard"]["project_tag"]
+    if project_prefix:
+        # Ingested with `--project-name <prefix><pipeline>` instead of the YAML's name.
+        project_tag = f"{project_prefix}{template.split('/')[1]}"
     payload = token_payload()
     token = json.loads(payload).get("access_token")
     dashboard_id = resolve_dashboard(api_url, token, project_tag)
@@ -239,6 +243,10 @@ def main(
         120_000, help="how long to let a tab's panels finish loading before capturing"
     ),
     headless: bool = typer.Option(True, "--headless/--headed"),
+    project_prefix: str = typer.Option(
+        "",
+        help="match projects ingested as <prefix><pipeline> (e.g. lot2-) instead of the YAML name",
+    ),
 ) -> None:
     names = templates_with_docs() if every else list(template)
     if not names:
@@ -258,6 +266,7 @@ def main(
                     settle_ms,
                     panel_timeout_ms,
                     headless,
+                    project_prefix,
                 )
             )
         except Exception as exc:  # one bad template must not sink the batch

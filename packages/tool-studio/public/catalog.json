@@ -777,6 +777,1535 @@
     },
     {
       "biotools_url": null,
+      "description": "Long-read transcript discovery and quantification from spliced alignments, used by nf-core/nanoseq for gene- and transcript-level counting.",
+      "dir": "depictio/catalog/bambu",
+      "homepage": "https://github.com/GoekeLab/bambu",
+      "id": "bambu",
+      "name": "Bambu",
+      "nf_core_url": null,
+      "outputs": [
+        {
+          "columns": {},
+          "description": "Bambu gene-level read counts, the top 50 genes by total count across samples, features x samples.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/bambu/counts_gene.txt",
+            "path_glob_alt": []
+          },
+          "fixture": "counts_gene.tsv",
+          "fixtureContent": "gene_id\tgene_biotype\tK562_R2\tK562_R1\tA549_R3\tA549_R1\tK562_R3\tA549_R2\nENSG00000205426\tprotein_coding\t0.0\t0.0\t9856.0\t19500.0\t0.0\t18511.0\nENSG00000210082\tMt_rRNA\t372.0\t4963.0\t3613.0\t5678.0\t19214.0\t10309.0\nENSG00000198786\tprotein_coding\t6799.0\t5809.0\t7073.0\t316.0\t13749.0\t9500.0\nENSG00000196565\tprotein_coding\t5945.0\t7729.0\t0.0\t0.0\t27642.0\t0.0\nENSG00000087086\tprotein_coding\t525.0\t1492.0\t5823.0\t9182.0\t4465.0\t8131.0\nENSG00000198886\tprotein_coding\t2705.0\t1330.0\t1924.0\t225.0\t16814.0\t5487.0\nENSG00000198938\tprotein_coding\t2368.0\t1094.0\t925.0\t59.0\t12436.0\t10420.0\nENSG00000236552\tpseudogene\t2225.0\t4192.0\t2818.0\t8953.0\t4860.0\t2951.0\nENSG00000075624\tprotein_coding\t390.0\t1983.0\t3297.0\t11426.0\t2023.0\t6257.0\nENSG00000111640\tprotein_coding\t349.0\t1661.0\t4154.0\t6726.0\t3859.0\t8274.0\nENSG00000105372\tprotein_coding\t1136.0\t2720.0\t2724.0\t11869.0\t3013.0\t3080.0\nENSG00000140988\tprotein_coding\t1956.0\t2346.0\t3189.0\t4815.0\t6485.0\t4602.0\nENSG00000197956\tprotein_coding\t24.0\t142.0\t3642.0\t12525.0\t173.0\t4175.0\nENSG00000156508\tprotein_coding\t2262.0\t2211.0\t2124.0\t1829.0\t7153.0\t4957.0\nENSG00000234851\tpseudogene\t1276.0\t2733.0\t2217.0\t7418.0\t4059.0\t2275.0\n",
+          "id": "bambu_counts_gene",
+          "mode": "quantification/gene",
+          "name": "Gene-level quantification",
+          "path_glob": "**/bambu/counts_gene.txt",
+          "rawYaml": "id: bambu_counts_gene\nname: Gene-level quantification\nmode: quantification/gene\ndescription: >-\n  Bambu gene-level read counts, the top 50 genes by total count across\n  samples, features x samples.\nfind: { path_glob: \"**/bambu/counts_gene.txt\" }\nrecipe: bambu/counts_gene.py\nfixture: counts_gene.tsv\nrenders_as:\n  - { id: top_expressed_genes_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: gene_id} }\n  - { component: card, column: gene_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: gene_biotype, top_n_count: 3 }\n  - { component: card, column: gene_biotype, aggregation: nunique, secondary_layout: donut, breakdown_col: gene_biotype }\n  - { component: table }\n",
+          "recipe": "bambu/counts_gene.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "top_expressed_genes_heatmap",
+              "kind": "complex_heatmap",
+              "roles": {
+                "index": "gene_id"
+              }
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "gene_biotype",
+              "column": "gene_id",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "gene_biotype",
+              "column": "gene_biotype",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "donut"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "counts_gene",
+          "yamlPath": "depictio/catalog/bambu/counts_gene.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Bambu transcript-level read counts, the top 50 transcripts by total count across samples, features x samples.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/bambu/counts_transcript.txt",
+            "path_glob_alt": []
+          },
+          "fixture": "counts_transcript.tsv",
+          "fixtureContent": "transcript_id\tgene_id\tK562_R2\tK562_R1\tA549_R3\tA549_R1\tK562_R3\tA549_R2\nENST00000327741\tENSG00000205426\t0.0\t0.0\t9856.0\t19500.0\t0.0\t18511.0\nENST00000387347\tENSG00000210082\t372.0\t4963.0\t3613.0\t5678.0\t19214.0\t10309.0\nENST00000361567\tENSG00000198786\t6799.0\t5809.0\t7073.0\t316.0\t13749.0\t9500.0\nENST00000380259\tENSG00000196565\t5945.0\t7729.0\t0.0\t0.0\t27642.0\t0.0\nENST00000331825\tENSG00000087086\t525.0\t1492.0\t5823.0\t9182.0\t4465.0\t8131.0\nENST00000361381\tENSG00000198886\t2705.0\t1330.0\t1924.0\t225.0\t16814.0\t5487.0\nENST00000362079\tENSG00000198938\t2368.0\t1094.0\t925.0\t59.0\t12436.0\t10420.0\nENST00000439189\tENSG00000236552\t2225.0\t4192.0\t2818.0\t8953.0\t4860.0\t2951.0\nENST00000331789\tENSG00000075624\t390.0\t1983.0\t3297.0\t11426.0\t2023.0\t6257.0\nENST00000229239\tENSG00000111640\t349.0\t1661.0\t4154.0\t6726.0\t3859.0\t8274.0\nENST00000598742\tENSG00000105372\t1136.0\t2720.0\t2724.0\t11869.0\t3013.0\t3080.0\nENST00000343262\tENSG00000140988\t1956.0\t2346.0\t3189.0\t4815.0\t6485.0\t4602.0\nENST00000309268\tENSG00000156508\t2262.0\t2211.0\t2124.0\t1829.0\t7153.0\t4957.0\nENST00000438478\tENSG00000234851\t1276.0\t2733.0\t2217.0\t7418.0\t4059.0\t2275.0\nENST00000368719\tENSG00000197956\t23.9999998211861\t135.104720657432\t3493.0720985679\t12015.0471062171\t167.086320506234\t3985.19668726627\n",
+          "id": "bambu_counts_transcript",
+          "mode": "quantification/transcript",
+          "name": "Transcript-level quantification",
+          "path_glob": "**/bambu/counts_transcript.txt",
+          "rawYaml": "id: bambu_counts_transcript\nname: Transcript-level quantification\nmode: quantification/transcript\ndescription: >-\n  Bambu transcript-level read counts, the top 50 transcripts by total count\n  across samples, features x samples.\nfind: { path_glob: \"**/bambu/counts_transcript.txt\" }\nrecipe: bambu/counts_transcript.py\nfixture: counts_transcript.tsv\nrenders_as:\n  - { id: top_expressed_transcripts_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: transcript_id} }\n  - { component: card, column: transcript_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: gene_id, top_n_count: 3 }\n  - { component: table }\n",
+          "recipe": "bambu/counts_transcript.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "top_expressed_transcripts_heatmap",
+              "kind": "complex_heatmap",
+              "roles": {
+                "index": "transcript_id"
+              }
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "gene_id",
+              "column": "transcript_id",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "counts_transcript",
+          "yamlPath": "depictio/catalog/bambu/counts_transcript.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": "https://bio.tools/bcftools",
+      "description": "",
+      "dir": "depictio/catalog/bcftools",
+      "homepage": "https://samtools.github.io/bcftools/",
+      "id": "bcftools",
+      "name": "BCFtools",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/bcftools/stats",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "Per-sample, per-caller variant record counts (SNPs, indels, multiallelic sites) from `bcftools stats`. Pipeline-agnostic: any workflow that runs `bcftools stats` per caller per sample, with the caller and sample in the path rather than in the file, lands in the same collection.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*.bcftools_stats.txt",
+            "path_glob_alt": []
+          },
+          "fixture": "stats_summary.tsv",
+          "fixtureContent": "sample\tcaller\tn_records\tn_no_alts\tn_snps\tn_mnps\tn_indels\tn_others\tn_multiallelic_sites\tn_multiallelic_snp_sites\tsnp_fraction\tlog10_n_records\nNA12878_200M\tdeepvariant\t53631\t0\t47040\t0\t6596\t6\t96\t20\t0.8771\t4.7294\nNA12878_200M\tfreebayes\t42747\t0\t38501\t870\t3382\t182\t377\t15\t0.9007\t4.6309\nNA12878_200M\thaplotypecaller\t45266\t0\t41163\t0\t4114\t0\t262\t19\t0.9094\t4.6558\nNA12878_200M\tmanta\t72\t0\t0\t0\t15\t37\t0\t0\t0.0\t1.8633\nNA12878_200M\tstrelka\t44701\t0\t41177\t0\t3524\t0\t256\t30\t0.9212\t4.6503\nNA12878_75M\tdeepvariant\t52603\t0\t46723\t0\t5886\t3\t88\t13\t0.8882\t4.721\nNA12878_75M\tfreebayes\t41690\t0\t37782\t818\t3095\t171\t326\t10\t0.9063\t4.62\nNA12878_75M\thaplotypecaller\t44387\t0\t40521\t0\t3877\t0\t224\t17\t0.9129\t4.6473\nNA12878_75M\tmanta\t57\t0\t0\t0\t7\t32\t0\t0\t0.0\t1.7634\nNA12878_75M\tstrelka\t45914\t0\t42620\t0\t3294\t0\t184\t26\t0.9283\t4.662\n",
+          "id": "bcftools_stats_summary",
+          "mode": "stats-summary",
+          "name": "Per-caller variant counts",
+          "path_glob": "**/*.bcftools_stats.txt",
+          "rawYaml": "id: bcftools_stats_summary\nname: Per-caller variant counts\nmode: stats-summary\ndescription: >-\n  Per-sample, per-caller variant record counts (SNPs, indels, multiallelic\n  sites) from `bcftools stats`. Pipeline-agnostic: any workflow that runs\n  `bcftools stats` per caller per sample, with the caller and sample in the\n  path rather than in the file, lands in the same collection.\nfind:\n  path_glob: \"**/*.bcftools_stats.txt\"\nrecipe: bcftools/stats_summary.py\nfixture: stats_summary.tsv\nrenders_as:\n  - { component: figure, visu_type: bar, dict_kwargs: {x: caller, y: n_snps, color: sample, barmode: group} }\n  - { component: card, column: n_snps, aggregation: sum, secondary_layout: top_n, breakdown_col: caller, top_n_count: 3 }\n  - { component: card, column: n_indels, aggregation: sum, secondary_layout: top_n, breakdown_col: caller, top_n_count: 3 }\n  - { component: card, column: n_multiallelic_sites, aggregation: sum, secondary_layout: donut, breakdown_col: caller }\n  - { id: caller_yield_dotplot, component: advanced_viz, kind: dot_plot, roles: {cluster: sample, gene: caller, mean_expression: log10_n_records, frac_expressing: snp_fraction} }\n  - { component: table }\n",
+          "recipe": "bcftools/stats_summary.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "barmode": "group",
+                "color": "sample",
+                "x": "caller",
+                "y": "n_snps"
+              },
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "caller",
+              "column": "n_snps",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "caller",
+              "column": "n_indels",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "caller",
+              "column": "n_multiallelic_sites",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "donut"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "caller_yield_dotplot",
+              "kind": "dot_plot",
+              "roles": {
+                "cluster": "sample",
+                "frac_expressing": "snp_fraction",
+                "gene": "caller",
+                "mean_expression": "log10_n_records"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "stats_summary",
+          "yamlPath": "depictio/catalog/bcftools/stats_summary.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Per-sample, per-caller transition/transversion ratio from `bcftools stats`. A germline WES/WGS SNP call set typically lands close to 2.0-2.1; a caller with too few SNPs to score (e.g. a structural-variant caller) reads 0.0 rather than being absent.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*.bcftools_stats.txt",
+            "path_glob_alt": []
+          },
+          "fixture": "stats_tstv.tsv",
+          "fixtureContent": "sample\tcaller\tts\ttv\tts_tv\tts_1st_alt\ttv_1st_alt\tts_tv_1st_alt\nNA12878_200M\tdeepvariant\t30375\t16685\t1.82\t30362\t16671\t1.82\nNA12878_200M\tfreebayes\t27722\t10639\t2.61\t27671\t10614\t2.61\nNA12878_200M\thaplotypecaller\t29453\t11729\t2.51\t29435\t11697\t2.52\nNA12878_200M\tmanta\t0\t0\t0.0\t0\t0\t0.0\nNA12878_200M\tstrelka\t29334\t11873\t2.47\t29327\t11850\t2.47\nNA12878_75M\tdeepvariant\t30089\t16647\t1.81\t30079\t16638\t1.81\nNA12878_75M\tfreebayes\t27289\t10361\t2.63\t27240\t10341\t2.63\nNA12878_75M\thaplotypecaller\t29058\t11480\t2.53\t29038\t11453\t2.54\nNA12878_75M\tmanta\t0\t0\t0.0\t0\t0\t0.0\nNA12878_75M\tstrelka\t30105\t12541\t2.4\t30098\t12522\t2.4\n",
+          "id": "bcftools_stats_tstv",
+          "mode": "stats-tstv",
+          "name": "Per-caller Ts/Tv ratio",
+          "path_glob": "**/*.bcftools_stats.txt",
+          "rawYaml": "id: bcftools_stats_tstv\nname: Per-caller Ts/Tv ratio\nmode: stats-tstv\ndescription: >-\n  Per-sample, per-caller transition/transversion ratio from `bcftools stats`.\n  A germline WES/WGS SNP call set typically lands close to 2.0-2.1; a caller\n  with too few SNPs to score (e.g. a structural-variant caller) reads 0.0\n  rather than being absent.\nfind:\n  path_glob: \"**/*.bcftools_stats.txt\"\nrecipe: bcftools/stats_tstv.py\nfixture: stats_tstv.tsv\nrenders_as:\n  - { component: figure, visu_type: bar, dict_kwargs: {x: caller, y: ts_tv, color: sample, barmode: group} }\n  - { component: card, column: ts_tv, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: table }\n",
+          "recipe": "bcftools/stats_tstv.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "barmode": "group",
+                "color": "sample",
+                "x": "caller",
+                "y": "ts_tv"
+              },
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "ts_tv",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "stats_tstv",
+          "yamlPath": "depictio/catalog/bcftools/stats_tstv.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": null,
+      "description": "",
+      "dir": "depictio/catalog/bismark",
+      "homepage": "https://github.com/FelixKrueger/Bismark",
+      "id": "bismark",
+      "name": "Bismark",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/bismark/align",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "Per-sample Bismark bisulfite alignment: pairs analysed, the unique-best-hit count and mapping efficiency Bismark itself reports, plus how many pairs never aligned or mapped to more than one place. MultiQC draws the bar; the exact counts behind it are only readable here.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*_bismark_bt2_PE_report.txt",
+            "path_glob_alt": [
+              "**/*_bismark_bt2_SE_report.txt"
+            ]
+          },
+          "fixture": "alignment_summary.tsv",
+          "fixtureContent": "sample\tpairs_analysed\tunique_best_hit\tmapping_efficiency_pct\tno_alignment\tnot_unique\nSRR7961102_GSM3415666_MShef11_low_oxygen_Q1\t10997339\t9055208\t82.3\t1439671\t502460\nSRR7961103_GSM3415667_MShef11_low_oxygen_Q2\t10202147\t8424468\t82.6\t1325105\t452574\nSRR7961104_GSM3415668_MShef11_low_oxygen_Q3\t27642107\t22345292\t80.8\t3921054\t1375761\nSRR7961150_GSM3415714_MShef4_bulk\t179412149\t138408891\t77.1\t31976733\t9026525\nSRR7961161_GSM3415725_MShef4_J1\t36566036\t29660736\t81.1\t5219276\t1686024\nSRR7961163_GSM3415727_MShef4_J2\t14456994\t11811151\t81.7\t2020284\t625559\nSRR7961164_GSM3415728_MShef4_J3\t19356487\t15743975\t81.3\t2755344\t857168\n",
+          "id": "bismark_alignment_summary",
+          "mode": "alignment",
+          "name": "Alignment summary",
+          "path_glob": "**/*_bismark_bt2_PE_report.txt",
+          "rawYaml": "id: bismark_alignment_summary\nname: Alignment summary\nmode: alignment\ndescription: >-\n  Per-sample Bismark bisulfite alignment: pairs analysed, the unique-best-hit\n  count and mapping efficiency Bismark itself reports, plus how many pairs\n  never aligned or mapped to more than one place. MultiQC draws the bar; the\n  exact counts behind it are only readable here.\nfind:\n  path_glob: \"**/*_bismark_bt2_PE_report.txt\"\n  path_glob_alt:\n    - \"**/*_bismark_bt2_SE_report.txt\"\nrecipe: bismark/alignment_summary.py\nfixture: alignment_summary.tsv\nrenders_as:\n  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: mapping_efficiency_pct, color: sample, title: Mapping efficiency per sample} }\n  - { component: card, column: mapping_efficiency_pct, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: mapping_efficiency_pct, aggregation: average, secondary_layout: threshold, threshold_value: 60.0, threshold_direction: min, threshold_warn: 70.0 }\n  - { component: card, column: pairs_analysed, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }\n  - { component: card, column: no_alignment, aggregation: sum, secondary_layout: histogram }\n  - { component: table }\n",
+          "recipe": "bismark/alignment_summary.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "sample",
+                "title": "Mapping efficiency per sample",
+                "x": "sample",
+                "y": "mapping_efficiency_pct"
+              },
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "mapping_efficiency_pct",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "mapping_efficiency_pct",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "threshold",
+              "threshold_direction": "min",
+              "threshold_value": 60.0,
+              "threshold_warn": 70.0
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample",
+              "column": "pairs_analysed",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "no_alignment",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "alignment_summary",
+          "yamlPath": "depictio/catalog/bismark/alignment_summary.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Per-sample Bismark PCR-duplicate removal: alignments examined, duplicates removed and the leftover count carried into methylation extraction. A duplication rate far above the run's median is the usual sign of a library that was oversequenced relative to its complexity.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*.deduplication_report.txt",
+            "path_glob_alt": []
+          },
+          "fixture": "deduplication_summary.tsv",
+          "fixtureContent": "sample\ttotal_alignments\tduplicates_removed\tpct_duplication\tleftover_sequences\nSRR7961102_GSM3415666_MShef11_low_oxygen_Q1\t9055201\t66725\t0.74\t8988476\nSRR7961103_GSM3415667_MShef11_low_oxygen_Q2\t8424466\t62024\t0.74\t8362442\nSRR7961104_GSM3415668_MShef11_low_oxygen_Q3\t22345272\t161092\t0.72\t22184180\nSRR7961150_GSM3415714_MShef4_bulk\t138408789\t50498994\t36.49\t87909795\nSRR7961161_GSM3415725_MShef4_J1\t29660706\t215715\t0.73\t29444991\nSRR7961163_GSM3415727_MShef4_J2\t11811141\t84461\t0.72\t11726680\nSRR7961164_GSM3415728_MShef4_J3\t15743960\t120473\t0.77\t15623487\n",
+          "id": "bismark_deduplication_summary",
+          "mode": "deduplication",
+          "name": "Deduplication summary",
+          "path_glob": "**/*.deduplication_report.txt",
+          "rawYaml": "id: bismark_deduplication_summary\nname: Deduplication summary\nmode: deduplication\ndescription: >-\n  Per-sample Bismark PCR-duplicate removal: alignments examined, duplicates\n  removed and the leftover count carried into methylation extraction. A\n  duplication rate far above the run's median is the usual sign of a library\n  that was oversequenced relative to its complexity.\nfind:\n  path_glob: \"**/*.deduplication_report.txt\"\nrecipe: bismark/deduplication_summary.py\nfixture: deduplication_summary.tsv\nrenders_as:\n  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: pct_duplication, color: sample, title: PCR duplication rate per sample} }\n  - { component: card, column: pct_duplication, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: pct_duplication, aggregation: max, secondary_layout: threshold, threshold_value: 20.0, threshold_direction: max, threshold_warn: 10.0 }\n  - { component: card, column: leftover_sequences, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }\n  - { component: table }\n",
+          "recipe": "bismark/deduplication_summary.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "sample",
+                "title": "PCR duplication rate per sample",
+                "x": "sample",
+                "y": "pct_duplication"
+              },
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "pct_duplication",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "pct_duplication",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "threshold",
+              "threshold_direction": "max",
+              "threshold_value": 20.0,
+              "threshold_warn": 10.0
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample",
+              "column": "leftover_sequences",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "deduplication_summary",
+          "yamlPath": "depictio/catalog/bismark/deduplication_summary.yaml"
+        },
+        {
+          "columns": {},
+          "description": "% methylation by read position, CpG context, read 1 and read 2 separately. MultiQC draws the same curve but as a static picture; here it is linkable through the sample filter, and the raw coverage behind each position stays queryable next to it.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*.M-bias.txt",
+            "path_glob_alt": []
+          },
+          "fixture": "mbias_curve.tsv",
+          "fixtureContent": "sample\tread\tseries\tposition\tpct_methylation\tcoverage\nSRR7961102_GSM3415666_MShef11_low_oxygen_Q1\tR1\tSRR7961102_GSM3415666_MShef11_low_oxygen_Q1 R1\t1\t88.17\t70027\nSRR7961102_GSM3415666_MShef11_low_oxygen_Q1\tR1\tSRR7961102_GSM3415666_MShef11_low_oxygen_Q1 R1\t2\t89.37\t60044\nSRR7961102_GSM3415666_MShef11_low_oxygen_Q1\tR1\tSRR7961102_GSM3415666_MShef11_low_oxygen_Q1 R1\t3\t86.75\t55990\nSRR7961102_GSM3415666_MShef11_low_oxygen_Q1\tR1\tSRR7961102_GSM3415666_MShef11_low_oxygen_Q1 R1\t4\t87.12\t59892\nSRR7961102_GSM3415666_MShef11_low_oxygen_Q1\tR1\tSRR7961102_GSM3415666_MShef11_low_oxygen_Q1 R1\t5\t88.79\t60758\nSRR7961102_GSM3415666_MShef11_low_oxygen_Q1\tR1\tSRR7961102_GSM3415666_MShef11_low_oxygen_Q1 R1\t6\t87.99\t64271\nSRR7961102_GSM3415666_MShef11_low_oxygen_Q1\tR1\tSRR7961102_GSM3415666_MShef11_low_oxygen_Q1 R1\t7\t87.39\t54626\nSRR7961102_GSM3415666_MShef11_low_oxygen_Q1\tR1\tSRR7961102_GSM3415666_MShef11_low_oxygen_Q1 R1\t8\t87.3\t54429\nSRR7961102_GSM3415666_MShef11_low_oxygen_Q1\tR2\tSRR7961102_GSM3415666_MShef11_low_oxygen_Q1 R2\t1\t73.59\t55607\nSRR7961102_GSM3415666_MShef11_low_oxygen_Q1\tR2\tSRR7961102_GSM3415666_MShef11_low_oxygen_Q1 R2\t2\t78.89\t52013\nSRR7961102_GSM3415666_MShef11_low_oxygen_Q1\tR2\tSRR7961102_GSM3415666_MShef11_low_oxygen_Q1 R2\t3\t82.24\t54712\nSRR7961102_GSM3415666_MShef11_low_oxygen_Q1\tR2\tSRR7961102_GSM3415666_MShef11_low_oxygen_Q1 R2\t4\t83.24\t56243\nSRR7961102_GSM3415666_MShef11_low_oxygen_Q1\tR2\tSRR7961102_GSM3415666_MShef11_low_oxygen_Q1 R2\t5\t82.5\t59442\nSRR7961102_GSM3415666_MShef11_low_oxygen_Q1\tR2\tSRR7961102_GSM3415666_MShef11_low_oxygen_Q1 R2\t6\t81.77\t50967\nSRR7961102_GSM3415666_MShef11_low_oxygen_Q1\tR2\tSRR7961102_GSM3415666_MShef11_low_oxygen_Q1 R2\t7\t81.32\t49597\nSRR7961102_GSM3415666_MShef11_low_oxygen_Q1\tR2\tSRR7961102_GSM3415666_MShef11_low_oxygen_Q1 R2\t8\t82.77\t53098\n",
+          "id": "bismark_mbias_curve",
+          "mode": "methylation/mbias",
+          "name": "CpG M-bias curve",
+          "path_glob": "**/*.M-bias.txt",
+          "rawYaml": "id: bismark_mbias_curve\nname: CpG M-bias curve\nmode: methylation/mbias\ndescription: >-\n  % methylation by read position, CpG context, read 1 and read 2 separately.\n  MultiQC draws the same curve but as a static picture; here it is linkable\n  through the sample filter, and the raw coverage behind each position stays\n  queryable next to it.\nfind:\n  path_glob: \"**/*.M-bias.txt\"\nrecipe: bismark/mbias_curve.py\nfixture: mbias_curve.tsv\nrenders_as:\n  - { id: mbias_cpg_profile, component: advanced_viz, kind: profile, roles: {series: series, x: position, y: pct_methylation} }\n  - { component: card, column: pct_methylation, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: table }\n",
+          "recipe": "bismark/mbias_curve.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "mbias_cpg_profile",
+              "kind": "profile",
+              "roles": {
+                "series": "series",
+                "x": "position",
+                "y": "pct_methylation"
+              }
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "pct_methylation",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "mbias_curve",
+          "yamlPath": "depictio/catalog/bismark/mbias_curve.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Post-deduplication, post-extraction methylation level in each cytosine context (CpG, CHG, CHH), one row per sample per context. CpG is where mammalian methylation concentrates; CHG and CHH sitting near zero is the usual bisulfite-conversion sanity check, not signal.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*_splitting_report.txt",
+            "path_glob_alt": []
+          },
+          "fixture": "methylation_context_summary.tsv",
+          "fixtureContent": "sample\tcontext\tmethylated_c\tunmethylated_c\tpct_methylated\nSRR7961102_GSM3415666_MShef11_low_oxygen_Q1\tCHG\t278005\t56264318\t0.5\nSRR7961102_GSM3415666_MShef11_low_oxygen_Q1\tCHH\t789763\t202132885\t0.4\nSRR7961102_GSM3415666_MShef11_low_oxygen_Q1\tCpG\t10100984\t1559476\t86.6\nSRR7961103_GSM3415667_MShef11_low_oxygen_Q2\tCHG\t385987\t51118282\t0.7\nSRR7961103_GSM3415667_MShef11_low_oxygen_Q2\tCHH\t787707\t189060196\t0.4\nSRR7961103_GSM3415667_MShef11_low_oxygen_Q2\tCpG\t9149421\t1329788\t87.3\nSRR7961104_GSM3415668_MShef11_low_oxygen_Q3\tCHG\t1009159\t162739915\t0.6\nSRR7961104_GSM3415668_MShef11_low_oxygen_Q3\tCHH\t2352506\t565250962\t0.4\nSRR7961104_GSM3415668_MShef11_low_oxygen_Q3\tCpG\t29108239\t4488066\t86.6\nSRR7961150_GSM3415714_MShef4_bulk\tCHG\t13471270\t761926925\t1.7\nSRR7961150_GSM3415714_MShef4_bulk\tCHH\t17844097\t2223606520\t0.8\nSRR7961150_GSM3415714_MShef4_bulk\tCpG\t160349849\t34354970\t82.4\nSRR7961161_GSM3415725_MShef4_J1\tCHG\t3872382\t221926077\t1.7\nSRR7961161_GSM3415725_MShef4_J1\tCHH\t5752259\t784418437\t0.7\nSRR7961161_GSM3415725_MShef4_J1\tCpG\t39926861\t7150664\t84.8\nSRR7961163_GSM3415727_MShef4_J2\tCHG\t1449909\t73701772\t1.9\nSRR7961163_GSM3415727_MShef4_J2\tCHH\t2252448\t273730609\t0.8\nSRR7961163_GSM3415727_MShef4_J2\tCpG\t13456556\t2040394\t86.8\nSRR7961164_GSM3415728_MShef4_J3\tCHG\t2050422\t98669379\t2.0\nSRR7961164_GSM3415728_MShef4_J3\tCHH\t3138552\t362374279\t0.9\nSRR7961164_GSM3415728_MShef4_J3\tCpG\t18282658\t2815193\t86.7\n",
+          "id": "bismark_methylation_context_summary",
+          "mode": "methylation/context",
+          "name": "Methylation by context",
+          "path_glob": "**/*_splitting_report.txt",
+          "rawYaml": "id: bismark_methylation_context_summary\nname: Methylation by context\nmode: methylation/context\ndescription: >-\n  Post-deduplication, post-extraction methylation level in each cytosine\n  context (CpG, CHG, CHH), one row per sample per context. CpG is where\n  mammalian methylation concentrates; CHG and CHH sitting near zero is the\n  usual bisulfite-conversion sanity check, not signal.\nfind:\n  path_glob: \"**/*_splitting_report.txt\"\nrecipe: bismark/methylation_context_summary.py\nfixture: methylation_context_summary.tsv\nrenders_as:\n  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: pct_methylated, color: context, title: \"% methylated cytosines by context\"} }\n  - { component: card, column: pct_methylated, aggregation: average, secondary_layout: donut, breakdown_col: context }\n  - { component: card, column: pct_methylated, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: methylated_c, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }\n  - { component: table }\n",
+          "recipe": "bismark/methylation_context_summary.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "context",
+                "title": "% methylated cytosines by context",
+                "x": "sample",
+                "y": "pct_methylated"
+              },
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "context",
+              "column": "pct_methylated",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "donut"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "pct_methylated",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample",
+              "column": "methylated_c",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "methylation_context_summary",
+          "yamlPath": "depictio/catalog/bismark/methylation_context_summary.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": null,
+      "description": "",
+      "dir": "depictio/catalog/cellbender",
+      "homepage": "https://cellbender.readthedocs.io/",
+      "id": "cellbender",
+      "name": "CellBender",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/cellbender/removebackground",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "CellBender's per-sample accounting of ambient-RNA removal: counts removed, cells found against the expected count, and the training convergence parameters.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/cellbender_removebackground/*_metrics.csv",
+            "path_glob_alt": []
+          },
+          "fixture": "metrics.tsv",
+          "fixtureContent": "sample\ttotal_raw_counts\ttotal_output_counts\ttotal_counts_removed\tfraction_counts_removed\texpected_cells\tfound_cells\tratio_of_found_cells_to_expected_cells\ttarget_fpr\npbmc8k\t46859112.0\t45579602.0\t1279510.0\t0.027\t4388.0\t8805.0\t2.007\t0.01\n",
+          "id": "cellbender_metrics",
+          "mode": "removebackground/metrics",
+          "name": "Ambient-RNA removal metrics",
+          "path_glob": "**/cellbender_removebackground/*_metrics.csv",
+          "rawYaml": "id: cellbender_metrics\nname: Ambient-RNA removal metrics\nmode: removebackground/metrics\ndescription: >-\n  CellBender's per-sample accounting of ambient-RNA removal: counts removed,\n  cells found against the expected count, and the training convergence\n  parameters.\nfind:\n  path_glob: \"**/cellbender_removebackground/*_metrics.csv\"\nrecipe: cellbender/metrics.py\nfixture: metrics.tsv\nrenders_as:\n  - { component: card, column: fraction_counts_removed, aggregation: average, secondary_layout: gauge, coverage_max: 1.0 }\n  - { component: card, column: found_cells, aggregation: max }\n  - { component: card, column: ratio_of_found_cells_to_expected_cells, aggregation: average, secondary_layout: threshold, threshold_value: 1.0 }\n  - { component: table }\n",
+          "recipe": "cellbender/metrics.py",
+          "renders_as": [
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "fraction_counts_removed",
+              "columns": [],
+              "component": "card",
+              "coverage_max": 1.0,
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "gauge"
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "found_cells",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {}
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "ratio_of_found_cells_to_expected_cells",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "threshold",
+              "threshold_value": 1.0
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "metrics",
+          "yamlPath": "depictio/catalog/cellbender/metrics.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": null,
+      "description": "",
+      "dir": "depictio/catalog/cellranger",
+      "homepage": "https://www.10xgenomics.com/support/software/cell-ranger",
+      "id": "cellranger",
+      "name": "Cell Ranger",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/cellranger/count",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "UMI count per barcode against its rank, summed from the raw feature-barcode matrix (background droplets included) and flagged against the barcodes Cell Ranger kept as cells, the knee that separates real cells from ambient noise.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/raw_feature_bc_matrix/matrix.mtx.gz",
+            "path_glob_alt": []
+          },
+          "fixture": "barcode_rank.tsv",
+          "fixtureContent": "sample\trank\tumi_count\tis_cell\npbmc8k\t1\t36766\ttrue\npbmc8k\t2\t27894\ttrue\npbmc8k\t3\t26812\ttrue\npbmc8k\t4\t26704\ttrue\npbmc8k\t5\t24441\ttrue\npbmc8k\t6\t23791\ttrue\npbmc8k\t7\t23097\ttrue\npbmc8k\t8\t23066\ttrue\npbmc8k\t9\t22868\ttrue\npbmc8k\t10\t22737\ttrue\npbmc8k\t11\t22586\ttrue\npbmc8k\t12\t22047\ttrue\npbmc8k\t13\t21841\ttrue\npbmc8k\t14\t21620\ttrue\npbmc8k\t15\t21590\ttrue\n",
+          "id": "cellranger_barcode_rank",
+          "mode": "count/barcode_rank",
+          "name": "Barcode-rank curve",
+          "path_glob": "**/raw_feature_bc_matrix/matrix.mtx.gz",
+          "rawYaml": "id: cellranger_barcode_rank\nname: Barcode-rank curve\nmode: count/barcode_rank\ndescription: >-\n  UMI count per barcode against its rank, summed from the raw\n  feature-barcode matrix (background droplets included) and flagged against\n  the barcodes Cell Ranger kept as cells, the knee that separates real\n  cells from ambient noise.\nfind:\n  path_glob: \"**/raw_feature_bc_matrix/matrix.mtx.gz\"\nrecipe: cellranger/barcode_rank.py\nfixture: barcode_rank.tsv\nrenders_as:\n  - { id: barcode_rank_knee, component: advanced_viz, kind: knee_plot, roles: {sample: sample, rank: rank, umi_count: umi_count, is_cell: is_cell} }\n  - { id: barcode_rank_curve, component: figure, visu_type: line, dict_kwargs: {x: rank, y: umi_count, color: sample, log_x: \"true\", log_y: \"true\", title: Barcode-rank curve} }\n  - { component: card, column: umi_count, aggregation: max, secondary_layout: histogram }\n  - { component: table }\n",
+          "recipe": "cellranger/barcode_rank.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "barcode_rank_knee",
+              "kind": "knee_plot",
+              "roles": {
+                "is_cell": "is_cell",
+                "rank": "rank",
+                "sample": "sample",
+                "umi_count": "umi_count"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "sample",
+                "log_x": "true",
+                "log_y": "true",
+                "title": "Barcode-rank curve",
+                "x": "rank",
+                "y": "umi_count"
+              },
+              "id": "barcode_rank_curve",
+              "roles": {},
+              "visu_type": "line"
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "umi_count",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "barcode_rank",
+          "yamlPath": "depictio/catalog/cellranger/barcode_rank.yaml"
+        },
+        {
+          "columns": {},
+          "description": "One row per called cell: UMI / gene counts, mito / ribo / hemoglobin / top-20 fractions, graph-based and k-means clusters, UMAP / t-SNE / PCA coordinates, CellBender agreement and a MAD-based QC flag. The hub every other cell-level cellranger output joins to.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/filtered_feature_bc_matrix/matrix.mtx.gz",
+            "path_glob_alt": []
+          },
+          "fixture": "cell_qc.tsv",
+          "fixtureContent": "sample\tbarcode\tbarcode_core\tn_umi\tn_genes\tpct_mito\tpct_ribo\tpct_hb\tpct_top20\tlog10_n_umi\tlog10_n_genes\tgraphclust\tcluster_label\tkmeans_2\tkmeans_3\tkmeans_4\tkmeans_5\tkmeans_6\tkmeans_7\tkmeans_8\tkmeans_9\tkmeans_10\tumap_1\tumap_2\ttsne_1\ttsne_2\tpc_1\tpc_2\tpc_3\tcellbender_cell\tmad_low_umi\tmad_low_genes\tmad_high_top20\tmad_high_mito\tqc_status\tqc_reason\tqc_flagged\npbmc8k\tAAACCTGAGCATCATC-1\tAAACCTGAGCATCATC\t3398\t1556\t0.0\t25.338434373160684\t0.0\t18.658034137728073\t3.5312233745330266\t3.19200959265367\tC1\tC1 VPREB3/OSBPL10\tC1\tC1\tC4\tC4\tC4\tC4\tC4\tC4\tC3\t-12.567150252521328\t9.852710755090245\t-30.838143586837596\t7.491039877268158\t4.746468131678811\t28.119563085323893\t5.866219975404079\ttrue\tfalse\tfalse\tfalse\tfalse\tpass\tpass\t0\npbmc8k\tAAACCTGAGCTAACTC-1\tAAACCTGAGCTAACTC\t2055\t1132\t0.0\t19.51338199513382\t0.0\t16.4963503649635\t3.3128118262120876\t3.0538464268522523\tC7\tC7 PF4/PPBP\tC2\tC2\tC2\tC2\tC2\tC2\tC3\tC3\tC2\t7.3828928289317215\t-8.322282974604862\t-18.701684050117578\t-16.859050240082244\t-26.475886297791437\t-0.3272540226453846\t-5.149626675905316\ttrue\tfalse\tfalse\tfalse\tfalse\tpass\tpass\t0\npbmc8k\tAAACCTGAGCTAGTGG-1\tAAACCTGAGCTAGTGG\t5296\t1841\t0.0\t38.5762839879154\t0.0\t22.432024169184288\t3.7239479764316434\t3.2650537885040145\tC6\tC6 LMNA/AQP3\tC1\tC1\tC1\tC1\tC1\tC1\tC2\tC2\tC4\t6.379259321235724\t8.516472447155344\t7.973305173586781\t11.200011559576886\t7.983307872482191\t-5.780001915547337\t-5.360812352378476\ttrue\tfalse\tfalse\tfalse\tfalse\tpass\tpass\t0\npbmc8k\tAAACCTGCACATTAGC-1\tAAACCTGCACATTAGC\t3272\t1298\t0.0\t39.54767726161369\t0.0\t26.71149144254279\t3.514813294999285\t3.11327469246435\tC3\tC3 LOC101060038/AK5\tC1\tC1\tC1\tC1\tC1\tC1\tC1\tC1\tC1\t3.295224847800412\t12.91055053234578\t17.109150663224295\t-11.868584730954733\t11.172600124508698\t-1.2144336826538993\t-11.252953793928373\ttrue\tfalse\tfalse\tfalse\tfalse\tpass\tpass\t0\npbmc8k\tAAACCTGCACTGTTAG-1\tAAACCTGCACTGTTAG\t5656\t2162\t0.0\t18.741159830268742\t0.0\t20.2970297029703\t3.7525094007888424\t3.3348556896172914\tC2\tC2 FCAR/CLEC4E\tC2\tC2\tC2\tC2\tC2\tC2\tC3\tC3\tC2\t4.258614679821567\t-9.8221411217622\t2.4004679527048447\t-35.55242770382979\t-31.37274412560795\t-2.0872564824638173\t-1.0586255658716235\ttrue\tfalse\tfalse\tfalse\tfalse\tpass\tpass\t0\npbmc8k\tAAACCTGCATAGTAAG-1\tAAACCTGCATAGTAAG\t5101\t1986\t0.0\t18.741423250343068\t0.0\t21.093903156243872\t3.7076553235311867\t3.2979792441593623\tC2\tC2 FCAR/CLEC4E\tC2\tC2\tC2\tC2\tC2\tC2\tC3\tC3\tC2\t6.106607470588091\t-8.936649883552656\t-11.963658188967406\t-28.21280540567274\t-33.33090197275386\t-3.1659475785621805\t-4.363204146952026\ttrue\tfalse\tfalse\tfalse\tfalse\tpass\tpass\t0\npbmc8k\tAAACCTGCATGAACCT-1\tAAACCTGCATGAACCT\t3893\t1792\t0.0\t18.854353968661698\t0.0\t20.678140251733883\t3.5902844037181616\t3.253338005326106\tC4\tC4 TARP/GZMK\tC1\tC3\tC3\tC3\tC3\tC3\tC2\tC6\tC5\t6.434022294215443\t3.0552516595432717\t-13.025830247371857\t34.07056328830619\t5.573883189033981\t-11.594027386907193\t18.73842685136254\ttrue\tfalse\tfalse\tfalse\tfalse\tpass\tpass\t0\npbmc8k\tAAACCTGGTAAGAGGA-1\tAAACCTGGTAAGAGGA\t6037\t2035\t0.0\t39.55607089614047\t0.0\t22.594003644194135\t3.7808211758534727\t3.308564413561238\tC3\tC3 LOC101060038/AK5\tC1\tC1\tC1\tC1\tC1\tC1\tC1\tC1\tC1\t0.6637616459793628\t12.100855335870635\t23.016580549269623\t8.567091136646894\t11.436569181359348\t-5.051782323039974\t-7.4570642737097375\ttrue\tfalse\tfalse\tfalse\tfalse\tpass\tpass\t0\npbmc8k\tAAACCTGGTAGAAGGA-1\tAAACCTGGTAGAAGGA\t6195\t2172\t0.0\t23.631961259079905\t0.0\t18.369652945924134\t3.792041310712082\t3.3368598209168088\tC12\tC12 LYPD2/MEG3\tC2\tC2\tC2\tC2\tC2\tC2\tC5\tC5\tC6\t3.5796772189279706\t-10.74362846718497\t5.495283328312089\t-32.594143664521845\t-27.187881649366613\t-1.1353365315841781\t-1.850564623780401\ttrue\tfalse\tfalse\tfalse\tfalse\tpass\tpass\t0\npbmc8k\tAAACCTGGTCCAGTGC-1\tAAACCTGGTCCAGTGC\t5137\t1678\t0.0\t43.215884757640644\t0.0\t24.936733502043996\t3.710709565724337\t3.2247919564926812\tC3\tC3 LOC101060038/AK5\tC1\tC1\tC1\tC1\tC1\tC1\tC1\tC1\tC1\t1.3814871277126146\t11.7557174829248\t40.54633461672481\t-3.069896692630014\t14.446974891087228\t-4.816340529663813\t-11.49431379649613\ttrue\tfalse\tfalse\tfalse\tfalse\tpass\tpass\t0\npbmc8k\tAAACCTGGTGTCTGAT-1\tAAACCTGGTGTCTGAT\t4158\t1774\t0.0\t28.234728234728234\t0.0\t22.51082251082251\t3.61888448499545\t3.248953615495707\tC13\tC13 FAAH2\tC1\tC3\tC1\tC1\tC1\tC1\tC2\tC2\tC4\t4.458609205502892\t7.142140529201306\t-4.010599421977277\t10.124425106378986\t10.000964781103356\t-6.8351326828033026\t2.0092956089786327\ttrue\tfalse\tfalse\tfalse\tfalse\tpass\tpass\t0\npbmc8k\tAAACCTGGTTTGCATG-1\tAAACCTGGTTTGCATG\t7249\t2525\t0.0\t21.589184715133122\t0.0\t17.160987722444474\t3.8602780997522346\t3.4022613824546797\tC2\tC2 FCAR/CLEC4E\tC2\tC2\tC2\tC2\tC2\tC2\tC3\tC3\tC2\t4.7631318870676305\t-10.605189924601135\t0.6244534524643316\t-33.06553697691776\t-32.65065309806055\t-2.578480697744487\t-1.3237063636937827\ttrue\tfalse\tfalse\tfalse\tfalse\tpass\tpass\t0\npbmc8k\tAAACCTGGTTTGTTTC-1\tAAACCTGGTTTGTTTC\t6408\t2256\t0.0\t33.86392009987516\t0.0\t21.161048689138575\t3.8067225030761813\t3.3533390953113043\tC5\tC5 LOC101060038/AK5\tC1\tC1\tC1\tC1\tC1\tC1\tC1\tC1\tC1\t0.47808044702025165\t9.227983220113568\t38.45297849517844\t18.680606118791104\t12.975469705175763\t-5.030021610277589\t-7.482442528099557\ttrue\tfalse\tfalse\tfalse\tfalse\tpass\tpass\t0\npbmc8k\tAAACCTGTCCGTTGCT-1\tAAACCTGTCCGTTGCT\t5958\t2153\t0.0\t36.47197045988587\t0.0\t21.920107418596846\t3.775100498879025\t3.333044029823487\tC1\tC1 VPREB3/OSBPL10\tC1\tC1\tC4\tC4\tC4\tC4\tC4\tC4\tC3\t-10.504426246833377\t9.724342065712833\t-40.35533689276569\t-7.4101405312885\t6.475133876820541\t23.380120800588287\t1.2292159190112373\ttrue\tfalse\tfalse\tfalse\tfalse\tpass\tpass\t0\npbmc8k\tAAACCTGTCCTGTAGA-1\tAAACCTGTCCTGTAGA\t4528\t2073\t0.0\t23.520318021201415\t0.0\t19.920494699646643\t3.655906418180215\t3.3165993020938602\tC4\tC4 TARP/GZMK\tC1\tC3\tC3\tC3\tC3\tC3\tC2\tC2\tC5\t5.288452117643818\t4.280574317036769\t-14.889566987242729\t20.65910738162961\t10.631721008328869\t-8.96326589767397\t15.7014787503533\ttrue\tfalse\tfalse\tfalse\tfalse\tpass\tpass\t0\npbmc8k\tAAACCTGTCGCCAAAT-1\tAAACCTGTCGCCAAAT\t6552\t2076\t0.0\t41.42246642246643\t0.0\t24.984737484737487\t3.816373888752362\t3.3172273491764197\tC3\tC3 LOC101060038/AK5\tC1\tC1\tC1\tC1\tC1\tC1\tC1\tC1\tC1\t1.5253311342205291\t12.256431198370525\t27.282815326985034\t-3.8371658762307845\t12.156246707064085\t-4.764609099062666\t-10.69176769539921\ttrue\tfalse\tfalse\tfalse\tfalse\tpass\tpass\t0\npbmc8k\tAAACCTGTCGTGGACC-1\tAAACCTGTCGTGGACC\t5591\t2032\t0.0\t35.1994276515829\t0.0\t21.17689143265963\t3.7474894922586723\t3.3079237036118814\tC14\tC14\tC2\tC2\tC2\tC2\tC2\tC2\tC3\tC3\tC2\t3.270469582213934\t-9.377323885491911\t17.660947024503766\t-23.035600051219145\t-13.514375431634546\t11.132544686820356\t-3.914803900678538\ttrue\tfalse\tfalse\tfalse\tfalse\tpass\tpass\t0\npbmc8k\tAAACCTGTCTACCAGA-1\tAAACCTGTCTACCAGA\t4583\t1830\t0.0\t30.264019201396465\t0.0\t22.387082696923414\t3.6611498572447867\t3.262451089730429\tC5\tC5 LOC101060038/AK5\tC1\tC1\tC1\tC1\tC1\tC1\tC1\tC1\tC1\t0.957359460011328\t9.040479755633822\t34.227677965274516\t20.533168352496777\t13.994131202006564\t-4.814038719738925\t-5.316594745870852\ttrue\tfalse\tfalse\tfalse\tfalse\tpass\tpass\t0\npbmc8k\tAAACCTGTCTCAAGTG-1\tAAACCTGTCTCAAGTG\t6227\t2166\t0.0\t35.024891601092015\t0.0\t21.230126866870084\t3.7942788657213993\t3.335658452289301\tC6\tC6 LMNA/AQP3\tC1\tC1\tC1\tC1\tC1\tC1\tC2\tC2\tC4\t6.452922316277846\t8.102824098422246\t6.553024564205262\t14.601258412354243\t7.949660387699909\t-6.921641713034556\t-3.2103963032012057\ttrue\tfalse\tfalse\tfalse\tfalse\tpass\tpass\t0\npbmc8k\tAAACCTGTCTCGCTTG-1\tAAACCTGTCTCGCTTG\t7128\t2408\t0.0\t20.763187429854096\t0.0\t22.13804713804714\t3.8529676910288178\t3.3816564825857864\tC2\tC2 FCAR/CLEC4E\tC2\tC2\tC2\tC2\tC2\tC2\tC3\tC3\tC2\t5.929000312149961\t-10.987918654988832\t5.747862248819311\t-20.652961260394527\t-31.75886643435153\t-2.2625784022328794\t-2.754043725010023\ttrue\tfalse\tfalse\tfalse\tfalse\tpass\tpass\t0\npbmc8k\tAAACCTGTCTGCGGCA-1\tAAACCTGTCTGCGGCA\t4034\t1619\t0.0\t35.32473971244423\t0.0\t22.33515121467526\t3.6057358938767465\t3.2092468487533736\tC3\tC3 LOC101060038/AK5\tC1\tC1\tC1\tC1\tC1\tC1\tC1\tC1\tC1\t0.6505583374616176\t12.333322586015136\t29.590938554076015\t0.5602798832887974\t11.283970347441715\t-4.2114123394236085\t-6.584286728825584\ttrue\tfalse\tfalse\tfalse\tfalse\tpass\tpass\t0\npbmc8k\tAAACCTGTCTTCGAGA-1\tAAACCTGTCTTCGAGA\t1062\t705\t0.0\t6.4030131826742\t0.0\t21.563088512241055\t3.02612451674545\t2.8481891169913984\tC1\tC1 VPREB3/OSBPL10\tC1\tC1\tC4\tC4\tC4\tC6\tC7\tC7\tC8\t-13.341645664145982\t11.215877398675852\t-29.33076900244601\t12.442531528031216\t2.830319683923025\t27.473720026844482\t14.334999058483127\ttrue\tfalse\tfalse\tfalse\tfalse\tpass\tpass\t0\npbmc8k\tAAACGGGAGCCTCGTG-1\tAAACGGGAGCCTCGTG\t10177\t2828\t0.0\t28.623366414463984\t0.0\t18.04067996462612\t4.007619774517403\t3.451479405124861\tC8\tC8 FCER1A/FLT3\tC2\tC2\tC2\tC2\tC2\tC2\tC3\tC3\tC2\t3.69618988270272\t-11.144263969372167\t5.072458050737133\t-43.83704713844585\t-25.264750879554835\t-1.8677507728089209\t-2.7183462272171255\ttrue\tfalse\tfalse\tfalse\tfalse\tpass\tpass\t0\npbmc8k\tAAACGGGAGGTGTGGT-1\tAAACGGGAGGTGTGGT\t3906\t1349\t0.0\t42.729134664618535\t0.0\t26.65130568356375\t3.591732238951835\t3.130011949671904\tC3\tC3 LOC101060038/AK5\tC1\tC1\tC1\tC1\tC1\tC1\tC1\tC1\tC1\t3.2199870279864817\t13.134182156746535\t18.391651043059777\t-12.800739490363242\t13.31685717712212\t-2.057619775439509\t-13.620644688590637\ttrue\tfalse\tfalse\tfalse\tfalse\tpass\tpass\t0\npbmc8k\tAAACGGGAGTACGATA-1\tAAACGGGAGTACGATA\t4682\t2051\t0.0\t13.968389577103801\t0.0\t17.257582229816318\t3.670431409360605\t3.3119656603683656\tC12\tC12 LYPD2/MEG3\tC2\tC2\tC2\tC2\tC5\tC5\tC5\tC5\tC6\t0.7489302164852785\t-10.068883578441366\t18.603248110259177\t-32.16169469793014\t-25.58233064960761\t-2.328009554577097\t8.586614798411203\ttrue\tfalse\tfalse\tfalse\tfalse\tpass\tpass\t0\n",
+          "id": "cellranger_cell_qc",
+          "mode": "analysis/cell_qc",
+          "name": "Per-cell QC, clusters and embeddings",
+          "path_glob": "**/filtered_feature_bc_matrix/matrix.mtx.gz",
+          "rawYaml": "id: cellranger_cell_qc\nname: Per-cell QC, clusters and embeddings\nmode: analysis/cell_qc\ndescription: >-\n  One row per called cell: UMI / gene counts, mito / ribo / hemoglobin /\n  top-20 fractions, graph-based and k-means clusters, UMAP / t-SNE / PCA\n  coordinates, CellBender agreement and a MAD-based QC flag. The hub every\n  other cell-level cellranger output joins to.\nfind:\n  path_glob: \"**/filtered_feature_bc_matrix/matrix.mtx.gz\"\nrecipe: cellranger/cell_qc.py\nfixture: cell_qc.tsv\nrenders_as:\n  - { id: umap_qc, component: advanced_viz, kind: embedding, roles: {sample_id: barcode, dim_1: umap_1, dim_2: umap_2, color: log10_n_genes, cluster: graphclust} }\n  - { id: umap_label, component: advanced_viz, kind: embedding, roles: {sample_id: barcode, dim_1: umap_1, dim_2: umap_2, cluster: cluster_label, color: cluster_label} }\n  - { id: tsne_label, component: advanced_viz, kind: embedding, roles: {sample_id: barcode, dim_1: tsne_1, dim_2: tsne_2, cluster: cluster_label, color: cluster_label} }\n  - { id: umi_vs_genes, component: advanced_viz, kind: scatter_xy, roles: {x: n_umi, y: n_genes, color: qc_status} }\n  - { id: cluster_stability, component: advanced_viz, kind: sankey, roles: {steps: [graphclust, kmeans_6, kmeans_10]} }\n  - { id: umi_histogram, component: figure, visu_type: histogram, dict_kwargs: {x: n_umi, title: UMI counts per cell} }\n  - { id: genes_histogram, component: figure, visu_type: histogram, dict_kwargs: {x: n_genes, title: Genes detected per cell} }\n  - { id: mito_box, component: figure, visu_type: box, dict_kwargs: {x: cluster_label, y: pct_mito, title: Mitochondrial fraction by cluster} }\n  - { component: card, column: n_umi, aggregation: median, secondary_layout: histogram }\n  - { component: card, column: n_genes, aggregation: median, secondary_layout: histogram }\n  - { component: card, column: pct_mito, aggregation: median, secondary_layout: threshold, threshold_value: 8.0 }\n  - { component: card, column: qc_flagged, aggregation: average, secondary_layout: gauge, coverage_max: 1.0 }\n  - { component: table, row_selection_enabled: true, row_selection_column: barcode }\n",
+          "recipe": "cellranger/cell_qc.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "umap_qc",
+              "kind": "embedding",
+              "roles": {
+                "cluster": "graphclust",
+                "color": "log10_n_genes",
+                "dim_1": "umap_1",
+                "dim_2": "umap_2",
+                "sample_id": "barcode"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "umap_label",
+              "kind": "embedding",
+              "roles": {
+                "cluster": "cluster_label",
+                "color": "cluster_label",
+                "dim_1": "umap_1",
+                "dim_2": "umap_2",
+                "sample_id": "barcode"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "tsne_label",
+              "kind": "embedding",
+              "roles": {
+                "cluster": "cluster_label",
+                "color": "cluster_label",
+                "dim_1": "tsne_1",
+                "dim_2": "tsne_2",
+                "sample_id": "barcode"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "umi_vs_genes",
+              "kind": "scatter_xy",
+              "roles": {
+                "color": "qc_status",
+                "x": "n_umi",
+                "y": "n_genes"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "cluster_stability",
+              "kind": "sankey",
+              "roles": {
+                "steps": [
+                  "graphclust",
+                  "kmeans_6",
+                  "kmeans_10"
+                ]
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "title": "UMI counts per cell",
+                "x": "n_umi"
+              },
+              "id": "umi_histogram",
+              "roles": {},
+              "visu_type": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "title": "Genes detected per cell",
+                "x": "n_genes"
+              },
+              "id": "genes_histogram",
+              "roles": {},
+              "visu_type": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "title": "Mitochondrial fraction by cluster",
+                "x": "cluster_label",
+                "y": "pct_mito"
+              },
+              "id": "mito_box",
+              "roles": {},
+              "visu_type": "box"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "n_umi",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "n_genes",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "pct_mito",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "threshold",
+              "threshold_value": 8.0
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "qc_flagged",
+              "columns": [],
+              "component": "card",
+              "coverage_max": 1.0,
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "gauge"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {},
+              "row_selection_column": "barcode",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "cell_qc",
+          "yamlPath": "depictio/catalog/cellranger/cell_qc.yaml"
+        },
+        {
+          "columns": {},
+          "description": "One row per graph-based cluster: size, QC medians and the share of cells CellBender also called, aggregated from the per-cell QC hub.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/filtered_feature_bc_matrix/matrix.mtx.gz",
+            "path_glob_alt": []
+          },
+          "fixture": "cluster_summary.tsv",
+          "fixtureContent": "sample\tgraphclust\tcluster_label\tn_cells\tpct_cells\tmedian_n_umi\tmedian_n_genes\tmedian_pct_mito\tpct_flagged\tpct_cellbender_cell\npbmc8k\tC1\tC1 VPREB3/OSBPL10\t1249\t14.246606592905211\t4215.0\t1729.0\t0.0\t0.5604483586869495\t99.67974379503602\npbmc8k\tC10\tC10 BNC2/SPON2\t264\t3.0112923462986196\t3996.0\t2003.0\t0.0\t0.0\t100.0\npbmc8k\tC11\tC11\t259\t2.954260294285388\t1355.0\t898.0\t0.0\t22.393822393822393\t96.52509652509652\npbmc8k\tC12\tC12 LYPD2/MEG3\t256\t2.9200410630774494\t8459.5\t2830.0\t0.0\t0.0\t100.0\npbmc8k\tC13\tC13 FAAH2\t251\t2.863009011064218\t4794.0\t1828.0\t0.0\t0.0\t100.0\npbmc8k\tC14\tC14\t129\t1.471426941941371\t8670.0\t2954.0\t0.0\t0.0\t100.0\npbmc8k\tC2\tC2 FCAR/CLEC4E\t1189\t13.562221968746435\t5353.0\t2027.0\t0.0\t0.0\t100.0\npbmc8k\tC3\tC3 LOC101060038/AK5\t1039\t11.851260408349493\t4772.0\t1681.0\t0.0\t0.0962463907603465\t100.0\npbmc8k\tC4\tC4 TARP/GZMK\t1023\t11.668757841907151\t4415.0\t1893.0\t0.0\t0.4887585532746823\t99.90224828934507\npbmc8k\tC5\tC5 LOC101060038/AK5\t952\t10.858902703319265\t5081.5\t1868.0\t0.0\t0.0\t100.0\npbmc8k\tC6\tC6 LMNA/AQP3\t939\t10.710619368084863\t5724.0\t2075.0\t0.0\t0.0\t100.0\npbmc8k\tC7\tC7 PF4/PPBP\t570\t6.501653929508383\t2482.0\t1164.5\t0.0\t8.947368421052632\t98.24561403508771\npbmc8k\tC8\tC8 FCER1A/FLT3\t340\t3.8781795368997374\t12667.5\t3588.5\t0.0\t0.0\t100.0\npbmc8k\tC9\tC9 LEF1/C14orf64\t307\t3.5017679936124098\t4221.0\t1573.0\t0.0\t0.0\t100.0\n",
+          "id": "cellranger_cluster_summary",
+          "mode": "analysis/cluster_summary",
+          "name": "Cluster summary",
+          "path_glob": "**/filtered_feature_bc_matrix/matrix.mtx.gz",
+          "rawYaml": "id: cellranger_cluster_summary\nname: Cluster summary\nmode: analysis/cluster_summary\ndescription: >-\n  One row per graph-based cluster: size, QC medians and the share of cells\n  CellBender also called, aggregated from the per-cell QC hub.\nfind:\n  path_glob: \"**/filtered_feature_bc_matrix/matrix.mtx.gz\"\nrecipe: cellranger/cluster_summary.py\nfixture: cluster_summary.tsv\nrenders_as:\n  - { id: cluster_sizes, component: figure, visu_type: bar, dict_kwargs: {x: cluster_label, y: n_cells, title: Cells per cluster} }\n  - { id: cluster_qc_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: cluster_label} }\n  - { component: card, column: n_cells, aggregation: sum, secondary_layout: top_n, breakdown_col: cluster_label, top_n_count: 3 }\n  - { component: table }\n",
+          "recipe": "cellranger/cluster_summary.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "title": "Cells per cluster",
+                "x": "cluster_label",
+                "y": "n_cells"
+              },
+              "id": "cluster_sizes",
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "cluster_qc_heatmap",
+              "kind": "complex_heatmap",
+              "roles": {
+                "index": "cluster_label"
+              }
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "cluster_label",
+              "column": "n_cells",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "cluster_summary",
+          "yamlPath": "depictio/catalog/cellranger/cluster_summary.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Top marker genes per graph-based cluster (cluster vs every other cell), ranked by adjusted p-value: log2 fold change, mean counts and significance.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/analysis/diffexp/gene_expression_graphclust/differential_expression.csv",
+            "path_glob_alt": []
+          },
+          "fixture": "diffexp.tsv",
+          "fixtureContent": "sample\tcluster\tcluster_label\trank_in_cluster\tgene_id\tgene\tmean_counts\tlog2fc\tadjusted_pvalue\npbmc8k\tCluster 1\tC1 VPREB3/OSBPL10\t1\tOSBPL10\tOSBPL10\t2.896799722190249\t6.5409940299474965\t6.677151185825382e-134\npbmc8k\tCluster 1\tC1 VPREB3/OSBPL10\t2\tCD79A\tCD79A\t5.9775232362655935\t6.106710636742871\t2.98983106244493e-130\npbmc8k\tCluster 1\tC1 VPREB3/OSBPL10\t3\tPAX5\tPAX5\t2.8135583508629427\t6.309716090985854\t1.5457838483727178e-128\npbmc8k\tCluster 1\tC1 VPREB3/OSBPL10\t4\tLINC00926\tLINC00926\t2.5939596855518596\t6.349314748460083\t7.242182897334487e-128\npbmc8k\tCluster 1\tC1 VPREB3/OSBPL10\t5\tBANK1\tBANK1\t6.488070313739737\t5.81776182226478\t1.4590529468535014e-121\npbmc8k\tCluster 1\tC1 VPREB3/OSBPL10\t7\tMS4A1\tMS4A1\t4.03681012189183\t5.963370121358485\t4.252282087587191e-121\npbmc8k\tCluster 1\tC1 VPREB3/OSBPL10\t6\tFCRL1\tFCRL1\t2.21422047730634\t6.15345464451716\t4.252282087587191e-121\npbmc8k\tCluster 1\tC1 VPREB3/OSBPL10\t8\tCD22\tCD22\t1.8503367683612593\t6.1641522334620005\t1.2087726519631363e-119\npbmc8k\tCluster 1\tC1 VPREB3/OSBPL10\t9\tVPREB3\tVPREB3\t1.1201910255760321\t6.615386021088421\t6.563585321959581e-119\npbmc8k\tCluster 1\tC1 VPREB3/OSBPL10\t10\tFCER2\tFCER2\t1.3088714672512591\t6.4285031744623415\t9.904848621909218e-119\npbmc8k\tCluster 1\tC1 VPREB3/OSBPL10\t11\tEBF1\tEBF1\t2.063593233952167\t6.1132526169374755\t1.8089603061812024e-114\npbmc8k\tCluster 1\tC1 VPREB3/OSBPL10\t12\tCOL19A1\tCOL19A1\t1.6148826037497366\t6.1502137573638835\t6.457000395941952e-110\npbmc8k\tCluster 1\tC1 VPREB3/OSBPL10\t13\tBLK\tBLK\t1.270025493965183\t5.872729212563685\t2.241691360880802e-107\npbmc8k\tCluster 1\tC1 VPREB3/OSBPL10\t14\tPLEKHG1\tPLEKHG1\t1.8828405419271597\t5.593364172459697\t4.6830901940484175e-102\npbmc8k\tCluster 1\tC1 VPREB3/OSBPL10\t15\tFCRLA\tFCRLA\t0.7166685683798536\t6.14524168573462\t4.722989184885951e-102\npbmc8k\tCluster 1\tC1 VPREB3/OSBPL10\t16\tLOC100507616\tLOC100507616\t0.5826895992911421\t6.342557076960277\t3.3954508828346104e-97\npbmc8k\tCluster 1\tC1 VPREB3/OSBPL10\t17\tCD24\tCD24\t0.5525641506203075\t6.266078347112916\t5.565540317814568e-97\npbmc8k\tCluster 1\tC1 VPREB3/OSBPL10\t18\tCD19\tCD19\t0.6048872983117569\t6.079233773058313\t2.7672186027555155e-96\npbmc8k\tCluster 1\tC1 VPREB3/OSBPL10\t19\tRALGPS2\tRALGPS2\t4.584617622722006\t5.0902373600544255\t6.665143799485117e-93\npbmc8k\tCluster 1\tC1 VPREB3/OSBPL10\t20\tANGPTL1\tANGPTL1\t2.7168398051302636\t5.1353318479605665\t5.202436405166617e-91\npbmc8k\tCluster 1\tC1 VPREB3/OSBPL10\t21\tFAM129C\tFAM129C\t2.4774217656936313\t5.165077667043566\t7.597406434857276e-91\npbmc8k\tCluster 1\tC1 VPREB3/OSBPL10\t22\tFCRL5\tFCRL5\t0.5565280254454172\t6.162719218180232\t3.743464593154118e-90\npbmc8k\tCluster 1\tC1 VPREB3/OSBPL10\t23\tCD79B\tCD79B\t5.426544635575329\t4.909577453551031\t5.587887498319133e-88\npbmc8k\tCluster 1\tC1 VPREB3/OSBPL10\t24\tIGLL5\tIGLL5\t2.914240771420732\t5.939409891141479\t4.599225078728039e-86\npbmc8k\tCluster 1\tC1 VPREB3/OSBPL10\t25\tTCL1A\tTCL1A\t3.5849283918293118\t5.030159381538768\t1.0991208487964788e-84\n",
+          "id": "cellranger_diffexp",
+          "mode": "analysis/diffexp",
+          "name": "Cluster marker genes",
+          "path_glob": "**/analysis/diffexp/gene_expression_graphclust/differential_expression.csv",
+          "rawYaml": "id: cellranger_diffexp\nname: Cluster marker genes\nmode: analysis/diffexp\ndescription: >-\n  Top marker genes per graph-based cluster (cluster vs every other cell),\n  ranked by adjusted p-value: log2 fold change, mean counts and\n  significance.\nfind:\n  path_glob: \"**/analysis/diffexp/gene_expression_graphclust/differential_expression.csv\"\nrecipe: cellranger/diffexp.py\nfixture: diffexp.tsv\nrenders_as:\n  - { id: cluster_markers, component: advanced_viz, kind: da_barplot, roles: {feature_id: gene, contrast: cluster, lfc: log2fc, significance: adjusted_pvalue, label: gene} }\n  - { id: cluster_volcano, component: advanced_viz, kind: volcano, roles: {feature_id: gene, effect_size: log2fc, significance: adjusted_pvalue, category: cluster_label, label: gene} }\n  - { component: card, column: gene, aggregation: nunique, secondary_layout: top_n, breakdown_col: cluster, top_n_count: 3 }\n  - { component: table, row_selection_enabled: true, row_selection_column: gene }\n",
+          "recipe": "cellranger/diffexp.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "cluster_markers",
+              "kind": "da_barplot",
+              "roles": {
+                "contrast": "cluster",
+                "feature_id": "gene",
+                "label": "gene",
+                "lfc": "log2fc",
+                "significance": "adjusted_pvalue"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "cluster_volcano",
+              "kind": "volcano",
+              "roles": {
+                "category": "cluster_label",
+                "effect_size": "log2fc",
+                "feature_id": "gene",
+                "label": "gene",
+                "significance": "adjusted_pvalue"
+              }
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "cluster",
+              "column": "gene",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {},
+              "row_selection_column": "gene",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "diffexp",
+          "yamlPath": "depictio/catalog/cellranger/diffexp.yaml"
+        },
+        {
+          "columns": {},
+          "description": "UMAP, t-SNE and the first 3 principal components of every cell, coloured by Cell Ranger's graph-based cluster.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/analysis/clustering/gene_expression_graphclust/clusters.csv",
+            "path_glob_alt": []
+          },
+          "fixture": "embedding.tsv",
+          "fixtureContent": "sample\tbarcode\tcluster\tumap_1\tumap_2\ttsne_1\ttsne_2\tpc_1\tpc_2\tpc_3\npbmc8k\tAAACCTGAGCATCATC-1\tCluster 1\t-12.567150252521328\t9.852710755090245\t-30.838143586837596\t7.491039877268158\t4.746468131678811\t28.119563085323893\t5.866219975404079\npbmc8k\tAAACCTGAGCTAACTC-1\tCluster 7\t7.3828928289317215\t-8.322282974604862\t-18.701684050117578\t-16.859050240082244\t-26.475886297791437\t-0.3272540226453846\t-5.149626675905316\npbmc8k\tAAACCTGAGCTAGTGG-1\tCluster 6\t6.379259321235724\t8.516472447155344\t7.973305173586781\t11.200011559576886\t7.983307872482191\t-5.780001915547337\t-5.360812352378476\npbmc8k\tAAACCTGCACATTAGC-1\tCluster 3\t3.295224847800412\t12.91055053234578\t17.109150663224295\t-11.868584730954733\t11.172600124508698\t-1.2144336826538993\t-11.252953793928373\npbmc8k\tAAACCTGCACTGTTAG-1\tCluster 2\t4.258614679821567\t-9.8221411217622\t2.4004679527048447\t-35.55242770382979\t-31.37274412560795\t-2.0872564824638173\t-1.0586255658716235\npbmc8k\tAAACCTGCATAGTAAG-1\tCluster 2\t6.106607470588091\t-8.936649883552656\t-11.963658188967406\t-28.21280540567274\t-33.33090197275386\t-3.1659475785621805\t-4.363204146952026\npbmc8k\tAAACCTGCATGAACCT-1\tCluster 4\t6.434022294215443\t3.0552516595432717\t-13.025830247371857\t34.07056328830619\t5.573883189033981\t-11.594027386907193\t18.73842685136254\npbmc8k\tAAACCTGGTAAGAGGA-1\tCluster 3\t0.6637616459793628\t12.100855335870635\t23.016580549269623\t8.567091136646894\t11.436569181359348\t-5.051782323039974\t-7.4570642737097375\npbmc8k\tAAACCTGGTAGAAGGA-1\tCluster 12\t3.5796772189279706\t-10.74362846718497\t5.495283328312089\t-32.594143664521845\t-27.187881649366613\t-1.1353365315841781\t-1.850564623780401\npbmc8k\tAAACCTGGTCCAGTGC-1\tCluster 3\t1.3814871277126146\t11.7557174829248\t40.54633461672481\t-3.069896692630014\t14.446974891087228\t-4.816340529663813\t-11.49431379649613\npbmc8k\tAAACCTGGTGTCTGAT-1\tCluster 13\t4.458609205502892\t7.142140529201306\t-4.010599421977277\t10.124425106378986\t10.000964781103356\t-6.8351326828033026\t2.0092956089786327\npbmc8k\tAAACCTGGTTTGCATG-1\tCluster 2\t4.7631318870676305\t-10.605189924601135\t0.6244534524643316\t-33.06553697691776\t-32.65065309806055\t-2.578480697744487\t-1.3237063636937827\npbmc8k\tAAACCTGGTTTGTTTC-1\tCluster 5\t0.47808044702025165\t9.227983220113568\t38.45297849517844\t18.680606118791104\t12.975469705175763\t-5.030021610277589\t-7.482442528099557\npbmc8k\tAAACCTGTCCGTTGCT-1\tCluster 1\t-10.504426246833377\t9.724342065712833\t-40.35533689276569\t-7.4101405312885\t6.475133876820541\t23.380120800588287\t1.2292159190112373\npbmc8k\tAAACCTGTCCTGTAGA-1\tCluster 4\t5.288452117643818\t4.280574317036769\t-14.889566987242729\t20.65910738162961\t10.631721008328869\t-8.96326589767397\t15.7014787503533\n",
+          "id": "cellranger_embedding",
+          "mode": "analysis/embedding",
+          "name": "Cell embeddings and clusters",
+          "path_glob": "**/analysis/clustering/gene_expression_graphclust/clusters.csv",
+          "rawYaml": "id: cellranger_embedding\nname: Cell embeddings and clusters\nmode: analysis/embedding\ndescription: >-\n  UMAP, t-SNE and the first 3 principal components of every cell, coloured\n  by Cell Ranger's graph-based cluster.\nfind:\n  path_glob: \"**/analysis/clustering/gene_expression_graphclust/clusters.csv\"\nrecipe: cellranger/embedding.py\nfixture: embedding.tsv\nrenders_as:\n  - { id: umap_clusters, component: advanced_viz, kind: embedding, roles: {sample_id: barcode, dim_1: umap_1, dim_2: umap_2, cluster: cluster, color: cluster} }\n  - { id: tsne_clusters, component: advanced_viz, kind: embedding, roles: {sample_id: barcode, dim_1: tsne_1, dim_2: tsne_2, cluster: cluster, color: cluster} }\n  - { id: pca_clusters, component: advanced_viz, kind: embedding, roles: {sample_id: barcode, dim_1: pc_1, dim_2: pc_2, dim_3: pc_3, cluster: cluster, color: cluster} }\n  - { component: card, column: barcode, aggregation: nunique, secondary_layout: donut, breakdown_col: cluster }\n  - { component: table }\n",
+          "recipe": "cellranger/embedding.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "umap_clusters",
+              "kind": "embedding",
+              "roles": {
+                "cluster": "cluster",
+                "color": "cluster",
+                "dim_1": "umap_1",
+                "dim_2": "umap_2",
+                "sample_id": "barcode"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "tsne_clusters",
+              "kind": "embedding",
+              "roles": {
+                "cluster": "cluster",
+                "color": "cluster",
+                "dim_1": "tsne_1",
+                "dim_2": "tsne_2",
+                "sample_id": "barcode"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "pca_clusters",
+              "kind": "embedding",
+              "roles": {
+                "cluster": "cluster",
+                "color": "cluster",
+                "dim_1": "pc_1",
+                "dim_2": "pc_2",
+                "dim_3": "pc_3",
+                "sample_id": "barcode"
+              }
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "cluster",
+              "column": "barcode",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "donut"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "embedding",
+          "yamlPath": "depictio/catalog/cellranger/embedding.yaml"
+        },
+        {
+          "columns": {},
+          "description": "The 5 headline Cell Ranger metrics 10x's QC guidance gives a pass/warn/fail band for, one row per (sample, metric), with the threshold and the status it crosses.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/metrics_summary.csv",
+            "path_glob_alt": []
+          },
+          "fixture": "library_metrics_long.tsv",
+          "fixtureContent": "sample\tmetric\tvalue\tunit\tthreshold\tstatus\npbmc8k\tconfidently_mapped_transcriptome\t0.7609999999999999\tfraction\t0.3\tpass\npbmc8k\tfraction_reads_in_cells\t0.941\tfraction\t0.7\tpass\npbmc8k\tq30_rna\t0.789\tfraction\t0.65\tpass\npbmc8k\tsequencing_saturation\t0.9079999999999999\tfraction\t0.6\tpass\npbmc8k\tvalid_barcodes\t0.985\tfraction\t0.75\tpass\n",
+          "id": "cellranger_library_metrics_long",
+          "mode": "count/library_metrics_long",
+          "name": "Library QC metrics, thresholded",
+          "path_glob": "**/metrics_summary.csv",
+          "rawYaml": "id: cellranger_library_metrics_long\nname: Library QC metrics, thresholded\nmode: count/library_metrics_long\ndescription: >-\n  The 5 headline Cell Ranger metrics 10x's QC guidance gives a pass/warn/fail\n  band for, one row per (sample, metric), with the threshold and the status\n  it crosses.\nfind:\n  path_glob: \"**/metrics_summary.csv\"\nrecipe: cellranger/library_metrics_long.py\nfixture: library_metrics_long.tsv\nrenders_as:\n  - { component: table }\n",
+          "recipe": "cellranger/library_metrics_long.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "library_metrics_long",
+          "yamlPath": "depictio/catalog/cellranger/library_metrics_long.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Confidently-mapped reads split into exonic, intronic and intergenic regions, plus the antisense and unmapped shares, for a stacked bar.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/metrics_summary.csv",
+            "path_glob_alt": []
+          },
+          "fixture": "mapping_breakdown.tsv",
+          "fixtureContent": "sample\tregion\tfraction\npbmc8k\tantisense\t0.1\npbmc8k\texonic\t0.615\npbmc8k\tintergenic\t0.06\npbmc8k\tintronic\t0.254\npbmc8k\tunmapped\t0.04500000000000004\n",
+          "id": "cellranger_mapping_breakdown",
+          "mode": "count/mapping_breakdown",
+          "name": "Read mapping region breakdown",
+          "path_glob": "**/metrics_summary.csv",
+          "rawYaml": "id: cellranger_mapping_breakdown\nname: Read mapping region breakdown\nmode: count/mapping_breakdown\ndescription: >-\n  Confidently-mapped reads split into exonic, intronic and intergenic\n  regions, plus the antisense and unmapped shares, for a stacked bar.\nfind:\n  path_glob: \"**/metrics_summary.csv\"\nrecipe: cellranger/mapping_breakdown.py\nfixture: mapping_breakdown.tsv\nrenders_as:\n  - { id: mapping_stacked_bar, component: figure, visu_type: bar, dict_kwargs: {x: sample, y: fraction, color: region, title: Read mapping breakdown} }\n  - { component: table }\n",
+          "recipe": "cellranger/mapping_breakdown.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "region",
+                "title": "Read mapping breakdown",
+                "x": "sample",
+                "y": "fraction"
+              },
+              "id": "mapping_stacked_bar",
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "mapping_breakdown",
+          "yamlPath": "depictio/catalog/cellranger/mapping_breakdown.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Mean log-normalised expression and detection rate of the top graph-based cluster marker genes, for every cluster, so the dot plot shows cluster-specificity.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/filtered_feature_bc_matrix/matrix.mtx.gz",
+            "path_glob_alt": []
+          },
+          "fixture": "marker_expression.tsv",
+          "fixtureContent": "cluster_label\tgene\tmean_expression\tfrac_expressing\nC1 VPREB3/OSBPL10\tANKRD55\t0.011156678221332305\t0.01120896717373899\nC1 VPREB3/OSBPL10\tBANK1\t2.5489060398008694\t0.9839871897518014\nC1 VPREB3/OSBPL10\tBNC2\t0.008445341566606196\t0.007205764611689352\nC1 VPREB3/OSBPL10\tC10orf11\t0.022730751871479337\t0.020016012810248198\nC1 VPREB3/OSBPL10\tCA6\t0.003816434599095996\t0.004803843074459567\nC1 VPREB3/OSBPL10\tCCL5\t0.14688136520308437\t0.10488390712570056\nC1 VPREB3/OSBPL10\tCCNL2\t0.17754845301997613\t0.1521216973578863\nC1 VPREB3/OSBPL10\tCD14\t0.022910052297125838\t0.021617293835068056\nC1 VPREB3/OSBPL10\tCD79A\t2.4792596099619995\t0.9799839871897518\nC1 VPREB3/OSBPL10\tCDKN1C\t0.0016306437069561802\t0.0016012810248198558\nC1 VPREB3/OSBPL10\tCLEC10A\t0.010071690675053323\t0.008807045636509208\nC1 VPREB3/OSBPL10\tCLEC4E\t0.0034976665230446705\t0.0032025620496397116\nC1 VPREB3/OSBPL10\tCST7\t0.04254250266635626\t0.0344275420336269\nC1 VPREB3/OSBPL10\tCSTA\t0.029495672751331727\t0.025620496397117692\nC1 VPREB3/OSBPL10\tCYP1B1\t0.0018806926644979842\t0.0016012810248198558\nC1 VPREB3/OSBPL10\tENHO\t0.0026136519335751185\t0.0024019215372297837\nC1 VPREB3/OSBPL10\tFAM49A\t0.28645702825247465\t0.23298638911128902\nC1 VPREB3/OSBPL10\tFCAR\t0.004643726780019078\t0.0040032025620496394\nC1 VPREB3/OSBPL10\tFCER1A\t0.014262126961461214\t0.01200960768614892\nC1 VPREB3/OSBPL10\tFCGR3A\t0.018590072131223462\t0.016813450760608487\nC1 VPREB3/OSBPL10\tFGFBP2\t0.015542900540471286\t0.01521216973578863\nC1 VPREB3/OSBPL10\tFLT3\t0.00656614096441657\t0.006405124099279423\nC1 VPREB3/OSBPL10\tGZMH\t0.01236042875544441\t0.009607686148919135\nC1 VPREB3/OSBPL10\tGZMK\t0.050842890643808814\t0.040032025620496396\nC1 VPREB3/OSBPL10\tHCK\t0.24616180581588848\t0.19615692554043235\nC1 VPREB3/OSBPL10\tHDAC9\t1.0906696562358345\t0.6493194555644516\nC1 VPREB3/OSBPL10\tHES4\t0.006528030575639501\t0.006405124099279423\nC1 VPREB3/OSBPL10\tIL1B\t0.0250265931335339\t0.021617293835068056\nC1 VPREB3/OSBPL10\tKLRF1\t0.013501558312502935\t0.012810248198558846\nC1 VPREB3/OSBPL10\tLINC00282\t0.004457255236531623\t0.004803843074459567\n",
+          "id": "cellranger_marker_expression",
+          "mode": "analysis/marker_expression",
+          "name": "Marker gene expression per cluster",
+          "path_glob": "**/filtered_feature_bc_matrix/matrix.mtx.gz",
+          "rawYaml": "id: cellranger_marker_expression\nname: Marker gene expression per cluster\nmode: analysis/marker_expression\ndescription: >-\n  Mean log-normalised expression and detection rate of the top graph-based\n  cluster marker genes, for every cluster, so the dot plot shows\n  cluster-specificity.\nfind:\n  path_glob: \"**/filtered_feature_bc_matrix/matrix.mtx.gz\"\nrecipe: cellranger/marker_expression.py\nfixture: marker_expression.tsv\nrenders_as:\n  - { id: marker_dotplot, component: advanced_viz, kind: dot_plot, roles: {cluster: cluster_label, gene: gene, mean_expression: mean_expression, frac_expressing: frac_expressing} }\n  - { component: card, column: gene, aggregation: nunique, secondary_layout: top_n, breakdown_col: cluster_label, top_n_count: 3 }\n  - { component: table }\n",
+          "recipe": "cellranger/marker_expression.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "marker_dotplot",
+              "kind": "dot_plot",
+              "roles": {
+                "cluster": "cluster_label",
+                "frac_expressing": "frac_expressing",
+                "gene": "gene",
+                "mean_expression": "mean_expression"
+              }
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "cluster_label",
+              "column": "gene",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "marker_expression",
+          "yamlPath": "depictio/catalog/cellranger/marker_expression.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Wide companion to marker_expression: one row per marker gene, one column per cluster, mean log-normalised expression, for the heatmap.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/filtered_feature_bc_matrix/matrix.mtx.gz",
+            "path_glob_alt": []
+          },
+          "fixture": "marker_matrix.tsv",
+          "fixtureContent": "gene\tC1 VPREB3/OSBPL10\tC10 BNC2/SPON2\tC11\tC12 LYPD2/MEG3\tC13 FAAH2\tC14\tC2 FCAR/CLEC4E\tC3 LOC101060038/AK5\tC4 TARP/GZMK\tC5 LOC101060038/AK5\tC6 LMNA/AQP3\tC7 PF4/PPBP\tC8 FCER1A/FLT3\tC9 LEF1/C14orf64\nANKRD55\t0.011156678221332305\t0.012696482645117605\t0.048809398144206345\t0.00815019296613051\t0.0879386322153664\t0.08040886905723506\t0.009236307683585594\t0.17919700664119703\t0.008921830115123753\t0.18160930656666346\t0.07703744785620939\t0.015992731467456743\t0.013579324235167096\t0.27481418220369724\nBANK1\t2.5489060398008694\t0.07565451118397995\t0.1574134366238556\t0.061922812427124795\t0.04384334946957042\t0.14096590910605725\t0.11344300420522757\t0.05658917553772903\t0.058145209933509696\t0.05696862928906555\t0.04080931135024741\t0.10466104927616711\t0.2841208000968633\t0.0346893168051555\nBNC2\t0.008445341566606196\t0.9905045148732949\t0.005485048381394298\t0.010718981424359529\t0.012899924709997694\t0.05674381144161401\t0.00923675908714995\t0.011906183051548783\t0.03857025773335315\t0.009282749178018523\t0.010627852890558011\t0.008132739924099292\t0.01970241208092038\t0.0\nC10orf11\t0.022730751871479337\t0.052895719107827754\t0.08543178481349743\t1.205079839176644\t0.01688570242291973\t1.2770758916825715\t1.7436532172962418\t0.019134265470696903\t0.047381717564787144\t0.02085614829466378\t0.029261847227766955\t1.3424213051358787\t1.183656822110774\t0.020980181705779827\nCA6\t0.003816434599095996\t0.0\t0.017943120821605808\t0.0\t0.017022781714868037\t0.0281072046820017\t0.007153464512673932\t0.13565361211243618\t0.008200029993754222\t0.16214966770691244\t0.021934891294195874\t0.011186929479488026\t0.008588217918469719\t0.2048604992045707\nCCL5\t0.14688136520308437\t2.3386320147041917\t0.5788026715276954\t0.17495281156654335\t1.0891005382132797\t0.6682774698456084\t0.18715033416297244\t0.11842894696306702\t3.1816442430208505\t0.15019444218771905\t0.8181323666843114\t0.4185432915280643\t0.23000695907730392\t0.19076097209409312\nCCNL2\t0.17754845301997613\t0.21277617552132957\t0.25409912929975126\t0.11998084102100202\t0.19361559369764966\t0.16239656329905897\t0.09482345883406607\t0.17086675747027252\t0.21705775439187153\t0.17110783452229542\t0.20489796473423952\t0.05082881546399769\t0.1721371537354655\t0.1472072982630636\nCD14\t0.022910052297125838\t0.013328024925511255\t0.02430094166077032\t0.26356648290838225\t0.0289234931568681\t1.0838777347322102\t1.5430544019360042\t0.022724377484615945\t0.02528597156289044\t0.01801741847782449\t0.027049211604023012\t1.4450443292985637\t0.42995941547574773\t0.013325928940849543\nCD79A\t2.4792596099619995\t0.054773782149478076\t0.12523660380930182\t0.07260287438259243\t0.04686951581227965\t0.11508534536370511\t0.07794605156991118\t0.08813790219205547\t0.06088997348648745\t0.09376595883843504\t0.06637751464498652\t0.06982440899333653\t0.10486353629415428\t0.10314627977272173\nCDKN1C\t0.0016306437069561802\t0.005916308465207109\t0.0\t0.7562850303061897\t0.0\t0.004190299877904658\t0.009639079913829736\t0.00409362787141921\t0.003877318910899065\t0.0017379663734801514\t0.0012990806786346166\t0.028347035230805225\t0.003601462779848391\t0.0\nCLEC10A\t0.010071690675053323\t0.005036928088863871\t0.0\t0.06954647422279839\t0.004003101180357588\t0.05654932210661549\t0.061929313685166264\t0.005758458406662334\t0.005306260867421729\t0.003937992903417031\t0.0038309947842930705\t0.01020238791124982\t0.6074519639082181\t0.0\nCLEC4E\t0.0034976665230446705\t0.0027412390093421385\t0.022401818246552165\t0.06743649469014419\t0.0\t0.3858037887720606\t0.6286966604059773\t0.003123529162781259\t0.0047607286933216645\t0.004819911963687778\t0.0041201395581159555\t0.5075596461596092\t0.09946770669394914\t0.012497416792814913\nCST7\t0.04254250266635626\t2.3650173023753456\t0.18647613471482807\t0.05650272508703851\t0.2816191784863612\t0.2752405788577133\t0.03984888609986212\t0.016521087028419215\t1.6871183536307064\t0.017951040324377603\t0.237388050911536\t0.05798822423048517\t0.12327171906149481\t0.011869212055893523\nCSTA\t0.029495672751331727\t0.017138811184755666\t0.05547528006884696\t1.3396088674365878\t0.03818763799798053\t1.596887205269864\t2.1379785360447845\t0.024797007918845926\t0.04459263053660206\t0.033651458811551994\t0.028802226369032177\t1.8980799254184906\t1.2084506006820384\t0.024538965767075142\nCYP1B1\t0.0018806926644979842\t0.004564041467112625\t0.0\t0.03913447401165138\t0.005710678173349759\t0.2206763905643707\t0.2708669110845816\t0.0048521536917998705\t0.003983124497238449\t0.0020667148031768405\t0.0\t0.41461005778618537\t0.017285788223417226\t0.0\nENHO\t0.0026136519335751185\t0.0\t0.0\t0.08873272698356048\t0.0\t0.0\t0.006969884181490651\t0.001107615679456886\t0.0005230665015460572\t0.004105878966712218\t0.0018250563223600087\t0.0\t0.39969914703384485\t0.007160996805246956\nFAM49A\t0.28645702825247465\t0.38349761530142545\t0.12890036040742253\t1.4013069926412194\t0.02997612964052364\t0.770607079793694\t1.0295520938147462\t0.013930626697451678\t0.15239875057617627\t0.005063169956376997\t0.027790389574931115\t0.6046350260442773\t0.6618299151812344\t0.026579413870977963\nFCAR\t0.004643726780019078\t0.01477455397642189\t0.018724518446084627\t0.19201616156624204\t0.008043161447904054\t0.4805427382185656\t0.6629408359736771\t0.0038176874727896704\t0.0020439949336883904\t0.00880478189233957\t0.002010891082657033\t0.4164245458633516\t0.04925818068636967\t0.008974234659196698\nFCER1A\t0.014262126961461214\t0.0\t0.005485048381394298\t0.032618026900557234\t0.017891491705264044\t0.022394821234581544\t0.027139758621077044\t0.013195608311390735\t0.0105694012546557\t0.008991676520629766\t0.011301467072228111\t0.02812735762186113\t1.4366983556668698\t0.018232612120499876\nFCGR3A\t0.018590072131223462\t1.8313039149314903\t0.02395379341096807\t2.1796990725004792\t0.009290506693178635\t0.08553545916388057\t0.07058253404454506\t0.016198457598038743\t0.2661921514315716\t0.02034711492299708\t0.02280985968402531\t0.03634619630836305\t0.038932286242064774\t0.029489489576555797\nFGFBP2\t0.015542900540471286\t2.19391263841457\t0.05302506242459317\t0.03378187891198433\t0.02218405048052202\t0.08004825031380206\t0.02167423131878497\t0.012284368002921407\t0.5273207928027209\t0.02467129734896485\t0.01768740967337546\t0.022592015459636995\t0.04007778584510755\t0.017669034608489866\nFLT3\t0.00656614096441657\t0.0\t0.016245263947771958\t0.014074493230051097\t0.0\t0.021848690765364966\t0.027026961505174172\t0.0010875534097734814\t0.006325741374703539\t0.0011094703205901748\t0.00853820063864883\t0.002972338604188488\t0.6065767873928863\t0.005189950829050927\nGZMH\t0.01236042875544441\t1.114561136818163\t0.11637999656735815\t0.0263340564193216\t0.0037799565950497192\t0.09360143666190907\t0.022402575627814978\t0.0100782683186907\t0.7135582357408478\t0.010189601065219794\t0.0166485333454429\t0.024882003923904206\t0.03856947164109403\t0.0033933417946897357\nGZMK\t0.050842890643808814\t0.12404758920318865\t0.29947954450998227\t0.048842178649200506\t0.539528704355698\t0.23684808442087238\t0.02772225220608578\t0.03775913920120969\t1.5523397029899462\t0.06880640621960753\t0.3621111954168191\t0.05157848411566211\t0.03783891245996539\t0.07199557199507729\nHCK\t0.24616180581588848\t0.011303058704461771\t0.024933708201764236\t1.8244504437873128\t0.00421731272256679\t0.8203411035002608\t1.1578180194755037\t0.020438560798775766\t0.02401669744483901\t0.027563856385707172\t0.021658016439881324\t0.8048925368656853\t0.8395361121852751\t0.010018348185159549\nHDAC9\t1.0906696562358345\t0.5738581575322654\t0.2129030931004592\t1.0888226367988512\t0.022083451129190863\t0.9402852455761375\t1.251248388759609\t0.0202606812216691\t0.23066534214520026\t0.026757943917833187\t0.048708209574936545\t0.8822704072526052\t1.6724613615663069\t0.022163270083833883\nHES4\t0.006528030575639501\t0.009101437071449685\t0.0\t0.8474357390637246\t0.0\t0.06099900967771684\t0.047067167244542886\t0.015180836190955714\t0.005614741727439991\t0.00880389730505748\t0.0027537010835074274\t0.01899038071397775\t0.039111455133848505\t0.003753876519160599\nIL1B\t0.0250265931335339\t0.026577976490080174\t0.05563129892269966\t0.6580309203231716\t0.004981858083280083\t0.9429568658365945\t1.282496173797864\t0.03189523250103723\t0.026055648124926434\t0.02691747902424779\t0.021240136483761912\t1.1638921865932343\t0.8994887320217326\t0.04501040913259331\nKLRF1\t0.013501558312502935\t2.1042215607785995\t0.04729217693936044\t0.02030153136699823\t0.0\t0.07700403346768031\t0.01966349377623832\t0.008116397154399966\t0.33425515871158945\t0.009264056411948149\t0.012800321217979494\t0.013863809517676993\t0.028214841445557706\t0.003916802183511584\nLINC00282\t0.004457255236531623\t0.0\t0.016257323300048913\t0.0\t0.026989162260379763\t0.036027532603828495\t0.0\t0.03159042800645673\t0.0013768847593450192\t0.030088253475681476\t0.008296791053764012\t0.0\t0.0\t0.09121501040502278\n",
+          "id": "cellranger_marker_matrix",
+          "mode": "analysis/marker_matrix",
+          "name": "Marker gene expression matrix",
+          "path_glob": "**/filtered_feature_bc_matrix/matrix.mtx.gz",
+          "rawYaml": "id: cellranger_marker_matrix\nname: Marker gene expression matrix\nmode: analysis/marker_matrix\ndescription: >-\n  Wide companion to marker_expression: one row per marker gene, one column\n  per cluster, mean log-normalised expression, for the heatmap.\nfind:\n  path_glob: \"**/filtered_feature_bc_matrix/matrix.mtx.gz\"\nrecipe: cellranger/marker_matrix.py\nfixture: marker_matrix.tsv\nrenders_as:\n  - { id: marker_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: gene} }\n  - { component: table }\n",
+          "recipe": "cellranger/marker_matrix.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "marker_heatmap",
+              "kind": "complex_heatmap",
+              "roles": {
+                "index": "gene"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "marker_matrix",
+          "yamlPath": "depictio/catalog/cellranger/marker_matrix.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Cell Ranger count's headline per-sample metrics: cells called, sequencing depth and saturation, mapping rates and the QC-thresholds (Q30) behind them, typed and de-commafied.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/metrics_summary.csv",
+            "path_glob_alt": []
+          },
+          "fixture": "metrics_summary.tsv",
+          "fixtureContent": "sample\testimated_cells\tmean_reads_per_cell\tmedian_genes_per_cell\tnumber_of_reads\tvalid_barcodes_pct\tsequencing_saturation_pct\tq30_barcode_pct\tq30_rna_read_pct\tq30_umi_pct\treads_mapped_confidently_transcriptome_pct\treads_mapped_antisense_pct\tfraction_reads_in_cells_pct\ttotal_genes_detected\tmedian_umi_counts_per_cell\tvalid_barcodes_frac\tsequencing_saturation_frac\tq30_barcode_frac\tq30_rna_read_frac\tq30_umi_frac\treads_mapped_confidently_transcriptome_frac\treads_mapped_antisense_frac\tfraction_reads_in_cells_frac\npbmc8k\t8767\t89434\t1853\t784064148\t98.5\t90.8\t98.2\t78.9\t98.2\t76.1\t10.0\t94.1\t22835\t4801\t0.985\t0.9079999999999999\t0.982\t0.789\t0.982\t0.7609999999999999\t0.1\t0.941\n",
+          "id": "cellranger_metrics_summary",
+          "mode": "count/metrics",
+          "name": "Cell Ranger metrics",
+          "path_glob": "**/metrics_summary.csv",
+          "rawYaml": "id: cellranger_metrics_summary\nname: Cell Ranger metrics\nmode: count/metrics\ndescription: >-\n  Cell Ranger count's headline per-sample metrics: cells called, sequencing\n  depth and saturation, mapping rates and the QC-thresholds (Q30) behind\n  them, typed and de-commafied.\nfind:\n  path_glob: \"**/metrics_summary.csv\"\nrecipe: cellranger/metrics_summary.py\nfixture: metrics_summary.tsv\nrenders_as:\n  - { component: card, column: estimated_cells, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }\n  - { component: card, column: median_genes_per_cell, aggregation: max }\n  - { component: card, column: sequencing_saturation_pct, aggregation: average, secondary_layout: gauge, coverage_max: 100.0 }\n  - { component: card, column: fraction_reads_in_cells_pct, aggregation: average, secondary_layout: gauge, coverage_max: 100.0 }\n  - { component: table }\n",
+          "recipe": "cellranger/metrics_summary.py",
+          "renders_as": [
+            {
+              "aggregation": "max",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample",
+              "column": "estimated_cells",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "median_genes_per_cell",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {}
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "sequencing_saturation_pct",
+              "columns": [],
+              "component": "card",
+              "coverage_max": 100.0,
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "gauge"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "fraction_reads_in_cells_pct",
+              "columns": [],
+              "component": "card",
+              "coverage_max": 100.0,
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "gauge"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "metrics_summary",
+          "yamlPath": "depictio/catalog/cellranger/metrics_summary.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Share of total expression variance each of Cell Ranger's reported principal components explains, the scree behind the PCA embedding.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/analysis/pca/*/variance.csv",
+            "path_glob_alt": []
+          },
+          "fixture": "pca_variance.tsv",
+          "fixtureContent": "sample\tpc\tvariance_explained\npbmc8k\t1\t0.013644769866606716\npbmc8k\t2\t0.00567102989597204\npbmc8k\t3\t0.004471897045474755\npbmc8k\t4\t0.003649452802864834\npbmc8k\t5\t0.0027342044631669575\npbmc8k\t6\t0.0020283979388427426\npbmc8k\t7\t0.0016351683626568186\npbmc8k\t8\t0.0012511570701230052\npbmc8k\t9\t0.0010855634848213607\npbmc8k\t10\t0.0009729477320664045\n",
+          "id": "cellranger_pca_variance",
+          "mode": "analysis/pca_variance",
+          "name": "PCA variance explained",
+          "path_glob": "**/analysis/pca/*/variance.csv",
+          "rawYaml": "id: cellranger_pca_variance\nname: PCA variance explained\nmode: analysis/pca_variance\ndescription: >-\n  Share of total expression variance each of Cell Ranger's reported\n  principal components explains, the scree behind the PCA embedding.\nfind:\n  path_glob: \"**/analysis/pca/*/variance.csv\"\nrecipe: cellranger/pca_variance.py\nfixture: pca_variance.tsv\nrenders_as:\n  - { id: pca_scree, component: figure, visu_type: bar, dict_kwargs: {x: pc, y: variance_explained, color: sample, title: PCA scree} }\n  - { component: card, column: variance_explained, aggregation: max, secondary_layout: histogram }\n  - { component: table }\n",
+          "recipe": "cellranger/pca_variance.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "sample",
+                "title": "PCA scree",
+                "x": "pc",
+                "y": "variance_explained"
+              },
+              "id": "pca_scree",
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "variance_explained",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "pca_variance",
+          "yamlPath": "depictio/catalog/cellranger/pca_variance.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": null,
       "description": "Aggregates the biosynthetic gene cluster predictions of antiSMASH, DeepBGC and GECCO into one table per sample plus a run-level summary, with the region coordinates, product class, CDS count and PFAM domains normalised across the three callers.",
       "dir": "depictio/catalog/combgc",
       "homepage": "https://nf-co.re/funcscan",
@@ -934,6 +2463,243 @@
           ],
           "slug": "tool_overlap",
           "yamlPath": "depictio/catalog/combgc/tool_overlap.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": null,
+      "description": "",
+      "dir": "depictio/catalog/cooler",
+      "homepage": "https://cooler.readthedocs.io/",
+      "id": "cooler",
+      "name": "cooler",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/cooler/cload",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "Binned, ICE-balanced intra-chromosomal contact matrix from a cooler dump, joined to its bins at the finest resolution the run dumped.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*_balanced.txt",
+            "path_glob_alt": []
+          },
+          "fixture": "contact_matrix.tsv",
+          "fixtureContent": "sample\tresolution\tchrom1\tstart1\tend1\tchrom2\tstart2\tend2\tcount\nHIC_ES_4\t500000\tchr1\t0\t500000\tchr1\t0\t500000\t0.469721\nHIC_ES_4\t500000\tchr1\t0\t500000\tchr1\t3500000\t4000000\t0.0001146\nHIC_ES_4\t500000\tchr1\t0\t500000\tchr1\t4000000\t4500000\t0.0000518756\nHIC_ES_4\t500000\tchr1\t0\t500000\tchr1\t4500000\t5000000\t0.000175767\nHIC_ES_4\t500000\tchr1\t0\t500000\tchr1\t5000000\t5500000\t0.0000685111\nHIC_ES_4\t500000\tchr1\t0\t500000\tchr1\t6000000\t6500000\t0.0000490875\nHIC_ES_4\t500000\tchr1\t0\t500000\tchr1\t6500000\t7000000\t0.000124547\nHIC_ES_4\t500000\tchr1\t0\t500000\tchr1\t7000000\t7500000\t0.0000444619\nHIC_ES_4\t500000\tchr1\t0\t500000\tchr1\t7500000\t8000000\t0.000176057\nHIC_ES_4\t500000\tchr1\t0\t500000\tchr1\t10000000\t10500000\t0.000108949\nHIC_ES_4\t500000\tchr1\t0\t500000\tchr1\t10500000\t11000000\t0.0000409594\nHIC_ES_4\t500000\tchr1\t0\t500000\tchr1\t11000000\t11500000\t0.000172754\nHIC_ES_4\t500000\tchr1\t0\t500000\tchr1\t11500000\t12000000\t0.000041949\nHIC_ES_4\t500000\tchr1\t0\t500000\tchr1\t12000000\t12500000\t0.0000508649\nHIC_ES_4\t500000\tchr1\t0\t500000\tchr1\t13000000\t13500000\t0.000147915\n",
+          "id": "cooler_contact_matrix",
+          "mode": "dump+balance",
+          "name": "Binned contact matrix",
+          "path_glob": "**/*_balanced.txt",
+          "rawYaml": "id: cooler_contact_matrix\nname: Binned contact matrix\nmode: dump+balance\ndescription: >-\n  Binned, ICE-balanced intra-chromosomal contact matrix from a cooler dump,\n  joined to its bins at the finest resolution the run dumped.\nfind:\n  path_glob: \"**/*_balanced.txt\"\nrecipe: cooler/contact_matrix.py\nfixture: contact_matrix.tsv\nrenders_as:\n  - id: binned_contact_map\n    component: advanced_viz\n    kind: contact_map\n    roles: {chrom1: chrom1, start1: start1, chrom2: chrom2, start2: start2, count: count}\n  - { component: card, column: count, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: table }\n",
+          "recipe": "cooler/contact_matrix.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "binned_contact_map",
+              "kind": "contact_map",
+              "roles": {
+                "chrom1": "chrom1",
+                "chrom2": "chrom2",
+                "count": "count",
+                "start1": "start1",
+                "start2": "start2"
+              }
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "count",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "contact_matrix",
+          "yamlPath": "depictio/catalog/cooler/contact_matrix.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": null,
+      "description": "",
+      "dir": "depictio/catalog/cooltools",
+      "homepage": "https://cooltools.readthedocs.io/",
+      "id": "cooltools",
+      "name": "cooltools",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/cooltools/eigscis",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "Per-chromosome eigenvalues behind the A/B compartment track, how much of the intra-chromosomal structure each eigenvector explains.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*.cis.lam.txt",
+            "path_glob_alt": []
+          },
+          "fixture": "eigenvalues.tsv",
+          "fixtureContent": "sample\tresolution\tchrom\teigval1\teigval2\teigval3\nHIC_ES_4\t250000\tchr1\t217.37192985882825\t106.30665106836362\t-99.03947177210624\nHIC_ES_4\t500000\tchr1\t99.13667734060417\t51.81533468620807\t-47.21877970420783\nHIC_ES_4\t250000\tchr10\t142.57814361566207\t-81.94256897558293\t72.2595450691952\nHIC_ES_4\t500000\tchr10\t66.59181811793138\t-39.62570244149256\t33.67062669108942\nHIC_ES_4\t250000\tchr11\t193.4115234104989\t-104.63373540482301\t73.82727082252077\nHIC_ES_4\t500000\tchr11\t90.67380650971026\t-50.54725889057199\t33.8597983862236\nHIC_ES_4\t250000\tchr12\t129.99125758132428\t65.17389035636864\t-63.741574739017935\nHIC_ES_4\t500000\tchr12\t58.956052829243326\t31.443704945139334\t-29.562935097486022\nHIC_ES_4\t250000\tchr13\t100.7430231013653\t-62.420995811940024\t60.42706200238849\nHIC_ES_4\t500000\tchr13\t47.22678011799135\t-30.63258782628069\t27.568927739948254\nHIC_ES_4\t250000\tchr14\t119.83196768673787\t-86.27919679397462\t72.54804600744085\nHIC_ES_4\t500000\tchr14\t55.787879332665085\t-43.00835561924044\t33.78167274090778\nHIC_ES_4\t250000\tchr15\t124.5800767134204\t68.0432932529258\t-59.73764098661196\nHIC_ES_4\t500000\tchr15\t59.31347796361848\t30.86266438756835\t-29.11000498120422\nHIC_ES_4\t250000\tchr16\t105.69617822087967\t-66.6589555846226\t57.194169433514375\n",
+          "id": "cooltools_eigenvalues",
+          "mode": "eigs-cis",
+          "name": "Compartment eigenvalues",
+          "path_glob": "**/*.cis.lam.txt",
+          "rawYaml": "id: cooltools_eigenvalues\nname: Compartment eigenvalues\nmode: eigs-cis\ndescription: Per-chromosome eigenvalues behind the A/B compartment track, how much of the intra-chromosomal structure each eigenvector explains.\nfind:\n  path_glob: \"**/*.cis.lam.txt\"\nrecipe: cooltools/eigenvalues.py\nfixture: eigenvalues.tsv\nrenders_as:\n  - { component: table }\n",
+          "recipe": "cooltools/eigenvalues.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "eigenvalues",
+          "yamlPath": "depictio/catalog/cooltools/eigenvalues.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Per-bin first eigenvector (E1) of the intra-chromosomal correlation matrix , the A/B compartment track. Sign marks the compartment, zero-crossings are compartment boundaries.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*.cis.vecs.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "eigenvector.tsv",
+          "fixtureContent": "sample\tresolution\tchrom\tstart\tend\tweight\tE1\tE2\tE3\nHIC_ES_4\t500000\tchr1\t3000000\t3500000\t0.007016882605806897\t-0.17178837025203647\t0.4528713887134975\t0.04774648252122206\nHIC_ES_4\t250000\tchr1\t3000000\t3250000\t0.011006600358798968\t-0.3110539706424927\t0.40720574458282427\t-0.023660937218532737\nHIC_ES_4\t250000\tchr1\t3250000\t3500000\t0.008351111796513554\t-0.02175174862371992\t0.3044577128040037\t-0.05407254276437825\nHIC_ES_4\t500000\tchr1\t3500000\t4000000\t0.006352615408293029\t-0.12057804368117842\t0.16963986420395571\t-0.2845242565077998\nHIC_ES_4\t250000\tchr1\t3500000\t3750000\t0.006776887191465767\t-0.16296666446607816\t0.1325651588814408\t-0.015067632641229258\nHIC_ES_4\t250000\tchr1\t3750000\t4000000\t0.008070358699634708\t-0.10685246611929948\t0.3422231927378721\t0.194444075050695\nHIC_ES_4\t500000\tchr1\t4000000\t4500000\t0.0053810325865998165\t-0.033831636951353744\t0.3923452883650525\t-0.1069297826240145\nHIC_ES_4\t250000\tchr1\t4000000\t4250000\t0.007400985213569173\t-0.06974714940814988\t0.3398710376054896\t0.03789454513183516\nHIC_ES_4\t250000\tchr1\t4250000\t4500000\t0.006423461589181744\t0.003759723205810231\t0.37548369656992125\t0.0188369708402592\nHIC_ES_4\t500000\tchr1\t4500000\t5000000\t0.004194888149207838\t0.4271902217003328\t0.34876939984324906\t-0.15156339535877436\nHIC_ES_4\t250000\tchr1\t4500000\t4750000\t0.006325797282102686\t0.3172457009378412\t0.16773287855296756\t0.3205424894960121\nHIC_ES_4\t250000\tchr1\t4750000\t5000000\t0.005466389252799497\t0.7016145463671112\t0.30966848395588203\t0.08278102285680486\nHIC_ES_4\t500000\tchr1\t5000000\t5500000\t0.006073468696124222\t0.07637716432193042\t0.23313731993971487\t-0.028627819112550135\nHIC_ES_4\t250000\tchr1\t5000000\t5250000\t0.0069682766642666545\t0.2727103597389767\t0.24795711591992803\t-0.11848435479655299\nHIC_ES_4\t250000\tchr1\t5250000\t5500000\t0.00823358789067641\t-0.13005673748961352\t0.30385352289930917\t-0.006941041729963103\n",
+          "id": "cooltools_eigenvector",
+          "mode": "eigs-cis",
+          "name": "A/B compartment track",
+          "path_glob": "**/*.cis.vecs.tsv",
+          "rawYaml": "id: cooltools_eigenvector\nname: A/B compartment track\nmode: eigs-cis\ndescription: >-\n  Per-bin first eigenvector (E1) of the intra-chromosomal correlation matrix ,\n  the A/B compartment track. Sign marks the compartment, zero-crossings are\n  compartment boundaries.\nfind:\n  path_glob: \"**/*.cis.vecs.tsv\"\nrecipe: cooltools/eigenvector.py\nfixture: eigenvector.tsv\nrenders_as:\n  - id: compartment_track\n    component: advanced_viz\n    kind: coverage_track\n    roles: {chromosome: chrom, position: start, value: E1}\n  - { component: card, column: E1, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: table }\n",
+          "recipe": "cooltools/eigenvector.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "compartment_track",
+              "kind": "coverage_track",
+              "roles": {
+                "chromosome": "chrom",
+                "position": "start",
+                "value": "E1"
+              }
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "E1",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "eigenvector",
+          "yamlPath": "depictio/catalog/cooltools/eigenvector.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Per-bin insulation score and cooltools' own boundary calls at every window size the run scanned, low insulation marks a TAD boundary.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*_balanced_insulation.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "insulation.tsv",
+          "fixtureContent": "sample\tresolution\tchrom\tstart\tend\tregion\tis_bad_bin\twindow\tlog2_insulation_score\tn_valid_pixels\tboundary_strength\tis_boundary\nHIC_ES_4\t20000\tchr1\t3000000\t3020000\tchr1\tfalse\t300000\t1.3152030755947677\t12.0\t\tfalse\nHIC_ES_4\t20000\tchr1\t3000000\t3020000\tchr1\tfalse\t500000\t1.7676342826225966\t22.0\t\tfalse\nHIC_ES_4\t40000\tchr1\t3000000\t3040000\tchr1\tfalse\t600000\t1.7056847982839523\t13.0\t\tfalse\nHIC_ES_4\t20000\tchr1\t3000000\t3020000\tchr1\tfalse\t1000000\t2.3762756012448216\t47.0\t\tfalse\nHIC_ES_4\t40000\tchr1\t3000000\t3040000\tchr1\tfalse\t1000000\t2.155655116252144\t23.0\t\tfalse\nHIC_ES_4\t40000\tchr1\t3000000\t3040000\tchr1\tfalse\t2000000\t2.7734948479666035\t48.0\t\tfalse\nHIC_ES_4\t20000\tchr1\t3020000\t3040000\tchr1\tfalse\t300000\t1.390963467850426\t25.0\t\tfalse\nHIC_ES_4\t20000\tchr1\t3020000\t3040000\tchr1\tfalse\t500000\t1.7385422060207971\t45.0\t\tfalse\nHIC_ES_4\t20000\tchr1\t3020000\t3040000\tchr1\tfalse\t1000000\t2.294422995945336\t95.0\t\tfalse\nHIC_ES_4\t20000\tchr1\t3040000\t3060000\tchr1\tfalse\t300000\t1.2900058160527688\t39.0\t\tfalse\nHIC_ES_4\t20000\tchr1\t3040000\t3060000\tchr1\tfalse\t500000\t1.6203487608370355\t69.0\t\tfalse\nHIC_ES_4\t40000\tchr1\t3040000\t3080000\tchr1\tfalse\t600000\t1.54435863408334\t27.0\t\tfalse\nHIC_ES_4\t20000\tchr1\t3040000\t3060000\tchr1\tfalse\t1000000\t2.1862541149096093\t144.0\t\tfalse\nHIC_ES_4\t40000\tchr1\t3040000\t3080000\tchr1\tfalse\t1000000\t2.0175320096486593\t47.0\t\tfalse\nHIC_ES_4\t40000\tchr1\t3040000\t3080000\tchr1\tfalse\t2000000\t2.6175079326950237\t97.0\t\tfalse\n",
+          "id": "cooltools_insulation",
+          "mode": "insulation",
+          "name": "TAD insulation score",
+          "path_glob": "**/*_balanced_insulation.tsv",
+          "rawYaml": "id: cooltools_insulation\nname: TAD insulation score\nmode: insulation\ndescription: >-\n  Per-bin insulation score and cooltools' own boundary calls at every window\n  size the run scanned, low insulation marks a TAD boundary.\nfind:\n  path_glob: \"**/*_balanced_insulation.tsv\"\nrecipe: cooltools/insulation.py\nfixture: insulation.tsv\nrenders_as:\n  - id: insulation_track\n    component: advanced_viz\n    kind: coverage_track\n    roles: {chromosome: chrom, position: start, value: log2_insulation_score}\n  - { component: card, column: log2_insulation_score, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: is_boundary, aggregation: count, secondary_layout: donut, breakdown_col: is_boundary }\n  - { component: table }\n",
+          "recipe": "cooltools/insulation.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "insulation_track",
+              "kind": "coverage_track",
+              "roles": {
+                "chromosome": "chrom",
+                "position": "start",
+                "value": "log2_insulation_score"
+              }
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "log2_insulation_score",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "is_boundary",
+              "column": "is_boundary",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "donut"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "insulation",
+          "yamlPath": "depictio/catalog/cooltools/insulation.yaml"
         }
       ]
     },
@@ -1149,6 +2915,90 @@
           ],
           "slug": "introns",
           "yamlPath": "depictio/catalog/ctatsplicing/introns.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": null,
+      "description": "",
+      "dir": "depictio/catalog/damageprofiler",
+      "homepage": "https://github.com/Integrative-Transcriptomics/DamageProfiler",
+      "id": "damageprofiler",
+      "name": "DamageProfiler",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/damageprofiler",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "Substitution frequency by distance from the read end, 5' and 3', C>T and G>A deamination against every other substitution pooled, the ancient-DNA authentication read.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*_freq_misincorporations.txt",
+            "path_glob_alt": []
+          },
+          "fixture": "misincorporation.tsv",
+          "fixtureContent": "sample\tend\tposition\tbase_change\tfrequency\nCOD076E1bL1\t3p\t0\tC>T\t0.009407\nCOD076E1bL1\t3p\t0\tG>A\t0.144072\nCOD076E1bL1\t3p\t0\tother\t0.02275\nCOD076E1bL1\t3p\t1\tC>T\t0.004157\nCOD076E1bL1\t3p\t1\tG>A\t0.091195\nCOD076E1bL1\t3p\t1\tother\t0.019304\nCOD076E1bL1\t3p\t2\tC>T\t0.004198\nCOD076E1bL1\t3p\t2\tG>A\t0.074365\nCOD076E1bL1\t3p\t2\tother\t0.016281\nCOD076E1bL1\t5p\t0\tC>T\t0.143623\nCOD076E1bL1\t5p\t0\tG>A\t0.007979\nCOD076E1bL1\t5p\t0\tother\t0.022613\nCOD076E1bL1\t5p\t1\tC>T\t0.091\nCOD076E1bL1\t5p\t1\tG>A\t0.00395\nCOD076E1bL1\t5p\t1\tother\t0.019239\nCOD076E1bL1\t5p\t2\tC>T\t0.075147\nCOD076E1bL1\t5p\t2\tG>A\t0.003951\nCOD076E1bL1\t5p\t2\tother\t0.01623\n",
+          "id": "damageprofiler_misincorporation",
+          "name": "Misincorporation profile",
+          "path_glob": "**/*_freq_misincorporations.txt",
+          "rawYaml": "id: damageprofiler_misincorporation\nname: Misincorporation profile\ndescription: >-\n  Substitution frequency by distance from the read end, 5' and 3', C>T and\n  G>A deamination against every other substitution pooled, the ancient-DNA\n  authentication read.\nfind:\n  path_glob: \"**/*_freq_misincorporations.txt\"\nrecipe: damageprofiler/misincorporation.py\nfixture: misincorporation.tsv\nrenders_as:\n  # New in lot 2 (depictio.models.components.advanced_viz kind damage_profile):\n  # a `use:` on this id may fail model validation until that kind lands.\n  - { id: eager_damage_profile, component: advanced_viz, kind: damage_profile, roles: {sample: sample, end: end, position: position, base_change: base_change, frequency: frequency} }\n  - { component: figure, visu_type: line, dict_kwargs: {x: position, y: frequency, color: base_change, line_dash: end, title: Misincorporation frequency by position} }\n  - { component: card, column: frequency, aggregation: max, secondary_layout: top_n, breakdown_col: base_change, top_n_count: 3 }\n  - { component: table }\n",
+          "recipe": "damageprofiler/misincorporation.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "eager_damage_profile",
+              "kind": "damage_profile",
+              "roles": {
+                "base_change": "base_change",
+                "end": "end",
+                "frequency": "frequency",
+                "position": "position",
+                "sample": "sample"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "base_change",
+                "line_dash": "end",
+                "title": "Misincorporation frequency by position",
+                "x": "position",
+                "y": "frequency"
+              },
+              "roles": {},
+              "visu_type": "line"
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "base_change",
+              "column": "frequency",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "misincorporation",
+          "yamlPath": "depictio/catalog/damageprofiler/misincorporation.yaml"
         }
       ]
     },
@@ -2252,6 +4102,113 @@
           ],
           "slug": "vst_pca",
           "yamlPath": "depictio/catalog/deseq2/vst_pca.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": null,
+      "description": "Differential exon / transcript usage testing, run by nf-core/nanoseq on Bambu's transcript-level counts to find genes whose isoform usage shifts between conditions.",
+      "dir": "depictio/catalog/dexseq",
+      "homepage": "https://bioconductor.org/packages/release/bioc/html/DEXSeq.html",
+      "id": "dexseq",
+      "name": "DEXSeq",
+      "nf_core_url": null,
+      "outputs": [
+        {
+          "columns": {},
+          "description": "DEXSeq per-transcript usage statistics from nanoseq's Bambu-based differential expression subworkflow, with the significance call precomputed on the gene-level adjusted q-value.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/dexseq/*.results.txt",
+            "path_glob_alt": []
+          },
+          "fixture": "results.tsv",
+          "fixtureContent": "feature_id\tgene_id\tlog2fc\tpvalue\tpadj\tsignificant\tdirection\nENST00000335686\tENSG00000124570\t-1.12454394627322\t0.000240594401280434\t0.0335984258894408\ttrue\tdown\nENST00000380529\tENSG00000124570\t0.665912468198051\t0.683506402494469\t0.0335984258894408\ttrue\tup\nENST00000380539\tENSG00000124570\t0.983357819780686\t0.175282993785262\t0.0335984258894408\ttrue\tup\nENST00000380546\tENSG00000124570\t1.41337559411305\t0.0915249045631308\t0.0335984258894408\ttrue\tup\nENST00000579248\tENSG00000265681\t1.00214433849538\t0.00451618197739008\t0.347672146187237\tfalse\tnot significant\nENST00000580261\tENSG00000265681\t-0.913356507672843\t0.00415865188878173\t0.347672146187237\tfalse\tnot significant\nENST00000392640\tENSG00000138382\t0.607007614448007\t0.0119474548083479\t0.469167995310595\tfalse\tnot significant\nENST00000409965\tENSG00000138382\t-0.537853884842473\t0.0112693863054158\t0.469167995310595\tfalse\tnot significant\nENST00000179765\tENSG00000076108\t0.473481225201012\t0.373119299484674\t1.0\tfalse\tnot significant\nENST00000379441\tENSG00000076108\t-0.481133879536325\t0.373717408412752\t1.0\tfalse\tnot significant\nENST00000215375\tENSG00000099624\t0.114470900088406\t0.985893309458966\t1.0\tfalse\tnot significant\nENST00000395633\tENSG00000099624\t-0.0993216752371984\t0.982824890591977\t1.0\tfalse\tnot significant\nENST00000221448\tENSG00000104852\t0.53045291729615\t0.113529633177086\t1.0\tfalse\tnot significant\nENST00000401730\tENSG00000104852\t-0.536345470747047\t0.11427569891585\t1.0\tfalse\tnot significant\nENST00000222308\tENSG00000105701\t-2.93487722148972\t0.0329430298295861\t1.0\tfalse\tnot significant\n",
+          "id": "dexseq_results",
+          "mode": "differential/usage",
+          "name": "Differential exon/transcript usage",
+          "path_glob": "**/dexseq/*.results.txt",
+          "rawYaml": "id: dexseq_results\nname: Differential exon/transcript usage\nmode: differential/usage\ndescription: >-\n  DEXSeq per-transcript usage statistics from nanoseq's Bambu-based\n  differential expression subworkflow, with the significance call\n  precomputed on the gene-level adjusted q-value.\nfind: { path_glob: \"**/dexseq/*.results.txt\" }\nrecipe: dexseq/results.py\nfixture: results.tsv\nrenders_as:\n  - { id: volcano, component: advanced_viz, kind: volcano, roles: {feature_id: feature_id, effect_size: log2fc, significance: padj} }\n  - { id: qq, component: advanced_viz, kind: qq, roles: {p_value: pvalue} }\n  - { component: card, column: feature_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: direction, top_n_count: 3 }\n  - { component: card, column: direction, aggregation: count, secondary_layout: donut, breakdown_col: direction }\n  - { component: card, column: log2fc, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: table, row_selection_enabled: true, row_selection_column: feature_id }\n",
+          "recipe": "dexseq/results.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "volcano",
+              "kind": "volcano",
+              "roles": {
+                "effect_size": "log2fc",
+                "feature_id": "feature_id",
+                "significance": "padj"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "qq",
+              "kind": "qq",
+              "roles": {
+                "p_value": "pvalue"
+              }
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "direction",
+              "column": "feature_id",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "direction",
+              "column": "direction",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "donut"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "log2fc",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {},
+              "row_selection_column": "feature_id",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "results",
+          "yamlPath": "depictio/catalog/dexseq/results.yaml"
         }
       ]
     },
@@ -3876,6 +5833,74 @@
       ]
     },
     {
+      "biotools_url": null,
+      "description": "",
+      "dir": "depictio/catalog/hicexplorer",
+      "homepage": "https://hicexplorer.readthedocs.io/",
+      "id": "hicexplorer",
+      "name": "HiCExplorer",
+      "nf_core_url": null,
+      "outputs": [
+        {
+          "columns": {},
+          "description": "Mean contact frequency against genomic distance, hicexplorer's hicPlotDistVsCounts curve, the standard Hi-C library-quality signature.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*_distcount.txt",
+            "path_glob_alt": []
+          },
+          "fixture": "distance_decay.tsv",
+          "fixtureContent": "sample\tresolution\tchromosome\tdistance\tcontacts\tnumber_bins\tscale_factor\nHIC_ES_4\t250000\tall\t0\t0.24082372470858182\t10912\t1.0\nHIC_ES_4\t250000\tall\t250000\t0.1028387047627779\t10890\t1.0\nHIC_ES_4\t250000\tall\t500000\t0.04249082736739464\t10869\t1.0\nHIC_ES_4\t250000\tall\t750000\t0.025662296049620396\t10848\t1.0\nHIC_ES_4\t250000\tall\t1000000\t0.01767251532164654\t10827\t1.0\nHIC_ES_4\t250000\tall\t1250000\t0.012760361736658917\t10806\t1.0\nHIC_ES_4\t250000\tall\t1500000\t0.009764048264469073\t10785\t1.0\nHIC_ES_4\t250000\tall\t1750000\t0.0077213721676777985\t10764\t1.0\nHIC_ES_4\t250000\tall\t2000000\t0.006306449228292257\t10743\t1.0\nHIC_ES_4\t250000\tall\t2250000\t0.0053717750623703065\t10722\t1.0\nHIC_ES_4\t250000\tall\t2500000\t0.004561141377814814\t10701\t1.0\nHIC_ES_4\t250000\tall\t2750000\t0.003998288180475948\t10680\t1.0\nHIC_ES_4\t250000\tall\t3000000\t0.00362242637091232\t10659\t1.0\n",
+          "id": "hicexplorer_distance_decay",
+          "mode": "dist-vs-counts",
+          "name": "Contact probability vs distance",
+          "path_glob": "**/*_distcount.txt",
+          "rawYaml": "id: hicexplorer_distance_decay\nname: Contact probability vs distance\nmode: dist-vs-counts\ndescription: >-\n  Mean contact frequency against genomic distance, hicexplorer's\n  hicPlotDistVsCounts curve, the standard Hi-C library-quality signature.\nfind:\n  path_glob: \"**/*_distcount.txt\"\nrecipe: hicexplorer/distance_decay.py\nfixture: distance_decay.tsv\nrenders_as:\n  - id: decay_curve\n    component: advanced_viz\n    kind: profile\n    roles: {series: chromosome, x: distance, y: contacts}\n  - { component: card, column: contacts, aggregation: max, secondary_layout: box_plot, aggregations: [box_plot_stats] }\n  - { component: table }\n",
+          "recipe": "hicexplorer/distance_decay.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "decay_curve",
+              "kind": "profile",
+              "roles": {
+                "series": "chromosome",
+                "x": "distance",
+                "y": "contacts"
+              }
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "contacts",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "distance_decay",
+          "yamlPath": "depictio/catalog/hicexplorer/distance_decay.yaml"
+        }
+      ]
+    },
+    {
       "biotools_url": "https://bio.tools/homer",
       "description": "",
       "dir": "depictio/catalog/homer",
@@ -4328,6 +6353,79 @@
           ],
           "slug": "variants_long",
           "yamlPath": "depictio/catalog/ivar/variants_long.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": null,
+      "description": "",
+      "dir": "depictio/catalog/kallisto",
+      "homepage": "https://www.kallistobus.tools/",
+      "id": "kallisto",
+      "name": "kallisto | bustools (kb-python)",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/kallistobustools/count",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "Reads processed and pseudoaligned by kallisto bus, barcodes on the 10x whitelist after correction, and the cells kb count --filter called, one row per sample.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*.count/run_info.json",
+            "path_glob_alt": []
+          },
+          "fixture": "run_metrics.tsv",
+          "fixtureContent": "sample\tn_processed\tn_pseudoaligned\tp_pseudoaligned\tn_barcodes\tcells_called\npbmc8k\t784064148\t467812652\t0.597\t1311043\t8514\n",
+          "id": "kallisto_run_metrics",
+          "mode": "kallisto/run_metrics",
+          "name": "Run headline numbers (kallisto | bustools)",
+          "path_glob": "**/*.count/run_info.json",
+          "rawYaml": "id: kallisto_run_metrics\nname: Run headline numbers (kallisto | bustools)\nmode: kallisto/run_metrics\ndescription: >-\n  Reads processed and pseudoaligned by kallisto bus, barcodes on the 10x\n  whitelist after correction, and the cells kb count --filter called, one\n  row per sample.\nfind:\n  path_glob: \"**/*.count/run_info.json\"\nrecipe: kallisto/run_metrics.py\nfixture: run_metrics.tsv\nrenders_as:\n  - { component: card, column: p_pseudoaligned, aggregation: average, secondary_layout: gauge, coverage_max: 1.0 }\n  - { component: card, column: cells_called, aggregation: max }\n  - { component: card, column: n_barcodes, aggregation: max }\n  - { component: table }\n",
+          "recipe": "kallisto/run_metrics.py",
+          "renders_as": [
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "p_pseudoaligned",
+              "columns": [],
+              "component": "card",
+              "coverage_max": 1.0,
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "gauge"
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "cells_called",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {}
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "n_barcodes",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "run_metrics",
+          "yamlPath": "depictio/catalog/kallisto/run_metrics.yaml"
         }
       ]
     },
@@ -5132,6 +7230,40 @@
       "outputs": [
         {
           "columns": {},
+          "description": "How many reads AdapterRemoval kept, discarded or collapsed into a single merged read, and the length ladder behind it, AdapterRemoval, via MultiQC.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+            "path_glob_alt": [
+              "**/multiqc/*_data/multiqc.parquet",
+              "**/multiqc/*/*_data/multiqc.parquet"
+            ]
+          },
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixtureContent": null,
+          "id": "multiqc_adapterremoval",
+          "mode": "adapterremoval",
+          "name": "Adapter trimming and read collapsing",
+          "origin_tool": "AdapterRemoval",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_adapterremoval\nname: Adapter trimming and read collapsing\norigin_tool: AdapterRemoval\nmode: adapterremoval\ndescription: How many reads AdapterRemoval kept, discarded or collapsed into a single merged read, and the length ladder behind it, AdapterRemoval, via MultiQC.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: adapterremoval }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "adapterremoval"
+            }
+          ],
+          "slug": "adapterremoval",
+          "yamlPath": "depictio/catalog/multiqc/adapterremoval.yaml"
+        },
+        {
+          "columns": {},
           "description": "ATAC-specific library quality, from ataqv, via MultiQC. The fragment-length ladder, the peak-enrichment percentiles, the MAPQ spread and the per-chromosome read distribution.",
           "edam_formats": [],
           "edam_operations": [],
@@ -5197,6 +7329,40 @@
           ],
           "slug": "bcftools",
           "yamlPath": "depictio/catalog/multiqc/bcftools.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Bismark alignment, deduplication, strand and M-bias plots, plus the per-sample methylation-extraction table, aggregated by MultiQC.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+            "path_glob_alt": [
+              "**/multiqc/*_data/multiqc.parquet",
+              "**/multiqc/*/*_data/multiqc.parquet"
+            ]
+          },
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixtureContent": null,
+          "id": "multiqc_bismark",
+          "mode": "bismark",
+          "name": "Bisulfite alignment QC",
+          "origin_tool": "Bismark",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_bismark\nname: Bisulfite alignment QC\norigin_tool: Bismark\nmode: bismark\ndescription: Bismark alignment, deduplication, strand and M-bias plots, plus the per-sample methylation-extraction table, aggregated by MultiQC.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: bismark }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "bismark"
+            }
+          ],
+          "slug": "bismark",
+          "yamlPath": "depictio/catalog/multiqc/bismark.yaml"
         },
         {
           "columns": {},
@@ -5268,6 +7434,40 @@
         },
         {
           "columns": {},
+          "description": "Cell Ranger count's per-sample summary stats table, barcode-rank plot, median-genes-per-cell and sequencing-saturation curves, from Cell Ranger via MultiQC.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+            "path_glob_alt": [
+              "**/multiqc/*_data/multiqc.parquet",
+              "**/multiqc/*/*_data/multiqc.parquet"
+            ]
+          },
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixtureContent": null,
+          "id": "multiqc_cellranger",
+          "mode": "cellranger",
+          "name": "Cell Ranger count summary",
+          "origin_tool": "Cell Ranger",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_cellranger\nname: Cell Ranger count summary\norigin_tool: Cell Ranger\nmode: cellranger\ndescription: Cell Ranger count's per-sample summary stats table, barcode-rank plot, median-genes-per-cell and sequencing-saturation curves, from Cell Ranger via MultiQC.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: cellranger }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "cellranger"
+            }
+          ],
+          "slug": "cellranger",
+          "yamlPath": "depictio/catalog/multiqc/cellranger.yaml"
+        },
+        {
+          "columns": {},
           "description": "Taxonomic read classification against a compressed FM-index (top taxa), from Centrifuge via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -5302,6 +7502,40 @@
         },
         {
           "columns": {},
+          "description": "Per-bin completeness and contamination estimates, CheckM2, via MultiQC. No standalone CheckM2 report ships in this megatest run; these numbers only reach Depictio through this panel.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+            "path_glob_alt": [
+              "**/multiqc/*_data/multiqc.parquet",
+              "**/multiqc/*/*_data/multiqc.parquet"
+            ]
+          },
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixtureContent": null,
+          "id": "multiqc_checkm2",
+          "mode": "checkm2",
+          "name": "Bin quality (CheckM2)",
+          "origin_tool": "CheckM2",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_checkm2\nname: Bin quality (CheckM2)\norigin_tool: CheckM2\nmode: checkm2\ndescription: Per-bin completeness and contamination estimates, CheckM2, via MultiQC. No standalone CheckM2 report ships in this megatest run; these numbers only reach Depictio through this panel.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: checkm2 }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "checkm2"
+            }
+          ],
+          "slug": "checkm2",
+          "yamlPath": "depictio/catalog/multiqc/checkm2.yaml"
+        },
+        {
+          "columns": {},
           "description": "Adapter/primer trimming summary (filtered reads, trimmed sequence lengths) \u2014 Cutadapt, surfaced via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -5333,6 +7567,40 @@
           ],
           "slug": "cutadapt",
           "yamlPath": "depictio/catalog/multiqc/cutadapt.yaml"
+        },
+        {
+          "columns": {},
+          "description": "MultiQC's own 5' and 3' misincorporation curves and read-length distributions from DamageProfiler, one line per sample. The tidy per-position table with the \"other substitutions\" pooled is `damageprofiler/misincorporation`.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+            "path_glob_alt": [
+              "**/multiqc/*_data/multiqc.parquet",
+              "**/multiqc/*/*_data/multiqc.parquet"
+            ]
+          },
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixtureContent": null,
+          "id": "multiqc_damageprofiler",
+          "mode": "damageprofiler",
+          "name": "Ancient-DNA damage (MultiQC)",
+          "origin_tool": "DamageProfiler",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_damageprofiler\nname: Ancient-DNA damage (MultiQC)\norigin_tool: DamageProfiler\nmode: damageprofiler\ndescription: MultiQC's own 5' and 3' misincorporation curves and read-length distributions from DamageProfiler, one line per sample. The tidy per-position table with the \"other substitutions\" pooled is `damageprofiler/misincorporation`.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: damageprofiler }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "damageprofiler"
+            }
+          ],
+          "slug": "damageprofiler",
+          "yamlPath": "depictio/catalog/multiqc/damageprofiler.yaml"
         },
         {
           "columns": {},
@@ -5506,6 +7774,40 @@
         },
         {
           "columns": {},
+          "description": "Base Quality Score Recalibration (BQSR) diagnostics, observed vs. reported quality after recalibration, from GATK4, via MultiQC.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+            "path_glob_alt": [
+              "**/multiqc/*_data/multiqc.parquet",
+              "**/multiqc/*/*_data/multiqc.parquet"
+            ]
+          },
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixtureContent": null,
+          "id": "multiqc_gatk",
+          "mode": "gatk",
+          "name": "Base quality recalibration",
+          "origin_tool": "GATK",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_gatk\nname: Base quality recalibration\norigin_tool: GATK\nmode: gatk\ndescription: Base Quality Score Recalibration (BQSR) diagnostics, observed vs. reported quality after recalibration, from GATK4, via MultiQC.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: gatk }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "gatk"
+            }
+          ],
+          "slug": "gatk",
+          "yamlPath": "depictio/catalog/multiqc/gatk.yaml"
+        },
+        {
+          "columns": {},
           "description": "The one table every MultiQC report has: one row per sample, one column per headline metric each module contributed. Not a module's own output, which is why it names no producing tool \u2014 MultiQC assembles it from all of them.",
           "edam_formats": [],
           "edam_operations": [],
@@ -5570,6 +7872,40 @@
           ],
           "slug": "happy",
           "yamlPath": "depictio/catalog/multiqc/happy.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Read mapping, pairing, valid-pair filtering and contact statistics, HiC-Pro plots aggregated by MultiQC.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+            "path_glob_alt": [
+              "**/multiqc/*_data/multiqc.parquet",
+              "**/multiqc/*/*_data/multiqc.parquet"
+            ]
+          },
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixtureContent": null,
+          "id": "multiqc_hicpro",
+          "mode": "hicpro",
+          "name": "HiC-Pro mapping and filtering",
+          "origin_tool": "HiC-Pro",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_hicpro\nname: HiC-Pro mapping and filtering\norigin_tool: HiC-Pro\nmode: hicpro\ndescription: Read mapping, pairing, valid-pair filtering and contact statistics, HiC-Pro plots aggregated by MultiQC.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: hicpro }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "hicpro"
+            }
+          ],
+          "slug": "hicpro",
+          "yamlPath": "depictio/catalog/multiqc/hicpro.yaml"
         },
         {
           "columns": {},
@@ -5811,6 +8147,40 @@
         },
         {
           "columns": {},
+          "description": "Long-read sequencing QC (read length, read quality, yield) from NanoPlot's NanoStat summary, via MultiQC.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+            "path_glob_alt": [
+              "**/multiqc/*_data/multiqc.parquet",
+              "**/multiqc/*/*_data/multiqc.parquet"
+            ]
+          },
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixtureContent": null,
+          "id": "multiqc_nanostat",
+          "mode": "nanostat",
+          "name": "Long-read QC",
+          "origin_tool": "NanoStat",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_nanostat\nname: Long-read QC\norigin_tool: NanoStat\nmode: nanostat\ndescription: Long-read sequencing QC (read length, read quality, yield) from NanoPlot's NanoStat summary, via MultiQC.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: nanostat }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "nanostat"
+            }
+          ],
+          "slug": "nanostat",
+          "yamlPath": "depictio/catalog/multiqc/nanostat.yaml"
+        },
+        {
+          "columns": {},
           "description": "Metagenome coverage and sequencing-effort redundancy curves, from Nonpareil via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -5879,6 +8249,40 @@
         },
         {
           "columns": {},
+          "description": "Long-read adapter-trimming summary (reads and bases kept), Porechop_ABI, via MultiQC.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+            "path_glob_alt": [
+              "**/multiqc/*_data/multiqc.parquet",
+              "**/multiqc/*/*_data/multiqc.parquet"
+            ]
+          },
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixtureContent": null,
+          "id": "multiqc_porechop",
+          "mode": "porechop",
+          "name": "Long-read adapter trimming",
+          "origin_tool": "Porechop_ABI",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_porechop\nname: Long-read adapter trimming\norigin_tool: Porechop_ABI\nmode: porechop\ndescription: Long-read adapter-trimming summary (reads and bases kept), Porechop_ABI, via MultiQC.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: porechop }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "porechop"
+            }
+          ],
+          "slug": "porechop",
+          "yamlPath": "depictio/catalog/multiqc/porechop.yaml"
+        },
+        {
+          "columns": {},
           "description": "Library complexity curve \u2014 how many additional unique molecules each extra million reads buys, from Preseq, via MultiQC.",
           "edam_formats": [],
           "edam_operations": [],
@@ -5910,6 +8314,40 @@
           ],
           "slug": "preseq",
           "yamlPath": "depictio/catalog/multiqc/preseq.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Per-bin gene-annotation summary (coding sequences, coding density, genome size), Prokka, via MultiQC.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+            "path_glob_alt": [
+              "**/multiqc/*_data/multiqc.parquet",
+              "**/multiqc/*/*_data/multiqc.parquet"
+            ]
+          },
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixtureContent": null,
+          "id": "multiqc_prokka",
+          "mode": "prokka",
+          "name": "Bin annotation (Prokka)",
+          "origin_tool": "Prokka",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_prokka\nname: Bin annotation (Prokka)\norigin_tool: Prokka\nmode: prokka\ndescription: Per-bin gene-annotation summary (coding sequences, coding density, genome size), Prokka, via MultiQC.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: prokka }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "prokka"
+            }
+          ],
+          "slug": "prokka",
+          "yamlPath": "depictio/catalog/multiqc/prokka.yaml"
         },
         {
           "columns": {},
@@ -6369,6 +8807,74 @@
           ],
           "slug": "truvari",
           "yamlPath": "depictio/catalog/multiqc/truvari.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Transition/transversion ratio as a function of variant quality and non-reference allele count, VCFtools, via MultiQC.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+            "path_glob_alt": [
+              "**/multiqc/*_data/multiqc.parquet",
+              "**/multiqc/*/*_data/multiqc.parquet"
+            ]
+          },
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixtureContent": null,
+          "id": "multiqc_vcftools",
+          "mode": "vcftools",
+          "name": "Ts/Tv by quality and count",
+          "origin_tool": "VCFtools",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_vcftools\nname: Ts/Tv by quality and count\norigin_tool: VCFtools\nmode: vcftools\ndescription: Transition/transversion ratio as a function of variant quality and non-reference allele count, VCFtools, via MultiQC.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: vcftools }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "vcftools"
+            }
+          ],
+          "slug": "vcftools",
+          "yamlPath": "depictio/catalog/multiqc/vcftools.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Variant Effect Predictor annotation summary (consequence classes, SIFT/PolyPhen calls, chromosome distribution), Ensembl VEP, via MultiQC.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+            "path_glob_alt": [
+              "**/multiqc/*_data/multiqc.parquet",
+              "**/multiqc/*/*_data/multiqc.parquet"
+            ]
+          },
+          "fixture": "../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet",
+          "fixtureContent": null,
+          "id": "multiqc_vep",
+          "mode": "vep",
+          "name": "Variant annotation",
+          "origin_tool": "VEP",
+          "path_glob": "**/multiqc/multiqc_data/multiqc.parquet",
+          "rawYaml": "id: multiqc_vep\nname: Variant annotation\norigin_tool: VEP\nmode: vep\ndescription: Variant Effect Predictor annotation summary (consequence classes, SIFT/PolyPhen calls, chromosome distribution), Ensembl VEP, via MultiQC.\nfind:\n  path_glob: \"**/multiqc/multiqc_data/multiqc.parquet\"\n  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/\n    - \"**/multiqc/*_data/multiqc.parquet\"\n    - \"**/multiqc/*/*_data/multiqc.parquet\"\n# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);\n# `section` selects this module's plot anchors out of the shared report.\nfixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet\nrenders_as:\n  - { component: multiqc, section: vep }\n",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "multiqc",
+              "dict_kwargs": {},
+              "roles": {},
+              "section": "vep"
+            }
+          ],
+          "slug": "vep",
+          "yamlPath": "depictio/catalog/multiqc/vep.yaml"
         }
       ]
     },
@@ -6661,6 +9167,81 @@
           ],
           "slug": "complexity_curve",
           "yamlPath": "depictio/catalog/preseq/complexity_curve.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": null,
+      "description": "",
+      "dir": "depictio/catalog/qcatch",
+      "homepage": "https://github.com/COMBINE-lab/qcatch",
+      "id": "qcatch",
+      "name": "QCatch",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/qcatch",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "QCatch's per-sample headline numbers for an alevin-fry / simpleaf quantification: retained cells, sequencing depth and saturation, mapping rate, the same shape as Cell Ranger's metrics_summary.csv.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/qcatch/*_metrics_summary.csv",
+            "path_glob_alt": []
+          },
+          "fixture": "metrics_summary.tsv",
+          "fixtureContent": "sample\tretained_cells\tprocessed_cells\tmean_reads_per_retained_cell\tmedian_umi_per_retained_cell\tmedian_genes_per_retained_cell\ttotal_genes_detected\tmapping_rate_pct\tsequencing_saturation_pct\npbmc8k\t8779\t341559\t74995\t4960\t1867\t23405\t84.49\t90.89\n",
+          "id": "qcatch_metrics_summary",
+          "mode": "qcatch/metrics_summary",
+          "name": "QC summary (QCatch)",
+          "path_glob": "**/qcatch/*_metrics_summary.csv",
+          "rawYaml": "id: qcatch_metrics_summary\nname: QC summary (QCatch)\nmode: qcatch/metrics_summary\ndescription: >-\n  QCatch's per-sample headline numbers for an alevin-fry / simpleaf\n  quantification: retained cells, sequencing depth and saturation, mapping\n  rate, the same shape as Cell Ranger's metrics_summary.csv.\nfind:\n  path_glob: \"**/qcatch/*_metrics_summary.csv\"\nrecipe: qcatch/metrics_summary.py\nfixture: metrics_summary.tsv\nrenders_as:\n  - { component: card, column: retained_cells, aggregation: max }\n  - { component: card, column: mapping_rate_pct, aggregation: average, secondary_layout: gauge, coverage_max: 100.0 }\n  - { component: card, column: sequencing_saturation_pct, aggregation: average, secondary_layout: gauge, coverage_max: 100.0 }\n  - { component: table }\n",
+          "recipe": "qcatch/metrics_summary.py",
+          "renders_as": [
+            {
+              "aggregation": "max",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "retained_cells",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {}
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "mapping_rate_pct",
+              "columns": [],
+              "component": "card",
+              "coverage_max": 100.0,
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "gauge"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "sequencing_saturation_pct",
+              "columns": [],
+              "component": "card",
+              "coverage_max": 100.0,
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "gauge"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "metrics_summary",
+          "yamlPath": "depictio/catalog/qcatch/metrics_summary.yaml"
         }
       ]
     },
@@ -7617,6 +10198,98 @@
       ]
     },
     {
+      "biotools_url": null,
+      "description": "",
+      "dir": "depictio/catalog/qualimap",
+      "homepage": "http://qualimap.conesalab.org",
+      "id": "qualimap",
+      "name": "Qualimap",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/qualimap/bamqc",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "Per-sample depth, mapping quality, error rate and duplication from Qualimap's BamQC genome_results.txt summary.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/genome_results.txt",
+            "path_glob_alt": []
+          },
+          "fixture": "bamqc_genome_results.tsv",
+          "fixtureContent": "sample\ttotal_reads\tmapped_reads\tpercentage_aligned\tmean_coverage\tmean_mapping_quality\tgeneral_error_rate\tgc_percentage\tduplication_rate\nCOD076E1bL1\t12118454\t12118454\t100.0\t0.8944\t35.7127\t0.0154\t47.9\t1.78\nCOD092E1bL1i69\t13682530\t13682530\t100.0\t0.9959\t36.1407\t0.01\t50.13\t1.78\n",
+          "id": "qualimap_bamqc_genome_results",
+          "name": "BamQC genome coverage",
+          "path_glob": "**/genome_results.txt",
+          "rawYaml": "id: qualimap_bamqc_genome_results\nname: BamQC genome coverage\ndescription: >-\n  Per-sample depth, mapping quality, error rate and duplication from\n  Qualimap's BamQC genome_results.txt summary.\nfind:\n  path_glob: \"**/genome_results.txt\"\nrecipe: qualimap/bamqc_genome_results.py\nfixture: bamqc_genome_results.tsv\nrenders_as:\n  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: mean_coverage, color: sample, title: Mean genome coverage per library} }\n  - { component: card, column: mean_coverage, aggregation: average, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }\n  - { component: card, column: duplication_rate, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: gc_percentage, aggregation: average, secondary_layout: donut, breakdown_col: sample }\n  - { component: table }\n",
+          "recipe": "qualimap/bamqc_genome_results.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "sample",
+                "title": "Mean genome coverage per library",
+                "x": "sample",
+                "y": "mean_coverage"
+              },
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample",
+              "column": "mean_coverage",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "duplication_rate",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample",
+              "column": "gc_percentage",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "donut"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "bamqc_genome_results",
+          "yamlPath": "depictio/catalog/qualimap/bamqc_genome_results.yaml"
+        }
+      ]
+    },
+    {
       "biotools_url": "https://bio.tools/rtg-tools",
       "description": "",
       "dir": "depictio/catalog/rtgtools",
@@ -8107,6 +10780,86 @@
           ],
           "slug": "sample_pca",
           "yamlPath": "depictio/catalog/salmon/sample_pca.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": null,
+      "description": "",
+      "dir": "depictio/catalog/samtools",
+      "homepage": "https://www.htslib.org",
+      "id": "samtools",
+      "name": "SAMtools",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/samtools/flagstat",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "How many reads placed, before and after a run's mapping-quality filter , samtools flagstat, one row per (sample, stage).",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*flagstat.stats",
+            "path_glob_alt": []
+          },
+          "fixture": "flagstat.tsv",
+          "fixtureContent": "sample\tstage\ttotal_reads\tmapped_reads\tmapped_pct\tduplicate_reads\tproperly_paired_reads\tproperly_paired_pct\tsingleton_pct\nCOD076E1bL1\tpost-filter\t16801402\t16801402\t100.0\t0\t0\t\t\nCOD076E1bL1\tpre-filter\t71388991\t25154106\t35.24\t0\t0\t\t\nCOD092E1bL1i69\tpost-filter\t16298931\t16298931\t100.0\t0\t0\t\t\nCOD092E1bL1i69\tpre-filter\t69615709\t25225923\t36.24\t0\t0\t\t\n",
+          "id": "samtools_flagstat",
+          "name": "Alignment flagstat",
+          "path_glob": "**/*flagstat.stats",
+          "rawYaml": "id: samtools_flagstat\nname: Alignment flagstat\ndescription: >-\n  How many reads placed, before and after a run's mapping-quality filter ,\n  samtools flagstat, one row per (sample, stage).\nfind:\n  path_glob: \"**/*flagstat.stats\"\nrecipe: samtools/flagstat.py\nfixture: flagstat.tsv\nrenders_as:\n  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: mapped_reads, color: stage, title: Mapped reads before and after the mapping-quality filter} }\n  - { component: card, column: mapped_reads, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }\n  - { component: card, column: mapped_pct, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: table }\n",
+          "recipe": "samtools/flagstat.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "stage",
+                "title": "Mapped reads before and after the mapping-quality filter",
+                "x": "sample",
+                "y": "mapped_reads"
+              },
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample",
+              "column": "mapped_reads",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "mapped_pct",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "flagstat",
+          "yamlPath": "depictio/catalog/samtools/flagstat.yaml"
         }
       ]
     },
@@ -8771,6 +11524,135 @@
           ],
           "slug": "reconstruction_qc",
           "yamlPath": "depictio/catalog/sidle/reconstruction_qc.yaml"
+        }
+      ]
+    },
+    {
+      "biotools_url": null,
+      "description": "",
+      "dir": "depictio/catalog/simpleaf",
+      "homepage": "https://github.com/COMBINE-lab/simpleaf",
+      "id": "simpleaf",
+      "name": "simpleaf (alevin-fry)",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/simpleaf/quant",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "UMI count per barcode against its rank, read from alevin-fry's per-barcode feature dump and flagged against CellBender's cell-barcode list for this route, so it can be compared to the Cell Ranger knee curve for the same sample.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/simpleaf_quant/af_quant/featureDump.txt",
+            "path_glob_alt": []
+          },
+          "fixture": "barcode_rank.tsv",
+          "fixtureContent": "sample\taligner\trank\tumi_count\tis_cell\npbmc8k\tsimpleaf\t1\t38191\ttrue\npbmc8k\tsimpleaf\t2\t28895\ttrue\npbmc8k\tsimpleaf\t3\t27793\ttrue\npbmc8k\tsimpleaf\t4\t27780\ttrue\npbmc8k\tsimpleaf\t5\t25207\ttrue\npbmc8k\tsimpleaf\t6\t24671\ttrue\npbmc8k\tsimpleaf\t7\t23951\ttrue\npbmc8k\tsimpleaf\t8\t23926\ttrue\npbmc8k\tsimpleaf\t9\t23730\ttrue\npbmc8k\tsimpleaf\t10\t23599\ttrue\npbmc8k\tsimpleaf\t11\t23514\ttrue\npbmc8k\tsimpleaf\t12\t22844\ttrue\npbmc8k\tsimpleaf\t13\t22747\ttrue\npbmc8k\tsimpleaf\t14\t22598\ttrue\npbmc8k\tsimpleaf\t15\t22485\ttrue\npbmc8k\tsimpleaf\t16\t22434\ttrue\n",
+          "id": "simpleaf_barcode_rank",
+          "mode": "simpleaf_quant/barcode_rank",
+          "name": "Barcode-rank curve (simpleaf/alevin-fry)",
+          "path_glob": "**/simpleaf_quant/af_quant/featureDump.txt",
+          "rawYaml": "id: simpleaf_barcode_rank\nname: Barcode-rank curve (simpleaf/alevin-fry)\nmode: simpleaf_quant/barcode_rank\ndescription: >-\n  UMI count per barcode against its rank, read from alevin-fry's per-barcode\n  feature dump and flagged against CellBender's cell-barcode list for this\n  route, so it can be compared to the Cell Ranger knee curve for the same\n  sample.\nfind:\n  path_glob: \"**/simpleaf_quant/af_quant/featureDump.txt\"\nrecipe: simpleaf/barcode_rank.py\nfixture: barcode_rank.tsv\nrenders_as:\n  - { id: simpleaf_barcode_rank_knee, component: advanced_viz, kind: knee_plot, roles: {sample: sample, rank: rank, umi_count: umi_count, is_cell: is_cell} }\n  - { component: card, column: umi_count, aggregation: max, secondary_layout: histogram }\n  - { component: table }\n",
+          "recipe": "simpleaf/barcode_rank.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "id": "simpleaf_barcode_rank_knee",
+              "kind": "knee_plot",
+              "roles": {
+                "is_cell": "is_cell",
+                "rank": "rank",
+                "sample": "sample",
+                "umi_count": "umi_count"
+              }
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "umi_count",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "barcode_rank",
+          "yamlPath": "depictio/catalog/simpleaf/barcode_rank.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Reads processed and mapped by piscem/alevin-fry and the barcodes alevin-fry quantified, one row per sample.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/simpleaf_quant/af_map/map_info.json",
+            "path_glob_alt": []
+          },
+          "fixture": "mapping_metrics.tsv",
+          "fixtureContent": "sample\tnum_processed\tnum_mapped\tmapping_rate\tnum_cells\npbmc8k\t784064148\t662490360\t0.8449440797540458\t343057\n",
+          "id": "simpleaf_mapping_metrics",
+          "mode": "simpleaf_quant/mapping_metrics",
+          "name": "Mapping headline numbers (simpleaf/alevin-fry)",
+          "path_glob": "**/simpleaf_quant/af_map/map_info.json",
+          "rawYaml": "id: simpleaf_mapping_metrics\nname: Mapping headline numbers (simpleaf/alevin-fry)\nmode: simpleaf_quant/mapping_metrics\ndescription: >-\n  Reads processed and mapped by piscem/alevin-fry and the barcodes\n  alevin-fry quantified, one row per sample.\nfind:\n  path_glob: \"**/simpleaf_quant/af_map/map_info.json\"\nrecipe: simpleaf/mapping_metrics.py\nfixture: mapping_metrics.tsv\nrenders_as:\n  - { component: card, column: mapping_rate, aggregation: average, secondary_layout: gauge, coverage_max: 1.0 }\n  - { component: card, column: num_processed, aggregation: max }\n  - { component: card, column: num_cells, aggregation: max }\n  - { component: table }\n",
+          "recipe": "simpleaf/mapping_metrics.py",
+          "renders_as": [
+            {
+              "aggregation": "average",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "mapping_rate",
+              "columns": [],
+              "component": "card",
+              "coverage_max": 1.0,
+              "dict_kwargs": {},
+              "roles": {},
+              "secondary_layout": "gauge"
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "num_processed",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {}
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "num_cells",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "roles": {}
+            }
+          ],
+          "slug": "mapping_metrics",
+          "yamlPath": "depictio/catalog/simpleaf/mapping_metrics.yaml"
         }
       ]
     },

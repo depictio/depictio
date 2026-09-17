@@ -2,7 +2,8 @@
 
 Survey of the public AWS megatest bucket (`s3://nf-core-awsmegatests/`) for the
 pipelines depictio templates or considered templating, taken on 2026-09-05 with
-`scripts/nfcore_megatest.py`. Every release of a pipeline is expected at
+`scripts/nfcore_megatest.py` and re-surveyed on 2026-09-16 for the lot 2 pipelines
+(sarek, scrnaseq, mag, nanoseq, eager, methylseq, hic, scdownstream). Every release of a pipeline is expected at
 `<pipeline>/results-<tag_sha>/`, where `tag_sha` is the release's sha in
 <https://nf-co.re/pipelines.json>. In practice many release prefixes are empty
 (only `pipeline_info/` plus zero-byte directory markers), truncated syncs (a few
@@ -33,20 +34,23 @@ and are lower bounds for the big runs.
 | rnaseq | 3.26.0 | `e7ca4627` | ok | `aligner_star_salmon/` | yes (`multiqc/star_salmon/multiqc_report_data/`) | **Selected.** 1568 files / 114 GB across `aligner_star_salmon/` and `aligner_star_rsem/`. MultiQC 1.33 writes `multiqc_report_data/` (not `multiqc_data/`): the template pins it with a literal scan regex and the catalog matches it on `find.path_glob_alt` `**/multiqc/*/*_data/multiqc.parquet`. 3.24.0 and 3.25.0 are complete; 3.23.0 and older predate the parquet or are truncated. |
 | taxprofiler | 2.0.1 | `70ecc15e` | ok | `.` | yes (`multiqc/multiqc_data/`) | **Selected.** 680 files / 3.1 GB, MultiQC 1.34 with 16 modules plus raw profiler txt outputs. 2.0.0 is complete too; 1.2.x predate the parquet. |
 | chipseq | 2.1.0 | `76e2382b` | empty | | no | 2.1.0 (29 files / 199 GB, 1 small) and 2.0.0 (9 files / 51 GB) are truncated syncs of BAMs. **Selected run is 1.2.0** (`048fd685`, 871 files / 79.7 GB, run root `bwa/mergedLibrary/...`), which wrote **MultiQC 1.9** (`multiqc/{broadPeak,narrowPeak}/multiqc_data/multiqc_data.json`, no parquet) and must be reprocessed with 1.35. 1.2.1 (`0f487ed7`) exists and is a complete structural twin of 1.2.0 (same 871 files, same sizes, same layout); the selection stays on 1.2.0. |
-| sarek | 3.10.0 | `8ccac7ad` | ok | `test_full_germline_ncbench_agilent/` (also `test_full_germline_aws/`) | yes (`test_full_germline_ncbench_agilent/multiqc/multiqc_data/`) | Not in this lot. 563 files / 104 GB; somatic profiles absent from the megatest. 3.9.0 complete; 3.8.x and older predate the parquet. |
+| sarek | 3.10.0 | `8ccac7ad` | ok | `test_full_germline_ncbench_agilent/` (also `test_full_germline_aws/`) | yes (`test_full_germline_ncbench_agilent/multiqc/multiqc_data/`) | **Selected (lot 2).** 563 files / 104 GB; somatic profiles absent from the megatest, so ASCAT / ControlFREEC / MSIsensor outputs do not exist. 3.9.0 complete; 3.8.x and older predate the parquet. |
 | crisprseq | 2.3.0 | `0e9f915c` | ok | `.` | not seen | Not in this lot. Flat layout with thousands of per-sample files at the prefix root (listing capped at 3000 keys, no parquet among them); screening workflow never published. Every 2.0.0 to 2.2.1 prefix is empty. |
-| scrnaseq | 4.2.0 | `3fc17b4f` | ok | `aligner_*/` (`cellranger`, `kallisto`, `simpleaf`, `star`) | yes (per aligner `multiqc/multiqc_data/`) | Not in this lot. 421 files / 137 GB; three of the four aligner roots carry a parquet. 2.x prefixes are empty or a single BAM. |
+| scrnaseq | 4.2.0 | `3fc17b4f` | ok | `aligner_*/` (`cellranger`, `kallisto`, `simpleaf`, `star`) | yes (per aligner `multiqc/multiqc_data/`) | **Selected (lot 2), run root `aligner_cellranger/`.** 421 files / 137 GB; three of the four aligner roots carry a parquet (`aligner_star/` has no MultiQC). No marker-gene table is published. 2.x prefixes are empty or a single BAM. |
 | smrnaseq | 2.4.1 | `cb0af579` | ok | `.` | yes (`multiqc/multiqc_data/`) | Not in this lot. 163 files / 1.6 GB. Every older prefix (2.2.3 to 2.4.0) is empty. |
 | oncoanalyser | 3.0.0 | `7c74c87a` | ok | `HCC1395/` (sample-named) | none (no MultiQC) | Not in this lot. 604 files / 272 GB; 2.3.0 and 2.2.0 complete, 2.1.0 and older empty. |
-| methylseq | 4.2.0 | `5aa56467` | empty | | no | 5 intermediates (3 BAM, 2 `txt.gz`, 37.6 GB) and nine restart `params_*.json`; 4.0.0 empty, 3.0.0 truncated (9 BAMs / 92 GB). Last complete run is 2.3.0 (2022, 1283 files, pre-parquet MultiQC). |
+| methylseq | 4.2.0 | `5aa56467` | empty | | no | 5 intermediates (3 BAM, 2 `txt.gz`, 37.6 GB) and nine restart `params_*.json`; 4.0.0 empty, 3.0.0 truncated (9 BAMs / 92 GB). **Selected run is 2.3.0** (`93bc5811`, 2022, 1283 files, run root `bismark/`, pre-parquet MultiQC reprocessed with 1.35). `PRESEQ_LCEXTRAP` FAILED for 6 of the 7 samples in this run (only `SRR7961103` completed), so no Preseq collection is built into the template. The `results-<sha>-bismark-CPU` / `-ARM` / `-GPU` benchmark prefixes hold at most 5 data objects and are invisible to the resolver (bare 40-hex sha required). |
 | atacseq | 2.1.2 | `1a1dbe52` | empty | | no | 2.1.2 and 2.1.1 hold a single 12 GB object each. Last complete run is 1.2.2 (2022, 488 files, pre-parquet). |
 | cutandrun | 3.2.2 | `6e1125d4` | empty | | no | 3.2.2, 3.2.1 and 3.2 hold directory markers only. Last complete run is 3.1 (2023, 415 files, pre-parquet). |
 | quantms | 1.2.0 | `fa34d79f` | empty | | no | Markers for `mode_dia/`, `mode_lfq/`, `mode_tmt/` and nothing else. Last complete run is 1.1.1 (2023, 224 files). |
 | bacass | 2.6.1 | `5ed7c2dd` | missing | | | No prefix for 2.6.1 and every older prefix (2.1.0 to 2.5.0) is empty: no usable megatest at all. |
 | raredisease | 3.1.2 | `83f2699d` | empty | | no | Every release prefix (2.2.0 to 3.1.2) holds `pipeline_info/` only. |
-| mag | 5.5.0 | `56abab5b` | partial | `.` | no | 43 small files / 11.8 MB under `GenomeBinning/`, `QC_longreads/`, `QC_shortreads/`: passes the heuristic but publishes no MultiQC, bin QC or GTDB-Tk tables. 5.4.0 to 5.4.2 are complete (650 files / 11.9 GB, no parquet seen in the first 1500 keys); 5.2.0 and 5.3.0 empty. |
+| mag | 5.5.0 | `56abab5b` | partial | `.` | no | 43 small files / 11.8 MB under `GenomeBinning/`, `QC_longreads/`, `QC_shortreads/`: passes the heuristic but publishes no MultiQC, bin QC or GTDB-Tk tables. **Selected run is 5.4.2** (`5dabb015`, 7500+ files / 14.7 GB, parquet at `multiqc/multiqc_data/multiqc.parquet`, 10 MB; the 2026-09-05 survey missed it because its listing was capped at 1500 keys). Publishes no bin QC (CheckM/BUSCO/GUNC), no taxonomy (GTDB-Tk) and no QUAST or depth tables at all, confirmed against the local fetch (0 objects under `Taxonomy/`, `QC_shortreads/`, `QC_longreads/` or `Assembly/`). Only `GenomeBinning/` contig-to-bin maps, COMEBin embeddings, assemblies, Prodigal/GenBank annotation (`Annotation/`, 917 files, not locally fetched) and MultiQC are published, so the template built on it stays thin by construction, not by an incomplete build. 5.2.0 and 5.3.0 empty. |
 | phyloplace | 2.1.0 | `441e351e` | missing | | | 2.0.1 (`3e37f9d7`) is complete and small (25 files / 14.8 MB, parquet present but the MultiQC report carries no module data). 2.0.0 empty. |
-| nanoseq | 3.1.0 | `6e563e54` | empty | | no | Two zero-sized data objects. Last complete run is 3.0.0 (2022, 205 files, pre-parquet). |
+| nanoseq | 3.1.0 | `6e563e54` | empty | | no | Two zero-sized data objects. **Selected run is 3.0.0** (`1e60482a`, 2022, 205 files / 17 GB, pre-parquet MultiQC under `multiqc/minimap2/multiqc_data/`, reprocessed with 1.35). |
+| eager | 2.5.3 | `cc66639a` | empty | | no | 2.5.0 to 2.5.3 hold `pipeline_info/` only. **Selected run is 2.4.5** (`42c9d5f8`, 302 files / 16.3 GB, DSL1, `multiqc/multiqc_data/multiqc_data.json` only, reprocessed with 1.35). 2.4.4 is a byte-identical twin of 2.4.5. |
+| hic | 2.1.0 | `fe4ac656` | empty | | no | 2.1.0 is a truncated sync: two 14.6 GB BAMs and one 19.7 GB `allValidPairs`, every other directory (including `multiqc/`) a zero-byte marker. **Selected run is 2.0.0** (`b4d89cfa`, 144 files / 59.7 GB, `multiqc/multiqc_data/mqc_*.txt`, reprocessed with 1.35). 1.3.0 (`ac74763a`) is complete but tiny (35 files / 54 MB). |
+| scdownstream | (dev) | `8e13eabb` | empty | | no | **No usable megatest at all.** The only prefix (`results-8e13eabb…`, 2024-08-01, not a release sha) holds six `pipeline_info/` files and nine zero-byte directory markers (`adata/`, `celda/`, `celltypes/`, `doublet/`, `integration/`, `qc/`, `scanpy/`, ...). Dropped from lot 2 until a run is published. |
 
 ## Selected runs for this lot
 
@@ -70,6 +74,22 @@ deliberate and visible rather than silent.
 | chipseq | 1.2.0 | `048fd6854fcc85b355c61dfc2e21da0bcc6399ea` | `.` (`bwa/mergedLibrary/...`) | 1.9, reprocessed with 1.35 |
 | atacseq | 1.2.2 | `f327c86324427c64716be09c98634ae0bc8165f6` | `.` (`bwa/mergedLibrary/...`) | none, reprocessed with 1.35; raw inputs under `multiqc/broadPeak/multiqc_data/` |
 | cutandrun | 3.1 | `42502fb44975e930eec865353c5481f472bcf766` | `.` (numbered stage dirs) | none, reprocessed with 1.35 |
+
+## Selected runs for lot 2
+
+The seven pipelines added in lot 2 (2026-09-16). Four of them are pinned to an
+older release than the latest for the same reason as above; scdownstream was
+dropped because the bucket holds no run for it.
+
+| pipeline | version | results_sha | run_root | MultiQC |
+|---|---|---|---|---|
+| sarek | 3.10.0 | `8ccac7ad37b05dd792447763bf9671b719824587` | `test_full_germline_ncbench_agilent/` | 1.35 native parquet |
+| scrnaseq | 4.2.0 | `3fc17b4f971a89e47c88337de71d0e777ffad8cc` | `aligner_cellranger/` | 1.34 native parquet |
+| mag | 5.4.2 | `5dabb0159ac0104885e09f301db22126e8fcb394` | `.` | native parquet |
+| nanoseq | 3.0.0 | `1e60482a2c4621234393a6eef8e9a104309c20ae` | `.` | pre-parquet (`multiqc/minimap2/multiqc_data/`), reprocessed with 1.35 |
+| eager | 2.4.5 | `42c9d5f8602e5e88fdcec28f194d2cd4cff61c75` | `.` | pre-parquet, reprocessed with 1.35 |
+| methylseq | 2.3.0 | `93bc5811603c287c766a0ff7e03b5b41f4483895` | `bismark/` | pre-parquet, reprocessed with 1.35 |
+| hic | 2.0.0 | `b4d89cfacf97a5835fba804887cf0fc7e0449e8d` | `.` | pre-parquet (`mqc_*.txt`), reprocessed with 1.35 |
 
 ## How to use
 
