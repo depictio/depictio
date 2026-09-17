@@ -5,7 +5,7 @@ Uses MultiQC Python module to extract samples, modules, and plots.
 
 import os
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from depictio.cli.cli.utils.api_calls import (
     api_check_duplicate_multiqc_report,
@@ -17,6 +17,39 @@ from depictio.cli.cli.utils.file_utils import compute_file_hash
 from depictio.cli.cli.utils.ingest_timing import record, timed
 from depictio.cli.cli.utils.rich_utils import rich_print_multiqc_processing_summary
 from depictio.cli.cli_logging import logger
+from depictio.models.models.multiqc_reports import (
+    GENERAL_STATS_ANCHOR,
+    GENERAL_STATS_FALLBACK_ANCHORS,
+)
+
+
+def _parquet_has_general_stats(parquet_path: str) -> Optional[bool]:
+    """Whether a report's parquet carries general-statistics rows.
+
+    MultiQC assembles that table from every module that ran, so it shows up in
+    neither `list_modules()` nor `list_plots()` and the only witness is the
+    parquet's own `anchor` column. Reports written without it (a run whose
+    `multiqc_config` drops the table) would otherwise still be offered a General
+    Stats tile that can only fail at render time.
+
+    Returns None when the columns cannot be read, which callers treat as unknown.
+    """
+    try:
+        import polars as pl
+
+        anchors = (
+            pl.read_parquet(parquet_path, columns=["anchor", "type"])
+            .filter(pl.col("type") == "plot_input_row")
+            .get_column("anchor")
+            .drop_nulls()
+            .unique()
+            .to_list()
+        )
+    except Exception as e:
+        logger.debug(f"Could not read anchors from {parquet_path}: {e}")
+        return None
+    known = {GENERAL_STATS_ANCHOR, *GENERAL_STATS_FALLBACK_ANCHORS}
+    return any(str(a) in known for a in anchors)
 
 
 def extract_multiqc_metadata(parquet_path: str) -> Dict[str, Any]:
@@ -123,6 +156,7 @@ def extract_multiqc_metadata(parquet_path: str) -> Dict[str, Any]:
         # Build sample mappings from canonical IDs to variants
         sample_mappings = build_sample_mapping(samples)
         canonical_samples = list(sample_mappings.keys())
+        has_general_stats = _parquet_has_general_stats(parquet_path)
 
         metadata = {
             "samples": samples,
@@ -131,11 +165,13 @@ def extract_multiqc_metadata(parquet_path: str) -> Dict[str, Any]:
             "sample_mappings": sample_mappings,
             "canonical_samples": canonical_samples,
             "multiqc_version": multiqc_version,
+            "has_general_stats": has_general_stats,
         }
 
         logger.info(
             f"Extracted metadata: {len(samples)} samples, {len(canonical_samples)} canonical IDs, "
-            f"{len(modules)} modules, {len(plots)} plot groups"
+            f"{len(modules)} modules, {len(plots)} plot groups, "
+            f"general stats: {has_general_stats}"
         )
 
         return metadata

@@ -60,6 +60,7 @@ from depictio.api.v1.services.figure.figure_builder import merge_dashboard_brand
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.branding import BrandTheme
 from depictio.models.models.dashboards import DashboardData, DashboardDataLite
+from depictio.models.models.multiqc_reports import general_stats_available
 from depictio.models.models.users import User
 from depictio.models.timestamps import preserved_creation_time, utc_now_str
 
@@ -5092,32 +5093,35 @@ _DATA_COMPONENT_TYPES = {"figure", "card", "table", "multiqc", "advanced_viz"}
 # Main-grid width (matches the React viewer's react-grid-layout cols=8).
 _GRID_COLS = 8
 
-# MultiQC sections that always exist when any module parsed but are NOT listed in a
-# report's stored `modules` array — exempt from the module-presence check so the
-# general-statistics component is never wrongly hidden.
+# MultiQC sections that are assembled by MultiQC rather than produced by a module,
+# so they are NOT listed in a report's stored `modules` array. The module-presence
+# check cannot speak for them; `metadata.has_general_stats` does (see
+# `_parsed_multiqc_report`).
 _MULTIQC_SYNTHETIC_MODULES = {"general_stats"}
 
 
 def _parsed_multiqc_report(
     dc_id: PyObjectId | None,
-) -> tuple[set[str] | None, dict[str, set[str]] | None]:
-    """Modules + per-module plot names that parsed for a MultiQC DC, from its record.
+) -> tuple[set[str] | None, dict[str, set[str]] | None, bool]:
+    """Modules, per-module plot names and general-stats presence for a MultiQC DC.
 
-    Returns ``(modules, plots)`` where ``plots`` maps each module to the set of
-    renderable plot/section names that ingestion recorded. Either element is
-    ``None`` when no record exists, so callers keep module/plot-pinned components
-    rather than hiding them on missing metadata (a genuine gap still surfaces).
+    Returns ``(modules, plots, general_stats)`` where ``plots`` maps each module
+    to the set of renderable plot/section names that ingestion recorded. The
+    first two are ``None`` when no record exists, so callers keep module/plot
+    -pinned components rather than hiding them on missing metadata (a genuine
+    gap still surfaces). ``general_stats`` says whether a General Stats tile can
+    render, and is True on an unknown or missing record for the same reason.
     """
     if not dc_id:
-        return None, None
+        return None, None, True
     from depictio.api.v1.db import multiqc_collection
 
-    doc = multiqc_collection.find_one(
-        {"data_collection_id": {"$in": [ObjectId(str(dc_id)), str(dc_id)]}}
+    docs = list(
+        multiqc_collection.find({"data_collection_id": {"$in": [ObjectId(str(dc_id)), str(dc_id)]}})
     )
-    if not doc:
-        return None, None
-    md = doc.get("metadata") or {}
+    if not docs:
+        return None, None, True
+    md = docs[0].get("metadata") or {}
     modules = md.get("modules")
     plots: dict[str, set[str]] = {}
     for mod, items in (md.get("plots") or {}).items():
@@ -5128,7 +5132,10 @@ def _parsed_multiqc_report(
             elif isinstance(item, dict):
                 names.update(item.keys())
         plots[mod] = names
-    return (set(modules) if modules else None), (plots or None)
+    general_stats = general_stats_available(
+        (doc.get("metadata") or {}).get("has_general_stats") for doc in docs
+    )
+    return (set(modules) if modules else None), (plots or None), general_stats
 
 
 def _build_dc_meta(project_id: PyObjectId | None) -> dict[str, dict]:
@@ -5153,9 +5160,10 @@ def _build_dc_meta(project_id: PyObjectId | None) -> dict[str, dict]:
             # ingestion so module/plot-pinned components for absent modules or
             # absent plots can be hidden below.
             if (entry["type"] or "").lower() == "multiqc":
-                mods, plots = _parsed_multiqc_report(dc.get("_id") or dc.get("id"))
+                mods, plots, general_stats = _parsed_multiqc_report(dc.get("_id") or dc.get("id"))
                 entry["mqc_modules"] = mods
                 entry["mqc_plots"] = plots
+                entry["mqc_general_stats"] = general_stats
             meta[tag] = entry
     return meta
 
@@ -5186,12 +5194,18 @@ def _component_has_data(component: dict, dc_meta: dict[str, dict]) -> bool:
     # called no iVar variants), OR the module is present but the pinned plot/section
     # produced no renderable plot for this run (e.g. nanopore's `snpeff` module
     # exists but has no "Variant Effects by Impact" plot — it would otherwise error
-    # at render). Mirrors DC/tab pruning. Synthetic sections such as `general_stats`
-    # are always available, so they are exempt; an unknown module/plot set (no
-    # ingestion record) keeps the component so a genuine gap still shows.
+    # at render). Mirrors DC/tab pruning. An unknown module/plot set (no ingestion
+    # record) keeps the component so a genuine gap still shows.
     if component.get("component_type") == "multiqc":
         module = component.get("selected_module")
-        if not module or module in _MULTIQC_SYNTHETIC_MODULES:
+        # `general_stats` is assembled by MultiQC from every module that ran, so it
+        # is in neither `mqc_modules` nor `mqc_plots` and the module check cannot
+        # speak for it. Ingestion records whether the parquet carries the table
+        # instead: a report written without it (a run whose `multiqc_config` drops
+        # it) gets the tile pruned rather than a render-time error in its place.
+        if module in _MULTIQC_SYNTHETIC_MODULES:
+            return bool(info.get("mqc_general_stats", True))
+        if not module:
             return True
         modules = info.get("mqc_modules")
         if modules is not None and module not in modules:

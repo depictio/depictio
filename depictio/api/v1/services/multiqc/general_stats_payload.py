@@ -17,6 +17,11 @@ import plotly.colors as pc
 import plotly.graph_objects as go
 import polars as pl
 
+from depictio.models.models.multiqc_reports import (
+    GENERAL_STATS_ANCHOR,
+    GENERAL_STATS_FALLBACK_ANCHORS,
+)
+
 # Plotly colorscales standing in for the matplotlib colormaps the general-stats
 # table used before the Dash → React migration. matplotlib is no longer a
 # dependency, and plotly (already required) provides equivalent scales with the
@@ -254,19 +259,14 @@ def _process_multiqc_data(
         # dtypes don't crash the concat — they just contribute nulls / get
         # cast to a common dtype, mirroring the CLI aggregator's behaviour.
         df_raw = pl.concat([pl.read_parquet(p) for p in parquet_path], how="diagonal_relaxed")
-    df_general_stats = df_raw.filter(pl.col("anchor") == "general_stats_table")
+    df_general_stats = df_raw.filter(pl.col("anchor") == GENERAL_STATS_ANCHOR)
     df_metrics_pl = df_general_stats.filter(pl.col("type") == "plot_input_row")
 
     # Fallback: try summary_variants_metrics_plot (nf-core/viralrecon style). The
     # illumina route emits the bare `..._plot` anchor; the nanopore/ARTIC route emits
     # the same table under a `..._plot_table` anchor — accept both.
     if len(df_metrics_pl) == 0:
-        for fallback_anchor in [
-            "summary_variants_metrics_plot",
-            "summary_assembly_metrics_plot",
-            "summary_variants_metrics_plot_table",
-            "summary_assembly_metrics_plot_table",
-        ]:
+        for fallback_anchor in GENERAL_STATS_FALLBACK_ANCHORS:
             df_fallback = df_raw.filter(pl.col("anchor") == fallback_anchor)
             df_fallback_metrics = df_fallback.filter(pl.col("type") == "plot_input_row")
             if len(df_fallback_metrics) > 0:
