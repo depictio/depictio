@@ -1,3 +1,4 @@
+import re
 from typing import Annotated
 
 import typer
@@ -74,6 +75,16 @@ def nextflow(
             help="Undo --install, leaving any other Nextflow settings alone.",
         ),
     ] = False,
+    default_enabled: Annotated[
+        bool,
+        typer.Option(
+            "--default-enabled/--default-disabled",
+            help=(
+                "With --install: whether a pipeline that sets no --depictio_enabled "
+                "triggers Depictio (default) or stays opt-in."
+            ),
+        ),
+    ] = True,
 ):
     """
     Print the path of the bundled Nextflow onComplete snippet.
@@ -97,7 +108,9 @@ def nextflow(
         depictio-cli config nextflow --install
 
     Every later `nextflow run` then triggers Depictio with no extra flag, and
-    `--uninstall` reverses it.
+    `--uninstall` reverses it. Add --default-disabled to install it opt-in
+    instead: pipelines then need `--depictio_enabled true` to trigger. Either
+    way, `--depictio_enabled true/false` on a given `nextflow run` always wins.
     """
     # Deliberately no rich_print_command_usage and no decoration: the only
     # useful form of this output is a bare path on stdout, inside $(...).
@@ -124,7 +137,7 @@ def nextflow(
                 "--install and --uninstall are opposites; pass only one.", "error"
             )
             raise typer.Exit(code=1)
-        _apply_nextflow_install(snippet, enable=install)
+        _apply_nextflow_install(snippet, enable=install, default_enabled=default_enabled)
         return
 
     if print_:
@@ -154,7 +167,30 @@ def _strip_managed_block(text: str) -> str:
     return "\n".join(out).strip("\n")
 
 
-def _apply_nextflow_install(snippet, enable: bool) -> None:
+# Matches the one line in the bundled snippet that supplies the fallback used
+# when a run sets no `--depictio_enabled`/`params.depictio_enabled`. Templated
+# in `_render_snippet` rather than left as a placeholder in the source file, so
+# `--print` and `--install` (no flag) still show plain, valid Groovy.
+_ENABLED_DEFAULT_RE = re.compile(r"(cfg\.call\('depictio_enabled',\s*)(?:true|false)(\))")
+
+
+def _render_snippet(snippet, default_enabled: bool) -> str:
+    """Return the bundled snippet's text, with its opt-out default swapped in."""
+    text = snippet.read_text()
+    templated, count = _ENABLED_DEFAULT_RE.subn(
+        rf"\g<1>{'true' if default_enabled else 'false'}\g<2>", text
+    )
+    if count != 1:
+        # The snippet is Depictio's own package data, not user input: a mismatch
+        # here means the source moved and this function needs updating with it,
+        # not a value some caller passed in.
+        raise RuntimeError(
+            f"Expected exactly one depictio_enabled default in {snippet}, found {count}."
+        )
+    return templated
+
+
+def _apply_nextflow_install(snippet, enable: bool, default_enabled: bool = True) -> None:
     """Add or remove the global include in ``$NXF_HOME/config``.
 
     Nextflow reads that file before every run, which is what removes the
@@ -168,9 +204,13 @@ def _apply_nextflow_install(snippet, enable: bool) -> None:
     location under ``~/.depictio`` instead, which survives all of that. If the
     CLI then disappears the handler simply reports it and leaves the pipeline's
     own result untouched.
+
+    ``default_enabled`` only changes the *fallback* used when a run sets no
+    ``--depictio_enabled``/``params.depictio_enabled``: the handler reads that
+    param lazily at completion time regardless of what was installed, so a
+    per-run override always wins either way.
     """
     import os
-    import shutil
     from pathlib import Path
 
     installed = Path("~/.depictio/nextflow.config").expanduser()
@@ -194,19 +234,30 @@ def _apply_nextflow_install(snippet, enable: bool) -> None:
 
     # Refresh on every --install so an upgraded CLI ships its updated handler.
     installed.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(snippet, installed)
+    installed.write_text(_render_snippet(snippet, default_enabled))
 
     block = f"{_NXF_BEGIN}\nincludeConfig '{installed}'\n{_NXF_END}"
     nxf_config.parent.mkdir(parents=True, exist_ok=True)
     nxf_config.write_text(f"{remainder}\n\n{block}\n" if remainder else f"{block}\n")
 
     rich_print_checked_statement(f"Copied the handler to {installed}", "success")
-    rich_print_checked_statement(f"Enabled it for every pipeline in {nxf_config}", "success")
-    rich_print_checked_statement(
-        "`nextflow run <pipeline>` now triggers Depictio with no extra flag. "
-        "Undo with: depictio-cli config nextflow --uninstall",
-        "info",
-    )
+    if default_enabled:
+        rich_print_checked_statement(f"Enabled it for every pipeline in {nxf_config}", "success")
+        rich_print_checked_statement(
+            "`nextflow run <pipeline>` now triggers Depictio with no extra flag. "
+            "Add --depictio_enabled false to skip a given run, "
+            "or undo with: depictio-cli config nextflow --uninstall",
+            "info",
+        )
+    else:
+        rich_print_checked_statement(
+            f"Installed opt-in in {nxf_config}: pipelines stay silent by default.", "success"
+        )
+        rich_print_checked_statement(
+            "Add --depictio_enabled true to a `nextflow run` to trigger Depictio for it, "
+            "or undo the install with: depictio-cli config nextflow --uninstall",
+            "info",
+        )
 
 
 @app.command()
