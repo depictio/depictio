@@ -615,7 +615,6 @@ const ProjectDetailApp: React.FC = () => {
 
       <CreateDataCollectionModal
         opened={createDcOpened}
-        projectType={projectType}
         projectId={projectId}
         onClose={() => setCreateDcOpened(false)}
         onSuccess={() => {
@@ -1068,11 +1067,10 @@ const CoordColumnPickers: React.FC<{
 
 const CreateDataCollectionModal: React.FC<{
   opened: boolean;
-  projectType: 'basic' | 'advanced';
   projectId: string | null;
   onClose: () => void;
   onSuccess: () => void;
-}> = ({ opened, projectType, projectId, onClose, onSuccess }) => {
+}> = ({ opened, projectId, onClose, onSuccess }) => {
   const accent = useBrandAccents();
   const [dcType, setDcType] = useState<'table' | 'multiqc'>('table');
   const [file, setFile] = useState<File | null>(null);
@@ -1268,45 +1266,6 @@ const CreateDataCollectionModal: React.FC<{
         : common[common.length - 1];
     setName(deepest || 'multiqc_reports');
   }, [dcType, multiqcDropzone.files, name]);
-
-  if (projectType === 'advanced') {
-    return (
-      <Modal
-        opened={opened}
-        onClose={onClose}
-        title="Create data collection"
-        centered
-        size="md"
-      >
-        <Stack gap="md">
-          <Group gap="xs">
-            <Icon
-              icon="mdi:database-plus-outline"
-              width={28}
-              color="var(--mantine-color-orange-6)"
-            />
-            <Text fw={500}>Advanced project — use depictio-CLI</Text>
-          </Group>
-          <Alert
-            color="yellow"
-            variant="light"
-            icon={<Icon icon="mdi:information-outline" width={18} />}
-          >
-            <Text size="sm">
-              For advanced (CLI-driven) projects, data collections are added by
-              running <code>depictio-cli</code> against your workflow output —
-              not from this UI.
-            </Text>
-          </Alert>
-          <Group justify="flex-end">
-            <Button variant="default" onClick={onClose}>
-              Got it
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
-    );
-  }
 
   const handleCheckUniformity = async () => {
     if (multiqcDropzone.files.length < 2) return;
