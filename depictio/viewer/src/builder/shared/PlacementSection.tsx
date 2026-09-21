@@ -13,7 +13,7 @@
  *
  * One component, two mount points: `DesignShell` supplies its own surrounding
  * `Accordion` for the seven builders that go through it, and the figure builder
- * slots the item into the accordion already in its right-hand panel. `section`
+ * slots the item into the accordion already in its control column. `section`
  * lives on the base component model, so duplicating the control per builder
  * would only guarantee drift.
  *
