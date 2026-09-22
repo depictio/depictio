@@ -1,0 +1,20 @@
+# Prokka: rapid prokaryotic genome annotation. In a metagenome pipeline it is
+# run once per recovered bin and answers two different questions with two
+# different files: the `.txt` summary says how many features of each kind the
+# bin holds, the `.gff` says where they are.
+#
+# The feature counts are not cosmetic. MIMAG's high-quality draft standard is
+# not completeness and contamination alone: it also requires the 5S, 16S and
+# 23S rRNA genes and at least 18 tRNAs, and only an annotation step can say
+# whether a bin has them. Nothing else in nf-core/mag counts them, and MultiQC's
+# prokka panel reports CDS and coding density but not the RNA classes.
+#
+# The GFF carries the bin's own FASTA after `##FASTA` and Prokka renames every
+# contig to an internal `gnl|<centre>|<hash>_N`, so a GFF is large and its
+# coordinates join to nothing outside the bin. It is read as a within-bin locus
+# map and nothing more; see the `gene_track` output.
+id: prokka
+name: Prokka
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/prokka
+homepage: https://github.com/tseemann/prokka
+description: Structural and functional annotation of prokaryotic genomes and metagenome-assembled genomes.

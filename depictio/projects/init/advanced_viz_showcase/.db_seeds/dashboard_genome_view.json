@@ -1,0 +1,586 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d7a"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d7a"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "gv-text",
+      "component_type": "text",
+      "title": "Genome view",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Coverage across the genome",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Two tracks over the same coverage collection. Scroll to zoom into a locus, drag to pan along the genome, brush the axis to publish the chromosome and the position range as ordinary dashboard filters. The lower track follows that region instead of showing the whole reference. Depth is drawn as bars because GenomeSpy has no line mark. Per-sample lanes, the gene annotation lane and the mark type live in the Settings gear.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gv-depth",
+      "component_type": "advanced_viz",
+      "title": "Depth along the reference",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "coverage_track_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d50"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "SARS-CoV-2 coverage tracks (200 bp bins) for ~50 samples with SARS-CoV-2 gene-region annotation; sourced from a viralrecon-bowtie2-mosdepth run",
+        "data_collection_tag": "coverage_track_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d50"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Read depth per 200 bp bin, drawn as bars from the baseline. Brush the axis to publish a region filter; switch to per-sample lanes in Settings.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Coverage across the genome",
+      "viz_kind": "genome_view",
+      "config": {
+        "viz_kind": "genome_view",
+        "chr_col": "chrom",
+        "pos_col": "start",
+        "score_col": "coverage",
+        "feature_col": null,
+        "end_col": "end",
+        "sample_col": "sample",
+        "category_col": "gene_region",
+        "mark": "bar",
+        "facet_by_sample": false,
+        "max_facets": 6,
+        "annotation": "none",
+        "assembly": null,
+        "score_title": "mean depth",
+        "score_threshold": null,
+        "point_size": 5,
+        "opacity": 0.85,
+        "region_filter_enabled": true,
+        "follow_region_filter": false,
+        "selection_enabled": false,
+        "selection_column": null
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gv-regions",
+      "component_type": "advanced_viz",
+      "title": "Bins as intervals, following the brushed region",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "coverage_track_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d50"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "SARS-CoV-2 coverage tracks (200 bp bins) for ~50 samples with SARS-CoV-2 gene-region annotation; sourced from a viralrecon-bowtie2-mosdepth run",
+        "data_collection_tag": "coverage_track_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d50"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "The same bins drawn as intervals coloured by gene region. This tile follows an incoming region filter, so a brush on the track above zooms it.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Coverage across the genome",
+      "viz_kind": "genome_view",
+      "config": {
+        "viz_kind": "genome_view",
+        "chr_col": "chrom",
+        "pos_col": "start",
+        "score_col": "coverage",
+        "feature_col": null,
+        "end_col": "end",
+        "sample_col": "sample",
+        "category_col": "gene_region",
+        "mark": "rect",
+        "facet_by_sample": false,
+        "max_facets": 8,
+        "annotation": "none",
+        "assembly": null,
+        "score_title": "mean depth",
+        "score_threshold": null,
+        "point_size": 5,
+        "opacity": 0.85,
+        "region_filter_enabled": false,
+        "follow_region_filter": true,
+        "selection_enabled": false,
+        "selection_column": null
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gv-text-markers",
+      "component_type": "text",
+      "title": "Markers on a locus axis",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Markers on a locus axis",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "The collection the Manhattan tab reads, on the same grammar: chromosomes are concatenated by the locus scale rather than laid out by hand, and the dashed rule is the significance threshold. Click a marker to filter the rest of the dashboard by feature. Compare it with the Manhattan tab for the same rows drawn in Plotly.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gv-markers",
+      "component_type": "advanced_viz",
+      "title": "Markers by position and score",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "manhattan_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic Manhattan: 23 chromosomes x ~40 noise points + 6 designed hits",
+        "data_collection_tag": "manhattan_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "chr / pos / score on a chromosome-aware locus scale. Zoom with the wheel, pan by dragging; the threshold rule, mark type and assembly live in the Settings gear.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Markers on a locus axis",
+      "viz_kind": "genome_view",
+      "config": {
+        "viz_kind": "genome_view",
+        "chr_col": "chr",
+        "pos_col": "pos",
+        "score_col": "score",
+        "feature_col": "feature",
+        "end_col": null,
+        "sample_col": null,
+        "category_col": null,
+        "mark": "point",
+        "facet_by_sample": false,
+        "max_facets": 8,
+        "annotation": "none",
+        "assembly": null,
+        "score_title": "-log10(padj)",
+        "score_threshold": 5.0,
+        "point_size": 5,
+        "opacity": 0.85,
+        "region_filter_enabled": false,
+        "follow_region_filter": false,
+        "selection_enabled": true,
+        "selection_column": "feature"
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gv-f-sample",
+      "component_type": "interactive",
+      "title": "Sample",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "coverage_track_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d50"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "SARS-CoV-2 coverage tracks (200 bp bins) for ~50 samples with SARS-CoV-2 gene-region annotation; sourced from a viralrecon-bowtie2-mosdepth run",
+        "data_collection_tag": "coverage_track_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d50"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Track scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Track filters",
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:flask",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gv-f-region",
+      "component_type": "interactive",
+      "title": "Gene region",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "coverage_track_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d50"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "SARS-CoV-2 coverage tracks (200 bp bins) for ~50 samples with SARS-CoV-2 gene-region annotation; sourced from a viralrecon-bowtie2-mosdepth run",
+        "data_collection_tag": "coverage_track_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d50"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Track scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "gene_region",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Track filters",
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:map-marker-path",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gv-f-depth",
+      "component_type": "interactive",
+      "title": "Depth",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "coverage_track_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d50"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "SARS-CoV-2 coverage tracks (200 bp bins) for ~50 samples with SARS-CoV-2 gene-region annotation; sourced from a viralrecon-bowtie2-mosdepth run",
+        "data_collection_tag": "coverage_track_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d50"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Track scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "coverage",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Track filters",
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:chart-line",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gv-f-score",
+      "component_type": "interactive",
+      "title": "Score",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "manhattan_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic Manhattan: 23 chromosomes x ~40 noise points + 6 designed hits",
+        "data_collection_tag": "manhattan_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Track scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "score",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Marker filters",
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:chart-bell-curve",
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-gv-f-sample",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-gv-f-region",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-gv-f-depth",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-gv-f-score",
+      "x": 0,
+      "y": 9,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-gv-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-gv-depth",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-gv-regions",
+      "x": 0,
+      "y": 8,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-gv-text-markers",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-gv-markers",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 7,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Genome view",
+  "subtitle": "GenomeSpy tracks on a chromosome-aware locus axis: bars, intervals, per-sample lanes and a region brush that filters the dashboard",
+  "icon": "tabler:dna-2",
+  "icon_color": "teal",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 35,
+  "main_tab_name": null,
+  "tab_icon": "tabler:dna-2",
+  "tab_icon_color": "teal",
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Track scope",
+      "icon": "mdi:filter-variant",
+      "color": "teal",
+      "description": "Restricts the tracks to a sample set, a region or a depth range",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Coverage across the genome",
+      "icon": "mdi:dna",
+      "color": "teal",
+      "description": "Two GenomeSpy tracks on one collection, linked by the region brush",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Markers on a locus axis",
+      "icon": "mdi:chart-scatter-plot",
+      "color": "teal",
+      "description": "The Manhattan collection drawn by GenomeSpy, for the side-by-side comparison",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
+}

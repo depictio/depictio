@@ -32,25 +32,46 @@ H3K27me3 in two replicates each, plus two IgG controls.
   share, and how much of it both replicates of a target support.
 - **The sample hub is the hub.** `samples` is one row per library with its target, its
   replicate number and its role (target or control). A persistent `Sample filters` section
-  (sample, target, role) is pinned to the top of every tab, and the template's links fan a
-  pick there out to the MultiQC panels, both peak collections, the peak summary, the
-  fragment-length tables and the caller comparison at once.
-- **Pinned sample sheet, tables and thresholds.** The sample hub sits in a collapsed
-  `Sample sheet` section pinned to the top of every tab, and the per-sample SEACR summary in
-  a collapsed `Reference tables` section pinned to the bottom, next to a collapsed
+  (sample, target, replicate, role) is pinned to the top of every tab, and the template's
+  links fan a pick there out to the MultiQC panels, both peak collections, the peak summary,
+  the fragment-length tables, the nucleosome classes, the spike-in factors, the signal budget
+  and the caller comparison at once. `replicate` is the second real samplesheet factor and is
+  filtered through `replicate_label`, its categorical twin, because an Int64 column only takes
+  a slider.
+- **Every tab carries filters on two levels.** The pinned persistent `Sample filters` section
+  above, plus a tab-local, non-persistent section on that tab's own columns: `Alignment scope`
+  on the MultiQC tab (target alignment rate, spike-in scale factor), `Signal scope` on Signal
+  (nucleosome class, fragment length, coverage concentration), `Peak scope` on Peak calls
+  (region width, coverage per base, contig), `Caller scope` on Caller agreement (caller, share
+  reproduced) and `Consensus scope` on Consensus (replicate support, interval width, member
+  peaks).
+- **Every tab opens with four cards.** A `w: 2` glance strip across the full width, mostly
+  multi-metric (donut, box plot, top-n, gauge). On the MultiQC tab that strip lives in the
+  pinned `Sample sheet` section rather than in a grid section of its own, because a MultiQC
+  tab holds MultiQC panels only and a pinned persistent section is the one exemption; it rides
+  every other tab too, open rather than collapsed, so the four cards are the first row
+  wherever the reader lands.
+- **Pinned sample sheet, tables and thresholds.** The glance strip and the sample hub sit in
+  an open `Sample sheet` section pinned to the top of every tab, and the per-sample SEACR
+  summary in a collapsed `Reference tables` section pinned to the bottom, next to a collapsed
   `QC thresholds` section holding the yield and coverage floors.
 - **Selection, both ways.** The total-against-maximum-coverage scatter on the Peak calls tab
   carries `selection_enabled` on `peak_id` and both peak tables carry
   `row_selection_enabled` on the same column; the caller scatter on the Caller agreement tab
   and the comparison table do the same on `sample`. Lassoing narrows the tables, ticking rows
   narrows the panels.
-- **Catalog provenance.** 45 of the 84 tiles carry a `use:` catalog reference, so the tile
-  chrome says where the panel comes from: `seacr/*` for the SEACR panels, `macs2/*` for the
-  MACS2 comparison panels, `deeptools/*` for the three tables on the Signal tab, and
-  `multiqc/<module>` for the tool-module QC panels.
-- **Everything matches on file name.** No data collection or recipe glob spells out the
-  numbered `03_peak_calling/` prefixes, so only `megatest.yaml` knows about the stage
-  numbering and a reorganised release needs the manifest updated and nothing else.
+- **Catalog provenance, on every bindable tile.** All 75 non-text, non-filter tiles carry a
+  `use:` catalog reference, so the tile chrome always says where the panel comes from:
+  `seacr/*` for the SEACR panels and the nucleosome classes, `macs2/*` for the MACS2
+  comparison panels, `deeptools/*` for the three tables on the Signal tab, `bowtie2/*` for the
+  spike-in factors, `cutandrun/*` for the three roll-ups the pipeline assembles itself (the
+  sample hub, the caller agreement and the signal budget) and `multiqc/<module>` for the
+  tool-module QC panels.
+- **Nothing is anchored on the stage layout.** No data collection regex, recipe glob or fetch
+  key spells out the numbered `01_prealign/ 02_alignment/ 03_peak_calling/ 04_reporting/`
+  prefixes; the MultiQC collection matches
+  `(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\.parquet$`, which finds the report whether
+  a run nests it under an aligner directory or the reprocess writes it at the root.
 
 ---
 
@@ -58,9 +79,9 @@ H3K27me3 in two replicates each, plus two IgG controls.
 
 The main tab, and the one reading the reprocessed report.
 
-`Sample sheet`, collapsed at the top of every tab, holds the sample hub with a donut of the
-sample count by role beside its intro, which is the tile that makes the two IgG controls
-visible.
+`Sample sheet`, pinned open at the top of every tab, opens on the dashboard's glance strip
+over the sample hub: samples by role (the donut that makes the IgG controls visible), samples
+by target, the libraries behind them and the replicate depth, then the hub table itself.
 
 `Run at a glance` opens the report itself with the general statistics table: one row per
 sample, pooling the FastQC, Trim Galore, bowtie2, samtools and MACS2 headline numbers, with a
@@ -73,7 +94,9 @@ cutadapt kept reads.
 target genome and the spike-in side by side, then samtools percent mapped, insert size and
 per-contig distribution. The spike-in rate is what a normalisation factor is derived from, so
 a library whose spike-in alignment collapses is not comparable to the others even if its
-target alignment looks fine.
+target alignment looks fine. The two `Alignment scope` sliders in the left rail read the
+spike-in table and reach these panels through a reverse link, so a rate or factor threshold
+narrows the report rather than only the Signal tab.
 
 `Enrichment over the control` is the tab's point: the deepTools fingerprint curve and its
 quality metrics, which separate an enriched target from a flat IgG control, then the sample
@@ -87,11 +110,31 @@ its own parquet; the three tables nf-core publishes behind them are read on the 
 ## Signal
 
 What the run published as a table beside the report. None of it reaches a MultiQC panel: the
-fragment histogram and the three deepTools tables are files of their own.
+fragment histogram, the Bowtie 2 logs and the three deepTools tables are files of their own.
 
-`Fragment length structure` is the nucleosomal ladder: four cards on the fragment-length
-table, a code-mode distribution figure and its cumulative twin. For H3K4me3 the ladder should
-show a clear mononucleosome peak; a flat distribution means the digestion did not work.
+`Signal at a glance` opens the tab with four numbers about the material itself, before any
+peak is called: the fragment-length spread, the fragments measured, the spike-in scale factor
+and the target alignment rate.
+
+`Fragment length structure` is the nucleosomal ladder: a code-mode distribution figure and its
+cumulative twin. For H3K4me3 the ladder should show a clear mononucleosome peak; a flat
+distribution means the digestion did not work.
+
+`Nucleosome classes` bins that same histogram at the conventional MNase boundaries:
+sub-nucleosomal below 120 bp, mononucleosomal to 250 bp, dinucleosomal to 450 bp and
+multi-nucleosomal above it. The donut is the composition over the libraries in view, the
+stacked bar is the same split per sample, and `mono_to_sub` is the sharp-against-broad
+contrast as one number per sample. On this megatest H3K27me3_R1 is the most nucleosome-heavy
+library at a ratio of 8.5 and H3K4me3_R2 the least at 3.1, which is the direction a broad mark
+against a sharp one should give.
+
+`Spike-in normalisation` is what the coverage was divided by. Every library is aligned twice
+and the carrier depth of the second alignment says how much material it really held; the
+pipeline turns that into `normalisation_c / spikein_aligned_pairs` and applies it to the
+bedGraph every caller reads. The run publishes no scale-factor table, so these rows are
+recomputed from the two Bowtie 2 logs. The spread is large and meaningful: the IgG controls
+carry 3 % carrier DNA and get a factor near 0.16, while H3K27me3_R1 carries 0.006 % and gets
+55.9.
 
 `Coverage concentration and sample similarity` reads the three tables behind the deepTools
 panels on the MultiQC tab. `use: deeptools/fingerprint_scatter` puts every library on one
@@ -108,18 +151,28 @@ swap or a contamination.
 `SEACR peak yield` counts the regions in view, their width distribution, the total coverage
 they carry and the coverage per base.
 
-`Signal along the genome` places every region at its maximum-signal position with height
-`log10(total signal)`, next to a code-mode scatter of total against maximum coverage carrying
-`selection_enabled` on `peak_id`, and a width histogram.
+`Signal budget` is the fraction of reads in peaks, first-class rather than inferred. SEACR
+reports no read count, so the fraction is built in base pairs of fragment coverage: the summed
+region signal, de-scaled by the spike-in factor, over the total the fragment-length histogram
+accounts for. The de-scaling is what makes it a fraction at all, and the numbers say so: the
+raw ratios span 2.3 to 48 across the four targets, whose factors span 2.9 to 55.9, and
+dividing the factor back out collapses them to 0.67 to 0.86. The donut is the in-peaks against
+outside-peaks composition, the stacked bar is the same split per sample.
+
+`Signal along the genome` draws every region as the interval it is on a chromosome-aware
+`genome_view` axis with height `log10(total signal)`, with a `coverage_track` below it reading
+the same columns through the Plotly renderer so the section still answers the question if the
+genome canvas is unavailable. Under them sit a code-mode scatter of total against maximum
+coverage carrying `selection_enabled` on `peak_id`, and a width histogram.
 
 `MACS2 alongside` is the same fragments through a background-model caller: four cards (peaks,
-width, fold enrichment, best q-value) and a manhattan panel over `-log10(q)`. Note that the
-two manhattan panels on this tab do not share a y axis: SEACR has no p-value and no fold
-enrichment at all, so its panel plots coverage while the MACS2 panel plots significance.
+width, fold enrichment, best q-value) and a manhattan panel over `-log10(q)`. Note that it
+does not share a y axis with the SEACR genome panels above: SEACR has no p-value and no fold
+enrichment at all, so its track plots coverage while the MACS2 panel plots significance.
 
 `Peak tables`, collapsed, holds both callers' rows with row selection on `peak_id`.
 
-The left rail filters on region width and coverage per base.
+The left rail filters on region width, coverage per base and contig.
 
 ---
 
@@ -141,7 +194,8 @@ plot, next to a code-mode scatter of MACS2 yield against SEACR yield per sample,
 of calls the other caller reproduced.
 
 `Comparison table` holds the eight rows (four samples times two callers) with row selection
-on `sample`.
+on `sample`. The whole tab now reads the `cutandrun/caller_agreement` catalog output rather
+than an inline recipe, so every tile on it carries provenance.
 
 `macs2_peaks` is the template's only `optional: true` collection, so a SEACR-only run keeps
 every other tile. This tab is the part that degrades least gracefully in that case: with one

@@ -77,31 +77,57 @@ normal, duplication that is flat and high is a library problem.
 condition breakdown, median TPM as a Tukey box plot, genes expressed against a 10000 threshold
 (the usual floor for a bulk human library, warning at 8000) and genes detected on a gauge.
 
-`Sample relationships` is the signature panel: a PCA of the log2(TPM + 1) matrix over its most
-variable genes, one point per library, coloured by condition, with lasso selection enabled on
-`sample_id`. Replicates of one condition should sit together and away from the others; a
-library that lands with the wrong group is the one to take back to the MultiQC tab. Beside it,
-the pipeline's own DESeq2 sample-similarity heatmap gives the same structure computed a
-different way, and below, the library summary table selects rows on the same `sample_id`, so
-picking points in the PCA and picking rows in the table are the same act.
+`Sample relationships` is the signature panel, and it now shows the same eight libraries twice.
+On the left, a PCA of the log2(TPM + 1) matrix over its most variable genes, one point per
+library, coloured by condition, with lasso selection enabled on `sample_id`. On the right, the
+pipeline's **own** DESeq2 QC PCA: nf-core/rnaseq runs `deseq2_qc.r` over the count matrix and
+publishes the component coordinates as `star_salmon/deseq2_qc/deseq2.pca.vals.txt`, which the
+`deseq2/qc_pca` recipe reads instead of recomputing, so the tile carries exactly the points
+MultiQC draws as a picture. The variance each component explains is parsed out of the file's
+own header (`"PC1: 43% variance"`) and kept as a column, because two libraries far apart on a
+component that explains three percent are not far apart.
 
-`Library composition` pairs the featureCounts biotype composition with a bar of genes
-expressed per library, coloured by condition. A library dominated by rRNA or by a single
-biotype explains a low gene count above it.
+Below them, the sample distance matrix: the square Euclidean distance matrix the same
+`deseq2_qc.r` clusters its dendrogram on, read through `deseq2/qc_sample_dists` and clustered
+in the browser. It replaces the static MultiQC similarity image. Because `sample` is a real
+column of that matrix and not only a column name, the sample filter narrows it on **both**
+axes and it stays square under a selection.
+
+Replicates of one condition should sit together in both PCAs and away from the others; a
+library that lands with the wrong group in one but not the other is the one to take back to
+the MultiQC tab. The library summary table at the foot selects rows on the same `sample_id`,
+so picking points and picking rows are the same act.
+
+`Library composition` puts three views of the same spend on one page. The featureCounts biotype
+composition and a bar of genes expressed per library sit on the first row; below them, the
+RSeQC read distribution, read straight out of the per-sample
+`*.read_distribution.txt` reports rather than out of MultiQC. A library dominated by rRNA or by
+a single biotype explains a low gene count above it; a library whose exonic bar is short and
+whose intronic or intergenic bar is long explains it a different way.
+
+RSeQC publishes its upstream and downstream bands **nested** inside each other (`TSS_up_5kb`
+counts the tags in `TSS_up_1kb` again, `TSS_up_10kb` counts both), so stacking the rows as
+written triples the promoter signal. The recipe differences them into disjoint rings and adds
+the tags that fall in no feature at all as an explicit `Other_intergenic` row, which is what
+makes the composition sum to one. The rank switch moves between the five region classes and
+the individual RSeQC features.
 
 ![Expression overview](screenshots/expression-overview.png)
 
 ## Expression heatmap
 
-One panel, doing one thing. `Top variable genes` draws the 500 genes with the highest variance
+One panel, doing one thing, under a glance strip about the libraries behind its columns
+(`salmon/sample_pca` cards on the per-sample overview: libraries by condition, median TPM,
+genes expressed and genes detected). `Top variable genes` draws the 500 genes with the highest variance
 across the run as a clustered heatmap, row z-normalised on the log2(TPM + 1) scale, with the
 condition annotation strip above the columns. Row normalisation is what makes the panel about
 pattern rather than magnitude: without it the plot is a ranking of highly expressed genes, with
 it the replicates of one condition form a visible block.
 
-The `Heatmap scope` filter reads the samplesheet, so it narrows the matrix by **columns**: the
-sample ids are column names here, not row values. `Matrix rows` (collapsed) holds the same
-matrix as an ordinary table, one gene per row.
+The `Heatmap scope` filter is a gene multi-select on the matrix itself, so it narrows by
+**rows**; the sample columns follow the pinned `Sample scope`, whose link reaches the matrix
+by column name. `Matrix rows` (collapsed) holds the same matrix as an ordinary table, one gene
+per row.
 
 ![Expression heatmap](screenshots/expression-heatmap.png)
 
@@ -125,9 +151,11 @@ rows, which is a distribution of the whole transcriptome rather than a compariso
 
 ## Catalog module
 
-The recipes ship as one catalog module, `depictio/catalog/salmon/`, holding `module.yaml` plus
-four output definitions. Salmon is an nf-core module, so `module.yaml` points at its nf-core
-`meta.yml` rather than restating the identity.
+The recipes ship as three catalog modules. `depictio/catalog/salmon/` holds `module.yaml` plus
+four output definitions; Salmon is an nf-core module, so `module.yaml` points at its nf-core
+`meta.yml` rather than restating the identity. `depictio/catalog/deseq2/` and
+`depictio/catalog/rseqc/` carry the two QC outputs the pipeline was already writing and
+nothing was reading.
 
 | Output | What it is | Renders as |
 |---|---|---|
@@ -135,6 +163,24 @@ four output definitions. Salmon is an nf-core module, so `module.yaml` points at
 | `salmon_expression_heatmap` | The 500 most variable genes, wide, with a condition annotation strip | Clustered heatmap (`use: salmon/top_variable_heatmap`), table |
 | `salmon_gene_expression` | The merged TPMs as one row per gene and sample, expressed genes only | Box figure, 2 cards, gene filter, table |
 | `salmon_merged_gene_counts` | The raw merged count matrix tximport writes next to the TPM matrix | Table |
+| `deseq2_qc_pca` | The pipeline's own DESeq2 QC principal components, with the variance each explains | Embedding (`use: deseq2/qc_pca_embedding`), gauge card, table |
+| `deseq2_qc_sample_dists` | The square sample-to-sample Euclidean distance matrix the QC dendrogram is clustered on | Clustered heatmap (`use: deseq2/qc_distance_heatmap`), table |
+| `rseqc_read_distribution` | Share of each library's tags per annotation feature, at two resolutions | Stacked composition (`use: rseqc/distribution_composition`), card, table |
+
+The two `deseq2` outputs are deliberately **not** pipeline-specific: their globs key on the file
+suffix (`**/*pca.vals.txt`, `**/*sample.dists.txt`) rather than on a `star_salmon/` directory,
+because nf-core/chipseq and nf-core/atacseq run the same `deseq2_qc.r` and publish the same two
+files under their consensus directories. Those two write the MultiQC custom-content flavour
+(`*.pca.vals_mqc.tsv`, under a `#` comment header), which the recipes also parse; a template
+whose run has only that flavour repoints the source with
+`source_overrides: {pca: {glob_pattern: "**/*pca.vals_mqc.tsv"}}`. The recipe's own glob
+matches only the plain `.txt` so that a run publishing both is not read twice.
+
+`rseqc_read_distribution` is a two-step: the report is fixed-width text, not a table, and the
+sample name lives only in the file name, so a recursive scan collection
+(`rseqc_read_distribution_raw`) reads every report as raw lines with `include_file_paths`, and
+the recipe consumes that collection by tag. `quote_char: null` is required on the scan, because
+`5'UTR_Exons` would otherwise open a quoted field that never closes.
 
 All three recipes read the same file, `salmon.merged.gene_tpm.tsv`, and are pipeline-agnostic:
 their default source path is `salmon/`, which is where a bare salmon/tximport run and

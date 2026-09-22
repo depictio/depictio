@@ -23,11 +23,18 @@ each.
 > `multiqc.list_plots()` on the regenerated parquet. See the Reproducing section below and
 > `VALIDATION_REPORT.md`.
 
-> **This is the broad-peak route.** The run was called with `--narrow_peak false`, so the
-> peak files are `*_peaks.broadPeak` (BED6+3, no summit column) and are read by the catalog's
-> `macs2/broad_peaks` rather than by `macs2/peaks`, which reads the narrowPeak shape. The two
-> outputs glob on different file names, so a run matches exactly one of them. Release 1.2.1 is
-> the narrowPeak twin of the same run.
+> **This is the broad-peak route, and only that route.** The run was called with
+> `--narrow_peak false`, so the peak files are `*_peaks.broadPeak` (BED6+3, no summit column)
+> and are read by the catalog's `macs2/broad_peaks` rather than by `macs2/peaks`, which reads
+> the narrowPeak shape. The two outputs glob on different file names, so a run matches exactly
+> one of them. Release 1.2.1 is the narrowPeak twin of the same run.
+>
+> There is deliberately no narrowPeak route variant in the template. The mechanism exists
+> (`template.conditional` with `override_dcs`), but broad reports a `midpoint` column where
+> narrow reports a `summit`, and the dashboard binds the broad catalog renders, so a narrow
+> route would also need a second copy of `dashboards/base.yaml`. See AT-D15. Every other
+> collection already takes both routes: the HOMER, consensus and DESeq2 globs match
+> `macs/*/`, not `macs/broadPeak/`.
 
 ---
 
@@ -40,14 +47,30 @@ each.
   change between transposition protocols.
 - **The design sheet is the hub.** `pipeline_info/design_reads.csv` becomes `sample_design`,
   one row per library with its protocol group and both spellings of its name. A persistent
-  `Sample filters` section (ATAC sample, transposition protocol) is pinned to the top of
-  every tab, and the template's links fan a pick there out to the MultiQC panels, the ataqv
-  collections, the peak QC summary, the peak calls and the HOMER annotation at once.
+  `Sample filters` section is pinned to the top of every tab and carries one control per real
+  factor of the sheet: the ATAC sample, the transposition protocol (three values) and the
+  biological replicate (two values, an integer column, so a range control rather than a
+  select). The template's links fan a pick there out to the MultiQC panels, the ataqv
+  collections, the peak QC summary, the peak calls, the HOMER annotation and the two DESeq2
+  QC collections at once; the protocol pick also reaches the DESeq2 contrasts, which are
+  named after the two groups compared, through a prefix (`wildcard`) link. The consensus
+  matrices cannot take that link: this pipeline version builds one consensus set across
+  every library, so `consensus_set` holds a single value and the samples are its columns.
+- **Every tab also filters on its own columns.** Beside the persistent sample scope, each tab
+  declares a non-persistent section on the collections it actually shows: `Peak QC scope`
+  (peaks called, median peak width) on the MultiQC tab, `Fragment windows` on ATAC signal,
+  `Peak filters` (significance, width, feature class, reference sequence) on Peaks,
+  `Consensus scope` on Consensus and `Contrast` on Differential accessibility. Nothing rides
+  a tab whose collections it cannot reach.
 - **Two spellings, one filter.** atacseq calls the merged filtered library
   `<sample>.mLb.clN` and MACS2 stamps that into every peak name, while ataqv, the peak QC
   summary and MultiQC use the bare sample id. `sample_design` carries both columns and each
   link starts from whichever one its target uses, so one pick in the sample filter reaches
   every collection.
+- **A glance strip on every tab.** `Cohort at a glance` is a pinned persistent four-card
+  strip, never collapsed: libraries by protocol (donut), replicate depth (box plot), peaks
+  called (top 3 by library) and mean FRiP (gauge). It is what makes a strip legal on the
+  MultiQC tab, and it is the first row wherever the reader lands.
 - **Pinned reference tables and thresholds.** The design sheet sits in a collapsed `Sample
   sheet` section pinned to the top of every tab, and the per-library peak QC rows in a
   collapsed `Reference tables` section pinned to the bottom, next to a collapsed
@@ -59,14 +82,19 @@ each.
   both peak tables do the same on `peak_id`. Lassoing narrows the tables, ticking rows
   narrows the panels, and the project links carry the selection between the MACS2 and HOMER
   collections.
-- **Catalog provenance.** 64 of the 110 tiles carry a `use:` catalog reference, so the tile
-  chrome says where the panel comes from: `ataqv/*` for the ATAC quality panels, `macs2/*`
-  for the peak and consensus panels, `homer/annotated_peaks` for the annotation panels,
-  `deseq2/*` for the differential accessibility panels and `multiqc/<module>` for the
-  tool-module QC panels.
-- **Everything matches on file name.** No data collection or recipe glob spells out the
-  `bwa/mergedLibrary/macs/broadPeak/` prefix, so a run aligned with a different aligner lands
-  in the same collections.
+- **Catalog provenance.** 68 of the 73 renderable tiles carry a `use:` catalog reference
+  (93%; the other 49 tiles are the text intros and the left-rail filters, which never do), so
+  the tile chrome says where the panel comes from: `ataqv/*` for the ATAC quality panels,
+  `macs2/*` for the peak and consensus panels, `homer/annotated_peaks` for the annotation
+  panels, `deseq2/*` for the differential accessibility and consensus QC panels and
+  `multiqc/<module>` for the tool-module QC panels. The five that do not are the two MultiQC
+  custom-content panels the catalog has no module for (AT-D9), the design table, and the two
+  genome-track tiles the MACS2 catalog has no render id for yet (AT-D16).
+- **Everything matches on file name, or on the part of the path that carries meaning.** No
+  data collection or recipe glob spells out the `bwa/` aligner directory or the `broadPeak/`
+  route: the HOMER and DESeq2 QC globs anchor on `**/mergedLibrary/macs/*/`, which is the
+  merge level the template binds, and the MultiQC scan regex takes both
+  `multiqc/multiqc_data/` and the `multiqc/<route>/multiqc_data/` a real run writes.
 
 ---
 
@@ -95,7 +123,13 @@ inside the consensus peaks.
 
 Every tile on this tab reads the report. The panels that read a tool's own tables instead of
 MultiQC's rendering of them sit on the ATAC signal tab, next to the collections they come
-from.
+from. That is also why this tab alone opens on a table rather than on a card strip: a shipped
+test keeps non-MultiQC tiles off a tab called MultiQC (AT-D11, AT-D17), and no card reads the
+report.
+
+The left rail carries the persistent sample scope, the persistent QC thresholds and, local to
+this tab, `Peak QC scope`: the peaks called and the median peak width of each library, which
+narrow the peak QC rows pinned under the panels.
 
 ---
 
@@ -106,7 +140,7 @@ from.
 The tab that exists because MultiQC 1.9 reported none of this and 1.35 only reports part of
 it.
 
-`Library quality at a glance` is seven cards on the ataqv collections, in two rows that each
+`Library quality at a glance` is eight cards on the ataqv collections, in two rows that each
 fill the grid. The first row is the quartet a library is accepted or rejected on: mean TSS
 enrichment, the share of high-quality autosomal reads that fall inside peaks, the median
 mitochondrial fraction and the duplicate fraction. The second is what the library's peaks and
@@ -152,6 +186,17 @@ their fold enrichment and the strongest significance reached.
 scatter of enrichment against significance carrying `selection_enabled` on `peak_id`, and a
 width histogram in UI mode.
 
+`Peak intervals on the genome` draws the same calls as intervals rather than as points. A
+broad call is a region, and the manhattan panel above collapses it to its midpoint, which is
+the one thing a broad run should not be read as. The `genome_view` tile binds `chr / start /
+end / neg_log10_qvalue` with `mark: rect` and `facet_by_sample`, so each library gets its own
+lane on a shared, chromosome-aware genome axis: scroll to zoom into a locus, drag to pan,
+brush a region to narrow the tab to it and click an interval to select the peak. A
+`coverage_track` tile under it reads the same rows through the Plotly renderer, so the
+section still answers the question if the GenomeSpy renderer is unavailable. Neither tile
+pins an assembly: the contig list is derived from the data, so the pair works on a run
+aligned against any reference rather than only against a human one.
+
 `Where the peaks land` reads the HOMER annotation: four cards (feature classes, genes
 reached, distance to TSS, annotated peaks), the annotation bar per library, and a code-mode
 histogram of the distance to the nearest start site inside a 10 kb window. Under it, `use:
@@ -163,7 +208,9 @@ different depth be compared.
 `Peak tables`, collapsed, holds the MACS2 broad calls and the HOMER annotation, both with row
 selection on `peak_id`, linked to each other in both directions.
 
-The left rail filters on peak significance, peak width and feature class.
+The left rail filters on peak significance, peak width, feature class and reference sequence.
+The last one is what the two genome tiles are read with: one chromosome at a time keeps the
+track legible and the region brush meaningful.
 
 ---
 
@@ -178,13 +225,24 @@ one, how many per-library peaks were merged into them, and the support of the st
 boolean matrix: which combinations of libraries call the same interval. With three protocols
 in two replicates each, the protocol-specific intersections are what to read.
 
+`Sample space` reads the two QC tables nf-core's own `featurecounts_deseq2.r` writes beside
+the contrast results, as data rather than as the MultiQC custom-content images the report
+renders them as: `use: deseq2/qc_pca_embedding` places every library on the two principal
+components of the consensus count matrix, and `use: deseq2/qc_distance_heatmap` clusters the
+pairwise Euclidean distances. Read together they say whether the contrasts on the next tab
+are worth reading at all: on this run the two replicates of a protocol sit at distance 32 to
+91 of each other and 101 to 119 from any other protocol, so the protocols separate cleanly.
+These two collections are also the only sample-keyed rows on the consensus level, which makes
+them what carries the left-rail sample scope onto this tab at all (AT-D18).
+
 `Signal at the strongest intervals` is the fold-enrichment heatmap over the 250 most
 accessible intervals, clustered. It is a top-N view on purpose: the full set is 104657
 intervals, which is not a heatmap. Selecting an interval elsewhere narrows this panel when
 the interval is in the top set and clears it otherwise.
 
 `Consensus tables`, collapsed, holds both consensus collections with row selection on
-`peak_id`.
+`peak_id`, then the PCA coordinates and the distance matrix behind the `Sample space` panels,
+with row selection on the library.
 
 ---
 

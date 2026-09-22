@@ -34,7 +34,7 @@ import ScatterXyRenderer from './ScatterXyRenderer';
 import ContactMapRenderer from './ContactMapRenderer';
 import KneePlotRenderer from './KneePlotRenderer';
 import DamageProfileRenderer from './DamageProfileRenderer';
-import GenomeSpyTrackRenderer from './GenomeSpyTrackRenderer';
+import GenomeViewRenderer from './GenomeViewRenderer';
 import GroupCompareRenderer from './GroupCompareRenderer';
 import TranscriptStructureRenderer from './TranscriptStructureRenderer';
 import CnvProfileRenderer from './CnvProfileRenderer';
@@ -134,7 +134,7 @@ const RENDERERS: Record<string, React.ComponentType<any>> = {
   contact_map: ContactMapRenderer,
   knee_plot: KneePlotRenderer,
   damage_profile: DamageProfileRenderer,
-  genomespy_track: GenomeSpyTrackRenderer,
+  genome_view: GenomeViewRenderer,
   group_compare: GroupCompareRenderer,
   transcript_structure: TranscriptStructureRenderer,
   cnv_profile: CnvProfileRenderer,

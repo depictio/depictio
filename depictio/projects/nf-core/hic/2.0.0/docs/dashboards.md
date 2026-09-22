@@ -1,12 +1,13 @@
 # nf-core/hic 2.0.0: Depictio dashboards
 
 This template turns the output of [nf-core/hic](https://nf-co.re/hic) 2.0.0 into a
-four-tab Depictio dashboard. hic maps Hi-C read pairs with HiC-Pro, bins and
+seven-tab Depictio dashboard. hic maps Hi-C read pairs with HiC-Pro, bins and
 ICE-balances them into a contact matrix with cooler, reads the A/B compartment
 track and the TAD insulation score off that matrix with cooltools, and plots how
 contact frequency falls off with genomic distance with hicexplorer. The dashboard
-follows that chain from left to right: sequencing and mapping QC, then the
-contact matrix, then compartments, then TADs.
+follows that chain from left to right: the MultiQC report, then the valid-pair
+funnel, then the shape of the library, then the contact matrix with its 1D tracks,
+then compartments, then TADs, then what a multi-sample run would add.
 
 Data comes from the AWS megatest run
 `results-b4d89cfacf97a5835fba804887cf0fc7e0449e8d` (the 2.0.0 release tag): one
@@ -25,38 +26,49 @@ mapping.
 
 ## How the dashboard is built
 
-- **One funnel, four tabs.** MultiQC, then Contact matrix, then Compartments,
-  then TADs and insulation. Each tab reads the output built on top of the
-  previous one: the matrix comes from valid pairs, the compartment track and
-  the insulation score both come from the matrix, at their own resolutions.
-- **HiC-Pro's own stats stay in MultiQC.** HiC-Pro ships a full native MultiQC
-  module (mapping, pairing, filtering, contact statistics), so the MultiQC tab
-  carries those numbers directly rather than through a second, dedicated
-  collection built from `hicpro/stats/<sample>/*`. Only the outputs with no
-  MultiQC module of their own, the contact matrix (cooler), the compartment
-  track and eigenvalues (cooltools eigs-cis), the insulation score (cooltools
-  insulation) and the distance-decay curve (hicexplorer), get their own tab.
+- **One funnel, seven tabs.** MultiQC, Run QC, Library shape, Contact maps,
+  Compartments, TADs and boundaries, Compare samples. Each tab reads the output
+  built on top of the previous one: the matrix comes from valid pairs, the
+  compartment track, the insulation score and P(s) all come from the matrix.
+- **HiC-Pro's numbers are read twice, on purpose.** HiC-Pro ships a full native
+  MultiQC module, and those panels stay on the MultiQC tab because that is the
+  report a reader may already know. But a MultiQC panel is an image: it cannot
+  be filtered, its numbers cannot go in a card and nothing can join to it, so
+  the valid-pair rate and the cis/trans split were invisible outside it.
+  `hicpro/stats/<sample>/*` is therefore also read directly, into `pair_stats`
+  (one wide funnel row per sample) and `pair_flow` (one weighted row per
+  read-pair fate).
+- **Four numbers ride every tab.** A pinned persistent `Run at a glance`
+  section carries the pairs sequenced with the whole funnel as its strip, the
+  valid-pair rate, the cis share and the cis/trans/duplicate composition, so
+  the question "is this library any good?" is answered wherever the reader
+  lands. Each tab then opens with its own four-card strip on its own numbers.
 - **The sample hub is the hub.** `samples` is one row per Hi-C sample
   (`HIC_ES_4` here) with how many FASTQ pairs HiC-Pro merged into it. A
   persistent `Sample filters` section is pinned to the top of every tab, and
-  the template's links fan a pick there out to the MultiQC panels, the contact
-  matrix, the compartment and insulation tracks and the distance-decay curve
-  at once. This run has one sample, so the filter has one value today; the
-  links are ready for a cohort without any change.
-- **Resolution is a filter, not a fixed choice.** The run computed compartments
-  at two resolutions and TADs at two others (with three insulation window
-  sizes each), so both tabs carry a local `Select` on `resolution` (and, on the
-  TADs tab, one on `window`) rather than picking one for the whole dashboard.
-  The contact matrix is the one exception: `cooler/contact_matrix.py` keeps
-  only the finest resolution the run dumped, because a whole-genome matrix at
-  two bin sizes is not drawn on the same axes.
+  the template's links fan a pick there out to the funnel, the contact matrix,
+  the compartment, insulation and domain tracks and both distance curves at
+  once. This run has one sample, so the filter has one value today; the links
+  are ready for a cohort without any change.
+- **Every tab that has coordinates has a chromosome filter.** Project links
+  carry the sample, not the chromosome, so each coordinate collection on a tab
+  gets its own `Select` on its chromosome column, grouped in one tab-local
+  filter section.
+- **Resolution and window are filters, not fixed choices.** The run computed
+  compartments at two resolutions and insulation at two others (with three
+  window sizes each), so those tabs carry local sliders rather than picking one
+  for the whole dashboard. The contact matrix and P(s) are the exception: both
+  keep only the finest resolution the run dumped, because a matrix or a curve
+  at two bin sizes is not drawn on the same axes.
 - **Catalog provenance.** Nearly every tile carries a `use:` catalog
-  reference: `cooler/*` for the contact matrix, `cooltools/*` for compartments
-  and TADs, `hicexplorer/*` for the distance-decay curve, and
+  reference: `hicpro/*` for the funnel, `cooler/*` for the contact matrix,
+  `cooltools/*` for P(s), compartments, insulation and domains,
+  `hicexplorer/*` for the published distance-decay curve, and
   `multiqc/<module>` for the tool-module QC panels.
 - **Everything matches on file name.** No data collection or recipe glob
-  spells out `contact_maps/`, `compartments/`, `tads/` or `distance_decay/`, so
-  a run with a different `--outdir` layout lands in the same collections.
+  spells out `contact_maps/`, `compartments/`, `tads/`, `hicpro/stats/` or
+  `distance_decay/`, so a run with a different `--outdir` layout lands in the
+  same collections.
 
 ---
 
@@ -64,11 +76,12 @@ mapping.
 
 The main tab, and the one reading the reprocessed report.
 
-`Sample sheet`, collapsed at the top of every tab, holds the sample hub with
-how many FASTQ pairs were merged into it.
+`Run at a glance`, pinned to the top of every tab, holds the four funnel cards.
+`Sample sheet`, collapsed under it, holds the sample hub with how many FASTQ
+pairs were merged into it.
 
-`Run at a glance` opens the report with the general statistics table: one row
-per sample, pooling the FastQC and HiC-Pro headline numbers.
+`MultiQC general statistics` opens the report with the general statistics
+table: one row per sample, pooling the FastQC and HiC-Pro headline numbers.
 
 `Read quality` is FastQC on the two merged FASTQ files HiC-Pro maps in
 two-step mode: sequence counts, per-base quality, per-sequence quality,
@@ -83,56 +96,148 @@ split of what survives filtering.
 
 ---
 
-## Contact matrix
+## Run QC
+
+The same HiC-Pro statistics as numbers rather than images.
+
+`Funnel at a glance` carries the low-quality pair rate, the duplicate rate,
+the mapping-fate composition and the unique valid pairs per sample.
+
+`Where the pairs go` is the Sankey: HiC-Pro's three decisions, one ribbon per
+path, weighted by read pairs. Does the pair map uniquely at both ends? Do its
+two ends sit on restriction fragments a real ligation could have joined, or is
+it a dangling end, a re-ligation or a self circle? And is the surviving contact
+cis or trans? Losses peel off into a `Lost` lane at the step they stopped at,
+and the three levels reconcile exactly with the totals HiC-Pro reports
+(536,273,614 pairs processed on this run).
+
+`The funnel in numbers`, collapsed, is the same statistics pivoted the other
+way: one row per sample, one column per stage, plus the derived rates the card
+strips read.
+
+Tab-local filters narrow the flow to one mapping fate or one contact fate.
+
+---
+
+## Library shape
+
+`Shape at a glance` carries the log-log slope, the peak contact probability,
+the long-range cis share and the long-range cis contact count.
+
+`Contact probability` is P(s), the probability that two loci a distance s
+apart are in contact, recomputed by `cooltools/distance_profile.py` from the
+balanced contact dump. It is recomputed rather than read from a tool output
+because nf-core/hic never runs `cooltools expected-cis`, and the curve the
+pipeline does publish stops at 3 Mb with a single pooled series. The
+denominator at each separation is every bin pair that could have been
+observed, not the non-zero pixels the sparse dump wrote, which is what keeps
+the tail from flattening artificially. One curve per chromosome plus the
+pooled genome-wide curve, over 40 log-spaced distance bins.
+
+Under it, the same curve differentiated in log-log space. A fractal globule
+sits near -1, an equilibrium globule falls to -1.5 and steeper, and a genome
+whose loop extrusion has been removed flattens out. It is its own tile rather
+than a second series because a slope near -1 and a probability near 0.1 share
+no scale.
+
+`The published curve`, collapsed, keeps hicexplorer's `hicPlotDistVsCounts`
+output as the run wrote it, for comparison: 13 points, pooled, from the 250 kb
+matrix.
+
+---
+
+## Contact maps
+
+`Matrix at a glance` carries the balanced contact value, the insulation score,
+the E1 spread and the A/B bin split.
 
 `Genome architecture` is the binned, ICE-balanced intra-chromosomal contact
 matrix `cooler/contact_matrix.py` builds by joining the sparse `cooler dump`
 triplet to its bins, at the finest resolution the run dumped (500 kb here).
-Trans (cross-chromosome) contacts are dropped: a whole-genome matrix is
-dominated by them, and they would swamp the per-chromosome checkerboard the
-compartments are read out of. `use: cooler/contact_matrix` binds the
-`contact_map` kind (lot 2 of the advanced-viz build; see `VALIDATION_REPORT.md`
-for the config caveat this carries until that kind's Pydantic config lands).
+Trans contacts are dropped: a whole-genome matrix is dominated by them, and
+they would swamp the per-chromosome checkerboard the compartments are read out
+of.
 
-`Distance decay` is hicexplorer's `hicPlotDistVsCounts` curve: mean contact
-frequency against genomic distance, pooled across the matrix, the standard
-Hi-C library-quality signature. A smooth, monotonic decay is a clean library; a
-plateau or a bump signals trans-contamination or a large structural artefact.
-Only 250 kb was computed for this curve, one resolution finer than the
-contact-matrix tab's, because `hicPlotDistVsCounts` ran on a third cooler file
-the megatest manifest fetches for exactly this curve.
+Stacked underneath it, on a chromosome-aware locus axis, sit the two 1D tracks
+derived from the same matrix: the insulation score, whose dips are TAD
+boundaries, and the first eigenvector, whose sign is the A/B compartment. This
+is the layout pyGenomeTracks and FAN-C use, and it is why they share a section:
+brushing a region on either track emits a chromosome and position filter the
+other follows.
+
+`Plotly fallback tracks`, collapsed, carries the same two tracks on the Plotly
+coverage renderer, one chromosome at a time, smoothed.
 
 ---
 
 ## Compartments
 
-`The A/B track` is `cooltools/eigenvector.py`'s per-bin E1 track: sign, not
-magnitude, marks the two compartments (conventionally A positive / gene-dense,
-B negative), and its zero-crossings are compartment boundaries. Blacklisted
-bins carry no value and break the line. The `Resolution` filter on the left
-switches between the two resolutions the run scanned (250 kb / 500 kb).
+`Compartments at a glance` carries the A/B split, the E1 spread and the first
+two eigenvalues.
 
-`Compartment table`, collapsed, holds every bin's weight and its three
-eigenvectors. The pinned `Reference tables` section, on every tab, carries the
-per-chromosome eigenvalues behind the track: how much of each chromosome's
-correlation structure E1 actually explains.
+`The A/B track` is `cooltools/eigenvector.py`'s per-bin E1: sign, not
+magnitude, marks the two compartments (conventionally A positive and
+gene-dense, B negative), and its zero-crossings are compartment boundaries.
+The recipe stores that sign as a `compartment` column of its own, so a reader
+can filter to one compartment and colour by it instead of re-deriving the
+threshold in every tile; blacklisted bins carry no value and appear in
+neither. The locus track draws it over the bundled mm10 gene lane; the Plotly
+track below reads one chromosome at a time.
+
+`Compartment table`, collapsed, holds every bin's weight, its compartment call
+and its three eigenvectors. The pinned `Reference tables` section, on every
+tab, carries the per-chromosome eigenvalues behind the track: how much of each
+chromosome's correlation structure E1 actually explains.
+
+Tab-local filters: chromosome, compartment and resolution.
 
 ---
 
-## TADs and insulation
+## TADs and boundaries
+
+`Domains at a glance` carries the median domain size, the domain count broken
+down by chromosome, the mappable share of a domain and the share of bins
+called a boundary.
+
+`TAD domains` is the interval list `cooltools/domains.py` derives. cooltools
+calls boundaries, not domains: it flags the individual bins whose
+neighbourhood is depleted of crossing contacts. No module in nf-core/hic 2.x
+emits an interval list (`HICEXPLORER_HICFINDTADS` never runs, as the execution
+trace confirms), so the recipe merges runs of adjacent flagged bins into one
+boundary (a boundary at 20 kb resolution is usually two or three bins wide)
+and calls a domain everything between the end of one boundary and the start of
+the next, inside one cooltools region so a domain never spans the gap between
+two scanned arms. Domains are scored on how much of their span is mappable,
+and one that is mostly unmappable is dropped rather than reported as an
+enormous TAD. On this run that turns a 30.8 Mb artefact into a 2.5 Mb
+maximum, with a median domain of 160 kb at 20 kb resolution and a 300 kb
+window.
+
+The domains are drawn as rectangles on the genome axis over the mm10 gene
+lane, with the same intervals on the Plotly renderer underneath.
 
 `Insulation score` is `cooltools/insulation.py`'s per-bin log2 insulation
-score: a bin whose neighbourhood is depleted of contacts crossing it is a TAD
-boundary, and `is_boundary` is cooltools' own threshold call on the score's
-local minima. The run scanned two resolutions (20 kb / 40 kb) with three
-window sizes each, and the two files use *different* window-size suffixes at
-the two resolutions (300 kb/500 kb/1 Mb vs 600 kb/1 Mb/2 Mb), the recipe
-discovers which windows are actually present rather than assuming a fixed set,
-and the `Window` and `Resolution` filters on the left narrow to one
-combination.
+score, on the same axis as the domains and then one chromosome at a time. The
+run scanned two resolutions (20 kb / 40 kb) with three window sizes each, and
+the two files use *different* window-size suffixes at the two resolutions
+(300 kb/500 kb/1 Mb vs 600 kb/1 Mb/2 Mb); the recipe discovers which windows
+are actually present rather than assuming a fixed set. The window matters: a
+wider window calls fewer, larger domains.
 
-`Insulation table`, collapsed, holds every bin's score and boundary call at
-every resolution and window scanned.
+`Domain and insulation tables`, collapsed, holds both row sets.
+
+---
+
+## Compare samples
+
+The run this template was validated against is a single library, so this tab
+says so and shows what is already in place for a cohort: the four per-sample
+numbers a Hi-C experiment is ranked on and the full per-sample funnel table.
+Nothing in the dashboard hard-codes one sample. The hub carries the sample
+filter, every collection carries a sample column and the project links route
+that filter to all of them, so the same template run against a multi-sample
+experiment fills these cards and the strips on every other tab without an
+edit.
 
 ---
 

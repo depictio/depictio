@@ -1974,3 +1974,494 @@ def generate_damage_profile_demo() -> None:
 
 
 generate_damage_profile_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN. Group comparison: 600 cells x 60 genes, 3 clusters, 6 planted markers.
+# columns: cell_id, cluster, gene_01 ... gene_60
+# ---------------------------------------------------------------------------
+# The one wide observation x feature matrix in the showcase whose point is not
+# a picture of the matrix but a test run over it. Two markers per cluster sit
+# at the head of the gene list and everything else is drawn from one
+# background distribution, so a comparison between two clusters returns
+# exactly the four markers of those two clusters: a reader can check the
+# volcano against the fixture's own definition.
+_GROUP_COMPARE_CELLS = 600
+_GROUP_COMPARE_GENES = 60
+_GROUP_COMPARE_CLUSTERS = (("cluster_1", 220), ("cluster_2", 200), ("cluster_3", 180))
+_GROUP_COMPARE_MARKERS = {
+    "cluster_1": ("gene_01", "gene_02"),
+    "cluster_2": ("gene_03", "gene_04"),
+    "cluster_3": ("gene_05", "gene_06"),
+}
+_GROUP_COMPARE_MARKER_FOLD = 8.0
+# A handful of genes that separate cluster_3 from the other two only mildly.
+# Without them the volcano would be six points against a flat cloud, which
+# would not show what the FDR and effect-size lines are for.
+_GROUP_COMPARE_WEAK = {"gene_07": 1.8, "gene_08": 1.6, "gene_09": 0.55}
+# Zeros, the way a droplet protocol produces them: a feature can simply not be
+# captured in a cell. A tenth is enough for the reader to see them in the data
+# popover without emptying the matrix.
+_GROUP_COMPARE_DROPOUT = 0.1
+
+
+def generate_group_compare_demo() -> None:
+    """Write group_compare_demo.tsv: a cell x gene matrix with planted markers."""
+    genes = [f"gene_{i:02d}" for i in range(1, _GROUP_COMPARE_GENES + 1)]
+    header = ["cell_id", "cluster", *genes]
+    rows: list[list] = []
+    rng = random.Random(20260520)
+
+    cells: list[tuple[str, str]] = []
+    n = 0
+    for cluster, count in _GROUP_COMPARE_CLUSTERS:
+        for _ in range(count):
+            n += 1
+            cells.append((f"cell_{n:04d}", cluster))
+    assert len(cells) == _GROUP_COMPARE_CELLS
+
+    # Interleaved rather than blocked, so nothing downstream can depend on the
+    # clusters arriving in contiguous runs.
+    rng.shuffle(cells)
+
+    for cell_id, cluster in cells:
+        # Per-cell depth: the same gene reads higher in a deeply sequenced
+        # cell, which is why the comparison normalises nothing and the
+        # rank-based test is the default.
+        depth = rng.lognormvariate(0.0, 0.25)
+        values: list[float] = []
+        for gene in genes:
+            fold = 1.0
+            if gene in _GROUP_COMPARE_MARKERS[cluster]:
+                fold = _GROUP_COMPARE_MARKER_FOLD
+            elif gene in _GROUP_COMPARE_WEAK and cluster == "cluster_3":
+                fold = _GROUP_COMPARE_WEAK[gene]
+            if rng.random() < _GROUP_COMPARE_DROPOUT:
+                values.append(0.0)
+                continue
+            values.append(round(rng.lognormvariate(1.0, 0.7) * fold * depth, 3))
+        rows.append([cell_id, cluster, *values])
+
+    write_tsv(OUT / "group_compare_demo.tsv", header, rows)
+
+
+generate_group_compare_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN. Genome chord: fusion / structural-variant partner links.
+# columns: chrom_a, pos_a, chrom_b, pos_b, label, weight, category
+# ---------------------------------------------------------------------------
+# A rearranged tumour genome as a caller would report it: four event classes,
+# read support spanning two orders of magnitude (which is what the renderer's
+# log-scaled chord width exists for), and a handful of recurrent partners heavy
+# enough to read at a glance against the lighter background of one-off events.
+# Positions are drawn inside the real GRCh38 chromosome lengths, so the demo
+# dashboard can pin `assembly: hg38` and every locus lands where it belongs.
+_CHORD_CHROM_SIZES = {
+    "chr1": 248956422,
+    "chr2": 242193529,
+    "chr3": 198295559,
+    "chr4": 190214555,
+    "chr5": 181538259,
+    "chr6": 170805979,
+    "chr7": 159345973,
+    "chr8": 145138636,
+    "chr9": 138394717,
+    "chr10": 133797422,
+    "chr11": 135086622,
+    "chr12": 133275309,
+    "chr13": 114364328,
+    "chr14": 107043718,
+    "chr15": 101991189,
+    "chr16": 90338345,
+    "chr17": 83257441,
+    "chr18": 80373285,
+    "chr19": 58617616,
+    "chr20": 64444167,
+    "chr21": 46709983,
+    "chr22": 50818468,
+    "chrX": 156040895,
+    "chrY": 57227415,
+}
+# The classes a caller assigns, with whether both breakpoints sit on one
+# chromosome and the weight band the class tends to fall in.
+_CHORD_CLASSES = (
+    ("translocation", False, 4, 90),
+    ("inversion", True, 3, 60),
+    ("deletion", True, 6, 200),
+    ("duplication", True, 8, 400),
+)
+# Recurrent partners drawn heavy, so the ring has a foreground: the picture is
+# about which partners recur, not about how many events there were.
+_CHORD_RECURRENT = (
+    ("chr8", "chr14", "MYC--IGH", "translocation", 480),
+    ("chr9", "chr22", "BCR--ABL1", "translocation", 365),
+    ("chr4", "chr4", "FGFR3--TACC3", "duplication", 290),
+    ("chr2", "chr2", "EML4--ALK", "inversion", 175),
+    ("chr12", "chr15", "ETV6--NTRK3", "translocation", 140),
+    ("chr21", "chr7", "TMPRSS2--ETV1", "translocation", 96),
+)
+_CHORD_N_LINKS = 40
+
+
+def generate_genome_chord_demo() -> None:
+    """Write genome_chord_demo.tsv: 40 links over 24 chromosomes, 4 classes."""
+    header = ["chrom_a", "pos_a", "chrom_b", "pos_b", "label", "weight", "category"]
+    rows: list[list] = []
+    rng = random.Random(20260520)
+    names = list(_CHORD_CHROM_SIZES)
+
+    def locus(chrom: str) -> int:
+        # Off the telomeres, where no caller reports a usable breakpoint.
+        size = _CHORD_CHROM_SIZES[chrom]
+        return rng.randint(int(size * 0.02), int(size * 0.98))
+
+    for chrom_a, chrom_b, label, category, weight in _CHORD_RECURRENT:
+        rows.append([chrom_a, locus(chrom_a), chrom_b, locus(chrom_b), label, weight, category])
+
+    for i in range(_CHORD_N_LINKS - len(_CHORD_RECURRENT)):
+        category, intra, low, high = _CHORD_CLASSES[i % len(_CHORD_CLASSES)]
+        chrom_a = rng.choice(names)
+        chrom_b = chrom_a if intra else rng.choice([c for c in names if c != chrom_a])
+        # Log-uniform within the class's band: read support is multiplicative,
+        # and a linear draw would put almost every event at the top of its range.
+        weight = int(round(math.exp(rng.uniform(math.log(low), math.log(high)))))
+        rows.append(
+            [
+                chrom_a,
+                locus(chrom_a),
+                chrom_b,
+                locus(chrom_b),
+                f"SV{i + 1:03d}",
+                weight,
+                category,
+            ]
+        )
+
+    write_tsv(OUT / "genome_chord_demo.tsv", header, rows)
+
+
+generate_genome_chord_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN. Transcript structure: isoforms of two genes on a base-pair axis.
+# columns: transcript_id, gene_id, gene_name, chrom, start, end, feature,
+#          strand, transcript_class, sample, expression
+# ---------------------------------------------------------------------------
+# The four events a long-read isoform panel exists to show, on one gene: a
+# skipped cassette exon, an alternative first exon, an alternative 3' end and a
+# retained intron, plus one transcript the caller flagged as novel. A second,
+# minus-strand gene is there so the chevrons and the gene selector have
+# something to switch to. Blocks are given as (start, end) pairs and the coding
+# ones are derived by intersecting the transcript's ORF with its exons, which
+# is what keeps a UTR visible either side of every CDS.
+_TS_CHROM = "chr7"
+_TS_SAMPLE = "A549_rep1"
+
+# gene_id, gene_name, strand, [(transcript_id, class, expression, exons, orf)]
+_TS_GENES: tuple = (
+    (
+        "DPXG00000001",
+        "DPX1",
+        "+",
+        (
+            (
+                "DPX1-201",
+                "known",
+                142.3,
+                (
+                    (1000000, 1000420),
+                    (1003200, 1003560),
+                    (1008100, 1008290),
+                    (1012400, 1012760),
+                    (1018000, 1019150),
+                ),
+                (1000310, 1018240),
+            ),
+            # cassette exon 3 skipped
+            (
+                "DPX1-202",
+                "known",
+                88.1,
+                ((1000000, 1000420), (1003200, 1003560), (1012400, 1012760), (1018000, 1019150)),
+                (1000310, 1018190),
+            ),
+            # alternative first exon, downstream of the canonical one
+            (
+                "DPX1-203",
+                "known",
+                31.5,
+                (
+                    (1001500, 1001840),
+                    (1003200, 1003560),
+                    (1008100, 1008290),
+                    (1012400, 1012760),
+                    (1018000, 1019150),
+                ),
+                (1001620, 1018240),
+            ),
+            # alternative 3' end: the last exon stops early
+            (
+                "DPX1-204",
+                "NIC",
+                12.4,
+                (
+                    (1000000, 1000420),
+                    (1003200, 1003560),
+                    (1008100, 1008290),
+                    (1012400, 1012760),
+                    (1018000, 1018520),
+                ),
+                (1000310, 1018300),
+            ),
+            # intron 2 retained, which puts a stop codon inside it
+            (
+                "DPX1-205",
+                "NNC",
+                5.9,
+                ((1000000, 1000420), (1003200, 1008290), (1012400, 1012760), (1018000, 1019150)),
+                (1000310, 1004010),
+            ),
+            # novel first exon upstream of the annotated gene, no called ORF
+            (
+                "BambuTx1",
+                "novel",
+                27.8,
+                (
+                    (999100, 999380),
+                    (1003200, 1003560),
+                    (1008100, 1008290),
+                    (1012400, 1012760),
+                    (1018000, 1019150),
+                ),
+                None,
+            ),
+        ),
+    ),
+    (
+        "DPXG00000002",
+        "DPX2",
+        "-",
+        (
+            (
+                "DPX2-201",
+                "known",
+                64.2,
+                ((1130000, 1131300), (1136200, 1136540), (1140600, 1142000)),
+                (1130900, 1141700),
+            ),
+            ("DPX2-202", "NIC", 9.4, ((1130000, 1131300), (1140600, 1142000)), (1130900, 1141700)),
+        ),
+    ),
+)
+
+
+def generate_transcript_structure_demo() -> None:
+    """Write transcript_structure_demo.tsv: eight isoforms across two genes."""
+    header = [
+        "transcript_id",
+        "gene_id",
+        "gene_name",
+        "chrom",
+        "start",
+        "end",
+        "feature",
+        "strand",
+        "transcript_class",
+        "sample",
+        "expression",
+    ]
+    rows: list[list] = []
+    for gene_id, gene_name, strand, transcripts in _TS_GENES:
+        for transcript_id, cls, expression, exons, orf in transcripts:
+            for start, end in exons:
+                rows.append(
+                    [
+                        transcript_id,
+                        gene_id,
+                        gene_name,
+                        _TS_CHROM,
+                        start,
+                        end,
+                        "exon",
+                        strand,
+                        cls,
+                        _TS_SAMPLE,
+                        expression,
+                    ]
+                )
+            if orf is None:
+                continue
+            orf_start, orf_end = orf
+            for start, end in exons:
+                cds_start, cds_end = max(start, orf_start), min(end, orf_end)
+                if cds_start >= cds_end:
+                    continue
+                rows.append(
+                    [
+                        transcript_id,
+                        gene_id,
+                        gene_name,
+                        _TS_CHROM,
+                        cds_start,
+                        cds_end,
+                        "CDS",
+                        strand,
+                        cls,
+                        _TS_SAMPLE,
+                        expression,
+                    ]
+                )
+
+    write_tsv(OUT / "transcript_structure_demo.tsv", header, rows)
+
+
+generate_transcript_structure_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN. CNV profile: a synthetic somatic copy-number profile, 2 tumour samples.
+# columns: sample, chrom, start, end, log2, baf, copy_number, segment, label
+# ---------------------------------------------------------------------------
+# One long table carrying both the evidence and the call, told apart by the
+# `segment` column, which is the shape the three somatic callers in the catalog
+# (CNVkit, ASCAT, Control-FREEC) are reshaped into. A synthetic genome of five
+# chromosomes at 20 kb bins, 10 000 bins per sample, with six events planted in
+# the first sample:
+#
+#   chr1  gain (3 copies)                 log2 +0.58, BAF splits to 1/3 and 2/3
+#   chr2  hemizygous loss (1 copy)        log2 -1.00, BAF collapses to the edges
+#   chr2  subclonal gain                  log2 +0.28, a shallow, wide event
+#   chr3  copy-neutral LOH (2 copies)     log2 stays at 0, only the BAF moves
+#   chr4  focal amplification (7 copies)  log2 +1.80 over 60 bins
+#   chr5  homozygous deletion (0 copies)  log2 -2.60, no BAF to report
+#
+# The copy-neutral LOH is the reason the BAF panel exists: the log2 track says
+# nothing at all there, and the allele fractions say the whole region lost one
+# parental haplotype. The second sample carries four different events so the
+# sample selector changes the picture rather than the labels.
+_CNV_CHROMS = (
+    # name, bins on that chromosome
+    ("chr1", 3000),
+    ("chr2", 2500),
+    ("chr3", 2000),
+    ("chr4", 1500),
+    ("chr5", 1000),
+)
+_CNV_BIN_SIZE = 20_000
+_CNV_LOG2_NOISE = 0.12
+_CNV_BAF_NOISE = 0.035
+# (chrom, first bin, last bin, log2, copy number, BAF bands, label)
+_CNV_EVENTS = {
+    "TUMOUR_A": (
+        ("chr1", 800, 1400, 0.58, 3, (0.33, 0.67), "CN 3 gain"),
+        ("chr2", 300, 900, -1.00, 1, (0.02, 0.98), "CN 1 loss"),
+        ("chr2", 1600, 2200, 0.28, 3, (0.40, 0.60), "CN 3 subclonal gain"),
+        ("chr3", 500, 1200, 0.00, 2, (0.04, 0.96), "CN 2 copy-neutral LOH"),
+        ("chr4", 700, 760, 1.80, 7, (0.14, 0.86), "CN 7 amplification"),
+        ("chr5", 400, 450, -2.60, 0, None, "CN 0 deletion"),
+    ),
+    "TUMOUR_B": (
+        ("chr1", 2100, 2800, -0.45, 1, (0.12, 0.88), "CN 1 loss"),
+        ("chr3", 500, 1200, 0.00, 2, (0.05, 0.95), "CN 2 copy-neutral LOH"),
+        ("chr4", 100, 900, 0.45, 3, (0.35, 0.65), "CN 3 gain"),
+        ("chr5", 200, 600, 0.62, 3, (0.34, 0.66), "CN 3 gain"),
+    ),
+}
+
+
+def _cnv_event_at(events, chrom: str, index: int):
+    """The planted event covering this bin, or None for a neutral bin."""
+    for event in events:
+        if event[0] == chrom and event[1] <= index <= event[2]:
+            return event
+    return None
+
+
+def _cnv_neutral_runs(events, chrom: str, n_bins: int):
+    """The stretches of a chromosome no planted event covers.
+
+    A caller publishes a segment for every stretch of the genome it assessed,
+    not only for the aberrant ones, so the drawn segment track is continuous.
+    """
+    covered = sorted((e[1], e[2]) for e in events if e[0] == chrom)
+    runs: list[tuple[int, int]] = []
+    cursor = 0
+    for first, last in covered:
+        if first > cursor:
+            runs.append((cursor, first - 1))
+        cursor = max(cursor, last + 1)
+    if cursor <= n_bins - 1:
+        runs.append((cursor, n_bins - 1))
+    return runs
+
+
+def generate_cnv_profile_demo() -> None:
+    """Write cnv_profile_demo.tsv: 20 000 bins and the segments called over them."""
+    header = ["sample", "chrom", "start", "end", "log2", "baf", "copy_number", "segment", "label"]
+    rows: list[list] = []
+    rng = random.Random(20260520)
+
+    for sample, events in _CNV_EVENTS.items():
+        for chrom, n_bins in _CNV_CHROMS:
+            for index in range(n_bins):
+                event = _cnv_event_at(events, chrom, index)
+                start = index * _CNV_BIN_SIZE
+                if event is None:
+                    log2 = rng.gauss(0.0, _CNV_LOG2_NOISE)
+                    copy_number = 2
+                    baf = rng.gauss(0.5, _CNV_BAF_NOISE)
+                else:
+                    log2 = rng.gauss(event[3], _CNV_LOG2_NOISE)
+                    copy_number = event[4]
+                    bands = event[5]
+                    # One of the two allelic bands per bin: drawing both is what
+                    # makes an unbalanced region read as a split rather than a
+                    # thicker line.
+                    baf = (
+                        None
+                        if bands is None
+                        else min(1.0, max(0.0, rng.gauss(rng.choice(bands), _CNV_BAF_NOISE)))
+                    )
+                rows.append(
+                    [
+                        sample,
+                        chrom,
+                        start,
+                        start + _CNV_BIN_SIZE,
+                        round(log2, 3),
+                        None if baf is None else round(baf, 3),
+                        copy_number,
+                        "bin",
+                        None,
+                    ]
+                )
+
+        # The calls over those bins: every planted event, plus the neutral
+        # stretches between them, so the segment track covers the genome.
+        for chrom, n_bins in _CNV_CHROMS:
+            called = [(e[1], e[2], e[3], e[4], e[5], e[6]) for e in events if e[0] == chrom] + [
+                (first, last, 0.0, 2, (0.5, 0.5), "CN 2")
+                for first, last in _cnv_neutral_runs(events, chrom, n_bins)
+            ]
+            for first, last, log2, copy_number, bands, label in sorted(called):
+                rows.append(
+                    [
+                        sample,
+                        chrom,
+                        first * _CNV_BIN_SIZE,
+                        (last + 1) * _CNV_BIN_SIZE,
+                        round(log2, 3),
+                        None if bands is None else round(min(bands), 3),
+                        copy_number,
+                        "segment",
+                        label,
+                    ]
+                )
+
+    write_tsv(OUT / "cnv_profile_demo.tsv", header, rows)
+
+
+generate_cnv_profile_demo()

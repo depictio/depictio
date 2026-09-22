@@ -1,0 +1,27 @@
+id: mosdepth_regions
+name: Coverage along the genome
+mode: regions
+description: >-
+  Read depth along the genome, from mosdepth's per-target
+  `regions.bed.gz` files. The recipe folds the targets into fixed
+  1 Mb windows and reports the target-length-weighted mean depth of each
+  window, so a capture panel with a few hundred thousand unevenly spaced
+  targets becomes a track a browser can draw and an eye can read. Only the
+  primary contigs are kept. One lane per sample and alignment stage
+  (duplicate-marked, then recalibrated), so a stage that lost coverage shows
+  up as a lane that dropped rather than as a number to look up.
+find:
+  path_glob: "**/*.regions.bed.gz"
+recipe: mosdepth/regions.py
+fixture: regions.tsv
+renders_as:
+  - { id: coverage_track_regions, component: advanced_viz, kind: coverage_track,
+      roles: {chromosome: chromosome, position: position, value: value, end: end, sample: sample_stage} }
+  # Same rows on GenomeSpy's own locus axis: the whole genome concatenated,
+  # zoomable, and brushable into a region filter the rest of the tab reads.
+  - { id: genomespy_regions, component: advanced_viz, kind: genome_view,
+      roles: {chr: chromosome, pos: position, score: value, end: end, feature: sample_stage} }
+  # Depth is the one number a coverage table is read for, and a mean alone
+  # hides the drop-outs: the Tukey strip shows the spread and the outliers.
+  - { component: card, column: value, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

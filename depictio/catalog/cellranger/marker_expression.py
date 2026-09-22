@@ -34,6 +34,7 @@ from __future__ import annotations
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.recipes.lib.cellranger_samples import with_sample_column
 
 DIFFEXP_DC_TAG = "cellranger_diffexp"
 MATRIX_DC_TAG = "cellranger_filtered_matrix_raw"
@@ -59,6 +60,9 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
 #: top markers per cluster kept in the union gene list
 TOP_MARKERS_PER_CLUSTER = 5
 
+#: the clustering the dot plot is about (see `cellranger/diffexp.py`)
+GRAPHCLUST_RESOLUTION = "graphclust"
+
 _MATRIX_SAMPLE_RE = r"cellranger/count/([^/]+)/outs/filtered_feature_bc_matrix/"
 _FEATURES_SAMPLE_RE = r"cellranger/count/([^/]+)/outs/filtered_feature_bc_matrix/"
 _BARCODE_INDEX_SAMPLE_RE = r"cellranger/count/([^/]+)/outs/filtered_feature_bc_matrix/"
@@ -67,17 +71,7 @@ _CP10K = 1e4
 
 
 def _with_sample(df: pl.DataFrame, pattern: str, dc_name: str) -> pl.DataFrame:
-    if "source_path" not in df.columns:
-        raise ValueError(
-            f"cellranger_marker_expression: '{dc_name}' has no 'source_path' column, "
-            "it must be scanned with polars_kwargs.include_file_paths"
-        )
-    out = df.with_columns(pl.col("source_path").str.extract(pattern, 1).alias("sample"))
-    if out.filter(pl.col("sample").is_null()).height:
-        raise ValueError(
-            f"cellranger_marker_expression: a row's source_path in '{dc_name}' did not match"
-        )
-    return out
+    return with_sample_column(df, pattern, dc_name, "cellranger_marker_expression")
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
@@ -96,6 +90,10 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     if missing := required_cell_qc - set(cell_qc.columns):
         raise ValueError(f"cellranger_marker_expression: cell_qc lacks columns {sorted(missing)}")
 
+    # `cellranger_diffexp` now carries every clustering resolution Cell Ranger
+    # ran; the dot plot is about the graph-based clusters the cell hub labels.
+    if "resolution" in diffexp.columns:
+        diffexp = diffexp.filter(pl.col("resolution") == GRAPHCLUST_RESOLUTION)
     markers = diffexp.filter(pl.col("rank_in_cluster") <= TOP_MARKERS_PER_CLUSTER)
     marker_genes = markers.select("gene_id", "gene").unique()
     all_clusters = cell_qc.select("cluster_label").unique()

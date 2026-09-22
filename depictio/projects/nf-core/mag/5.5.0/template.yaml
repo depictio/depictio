@@ -1,0 +1,894 @@
+# nf-core/mag Template 5.5.0 - metagenome assembly, binning, bin QC and taxonomy
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/mag/5.5.0 --data-root /path/to/your/data
+#
+# Tested against nf-core/mag AWS megatest results:
+#   s3://nf-core-awsmegatests/mag/results-171cf36971499cea4c9bccac4536cccbfc540e14
+#   (the 5.5.0 release candidate; samplesheet.full.v4.csv, 3 CaPES samples,
+#    hybrid short+long read assembly with FLYE, MEGAHIT, METAMDBG and SPAdes.
+#    See megatest.yaml for why this prefix and not the 5.5.0 tag.)
+# ============================================================================
+#
+# THE UNIT IS THE BIN, NOT THE SAMPLE.
+# Three samples is not the size of this dataset. Four assemblers times five
+# binners times three samples gives 479 metagenome-assembled genomes, each with
+# its own completeness, contamination, assembly statistics, gene content and
+# taxonomic placement, over 74 000 contigs and 222 000 contig-by-sample coverage
+# rows. Every filter on this dashboard is therefore an assembler, a binner, a
+# phylum or a quality threshold; the sample filter is the least selective one
+# there is.
+#
+# WHAT THE RUN DOES AND DOES NOT PUBLISH.
+#   * No `multiqc/` directory at all. The report bound below is NOT the run's:
+#     it is produced by re-running the pinned MultiQC 1.35 over the run's raw
+#     tool outputs,
+#         python -m depictio.dev_scripts.multiqc_reprocess --src DATA_ROOT --dest DATA_ROOT
+#     which parsed bowtie2, checkm2, fastp, gtdbtk, nanostat, prokka and quast.
+#     `modules` / `plots` below are the 1.35 section names.
+#   * No `input/` directory. The samplesheet bundled with this template is
+#     copied into DATA_ROOT by `download_test_data.sh`.
+#   * No `GenomeBinning/bin_summary.tsv`. nf-core/mag's BIN_SUMMARY process
+#     joins bin depth, CheckM2, GTDB-Tk and QUAST into one table and this run
+#     did not publish it, so `bin_summary` below rebuilds that join Depictio
+#     side from the four tool outputs (see depictio/catalog/mag/bin_summary.py).
+#   * No `GenomeBinning/contig_to_bin/` and no `GenomeBinning/depths/bins/`, so
+#     there is no contig-to-bin membership and no per-bin depth. Prokka's GFF
+#     is not a substitute: Prokka renames every contig to an internal
+#     `gnl|<centre>|<hash>_N`. Contig coverage is therefore shown per contig
+#     (`contig_depths`) and never rolled up to a bin.
+#   * No BUSCO and no GUNC: 5.5.0 stopped publishing BUSCO directories and this
+#     run did not enable GUNC. CheckM2 is the only bin-quality estimator here.
+#
+# THE FOUR TOOLS SEE DIFFERENT BINS, ON PURPOSE.
+# QUAST ran on all 479 bins, CheckM2 on 427, Prokka on 449 and GTDB-Tk on the
+# 150 that passed its completeness and contamination thresholds. `bin_summary`
+# is a full outer join over the union and carries `sources_present` (1 to 4) so
+# the gap is a readable number rather than a silent row loss.
+#
+# DECLARATION ORDER IS LOAD-BEARING.
+# `bin_summary` reads the four per-bin collections through `dc_ref`, which
+# resolves against their Delta tables. They must be processed first, so they
+# are declared above it and it is declared last.
+template:
+  template_id: "nf-core/mag/5.5.0"
+  description: "nf-core/mag template: the bin funnel from reads to metagenome-assembled genomes. Read QC and host removal, assembly statistics and the contig-length ladder, per-contig differential coverage, CheckM2 completeness against contamination for every bin of every binner, the GTDB-Tk lineage of the ones that passed, Prokka gene and RNA content, and a per-bin locus map."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory containing mag output (Assembly/, GenomeBinning/, Taxonomy/, Annotation/, QC_shortreads/, QC_longreads/, pipeline_info/) plus input/samplesheet.full.v4.csv and the reprocessed multiqc/multiqc_data/multiqc.parquet."
+      required: true
+  reference:
+    vars: {}
+  provenance:
+    sources:
+      - name: "software_versions"
+        glob: "pipeline_info/software_versions.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        group: "Pipeline parameters"
+    groups:
+      - group: "Software versions"
+        key_patterns: ["*"]
+      - group: "Pipeline parameters"
+        key_patterns: ["*"]
+  dashboards:
+    - "dashboards/base.yaml"
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Metagenome Assembly and Binning"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "mag"
+    version: "5.5.0"
+    engine:
+      name: "nextflow"
+      version: "24.10.5"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/mag"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Hub: one row per mag sample. The samplesheet is already
+      # sample-level (unlike cutandrun/hic's library-level sheets), so this
+      # recipe only renames `sample` -> `sample_id` and drops the FASTQ URLs.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samples"
+        description: "Per-sample hub: the sample name every Assembly/GenomeBinning/Annotation output uses, its co-assembly group and whether it has a long-read run (hybrid assembly)"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/mag/samples.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample name every other collection is linked on"
+              "group": "Co-assembly group (mag's `group` samplesheet column)"
+              "short_reads_platform": "Sequencing platform of the short-read pair"
+              "long_reads_platform": "Sequencing platform of the long-read run, null if short-read only"
+              "has_long_reads": "True when the sample also has a long-read run (hybrid short plus long assembly)"
+
+      # ----------------------------------------------------------------
+      # MultiQC, reprocessed with 1.35 (the run publishes none). Eight
+      # modules parsed; the section names below are the 1.35 ones, read
+      # off the parquet with multiqc.list_plots().
+      # ----------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report, re-generated with MultiQC 1.35 from the run's raw tool outputs: read QC (fastp, NanoStat), host and phiX removal (Bowtie2), assembly QC (QUAST), bin quality (CheckM2), taxonomy (GTDB-Tk) and annotation (Prokka)"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\\.parquet$"
+          dc_specific_properties:
+            s3_location: null
+            modules:
+              - "general_stats"
+              - "fastp"
+              - "nanostat"
+              - "bowtie2"
+              - "quast"
+              - "checkm2"
+              - "gtdbtk"
+              - "prokka"
+            plots:
+              general_stats:
+                - "General Statistics"
+              fastp:
+                - "Filtered Reads"
+                - "Insert Sizes"
+                - "Sequence Quality":
+                    - "Read 1: Before filtering"
+                    - "Read 1: After filtering"
+                    - "Read 2: Before filtering"
+                    - "Read 2: After filtering"
+                - "GC Content":
+                    - "Read 1: Before filtering"
+                    - "Read 1: After filtering"
+                - "N content":
+                    - "Read 1: Before filtering"
+                    - "Read 1: After filtering"
+              nanostat:
+                - "Summary Statistics (FASTQ)"
+                - "Reads by quality"
+              bowtie2:
+                - "Paired-end alignments"
+              quast:
+                - "Assembly Statistics"
+                - "Number of Contigs"
+              checkm2:
+                - "Bin quality"
+              gtdbtk:
+                - "MAG taxonomy"
+
+      # ----------------------------------------------------------------
+      # Assembly QC. One QUAST transposed report per assembler and sample,
+      # read twice: as one row per assembly and as the contig-length
+      # ladder underneath it.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "quast_assembly_raw"
+        description: "Raw QUAST transposed reports of the whole assemblies (input of assembly_report and length_ladder)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?Assembly/.*/QUAST/transposed_report\\.tsv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "Assembly": "Assembly QUAST measured, as the pipeline labelled it"
+              "source_path": "File the row came from"
+
+      - data_collection_tag: "assembly_report"
+        description: "One row per assembly: contigs, assembled length, N50/L50, GC and the binnable fraction"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "quast/assembly_report.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "assembly_id": "Assembly as QUAST labelled it, assembler and sample"
+              "assembler": "FLYE, MEGAHIT, METAMDBG or SPAdes"
+              "sample": "Sample the assembly was built from"
+              "n_contigs": "Contigs past QUAST's minimum length"
+              "total_length": "Assembled bases"
+              "largest_contig": "Longest contig"
+              "n50": "Half the assembly sits in contigs at least this long"
+              "n75": "The same at 75 percent"
+              "l50": "How many contigs make up that half"
+              "l75": "The same at 75 percent"
+              "gc_percent": "Percent G plus C"
+              "ns_per_100_kbp": "Ambiguous bases per 100 kbp"
+              "predicted_rrna_genes": "QUAST's rRNA count, kept as text because it reports partial hits"
+              "contigs_over_1kb": "Contigs at least 1 kbp long, the fraction a binner can use"
+              "length_over_1kb": "Bases held by those contigs"
+
+      - data_collection_tag: "length_ladder"
+        description: "Contigs and bases surviving each minimum contig length, one row per assembly and threshold"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "quast/length_ladder.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "assembly_id": "Assembly as QUAST labelled it"
+              "assembler": "FLYE, MEGAHIT, METAMDBG or SPAdes"
+              "sample": "Sample the assembly was built from"
+              "min_contig_length": "Minimum contig length this row reports on, in bases"
+              "n_contigs": "Contigs at least that long"
+              "total_length": "Bases held by those contigs"
+              "length_fraction": "Those bases as a fraction of the whole assembly"
+
+      # ----------------------------------------------------------------
+      # Contig coverage. Each depth file names its columns after the BAMs,
+      # so the files cannot be concatenated on their headers: the scan
+      # reads them WITHOUT a header and the recipe reads each file's own
+      # header back out of its first row.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "mag_contig_depths_raw"
+        description: "Raw jgi_summarize_bam_contig_depths tables, header row included as data (input of contig_depths)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*-depth\\.txt(\\.gz)?$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              has_header: false
+              truncate_ragged_lines: true
+              new_columns: ["f0", "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "f0": "Contig name, or the literal header on each file's first row"
+              "f1": "Contig length"
+              "f2": "Mean depth over every sample mapped back"
+              "f3": "Depth of the first BAM, named on the header row"
+              "f4": "Variance of that depth"
+              "f5": "Depth of the second BAM"
+              "f6": "Variance of that depth"
+              "f7": "Depth of the third BAM"
+              "f8": "Variance of that depth"
+              "source_path": "File the row came from; the assembly is derived from its name"
+
+      - data_collection_tag: "contig_depths"
+        description: "One row per contig and per sample mapped onto it: length, mean depth and that sample's depth, for contigs of at least 1 kbp"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mag/contig_depths.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "assembly_id": "Assembly the contig belongs to, assembler and sample"
+              "assembler": "Assembler that built it"
+              "sample": "Sample the assembly was built from"
+              "contig_id": "Contig name inside that assembly"
+              "contig_length": "Contig length in bases"
+              "mean_depth": "Mean depth over every sample mapped back"
+              "read_sample": "Sample whose reads produced this row's depth"
+              "depth": "Mean depth of this contig in that sample"
+              "depth_variance": "Variance of that depth"
+
+      # ----------------------------------------------------------------
+      # Bin QC. CheckM2 gives completeness and contamination, QUAST the
+      # assembly statistics of the same bins.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "checkm2_quality_raw"
+        description: "Raw CheckM2 per-run reports (input of checkm2_quality_report)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*_checkm2_report\\.tsv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "Name": "Bin CheckM2 scored"
+              "source_path": "File the row came from; assembler, binner and sample are derived from its name"
+
+      - data_collection_tag: "checkm2_quality_report"
+        description: "One row per bin: CheckM2 completeness and contamination plus the assembly statistics it measured on the way"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "checkm2/quality_report.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "bin_id": "Bin name as the binner wrote it"
+              "sample": "Sample the assembly was built from"
+              "assembler": "FLYE, MEGAHIT, METAMDBG or SPAdes"
+              "binner": "COMEBin, MaxBin2, MetaBAT2, MetaBinner or SemiBin2"
+              "completeness": "Percent of the expected genome recovered"
+              "contamination": "Percent of the bin that belongs to another organism"
+              "quality_score": "completeness minus five times contamination"
+              "quality_tier": "CheckM2-only band: High, Medium or Low quality, or Contaminated"
+              "coding_density": "Fraction of the bin covered by coding sequence"
+              "contig_n50": "N50 of the contigs in the bin"
+              "genome_size": "Total bases in the bin"
+              "gc_content": "Fraction G plus C"
+              "total_coding_sequences": "Genes CheckM2 called"
+              "total_contigs": "Contigs in the bin"
+              "max_contig_length": "Longest contig in the bin"
+              "completeness_model": "Which CheckM2 model produced the estimate"
+
+      - data_collection_tag: "quast_bins_raw"
+        description: "Raw QUAST per-binning-run bin summaries (input of quast_bins_summary)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*-quast_summary\\.tsv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "Assembly": "Bin FASTA QUAST measured"
+              "source_path": "File the row came from; assembler, binner and sample are derived from its name"
+
+      - data_collection_tag: "quast_bins_summary"
+        description: "One row per bin: contigs, N50, length and GC of the bin itself"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "quast/bins_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "bin_id": "Bin name, FASTA suffixes removed"
+              "sample": "Sample the assembly was built from"
+              "assembler": "FLYE, MEGAHIT, METAMDBG or SPAdes"
+              "binner": "COMEBin, MaxBin2, MetaBAT2, MetaBinner or SemiBin2"
+              "n_contigs": "Contigs in the bin"
+              "total_length": "Bases in the bin"
+              "largest_contig": "Longest contig in the bin"
+              "n50": "Half the bin sits in contigs at least this long"
+              "l50": "How many contigs make up that half"
+              "gc_percent": "Percent G plus C"
+              "predicted_rrna_genes": "QUAST's rRNA count, kept as text because it reports partial hits"
+              "contigs_over_10kb": "Contigs at least 10 kbp long"
+
+      # ----------------------------------------------------------------
+      # Taxonomy. GTDB-Tk writes the summary twice; only the classify/
+      # copy is populated, so the scan is anchored on the file name and
+      # the path is disambiguated by the recipe.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "gtdbtk_summary_raw"
+        description: "Raw GTDB-Tk classification summaries (input of gtdbtk_summary and gtdbtk_rank_composition)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?classify/.*\\.(?:bac|ar)\\d+\\.summary\\.tsv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "user_genome": "Bin GTDB-Tk placed"
+              "classification": "Full GTDB lineage, semicolon separated with rank prefixes"
+              "source_path": "File the row came from; assembler, binner, sample and marker set are derived from its name"
+
+      - data_collection_tag: "gtdbtk_summary"
+        description: "One row per classified bin with its GTDB lineage split into ranks"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "gtdbtk/summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "bin_id": "Bin name, FASTA suffix removed"
+              "sample": "Sample the assembly was built from"
+              "assembler": "FLYE, MEGAHIT, METAMDBG or SPAdes"
+              "binner": "COMEBin, MaxBin2, MetaBAT2, MetaBinner or SemiBin2"
+              "marker_set": "bac120 or ar53, the marker set that placed the bin"
+              "domain": "GTDB domain"
+              "phylum": "GTDB phylum"
+              "class_name": "GTDB class"
+              "order": "GTDB order"
+              "family": "GTDB family"
+              "genus": "GTDB genus"
+              "species": "GTDB species"
+              "rank_assigned": "Deepest rank that carries a name"
+              "classification": "The packed lineage as GTDB-Tk wrote it"
+              "closest_reference": "Accession of the closest GTDB genome"
+              "closest_ani": "Average nucleotide identity to it, percent"
+              "closest_af": "Alignment fraction to it"
+              "classification_method": "How the placement was made, ANI screen or tree topology"
+              "msa_percent": "Percent of the marker alignment the bin covered"
+              "bin_count": "Always 1, the weight a sunburst or sankey sums"
+
+      - data_collection_tag: "gtdbtk_rank_composition"
+        description: "Bins per taxon and rank for each binning run, the community each binner recovered"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "gtdbtk/rank_composition.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Binning run, assembler plus binner plus sample"
+              "sample": "Sample the assembly was built from"
+              "assembler": "FLYE, MEGAHIT, METAMDBG or SPAdes"
+              "binner": "COMEBin, MaxBin2, MetaBAT2, MetaBinner or SemiBin2"
+              "rank": "domain, phylum, class, order, family or genus"
+              "taxon": "The name at that rank"
+              "abundance": "Bins of this run carrying that name"
+
+      # ----------------------------------------------------------------
+      # Annotation. Prokka's per-bin `.txt` is a key/value file, so it is
+      # scanned as two colon-separated columns and pivoted by the recipe.
+      # The GFF subset (METAMDBG bins only, see megatest.yaml) carries the
+      # coordinates the locus map needs.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "prokka_summary_raw"
+        description: "Raw Prokka per-bin feature-count summaries as key/value rows (input of prokka_summary)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?[Pp]rokka/.*\\.txt$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: ":"
+              has_header: false
+              truncate_ragged_lines: true
+              new_columns: ["key", "value"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "key": "Prokka metric name, e.g. CDS, tRNA, bases"
+              "value": "Its value for this bin"
+              "source_path": "File the row came from; the bin is derived from its name"
+
+      - data_collection_tag: "prokka_summary"
+        description: "One row per annotated bin: coding sequences, transfer and ribosomal RNAs, gene density and the MIMAG RNA criteria"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "prokka/summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "bin_id": "Bin the annotation belongs to"
+              "sample": "Sample the assembly was built from"
+              "assembler": "FLYE, MEGAHIT, METAMDBG or SPAdes"
+              "binner": "COMEBin, MaxBin2, MetaBAT2, MetaBinner or SemiBin2"
+              "n_contigs": "Contigs Prokka annotated"
+              "bases": "Bases in the bin"
+              "cds": "Coding sequences"
+              "genes": "Gene features, coding plus RNA genes"
+              "trna": "Transfer RNAs"
+              "rrna": "Ribosomal RNAs"
+              "tmrna": "Transfer-messenger RNAs"
+              "repeat_regions": "Repeat regions"
+              "cds_per_mbp": "Coding sequences per megabase, the gene density"
+              "meets_mimag_rna": "True when the bin carries at least 3 rRNAs and 18 tRNAs"
+
+      - data_collection_tag: "prokka_gff_raw"
+        description: "Raw Prokka GFF rows including the embedded FASTA (input of prokka_gene_track). METAMDBG bins only, see megatest.yaml"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?[Pp]rokka/.*\\.gff$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              has_header: false
+              comment_prefix: "#"
+              quote_char: null
+              truncate_ragged_lines: true
+              new_columns: ["seqid", "source", "ftype", "start", "end", "score", "strand", "phase", "attributes"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "seqid": "Contig the feature sits on, as Prokka renamed it"
+              "source": "Tool that called the feature"
+              "ftype": "Feature type: CDS, tRNA, rRNA, tmRNA, gene, repeat_region"
+              "start": "First base of the feature"
+              "end": "Last base of the feature"
+              "score": "GFF score column, unused by Prokka"
+              "strand": "Plus or minus"
+              "phase": "Coding phase"
+              "attributes": "Semicolon-separated key=value annotations; null on the embedded FASTA rows"
+              "source_path": "File the row came from; the bin is derived from its name"
+
+      - data_collection_tag: "prokka_gene_track"
+        description: "One row per annotated feature with its coordinates inside the bin, the per-bin locus map"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "prokka/gene_track.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "bin_id": "Bin the feature belongs to"
+              "sample": "Sample the assembly was built from"
+              "assembler": "FLYE, MEGAHIT, METAMDBG or SPAdes"
+              "binner": "COMEBin, MaxBin2, MetaBAT2, MetaBinner or SemiBin2"
+              "contig": "Prokka's contig label, meaningful inside the bin only"
+              "feature_id": "Locus tag"
+              "ftype": "CDS, tRNA, rRNA, tmRNA or repeat_region"
+              "start": "First base, 1-based as GFF writes it"
+              "end": "Last base"
+              "strand": "Plus or minus"
+              "length_bp": "Feature length in bases"
+              "gene": "Gene symbol when Prokka assigned one"
+              "product": "Product description, hypothetical protein when unknown"
+
+      # ----------------------------------------------------------------
+      # The headline table. Declared LAST: it reads the four per-bin
+      # collections above through dc_ref, which resolves against their
+      # Delta tables and therefore needs them processed first.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "bin_summary"
+        description: "One row per bin joining CheckM2, QUAST, GTDB-Tk and Prokka, with the MIMAG tier computed from completeness, contamination and the RNA criteria together"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mag/bin_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "bin_id": "Bin name as the binner wrote it"
+              "sample": "Sample the assembly was built from"
+              "assembler": "FLYE, MEGAHIT, METAMDBG or SPAdes"
+              "binner": "COMEBin, MaxBin2, MetaBAT2, MetaBinner or SemiBin2"
+              "completeness": "CheckM2 completeness, percent"
+              "contamination": "CheckM2 contamination, percent"
+              "quality_score": "completeness minus five times contamination"
+              "quality_tier": "CheckM2-only band, ignoring the RNA criteria"
+              "mimag_tier": "The MIMAG tier with the rRNA and tRNA criteria included"
+              "total_length": "Bases in the bin"
+              "n_contigs": "Contigs in the bin"
+              "n50": "Contig N50 of the bin"
+              "gc_percent": "Percent G plus C"
+              "cds": "Coding sequences Prokka called"
+              "trna": "Transfer RNAs"
+              "rrna": "Ribosomal RNAs"
+              "cds_per_mbp": "Coding sequences per megabase"
+              "meets_mimag_rna": "True when the bin carries at least 3 rRNAs and 18 tRNAs"
+              "domain": "GTDB domain"
+              "phylum": "GTDB phylum"
+              "class_name": "GTDB class"
+              "order": "GTDB order"
+              "family": "GTDB family"
+              "genus": "GTDB genus"
+              "species": "GTDB species"
+              "rank_assigned": "Deepest rank GTDB-Tk named"
+              "classified": "True when GTDB-Tk placed this bin at all"
+              "sources_present": "How many of the four tools reported on this bin, 1 to 4"
+
+links:
+  # Hub -> MultiQC, resolved through the report's own recorded sample-name
+  # variants: the bin, assembly and read-QC names never equal sample_id.
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Filter the MultiQC panels by the samples picked in the left panel"
+    enabled: true
+
+  # Hub -> everything that carries a `sample` column. Without these a sample
+  # picked in the pinned filter section would not reach the tab's own tiles.
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "assembly_report"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the assembly statistics by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "length_ladder"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the contig-length ladder by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "contig_depths"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the contig coverage by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "checkm2_quality_report"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the CheckM2 bin quality by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "quast_bins_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the per-bin assembly statistics by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "gtdbtk_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the bin taxonomy by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "gtdbtk_rank_composition"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the recovered community by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "prokka_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the annotation summary by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "prokka_gene_track"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the per-bin locus map by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "bin_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the bin summary by the samples picked in the left panel"
+    enabled: true
+
+  # bin_summary is the scope table of the whole binning half of the dashboard:
+  # the persistent assembler and binner filters are sourced on it and fan out
+  # to every other per-bin collection.
+  - source_dc_tag: "bin_summary"
+    source_column: "assembler"
+    target_dc_tag: "checkm2_quality_report"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "assembler"}
+    description: "Carry the assembler picked in the left panel over to CheckM2 bin quality"
+    enabled: true
+
+  - source_dc_tag: "bin_summary"
+    source_column: "binner"
+    target_dc_tag: "checkm2_quality_report"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "binner"}
+    description: "Carry the binner picked in the left panel over to CheckM2 bin quality"
+    enabled: true
+
+  - source_dc_tag: "bin_summary"
+    source_column: "assembler"
+    target_dc_tag: "quast_bins_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "assembler"}
+    description: "Carry the assembler picked in the left panel over to the per-bin assembly statistics"
+    enabled: true
+
+  - source_dc_tag: "bin_summary"
+    source_column: "binner"
+    target_dc_tag: "quast_bins_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "binner"}
+    description: "Carry the binner picked in the left panel over to the per-bin assembly statistics"
+    enabled: true
+
+  - source_dc_tag: "bin_summary"
+    source_column: "assembler"
+    target_dc_tag: "gtdbtk_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "assembler"}
+    description: "Carry the assembler picked in the left panel over to the bin taxonomy"
+    enabled: true
+
+  - source_dc_tag: "bin_summary"
+    source_column: "binner"
+    target_dc_tag: "gtdbtk_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "binner"}
+    description: "Carry the binner picked in the left panel over to the bin taxonomy"
+    enabled: true
+
+  - source_dc_tag: "bin_summary"
+    source_column: "assembler"
+    target_dc_tag: "gtdbtk_rank_composition"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "assembler"}
+    description: "Carry the assembler picked in the left panel over to the recovered community"
+    enabled: true
+
+  - source_dc_tag: "bin_summary"
+    source_column: "binner"
+    target_dc_tag: "gtdbtk_rank_composition"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "binner"}
+    description: "Carry the binner picked in the left panel over to the recovered community"
+    enabled: true
+
+  - source_dc_tag: "bin_summary"
+    source_column: "assembler"
+    target_dc_tag: "prokka_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "assembler"}
+    description: "Carry the assembler picked in the left panel over to the annotation summary"
+    enabled: true
+
+  - source_dc_tag: "bin_summary"
+    source_column: "binner"
+    target_dc_tag: "prokka_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "binner"}
+    description: "Carry the binner picked in the left panel over to the annotation summary"
+    enabled: true
+
+  - source_dc_tag: "bin_summary"
+    source_column: "binner"
+    target_dc_tag: "prokka_gene_track"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "binner"}
+    description: "Carry the binner picked in the left panel over to the per-bin locus map"
+    enabled: true
+
+  - source_dc_tag: "bin_summary"
+    source_column: "assembler"
+    target_dc_tag: "assembly_report"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "assembler"}
+    description: "Carry the assembler picked in the left panel over to the assembly statistics"
+    enabled: true
+
+  - source_dc_tag: "bin_summary"
+    source_column: "assembler"
+    target_dc_tag: "length_ladder"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "assembler"}
+    description: "Carry the assembler picked in the left panel over to the contig-length ladder"
+    enabled: true
+
+  - source_dc_tag: "bin_summary"
+    source_column: "assembler"
+    target_dc_tag: "contig_depths"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "assembler"}
+    description: "Carry the assembler picked in the left panel over to the contig coverage"
+    enabled: true
+
+  # Reverse links: a bin picked on the headline table carries its own identity
+  # back to the tables the other tabs are built on.
+  - source_dc_tag: "bin_summary"
+    source_column: "bin_id"
+    target_dc_tag: "prokka_gene_track"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "bin_id"}
+    description: "Open the locus map of the bin picked on the bin summary"
+    enabled: true
+
+  - source_dc_tag: "bin_summary"
+    source_column: "bin_id"
+    target_dc_tag: "checkm2_quality_report"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "bin_id"}
+    description: "Carry a bin picked on the bin summary over to its CheckM2 row"
+    enabled: true
+
+  - source_dc_tag: "bin_summary"
+    source_column: "phylum"
+    target_dc_tag: "gtdbtk_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "phylum"}
+    description: "Carry the phylum picked on the Taxonomy tab over to the bin taxonomy table"
+    enabled: true

@@ -34,6 +34,12 @@ column cannot be attributed inside a recipe:
 `_resolve_glob_source` always add a path or stem column. One change removes two
 workarounds and the extra collections.
 
+**2026-09-22 check.** Polars 1.43 still has no `include_file_paths` on `read_csv`
+(only on `scan_csv`), so the raw-scan plus `dc_ref` pair remains the only way for a
+recipe to learn sample or caller from a file name; sarek's variant tables, eager's
+lane ledger and hic's HiC-Pro stats all pay the extra collection. `melon/ranks`
+(taxprofiler) cannot be linked at all until it does the same.
+
 ## 2. `optional: true` is not honoured on a glob source
 
 `RecipeSource(optional=True)` is respected for `path` and `dc_ref` sources.
@@ -141,7 +147,7 @@ No new `advanced_viz` kind was added in this lot. Every tile either binds one of
 existing kinds or falls back to a code-mode figure, and the 27 code-mode figures across
 the nine templates are the evidence for what is missing.
 
-Lot 2 (sarek 3.10.0, scrnaseq 4.2.0, mag 5.4.2, nanoseq 3.0.0, eager 2.4.5, methylseq 2.3.0,
+Lot 2 (sarek 3.10.0, scrnaseq 4.2.0, mag 5.5.0, nanoseq 3.0.0, eager 2.4.5, methylseq 2.3.0,
 hic 2.0.0) is the lot that closed part of that gap: three new kinds, `contact_map`,
 `knee_plot` and `damage_profile`, plus a new `mark` setting on `coverage_track`. All four
 were designed GenomeSpy-ready from the start (issue #1083: coordinate-bound rows carry a
@@ -165,11 +171,13 @@ because their rows are not coordinate-bound.
 | cutandrun 3.1 | manhattan x2, upset_plot, dot_plot | 4 | fragment-length ladder |
 | sarek 3.10.0 | dot_plot (caller-comparison, `bcftools/stats_summary`) | 3 | nothing, the three per-caller SNP/indel/Ts-Tv bars are plain grouped bars |
 | scrnaseq 4.2.0 | `knee_plot` (new), embedding x3, da_barplot | 1 | nothing, the PCA scree plot is a plain bar |
-| mag 5.4.2 | none | 1 | nothing renders as a kind at all here: the bin-count bar is plain, and the contig-to-bin tables are pipeline-local aggregation with no catalog owner, not a missing kind |
+| mag 5.5.0 | scatter_xy x8, profile x2, sunburst, sankey x2, stacked_taxonomy, gene_arrow_track | 0 | resolved on 2026-09-22: the old row was written against a truncated S3 sync with no report tables |
 | nanoseq 3.0.0 | complex_heatmap x2, volcano/ma/qq, volcano/qq | 0 | n/a, every dense tile already binds an existing kind |
 | eager 2.4.5 | profile (preseq complexity curve), `damage_profile` (new) | 3 | nothing for two of the three (mapped-reads and mean-coverage bars are plain); the misincorporation line duplicates the `damage_profile` advanced-viz tile in the same section, display redundancy rather than a missing kind |
 | methylseq 2.3.0 | profile (Bismark M-bias, CpG context) | 3 | nothing, three plain grouped bars (alignment efficiency, dedup rate, per-context methylation) |
 | hic 2.0.0 | `contact_map` (new), profile (distance decay), coverage_track x2 (new `mark` setting: A/B compartment track, insulation score) | 0 | n/a, hic has no plotly-express figure tile at all: every dedicated-tab visualisation is a kind or a MultiQC panel |
+
+**2026-09-22 update.** The table above is the initial-build snapshot. The remediation wave added five kinds (`genome_view`, `group_compare`, `transcript_structure`, `cnv_profile`, `genome_chord`, see `docs/design/advanced-viz.md` section 7) and rebuilt the lot 2 dashboards around them: sarek 2 to 6 tabs (VCF-level UpSet, lollipop, oncoplot and `genome_view` on mosdepth regions), eager 5 to 8 (scatter_xy x5, profile x4, sankey, `genome_view`), methylseq 3 to 8 (binned methylome: embedding, complex_heatmap, volcano, `genome_view`), nanoseq 3 to 7 (embedding, complex_heatmap, `transcript_structure` gated), hic 4 to 7 (`genome_view` x3, `contact_map` triangle, sankey, profile x2), scrnaseq 8 to 9 (`group_compare` on a cell x marker-gene matrix), mag 2 to 7. Lot 1 gained `genome_view` on peaks and BGC regions (chipseq, atacseq, cutandrun, funcscan), `genome_chord` on Arriba fusions (rnafusion) and the DESeq2 QC sample space (rnaseq, chipseq, atacseq).
 
 ### What those 27 figures are
 
@@ -419,6 +427,17 @@ outputs are 2.8 GB against 6.5 MB of aggregated reports. Every template in this 
 binds the aggregated report and leaves the per-sample corpus alone, which is why
 airrflow's V-to-J pairing and rnafusion's per-read evidence are unbound.
 
+**2026-09-22 update.** methylseq shows the pre-aggregation story that works today:
+the 756 MB of per-CpG bedGraph (7 files, 8 to 46 M rows each) is never ingested.
+A one-row-per-file index collection (`n_rows: 1` plus
+`include_file_paths: source_path`, which goes through lazy `scan_csv`) carries the
+paths, and the recipes stream each file themselves through
+`depictio/recipes/lib/genomic_bins.py` into 10 kb windows (about 20 s at ingestion,
+nothing large enters Delta). The same idiom applies to airrflow's `*_db-pass.tsv`
+and cutandrun's `deeptools_heatmaps/*.mat.gz`. Remaining gap for methylseq: no
+CpG-island or TSS annotation is bundled, so its feature tab stratifies by
+CpG-density tertile and names the proxy as one.
+
 ## 13. A stale API catalog cache corrupts imports silently
 
 `load_catalog_entries()` is `@lru_cache(maxsize=1)` and nothing in the shipped code
@@ -472,6 +491,48 @@ labels with a hover, so that no binding can produce a negative plot area.
 
 Worth checking wherever a field is free text rather than a controlled
 vocabulary: taxonomy lineages, GO terms and drug classes are all candidates.
+
+## 15. A scan pattern that starts with `.*` will eventually eat a MultiQC table
+
+Widening eager's Qualimap scan from `.*_stats/genome_results\.txt$` to
+`.*genome_results\.txt$` (to stop depending on the `_rmdup_stats/` directory name)
+also matched `multiqc/multiqc_data/multiqc_qualimap_bamqc_genome_results.txt`,
+MultiQC's own flattened copy of the same table. The raw collection picked up three
+files instead of two and the recipe died on the third
+(`pattern not found: 'number of reads = ([\d,]+)'`).
+
+The scan regex is matched against the basename first, so the leading `.*` is never
+needed: anchor as `genome_results\.txt$`, or path-qualify with `(?:.*/)?` when a
+directory has to be part of the match. Every template whose tool-output pattern
+starts with `.*` is one MultiQC module name away from the same failure; worth a
+sweep when the lint rules land.
+
+## 16. `sample_mapping` cannot strip dot-joined per-tool suffixes
+
+The canonicalisation regex in `depictio/cli/cli/utils/sample_mapping.py` strips the
+usual `_1` / `_R1` / `.sorted` decorations, but not the dot-joined per-tool suffixes
+sarek writes into MultiQC (`<sample>.md`, `<sample>.recal`, `<sample>.deepvariant`,
+`<sample>.freebayes.filtered`) nor a `-1` lane marker. sarek works around it with an
+explicit `mappings:` block on the `samples -> multiqc_data` link (20 name variants
+per sample). A template that cannot enumerate its variants up front (any pipeline
+whose caller or stage set is a parameter) still needs the resolver fixed.
+
+## 17. `depictio/cli/.venv` has no MultiQC, so a live ingest from it aborts early
+
+Any template with a `multiqc` collection fails its live ingest from
+`depictio/cli/.venv` with `No module named 'multiqc'`, and the failure aborts the
+run before steps 7 and 8, so no dashboard is imported at all (nanoseq, 2026-09-22).
+Run the CLI from the repo venv (`.venv/bin/python -m depictio.cli run ...`) or
+`uv sync --extra multiqc` the CLI venv. The dry run does not catch it.
+
+## 18. Integer factor columns only take sliders
+
+`INTERACTIVE_COMPATIBILITY` maps Int64 to range controls, so a samplesheet factor
+stored as an integer (cutandrun `replicate`, sarek `read_depth_millions`) cannot be
+a MultiSelect. Both templates now emit a Utf8 twin (`replicate_label`,
+`read_depth_label`) from the sample recipe and filter on that. Recipe-side fix; a
+platform-side option would be to let a low-cardinality integer column opt into a
+Select.
 
 ## Pipelines considered and not templated in this lot
 

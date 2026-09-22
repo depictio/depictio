@@ -17,7 +17,7 @@ main_dashboard:
   - name: Sample filters
     icon: mdi:filter-variant
     color: teal
-    description: Applies to every tab
+    description: Sample, subject, sampling site and sex, applied to every tab
     persistent: true
     pin: top
   - name: Read QC scope
@@ -43,6 +43,16 @@ main_dashboard:
     color: gray
     description: GC, length, duplication and adapter content
     collapsed: true
+  # The four cohort cards ride every tab open, so a reader always knows how many
+  # samples, subjects and sites the tiles in front of them are computed from.
+  # The samplesheet table stays in its own collapsed section below: it is the
+  # detail behind the same numbers, not something to scroll past on every tab.
+  - name: Cohort at a glance
+    icon: mdi:chart-box-outline
+    color: teal
+    description: Samples, subjects, sites and loci in the current scope
+    persistent: true
+    pin: top
   - name: Sample sheet
     icon: mdi:table-account
     color: teal
@@ -75,7 +85,7 @@ main_dashboard:
       on the raw reads and again after the mate pairs are assembled. Read these
       panels first: everything on the later tabs is built from whatever survives
       here.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: multiqc
     tag: airr-qc-general-stats
     section: Read QC at a glance
@@ -87,7 +97,7 @@ main_dashboard:
     title: General statistics
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 1, w: 8, h: 4}
+    layout: {x: 0, y: 2, w: 8, h: 4}
   - component_type: multiqc
     tag: airr-qc-fastp-filtered
     section: Read QC at a glance
@@ -100,7 +110,7 @@ main_dashboard:
     description: How many read pairs passed trimming and quality filtering per sample.
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 5, w: 4, h: 5}
+    layout: {x: 0, y: 6, w: 4, h: 5}
   - component_type: multiqc
     tag: airr-qc-fastqc-counts
     section: Read QC at a glance
@@ -113,7 +123,7 @@ main_dashboard:
     description: Unique and duplicate read counts, raw and post-assembly.
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 5, w: 4, h: 5}
+    layout: {x: 4, y: 6, w: 4, h: 5}
 
   # ------------------------------------------------------------ base quality
   - component_type: text
@@ -130,7 +140,7 @@ main_dashboard:
       Quality falls along the read and the UMI consensus step upstream of the
       repertoire depends on it. A sample whose curve drops early loses reads at
       the quality filter, which the next tab counts exactly.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: multiqc
     tag: airr-qc-fastp-quality
     section: Base quality
@@ -143,7 +153,7 @@ main_dashboard:
     description: Per-base quality before and after filtering, for both mates.
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 1, w: 4, h: 5}
+    layout: {x: 0, y: 2, w: 4, h: 5}
   - component_type: multiqc
     tag: airr-qc-fastqc-quality
     section: Base quality
@@ -156,7 +166,7 @@ main_dashboard:
     description: Mean quality at each base position.
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 1, w: 4, h: 5}
+    layout: {x: 4, y: 2, w: 4, h: 5}
   - component_type: multiqc
     tag: airr-qc-fastqc-perseq
     section: Base quality
@@ -169,7 +179,7 @@ main_dashboard:
     description: Distribution of the mean quality per read.
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 6, w: 8, h: 5}
+    layout: {x: 0, y: 7, w: 8, h: 5}
 
   # ------------------------------------------------------------ read content
   - component_type: text
@@ -186,7 +196,7 @@ main_dashboard:
       Amplicon libraries are expected to look duplicated and to sit at a narrow
       GC and length range, so the FastQC warnings here are normal. Adapter
       content and the status grid are the panels worth scanning.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: multiqc
     tag: airr-qc-fastqc-gc
     section: Read content
@@ -198,7 +208,7 @@ main_dashboard:
     title: GC content
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 1, w: 4, h: 5}
+    layout: {x: 0, y: 2, w: 4, h: 5}
   - component_type: multiqc
     tag: airr-qc-fastqc-length
     section: Read content
@@ -210,7 +220,7 @@ main_dashboard:
     title: Sequence length distribution
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 1, w: 4, h: 5}
+    layout: {x: 4, y: 2, w: 4, h: 5}
   - component_type: multiqc
     tag: airr-qc-fastqc-dup
     section: Read content
@@ -222,7 +232,7 @@ main_dashboard:
     title: Duplication levels
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 6, w: 4, h: 5}
+    layout: {x: 0, y: 7, w: 4, h: 5}
   - component_type: multiqc
     tag: airr-qc-fastqc-adapter
     section: Read content
@@ -234,7 +244,7 @@ main_dashboard:
     title: Adapter content
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 6, w: 4, h: 5}
+    layout: {x: 4, y: 7, w: 4, h: 5}
   - component_type: multiqc
     tag: airr-qc-fastqc-status
     section: Read content
@@ -246,7 +256,7 @@ main_dashboard:
     title: FastQC status checks
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 11, w: 8, h: 5}
+    layout: {x: 0, y: 12, w: 8, h: 5}
 
   # ------------------------------------------------------------ sample sheet
   - component_type: text
@@ -263,10 +273,10 @@ main_dashboard:
       The validated AIRR samplesheet airrflow writes. Clones are defined within a
       subject, so the subject column is what separates the repertoires the later
       tabs compare.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: card
     tag: airr-meta-card-samples
-    section: Sample sheet
+    section: Cohort at a glance
     workflow_tag: airrflow
     data_collection_tag: samplesheet
     aggregation: nunique
@@ -279,26 +289,26 @@ main_dashboard:
     title: Samples
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 1, w: 2, h: 2}
+    layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     tag: airr-meta-card-subjects
-    section: Sample sheet
+    section: Cohort at a glance
     workflow_tag: airrflow
     data_collection_tag: samplesheet
     aggregation: nunique
     column_name: subject_id
     column_type: object
     secondary_layout: top_n
-    breakdown_col: tissue
+    breakdown_col: treatment
     top_n_count: 3
     display: {icon_name: 'mdi:account-group-outline', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
     title: Subjects
     title_size: sm
     title_align: left
-    layout: {x: 2, y: 1, w: 2, h: 2}
+    layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     tag: airr-meta-card-age
-    section: Sample sheet
+    section: Cohort at a glance
     workflow_tag: airrflow
     data_collection_tag: samplesheet
     aggregation: median
@@ -310,10 +320,10 @@ main_dashboard:
     title: Subject age
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 1, w: 2, h: 2}
+    layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     tag: airr-meta-card-locus
-    section: Sample sheet
+    section: Cohort at a glance
     workflow_tag: airrflow
     data_collection_tag: samplesheet
     aggregation: nunique
@@ -325,7 +335,7 @@ main_dashboard:
     title: Target loci
     title_size: sm
     title_align: left
-    layout: {x: 6, y: 1, w: 2, h: 2}
+    layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: table
     tag: airr-meta-table
     section: Sample sheet
@@ -333,10 +343,10 @@ main_dashboard:
     data_collection_tag: samplesheet
     row_selection_enabled: false
     title: AIRR samplesheet
-    description: Sample, subject, species, locus and the submitter's biological metadata.
+    description: Sample, subject, species, locus, sampling site, sorted population, sex and age.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 3, w: 8, h: 5}
+    layout: {x: 0, y: 2, w: 8, h: 4}
 
   # --------------------------------------------------------- reference tables
   - component_type: text
@@ -352,7 +362,7 @@ main_dashboard:
     body: >
       The per-sample and per-subject tables every panel above is computed from.
       Filters picked in the left panel narrow these too.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: table
     tag: airr-tables-summary
     section: Reference tables
@@ -364,7 +374,7 @@ main_dashboard:
     description: Clone counts, clone-size spread and the rarefied Hill numbers per sample.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 1, w: 8, h: 4}
+    layout: {x: 0, y: 2, w: 8, h: 4}
   - component_type: table
     tag: airr-tables-seqcounts
     section: Reference tables
@@ -376,7 +386,7 @@ main_dashboard:
     description: Sequences remaining after every pRESTO and Change-O step.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 5, w: 8, h: 4}
+    layout: {x: 0, y: 6, w: 8, h: 4}
   - component_type: table
     tag: airr-tables-threshold
     section: Reference tables
@@ -388,7 +398,7 @@ main_dashboard:
     description: The shazam model and threshold fitted for each subject.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 9, w: 8, h: 4}
+    layout: {x: 0, y: 10, w: 8, h: 3}
   - component_type: table
     tag: airr-tables-overlap
     section: Reference tables
@@ -431,19 +441,24 @@ main_dashboard:
     placement: left
     title: Subject
     layout: {x: 0, y: 3, w: 1, h: 3}
+  # airrflow's samplesheet keeps `treatment`, `tissue` and `population` as free
+  # submitter columns. On this cohort `treatment` holds the sampling site (lymph
+  # node against brain lesion), which is the only biological contrast that
+  # varies; `tissue` holds one timepoint for every sample, so a filter on it
+  # could never narrow anything.
   - component_type: interactive
-    tag: airr-filter-tissue
-    index: airr-tissue-filter
+    tag: airr-filter-site
+    index: airr-site-filter
     section: Sample filters
     group: Cohort
     workflow_tag: airrflow
     data_collection_tag: samplesheet
     interactive_component_type: MultiSelect
-    column_name: tissue
+    column_name: treatment
     column_type: object
     display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:test-tube'}
     placement: left
-    title: Tissue
+    title: Sampling site
     layout: {x: 0, y: 6, w: 1, h: 3}
   - component_type: interactive
     tag: airr-filter-sex
@@ -521,7 +536,7 @@ tabs:
       deduplication and the representative filter each fold many reads onto one
       sequence. A low retention is therefore expected, and its spread across
       samples is what matters.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: card
     tag: airr-seq-card-input
     section: Funnel at a glance
@@ -537,7 +552,7 @@ tabs:
     title: Input reads
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 1, w: 2, h: 2}
+    layout: {x: 0, y: 2, w: 2, h: 2}
   - component_type: card
     tag: airr-seq-card-representative
     section: Funnel at a glance
@@ -554,7 +569,7 @@ tabs:
     title: UMI representatives
     title_size: sm
     title_align: left
-    layout: {x: 2, y: 1, w: 2, h: 2}
+    layout: {x: 2, y: 2, w: 2, h: 2}
   - component_type: card
     tag: airr-seq-card-collapsed
     section: Funnel at a glance
@@ -570,7 +585,7 @@ tabs:
     title: Annotated sequences
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 1, w: 2, h: 2}
+    layout: {x: 4, y: 2, w: 2, h: 2}
   - component_type: card
     tag: airr-seq-card-retention
     section: Funnel at a glance
@@ -586,7 +601,7 @@ tabs:
     title: Retention
     title_size: sm
     title_align: left
-    layout: {x: 6, y: 1, w: 2, h: 2}
+    layout: {x: 6, y: 2, w: 2, h: 2}
 
   - component_type: text
     tag: airr-seq-sankey-intro
@@ -603,7 +618,7 @@ tabs:
       step peel off into the Lost lane and stay there. The depth control in the
       panel settings adds the [Change-O](https://changeo.readthedocs.io) steps
       after [IgBLAST](https://ncbi.github.io/igblast/) annotation.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: advanced_viz
     tag: airr-seq-sankey
     index: airr-seq-sankey
@@ -623,7 +638,7 @@ tabs:
     title: Read fates through the pipeline
     description: Weighted by reads. Losses peel off into the Lost lane at the step they stopped at.
     title_size: h3
-    layout: {x: 0, y: 1, w: 8, h: 8}
+    layout: {x: 0, y: 2, w: 8, h: 8}
 
   - component_type: text
     tag: airr-seq-persample-intro
@@ -638,7 +653,7 @@ tabs:
     body: >
       A sample whose line drops away from the rest at one step is the one to look
       at. The retention bars beside it rank the same signal as a single number.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: figure
     tag: airr-seq-fig-stages
     index: airr-seq-stage-lines
@@ -668,7 +683,7 @@ tabs:
     title: Sequences remaining at each step
     description: Log scale, so a constant fold loss reads as a straight segment.
     title_size: h3
-    layout: {x: 0, y: 1, w: 4, h: 6}
+    layout: {x: 0, y: 2, w: 4, h: 6}
   - component_type: figure
     tag: airr-seq-fig-retention
     index: airr-seq-retention-bars
@@ -681,7 +696,7 @@ tabs:
     title: Retention per sample
     description: Fraction of raw reads still represented in the annotated repertoire.
     title_size: h3
-    layout: {x: 4, y: 1, w: 4, h: 6}
+    layout: {x: 4, y: 2, w: 4, h: 6}
 
   - component_type: interactive
     tag: airr-seq-filter-depth
@@ -757,7 +772,7 @@ tabs:
       Clone counts scale with how deeply a sample was sequenced, so the Hill
       numbers behind the evenness card are rarefied to a common depth. Evenness
       near one means no clone dominates.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: card
     tag: airr-rep-card-clones
     section: Repertoire at a glance
@@ -773,7 +788,7 @@ tabs:
     title: Clones
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 1, w: 2, h: 2}
+    layout: {x: 0, y: 2, w: 2, h: 2}
   - component_type: card
     tag: airr-rep-card-clonesize
     section: Repertoire at a glance
@@ -791,7 +806,7 @@ tabs:
     title: Mean clone size
     title_size: sm
     title_align: left
-    layout: {x: 2, y: 1, w: 2, h: 2}
+    layout: {x: 2, y: 2, w: 2, h: 2}
   - component_type: card
     tag: airr-rep-card-evenness
     section: Repertoire at a glance
@@ -807,7 +822,7 @@ tabs:
     title: Evenness
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 1, w: 2, h: 2}
+    layout: {x: 4, y: 2, w: 2, h: 2}
   - component_type: card
     tag: airr-rep-card-samples
     section: Repertoire at a glance
@@ -824,7 +839,7 @@ tabs:
     title: Repertoires
     title_size: sm
     title_align: left
-    layout: {x: 6, y: 1, w: 2, h: 2}
+    layout: {x: 6, y: 2, w: 2, h: 2}
 
   - component_type: text
     tag: airr-rep-vgene-intro
@@ -840,7 +855,7 @@ tabs:
       The composition bars switch between V family and V gene resolution; the
       heatmap clusters samples on their gene fractions, so repertoires drawn from
       the same subject should land next to each other.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: advanced_viz
     tag: airr-rep-v-composition
     index: airr-rep-v-composition
@@ -858,7 +873,7 @@ tabs:
     title: V gene composition
     description: Share of each sample's sequences per V family, switchable to gene resolution.
     title_size: h3
-    layout: {x: 0, y: 1, w: 8, h: 7}
+    layout: {x: 0, y: 2, w: 8, h: 7}
   - component_type: advanced_viz
     tag: airr-rep-v-heatmap
     index: airr-rep-v-heatmap
@@ -876,7 +891,7 @@ tabs:
     title: V gene usage heatmap
     description: Sample by V gene fractions, column standardised so rare genes stay visible.
     title_size: h3
-    layout: {x: 0, y: 8, w: 8, h: 7}
+    layout: {x: 0, y: 9, w: 8, h: 7}
   - component_type: figure
     tag: airr-rep-fig-family
     index: airr-rep-family-bars
@@ -900,7 +915,7 @@ tabs:
     title: V family composition
     description: The family level on its own, stacked to one per sample.
     title_size: h3
-    layout: {x: 0, y: 15, w: 8, h: 6}
+    layout: {x: 0, y: 16, w: 8, h: 6}
 
   - component_type: text
     tag: airr-rep-depth-intro
@@ -916,7 +931,7 @@ tabs:
       Both axes are log scaled, so a repertoire that is simply deeper sits along
       the diagonal and one that is genuinely more clonal sits below it. Selecting
       points, or rows in the table, filters the clonal tab.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: figure
     tag: airr-rep-fig-depth
     index: airr-rep-depth-scatter
@@ -940,7 +955,25 @@ tabs:
     title: Clones versus depth
     description: One point per sample; size is the mean clone size. Select points to filter the clonal tab.
     title_size: h3
-    layout: {x: 0, y: 1, w: 4, h: 6}
+    layout: {x: 0, y: 2, w: 4, h: 6}
+  - component_type: advanced_viz
+    tag: airr-rep-richness-evenness
+    index: airr-rep-richness-evenness
+    section: Clones and depth
+    workflow_tag: airrflow
+    data_collection_tag: repertoire_summary
+    use: enchantr/richness_evenness
+    config:
+      x_title: Rarefied richness (clones)
+      y_title: Evenness
+      log_x: true
+      top_n_labels: 3
+      selection_enabled: true
+      selection_column: sample_id
+    title: Richness against evenness
+    description: One point per sample, sized by the sequences behind it. A large but uneven repertoire sits low and right.
+    title_size: h3
+    layout: {x: 4, y: 2, w: 4, h: 6}
   - component_type: table
     tag: airr-rep-table-summary
     section: Clones and depth
@@ -953,7 +986,7 @@ tabs:
     description: Select rows to narrow the clone-level panels to those samples.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 7, w: 8, h: 6}
+    layout: {x: 0, y: 8, w: 8, h: 4}
 
   - component_type: interactive
     tag: airr-rep-filter-clones
@@ -1053,7 +1086,7 @@ tabs:
       [shazam](https://shazam.readthedocs.io) fitted per subject decides where one
       clone ends and the next begins. Every number on this tab rests on it, so it
       is on the card row.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: card
     tag: airr-clone-card-richness
     section: Clonal analysis at a glance
@@ -1069,7 +1102,7 @@ tabs:
     title: Rarefied richness
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 1, w: 2, h: 2}
+    layout: {x: 0, y: 2, w: 2, h: 2}
   - component_type: card
     tag: airr-clone-card-sizeclass
     section: Clonal analysis at a glance
@@ -1085,7 +1118,7 @@ tabs:
     title: Clones by size class
     title_size: sm
     title_align: left
-    layout: {x: 2, y: 1, w: 2, h: 2}
+    layout: {x: 2, y: 2, w: 2, h: 2}
   - component_type: card
     tag: airr-clone-card-threshold
     section: Clonal analysis at a glance
@@ -1103,7 +1136,7 @@ tabs:
     title: Distance threshold
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 1, w: 2, h: 2}
+    layout: {x: 4, y: 2, w: 2, h: 2}
   - component_type: card
     tag: airr-clone-card-sensitivity
     section: Clonal analysis at a glance
@@ -1119,7 +1152,7 @@ tabs:
     title: Threshold sensitivity
     title_size: sm
     title_align: left
-    layout: {x: 6, y: 1, w: 2, h: 2}
+    layout: {x: 6, y: 2, w: 2, h: 2}
 
   - component_type: text
     tag: airr-clone-div-intro
@@ -1218,7 +1251,28 @@ tabs:
       Rank against frequency on log axes: a flat head means a polyclonal
       repertoire, a steep one means a few clones carry it. The sunburst splits
       the same clones into the standard homeostasis size classes.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: airr-clone-abundance-ribbon
+    index: airr-clone-abundance-ribbon
+    section: Clone abundance
+    workflow_tag: airrflow
+    data_collection_tag: clonal_abundance
+    use: enchantr/abundance_ribbon
+    config:
+      x_title: Clone rank within sample
+      y_title: Relative abundance
+      log_x: true
+      log_y: true
+      band_opacity: 0.18
+      line_width: 1.6
+      legend_pos: right
+      selection_enabled: true
+      selection_column: sample_id
+    title: Rank abundance with bootstrap confidence
+    description: The shaded band is alakazam's bootstrap interval. Where two curves overlap inside their bands, the difference in expansion is not supported.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 7}
   - component_type: figure
     tag: airr-clone-fig-rank
     index: airr-clone-rank-abundance
@@ -1244,7 +1298,7 @@ tabs:
     title: Rank abundance
     description: Top 500 clones per sample. Select points to narrow the rest of the tab to those samples.
     title_size: h3
-    layout: {x: 0, y: 1, w: 8, h: 6}
+    layout: {x: 0, y: 9, w: 8, h: 6}
   - component_type: advanced_viz
     tag: airr-clone-sunburst
     index: airr-clone-sunburst
@@ -1262,7 +1316,7 @@ tabs:
     title: Clonal homeostasis
     description: Sequences per subject, sample and clone size class, from rare to hyperexpanded.
     title_size: h3
-    layout: {x: 0, y: 7, w: 8, h: 6}
+    layout: {x: 0, y: 15, w: 8, h: 6}
 
   - component_type: text
     tag: airr-clone-share-intro
@@ -1278,7 +1332,7 @@ tabs:
       Clones are defined within a subject, so samples of different subjects always
       read zero. The heatmap counts every pair, the UpSet counts the higher-order
       intersections a pairwise view cannot show.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: advanced_viz
     tag: airr-clone-overlap
     index: airr-clone-overlap
@@ -1296,7 +1350,7 @@ tabs:
     title: Shared clones per sample pair
     description: Diagonal is zeroed so the colour scale spans the real sharing.
     title_size: h3
-    layout: {x: 0, y: 1, w: 8, h: 6}
+    layout: {x: 0, y: 2, w: 8, h: 6}
   - component_type: advanced_viz
     tag: airr-clone-upset
     index: airr-clone-upset
@@ -1315,7 +1369,28 @@ tabs:
     title: Clone set intersections
     description: Each bar is a set of samples and how many clones appear in exactly those.
     title_size: h3
-    layout: {x: 0, y: 7, w: 8, h: 6}
+    layout: {x: 0, y: 8, w: 8, h: 6}
+
+  - component_type: advanced_viz
+    tag: airr-clone-overlap-mds
+    index: airr-clone-overlap-mds
+    section: Sharing between samples
+    workflow_tag: airrflow
+    data_collection_tag: clonal_overlap
+    use: enchantr/overlap_mds
+    config:
+      compute_method: pcoa
+      pcoa_distance: bray_curtis
+      default_color_by: subject_id
+      point_size: 11
+      marker_outline: true
+      show_centroids: true
+      legend_pos: right
+      hover_cols: [sample_id]
+    title: Repertoire overlap ordination
+    description: Samples placed by how many clones they share. Coordinates are recomputed whenever the sample scope changes, so an ordination always describes what is on screen.
+    title_size: h3
+    layout: {x: 0, y: 14, w: 8, h: 6}
 
   - component_type: interactive
     tag: airr-clone-filter-q

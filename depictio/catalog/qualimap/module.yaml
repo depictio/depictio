@@ -1,8 +1,10 @@
-# Qualimap BamQC, one output here (the genome_results.txt summary). The raw
-# per-base histograms under raw_data_qualimapReport/ (coverage_across_reference,
-# mapping_quality_histogram, ...) are ingested for MultiQC's own Qualimap panel
-# but are not tidied into a second catalog output here; nothing needed a
-# coverage_track view of them yet.
+# Qualimap BamQC. Five outputs: the genome_results.txt summary and the
+# per-contig block at the end of the same file, plus three of the plain tables
+# under raw_data_qualimapReport/ (depth along the reference, the depth
+# histogram, the cumulative genome fraction). The remaining raw tables
+# (mapping_quality_*, duplication_rate_histogram, homopolymer_indels,
+# mapped_reads_*) are ingested for MultiQC's own Qualimap panel and are not
+# tidied into catalog outputs here; nothing needed a bindable frame of them yet.
 id: qualimap
 name: Qualimap
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qualimap/bamqc

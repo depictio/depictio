@@ -10,7 +10,7 @@ find:
 recipe: qcatch/metrics_summary.py
 fixture: metrics_summary.tsv
 renders_as:
-  - { component: card, column: retained_cells, aggregation: max }
+  - { component: card, column: retained_cells, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
   - { component: card, column: mapping_rate_pct, aggregation: average, secondary_layout: gauge, coverage_max: 100.0 }
   - { component: card, column: sequencing_saturation_pct, aggregation: average, secondary_layout: gauge, coverage_max: 100.0 }
   - { component: table }

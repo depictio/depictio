@@ -1,0 +1,20 @@
+id: cellranger_cell_expression
+name: Cell x marker-gene expression matrix
+mode: analysis/cell_expression
+description: >-
+  One row per called cell, one Float64 column per panel gene (the run's own
+  cluster markers, a curated PBMC panel and the most dispersed genes),
+  log1p(CP10k), next to the cell's UMAP coordinates and cluster. The embedding
+  renderer lists every column in its Colour-by menu, so this is the table that
+  answers "type a gene, see it on the UMAP", and the wide matrix the
+  two-group comparison is computed over.
+find:
+  path_glob: "**/filtered_feature_bc_matrix/matrix.mtx.gz"
+recipe: cellranger/cell_expression.py
+fixture: cell_expression.tsv
+renders_as:
+  - { id: gene_umap, component: advanced_viz, kind: embedding, roles: {sample_id: barcode, dim_1: umap_1, dim_2: umap_2, cluster: cluster_label, color: cluster_label} }
+  - { id: selection_compare, component: advanced_viz, kind: group_compare, roles: {index: barcode, group: cluster_label} }
+  - { id: cell_cluster_picker, component: interactive, interactive_type: MultiSelect, column_name: cluster_label }
+  - { id: cell_qc_status_picker, component: interactive, interactive_type: SegmentedControl, column_name: qc_status }
+  - { component: card, column: barcode, aggregation: count, secondary_layout: donut, breakdown_col: cluster_label, top_n_count: 5 }

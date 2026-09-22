@@ -1,0 +1,116 @@
+# Genome chord: one tab of the advanced-visualisation showcase.
+#
+# Regenerate the seed after editing:
+#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'Genome chord'
+subtitle: 'The 24 GRCh38 chromosomes on a ring, one chord per rearrangement: 40 links in 4 classes, chord width from the supporting reads.'
+icon: 'mdi:chart-donut'
+icon_color: 'red'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8d7e'
+is_main_tab: false
+tab_order: 42
+parent_dashboard_tag: volcano
+tab_icon: 'mdi:chart-donut'
+tab_icon_color: 'red'
+
+# Left-panel filter section. Deliberately not `persistent`: the tabs of this
+# family read different collections whose column names collide while their
+# value domains do not overlap, so a control fanned out from one tab would show
+# up everywhere and bite on nothing.
+filter_sections:
+  - name: 'Link scope'
+    icon: 'mdi:filter-variant'
+    color: 'red'
+    description: 'Restricts which rearrangements are drawn, by class and by read support'
+
+grid_sections:
+  - name: 'Rearrangement map'
+    icon: 'mdi:chart-donut'
+    color: 'red'
+    description: 'Which chromosomes this genome joined to which, and how strongly'
+
+components:
+  - tag: text-genome-chord
+    index: chord-text
+    component_type: text
+    title: 'Genome chord'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Rearrangement map'
+    body: >
+      Chromosomes run clockwise from twelve o'clock, each band as wide as the chromosome is
+      long, and every chord joins the two breakpoints of one rearrangement. Width is the read
+      support on a log scale, so the recurrent partners stand out without hiding the one-off
+      events. Colour is the event class: only translocations cross between chromosomes, which
+      is why the deletions and duplications hug the rim. Hover a chord for its two loci, click
+      it to filter the dashboard by that link, click the background to clear.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: viz-genome-chord
+    index: 'chord-ring'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'genome_chord_demo'
+    title: 'Rearrangement partners'
+    description: '40 links over the 24 GRCh38 chromosomes, coloured by event class and sized by supporting reads. Assembly, colour encoding, link cap and the intra-chromosomal toggle live in the Settings ⚙ popover.'
+    section: 'Rearrangement map'
+    viz_kind: 'genome_chord'
+    config:
+      viz_kind: "genome_chord"
+      chrom_a_col: "chrom_a"
+      pos_a_col: "pos_a"
+      chrom_b_col: "chrom_b"
+      pos_b_col: "pos_b"
+      label_col: "label"
+      weight_col: "weight"
+      category_col: "category"
+      assembly: "hg38"
+      max_links: 500
+      colour_by: "category"
+      show_labels: true
+      intra_chromosomal: true
+      selection_enabled: true
+      selection_column: "label"
+    layout: { x: 0, y: 2, w: 8, h: 8 }
+
+  - tag: filter-genome-chord-category
+    index: chord-f-category
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'genome_chord_demo'
+    interactive_component_type: MultiSelect
+    column_name: 'category'
+    column_type: 'object'
+    title: 'Event class'
+    placement: left
+    section: 'Link scope'
+    group: 'Link filters'
+    display:
+      title_size: md
+      custom_color: '#FA5252'
+      icon_name: 'mdi:shape-outline'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-genome-chord-weight
+    index: chord-f-weight
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'genome_chord_demo'
+    interactive_component_type: RangeSlider
+    column_name: 'weight'
+    column_type: 'int64'
+    title: 'Supporting reads'
+    placement: left
+    section: 'Link scope'
+    group: 'Link filters'
+    display:
+      title_size: md
+      custom_color: '#E64980'
+      icon_name: 'mdi:counter'
+    layout: { x: 0, y: 3, w: 1, h: 3 }

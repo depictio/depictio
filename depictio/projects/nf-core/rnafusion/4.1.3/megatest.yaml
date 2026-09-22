@@ -40,7 +40,10 @@ keys:
   - multiqc/multiqc_data/multiqc.parquet
   # fusion-report: the caller-consensus table, hub of the whole template.
   - fusionreport/*/*.fusions.csv
-  # Per-caller evidence tables.
+  # Per-caller evidence tables. The Arriba file feeds two recipes: arriba/fusions.py
+  # (the call table) and arriba/fusion_links.py (the same calls as breakpoint pairs
+  # with integer positions, which is the row shape the chord diagram binds), so no
+  # extra key is needed for the partner map.
   - arriba/*.arriba.fusions.tsv
   - starfusion/*.starfusion.abridged.tsv
   - fusioncatcher/*.fusion-genes.txt

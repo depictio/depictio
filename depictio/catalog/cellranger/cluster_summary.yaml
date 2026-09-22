@@ -11,5 +11,10 @@ fixture: cluster_summary.tsv
 renders_as:
   - { id: cluster_sizes, component: figure, visu_type: bar, dict_kwargs: {x: cluster_label, y: n_cells, title: Cells per cluster} }
   - { id: cluster_qc_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: cluster_label} }
+  - { id: cluster_composition, component: figure, visu_type: bar, dict_kwargs: {x: sample, y: pct_cells, color: cluster_label, barmode: stack, title: Cluster composition per sample} }
+  - { id: cluster_size_filter, component: interactive, interactive_type: RangeSlider, column_name: n_cells }
   - { component: card, column: n_cells, aggregation: sum, secondary_layout: top_n, breakdown_col: cluster_label, top_n_count: 3 }
+  - { component: card, column: median_n_umi, aggregation: median, secondary_layout: box_plot, aggregations: [box_plot_stats] }
+  - { component: card, column: pct_flagged, aggregation: average, secondary_layout: gauge, coverage_max: 100.0 }
+  - { component: card, column: pct_cellbender_cell, aggregation: average, secondary_layout: gauge, coverage_max: 100.0 }
   - { component: table }

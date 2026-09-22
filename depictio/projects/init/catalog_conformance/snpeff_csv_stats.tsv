@@ -1,0 +1,16 @@
+sample	caller	section	category	count	percent
+NA12878_200M	deepvariant	effect	3_prime_UTR_variant	1547	1.719615
+NA12878_200M	deepvariant	effect	5_prime_UTR_premature_start_codon_gain_variant	94	0.104489
+NA12878_200M	deepvariant	effect	5_prime_UTR_truncation	1	0.001112
+NA12878_200M	deepvariant	effect	5_prime_UTR_variant	940	1.044886
+NA12878_200M	deepvariant	effect	conservative_inframe_deletion	84	0.093373
+NA12878_200M	deepvariant	effect	conservative_inframe_insertion	83	0.092261
+NA12878_200M	deepvariant	effect	disruptive_inframe_deletion	172	0.191192
+NA12878_200M	deepvariant	effect	disruptive_inframe_insertion	80	0.088926
+NA12878_200M	deepvariant	effect	downstream_gene_variant	11716	13.023276
+NA12878_200M	deepvariant	effect	exon_loss_variant	1	0.001112
+NA12878_200M	deepvariant	effect	frameshift_variant	487	0.54134
+NA12878_200M	deepvariant	effect	initiator_codon_variant	4	0.004446
+NA12878_200M	deepvariant	effect	intergenic_region	489	0.543563
+NA12878_200M	deepvariant	effect	intragenic_variant	4660	5.179965
+NA12878_200M	deepvariant	effect	intron_variant	28599	31.790089

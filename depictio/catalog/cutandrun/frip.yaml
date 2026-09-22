@@ -1,0 +1,26 @@
+id: cutandrun_frip
+name: Fraction of coverage in peaks
+mode: peaks/frip
+description: >-
+  Each sample's fragment coverage split into the part that falls inside its own
+  peaks and the part that does not, in base pairs and as a fraction. SEACR
+  reports no read count, so the numerator is the summed region signal de-scaled
+  by the spike-in factor and the denominator is the fragment-length histogram.
+# The table is long on purpose, two rows per sample, so a donut or a stacked
+# bar reads it as a composition without any client-side pivot. The sample-level
+# FRiP is repeated on both rows, which leaves its quantiles unchanged.
+find:
+  path_glob: "**/*.frags.len.txt"
+  path_glob_alt:
+    - "**/*.seacr.peaks.*.bed"
+recipe: cutandrun/frip.py
+fixture: frip.tsv
+renders_as:
+  - { id: frip_composition_bar, component: figure, visu_type: bar, dict_kwargs: {x: sample, y: fraction, color: signal_class, title: Fragment coverage inside and outside peaks} }
+  # The composition itself, then the spread of the fraction across samples and
+  # the worst library in the run.
+  - { component: card, column: coverage_bp, aggregation: sum, secondary_layout: donut, breakdown_col: signal_class }
+  - { component: card, column: frip, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: fraction, aggregation: min, secondary_layout: gauge, coverage_max: 1.0 }
+  - { component: card, column: n_peaks, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 4 }
+  - { component: table }

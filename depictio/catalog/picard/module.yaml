@@ -1,0 +1,8 @@
+# Picard, multi-output tool -> a folder. One output here, the MarkDuplicates
+# duplication metrics; the CollectMultipleMetrics family reaches dashboards
+# through MultiQC's own Picard panels and has no catalog output yet.
+id: picard
+name: Picard
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/picard/markduplicates
+homepage: https://broadinstitute.github.io/picard/
+biotools_url: https://bio.tools/picard_tools

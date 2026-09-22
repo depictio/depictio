@@ -18,8 +18,16 @@
 # Strelka), both annotators (snpEff, VEP). `reports/` nests every QC file under
 # <tool>/[<caller>/]<sample>/, and the sample name lives only in the file name.
 #
-# Not fetched on purpose: preprocessing/ (16 GB of CRAM), variant_calling/ and
-# annotation/ (the VCFs themselves, 225 MB), the mosdepth per-base beds
+# Fetched since 2026-09-22: the per-sample per-caller VCFs and their
+# snpEff-annotated twins (20 objects, 44 MB), which is what the variant-level
+# tabs read. bgzip is gzip-compatible so Polars reads them directly, no VCF
+# dependency needed. Deliberately still skipped inside variant_calling/ and
+# annotation/: the gVCFs (`*.g.vcf.gz`, `*.genome.vcf.gz`, 6-46 MB each, only
+# useful for joint genotyping) and the VEP-annotated duplicates (VEP publishes
+# the same calls with a second vocabulary, and its own summary is HTML only,
+# see VALIDATION_REPORT.md SK-D3).
+#
+# Not fetched on purpose: preprocessing/ (16 GB of CRAM), the mosdepth per-base beds
 # (219-587 MB each; the 200 MB cap skips them anyway), every HTML report
 # (fastp, FastQC, snpEff, VEP: MultiQC already parsed them, and VEP publishes
 # nothing but HTML, see VALIDATION_REPORT.md SK-D3) and the bed indices.
@@ -67,6 +75,16 @@ keys:
   - reports/fastp/*/*.fastp.json
   - reports/fastp/*/*.fastp.log
   - reports/fastqc/*/*_fastqc.zip
+  # --- the calls themselves. One VCF per sample and caller (1-3 MB each) and
+  # its snpEff-annotated twin (3-7 MB). The two FreeBayes objects under
+  # variant_calling/ come back as 196-byte Fusion symlink targets rather than
+  # VCFs (VALIDATION_REPORT.md SK-D6); the raw scan drops the junk line and the
+  # annotated twin carries FreeBayes' calls in full, so nothing is lost.
+  - variant_calling/deepvariant/*/*.deepvariant.vcf.gz
+  - variant_calling/*/*/*.filtered.vcf.gz
+  - variant_calling/manta/*/*.diploid_sv.vcf.gz
+  - variant_calling/strelka/*/*.variants.vcf.gz
+  - annotation/*/*/*_snpEff.ann.vcf.gz
   # --- annotation summaries: snpEff's CSV stats + per-gene effect counts. VEP
   # writes only *_VEP.ann.summary.html, which MultiQC parses and nothing else can.
   - reports/snpeff/*/*/*_snpEff.csv

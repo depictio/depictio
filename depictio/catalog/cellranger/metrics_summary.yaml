@@ -11,7 +11,7 @@ recipe: cellranger/metrics_summary.py
 fixture: metrics_summary.tsv
 renders_as:
   - { component: card, column: estimated_cells, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
-  - { component: card, column: median_genes_per_cell, aggregation: max }
+  - { component: card, column: median_genes_per_cell, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
   - { component: card, column: sequencing_saturation_pct, aggregation: average, secondary_layout: gauge, coverage_max: 100.0 }
   - { component: card, column: fraction_reads_in_cells_pct, aggregation: average, secondary_layout: gauge, coverage_max: 100.0 }
   - { component: table }

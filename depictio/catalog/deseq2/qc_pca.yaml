@@ -1,0 +1,27 @@
+id: deseq2_qc_pca
+name: DESeq2 QC PCA
+mode: qc/pca
+description: >-
+  The principal components nf-core's own deseq2_qc.r computed on the count
+  matrix, read from the file the pipeline publishes rather than recomputed, so
+  the dashboard and the MultiQC report show the same points. The variance each
+  component explains is parsed out of the file header and kept as a column.
+find:
+  path_glob: "**/*pca.vals.txt"
+  path_glob_alt: # MultiQC custom-content flavour written by chipseq and atacseq
+    - "**/*pca.vals_mqc.tsv"
+recipe: deseq2/qc_pca.py
+fixture: qc_pca.tsv
+renders_as:
+  - id: qc_pca_embedding
+    component: advanced_viz
+    kind: embedding
+    roles: { sample_id: sample_id, dim_1: dim_1, dim_2: dim_2 }
+  - {
+      component: card,
+      column: dim_1_percent,
+      aggregation: max,
+      secondary_layout: gauge,
+      coverage_max: 100,
+    }
+  - { component: table }

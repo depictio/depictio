@@ -14,5 +14,14 @@ renders_as:
     component: advanced_viz
     kind: coverage_track
     roles: {chromosome: chrom, position: start, value: E1}
+  # The same track on a chromosome-aware locus axis, so it lines up with the
+  # insulation and domain tracks stacked under the contact map.
+  - id: compartment_locus_track
+    component: advanced_viz
+    kind: genome_view
+    roles: {chr: chrom, pos: start, score: E1, end: end, sample: sample, category: compartment}
   - { component: card, column: E1, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  # Sign of E1 as a category: what share of the mappable genome is A and what
+  # share is B, which a continuous E1 column cannot answer.
+  - { component: card, column: E1, aggregation: count, secondary_layout: donut, breakdown_col: compartment }
   - { component: table }

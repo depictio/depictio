@@ -63,6 +63,7 @@ import re
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.recipes.lib.cooltools import float_col
 
 #: Data-collection tag the recipe reads. A template reusing this recipe must
 #: scan the per-sample insulation files into a DC with this tag (see module docstring).
@@ -106,11 +107,6 @@ def _bool_col(name: str) -> pl.Expr:
     )
 
 
-def _float_col(name: str) -> pl.Expr:
-    """A numeric text column ("nan" on masked bins) as a nullable Float64."""
-    return pl.col(name).replace("nan", None).cast(pl.Float64, strict=False).alias(name)
-
-
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """Unpivot the per-window column groups into one row per bin per window."""
     df = sources["insulation"]
@@ -142,9 +138,9 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         chunk = df.select(
             *id_cols,
             pl.lit(window).cast(pl.Int64).alias("window"),
-            _float_col(score_col).alias("log2_insulation_score"),
-            _float_col(pixels_col).alias("n_valid_pixels"),
-            _float_col(strength_col).alias("boundary_strength"),
+            float_col(score_col).alias("log2_insulation_score"),
+            float_col(pixels_col).alias("n_valid_pixels"),
+            float_col(strength_col).alias("boundary_strength"),
             _bool_col(boundary_col).alias("is_boundary"),
         )
         # A file that never scanned this window size still supplies rows after

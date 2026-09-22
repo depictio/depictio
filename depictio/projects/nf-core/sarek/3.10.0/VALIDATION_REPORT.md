@@ -198,3 +198,249 @@ anything, confirming the cause was concurrent edits elsewhere, not this template
 the three new `multiqc/*.yaml` panels were also verified to load cleanly in isolation via
 `_load_tool_dir()` at every point during this session, independent of the rest of the catalog's
 state.
+
+---
+
+# Remediation pass, 2026-09-22
+
+**Date:** 2026-09-22
+**Worktree / branch:** `depictio-worktrees/feat-nfcore-templates-lot2` (`feat/nfcore-templates-lot2`)
+**Validator:** local depictio-cli dry run + recipe execution against the real megatest data +
+`pytest` + **a live ingestion and per-tab screenshots against a running stack** (API
+`http://localhost:8112`, viewer `http://localhost:5612`, Mongo `localhost:27112`). Unlike the
+2026-09-17 pass, this one did cover a live server.
+
+## What changed
+
+The 2026-09-17 pass shipped 2 tabs and 45 components, with the variant-level panels blocked on
+the megatest manifest deliberately not fetching any VCF. This pass fetched the VCFs and built
+the variant-level half of the template.
+
+**Fetched (20 files, 44 MB), added to `megatest.yaml`:** per-sample per-caller
+`variant_calling/deepvariant/*/*.deepvariant.vcf.gz`, `variant_calling/*/*/*.filtered.vcf.gz`,
+`variant_calling/manta/*/*.diploid_sv.vcf.gz`, `variant_calling/strelka/*/*.variants.vcf.gz`,
+and `annotation/*/*/*_snpEff.ann.vcf.gz`. Deliberately still not fetched: `*.g.vcf.gz` and
+`*.genome.vcf.gz` (gVCF, one record per reference block, no value in a call-level view) and
+`*_VEP.ann.vcf.gz` (SnpEff's annotation already covers the annotated-call panels; VEP's own
+summary is on the MultiQC tab). The full manifest dry run now reports 196 files / 104.3 MB.
+
+**New shared library:** `depictio/recipes/lib/vcf.py`, a pure-Polars VCF reader. bgzip is
+gzip-compatible, so `pl.scan_csv` reads a `.vcf.gz` with no new dependency: 286,633 plain
+records scan in 0.1 s, 371,068 annotated records in 0.2 s. `vcf_to_long()` returns one row per
+variant (sample, caller, chrom, pos, variant_key, ref, alt, variant_type, qual, filter_status,
+is_pass, gt, dp, vaf), and with `with_annotation=True` also splits SnpEff's first `ANN` entry
+into gene, gene_id, impact, consequence, hgvs_p and aa_pos.
+
+**New catalog outputs (15 across 5 tool dirs):**
+
+| Tool dir | Outputs added |
+| --- | --- |
+| `depictio/catalog/vcf/` (new) | `variants` |
+| `depictio/catalog/snpeff/` (new) | `ann_variants`, `variant_upset`, `protein_lollipop`, `csv_stats`, `genes`, `gene_upset`, `gene_heatmap`, `oncoplot` |
+| `depictio/catalog/vcftools/` (new) | `filter_summary`, `tstv_qual` |
+| `depictio/catalog/mosdepth/` | `regions`, `summary`, `xy_sex_check` (`amplicon_coverage` untouched) |
+| `depictio/catalog/bcftools/` | `stats_sections` |
+
+**template.yaml:** 6 data collections and 4 links became 33 and 24, including four
+`optional: true` somatic collections (`ascat_segments`, `cnvkit_segments`,
+`msisensorpro_summary`, `ngscheckmate_matches`) carrying their real output globs so a somatic
+`test_full` run lights them up without a template change. `samples.py` gained a
+`read_depth_label` string column (`75M reads` / `200M reads`), because the Int64
+`read_depth_millions` can only drive a slider, never a MultiSelect.
+
+**dashboards/base.yaml:** 2 tabs / 45 components became 6 tabs / 131 components, 80 tiles of
+which 77 carry a `use:` (96%). Every tab has a 4-card glance strip, an intro text tile and its
+own tab-local filters; box-plot cards went from 0/5 to present on every distribution tab.
+
+## Live validation performed
+
+```bash
+depictio-cli run --template nf-core/sarek/3.10.0 --data-root <megatest> --dry-run
+# -> 8/8 steps passed, 0 errors, 0 warnings
+
+# project lot2-sarek wiped first (DELETE /projects/delete), then ingested once:
+uv run python -m depictio.cli run --template nf-core/sarek/3.10.0 \
+  --data-root ~/Data/depictio-nfcore/sarek/3.10.0/megatest --project-name lot2-sarek
+# -> 8/8 steps, 29 data collections processed, 4 optional skipped, no other error
+
+uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py -k sarek -q
+# -> 10 passed
+```
+
+**Row counts, read back from `/deltatables/shape/{dc_id}` after the ingest.** All 29
+non-optional collections have rows; the 4 optional ones have no Delta table, as intended.
+
+| Collection | Rows x cols | Collection | Rows x cols |
+| --- | --- | --- | --- |
+| `samples` | 2 x 7 | `snpeff_ann_variants` | 371,068 x 20 |
+| `samplesheet` | 2 x 8 | `snpeff_variant_upset` | 52,644 x 11 |
+| `bcftools_stats_summary` | 10 x 12 | `snpeff_protein_lollipop` | 13,993 x 9 |
+| `bcftools_stats_tstv` | 10 x 8 | `snpeff_csv_stats` | 510 x 6 |
+| `bcftools_stats_sections` | 92,362 x 6 | `snpeff_genes` | 163,557 x 11 |
+| `mosdepth_regions` | 10,836 x 8 | `snpeff_gene_upset` | 3,000 x 6 |
+| `mosdepth_summary` | 204 x 9 | `snpeff_gene_heatmap` | 40 x 11 |
+| `mosdepth_xy_sex_check` | 4 x 6 | `snpeff_oncoplot` | 253 x 4 |
+| `vcftools_filter_summary` | 48 x 9 | `vcf_variants` | 286,631 x 14 |
+| `vcftools_tstv_qual` | 1,757 x 7 | `multiqc_data` | 1 parquet file |
+
+**Per-tab screenshots** (headless Chromium, 1600x1000): one per tab under
+`/tmp/claude-502/shots-sarek/`, plus a tall variant capturing the whole scroll container.
+
+## Discrepancies found in this pass
+
+### SK-D1 (fixed): `sample_mapping` now carries explicit mappings
+
+SK-D1 above described `sample_mapping`'s canonicalisation regex failing on sarek's dot-joined
+per-tool MultiQC sample names. The resolver itself is shared code outside this template's edit
+scope, but the link accepts an explicit `mappings: {canonical: [variants]}` block, which is.
+The MultiQC link now lists the 20 MultiQC sample-name variants per sample read directly off the
+run's `multiqc.parquet` (`-1`, `-1_1`, `-1_2`, `.md`, `.recal`, `.deepvariant`,
+`.deepvariant_snpEff`, `.deepvariant_VEP.ann`, `.freebayes.filtered[...]`,
+`.haplotypecaller.filtered[...]`, `.manta.diploid_sv[...]`, `.strelka.variants[...]`). The
+underlying regex gap in `depictio/cli/cli/utils/sample_mapping.py` is unchanged and still worth
+fixing for templates that cannot enumerate their variants.
+
+### SK-D7: two FreeBayes VCFs in the bucket are Fusion symlink targets, not VCFs
+
+`variant_calling/freebayes/NA12878_{75M,200M}/*.filtered.vcf.gz` are 196-byte ASCII files whose
+entire content is a Fusion path (`/fusion/s3/nf-core-awsmegatests/work/sarek/work-8ccac7ad.../...`).
+They are not gzip, so a reader that decompresses them raises `not in gzip format`. The raw-line
+scan design absorbs this: each file contributes one junk line that the recipe's data-line regex
+drops, rather than failing the whole collection. Practical effect: FreeBayes contributes 0 rows
+to `vcf_variants` and is absent from the variant-level UpSet, while its SnpEff-annotated twins
+(`annotation/freebayes/...*_snpEff.ann.vcf.gz`) are complete (42k and 43k calls) and do reach
+`snpeff_ann_variants`. This is a publication defect in the megatest bucket, not a template or
+pipeline issue.
+
+### SK-D8: Manta's VCFs are real, correcting an earlier note
+
+An earlier note recorded both FreeBayes and Manta VCFs as 0 bytes on S3. Manta's are in fact
+complete (26 KB and 41 KB, 57 and 72 SV records), consistent with SK-D4's bcftools-stats
+reading. Only FreeBayes' are defective, and not as zero-byte objects but as SK-D7's symlink
+targets.
+
+### SK-D9: `.md` and `.recal` mosdepth region files are byte-identical
+
+`<sample>.md.regions.bed.gz` and `<sample>.recal.regions.bed.gz` have matching md5s on this
+run: BQSR changes base qualities, not alignment positions, so per-target depth is unchanged.
+`mosdepth_regions` therefore carries each window twice, once per pass, and the `mosdepth pass`
+filter on the Cohort QC tab exists so a reader can collapse that duplication rather than
+mistake it for two conditions. The `.recal` summaries are not identical: they drop chrM (50 rows
+against `.md`'s 52).
+
+### SK-D10: `bcftools stats` column offsets are not where the brief placed them
+
+Building `bcftools_stats_sections` needed three corrections against the brief's field offsets:
+the `DP` block's count is field 5 ("number of sites"), not field 4 (a fraction) and not field 3
+(identically 0 unless bcftools ran with `-s`/`-S`); `SiS` keeps fields 3 and 6 (singleton SNPs,
+singleton indels). `QUAL`, `AF` and `ST` matched. Also worth recording for any future panel: the
+`quality` block alone is 97% of the collection's 92,362 rows, so a bar chart over all sections
+pooled is unreadable and the section filter is load-bearing, not a convenience.
+
+### SK-D11: `genomespy_track` is not a registered kind, `genome_view` superseded it
+
+The brief asked for a `genomespy_track` tile beside the `coverage_track` one.
+`AdvancedVizKind` in `depictio/models/components/types.py` has no such member: the spike's
+single-track kind was replaced by the multi-track `genome_view`, which takes the same
+`mark: rect` / `end_col` configuration plus per-sample lanes. Both the mosdepth regions tile and
+the VCF call tile use `genome_view`.
+
+### SK-D12: polars 1.43.2 `read_csv` has no `include_file_paths`
+
+A `RecipeSource` that resolves a glob reads with `pl.read_csv`, which in the pinned polars
+(1.43.2) does not accept `include_file_paths`; only `scan_csv` does. Any recipe that derives
+`sample` or `caller` from a file name therefore cannot use a glob source and must go through a
+raw-scan data collection with `dc_ref`. That is why every new collection here comes in raw plus
+transformed pairs (`vcf_calls_raw` / `vcf_variants`, `snpeff_genes_raw` / `snpeff_genes`, and so
+on) rather than a single glob-sourced recipe. `xy_sex_check` is the one glob-sourced recipe, and
+it needs no file-name identity because it reads the already-keyed summary rows.
+
+### SK-D5 (unchanged): catalog schema regen still owed, and four failures that are not this template's
+
+Final run of the catalog suite in this pass:
+
+```bash
+uv run pytest depictio/tests/models/test_catalog.py -q
+# -> 4 failed, 95 passed
+```
+
+None of the four belong to this template, and all four name another agent's tool directory or a
+shared file outside every template agent's edit scope:
+
+- `test_committed_json_schema_is_current[catalog.schema.json]` and `[output.schema.json]`: the
+  two committed `*.schema.json` files are stale against the current `CatalogEntry` /
+  `CatalogOutput` models, unchanged since 2026-09-17. Fixing needs
+  `depictio dev catalog schema --model {entry,output} -o depictio/catalog/<file>`, and
+  `depictio/catalog/*.schema.json` is a shared file this agent may not edit.
+- `test_every_bundled_card_declares_a_secondary_strip`: six bare cards in `cellbender`,
+  `kallisto`, `qcatch` and `simpleaf`.
+- `test_cli_validate_exits_zero_on_bundled_catalog`: three non-numeric card aggregations in
+  `cellranger`, `cooltools` and `gtdbtk`.
+
+Catalog loading is all-or-nothing, so any test that resolves a `use:` transitively validates
+every tool directory. The five this template owns were confirmed to load cleanly in isolation at
+the end of the pass, and the catalog as a whole loads (75 entries):
+
+```
+vcf OK outputs=1 | snpeff OK outputs=8 | vcftools OK outputs=2
+mosdepth OK outputs=6 | bcftools OK outputs=3
+```
+
+## Known gap in this pass: five of six tabs could not be screenshotted
+
+Tab 1 (MultiQC) renders correctly and was captured (23 tiles, no error markers). Tabs 2 to 6
+could not be: the shared viewer dev server on `localhost:5612` is failing to transform
+`packages/depictio-react-core/.../advanced_viz/AdvancedVizDispatch.tsx`, with
+
+```
+[plugin:vite:import-analysis] Failed to resolve import "@genome-spy/core/genome/genomes.js"
+  from ".../advanced_viz/genomespy/useGenomeSpy.ts"
+```
+
+which surfaces in the browser as `Failed to fetch dynamically imported module:
+.../AdvancedVizDispatch.tsx` and renders 0 tiles on any tab holding an advanced-viz panel. All
+five new tabs hold at least one, so all five are blocked; tab 1 is the only tab with no
+advanced-viz tile, which is why it alone rendered.
+
+**Root cause, and why it is not a host-side install problem.** `@genome-spy/core@0.88.1` is
+installed on the host (`packages/depictio-react-core/node_modules/@genome-spy`, with
+`dist/src/genome/genomes.js` present, and the package's `exports` map has `"./*":
+"./dist/src/*"`), so the import path is correct and resolvable from a host-side build. The dev
+server does not see it: `docker-compose.dev.yaml` bind-mounts only the `src/` directories into
+`depictio-viewer-dev` ("Live source only, node_modules stay in the image, never masked"), so
+every `node_modules` the container resolves against comes from the image, which was built before
+this dependency was added. `docker logs` on the container confirms it resolving against
+`/build/node_modules`. Installing on the host therefore cannot fix it and neither can a plain
+restart: the viewer-dev image has to be rebuilt.
+
+```bash
+docker compose -f docker-compose.dev.yaml --env-file .env.instance build depictio-viewer-dev
+docker compose -f docker-compose.dev.yaml --env-file .env.instance up -d depictio-viewer-dev
+```
+
+`packages/**` belongs to the GenomeSpy kind agent and docker commands are out of scope here, so
+neither was run from this agent; the owning agent was sent the diagnosis. Re-shooting the five
+tabs is the one outstanding validation step for this template. Everything those tabs depend on
+(the ingest, the row counts, the links, the dashboard YAML and the catalog renders it resolves)
+validated by the other means recorded above, and this failure mode is independent of the
+template: it takes down every advanced-viz tile in the repo equally.
+
+## 2026-09-22 review fixes
+
+- `dashboards/base.yaml`: the four glance cards (`sk-glance-card-snps/indels/depth/tstv`,
+  formerly `sk-sheet-card-*`) moved out of the collapsed `Sample sheet` section into
+  `Run at a glance`, which is now `persistent: true, pin: top` so the strip is visible on first
+  paint and rides every tab; the MultiQC intro and general statistics panel moved to a new
+  `MultiQC general statistics` section. The sample hub table sits at `y: 2` under its intro.
+- Tab-local, non-persistent `Glance scope` section on the main tab: a `Select` on
+  `bcftools_stats_summary.caller`, which narrows the pinned strip and the pinned reference
+  table (both rendered on that tab).
+- Pinned `Sample filters` unchanged: `patient` equals `sample_id` on both reference rows, so
+  a patient control would mirror the sample control one to one, and `status` is `0` for
+  both rows, so a `status_label` filter would be dead. Both are worth adding on a run with
+  several samples per patient or a tumour/normal design.
+- `template.yaml`: new links `samples.sample_id -> snpeff_oncoplot.sample_id` (the `Genes`
+  oncoplot is now reached by the persistent sample picker) and
+  `bcftools_stats_summary.caller -> bcftools_stats_tstv.caller` (so the glance scope reaches
+  the Ts/Tv card).
+- `test_shipped_dashboard_yamls.py -k sarek` passes. `.db_seeds` not regenerated here.

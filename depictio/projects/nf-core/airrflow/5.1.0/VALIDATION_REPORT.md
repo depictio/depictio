@@ -191,3 +191,95 @@ workstream's tool folder is incomplete
 tests plus the airrflow `advanced_viz` assertion failed on it. The folder was completed by its
 own workstream during this run and the tests now pass; recorded here because the failure mode is
 not obvious from the error, which names only the offending folder.
+
+---
+
+## 2026-09-22: lot 1 remediation pass
+
+Filter semantics, the unbound rank-abundance file, the overlap ordination, table sizing and the
+text-tile height convention, against the same megatest run.
+
+### What changed
+
+* **Dead filter removed.** `tissue` holds one value for every sample of this cohort, so the
+  filter on it could never narrow anything. It is replaced by `treatment`, which is where the
+  megatest submitters put the sampling site (lymph node against brain lesion): the only
+  biological contrast that varies here. The filter is titled `Sampling site`, and
+  `columns_description` now documents the values rather than trusting the column names. The
+  `Subjects` card's `breakdown_col` moved from `tissue` to `treatment` for the same reason.
+* **`clonal_abundance.tsv` is now ingested.** It was on disk and unbound: 238 651 rows,
+  17 MB, alakazam's `estimateAbundance` output. New catalog output `enchantr/clonal_abundance`
+  (`clonal_abundance.py` / `.yaml` / `.tsv`) casts it and decimates each sample onto a
+  log-spaced rank grid: every rank up to 20 kept exactly, the tail thinned, 200 points per
+  sample at most. 238 651 rows in, 1 296 out, 132 to 151 points per sample. It renders as a
+  `profile` with the bootstrap interval as a ribbon (`enchantr/abundance_ribbon`), two cards and
+  a table. The manifest key is added and the "deliberately NOT fetched" note removed.
+* **Overlap MDS.** `enchantr/clonal_overlap` gained an `embedding` render (`overlap_mds`) bound
+  to the existing wide matrix. The dashboard tile sets `compute_method: pcoa` with a
+  Bray-Curtis distance, so the ordination is computed per request and follows the sample filter
+  instead of freezing a layout at ingest.
+* **Orphan DCs linked.** `clone_sets` and `threshold_summary` reached no filter before.
+  `threshold_summary` is per subject, so it is now linked on `subject_id`. `clone_sets` has no
+  `sample_id` column at all (its sample columns are the membership flags), so the link exists to
+  carry the filter as far as `_narrow_wide_matrix_columns`, which mirrors it onto the column set
+  by value. `clonal_abundance` is linked from both the samplesheet and the repertoire summary.
+* **Half row filled.** `Clones and depth` had a lone `w: 4` figure. A new `scatter_xy` render
+  on `enchantr/repertoire_summary` (`richness_evenness`) fills the other half: rarefied richness
+  against evenness, sized by sequencing depth.
+* **Tables resized to their real row counts.** samplesheet h5 to h4 (10 rows), repertoire
+  summary h4 (10), sequence counts h4 (10), clonal overlap h4 (10), clonal threshold h4 to h3
+  (2 rows).
+* **Glance strip on every tab.** The four cohort cards moved out of the collapsed `Sample sheet`
+  section into a new persistent, pinned, uncollapsed `Cohort at a glance` section, so a reader
+  on any tab sees what the tiles are computed from. The samplesheet table stays collapsed below.
+* **Text tiles.** Eleven intros whose rendered body exceeds 120 characters moved from `h: 1` to
+  `h: 2`, and the `y` of every tile below them in the same section was recomputed so each grid
+  row still sums to 8.
+
+### Commands
+
+```bash
+# recipe on the real file
+uv run python -c "...transform(...)"        # 238651 -> 1296 rows, 8 columns, dtypes match
+uv run python <scratchpad>/audit.py .../airrflow/5.1.0/dashboards/base.yaml   # 0 problems
+uv run python <scratchpad>/catcheck.py .../airrflow/5.1.0/dashboards/base.yaml # 11 advanced_viz, 0 invalid
+uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py -q -k airrflow
+uv run python -m depictio.cli run --template nf-core/airrflow/5.1.0 \
+  --data-root ~/Data/depictio-nfcore/airrflow/5.1.0/megatest --dry-run   # 8/8 steps
+```
+
+### Discrepancies
+
+#### AF-D9: alakazam drops a sample from the abundance table
+
+`clonal_abundance.tsv` has nine of the ten samples. SRR1383456 contributed 27 sequences in 24
+clones, below what `estimateAbundance` will bootstrap, so it has no row. This is the same reason
+it has no diversity numbers (AF-D5). The DC is declared `optional: true` and the profile simply
+has one curve fewer; no tile fails.
+
+#### AF-D10: AF-D1 is reversed
+
+AF-D1 argued `clonal_abundance.tsv` was not worth 17 MB of a 20 MB download because
+`clone_sizes_table.tsv` already carries rank and frequency. That is true of the point estimates
+and false of the confidence band, which is the only thing on this template that says whether a
+difference in clonal expansion is supported by the sequences behind it. The decimation keeps the
+cost at ingest: the download grows, the delta table does not.
+
+#### AF-D11: the whole-catalog test is red for reasons outside this template
+
+`test_advanced_viz_components_validate` and `test_advanced_viz_survives_the_component_union`
+fail on every template while other agents of this wave are mid-write in `depictio/catalog/`
+(`ascat` without output files, `cooltools` still naming the pre-rename `genomespy_track` kind).
+Catalog loading is all-or-nothing, so the failure is unrelated to airrflow. Validated instead
+against a catalog copy restricted to the tool dirs this dashboard uses (`enchantr`, `multiqc`):
+11 advanced_viz components, 0 invalid. This is AF-X3 recurring, and it is the argument for that
+issue's proposed per-tool validation path.
+
+## 2026-09-22 review fixes
+
+MultiQC scan regex brought to the mandated form
+(`(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\.parquet$`). Not done: a pinned
+`pcr_target_locus` factor. On the reference run (`pipeline_info/samplesheet.valid.tsv`,
+10 rows) the column is constant (`IG` throughout), so a control on it could never narrow
+anything and stays out per the dead-filter rule; `subject_id` (2), `treatment` (2) and
+`sex` (2) already carry the varying factors.

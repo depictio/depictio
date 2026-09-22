@@ -193,3 +193,166 @@ each recipe's docstring for the exact commands / output columns).
 
 - Screenshots for `docs/dashboards.md` (no server / viewer to capture from).
 - A real (non-dry-run) ingest against a live instance.
+
+---
+
+# Remediation pass, 2026-09-22
+
+**Date:** 2026-09-22
+**Worktree / branch:** `depictio-worktrees/feat-nfcore-templates-lot2`
+**Instance:** PORT_OFFSET 112 (API `localhost:8112`, viewer `localhost:5612`), project `lot2-nanoseq`.
+**Validator:** `uv run pytest`, a `--dry-run`, and one live wipe-and-re-ingest against that instance.
+
+## Why
+
+The lot 2 audit found this template the worst funnel of the seven: **one** link
+(`samples -> multiqc`), because everything downstream of Bambu is a wide matrix with a column
+per sample and no `sample` column to link on. Four Quantification cards were therefore constants
+over a 50-row table, two rows carried 4 cards where 8 columns were available, the pinned
+reference table was 208 722 rows in a four-row-high tile, DE labels were Bambu's exon-granular
+GTF attribute strings, NanoStat and `samtools stats` sat on disk but were reachable only through
+MultiQC, DEXSeq's 419 rows / 4 hits took two 8x7 tiles, and 8 MultiQC panels were unplaced.
+
+## What changed
+
+**New catalog outputs** (module-level, reusable by any pipeline that runs these tools):
+
+| Output | Rows on this run | What it unlocks |
+| --- | --- | --- |
+| `bambu/counts_gene_long` | 159 138 | Melts the wide gene matrix to one row per sample and gene, with count / CPM / log CPM. This is the link that was missing. |
+| `bambu/counts_transcript_long` | 415 356 | Same at transcript level (`MIN_TOTAL_COUNT = 5`). |
+| `bambu/sample_pca` | 6 | numpy SVD on log CPM over the 500 most variable genes, plotPCA-style, plus per-library depth / complexity / concentration readings. |
+| `bambu/sample_correlation` | 6 | Spearman on log CPM of expressed genes, one column per sample, for `complex_heatmap`. |
+| `bambu/top_variable_genes` | 100 | Genes ranked by variance of log CPM rather than by total count. |
+| `nanoplot/nanostats` | 6 | NanoStat's summary block read directly: N50, mean/median length and quality, yield, extremes. |
+| `nanoplot/nanostats_quality` | 30 | The Q-cutoff ladder (reads, share, megabases above each Phred floor). |
+| `samtools/stats_sections` | 3 155 | The SN summary plus the RL / COV / ID histograms `samtools stats` writes and MultiQC never surfaces, decimated to 200 geometric bins per library per section. |
+
+`samtools/stats_sections` is a new **output** in an existing tool dir: `flagstat` and `stats`
+were not touched, and its glob is narrowed to `**/*.bam.stats` so it cannot collide with
+`flagstat.yaml`'s `**/*flagstat.stats`.
+
+**New pipeline-local recipes** (`depictio/projects/nf-core/nanoseq/recipes/`):
+
+- `samples.py` now extracts `protocol`, `source_replicate` and `run_id` out of
+  `samplesheet.input_file`. The six libraries are not three replicates per cell line: they are
+  one cDNA and two direct-cDNA preparations off three flow-cell runs, which the sheet's
+  `A549_R1..R3` naming hides. `protocol` is a persistent filter as a result.
+- `deseq2_results.py` wraps the shared DESeq2 reader so `gene_id` is the Ensembl id extracted
+  from Bambu's attribute string, `gene_biotype` is its own filterable column, the original
+  descriptor survives as `feature_label`, and the contrast is named `A549 vs K562` from the
+  samplesheet instead of `all`. 208 722 rows; the `use: deseq2/...` renders bind unchanged
+  (resolution is catalog-side, verified through `catalog_source_for_use`).
+- `deseq2_top_expressed.py` is the same table cut to its 200 best-measured rows, which is what
+  the bottom-pinned reference tile now holds.
+
+**Isoform structures bind the shared `gtf/transcripts` catalog output.** A pipeline-local
+`transcript_structures.py` reading both GTF and BED12 was written first and then **deleted** in
+favour of `depictio/catalog/gtf/transcripts.py`, which landed mid-session from the
+`transcript_structure` kind work. The tile is `use: gtf/transcript_structures`; the raw DC is
+`gtf_transcripts_raw`, scanning `bambu/extended_annotations.gtf` only rather than the catalog's
+own `**/*.gtf` glob, so the reference annotation the run was quantified against is not drawn
+beside the discovered models. BED12 support went with the deleted recipe (see NS-D11).
+
+**Dashboard: 3 tabs to 7.** Run hub / Basecall and read QC / Run dynamics / Alignment and
+coverage / Quantification and sample structure / DE and usage / Isoforms. Persistent pinned
+`Sample filters` (sample, condition, protocol) on every tab, persistent collapsed
+`Significance thresholds` (padj, log2fc), and a tab-local filter section on each tab
+(flow-cell run and source replicate; q_cutoff; stats section and axis range; gene biotype and
+log CPM; direction, biotype and mean expression). Every card row fills all 8 columns, cards use
+`box_plot` / `top_n` / `donut` / `gauge` strips, and all 8 previously unplaced MultiQC panels
+are placed in collapsed per-tab sections.
+
+## Discrepancies found in this pass
+
+- **NS-D8** The 4 Quantification cards read `bambu_counts_gene` (the top-50 wide matrix), so
+  `nunique(gene_id)` was the constant 50 and `sum(count)` the constant total of those 50 rows on
+  every filter state. Fixed: those cards now read `bambu_counts_gene_long` /
+  `bambu_sample_pca`, which carry a `sample` column and move with the filters.
+- **NS-D9** NS-D5 (unreadable DE labels) is now **fixed**, not just documented: the wrapper
+  above replaces the attribute string with the Ensembl id on every Bambu-derived collection,
+  DESeq2 included. `feature_label` keeps the original.
+- **NS-D10** The pinned `Reference tables` tile held all 208 722 DESeq2 rows at `h: 4` on every
+  tab. Fixed: 200 rows at `h: 7`; the full table is still what the DE tab's volcano, MA,
+  barplot and QQ read.
+- **NS-D11 (accepted limitation)** nanoseq's UCSC conversion route publishes the same transcript
+  models as BED12, which `gtf/transcripts` does not read. Since that conversion runs on a BED12
+  derived from `extended_annotations.gtf`, a run with the BED12 has the GTF, so nothing is lost
+  in practice. Recorded here rather than kept as a second optional collection.
+- **NS-D12 (environmental, not a template defect)** `multiqc_data` fails to process with the
+  CLI's own venv (`depictio/cli/.venv`): `No module named 'multiqc'`, so
+  `extract_multiqc_metadata` cannot read the parquet and the run aborts before steps 7 and 8.
+  The repo venv carries MultiQC 1.35, so the live ingest was re-run as
+  `.venv/bin/python -m depictio.cli run ...`. Anyone re-ingesting this template from
+  `depictio/cli/.venv` needs `uv sync --extra multiqc` first.
+- **NS-D13 (fixed during validation)** Three `description:` values in `base.yaml` began a plain
+  scalar and then contained `": "`, which YAML reads as a nested mapping; `yaml.safe_load`
+  raised `mapping values are not allowed here` and all 10 shipped-dashboard tests failed to even
+  parse the file. Reworded rather than quoted, so the pattern does not come back on the next
+  edit.
+
+## What was actually run (2026-09-22)
+
+```bash
+uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py -q -k nanoseq
+# -> 10 passed, 863 deselected.
+
+uv run pytest depictio/tests/unit/test_nfcore_megatest.py -q
+# -> 72 passed, 2 failed. Both failures are other pipelines' manifests
+#    (eager-2.4.5, scrnaseq-4.2.0), owned by other agents in the same wave.
+
+depictio/cli/.venv/bin/depictio-cli run --template nf-core/nanoseq/3.0.0 \
+  --data-root ~/Data/depictio-nfcore/nanoseq/3.0.0/megatest --dry-run
+# -> 8/8 steps passed.
+
+uv run ruff format / ruff check <every new and changed .py>
+# -> 4 files reformatted, then All checks passed!
+
+uv run pre-commit run --files <every new and changed file>
+# -> trailing-whitespace, end-of-file-fixer, check-yaml, check-added-large-files,
+#    ruff, ruff-format all pass; ty / Helm / thumbnails / nbstripout / shellcheck
+#    skipped (no matching files).
+```
+
+Two cross-checks were scripted against the shipped YAML rather than run by hand, and both pass:
+every `data_collection_tag` in `dashboards/base.yaml` exists in `template.yaml` (the only
+collections not bound to a tile are the four raw two-step scans plus `samplesheet`), and every
+column named by a card, figure, table, filter or advanced-viz config exists in the recipe's
+`EXPECTED_SCHEMA` with the declared `column_type`.
+
+### Live ingest: partial, blocked on the instance
+
+`lot2-nanoseq` was deleted and re-ingested once against PORT_OFFSET 112. Result, read back from
+Mongo (`mongodb://localhost:27112/depictioDB`, project `6ab2aea59c185131670a9f4a`):
+
+- **18 of 21 data collections written**, with the row counts the recipes were designed for:
+  `samples` 6, `nanostats` 6, `nanostats_quality` 30, `nanoplot_nanostats_raw` 162,
+  `samtools_stats_raw` 1 780 032, `samtools_stats_sections` 3 155, `bambu_counts_gene` 50,
+  `bambu_counts_gene_long` 159 138, `bambu_counts_transcript` 50,
+  `bambu_counts_transcript_long` 415 356, `bambu_sample_pca` 6, `bambu_sample_correlation` 6,
+  `bambu_top_variable_genes` 100, `deseq2_results` 208 722, `deseq2_top_expressed` 200,
+  `dexseq_results` 419, plus the two raw DESeq2 / samplesheet scans.
+- `gtf_transcripts_raw` / `gtf_transcripts` skipped cleanly as designed: the optional gate did
+  its job, no file on disk, no failure.
+- `multiqc_data` failed on NS-D12 (no `multiqc` module in `depictio/cli/.venv`), which aborts
+  the run before step 7, so **no dashboard was imported**. The retry through the repo venv,
+  which does carry MultiQC 1.35, never reached step 1: the instance's API wedged at 18:45 on an
+  unrelated uvicorn reload and only a container restart clears it.
+
+**Outstanding, for whoever has the restarted instance:** re-run
+`.venv/bin/python -m depictio.cli run --template nf-core/nanoseq/3.0.0 --data-root
+~/Data/depictio-nfcore/nanoseq/3.0.0/megatest --project-name lot2-nanoseq --overwrite`, then
+capture the seven tab screenshots. The dev viewer on 5612 additionally predates the
+`@genome-spy/core` install and throws "Failed to fetch dynamically imported module" on every
+advanced-viz tile until its image is rebuilt, so screenshots need that rebuild too. Neither is
+caused by this template.
+
+## 2026-09-22 review fixes
+
+- `dashboards/base.yaml`: the `Significance thresholds` section (adjusted p-value and log2
+  fold-change `RangeSlider`s on `deseq2_results`) is no longer pinned and persistent on the
+  main tab; it now lives in the `DE and usage` tab's own `filter_sections`
+  (`ns-de-filter-padj`, `ns-de-filter-log2fc`), the only tab that renders that DC.
+- `template.yaml`: new link `samples.sample_id -> gtf_transcripts.sample` (the DC's own column
+  name), so the `Isoforms` structures follow the persistent sample picker.
+- `test_shipped_dashboard_yamls.py -k nanoseq` passes. `.db_seeds` not regenerated here.

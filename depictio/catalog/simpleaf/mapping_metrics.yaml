@@ -10,6 +10,6 @@ recipe: simpleaf/mapping_metrics.py
 fixture: mapping_metrics.tsv
 renders_as:
   - { component: card, column: mapping_rate, aggregation: average, secondary_layout: gauge, coverage_max: 1.0 }
-  - { component: card, column: num_processed, aggregation: max }
-  - { component: card, column: num_cells, aggregation: max }
+  - { component: card, column: num_processed, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: num_cells, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
   - { component: table }

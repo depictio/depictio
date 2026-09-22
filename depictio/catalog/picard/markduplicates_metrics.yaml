@@ -1,0 +1,24 @@
+id: picard_markduplicates_metrics
+name: Duplication metrics
+description: >-
+  Reads examined, duplicates flagged and the resulting duplication rate from a
+  Picard MarkDuplicates report, with the sample read off the report name because
+  Picard's own LIBRARY field is whatever the read group said. Low-input ancient
+  libraries run far higher duplication than a modern shotgun library at the same
+  depth, which is what makes this the companion of the complexity curve.
+find:
+  path_glob: "**/*.metrics"
+  path_glob_alt:
+    - "**/*.metrics.txt"
+    - "**/*.MarkDuplicates.metrics.txt"
+recipe: picard/markduplicates_metrics.py
+fixture: markduplicates_metrics.tsv
+renders_as:
+  - { id: duplication_vs_depth, component: advanced_viz, kind: scatter_xy,
+      roles: {x: reads_after_dedup, y: percent_duplication, label: sample, color: sample, size: duplicate_reads} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: percent_duplication, color: sample, title: Duplication rate per library} }
+  - { component: card, column: percent_duplication, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: duplicate_reads, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: reads_after_dedup, aggregation: sum, secondary_layout: donut, breakdown_col: sample }
+  - { component: card, column: unpaired_reads_examined, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: table }

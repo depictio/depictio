@@ -358,3 +358,125 @@ component by `tag` matches nothing, with no error, and simply reports zero compo
 was hit while writing the verification harness: a first pass that collected the persistent
 filters by `tag` found an empty list and silently skipped the whole persistent filter test.
 Either carry `tag` through as an alias, or reject a YAML that sets both to different values.
+
+---
+
+# 2026-09-22: lot 2 remediation pass
+
+**Worktree / branch:** `depictio-worktrees/feat-nfcore-templates-lot2`, `feat/nfcore-templates-lot2`
+**Scope:** dead filters, table sizing, glance strip on every tab, Arriba composition bars,
+partner-chromosome flow and chord. No ingest was run from this pass; the dry run and the
+schema-level checks below are what was executed.
+
+## What changed
+
+**Dead filters removed.** `rnaf-filter-sample` (`samplesheet.sample`) and
+`rnaf-filter-strandedness` (`samplesheet.strandedness`) both bound a column holding exactly
+one value on this run, so neither could narrow anything. Both are gone, and with them the
+`Sample filters` and `Read QC scope` sections. `Fusion scope` is now the single pinned
+persistent section, which is the honest shape for a dashboard whose unit is the fusion.
+
+**Fusion-level replacements.** `chrom_pair` (13 values) joins `Consensus scope` on the
+Fusion calls tab and `confidence` (3 values: low, medium, high) joins `Evidence scope`. A
+new tab-local `Reference scope` on the main tab carries `gene_5p` (17 values) and
+`databases` (3 values), so the MultiQC tab has a filter section of its own that narrows the
+reference tables it carries. Neither column is wired anywhere else, so these are genuine
+per-tab filters rather than second copies of another tab's.
+
+**Glance strip on every tab.** The `Sample sheet` section became `Run at a glance`, is no
+longer collapsed, and opens with four run-level cards at `w: 2` (distinct 5' partners with a
+top-3 breakdown by knowledge base, callers reporting as a donut, Arriba support fraction as
+a Tukey box plot, uniquely mapped junction fraction on a gauge) above the samplesheet table.
+It is `persistent` and `pin: top`, which is what keeps those cards legal on a tab named
+MultiQC. The four metrics are deliberately different from the per-tab strips.
+
+**Table sizing** against the real row counts measured by running each recipe on the megatest
+(rule used: 1-2 rows `h: 2`, 3-8 `h: 3`, 9-20 `h: 4`, 21-50 `h: 5`, 51-150 `h: 6`, over 150
+`h: 7`):
+
+| Table | Rows | h before | h after |
+|---|---|---|---|
+| `rnaf-table-samplesheet` | 1 | 3 | 2 |
+| `rnaf-calls-table` | 20 | 6 | 4 |
+| `rnaf-ref-table-consensus` | 20 | 4 | 4 |
+| `rnaf-ref-table-evidence` | 45 | 4 | 5 |
+| `rnaf-ref-table-fi` | 17 | 4 | 4 |
+| `rnaf-ref-table-junctions` | 200 | 4 | 7 |
+| `rnaf-ev-table-arriba` | 15 | 4 | 4 |
+| `rnaf-ev-table-starfusion` | 15 | 4 | 4 |
+| `rnaf-ev-table-fusioncatcher` | 23 | 4 | 5 |
+| `rnaf-fi-domain-table` | 184 | 4 | 7 |
+
+**Text tiles.** All 13 intro tiles whose rendered body exceeds 120 characters moved from
+`h: 1` to `h: 2`, and every tile below them had its `y` recomputed so each grid row still
+sums to 8.
+
+**New panels.**
+
+- `arriba/fusions.py` gained `chrom_5p`, `chrom_3p` and `chrom_pair`, split out of the
+  `chrom:position` breakpoint strings. The fixture was regenerated from the real run.
+- `arriba/fusions.yaml` gained four renders: `partner_chrom_sankey` (`sankey` on
+  `[chrom_5p, chrom_3p]`), `type_bars`, `site_bars` and an id on the pre-existing
+  `type_frame_bars`.
+- New DC `arriba_fusion_links` on `arriba/fusion_links.py` (the coordinate view another
+  agent added this wave: `label, chrom_a, pos_a, chrom_b, pos_b, weight, category,
+  confidence`, 15 rows), plus a `fusion_consensus.fusion -> arriba_fusion_links.label`
+  link so the persistent fusion filter reaches the ring.
+- Fusion calls gained a `Partner chromosomes` section: the sankey at `h: 7` and a
+  `genome_chord` tile (`use: arriba/partner_chords`) at `h: 8`.
+- Evidence gained the two Arriba composition bars at `w: 4` each, above the per-caller dot
+  plots.
+
+## Measured row counts (recipes run on `~/Data/depictio-nfcore/rnafusion/4.1.3/megatest`)
+
+`fusionreport/fusions` 20, `fusionreport/caller_evidence` 45, `arriba/fusions` 15,
+`arriba/fusion_links` 15, `starfusion/fusions` 15, `fusioncatcher/fusion_genes` 23,
+`fusioninspector/fusions` 17, `fusioninspector/protein_domains` 184,
+`ctatsplicing/introns` 200, `ctatsplicing/cancer_introns` 0 (header only, as before).
+
+## Commands run
+
+| Command | Result |
+|---|---|
+| mechanical dashboard audit (rows sum to 8, text height, glance strip, tab filters, table width) | 0 problems, from 13 before |
+| `uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py -q -k rnafusion` | 8 passed, 2 failed (RF-D8 below) |
+| the two failing checks re-run against an isolated catalog | 13 advanced_viz tiles, 0 problems |
+| fixture grounding and recipe resolution for the 7 tools this template uses, isolated | 0 problems |
+| `uv run python -m depictio.cli run --template nf-core/rnafusion/4.1.3 --data-root ~/Data/... --dry-run` | 8/8 steps, completed successfully |
+| `uv run ruff format` and `ruff check` on `depictio/catalog/arriba/fusions.py` | unchanged, all checks passed |
+
+## Discrepancies
+
+### RF-D8: `depictio/catalog/` loads all-or-nothing, so one broken tool dir degrades every template
+
+`load_catalog_entries()` raises on the first invalid tool folder and has no per-tool
+recovery, so while other agents were writing new tools in the same tree, the two
+catalog-dependent shipped-YAML checks
+(`test_advanced_viz_components_validate`, `test_advanced_viz_survives_the_component_union`)
+failed for rnafusion with all 13 advanced-viz tiles degraded to raw dicts, including tiles
+this pass never touched. The cause was another tool entirely (first a folder missing
+`module.yaml`, later a `sankey` render with empty `roles`). Re-running both checks with
+`CATALOG_DIR` pointed at a directory holding only the seven tools this template uses gives 0
+problems. Nothing rnafusion-specific, and it compounds the already-recorded RF-D5 (the
+catalog cache is per process): a template can be correct and still import with
+`viz_kind: null` because of an unrelated tool. Worth a per-tool try/except in the loader so
+one bad folder costs one tool rather than the whole catalog.
+
+### RF-D9: the run's `sample` and `strandedness` are constant, which is a data limit not a template one
+
+Recorded here because the fix is a re-point, not a code change: the 4.1.3 megatest is the
+pipeline's single-sample `test` profile. Any panel or filter keyed on the sample is
+degenerate. The template now says so in its section descriptions rather than shipping
+controls that cannot move. A cohort re-point would restore the sample filter, the
+`_trimmed` MultiQC caveat in `docs/dashboards.md` included.
+
+## 2026-09-22 review fixes
+
+MultiQC scan regex brought to the mandated form. The persistent `Sample filters` section
+is back (`samplesheet.sample` + `samplesheet.strandedness`, pin top), ahead of `Fusion
+scope`, which stays as the second persistent section because the fusion collections carry
+no sample column. On this single-sample run both new controls are inert, which is the
+shape of the run and not a defect. Not done: `samplesheet -> splice_junctions`. The
+`ctatsplicing/introns.py` schema has no sample column (intron, chrom, start, end, strand,
+gene, read support), so there is no target field; the template's own comment documents the
+table as junction-keyed and unlinked.

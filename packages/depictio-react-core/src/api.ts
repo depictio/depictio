@@ -802,6 +802,11 @@ export type InteractiveFilterSource =
   | 'map_selection'
   | 'image_selection'
   | 'tree_selection'
+  /** A region brushed on a `genome_view` tile's genome axis. Unlike the other
+   *  sources it emits a *pair* of entries (a chromosome multi-select and a
+   *  position range) because the pipeline filters by column and a genomic
+   *  region is two columns. See `genomeRegionFilters` in `selection.ts`. */
+  | 'genome_selection'
   /** Derived projection of saved selection groups (see `selectionGroups.ts`).
    *  Never merged into the user's filter list — composed at the fetch
    *  boundary only. */
@@ -1023,7 +1028,7 @@ export type AdvancedVizKind =
   | 'contact_map'
   | 'knee_plot'
   | 'damage_profile'
-  | 'genomespy_track'
+  | 'genome_view'
   | 'group_compare'
   | 'transcript_structure'
   | 'cnv_profile'
@@ -1473,6 +1478,95 @@ export async function dispatchSankey(payload: SankeyPayload): Promise<SankeyJob>
 export async function pollSankey(jobId: string): Promise<SankeyJob> {
   const res = await authFetch(`${API_BASE}/advanced_viz/compute_sankey/${jobId}`);
   if (!res.ok) throw new Error(`Failed to poll compute_sankey: ${res.status}`);
+  return res.json();
+}
+
+
+/** One arm of a group comparison: the column a selection was captured on and
+ *  the values it captured. A saved selection group (`GroupRenderDef`) and a
+ *  single value of the config's `group_col` both collapse to this shape, which
+ *  is what lets the worker treat "two lassos" and "two labels" identically. */
+export interface GroupCompareSelector {
+  label: string;
+  column: string;
+  values: string[];
+}
+
+export interface GroupComparePayload {
+  wf_id: string;
+  dc_id: string;
+  index_col: string;
+  group_a: GroupCompareSelector;
+  group_b: GroupCompareSelector;
+  test?: 'wilcoxon' | 't_test';
+  log_transform?: boolean;
+  max_features?: number;
+  min_observations?: number;
+  fdr_threshold?: number;
+  log2fc_threshold?: number;
+  top_n_labels?: number;
+  filter_metadata: InteractiveFilter[];
+}
+
+/** One feature's result. `log2fc` is A relative to B, so positive means higher
+ *  in group A. Any statistic that came out non-finite arrives as null. */
+export interface GroupCompareRow {
+  feature: string;
+  mean_a: number | null;
+  mean_b: number | null;
+  log2fc: number | null;
+  p_value: number | null;
+  fdr: number | null;
+  significant: boolean;
+  direction: 'up' | 'down' | 'ns';
+}
+
+export interface GroupCompareResult {
+  /** Sorted by raw p-value, most significant first. */
+  rows: GroupCompareRow[];
+  group_a: { label: string; n: number };
+  group_b: { label: string; n: number };
+  /** Observations claimed by both selectors, dropped from both arms. */
+  overlap_dropped: number;
+  /** Numeric feature columns in the matrix, before the `max_features` cap. */
+  feature_count: number;
+  tested_features: number;
+  significant_count: number;
+  test: string;
+  log_transform: boolean;
+  fdr_threshold: number;
+  log2fc_threshold: number;
+  top_n_labels: number;
+  row_count: number;
+  load_ms?: number;
+  compute_ms?: number;
+}
+
+export interface GroupCompareJob {
+  job_id: string;
+  status: 'pending' | 'done' | 'failed';
+  result?: GroupCompareResult | null;
+  error?: string | null;
+  from_cache?: boolean;
+}
+
+/** Dispatch a two-group differential test. Same dispatch + poll + cache
+ *  contract as the UpSet and Sankey computes. */
+export async function dispatchGroupCompare(
+  payload: GroupComparePayload,
+): Promise<GroupCompareJob> {
+  const res = await authFetch(`${API_BASE}/advanced_viz/compute_group_compare`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Failed to dispatch compute_group_compare: ${res.status}`);
+  return res.json();
+}
+
+/** Poll a previously-dispatched group comparison. */
+export async function pollGroupCompare(jobId: string): Promise<GroupCompareJob> {
+  const res = await authFetch(`${API_BASE}/advanced_viz/compute_group_compare/${jobId}`);
+  if (!res.ok) throw new Error(`Failed to poll compute_group_compare: ${res.status}`);
   return res.json();
 }
 

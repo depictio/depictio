@@ -23,6 +23,12 @@ frame, and the recipe reads it through `dc_ref`::
           include_file_paths: source_path
           infer_schema_length: 0
 
+``compartment`` turns that sign into a category ("A" / "B", null on a bin with
+no E1), because the sign is what a reader groups and colours by: a continuous
+E1 column can be plotted but it cannot fill a donut, drive a Select filter or
+colour a track by compartment, and re-deriving ``E1 > 0`` in every tile is how
+two tiles end up disagreeing about a bin exactly at zero.
+
 Output schema:
     sample : Utf8        sample the compartments were called for
     resolution : Int64    bin size in bp
@@ -31,6 +37,7 @@ Output schema:
     end : Int64             bin end
     weight : Float64      cooler balancing weight for the bin (null on blacklisted bins)
     E1 : Float64          first eigenvector, the A/B compartment track
+    compartment : Utf8    "A" where E1 is positive, "B" where it is negative, null on a bin with no E1
     E2 : Float64          second eigenvector
     E3 : Float64          third eigenvector
 """
@@ -57,9 +64,14 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "end": pl.Int64,
     "weight": pl.Float64,
     "E1": pl.Float64,
+    "compartment": pl.Utf8,
     "E2": pl.Float64,
     "E3": pl.Float64,
 }
+
+#: Sign of E1 -> compartment label. Exactly zero is treated as no call rather
+#: than as A, so the two labels never overlap.
+COMPARTMENT_LABELS = ("A", "B")
 
 #: `<sample>.<resolution>_compartments.cis.vecs.tsv`
 _PATH_RE = r"([^/\\]+)\.(\d+)_compartments\.cis\.vecs\.tsv$"
@@ -77,5 +89,12 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("E1").cast(pl.Float64, strict=False),
         pl.col("E2").cast(pl.Float64, strict=False),
         pl.col("E3").cast(pl.Float64, strict=False),
+    ).with_columns(
+        pl.when(pl.col("E1") > 0)
+        .then(pl.lit(COMPARTMENT_LABELS[0], dtype=pl.Utf8))
+        .when(pl.col("E1") < 0)
+        .then(pl.lit(COMPARTMENT_LABELS[1], dtype=pl.Utf8))
+        .otherwise(None)
+        .alias("compartment")
     )
-    return df.select(list(EXPECTED_SCHEMA)).sort(["chrom", "start"])
+    return df.select(list(EXPECTED_SCHEMA)).sort(["sample", "resolution", "chrom", "start"])

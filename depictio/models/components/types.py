@@ -72,11 +72,13 @@ AdvancedVizKind = Literal[
     "contact_map",
     "knee_plot",
     "damage_profile",
-    # Declarative genome track rendered by GenomeSpy (issue #1083). The same
+    # Declarative genome view rendered by GenomeSpy (issue #1083). The same
     # chr / pos / score roles as `manhattan`, drawn on a `locus` scale that
     # GenomeSpy concatenates and zooms itself. `end_col` turns points into
-    # intervals. Spike: see docs/design/genomespy-eval.md.
-    "genomespy_track",
+    # intervals, `sample_col` into stacked lanes, and a brush on the genome
+    # axis into a chromosome + position filter the rest of the dashboard
+    # reads. See docs/design/genomespy-eval.md.
+    "genome_view",
     # Kinds from the 2026-09 nf-core audit, each the missing piece of a
     # reference app: a two-group test computed on demand (CELLxGENE / iSEE),
     # isoform structures (SQANTI / Swan), a copy-number profile (CNVkit /

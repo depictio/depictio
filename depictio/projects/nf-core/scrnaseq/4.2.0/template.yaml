@@ -92,12 +92,12 @@ template:
   provenance:
     sources:
       - name: "software_versions"
-        glob: "aligner_cellranger/pipeline_info/*software*versions*.yml"
+        glob: "pipeline_info/*software*versions*.yml"
         format: "yaml"
         pick: "latest"
         group: "Software versions"
       - name: "params"
-        glob: "aligner_cellranger/pipeline_info/params*.json"
+        glob: "pipeline_info/params*.json"
         format: "yaml" # params.json parses fine as YAML (JSON is a YAML subset)
         pick: "latest"
         group: "Pipeline parameters"
@@ -183,7 +183,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: "aligner_cellranger/multiqc/multiqc_data/multiqc\\.parquet$"
+                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\\.parquet$"
           dc_specific_properties:
             s3_location: null
             modules:
@@ -222,7 +222,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: ".*/cellranger/count/[^/]+/outs/metrics_summary\\.csv$"
+                pattern: "(?:.*/)?cellranger/count/[^/]+/outs/metrics_summary\\.csv$"
           dc_specific_properties:
             format: "CSV"
             polars_kwargs:
@@ -312,7 +312,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: ".*/raw_feature_bc_matrix/matrix\\.mtx\\.gz$"
+                pattern: "(?:.*/)?raw_feature_bc_matrix/matrix\\.mtx\\.gz$"
           dc_specific_properties:
             format: "CSV"
             polars_kwargs:
@@ -336,7 +336,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: ".*/raw_feature_bc_matrix/barcodes\\.tsv\\.gz$"
+                pattern: "(?:.*/)?raw_feature_bc_matrix/barcodes\\.tsv\\.gz$"
           dc_specific_properties:
             format: "CSV"
             polars_kwargs:
@@ -359,7 +359,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: ".*/filtered_feature_bc_matrix/barcodes\\.tsv\\.gz$"
+                pattern: "(?:.*/)?filtered_feature_bc_matrix/barcodes\\.tsv\\.gz$"
           dc_specific_properties:
             format: "CSV"
             polars_kwargs:
@@ -399,7 +399,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: ".*/analysis/clustering/gene_expression_graphclust/clusters\\.csv$"
+                pattern: "(?:.*/)?analysis/clustering/gene_expression_graphclust/clusters\\.csv$"
           dc_specific_properties:
             format: "CSV"
             polars_kwargs:
@@ -418,7 +418,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: ".*/analysis/clustering/gene_expression_kmeans_[0-9]+_clusters/clusters\\.csv$"
+                pattern: "(?:.*/)?analysis/clustering/gene_expression_kmeans_[0-9]+_clusters/clusters\\.csv$"
           dc_specific_properties:
             format: "CSV"
             polars_kwargs:
@@ -437,7 +437,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: ".*/analysis/umap/[^/]+/projection\\.csv$"
+                pattern: "(?:.*/)?analysis/umap/[^/]+/projection\\.csv$"
           dc_specific_properties:
             format: "CSV"
             polars_kwargs:
@@ -457,7 +457,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: ".*/analysis/tsne/[^/]+/projection\\.csv$"
+                pattern: "(?:.*/)?analysis/tsne/[^/]+/projection\\.csv$"
           dc_specific_properties:
             format: "CSV"
             polars_kwargs:
@@ -477,7 +477,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: ".*/analysis/pca/[^/]+/projection\\.csv$"
+                pattern: "(?:.*/)?analysis/pca/[^/]+/projection\\.csv$"
           dc_specific_properties:
             format: "CSV"
             polars_kwargs:
@@ -501,7 +501,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: ".*/analysis/pca/[^/]+/variance\\.csv$"
+                pattern: "(?:.*/)?analysis/pca/[^/]+/variance\\.csv$"
           dc_specific_properties:
             format: "CSV"
             polars_kwargs:
@@ -527,10 +527,11 @@ workflows:
               "variance_explained": "Share of total variance this component explains"
 
       # ----------------------------------------------------------------
-      # Cluster marker genes (raw wide table).
+      # Feature selection: the two files Cell Ranger writes next to the
+      # PCA that say which genes the embedding was computed on.
       # ----------------------------------------------------------------
-      - data_collection_tag: "cellranger_diffexp_raw"
-        description: "Raw wide differential-expression table, one row per gene, 3 columns per cluster (input of cellranger_diffexp, cellranger_cell_qc, cellranger_marker_expression, cellranger_marker_matrix)"
+      - data_collection_tag: "cellranger_dispersion_raw"
+        description: "Raw normalised dispersion per gene, next to the PCA (input of cellranger_hvg_dispersion and of cellranger_cell_expression's gene panel)"
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -538,18 +539,84 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: ".*/analysis/diffexp/gene_expression_graphclust/differential_expression\\.csv$"
+                pattern: "(?:.*/)?analysis/pca/[^/]+/dispersion\\.csv$"
           dc_specific_properties:
             format: "CSV"
             polars_kwargs:
               include_file_paths: "source_path"
             columns_description:
-              "Feature ID": "Gene id"
-              "Feature Name": "Gene symbol"
+              "Feature": "Gene symbol"
+              "Normalized.Dispersion": "Cell Ranger's normalised dispersion for the gene; NaN when it could not be normalised"
               "source_path": "File the row came from; the sample name is derived from it"
 
+      - data_collection_tag: "cellranger_features_selected_raw"
+        description: "Raw list of the genes Cell Ranger kept as variable and ran the PCA on (input of cellranger_hvg_dispersion). The file's header names one column while its rows carry two, so it is scanned headerless past the first line."
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?analysis/pca/[^/]+/features_selected\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              has_header: false
+              skip_rows: 1
+              new_columns: ["selection_rank", "feature"]
+              include_file_paths: "source_path"
+            columns_description:
+              "selection_rank": "1-based position in the file, Cell Ranger's own ordering"
+              "feature": "Gene symbol Cell Ranger selected for the PCA"
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      - data_collection_tag: "cellranger_hvg_dispersion"
+        description: "Mean expression against normalised dispersion for every gene Cell Ranger measured, flagged with whether it kept the gene for the PCA"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cellranger/hvg_dispersion.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the PCA was computed on"
+              "gene": "Gene symbol"
+              "normalized_dispersion": "Cell Ranger's normalised dispersion; empty for a gene it could not normalise"
+              "mean_expression": "Mean log1p(CP10k) over every called cell, undetected cells counted as 0"
+              "detection_rate": "Share of called cells with at least 1 UMI of this gene"
+              "selection": "selected or not selected, whether Cell Ranger ran the PCA on this gene"
+
+      # ----------------------------------------------------------------
+      # Cluster marker genes (raw wide table).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "cellranger_diffexp_raw"
+        description: "Raw wide differential-expression tables, one file per clustering Cell Ranger ran (graph-based plus one per k-means k), one row per gene and 3 columns per cluster (input of cellranger_diffexp, cellranger_cell_qc, cellranger_marker_expression, cellranger_marker_matrix, cellranger_cell_expression)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?analysis/diffexp/gene_expression_[^/]+/differential_expression\\.csv$"
+          dc_specific_properties:
+            format: "CSV"
+            # Read as text. The per-cluster p-value columns open with runs of
+            # 1.0 in the k-means files, so per-file type inference lands on
+            # Int64 and then fails on the first real float; the recipe casts.
+            polars_kwargs:
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "Feature ID": "Gene id"
+              "Feature Name": "Gene symbol"
+              "source_path": "File the row came from; the sample and the clustering resolution are derived from it"
+
       - data_collection_tag: "cellranger_diffexp"
-        description: "Top marker genes per graph-based cluster, ranked by adjusted p-value"
+        description: "Top marker genes per cluster, for every clustering resolution Cell Ranger ran, ranked by adjusted p-value"
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -560,8 +627,9 @@ workflows:
             format: "TSV"
             columns_description:
               "sample": "Sample the clustering was computed on"
+              "resolution": "graphclust, or kmeans_2 .. kmeans_10, the clustering this row belongs to"
               "cluster": "Cluster this gene was tested against the rest for"
-              "cluster_label": "C<n> top1/top2 marker genes for this cluster"
+              "cluster_label": "Cn top1/top2 marker genes for this cluster; a k-means resolution prefixes it with its k"
               "rank_in_cluster": "1-based rank within the cluster by adjusted p-value, most significant first"
               "gene_id": "Cell Ranger Feature ID"
               "gene": "Feature Name (gene symbol)"
@@ -583,7 +651,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: ".*/filtered_feature_bc_matrix/matrix\\.mtx\\.gz$"
+                pattern: "(?:.*/)?filtered_feature_bc_matrix/matrix\\.mtx\\.gz$"
           dc_specific_properties:
             format: "CSV"
             polars_kwargs:
@@ -607,7 +675,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: ".*/filtered_feature_bc_matrix/features\\.tsv\\.gz$"
+                pattern: "(?:.*/)?filtered_feature_bc_matrix/features\\.tsv\\.gz$"
           dc_specific_properties:
             format: "CSV"
             polars_kwargs:
@@ -633,7 +701,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: ".*/filtered_feature_bc_matrix/barcodes\\.tsv\\.gz$"
+                pattern: "(?:.*/)?filtered_feature_bc_matrix/barcodes\\.tsv\\.gz$"
           dc_specific_properties:
             format: "CSV"
             polars_kwargs:
@@ -660,7 +728,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: "aligner_cellranger/cellranger/[^/]+/cellbender_removebackground/[^/]+_cell_barcodes\\.csv$"
+                pattern: "(?:.*/)?cellranger/[^/]+/cellbender_removebackground/[^/]+_cell_barcodes\\.csv$"
           dc_specific_properties:
             format: "CSV"
             polars_kwargs:
@@ -772,6 +840,87 @@ workflows:
               "gene": "Marker gene symbol (row id); one Float64 column per cluster label follows, added at pivot time"
 
       # ----------------------------------------------------------------
+      # Per-cell expression of a marker gene panel, the keystone of the
+      # Markers and Compare selections tabs: one row per cell, one
+      # Float64 column per panel gene, plus the embedding coordinates, so
+      # the embedding tile's Colour by menu lists every gene.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "cellranger_cell_expression"
+        description: "Wide cell by gene table: one row per called cell, one column per marker panel gene (top markers of every graph-based cluster, a curated PBMC panel and the most dispersed genes), log1p(CP10k) normalised, carrying the UMAP coordinates and the cluster label"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cellranger/cell_expression.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the cell belongs to"
+              "barcode": "10x cell barcode, the row id and the index column of the group comparison"
+              "cluster_label": "Graph-based cluster of the cell, Cn top1/top2 marker genes"
+              "qc_status": "pass or flagged, carried over from the per-cell QC hub"
+              "umap_1": "First UMAP coordinate"
+              "umap_2": "Second UMAP coordinate"
+
+      - data_collection_tag: "cellranger_cell_expression_long"
+        description: "The curated panel half of cellranger_cell_expression, melted to one row per cell and gene, so a box shows a marker's whole per-cell distribution across clusters. Capped to a fixed number of cells per cluster, the figure service does not downsample a box."
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cellranger/cell_expression_long.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the cell belongs to"
+              "barcode": "10x cell barcode"
+              "cluster_label": "Graph-based cluster of the cell"
+              "qc_status": "pass or flagged"
+              "gene": "Marker gene symbol, the column the gene picker filters on"
+              "expression": "log1p(CP10k) of that gene in that cell, 0 when undetected"
+
+      - data_collection_tag: "cellranger_cell_cycle"
+        description: "Cell-cycle S and G2/M scores per cell from the Tirosh gene sets, and the phase call that follows from them. Cell Ranger publishes no cell-cycle call, so a cluster that is really the same cell type cycling is invisible without this."
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cellranger/cell_cycle.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the cell belongs to"
+              "barcode": "10x cell barcode, joins the per-cell QC hub"
+              "cluster_label": "Graph-based cluster of the cell"
+              "s_score": "Mean expression of the S-phase set minus the cell's mean over every measured gene"
+              "g2m_score": "Mean expression of the G2/M set minus the same background"
+              "phase": "G1, S or G2M, the larger score when it is positive"
+              "n_s_genes": "S-phase genes of the set this reference carries"
+              "n_g2m_genes": "G2/M genes of the set this reference carries"
+
+      - data_collection_tag: "cellranger_cell_funnel"
+        description: "One row per sample with the nested barcode counts of the filtering waterfall: every barcode the run observed, the ones Cell Ranger called a cell, the ones CellBender kept, and the ones that pass the per-cell QC"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cellranger/cell_funnel.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample"
+              "barcodes_observed": "Barcodes in the raw matrix, before any cell calling"
+              "cells_called": "Barcodes Cell Ranger called a cell"
+              "cellbender_cells": "Called cells CellBender also called a cell"
+              "cells_qc_pass": "Called cells with qc_status pass"
+              "pct_called": "Percent of observed barcodes Cell Ranger called a cell"
+              "pct_qc_pass": "Percent of called cells that pass the QC"
+
+      # ----------------------------------------------------------------
       # CellBender (Cell Ranger route). Optional: a run launched with
       # --skip_cellbender writes none of these files.
       # ----------------------------------------------------------------
@@ -785,7 +934,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: ".*/cellranger/[^/]+/cellbender_removebackground/[^/]+_metrics\\.csv$"
+                pattern: "(?:.*/)?cellranger/[^/]+/cellbender_removebackground/[^/]+_metrics\\.csv$"
           dc_specific_properties:
             format: "CSV"
             polars_kwargs:
@@ -833,7 +982,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: "aligner_simpleaf/simpleaf/[^/]+/simpleaf_quant/af_quant/featureDump\\.txt$"
+                pattern: "(?:.*/)?simpleaf/[^/]+/simpleaf_quant/af_quant/featureDump\\.txt$"
           dc_specific_properties:
             format: "CSV"
             polars_kwargs:
@@ -861,7 +1010,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: "aligner_simpleaf/simpleaf/[^/]+/cellbender_removebackground/[^/]+_cell_barcodes\\.csv$"
+                pattern: "(?:.*/)?simpleaf/[^/]+/cellbender_removebackground/[^/]+_cell_barcodes\\.csv$"
           dc_specific_properties:
             format: "CSV"
             polars_kwargs:
@@ -882,7 +1031,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: "aligner_simpleaf/simpleaf/[^/]+/simpleaf_quant/af_map/map_info\\.json$"
+                pattern: "(?:.*/)?simpleaf/[^/]+/simpleaf_quant/af_map/map_info\\.json$"
           dc_specific_properties:
             format: "CSV"
             polars_kwargs:
@@ -906,7 +1055,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: "aligner_simpleaf/simpleaf/[^/]+/simpleaf_quant/af_quant/quant\\.json$"
+                pattern: "(?:.*/)?simpleaf/[^/]+/simpleaf_quant/af_quant/quant\\.json$"
           dc_specific_properties:
             format: "CSV"
             polars_kwargs:
@@ -930,7 +1079,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: "aligner_simpleaf/simpleaf/[^/]+/qcatch/[^/]+_metrics_summary\\.csv$"
+                pattern: "(?:.*/)?simpleaf/[^/]+/qcatch/[^/]+_metrics_summary\\.csv$"
           dc_specific_properties:
             format: "CSV"
             polars_kwargs:
@@ -957,7 +1106,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: "aligner_simpleaf/simpleaf/[^/]+/cellbender_removebackground/[^/]+_metrics\\.csv$"
+                pattern: "(?:.*/)?simpleaf/[^/]+/cellbender_removebackground/[^/]+_metrics\\.csv$"
           dc_specific_properties:
             format: "CSV"
             polars_kwargs:
@@ -1063,7 +1212,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: "aligner_kallisto/kallisto/[^/]+\\.count/run_info\\.json$"
+                pattern: "(?:.*/)?kallisto/[^/]+\\.count/run_info\\.json$"
           dc_specific_properties:
             format: "CSV"
             polars_kwargs:
@@ -1087,7 +1236,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: "aligner_kallisto/kallisto/[^/]+\\.count/inspect\\.json$"
+                pattern: "(?:.*/)?kallisto/[^/]+\\.count/inspect\\.json$"
           dc_specific_properties:
             format: "CSV"
             polars_kwargs:
@@ -1111,7 +1260,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: "aligner_kallisto/kallisto/[^/]+\\.count/counts_filtered/cells_x_genes\\.barcodes\\.txt$"
+                pattern: "(?:.*/)?kallisto/[^/]+\\.count/counts_filtered/cells_x_genes\\.barcodes\\.txt$"
           dc_specific_properties:
             format: "CSV"
             polars_kwargs:
@@ -1132,7 +1281,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: "aligner_kallisto/kallisto/[^/]+/cellbender_removebackground/[^/]+_cell_barcodes\\.csv$"
+                pattern: "(?:.*/)?kallisto/[^/]+/cellbender_removebackground/[^/]+_cell_barcodes\\.csv$"
           dc_specific_properties:
             format: "CSV"
             polars_kwargs:
@@ -1153,7 +1302,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: "aligner_kallisto/kallisto/[^/]+/cellbender_removebackground/[^/]+_metrics\\.csv$"
+                pattern: "(?:.*/)?kallisto/[^/]+/cellbender_removebackground/[^/]+_metrics\\.csv$"
           dc_specific_properties:
             format: "CSV"
             polars_kwargs:
@@ -1219,7 +1368,7 @@ workflows:
           metatype: "Aggregate"
           source: "transformed"
           transform:
-            recipe: "nf-core/scrnaseq/cell_calls_by_method.py"
+            recipe: "cellranger/cell_calls_by_method.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -1239,7 +1388,7 @@ workflows:
           metatype: "Aggregate"
           source: "transformed"
           transform:
-            recipe: "nf-core/scrnaseq/aligner_summary.py"
+            recipe: "cellranger/aligner_summary.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -1421,4 +1570,86 @@ links:
       resolver: "direct"
       target_field: "cluster_label"
     description: "Carry a cluster selected on the cell hub over to its marker genes"
+    enabled: true
+
+  - source_dc_tag: "cellranger_cell_qc"
+    source_column: "cluster_label"
+    target_dc_tag: "cellranger_cell_expression"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "cluster_label"
+    description: "Carry a cluster selected on the cell hub over to the per-cell expression matrix"
+    enabled: true
+
+  - source_dc_tag: "cellranger_cell_qc"
+    source_column: "cluster_label"
+    target_dc_tag: "cellranger_cell_expression_long"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "cluster_label"
+    description: "Carry a cluster selected on the cell hub over to the melted marker expression"
+    enabled: true
+
+  - source_dc_tag: "cellranger_cell_qc"
+    source_column: "cluster_label"
+    target_dc_tag: "cellranger_cell_cycle"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "cluster_label"
+    description: "Carry a cluster selected on the cell hub over to its cell-cycle scores"
+    enabled: true
+
+  # Sample hub -> the data collections added for feature selection, the
+  # per-cell expression matrix, the cell-cycle scores and the funnel.
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "cellranger_hvg_dispersion"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the gene dispersion cloud by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "cellranger_cell_expression"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the per-cell expression matrix by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "cellranger_cell_expression_long"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the melted marker expression by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "cellranger_cell_cycle"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the cell-cycle scores by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "cellranger_cell_funnel"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the cell-calling funnel by the samples picked in the left panel"
     enabled: true

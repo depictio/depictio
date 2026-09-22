@@ -1,0 +1,18 @@
+# QUAST: assembly statistics without a reference, contig counts, N50/L50, the
+# contig-length ladder, GC and predicted rRNA. nf-core/mag runs it twice, once
+# over each whole assembly (`Assembly/<assembler>/QC/<sample>/QUAST/`) and once
+# over every recovered bin (`GenomeBinning/QC/QUAST/`), and both write the same
+# table, so the three outputs here are three readings of one file shape.
+#
+# `depictio/catalog/multiqc/quast.yaml` binds MultiQC's QUAST panel. That panel
+# is a general-statistics block over whichever QUAST runs MultiQC indexed; it
+# cannot separate the whole-assembly runs from the per-bin ones, and it drops
+# the contig-length ladder entirely. The ladder is the part that says whether an
+# assembly's length sits in a few long contigs or in a hundred thousand short
+# ones, which is the difference between a binnable assembly and an unbinnable
+# one.
+id: quast
+name: QUAST
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/quast
+homepage: https://quast.sourceforge.net
+description: Reference-free assembly quality statistics for whole assemblies and for individual bins.

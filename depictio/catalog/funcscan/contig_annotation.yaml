@@ -1,0 +1,34 @@
+id: funcscan_contig_annotation
+name: Contig annotation
+mode: screening/contigs
+description: >-
+  One row per annotated contig with how many features each nf-core/funcscan
+  screen put on it, the contig length and k-mer coverage read from the
+  assembler's own contig name, and the feature density that follows. This is
+  the annotation layer the four screens share: they all report the contig a
+  feature sits on, even though the annotation step itself publishes no table.
+find:
+  path_glob: "**/hamronization_summarize/*combined_report.tsv"
+  path_glob_alt:
+    - "**/hamronization/*combined_report.tsv"
+    - "**/ampcombi2/Ampcombi_summary.tsv"
+    - "**/combgc/combgc_complete_summary.tsv"
+    - "**/cazyme_annotation/*/*_overview.tsv"
+recipe: funcscan/contig_annotation.py
+fixture: contig_annotation.tsv
+renders_as:
+  # Feature count against contig length. A metagenome assembly's long contigs
+  # carry more of everything, so the interesting rows are the short contigs
+  # high on the y axis: dense loci rather than large ones.
+  - id: contig_feature_scatter
+    component: advanced_viz
+    kind: scatter_xy
+    roles:
+      {x: contig_length, y: features, label: contig, color: top_screen, size: features_per_kb}
+  - { component: figure, visu_type: histogram, dict_kwargs: {x: features_per_kb, color: top_screen, title: Feature density per contig} }
+  - { component: card, column: features, aggregation: sum, secondary_layout: top_n, breakdown_col: top_screen, top_n_count: 4 }
+  - { component: card, column: contig, aggregation: nunique, secondary_layout: donut, breakdown_col: top_screen, top_n_count: 4 }
+  - { component: card, column: contig_length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: screens_on_contig, aggregation: average, secondary_layout: gauge, coverage_max: 4.0 }
+  - { component: card, column: features_per_kb, aggregation: average, secondary_layout: histogram }
+  - { component: table, row_selection_enabled: true, row_selection_column: contig }

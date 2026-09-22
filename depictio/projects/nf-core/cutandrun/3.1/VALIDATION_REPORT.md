@@ -258,3 +258,263 @@ longer exist.
 
 Still stale after this change: `docs/dashboards.md` describes `Run at a glance` as a
 four-card strip.
+
+---
+
+# 2026-09-22: remediation pass
+
+**Date:** 2026-09-22
+**Worktree / branch:** `depictio-worktrees/feat-nfcore-templates-lot2`
+**Validator:** local depictio-cli against the lot 2 docker stack (port offset 112: API
+`:8112`, MinIO `:9112`, dev viewer `:5612`), against the same megatest data as above.
+
+## What changed
+
+The version pin is unchanged and deliberately so (CR-D10). The template went from 11 to 18
+data collections and from 4 to 5 tabs, and the two recipes that used to live inside the
+project moved into the catalog.
+
+| Added | Home | Rows on the megatest |
+|---|---|---|
+| `bowtie2_logs_raw` | raw scan of `*.bowtie2.log`, both log sets in one collection | 72 |
+| `bowtie2_spikein_factors` | new catalog tool `bowtie2` (`spikein_factors.py`) | 6 |
+| `seacr_fragment_classes` | new output on the existing `seacr` tool | 16 |
+| `frip` | new catalog tool `cutandrun` (`frip.py`) | 8 |
+
+`samples.py` and `caller_agreement.py` moved out of
+`depictio/projects/nf-core/cutandrun/recipes/` and into the new `cutandrun` catalog tool.
+That directory is now empty: the template owns no code of its own, and every tile on it has
+a catalog home.
+
+New tab `Signal` (tab 2) takes the fragment ladder and the deepTools tables off the QC tab
+and hosts the two new signal sections, `Nucleosome classes` and `Spike-in normalisation`.
+
+Fixed from the audit, in the order the findings were raised:
+
+* the lone card at the old `base.yaml:336` is gone; every tab now opens with a four-card
+  strip (`w: 2`, `h: 2`, at `x` 0 / 2 / 4 / 6), multi-metric, over the tab's own collection;
+* both ragged rows on the `Caller agreement` tab (old `:1272` and `:1337`) fill their eight
+  columns, and every `y` below them was recomputed;
+* `seacr_peak_summary` is a four-row table, so its tile is `h: 3` rather than `h: 4`;
+* `replicate` is exposed as a persistent factor filter beside `sample` (CR-D15);
+* every tab carries filters on two levels: the pinned persistent sample and threshold
+  sections, plus a tab-local section on the tab's own collections. No tab has an empty
+  `filter_sections` any more;
+* `megatest.yaml` is de-anchored from the numbered stage tree (CR-D17), which supersedes
+  CR-D1.
+
+## Post-ingest verification (2026-09-22)
+
+`depictio-cli run --template nf-core/cutandrun/3.1 --data-root
+~/Data/depictio-nfcore/cutandrun/3.1/megatest`: 18 / 18 data collections processed, 8 / 8
+steps, exit 0. No pre-existing "CUT&RUN Chromatin Profiling" project needed deleting.
+Project `6ab2aa3ad486f8485e1a87ed`; dashboards `6ab2aa58fbe776a1a573e2a1` through
+`...e2a5`, one document per tab.
+
+Row counts read back from the Delta tables through `GET /deltatables/specs/{id}`:
+
+```
+samples                    6      seacr_peaks              433629
+samplesheet                6      seacr_peak_summary            4
+bowtie2_logs_raw          72      macs2_peaks               17486
+bowtie2_spikein_factors    6      seacr_consensus_peaks    274445
+seacr_fragment_lengths  2713      seacr_fragment_classes       16
+frip                       8      caller_agreement              8
+```
+
+Headline numbers on the three new collections, from the same specs:
+
+* spike-in factors: alignment rate to the target genome 75.73 % to 88.92 % (mean 84.96),
+  spike-in reads 179 to 62845 per library, spike-in fraction 0.006 % to 3.06 %, scale factor
+  0.1591 to 55.8659 (median 14.66). Six rows, one per library, IgG controls included;
+* nucleosome classes: 7051185 fragments over four classes and four target samples, class
+  fractions 6.36 % to 56.31 %, class medians 59 bp to 573 bp, mononucleosome to
+  sub-nucleosome ratio 3.14 to 8.47;
+* FRiP: eight rows, two per target sample, `In peaks` and `Outside peaks`. Coverage in peaks
+  1958573070 bp in total, FRiP 0.6745 to 0.8599 (median 0.7766). The two rows of a sample
+  sum to 1.0 by construction, which the `fraction` sum of 4.0 over four samples confirms.
+
+Layout: a checker over all five tabs found 0 overlapping tiles, 0 vertical gaps, and every
+row filling exactly eight columns.
+
+Catalog coverage: 118 components, of which 24 text tiles and 19 interactive filters. All 75
+remaining tiles carry a `use:` reference and all 75 resolve through `catalog_source_for_use`
+(`seacr` 28, `cutandrun` 22, `multiqc` 13, `macs2` 6, `bowtie2` 5, `deeptools` 3). Two of the
+interactive filters bind catalog renders as well, so 77 references in total. The audit
+measured 80 % before this pass.
+
+Commands run once each:
+
+```bash
+uv run pytest depictio/tests/recipes/test_bowtie2_spikein_factors.py \
+              depictio/tests/recipes/test_cutandrun_frip.py \
+              depictio/tests/recipes/test_seacr_fragment_classes.py   # 15 passed
+uv run pytest depictio/tests/models/test_catalog.py                   # 93 passed, 6 failed
+depictio-cli run --template nf-core/cutandrun/3.1 --data-root <megatest>   # 8/8 steps, exit 0
+```
+
+None of the six `test_catalog.py` failures names `bowtie2`, `cutandrun` or `seacr`: four are
+card strip requirements on `cellbender` / `kallisto` / `qcatch` / `simpleaf`, two are the
+`funcscan_software_versions` glob tests, one is the committed JSON schema lagging the
+`genomespy_track` to `genome_view` rename, and `test_cli_validate_exits_zero_on_bundled_catalog`
+fails because catalog loading is all or nothing (see CR-D18). All three tools here load
+cleanly through `load_catalog_entries()`.
+
+Screenshots (1600 x 1000, dev viewer), four of five: `1-multiqc.png`, `2-signal.png`,
+`3-peak-calls.png` and `4-caller-agreement.png` under `/tmp/claude-502/shots-cutandrun/`.
+The fifth tab is CR-D16.
+
+## Discrepancies (2026-09-22)
+
+### CR-D10: 3.1 stays pinned although 3.2.2 exists, and `--peakcaller macs2` would empty three tabs
+
+3.2.2 is the current release, so this template is one minor and two patches behind. It is
+pinned anyway: every cutandrun 3.2.x prefix in the megatest bucket is an empty or failed run
+(CR-D1's note still holds), so bumping would mean pinning a version with no validated data
+behind it. Recorded here so that the staleness is a decision rather than an oversight.
+
+The route that is not covered is `--peakcaller macs2` alone. SEACR is cutandrun's default and
+this template is built on it: with MACS2 as the only caller, `seacr_peaks`,
+`seacr_peak_summary`, `seacr_consensus_peaks`, `seacr_fragment_classes` and `frip` are all
+empty, which empties the `Signal`, `Peak calls` and `Consensus` tabs and degrades
+`Caller agreement` to the self-comparison CR-D3 already describes. There are 0 route variants
+for it in `VALIDATION_SCENARIOS.md` and none could be built from the bucket. The opposite
+route, `--peakcaller seacr`, is covered: `macs2_peaks` is `optional: true` and prunes.
+
+### CR-D11: the spike-in scale factor is recomputed here, not read from a published table
+
+The run publishes no scale-factor table. All 104 fetched files were checked for one before
+the recipe was written. cutandrun computes the factor inside the pipeline and applies it to
+the bedGraph without writing it out, so `bowtie2/spikein_factors.py` recovers it from the two
+Bowtie 2 log sets as `normalisation_c / spikein_aligned_pairs` with cutandrun's default
+`normalisation_c = 10000`.
+
+Two independent checks say the recovery is right. First, dividing the recovered factor back
+out of the SEACR signal collapses four raw signal-to-fragment ratios spanning 2.3 to 48 into
+the band 0.67 to 0.86, which a wrong formula or a reads-instead-of-pairs reading would not
+do. Second, that band is a plausible FRiP for a CUT&RUN library, which the raw ratios (above
+1, therefore not fractions at all) are not.
+
+A run launched with a different `--normalisation_c` would need that value threaded through.
+It is a module constant today, `NORMALISATION_C` in `bowtie2/spikein_factors.py`, because no
+`params.json` is published to read it from (CR-D8).
+
+### CR-D12: FRiP here is a fraction of fragment coverage, not a fraction of reads
+
+The name is the field's, the denominator is not. SEACR reports no read count anywhere, so
+`cutandrun/frip.py` works in base pairs on both sides: the denominator is
+`sum(fragment_length * count)` over the fragment-length histogram, and the numerator is
+SEACR's `total_signal` summed over the sample's regions, de-scaled by CR-D11's factor. For a
+uniform read length the two definitions agree; for a library with a wide fragment ladder they
+differ, and this one is the more faithful of the two for CUT&RUN, where fragment length is
+the signal.
+
+The ratio is clipped at 1 with `min_horizontal`. An imperfect factor then shows as a
+saturated split (`Outside peaks` at 0) rather than as a fraction above 1. No sample on the
+megatest hits the clip.
+
+### CR-D13: the SEACR manhattan was dropped from `Signal along the genome`
+
+That section now carries a `genome_view` tile (`mark: rect`, `end_col: end`, so a region is
+drawn at its true width) and a `coverage_track` tile on the same `seacr/peaks` collection.
+Keeping the old manhattan would have put three genome-axis views of one table in one section,
+two of them saying the same thing less precisely: the manhattan plots one point per region at
+the maximum-signal position, which the `genome_view` rect supersedes.
+
+The `coverage_track` tile is deliberate redundancy and not a duplicate: it is the fallback if
+the GenomeSpy renderer is unavailable (CR-D16), and it reads the same columns through a
+renderer with no WebGL dependency. The MACS2 manhattan on `MACS2 alongside` is untouched:
+it plots a different score (`-log10(q)`) that CR-D4 explains is not comparable.
+
+### CR-D14: the glance strip on the MultiQC tab lives in the pinned section
+
+"Every tab opens with a four-card strip" and "a tab named MultiQC holds MultiQC panels only"
+(`test_multiqc_tabs_hold_only_multiqc_panels`) cannot both be satisfied by a section on the
+MultiQC tab itself, which is what CR-D9 resolved by emptying `Run at a glance` of cards.
+
+The strip therefore sits in the pinned persistent `Sample sheet` section, which the test
+exempts explicitly and which rides every tab. One consequence worth knowing when reading a
+screenshot: the first strip on the QC tab is the sample-sheet strip, identical on all five
+tabs, and the tab's own opening content starts below it.
+
+### CR-D15: `replicate` is an integer, so the factor filter binds a second column
+
+`replicate` is a real samplesheet factor with two distinct values on this run, but it is
+`Int64`, and an integer column takes a `Slider` or a `RangeSlider` and never a `MultiSelect`.
+A slider over the values 1 and 2 is not a factor control.
+
+`cutandrun/samples.py` therefore carries the same value a second time as
+`replicate_label` (`Utf8`, `R1` / `R2`), which is also how the run names its own files, and
+the persistent `Replicate` filter is a `MultiSelect` on that. The integer column stays in the
+collection for the cards that aggregate it. A reader who edits the dashboard has to know that
+the two columns are the same factor.
+
+### CR-D16: the `Consensus` tab could not be screenshotted, for an environment reason
+
+Four of the five tabs were captured clean. The fifth kept failing with
+`Failed to fetch dynamically imported module: .../AdvancedVizDispatch.tsx`, which is the
+error boundary every `advanced_viz` tile falls into on this stack: the lot 2 dev viewer
+container predates the `@genome-spy/core` install and needs an image rebuild that only the
+maintainer can run. The dependency is declared and present on the host
+(`packages/depictio-react-core` and `depictio/viewer`, 0.88.1), and tabs 2, 3 and 4 did
+render their advanced visualisations once it landed, but the failure recurs and is not
+something a reload clears.
+
+Nothing in the template is implicated: the tab's YAML is unchanged from the version that
+imported and rendered before this pass except for one text intro and one added filter, and
+its UpSet panel resolved its columns server side. Validation for this pass was therefore done
+through the API (row counts and shapes per collection, dashboard and tab listing) rather than
+through the rendered page, and the fifth tab should be screenshotted after the rebuild:
+
+| Tab | Dashboard id | Title |
+|---|---|---|
+| 0 | `6ab2aa58fbe776a1a573e2a1` | nf-core/cutandrun (the MultiQC tab) |
+| 1 | `6ab2aa58fbe776a1a573e2a2` | Signal |
+| 2 | `6ab2aa58fbe776a1a573e2a3` | Peak calls |
+| 3 | `6ab2aa58fbe776a1a573e2a4` | Caller agreement |
+| 4 | `6ab2aa58fbe776a1a573e2a5` | Consensus and reproducibility |
+
+### CR-D17: `megatest.yaml` no longer spells out the numbered stage directories
+
+This supersedes CR-D1. Every key is now anchored on the tool directory or on the file name
+that identifies the output, never on `01_prealign/`, `02_alignment/`, `03_peak_calling/` or
+`04_reporting/`, which are this run's publishing layout and not part of any file's identity.
+Lint rule F7 is satisfied and a run published with a different `--outdir` structure is
+matched.
+
+The de-anchored manifest matches exactly the same 102 of the 104 fetched files as the pinned
+one did; the two unmatched files are the locally produced MultiQC reprocess artefacts, which
+are created after the fetch and are not meant to be matched.
+
+The concern CR-D1 raised, that matching on file name alone would pull the spike-in alignment
+statistics into the target collections, is handled rather than avoided: one key,
+`*.bowtie2.log`, now collects both log sets on purpose, and `bowtie2/spikein_factors.py`
+tells them apart by the `.spikein.` infix in the file name. Three keys keep a directory
+segment (`*markdup/*.stats` and its two siblings) because there the directory names the BAM
+the statistics describe, which is what excludes the duplicate dedup/ twin of the IgG
+controls.
+
+### CR-D18: catalog loading is all or nothing, so a broken tool elsewhere fails this one too
+
+`python -m depictio.cli dev catalog validate` and
+`test_cli_validate_exits_zero_on_bundled_catalog` exit non-zero on the tree this pass was
+validated on, because another tool being built in parallel in the same shared worktree has a
+recipe without a `module.yaml`. `load_catalog_entries()` refuses the whole catalog rather
+than skipping the offending directory.
+
+The three tools added or changed here were checked individually through
+`load_catalog_entries()` and load cleanly, and the end-to-end `depictio-cli run` above went
+through the same loader successfully. This is a property of the shared tree at validation
+time, not of the template, but it means the bundled-catalog gate cannot be read as green
+until every tool in the lot lands.
+
+## 2026-09-22 review fixes
+
+`collapsed: true` dropped from the pinned `Sample sheet` section and the four cards moved
+to its first row (intro text below, hub table last), so the glance strip is on screen at
+first paint on every tab. Run-specific prose reworded (`The eight rows ...` and the spike-in
+scatter description now describe the mechanism). Not done: rebinding the tab-local
+`Alignment scope` (`bowtie2_spikein_factors`). The MultiQC tab renders only the report plus
+the pinned `samples` and `seacr_peak_summary` tables, both already filtered, and `samples`
+has no numeric column for the two sliders; the `bowtie2_spikein_factors -> multiqc_data`
+link is what makes them narrow the report, so the binding is functional as declared.

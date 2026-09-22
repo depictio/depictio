@@ -118,9 +118,11 @@ export function advancedVizSelectionColumn(metadata: StoredMetadata): string | u
     }
     case 'manhattan':
       return named;
-    case 'genomespy_track':
+    case 'genome_view':
       // Same reasoning as the Manhattan: a mark is one feature at one locus and
-      // the dashboard has to name the column a pick stands for.
+      // the dashboard has to name the column a pick stands for. The region
+      // brush is a separate path (`genomeRegionFilters` below) that needs no
+      // opt-in, because a chromosome and a position range are never ambiguous.
       return named;
     case 'profile': {
       const seriesCol =
@@ -136,6 +138,14 @@ export function advancedVizSelectionColumn(metadata: StoredMetadata): string | u
       const labelCol =
         typeof config.label_col === 'string' && config.label_col ? config.label_col : undefined;
       return named ?? labelCol;
+    }
+    case 'genome_chord': {
+      // A chord is one named link between two loci, so its label is the
+      // identifier. The two chromosome columns are a grouping and the positions
+      // are numeric, so neither could stand in for it.
+      const chordLabelCol =
+        typeof config.label_col === 'string' && config.label_col ? config.label_col : undefined;
+      return named ?? chordLabelCol;
     }
     default:
       return undefined;
@@ -170,6 +180,122 @@ export function advancedVizSelectionFilter(
       selection_column: selectionColumn,
     },
   };
+}
+
+/** A genomic region as a `genome_view` brush reports it. */
+export interface GenomeRegionSelection {
+  /** Chromosomes the brush covers, in genome order. */
+  chroms: string[];
+  /** Position range inside the chromosome, or null when the brush spans
+   *  several: one `[start, end]` pair has no meaning across contigs. */
+  range: [number, number] | null;
+}
+
+/** Index suffix of the position-range half of a region selection.
+ *
+ *  `mergeFiltersBySource` dedupes by `(index, source)`, so the two halves of a
+ *  region need two keys. Suffixing the emitting component's own index keeps
+ *  them recognisably one selection, keeps "clear" able to drop each half, and
+ *  keeps `clearFiltersBySource(filters, 'genome_selection')` able to drop
+ *  both. */
+export const GENOME_POS_INDEX_SUFFIX = '::pos';
+
+export function genomePosFilterIndex(componentIndex: string): string {
+  return `${componentIndex}${GENOME_POS_INDEX_SUFFIX}`;
+}
+
+/**
+ * The filter pair a `genome_view` region brush emits.
+ *
+ * A genomic region is not a value, it is a chromosome *and* a position range,
+ * and the dashboard's filter pipeline only knows columns. So the brush becomes
+ * two ordinary entries the existing backend already understands:
+ *
+ * - a `MultiSelect` on the tile's `chr_col`, carrying the brushed chromosomes;
+ * - a `RangeSlider` on the tile's `pos_col`, carrying `[start, end]`
+ *   (`deltatables_utils.add_filter` turns that into
+ *   `col >= start & col <= end`).
+ *
+ * Both carry the emitting tile's `dc_id`, so a second tile bound to the *same*
+ * collection narrows immediately, and a tile on a *different* collection
+ * receives them through the project's links whenever that link joins on the
+ * same chromosome / position columns. Nothing new is needed server-side.
+ *
+ * Passing `null` (or a region with no chromosomes) returns the cleared form of
+ * both entries, which `mergeFiltersBySource` drops.
+ */
+export function genomeRegionFilters(
+  metadata: StoredMetadata,
+  chrColumn: string,
+  posColumn: string,
+  region: GenomeRegionSelection | null,
+): InteractiveFilter[] {
+  const chroms = region?.chroms ?? [];
+  const range = chroms.length ? (region?.range ?? null) : null;
+  return [
+    {
+      index: metadata.index,
+      value: chroms,
+      source: 'genome_selection',
+      column_name: chrColumn,
+      interactive_component_type: 'MultiSelect',
+      metadata: {
+        dc_id: metadata.dc_id,
+        column_name: chrColumn,
+        interactive_component_type: 'MultiSelect',
+        selection_column: chrColumn,
+      },
+    },
+    {
+      index: genomePosFilterIndex(metadata.index),
+      // `[]` rather than `null` so both halves clear through the same rule
+      // `mergeFiltersBySource` applies to every other selection source.
+      value: range ?? [],
+      source: 'genome_selection',
+      column_name: posColumn,
+      interactive_component_type: 'RangeSlider',
+      metadata: {
+        dc_id: metadata.dc_id,
+        column_name: posColumn,
+        interactive_component_type: 'RangeSlider',
+        selection_column: posColumn,
+      },
+    },
+  ];
+}
+
+/**
+ * Read a region back out of the dashboard's filter list, for a tile that
+ * follows one instead of emitting it.
+ *
+ * Deliberately column-keyed rather than index-keyed: the point of the region
+ * filter is that *any* tile or sidebar control naming the same chromosome and
+ * position columns drives it, so a plain `Chromosome` multi-select in the left
+ * panel zooms a following tile exactly as another tile's brush does. Only a
+ * single chromosome yields a region: "chr1 and chr7" is not somewhere to zoom.
+ */
+export function regionFromFilters(
+  filters: InteractiveFilter[],
+  chrColumn: string,
+  posColumn: string,
+): { chrom: string; start: number; end: number } | null {
+  let chrom: string | null = null;
+  let range: [number, number] | null = null;
+  for (const f of filters) {
+    const column = f.column_name ?? f.metadata?.column_name;
+    if (column === chrColumn && Array.isArray(f.value)) {
+      if (f.value.length !== 1) return null;
+      chrom = String(f.value[0]);
+    } else if (column === posColumn && Array.isArray(f.value) && f.value.length === 2) {
+      const lo = Number(f.value[0]);
+      const hi = Number(f.value[1]);
+      if (Number.isFinite(lo) && Number.isFinite(hi) && hi > lo) range = [lo, hi];
+    }
+  }
+  if (!chrom) return null;
+  // A chromosome with no range is still somewhere to zoom: the contig.
+  if (!range) return { chrom, start: 0, end: Number.POSITIVE_INFINITY };
+  return { chrom, start: range[0], end: range[1] };
 }
 
 /**

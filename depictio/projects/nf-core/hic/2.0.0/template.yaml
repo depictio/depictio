@@ -30,15 +30,20 @@
 # `multiqc_software_versions`); `modules` / `plots` below are the 1.35 section
 # names, not the plot config's display title (see docs/dashboards.md).
 #
-# HIC-PRO'S OWN STATS ARE NOT DUPLICATED OUTSIDE MULTIQC.
+# HIC-PRO'S OWN STATS ARE READ TWICE, ON PURPOSE.
 # HiC-Pro ships a full native MultiQC module (mapping, pairing, filtering,
-# contact statistics), so those numbers are read through `multiqc/hicpro`
-# rather than through a second, dedicated collection built from
-# `hicpro/stats/<sample>/*`. The pipeline outputs that have no MultiQC module
-# at all - the binned contact matrix (cooler), the A/B compartment track and
-# eigenvalues (cooltools eigs-cis), the TAD insulation score (cooltools
-# insulation) and the contact-probability-vs-distance curve (hicexplorer) -
-# are what the three new catalog tools in this lot cover.
+# contact statistics), and those panels stay on the MultiQC tab. But a MultiQC
+# panel is an image: nothing on a dashboard can filter it, put one of its
+# numbers in a card or join it to another collection, so the headline Hi-C
+# numbers (valid-pair rate, cis/trans, long-range share) were invisible
+# outside it. `hicpro/stats/<sample>/*` is therefore ALSO scanned directly
+# into `pair_stats` (one wide funnel row per sample) and `pair_flow` (one
+# weighted row per read-pair fate). The pipeline outputs that have no MultiQC
+# module at all - the binned contact matrix (cooler), the A/B compartment
+# track and eigenvalues (cooltools eigs-cis), the TAD insulation score and the
+# domains derived from it (cooltools insulation), P(s) recomputed from the
+# contact dump and the contact-probability-vs-distance curve (hicexplorer) -
+# are what the other catalog tools in this lot cover.
 #
 # THREE RESOLUTIONS, PICKED PER OUTPUT.
 # The run dumped contact maps at two resolutions (500 kb, 1 Mb) and ran
@@ -55,11 +60,11 @@
 # is auto-set from pipeline parameters.
 template:
   template_id: "nf-core/hic/2.0.0"
-  description: "nf-core/hic template: the reprocessed MultiQC report (FastQC, HiC-Pro mapping/pairing/filtering/contact stats), the binned intra-chromosomal contact matrix, the A/B compartment track and the TAD insulation score, plus the contact-probability-vs-distance curve."
+  description: "nf-core/hic template: HiC-Pro's valid-pair funnel as filterable numbers, the binned intra-chromosomal contact matrix with the compartment, insulation and TAD-domain tracks stacked under it, the contact-probability curve P(s) recomputed per chromosome, and the reprocessed MultiQC report."
   version: "1.0.0"
   variables:
     - name: "DATA_ROOT"
-      description: "Root directory containing hic output (compartments/, contact_maps/, distance_decay/, fastqc/, hicpro/, tads/, pipeline_info/) plus the reprocessed multiqc/multiqc_data/multiqc.parquet."
+      description: "Root directory containing hic output (compartments/, contact_maps/, distance_decay/, fastqc/, hicpro/stats/, tads/, pipeline_info/) plus the reprocessed multiqc/multiqc_data/multiqc.parquet."
       required: true
   reference:
     vars: {}
@@ -150,7 +155,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: "multiqc/multiqc_data/multiqc.parquet"
+                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\\.parquet$"
           dc_specific_properties:
             s3_location: null
             modules:
@@ -173,6 +178,96 @@ workflows:
                 - "Read Pairing"
                 - "Read Pair Filtering"
                 - "Contact Statistics"
+
+      # ----------------------------------------------------------------
+      # HiC-Pro's own statistics. The five files under stats/<sample>/ are
+      # headerless key/value TSVs of different widths (mpairstat carries a
+      # third, percentage column), so they are scanned into ONE raw DC with
+      # no `new_columns`: polars names the fields column_1..column_3 and the
+      # ingest-time schema union null-fills the third on the narrow files.
+      # Two recipes read that one scan: a wide funnel row per sample and a
+      # weighted row per read-pair fate.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "hicpro_stats_raw"
+        description: "Raw HiC-Pro mapping, pairing, restriction-fragment and contact statistics (input of pair_stats and pair_flow)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.(mmapstat|mpairstat|mRSstat|mergestat)$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              has_header: false
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "column_1": "HiC-Pro metric name"
+              "column_2": "Metric value, a read or read-pair count"
+              "column_3": "Percentage of the pairs processed (mpairstat only, null elsewhere)"
+              "source_path": "File the row came from; the sample is derived from its name"
+
+      - data_collection_tag: "pair_stats"
+        description: "HiC-Pro's valid-pair funnel and its rates, one row per sample"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "hicpro/pair_stats.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the funnel belongs to"
+              "total_pairs": "Read pairs HiC-Pro processed"
+              "unmapped_pairs": "Pairs with neither mate mapped"
+              "low_qual_pairs": "Pairs dropped on mapping quality"
+              "singleton_pairs": "Pairs with one mate mapped only"
+              "reported_pairs": "Uniquely paired alignments reaching the restriction-fragment filter"
+              "valid_pairs": "Valid 3C products"
+              "dangling_end_pairs": "Un-ligated fragment ends"
+              "religation_pairs": "Re-ligations of adjacent fragments"
+              "self_circle_pairs": "Self-circularised fragments"
+              "dumped_pairs": "Pairs dropped for any other reason"
+              "valid_pairs_rmdup": "Valid pairs left after de-duplication"
+              "cis_pairs": "Intra-chromosomal contacts"
+              "trans_pairs": "Inter-chromosomal contacts"
+              "cis_short_range": "Cis contacts below HiC-Pro's range cut-off"
+              "cis_long_range": "Cis contacts above HiC-Pro's range cut-off"
+              "total_reads": "Reads per mate entering mapping"
+              "mapped_r1": "Read 1 alignments HiC-Pro kept"
+              "mapped_r2": "Read 2 alignments HiC-Pro kept"
+              "trimmed_r1": "Read 1 alignments rescued by the trimmed, second mapping pass"
+              "trimmed_r2": "Read 2 alignments rescued by the trimmed, second mapping pass"
+              "mapping_rate_r1": "Read 1 alignments over reads entering mapping"
+              "mapping_rate_r2": "Read 2 alignments over reads entering mapping"
+              "low_qual_rate": "Low-quality pairs over pairs processed"
+              "valid_pair_rate": "Valid pairs over pairs processed, the headline Hi-C yield"
+              "duplicate_rate": "Duplicates over valid pairs"
+              "cis_ratio": "Cis share of the de-duplicated contacts"
+              "trans_ratio": "Trans share of the de-duplicated contacts, the standard noise proxy"
+              "long_range_ratio": "Long-range share of the cis contacts"
+
+      - data_collection_tag: "pair_flow"
+        description: "Where a library's read pairs end up, one weighted row per mapping, filtering and contact fate"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "hicpro/pair_flow.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the library belongs to"
+              "mapping": "Mapping fate: Unmapped, Low quality, Singleton or Uniquely mapped"
+              "filtering": "Restriction-fragment fate: Dangling end, Religation, Self circle, Dumped, Valid pairs or Lost"
+              "contacts": "Contact fate: Cis, Trans, Duplicate or Lost"
+              "pairs": "Read pairs taking this path"
 
       # ----------------------------------------------------------------
       # cooler: binned contact matrix. The sample name and the resolution
@@ -250,6 +345,33 @@ workflows:
               "count": "ICE-balanced contact value"
 
       # ----------------------------------------------------------------
+      # P(s): the contact-probability curve, recomputed from the same two
+      # raw scans as the contact matrix. nf-core/hic never runs
+      # `cooltools expected-cis`, and the curve hicexplorer does publish
+      # stops at 3 Mb (13 points, one pooled series), so the library-shape
+      # tab needs this one to say anything per chromosome.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "distance_profile"
+        description: "Contact probability against genomic distance over log-spaced bins, one curve per chromosome plus the pooled genome-wide curve"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cooltools/distance_profile.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the matrix was dumped for"
+              "resolution": "Bin size in bp (the finest resolution present)"
+              "chrom": "Chromosome, or \"all\" for the genome-wide pooled curve"
+              "distance": "Geometric centre of the log-spaced distance bin, in bp"
+              "contact_probability": "Balanced contact value per bin pair that could have been observed"
+              "log10_slope": "Local slope of the log-log curve (null on the first point of a series)"
+              "observed": "Summed balanced contact value in the distance bin"
+              "n_possible": "Bin pairs at that separation, whether or not the sparse dump wrote a pixel"
+
+      # ----------------------------------------------------------------
       # cooltools eigs-cis: A/B compartments. Neither file carries the
       # sample or the resolution as a column, so both are scanned raw
       # with `include_file_paths`.
@@ -298,6 +420,7 @@ workflows:
               "end": "Bin end"
               "weight": "cooler balancing weight for the bin (null on blacklisted bins)"
               "E1": "First eigenvector, the A/B compartment track"
+              "compartment": "A where E1 is positive, B where it is negative, empty on a bin with no call"
               "E2": "Second eigenvector"
               "E3": "Third eigenvector"
 
@@ -400,6 +523,37 @@ workflows:
               "is_boundary": "cooltools' own boundary call at this window"
 
       # ----------------------------------------------------------------
+      # TAD intervals. HICEXPLORER_HICFINDTADS never ran in this pipeline
+      # version (the execution trace confirms it), so the domains are
+      # derived from the same insulation file: a domain is what lies
+      # between two consecutive boundary calls.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "tad_domains"
+        description: "TAD intervals derived from the insulation track's boundary calls, one row per domain per window size"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cooltools/domains.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample insulation was scanned for"
+              "resolution": "Bin size in bp"
+              "window": "Insulation window the flanking boundaries were called at"
+              "chrom": "Chromosome"
+              "start": "Domain start, the end of the left boundary region"
+              "end": "Domain end, the start of the right boundary region"
+              "size": "Domain length in bp"
+              "size_kb": "Domain length in kb"
+              "n_bins": "Bins the domain spans"
+              "valid_fraction": "Share of those bins that are mappable"
+              "region": "cooltools region label (chromosome arm)"
+              "left_boundary_strength": "Boundary strength at the left edge"
+              "right_boundary_strength": "Boundary strength at the right edge"
+
+      # ----------------------------------------------------------------
       # hicexplorer: contact probability vs genomic distance.
       # ----------------------------------------------------------------
       - data_collection_tag: "hicexplorer_distance_decay_raw"
@@ -456,6 +610,46 @@ links:
       resolver: "sample_mapping"
       target_field: "sample_name"
     description: "Filter the MultiQC panels by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "pair_stats"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the valid-pair funnel by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "pair_flow"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the read-pair fates by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "distance_profile"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the contact-probability curve by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "tad_domains"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the TAD domains by the samples picked in the left panel"
     enabled: true
 
   - source_dc_tag: "samples"

@@ -245,3 +245,259 @@ was written, and the full suite now runs clean except for the two
 model-schema-staleness failures noted above. Recommend the brief mention this
 collision risk explicitly (isolate `_load_tool_dir` validation per own tool
 dir as a workaround when the shared suite is red) for the next 6 pipelines.
+
+---
+
+# 2026-09-22: lot 2 remediation pass (funnel, P(s), TAD domains, genome tracks)
+
+**Date:** 2026-09-22
+**Worktree / branch:** `depictio-worktrees/feat-nfcore-templates-lot2` (PR #1102)
+**Validator:** recipes run on the real AWS megatest files through the same
+scan the CLI builds, then a full ingest against the live lot 2 stack
+(API `localhost:8112`, viewer `localhost:5612`, Mongo `localhost:27112`) and
+one headless Playwright screenshot per tab.
+
+## What changed
+
+The audit found hic at 4 tabs / 39 components / 0 figures, with no tab filling
+a card row, no chromosome filter although every coordinate collection carries
+one, and HiC-Pro's own statistics reaching the dashboard only as MultiQC
+images. This pass addresses all four.
+
+### New catalog tool: `hicpro`
+
+| Output | Rows (this run) | Renders |
+| --- | --- | --- |
+| `hicpro/pair_stats` | 1 per sample, 29 columns | attrition card (the whole funnel), 3 gauges, 4 box-plot cards, 2 top-N cards, table |
+| `hicpro/pair_flow` | 10 | sankey (`pair_flow_sankey`), 2 donut cards, table |
+
+Both read ONE raw scan, `hicpro_stats_raw` (35 rows), over
+`*.{mmapstat,mpairstat,mRSstat,mergestat}`. The five files differ in width
+(`mpairstat` carries a percentage column the others do not), so the scan
+declares `has_header: false` with NO `new_columns`: polars names the fields
+`column_1..column_3` and `align_lazy_schemas` null-fills the third on the
+narrow files. The sample is recovered from the file NAME (stripping the
+`.R1`/`.R2` mate suffix and `_allValidPairs`), not from the
+`stats/<sample>/` directory, so a run that publishes the files flat still
+resolves.
+
+The two outputs reconcile exactly against HiC-Pro's own totals:
+
+```
+Total_pairs_processed                    536,273,614
+  Unmapped 4,426,294 + Low quality 161,357,311
+  + Singleton 57,775,382 + Reported 312,714,627    = 536,273,614  OK
+Reported_pairs                           312,714,627
+  Dangling end 51,009,354 + Religation 33,502,668
+  + Self circle 249,107 + Dumped 5,673,410
+  + Valid 222,280,088                              = 312,714,627  OK
+Valid_interaction_pairs                  222,280,088
+  Cis 167,060,018 + Trans 36,351,801
+  + Duplicate 18,868,269                           = 222,280,088  OK
+```
+
+Headline numbers now on a card: valid-pair rate 41.4%, cis share 82.1%,
+long-range cis share 78.9%, duplicate rate 8.5%, low-quality pair rate 30.1%.
+
+### New catalog outputs under `cooltools`
+
+| Output | Rows | Renders |
+| --- | --- | --- |
+| `cooltools/distance_profile` | 670 (22 series, at most 33 points each) | `ps_curve` + `ps_slope` profiles, 2 box-plot cards, table |
+| `cooltools/domains` | 43,775 | `domain_track` (genome_view, rect), `domain_size_track` (coverage_track), box-plot / top-N / gauge cards, table |
+
+`distance_profile` recomputes P(s) from the balanced `cooler dump` triplet and
+its bins (the same two raw scans `cooler/contact_matrix.py` reads). The
+denominator at separation `s` is every bin pair that could have been observed
+(`n_bins(chrom) - s`), not the non-zero pixels the sparse dump wrote;
+dividing by observed pixels flattens the tail exactly where the matrix gets
+sparse. Separations are pooled into 40 log-spaced bins with sums on both
+sides, and `log10_slope` is the finite-difference derivative along that binned
+curve. The pooled curve reads -1.53 at 1 Mb and steepens past -2.4 beyond
+100 Mb, which is the expected mESC shape.
+
+`domains` derives TAD intervals from `is_boundary_<window>`. Runs of adjacent
+flagged bins are merged into one boundary region first (a boundary at 20 kb is
+usually 2-3 bins wide); a domain is then the span between the end of one
+boundary region and the start of the next, within one cooltools `region` so no
+domain crosses a scanned-region gap. Each domain is scored on the share of its
+bins that are mappable, and a domain below 0.5 is dropped.
+
+| resolution | window | domains | median size | max size |
+| --- | --- | --- | --- | --- |
+| 20 kb | 300 kb | 11,337 | 160 kb | 2.52 Mb |
+| 20 kb | 500 kb | 9,559 | 180 kb | 2.84 Mb |
+| 20 kb | 1 Mb | 8,256 | 200 kb | 5.20 Mb |
+| 40 kb | 600 kb | 5,312 | 360 kb | 2.48 Mb |
+| 40 kb | 1 Mb | 4,803 | 360 kb | 5.84 Mb |
+| 40 kb | 2 Mb | 4,508 | 360 kb | 12.60 Mb |
+
+Without the mappability filter the maximum at 20 kb / 300 kb is 30.84 Mb, an
+unmappable stretch reported as a single TAD.
+
+### Extended catalog outputs
+
+- `cooltools/eigenvector.py` gained a `compartment` column ("A" where E1 is
+  positive, "B" where it is negative, null on a bin with no E1). Counts on
+  this run: A 7,497 / B 7,746 / no call 1,132 of 16,375 bins. It unlocks an
+  A/B donut card and a compartment `Select`, neither of which a continuous E1
+  column can drive.
+- `genome_view` locus tracks added to `cooltools/eigenvector`
+  (`compartment_locus_track`), `cooltools/insulation`
+  (`insulation_locus_track`) and `cooltools/domains` (`domain_track`). Every
+  one of them keeps its `coverage_track` sibling, so a tab still reads if the
+  GenomeSpy renderer is unavailable.
+- `cooltools/eigenvalues` gained two box-plot cards (it shipped with a table
+  and nothing else).
+
+### Dashboard
+
+4 tabs become 7: MultiQC, Run QC, Library shape, Contact maps, Compartments,
+TADs and boundaries, Compare samples. 39 components become 92.
+
+- A pinned persistent `Run at a glance` section carries four funnel cards on
+  every tab (pairs sequenced with the attrition strip, valid-pair rate,
+  cis share, cis/trans/duplicate donut). Cards are legal on the MultiQC tab
+  only inside a pinned persistent section, which is what this is.
+- Each of the six other tabs opens with its own four-card strip at
+  `x` 0/2/4/6, `w: 2`, `h: 2`. No half-filled rows remain.
+- Every tab that carries coordinate collections carries one chromosome
+  `Select` per collection, grouped in one tab-local filter section, plus the
+  window / resolution sliders that tab needs. Project links carry the sample,
+  not the chromosome, so a per-collection control is the only way to reach
+  each track today.
+- The insulation and compartment locus tracks sit in the same section as the
+  contact matrix, under it, with `follow_region_filter: true`, which is the
+  pyGenomeTracks / FAN-C layout the audit asked for.
+- `Compare samples` states plainly that the run is one library and shows the
+  four per-sample numbers and the funnel table a cohort would be ranked on.
+
+## Commands and results
+
+```bash
+# recipes on the real files, through the scan the CLI builds
+uv run python /tmp/claude-502/test_hicpro.py     # pair_stats 1x29, pair_flow 10x5, totals reconcile
+uv run python /tmp/claude-502/test_ps.py         # distance_profile 670x8, 22 series, <=33 pts/series
+uv run python /tmp/claude-502/test_domains.py    # domains 43,775x13
+
+uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py -q -k hic
+# 8 passed, 2 failed -- both failures are the shared catalog being all-or-nothing
+# (another agent's half-written gtdbtk/ and mag/ dirs), see HC-D13
+
+uv run python -m depictio.cli run --template nf-core/hic/2.0.0 \
+  --data-root ~/Data/depictio-nfcore/hic/2.0.0/megatest \
+  --CLI-config-path ~/.depictio/CLI.feat-nfcore-templates-lot2-112.yaml --dry-run
+# 8/8 steps
+
+# wipe + one ingest against the live stack
+curl -X DELETE ".../projects/delete?project_id=6aabb19d423d80d6bc9c8f2b"
+uv run python -m depictio.cli run --template nf-core/hic/2.0.0 \
+  --data-root ~/Data/depictio-nfcore/hic/2.0.0/megatest \
+  --CLI-config-path ~/.depictio/CLI.feat-nfcore-templates-lot2-112.yaml \
+  --project-name lot2-hic
+# 8/8 steps, 19 data collections, project 6ab2a86eba071d50de877855,
+# dashboard 6ab2a8a8fbe776a1a573e1dc
+```
+
+Row counts after ingest (every collection non-empty):
+
+| Collection | Rows |
+| --- | --- |
+| samples | 1 |
+| samplesheet | 3 |
+| hicpro_stats_raw | 35 |
+| pair_stats | 1 |
+| pair_flow | 10 |
+| cooler_contacts_raw | 14,466,445 |
+| cooler_bins_raw | 8,201 |
+| contact_matrix | 696,939 |
+| distance_profile | 670 |
+| cooltools_eigenvector_raw / compartment_eigenvector | 16,375 / 16,375 |
+| cooltools_eigenvalues_raw / compartment_eigenvalues | 44 / 44 |
+| cooltools_insulation_raw | 204,440 |
+| tad_insulation | 613,314 |
+| tad_domains | 43,775 |
+| hicexplorer_distance_decay_raw / distance_decay | 13 / 13 |
+
+## Discrepancies
+
+### HC-D10: the published distance-decay curve is 13 points, not a curve
+
+`hicPlotDistVsCounts` ran with a 3 Mb depth cap on the 250 kb matrix and wrote
+13 rows, all `Chromosome == all`. It cannot show the knee, cannot be split per
+chromosome and cannot be compared between conditions. `cooltools expected-cis`
+never runs in nf-core/hic 2.x. This is why `cooltools/distance_profile.py`
+recomputes P(s) from the contact dump rather than binding the published curve;
+the published one is kept on a collapsed section for comparison.
+
+### HC-D11: cooltools calls boundaries, hicFindTADs never runs
+
+`HICEXPLORER_HICFINDTADS` is absent from `pipeline_info/execution_trace_*.txt`,
+so no interval list of TADs exists on disk at any nf-core/hic 2.x version. The
+domains here are derived, and the derivation is a choice, not a ground truth:
+merging adjacent boundary bins and requiring 50% mappability are both
+parameters of this recipe, documented in its module docstring. A reader
+comparing these domain counts with a published mESC TAD set should expect the
+insulation-window choice to dominate the difference (11,337 domains at a
+300 kb window against 8,256 at 1 Mb, same data).
+
+### HC-D12: no samplesheet factor exists, so the persistent section holds one filter
+
+The maintainer rule asks for one persistent filter per real samplesheet factor.
+`samplesheet.valid.csv` has `sample` (1 value), `single_end` (1 value, False)
+and the two FASTQ paths (3 values each, file paths rather than factors), and
+the `samples` hub has `sample_id`, `n_libraries` and `single_end`, all
+single-valued. There is no factor to expose. Every tab therefore carries the
+sample filter plus a tab-local section on its own collections' categorical
+columns (mapping fate, contact fate, chromosome, compartment, window,
+resolution), which are the columns with 2 to 23 real values on this run.
+
+### HC-D13: the shared catalog is still all-or-nothing under parallel agents
+
+`load_catalog_entries()` validates every tool folder under
+`depictio/catalog/`, so one half-written dir anywhere breaks
+`AdvancedVizLiteComponent` validation for every pipeline. During this pass
+`ascat/`, `gtdbtk/` and `mag/` were each observed broken (other agents, same
+worktree). Validation of the hic tiles was therefore also run against a copy
+of the catalog with the broken dirs removed, where all 15 `advanced_viz`
+tiles resolve their `use:` and survive the component union with zero errors.
+The two red tests above are expected to go green once those agents land.
+
+### HC-D14: the `genomespy_track` kind was renamed to `genome_view` mid-session
+
+The brief named the kind `genomespy_track`, and
+`depictio/models/components/advanced_viz/configs.py` still spelled it that way
+early in this session; by the time the catalog entries were validated,
+`types.py` and `configs.py` had been renamed to `genome_view` by the kind's
+owning agent. All three locus tracks bind `genome_view`. The config also gained
+`mark: bar`, `sample_col`, `category_col`, `facet_by_sample`,
+`annotation: none|hg38|mm10` and the region-brush pair
+(`region_filter_enabled` / `follow_region_filter`) relative to the brief; the
+mm10 gene lane is used on the compartment and domain tracks.
+
+### HC-D15: `.cool` files remain unreadable, and that is still the right call
+
+`contact_maps/cool/*.cool` (12 MB at 500 kb, 16 MB total) are HDF5 and no
+reader is available without `h5py`/`cooler`. Nothing in this pass needs them:
+the `.txt` dump carries the same matrix at the same resolutions, and P(s) is
+computed from it. Multi-resolution zoom (HiGlass class) is what the `.cool`
+files would unlock, and that remains out of scope.
+
+## Still undone
+
+- Saddle plot (`cooltools/saddle.py`, contact triplet against E1 quantiles)
+  and the `axis_mode` flag the audit ranks next after P(s).
+- HiCRep replicate correlation, multi-sample P(s) and APA all need a second
+  sample or loop anchors, neither of which this run has.
+- The region brush emitted by one locus track is not yet routed to the contact
+  map: `contact_map` has no `follow_region_filter` equivalent, so the three
+  tiles share a section and an axis but not yet a zoom.
+
+## 2026-09-22 review fixes
+
+`template.yaml`: the `multiqc_data` scan regex was the bare
+`multiqc/multiqc_data/multiqc.parquet`; it is now the mandated
+`(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\.parquet$` (optional prefix, optional
+route segment, escaped dot, anchored end). No dashboard change: the main tab already opens
+with the pinned four-card `Run at a glance` strip and carries the tab-local `Funnel scope`.
+`test_shipped_dashboard_yamls.py -k hic` passes.

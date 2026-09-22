@@ -128,7 +128,12 @@ SCENARIOS: list[Scenario] = [
     Scenario(
         "hic", "2.0.0", "megatest", note="MultiQC reprocessed; 2.1.0 megatest is a truncated sync"
     ),
-    Scenario("mag", "5.4.2", "megatest", note="nf-core AWS megatest; 5.5.0 is partial"),
+    Scenario(
+        "mag",
+        "5.5.0",
+        "megatest",
+        note="5.5.0 release-candidate run 171cf369; the 5.4.2 sync dropped small objects",
+    ),
     Scenario(
         "methylseq",
         "2.3.0",

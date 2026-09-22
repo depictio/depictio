@@ -161,7 +161,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: "multiqc/multiqc_data/multiqc\\.parquet"
+                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\\.parquet$"
           dc_specific_properties:
             # rnafusion runs FastQC twice, on the raw reads and on the trimmed
             # ones, so MultiQC anchors the second instance as 'fastqc-1'. Both
@@ -299,7 +299,7 @@ workflows:
               "detail": "The caller's full evidence string, unparsed"
 
       - data_collection_tag: "arriba_fusions"
-        description: "Arriba fusion calls with split reads, discordant mates, local coverage, confidence and reading frame"
+        description: "Arriba fusion calls with split reads, discordant mates, local coverage, confidence, reading frame and the two partner contigs"
         config:
           type: "Table"
           source: "transformed"
@@ -311,6 +311,11 @@ workflows:
               "fusion": "Fusion name, matching the consensus collection"
               "breakpoint_5p": "5' breakpoint coordinate"
               "breakpoint_3p": "3' breakpoint coordinate"
+              "chrom_5p": "Contig the 5' breakpoint sits on"
+              "chrom_3p": "Contig the 3' breakpoint sits on"
+              "chrom_pair": "The two contigs as one label, so an intra-chromosomal event and a translocation separate"
+              "site_5p": "Transcript feature the 5' breakpoint fell in"
+              "site_3p": "Transcript feature the 3' breakpoint fell in"
               "fusion_type": "Structural class Arriba assigned (deletion, translocation, inversion, duplication)"
               "confidence": "Arriba's own confidence class for the call"
               "reading_frame": "Whether the fusion transcript stays in frame"
@@ -320,6 +325,30 @@ workflows:
               "coverage": "Local coverage at both breakpoints"
               "support_fraction": "Share of the local reads that support the fusion"
               "retained_protein_domains": "Protein domains Arriba predicts the fusion keeps"
+
+      # The coordinate view of the same Arriba file: one link per call with both
+      # breakpoints split into chromosome and position, which is the row shape a
+      # chord diagram binds. Kept as its own collection rather than as more
+      # columns on `arriba_fusions` because the two answer different questions
+      # and the chord needs integer positions, not the "chr:pos" strings.
+      - data_collection_tag: "arriba_fusion_links"
+        description: "Arriba calls as breakpoint pairs: both loci split into contig and position, with the summed read evidence as the link weight"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "arriba/fusion_links.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "label": "Fusion name, matching the consensus collection"
+              "chrom_a": "Contig of the 5' breakpoint"
+              "pos_a": "Position of the 5' breakpoint in base pairs"
+              "chrom_b": "Contig of the 3' breakpoint"
+              "pos_b": "Position of the 3' breakpoint in base pairs"
+              "weight": "Split reads on both sides plus discordant mates, the width of the chord"
+              "category": "Structural class Arriba assigned, which colours the chord"
+              "confidence": "Arriba's own confidence class for the call"
 
       - data_collection_tag: "starfusion_fusions"
         description: "STAR-Fusion calls with junction and spanning read counts, splice type and normalised abundance"
@@ -489,6 +518,19 @@ links:
       resolver: "direct"
       target_field: "fusion"
     description: "Filter the Arriba calls by the selected fusions"
+    enabled: true
+
+  # The chord view is keyed on `label`, not `fusion`, so the persistent fusion
+  # filter needs its own link to reach it. Without this the ring would keep
+  # every call while the rest of the tab narrowed.
+  - source_dc_tag: "fusion_consensus"
+    source_column: "fusion"
+    target_dc_tag: "arriba_fusion_links"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "label"
+    description: "Filter the Arriba breakpoint links by the selected fusions"
     enabled: true
 
   - source_dc_tag: "fusion_consensus"

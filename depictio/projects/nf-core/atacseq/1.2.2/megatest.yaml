@@ -99,7 +99,10 @@ keys:
   # `*.deseq2.FDR0.0*.results.txt` subsets are left out: they are filtered
   # copies of these same rows.
   - bwa/mergedLibrary/macs/broadPeak/consensus/deseq2/*/*.deseq2.results.txt
-  # PCA / sample-distance custom content MultiQC picks up.
+  # PCA / sample-distance custom content. MultiQC picks it up, and since the
+  # 2026-09-22 pass the same two files also back the `deseq2_qc_pca` and
+  # `deseq2_qc_sample_dists` collections behind the Consensus tab's Sample
+  # space section, so this line is load-bearing for the dashboard too.
   - bwa/mergedLibrary/macs/broadPeak/consensus/deseq2/*_mqc.tsv
 prefix_keys: []
 renames: {}

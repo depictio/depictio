@@ -472,3 +472,349 @@ Two intros were rewritten for what is actually on screen. `cs-qc-intro` no longe
 "four cards for the peak yield and signal-to-noise of the run" and now describes the general
 statistics table and the panels under it; `cs-ref-intro` no longer calls the peak QC summary
 the rows "behind the cards on every tab", because after this change no card reads it.
+
+---
+
+# 2026-09-22 remediation pass
+
+**Date:** 2026-09-22
+**Worktree / branch:** `depictio-worktrees/feat-nfcore-templates-lot2`, `feat/nfcore-templates-lot2`
+**Validator:** local depictio-cli against the lot 2 docker stack (API `:8112`, viewer `:5612`,
+Mongo `:27112`, config `~/.depictio/CLI.feat-nfcore-templates-lot2-112.yaml`), on the same
+megatest data as the 2026-09-05 build.
+
+## Why
+
+The 2026-09 nf-core template audit measured this template against the real run rather than
+against its own YAML, and found that the experiment it is built to show was not reachable from
+the dashboard: the only exposed factor was `antibody`, one DESeq2 collection was bound by
+thirteen tiles and reachable by no filter, the cards sat in a collapsed section with three of
+four drawing the same breakdown, and every text tile was one grid row shorter than its body.
+This pass fixes those and adds the interval-shaped views of the peak set that the Manhattan
+plot cannot give.
+
+## What changed
+
+**The hub was rebuilt (CS-D14, CS-D15, CS-D16).** `design` is no longer a scan of
+`pipeline_info/design_controls.csv`; it is a transformed collection produced by
+`nf-core/chipseq/design_factors.py`. The sheet itself stays bound as `design_controls`.
+
+**New / changed collections, with the shape read back from Delta after ingest:**
+
+| Collection | Rows x cols | What it is |
+|---|---|---|
+| `design` (rebuilt) | 16 x 7 | one row per LIBRARY, with `role`, `antibody`, `condition`, `replicate` |
+| `design_controls` (new) | 8 x 7 | the pipeline's own design sheet, unchanged |
+| `deseq2_qc_pca` (new) | 8 x 6 | principal components of the count matrix, per antibody |
+| `deseq2_qc_sample_dists` (new) | 8 x 9 | sample-to-sample distances on rlog values, per antibody |
+
+The other fourteen collections are unchanged and were re-verified in the same ingest:
+`macs2_peaks` 258986 x 11, `homer_annotated_peaks` 258986 x 13, `macs2_consensus_boolean`
+153891 x 16, `deseq2_results` 153891 x 12, `deseq2_results_raw` 153891 x 31,
+`preseq_ccurve_raw` 160000 x 7, `deeptools_plot_profile` 11200 x 5,
+`preseq_complexity_curve` 2688 x 6, `homer_tss_distance_profile` 648 x 4,
+`macs2_consensus_fc` 500 x 14, `deeptools_fingerprint_metrics` 16 x 13, `design_reads` 16 x 5,
+`macs2_peak_summary` 8 x 10, and `multiqc_data` (a MultiQC collection, no Delta shape).
+
+**Links.** Nine added: `design_reads -> multiqc_data` on the library name;
+`design.antibody -> macs2_consensus_boolean / macs2_consensus_fc / deseq2_results /
+deseq2_qc_pca` through the `wildcard` resolver; `macs2_consensus_boolean.interval_id <->
+deseq2_results.gene_id` in both directions; and `design.sample_id -> deseq2_qc_pca /
+deseq2_qc_sample_dists`.
+
+**Catalog.** `macs2_peaks` gained three renders (`peak_genome_view`, `peak_coverage_track`,
+`peak_volcano`). Four MultiQC panel stubs were added for the pipeline's own custom content:
+`frip_score`, `nsc_coefficient`, `rsc_coefficient`, `strand_shift_correlation`.
+
+**Dashboard.** Five tabs, 112 components. 62 of the 65 panel tiles carry a `use:` (95%); the
+three that do not read the `design` hub, which is a pipeline-local recipe with no catalog
+module. Every tab now opens on a four-card glance strip, every tab carries both the pinned
+persistent filter section and a tab-local one, every text tile is `h: 2`, and every grid row
+sums to 8.
+
+## Commands run
+
+```
+uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py -q -k chipseq
+    8 passed, 2 failed (both catalog-dependent; see CS-D26)
+uv run pytest depictio/tests/models/test_catalog.py -q
+    92 passed, 7 failed (none naming macs2 or the new multiqc stubs; see CS-D26)
+uv run python -m depictio.cli run --template nf-core/chipseq/1.2.0 \
+  --data-root ~/Data/depictio-nfcore/chipseq/1.2.0/megatest --dry-run
+    8/8 steps
+uv run python -m depictio.cli run --CLI-config-path ~/.depictio/CLI.feat-nfcore-templates-lot2-112.yaml \
+  --template nf-core/chipseq/1.2.0 --data-root ~/Data/depictio-nfcore/chipseq/1.2.0/megatest
+    8/8 steps, 18 data collections, dashboard 6ab2aa14fbe776a1a573e22f, 5 tabs
+uv run ruff format / check on the two new recipes
+    clean
+```
+
+Every recipe was also run directly against the real files before the ingest, through the same
+glob and read options the collection declares, and its output frame compared to
+`EXPECTED_SCHEMA`.
+
+---
+
+### CS-D14: the 1.2.0 pin is stale, and staying
+
+chipseq 2.x is the current line. The template stays on 1.2.0 in this pass, deliberately: 2.x is
+not a version bump of this template but a rewrite. `design_controls.csv` is gone (2.x takes an
+nf-core samplesheet and derives no control sheet), `macs` became `macs3`, and `mergedLibrary`
+became `merged_library`, so every scan regex, every recipe glob and the hub recipe would change
+together. The 2.x megatest prefix on `s3://nf-core-awsmegatests/chipseq/` is empty, so there is
+no run to validate that rewrite against and no way to tell which of the guesses is right. Until
+a 2.x megatest exists, a 2.x template would be authored blind. Recorded here rather than fixed.
+
+### CS-D15: the conditions the run exists to compare were not filterable
+
+The megatest is two experiments: EZH2 in NTKO against TKO cells, and FOXA1 in E2-treated
+against vehicle-treated cells. Neither comparison was a column. `design_controls.csv` carries
+`sample_id`, `control_id`, `antibody`, `replicatesExist` and `multipleGroups`, and the
+conditions appear only inside the sample names (`EZH2_IP_NTKO_R1`). The dashboard exposed
+`antibody`, which has two values and separates the two experiments but not the arms inside
+them, so the reader could compare EZH2 against FOXA1 and nothing else.
+
+`nf-core/chipseq/design_factors.py` parses the names token by token: the replicate is a trailing
+`_R<digits>`, and the condition is what is left after the leading antibody token and an optional
+`IP` / `ChIP` marker. On this run it yields `condition` with 4 distinct values (E2, NTKO, TKO,
+VEH) and `replicate` with 2 (R1, R2), both inside the 2..6 band a factor filter needs, checked
+against the ingested collection rather than assumed. Both are now persistent filters beside the
+library and antibody ones.
+
+The parse is name-shaped, and that is a real limit: a run whose samples are named on another
+convention gets a `condition` that is whatever is left of the name. The recipe emits the column
+either way and the dashboard filter then shows one value per sample, which is visibly useless
+rather than silently wrong.
+
+### CS-D16: the input control libraries were in no row of the hub
+
+`design_controls.csv` has one row per ChIP, so the eight INPUT libraries appeared only as values
+of `control_id`. They are sequenced libraries and they carry rows in preseq, plotFingerprint,
+plotProfile, samtools and the MultiQC report, so the sample filter offered eight of the sixteen
+libraries the reader can see, and an input could never be selected. A ChIP QC comparison is a
+comparison against those inputs.
+
+The recipe recovers them from `control_id` and carries them as rows of their own, labelled by
+`role` (ChIP / input control) and given the antibody of their own name prefix (INPUT). The hub
+is 16 rows now, and `antibody` has 3 values instead of 2.
+
+### CS-D17: `replicatesExist` and `multipleGroups` were dead columns
+
+Both are 1 on every row of this run, by construction: the pipeline writes them per antibody and
+this design has replicates and groups for both antibodies. They backed a `gauge` card
+("Replicated share", pinned at 100% forever) and would back a filter that can never narrow
+anything. Dropped from the hub; the card is gone with them.
+
+### CS-D18: `deseq2_results` was bound by thirteen tiles and reachable by no filter
+
+The Differential binding tab reads `deseq2_results` for every one of its panels, and the
+collection appeared in no `links:` entry, so nothing the reader picked anywhere else reached it.
+Two links fix it at two grains.
+
+Per interval: a DESeq2 row scores one consensus interval, and `gene_id` there is `interval_id`
+in `macs2_consensus_boolean`. Both directions are now linked, so a row ticked on the Consensus
+tab carries to its differential binding row and back.
+
+Per antibody: the contrast ids are `EZH2_IP_NTKOvsEZH2_IP_TKO` and `FOXA1_IP_E2vsFOXA1_IP_VEH`,
+which start with the antibody, so the `wildcard` resolver (prefix match) carries the persistent
+antibody filter into the contrast column. The same resolver carries it into `consensus_set` on
+the two consensus collections, whose labels are `EZH2_IP` and `FOXA1_IP`. A per-SAMPLE link
+into any of those three is not possible and is not a gap in the template: a consensus set and a
+contrast are aggregates over samples and have no sample column by construction.
+
+The interval link inherits CS-D9: `Interval_1` exists in both consensus sets, so the join is
+exact only once a single antibody or contrast is in view. The antibody link is what makes that
+the normal reading state rather than something the reader has to remember.
+
+### CS-D19: there was no glance strip, and three of the four cards drew the same breakdown
+
+The four cards the dashboard opened with sat inside `ChIP design`, a section that is
+`collapsed: true`, so the default view of every tab opened on a text tile and a MultiQC panel.
+Three of the four broke down by `antibody` (ChIP samples split by antibody, antibodies by
+antibody, input controls by antibody) and the fourth was the dead gauge of CS-D17.
+
+`Cohort at a glance` is a new pinned persistent grid section, not collapsed, carrying four cards
+at `x` 0/2/4/6, `w: 2`, `h: 2`, with four different breakdowns: libraries by role (donut),
+conditions as a top-4, peaks called with a top-3 by sample, and the FRiP score as a Tukey box
+plot. Being persistent and pinned is also what makes it legal on the MultiQC tab, which
+`test_multiqc_tabs_hold_only_multiqc_panels` otherwise restricts to report panels.
+
+Two per-tab strips were rebalanced for the same reason: the Consensus fourth card broke down by
+`consensus_set`, which the first card already did, and now draws the reproducibility tiers of
+the strongest intervals; the Differential binding first card broke down by `direction`, which
+the second card already did, and now breaks down by contrast.
+
+### CS-D20: 23 text tiles were one grid row short of their body
+
+Every text tile in the file was `h: 1` and every one had a body over 120 rendered characters,
+between 136 and 276, against the ~300 characters a full-width row fits. `TextRenderer` applies
+no `maxHeight`, no `overflow` and no line clamp, so the overflow is drawn over the tile below.
+All 23 are `h: 2`, and the `y` of every tile under them was recomputed section by section (the
+grid is per section, so the arithmetic is local to each). Guarded from here by
+`test_text_tiles_are_tall_enough_for_their_body`.
+
+### CS-D21: a megatest-only directory was anchored in a glob (lint F7)
+
+`homer_annotated_peaks` overrides the recipe's glob to keep the merged-library level only, and
+the override read `bwa/mergedLibrary/macs/*/*_peaks.annotatePeaks.txt`. The `bwa/` prefix exists
+because this megatest aligned with BWA; chipseq 1.2.0 writes `bowtie2/`, `star/` or `hisat2/`
+for its other aligners, and the collection would have come back empty for all of them. The glob
+is now `**/mergedLibrary/macs/*/*_peaks.annotatePeaks.txt`: `mergedLibrary` is the aggregation
+level every 1.2.0 run publishes and is exactly the thing the override exists to pin, so it
+stays. Verified to match the same 8 files as before.
+
+`(?:.*/)?` is the portable form for a REGEX, and the same pass applied it to the MultiQC scan,
+which is now the shared
+`(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\.parquet$` every template uses; it matches the
+one parquet on disk and would also match the `multiqc/<peak route>/multiqc_data/` layout a run
+publishes without the reprocess. The HOMER override is a GLOB and not a regex, so it takes
+`**/` instead.
+
+### CS-D22: four MultiQC panels had no catalog stub, and now do
+
+FRiP, NSC, RSC and the strand cross-correlation are MultiQC custom content the pipeline writes
+itself, so they had no `depictio/catalog/multiqc/<module>.yaml` and their four tiles were the
+only MultiQC tiles in the file with no `use:` (the original CS-D6). They are written
+identically by chipseq, atacseq and cutandrun, which makes them catalog material rather than a
+template specific: `multiqc/frip_score`, `multiqc/nsc_coefficient`, `multiqc/rsc_coefficient`
+and `multiqc/strand_shift_correlation` now exist and the four tiles carry a badge.
+
+The section names were read off the run's own parquet with `multiqc.list_plots()` before
+writing them (`frip_score-section`, `nsc_coefficient-section`, `rsc_coefficient-section`,
+`strand_shift_correlation-section`), not copied from the published HTML report.
+
+`peak_count` and `peak_annotation` are the same kind of custom content and deliberately have no
+stub: both duplicate a panel the Peaks tab draws from the peak tables directly. The DESeq2 PCA
+and clustering sections carry a per-antibody numeric suffix the run assigns itself
+(`deseq2_pca_1`, `deseq2_pca_2`, `deseq2_clustering_1`, `deseq2_clustering_2`), which is not a
+portable module name; they are bound as data instead, see CS-D24.
+
+### CS-D23: the peak set had no interval-shaped view
+
+Every view of the peaks placed them at a point: the Manhattan at the summit, the volcano at
+(enrichment, significance), the histogram at the width. A MACS2 call is an interval, and the
+question "what does the binding look like along this locus" had no panel.
+
+`Peak landscape` is a new section on the Peaks tab with two tiles over `macs2_peaks`:
+`use: macs2/peak_genome_view` (`genome_view`, `mark: rect`, `end_col` on the peak end) draws one
+rectangle per call on a chromosome-aware locus axis with a region brush, and
+`use: macs2/peak_coverage_track` draws the same intervals in plain Plotly with fold enrichment
+on a log axis. The second is deliberate redundancy per the wave's contract for coordinate
+tracks: same rows, no external renderer, so the section still says something if the GenomeSpy
+view is unavailable. It is unavailable right now, see CS-D27.
+
+Neither smooths. `smoothing_window: 0` is set explicitly on the coverage track because peaks are
+not evenly spaced bins and the default rolling mean would average across gaps of megabases.
+
+### CS-D24: the shared DESeq2 QC PCA recipe mis-maps a per-antibody run
+
+`pca.vals_mqc.tsv` and `sample.dists_mqc.tsv` were on disk and bound by nothing. The
+`deseq2/qc_pca` and `deseq2/qc_sample_dists` catalog outputs landed during this wave, and both
+recipes need their glob repointed at the `_mqc.tsv` flavour chipseq publishes (their own glob
+wants the plain `.txt` a single-matrix pipeline writes); that is a `source_overrides` entry in
+this template and works.
+
+`qc_sample_dists` is then correct. The matrix comes back block diagonal, 8 rows by 8 sample
+columns with the cross-antibody pairs empty, which is honest: the two matrices were never
+compared. The heatmap is captioned to say so.
+
+`qc_pca` is NOT correct on this run, and it is a shape problem rather than a parse failure.
+chipseq publishes one count matrix per antibody, so there are two PCA files, and each spells the
+variance it explains into its own header (`"PC1: 63% variance"` against `"PC1: 91% variance"`).
+The glob loader concatenates diagonally, those headers do not collide, and the two matrices land
+in four columns rather than two. `qc_pca.py` then maps columns to roles by position on the
+concatenated frame: the output has EZH2's PC1 and PC2 as `dim_1` and `dim_2`, FOXA1's PC1 as
+`dim_3`, all four FOXA1 rows null on `dim_1` and `dim_2`, and `dim_1_percent` = 63 for all eight
+rows. An embedding bound to it plots four of the eight libraries.
+
+`depictio/catalog/deseq2/**` is another agent's partition this wave and was not edited. The
+template uses a pipeline-local recipe, `nf-core/chipseq/deseq2_qc_pca.py`, which keeps the
+catalog output's column names (so the tile still binds `use: deseq2/qc_pca_embedding`) and
+resolves the components per matrix: it recognises a matrix by which component columns its rows
+populate, which is exactly what the diagonal concat encodes, and labels it by the longest common
+prefix of its samples, the same rule `macs2/consensus_boolean.py` uses for `consensus_set`. The
+result is 8 rows, every library on its own matrix's PC1 and PC2, with the per-set variance
+(EZH2_IP 63 / 34, FOXA1_IP 91 / 7).
+
+The general fix belongs upstream: `deseq2/qc_pca.py` should resolve its components per source
+file rather than per concatenated frame, which would make it correct for any pipeline that runs
+DESeq2 more than once. Recorded here for whoever owns that output.
+
+The gauge card the catalog output offers (`dim_1_percent`, `coverage_max: 100`) is not bound.
+It would be the only card in its section, and the wave's layout rule is that a strip is four
+cards or none.
+
+### CS-D25: every tab now carries both kinds of filter
+
+The audit's rule is that a tab has the pinned persistent section AND a tab-local,
+non-persistent one on its own collections. Three tabs had no tab-local section at all.
+
+| Tab | Tab-local filter section | On |
+|---|---|---|
+| MultiQC | `Library scope` (new) | `design_reads.sample_id`, the `<sample>_T<n>` grain the FastQC and Trim Galore panels are keyed on |
+| Signal | `Signal scope` (new) | `deeptools_fingerprint_metrics.percent_genome_enriched`, `preseq_complexity_curve.total_reads` |
+| Peaks | `Peak scope`, `Annotation scope` | q-value, fold enrichment, width, and a chromosome multi-select (new) |
+| Consensus | `Consensus scope` | consensus set, samples per interval, and a chromosome multi-select (new) |
+| Differential binding | `Contrast` | contrast, direction, log2 fold change, -log10 padj |
+
+`Library scope` needed a link of its own (`design_reads -> multiqc_data`, `sample_mapping`):
+the read-level panels are keyed on the library and the rest of the dashboard on the merged
+sample, so the library sheet reaches the report on its own key rather than through the hub.
+
+### CS-D26: the catalog is all-or-nothing, and it was red for other reasons during this pass
+
+`load_catalog_entries()` raises on the first invalid tool directory and returns nothing, so a
+half-written directory anywhere under `depictio/catalog/` blanks every `use:` in every template
+at once. Thirteen other agents were writing into that tree during this pass, and it was red on
+`gtdbtk` (a `sankey` render with no `roles.steps`) and `mag` throughout.
+
+That is what makes `test_shipped_dashboard_yamls.py -k chipseq` report 2 failures and
+`test_catalog.py` 7. Neither set names `macs2`, the four new `multiqc` stubs or this template:
+the catalog failures are `gtdbtk`, `mag`, `cooltools`, `funcscan` and four scrnaseq tools, plus
+two `*.schema.json` files that are now behind a model change. Verified by loading every tool
+directory individually and patching the loader with the result: with `gtdbtk` and `mag` skipped,
+all 16 `advanced_viz` tiles of this dashboard resolve and none degrades to a dict. The ingest
+above ran against the live API, whose catalog cache predates those edits, and every `use:`
+expanded.
+
+### CS-D27: the kind is `genome_view`, and its renderer does not build right now
+
+The wave brief names the GenomeSpy kind `genomespy_track`. No such kind is registered: the
+merged spike calls it `genome_view` in `depictio/models/components/types.py`, with exactly the
+roles and config keys the brief describes (`chr`, `pos`, `score` required, `feature`, `end`,
+`sample`, `category` optional; `mark: point|rect|bar`, `end_col` required by `rect`). The
+catalog render and the tile bind `genome_view`; binding the name in the brief would have failed
+`use:` expansion.
+
+The renderer landed during this wave and the dev viewer of this stack cannot serve it yet.
+`packages/depictio-react-core/src/components/advanced_viz/genomespy/useGenomeSpy.ts` imports
+`@genome-spy/core/genome/genomes.js`. The dependency is declared (`@genome-spy/core: 0.88.1`, in
+`packages/depictio-react-core/package.json` and `depictio/viewer/package.json`) and present in
+this worktree's own `node_modules`, so this is not a missing dependency: the viewer container's
+install predates it, and the fix is an image rebuild rather than a code change. It affects every
+dashboard on this stack, not this template.
+
+Two consequences, both environmental. Vite raises a full-page HMR overlay, which a screenshot
+can pre-empt by claiming the `vite-error-overlay` custom element name before Vite defines it.
+Worse, the failed dynamic import rejects the lazy chunk ALL `advanced_viz` tiles are loaded
+from, so the viewer's error boundary replaces the whole tab, not the one tile. Any tab holding
+an `advanced_viz` tile is therefore unrenderable on this stack until the rebuild, which is four
+of the five here; the MultiQC tab holds none and renders, and its screenshot is the evidence
+that the new glance strip, the four filter groups and the report panels are correct.
+
+Validated through the API instead: every collection's shape was read back from
+`/deltatables/shape/{dc_id}` after the ingest, and the dashboard and its five tabs from
+`/dashboards/list?include_child_tabs=true`. The remaining four tabs want a screenshot pass once
+the viewer image is rebuilt.
+
+None of this is why CS-D23 keeps a `coverage_track` beside the GenomeSpy tile: that redundancy
+is the wave's contract for coordinate tracks and holds after the rebuild too.
+
+## 2026-09-22 review fixes
+
+Pinned `Role` multi-select added on `design.role` (two values on the reference run: ChIP or
+input control), grouped with the other experimental factors. Not done: rebinding the
+tab-local `Library scope` (`design_reads.sample_id`). The MultiQC tab renders only the
+report plus the pinned `design` and `macs2_peak_summary` tables, which already carry the
+persistent and threshold filters; the `design_reads -> multiqc_data` link is what makes the
+library control narrow the read-level panels, so the binding is functional as declared.
