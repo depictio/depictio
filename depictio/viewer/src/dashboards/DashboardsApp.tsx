@@ -27,15 +27,16 @@ import type {
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { AppSidebar } from '../chrome';
 import DashboardsList from './DashboardsList';
+import type { ViewMode } from './hooks/useDashboardViewPrefs';
 import CreateDashboardModal from './CreateDashboardModal';
 import EditDashboardModal from './EditDashboardModal';
 import DeleteDashboardModal from './DeleteDashboardModal';
 import { recordOpen as recordDashboardOpen } from './lib/dashboardRecents';
 import { usePageTitle } from '../branding';
 
-/** Separate storage key from the per-dashboard sidebar (`sidebar-collapsed`)
- *  so the management page can default to OPEN regardless of the user's
- *  in-dashboard preference. */
+/** Separate storage key from the in-dashboard tab sidebar
+ *  (`tab-sidebar-collapsed:<familyId>`, see useSidebarOpen) so the management
+ *  page keeps its own open/closed state. */
 const SIDEBAR_KEY = 'dashboards-sidebar-collapsed';
 
 function useDashboardsSidebar(): [boolean, () => void] {
@@ -62,6 +63,13 @@ function useDashboardsSidebar(): [boolean, () => void] {
   return [opened, toggle];
 }
 
+/** The backend sends the deployment's default view as a plain string, so an
+ *  unknown value (a newer backend, a retired mode) falls back to the
+ *  listing's own default rather than reaching the grid. */
+function asViewMode(value: string | null): ViewMode | null {
+  return value === 'thumbnails' || value === 'table' ? value : null;
+}
+
 const DashboardsApp: React.FC = () => {
   const accent = useBrandAccents();
   const [dashboards, setDashboards] = useState<DashboardListEntry[]>([]);
@@ -76,7 +84,13 @@ const DashboardsApp: React.FC = () => {
 
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [desktopOpened, toggleDesktop] = useDashboardsSidebar();
-  const { user, isPublicMode, isDemoMode, loading: authLoading } = useCurrentUser();
+  const {
+    user,
+    isPublicMode,
+    isDemoMode,
+    dashboardsDefaultView,
+    loading: authLoading,
+  } = useCurrentUser();
   // Public/demo deployments don't allow importing user-supplied dashboard
   // JSON — that would let an anonymous visitor write into shared projects.
   // Mirrors the Dash gate added in `layouts_toolbox.create_dashboard_modal`.
@@ -332,6 +346,7 @@ const DashboardsApp: React.FC = () => {
               dashboards={dashboards}
               projects={projects}
               currentUserEmail={currentUserEmail}
+              defaultView={asViewMode(dashboardsDefaultView)}
               onView={handleView}
               onEdit={(d) => setEditTarget(d)}
               onDelete={(d) => setDeleteTarget(d)}

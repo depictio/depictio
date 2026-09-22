@@ -32,9 +32,9 @@ import EditProjectModal from './EditProjectModal';
 import DeleteProjectModal from './DeleteProjectModal';
 import { usePageTitle } from '../branding';
 
-/** Separate storage key from per-dashboard sidebar (`sidebar-collapsed`) so
- *  the projects management page can default to OPEN regardless of the user's
- *  in-dashboard sidebar preference. Mirrors `DashboardsApp.tsx`. */
+/** Separate storage key from the in-dashboard tab sidebar
+ *  (`tab-sidebar-collapsed:<familyId>`, see useSidebarOpen) so the projects
+ *  management page keeps its own open/closed state. Mirrors `DashboardsApp.tsx`. */
 const SIDEBAR_KEY = 'projects-sidebar-collapsed';
 
 function useProjectsSidebar(): [boolean, () => void] {

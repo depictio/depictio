@@ -1,15 +1,13 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import {
   ActionIcon,
   Anchor,
   AppShell,
-  Box,
   Button,
   Card,
   Center,
   Container,
   Group,
-  Paper,
   SimpleGrid,
   Stack,
   Text,
@@ -23,41 +21,64 @@ import { usePageTitle } from '../branding';
 
 const LOGO_BASE = '/dashboard/logos';
 
-interface ResourceCardProps {
-  icon: string;
+// Fixed media slot, so a tall EU logo and a wide EMBL one still put every
+// card's title on the same line.
+const MEDIA_HEIGHT = 84;
+
+// One column of the three-column funding grid, give or take: it keeps the lone
+// partner card the same size as its neighbours above.
+const SINGLE_CARD_WIDTH = 380;
+
+interface AboutCardProps {
+  /** A logo fills the media slot; without one, `icon` is drawn instead. */
+  imagePath?: string;
+  icon?: string;
   title: string;
   description: string;
-  buttonLabel: string;
-  buttonIcon: string;
   href: string;
+  buttonLabel?: string;
+  buttonIcon?: string;
 }
 
-const ResourceCard: React.FC<ResourceCardProps> = ({
+/**
+ * The single card used by every section: media, title, description, and a
+ * link button pinned to the bottom so buttons line up across a row whatever
+ * the description's length.
+ */
+const AboutCard: React.FC<AboutCardProps> = ({
+  imagePath,
   icon,
   title,
   description,
-  buttonLabel,
-  buttonIcon,
   href,
+  buttonLabel = 'Learn more',
+  buttonIcon,
 }) => (
-  <Card withBorder shadow="md" radius="md" p="lg" style={{ textAlign: 'center' }}>
-    <Stack gap="sm" align="center">
-      <Group justify="center" gap="sm">
-        <Icon icon={icon} width={36} />
-        <Text size="xl" fw={700}>
-          {title}
-        </Text>
-      </Group>
-      <Text size="sm" c="gray">
+  <Card withBorder shadow="md" radius="md" p="lg" h="100%">
+    <Stack gap="sm" align="center" style={{ flex: 1, textAlign: 'center' }}>
+      <Center h={MEDIA_HEIGHT}>
+        {imagePath ? (
+          <img
+            src={imagePath}
+            alt={title}
+            style={{ maxHeight: MEDIA_HEIGHT, maxWidth: '100%', objectFit: 'contain' }}
+          />
+        ) : (
+          icon && <Icon icon={icon} width={48} />
+        )}
+      </Center>
+      <Text size="lg" fw={700}>
+        {title}
+      </Text>
+      <Text size="sm" c="dimmed">
         {description}
       </Text>
-      <Anchor href={href} target="_blank" rel="noreferrer">
+      <Anchor href={href} target="_blank" rel="noreferrer" mt="auto">
         <Button
-          variant="filled"
-          size="md"
+          variant="default"
+          size="sm"
           radius="md"
-          color="dark"
-          leftSection={<Icon icon={buttonIcon} width={18} />}
+          leftSection={buttonIcon ? <Icon icon={buttonIcon} width={16} /> : undefined}
         >
           {buttonLabel}
         </Button>
@@ -66,58 +87,16 @@ const ResourceCard: React.FC<ResourceCardProps> = ({
   </Card>
 );
 
-interface FundingPartnerCardProps {
-  imagePath: string;
-  title: string;
-  description: string;
-  href: string;
-  logoHeight?: number;
-  textSize?: 'sm' | 'md';
-  minHeight?: number;
-}
-
-const FundingPartnerCard: React.FC<FundingPartnerCardProps> = ({
-  imagePath,
+const AboutSection: React.FC<{ title: string; children: React.ReactNode }> = ({
   title,
-  description,
-  href,
-  logoHeight = 100,
-  textSize = 'sm',
-  minHeight = 350,
+  children,
 }) => (
-  <Card
-    withBorder
-    shadow="md"
-    radius="md"
-    p="lg"
-    style={{
-      textAlign: 'center',
-      display: 'flex',
-      flexDirection: 'column',
-      minHeight,
-    }}
-  >
-    <Stack gap="sm" style={{ flex: 1 }}>
-      <Center>
-        <img
-          src={imagePath}
-          alt={title}
-          style={{ height: logoHeight, objectFit: 'contain', marginBottom: 10 }}
-        />
-      </Center>
-      <Text size="lg" fw="bold">
-        {title}
-      </Text>
-      <Text size={textSize} c="gray" style={{ flex: 1 }}>
-        {description}
-      </Text>
-    </Stack>
-    <Anchor href={href} target="_blank" rel="noreferrer" style={{ marginTop: 'auto' }}>
-      <Button variant="outline" size="sm" radius="md" mt="md" color="dark">
-        Learn More
-      </Button>
-    </Anchor>
-  </Card>
+  <Stack gap="lg">
+    <Title order={3} ta="center">
+      {title}
+    </Title>
+    {children}
+  </Stack>
 );
 
 const AboutApp: React.FC = () => {
@@ -177,84 +156,73 @@ const AboutApp: React.FC = () => {
       </AppShell.Navbar>
 
       <AppShell.Main>
-        <Box px="lg" py="md">
-          <Container size="xl" py="xl">
-            <Stack gap="xl">
-              <Paper p="xl" radius="md" mt="xl">
-                <Text size="xl" fw="bold" ta="center" mb="md">
-                  Resources
-                </Text>
-                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xl">
-                  <ResourceCard
-                    icon="mdi:github"
-                    title="GitHub Repository"
-                    description="Explore the source code of Depictio on GitHub."
-                    buttonLabel="GitHub"
-                    buttonIcon="mdi:github"
-                    href="https://github.com/depictio/depictio"
-                  />
-                  <ResourceCard
-                    icon="mdi:file-document"
-                    title="Documentation"
-                    description="Learn how to use Depictio with our comprehensive documentation."
-                    buttonLabel="Documentation"
-                    buttonIcon="mdi:file-document-box"
-                    href="https://depictio.github.io/depictio-docs/"
-                  />
-                </SimpleGrid>
-              </Paper>
+        <Container size="lg" py="xl">
+          <Stack gap={48}>
+            <AboutSection title="Resources">
+              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xl">
+                <AboutCard
+                  icon="mdi:github"
+                  title="GitHub Repository"
+                  description="Explore the source code of Depictio on GitHub."
+                  buttonLabel="GitHub"
+                  buttonIcon="mdi:github"
+                  href="https://github.com/depictio/depictio"
+                />
+                <AboutCard
+                  icon="mdi:file-document"
+                  title="Documentation"
+                  description="Learn how to use Depictio with our comprehensive documentation."
+                  buttonLabel="Documentation"
+                  buttonIcon="mdi:file-document-box"
+                  href="https://depictio.github.io/depictio-docs/"
+                />
+              </SimpleGrid>
+            </AboutSection>
 
-              <Paper p="xl" radius="md" mt="xl">
-                <Text size="xl" fw="bold" ta="center" mb="xl">
-                  Funding
-                </Text>
-                <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="xl">
-                  <FundingPartnerCard
-                    imagePath={`${LOGO_BASE}/EN_fundedbyEU_VERTICAL_RGB_POS.png`}
-                    title="Marie Sklodowska-Curie Grant"
-                    description="This project has received funding from the European Union's Horizon 2020 research and innovation programme under the Marie Sklodowska-Curie grant agreement No 945405"
-                    href="https://marie-sklodowska-curie-actions.ec.europa.eu/"
-                  />
-                  <FundingPartnerCard
-                    imagePath={`${LOGO_BASE}/AriseLogo300dpi.png`}
-                    title="ARISE Programme"
-                    description="ARISE is a postdoctoral research programme for technology developers, hosted at EMBL."
-                    href="https://www.embl.org/about/info/arise/"
-                  />
-                  <FundingPartnerCard
-                    imagePath={`${LOGO_BASE}/EMBL_logo_colour_DIGITAL.png`}
-                    title="EMBL"
-                    description="The European Molecular Biology Laboratory is Europe's flagship laboratory for the life sciences."
-                    href="https://www.embl.org/"
-                  />
-                </SimpleGrid>
-              </Paper>
+            <AboutSection title="Funding">
+              <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="xl">
+                <AboutCard
+                  imagePath={`${LOGO_BASE}/EN_fundedbyEU_VERTICAL_RGB_POS.png`}
+                  title="Marie Sklodowska-Curie Grant"
+                  description="This project has received funding from the European Union's Horizon 2020 research and innovation programme under the Marie Sklodowska-Curie grant agreement No 945405"
+                  href="https://marie-sklodowska-curie-actions.ec.europa.eu/"
+                />
+                <AboutCard
+                  imagePath={`${LOGO_BASE}/AriseLogo300dpi.png`}
+                  title="ARISE Programme"
+                  description="ARISE is a postdoctoral research programme for technology developers, hosted at EMBL."
+                  href="https://www.embl.org/about/info/arise/"
+                />
+                <AboutCard
+                  imagePath={`${LOGO_BASE}/EMBL_logo_colour_DIGITAL.png`}
+                  title="EMBL"
+                  description="The European Molecular Biology Laboratory is Europe's flagship laboratory for the life sciences."
+                  href="https://www.embl.org/"
+                />
+              </SimpleGrid>
+            </AboutSection>
 
-              <Paper p="xl" radius="md" mt="xl">
-                <Text size="xl" fw="bold" ta="center" mb="xl">
-                  Academic Partners
-                </Text>
-                <Center>
-                  <Box style={{ width: '100%', maxWidth: 500 }}>
-                    <FundingPartnerCard
-                      imagePath={`${LOGO_BASE}/scilifelab_logo.png`}
-                      title="SciLifeLab Data Centre"
-                      description="SciLifeLab Data Centre provides data-driven life science research infrastructure and expertise to accelerate open science in Sweden and beyond."
-                      href="https://www.scilifelab.se/data/"
-                      logoHeight={60}
-                      textSize="md"
-                      minHeight={300}
-                    />
-                  </Box>
-                </Center>
-              </Paper>
+            <AboutSection title="Academic Partners">
+              <Center>
+                <div style={{ width: '100%', maxWidth: SINGLE_CARD_WIDTH }}>
+                  <AboutCard
+                    imagePath={`${LOGO_BASE}/scilifelab_logo.png`}
+                    title="SciLifeLab Data Centre"
+                    description="SciLifeLab Data Centre provides data-driven life science research infrastructure and expertise to accelerate open science in Sweden and beyond."
+                    href="https://www.scilifelab.se/data/"
+                  />
+                </div>
+              </Center>
+            </AboutSection>
 
-              <Text size="xs" c="gray" ta="center" mt="xl" mb="xl">
-                2025 Depictio. Developed by Thomas Weber. All rights reserved.
-              </Text>
-            </Stack>
-          </Container>
-        </Box>
+            {/* Computed rather than written out, so the notice cannot go
+                stale the way the hardcoded 2025 did. */}
+            <Text size="xs" c="dimmed" ta="center">
+              {new Date().getFullYear()} Depictio. Developed by Thomas Weber. All rights
+              reserved.
+            </Text>
+          </Stack>
+        </Container>
       </AppShell.Main>
     </AppShell>
   );

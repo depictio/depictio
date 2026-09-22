@@ -5,7 +5,7 @@ import './icons';
 
 import React, { Suspense } from 'react';
 import ReactDOM from 'react-dom/client';
-import { MantineProvider } from '@mantine/core';
+import { MantineProvider, useMantineColorScheme } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
 import { DatesProvider } from '@mantine/dates';
 import '@mantine/core/styles.css';
@@ -61,6 +61,11 @@ import { UiScaleContext } from 'depictio-react-core';
 import BootSplash from './components/BootSplash';
 import { brandCssVariablesResolver, buildDepictioTheme } from './theme';
 import { readStoredScheme } from './hooks/useColorScheme';
+import {
+  createColorSchemeManager,
+  getEmbedColorScheme,
+  onParentColorScheme,
+} from './lib/embedColorScheme';
 import { useUiScalePref } from './hooks/useUiScalePref';
 import { BrandingContext, getBranding, setBranding, subscribeBranding } from './branding';
 import { setFeedback } from './feedback';
@@ -124,9 +129,25 @@ function resolveTree(): React.ReactElement {
 
 // Mirrors depictio/dash/layouts/shared_app_shell.py:create_app_shell MantineProvider config.
 // Initial value comes from localStorage — same key/parser as useColorScheme, so
-// the boot-time read and the hook's hydration can never disagree.
+// the boot-time read and the hook's hydration can never disagree. A scheme
+// handed down by an embedding page wins (see lib/embedColorScheme.ts).
 function readInitialColorScheme(): 'light' | 'dark' {
-  return readStoredScheme() ?? 'light';
+  return getEmbedColorScheme() ?? readStoredScheme() ?? 'light';
+}
+
+// One instance for the page: MantineProvider re-subscribes when it changes.
+const colorSchemeManager = createColorSchemeManager();
+
+/** Applies the scheme a parent frame posts (docs embeds), without touching the
+ *  viewer's stored preference. Renders nothing. */
+function ParentColorSchemeBridge() {
+  const { setColorScheme } = useMantineColorScheme();
+  // Mantine hands out a new `setColorScheme` on every render; a ref keeps one
+  // subscription for the life of the page instead of re-subscribing each time.
+  const setRef = React.useRef(setColorScheme);
+  setRef.current = setColorScheme;
+  React.useEffect(() => onParentColorScheme((scheme) => setRef.current(scheme)), []);
+  return null;
 }
 
 /**
@@ -158,8 +179,10 @@ function ThemeRoot({ children }: { children: React.ReactNode }) {
         <MantineProvider
           theme={theme}
           cssVariablesResolver={cssVariablesResolver}
+          colorSchemeManager={colorSchemeManager}
           defaultColorScheme={readInitialColorScheme()}
         >
+          <ParentColorSchemeBridge />
           {/* DatesProvider is required for @mantine/dates components to pick up
               locale + first-day-of-week settings. Matches what DMC does
               internally for ``dmc.DatePickerInput``. */}

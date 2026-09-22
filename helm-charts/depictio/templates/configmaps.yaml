@@ -105,6 +105,12 @@ data:
   DEPICTIO_TELEMETRY_MEMORY_LIMIT: {{ .Values.backend.env.DEPICTIO_TELEMETRY_MEMORY_LIMIT | default .Values.backend.resources.limits.memory | quote }}
   DEPICTIO_TELEMETRY_INCLUDE_USAGE_METRICS: {{ .Values.backend.env.DEPICTIO_TELEMETRY_INCLUDE_USAGE_METRICS | default "true" | quote }}
   DEPICTIO_TELEMETRY_DEBUG: {{ .Values.backend.env.DEPICTIO_TELEMETRY_DEBUG | default "false" | quote }}
+  # Which view /dashboards opens in for someone who never picked one, and the
+  # geometry of the thumbnails it shows. See .env.example.
+  DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW: {{ .Values.backend.env.DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW | default "thumbnails" | quote }}
+  DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_WIDTH: {{ .Values.backend.env.DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_WIDTH | default "1440" | quote }}
+  DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_HEIGHT: {{ .Values.backend.env.DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_HEIGHT | default "900" | quote }}
+  DEPICTIO_PERFORMANCE_SCREENSHOT_SCALE: {{ .Values.backend.env.DEPICTIO_PERFORMANCE_SCREENSHOT_SCALE | default "2.0" | quote }}
   # Dashboard feedback link, served to the SPA through /utils/public-config.
   # Both halves are required: the flag alone renders nothing, and so does a URL
   # without it. The URL is a template the browser fills with {dashboard},

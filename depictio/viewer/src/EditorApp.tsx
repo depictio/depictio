@@ -232,8 +232,6 @@ const EditorApp: React.FC = () => {
   const [cardsLoading, setCardsLoading] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
-  // Persist across tab/page navigations (matches App.tsx + Dash app).
-  const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
   const contentScaleStyle = useContentScaleStyle();
   // Bumped after a plot_theme save lands so figure components refetch and pick
@@ -293,6 +291,9 @@ const EditorApp: React.FC = () => {
 
   // Same family scoping as the viewer — see App.tsx `panelScopeId`.
   const panelScopeId = crossTab.familyId ?? dashboardId;
+
+  // Tab sidebar: same per-family key as the viewer, so both agree.
+  const [desktopOpened, toggleDesktop] = useSidebarOpen(panelScopeId);
 
   // Left filter panel chrome — same hooks and same storage keys as the viewer,
   // so collapsing or resizing in one mode carries over to the other.

@@ -11,7 +11,7 @@ import { FILTER_PANEL_TOGGLE_EVENT, dispatchPanelToggle } from 'depictio-react-c
  * family id once it resolves (the tab's own id stands in before that), and the
  * key-swap effect below re-reads storage when it lands.
  *
- * Defaults to open, unlike the tab sidebar — the filters are the point of the
+ * Defaults to open, like the tab sidebar: the filters are the point of the
  * page, so hiding them on first visit would bury the feature.
  */
 const STORAGE_KEY_PREFIX = 'filter-panel-collapsed:';

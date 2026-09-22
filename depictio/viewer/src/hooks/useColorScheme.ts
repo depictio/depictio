@@ -1,12 +1,18 @@
 import { useCallback, useEffect } from 'react';
 import { useMantineColorScheme } from '@mantine/core';
 
+import { getEmbedColorScheme, rememberEmbedColorScheme } from '../lib/embedColorScheme';
+
 /**
  * Color scheme hook that stays in sync with the Dash app's `theme-store`
  * (a `dcc.Store(storage_type="local")`, which writes the JSON-encoded value to
  * `localStorage` under the same key — so the value is literally `'"light"'` or
  * `'"dark"'`). On mount we hydrate Mantine from that key; on toggle we write
  * back so the Dash app picks up the same setting on its next render.
+ *
+ * While a scheme is borrowed from an embedding page (lib/embedColorScheme.ts)
+ * the stored preference is neither read nor written: the embed follows its
+ * host, and toggling inside it lasts only for that framed session.
  */
 
 const STORAGE_KEY = 'theme-store';
@@ -44,6 +50,7 @@ export function useColorScheme() {
 
   // On mount, hydrate Mantine from localStorage if the stored scheme differs.
   useEffect(() => {
+    if (getEmbedColorScheme()) return;
     const stored = readStoredScheme();
     if (stored && stored !== colorScheme) {
       setColorScheme(stored);
@@ -54,7 +61,8 @@ export function useColorScheme() {
   const apply = useCallback(
     (scheme: Scheme) => {
       setColorScheme(scheme);
-      writeStoredScheme(scheme);
+      if (getEmbedColorScheme()) rememberEmbedColorScheme(scheme);
+      else writeStoredScheme(scheme);
     },
     [setColorScheme],
   );

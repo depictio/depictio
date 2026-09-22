@@ -14,7 +14,8 @@ import { Icon } from '@iconify/react';
 
 import type { DashboardListEntry } from 'depictio-react-core';
 import { dashboardHref, dashboardLinkClickHandler } from './lib/dashboardLinks';
-import { isImagePath, resolveAssetUrl } from './lib/format';
+import { isImagePath, resolveAssetUrl, screenshotUrl } from './lib/format';
+import type { ScreenshotVariant } from './lib/format';
 
 interface MultiTabPreviewProps {
   parent: DashboardListEntry;
@@ -58,10 +59,14 @@ const SlideImage: React.FC<{
   slide: SlideData;
   theme: 'light' | 'dark';
   iconSize: number;
-}> = ({ slide, theme, iconSize }) => {
-  // No real screenshot yet → fall straight back to the tab's colored icon.
-  // No generic placeholder image in between.
-  const [fallback, setFallback] = useState<'none' | 'icon'>('none');
+  /** `hidpi` in the hover preview, where the image is shown large enough to
+   *  be worth the extra bytes; the carousel inside the card keeps `base`. */
+  variant?: ScreenshotVariant;
+}> = ({ slide, theme, iconSize, variant = 'base' }) => {
+  // The `@2x` capture is missing for tabs shot before it existed, so a failed
+  // load steps down to the base one; without any screenshot at all we fall
+  // straight back to the tab's colored icon, no generic placeholder between.
+  const [fallback, setFallback] = useState<ScreenshotVariant | 'icon'>(variant);
   if (fallback === 'icon') {
     // An image-logo `icon` can't be rendered as an Iconify glyph — show the
     // logo image itself instead of an empty/broken ThemeIcon.
@@ -91,15 +96,15 @@ const SlideImage: React.FC<{
       </Center>
     );
   }
-  const versionQuery = slide.version ? `?v=${encodeURIComponent(slide.version)}` : '';
+  const src = screenshotUrl(slide.id, theme, slide.version, fallback);
   return (
     <img
-      key={`${theme}-${slide.version ?? ''}-${fallback}`}
-      src={`/static/screenshots/${slide.id}_${theme}.png${versionQuery}`}
+      key={src}
+      src={src}
       alt={slide.title}
       loading="lazy"
       decoding="async"
-      onError={() => setFallback('icon')}
+      onError={() => setFallback((f) => (f === 'hidpi' ? 'base' : 'icon'))}
       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
     />
   );
@@ -163,7 +168,9 @@ const MultiTabPreview: React.FC<MultiTabPreviewProps> = ({
           </Carousel>
         </div>
       </HoverCard.Target>
-      <HoverCard.Dropdown p="xs" w={720}>
+      {/* Window-relative like the single-dashboard preview, so the enlarged
+          slide is actually readable on a wide screen. */}
+      <HoverCard.Dropdown p="xs" w="min(1100px, 70vw)">
         <Stack gap="xs">
           <Carousel slideSize="100%" slideGap={0} withIndicators controlSize={28}>
             {slides.map((slide) => (
@@ -179,7 +186,12 @@ const MultiTabPreview: React.FC<MultiTabPreviewProps> = ({
                 >
                   <Stack gap={4}>
                     <AspectRatio ratio={16 / 10}>
-                      <SlideImage slide={slide} theme={theme} iconSize={72} />
+                      <SlideImage
+                        slide={slide}
+                        theme={theme}
+                        iconSize={72}
+                        variant="hidpi"
+                      />
                     </AspectRatio>
                     <Text
                       size="sm"

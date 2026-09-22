@@ -202,9 +202,6 @@ const App: React.FC = () => {
   >({});
   const [cardsLoading, setCardsLoading] = useState(false);
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
-  // Desktop state is persisted across tab/page navigations via the same
-  // `sidebar-collapsed` localStorage key the Dash app writes.
-  const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
   const contentScaleStyle = useContentScaleStyle();
   const { user: currentUser, inspectorEnabled } = useCurrentUser();
@@ -272,6 +269,9 @@ const App: React.FC = () => {
   // (one fetch, see useCrossTabComponents) the tab's own id stands in, and the
   // hooks re-read storage when the key changes underneath them.
   const panelScopeId = crossTab.familyId ?? dashboardId;
+
+  // Tab sidebar (desktop): open by default, remembered per dashboard family.
+  const [desktopOpened, toggleDesktop] = useSidebarOpen(panelScopeId);
 
   // Left filter panel chrome. Width first: the collapse swing is the width the
   // content column reclaims, which is everything but the icon rail.

@@ -679,6 +679,9 @@ async def get_current_user_info_optional(
         # round-trip. Readers coerce with `Boolean(...)`, so an older backend
         # that omits the key degrades to the feature being off.
         "inspector_enabled": getattr(settings.viewer, "inspector_enabled", False),
+        "dashboards_default_view": getattr(
+            settings.viewer, "dashboards_default_view", "thumbnails"
+        ),
     }
 
 
