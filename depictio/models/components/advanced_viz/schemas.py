@@ -114,6 +114,13 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "pos": _INT,
         "score": _FLOAT,
     },
+    # Same three roles as `manhattan`, drawn by GenomeSpy on a locus scale. Kept
+    # identical on purpose so any DC a Manhattan binds renders here unchanged.
+    "genomespy_track": {
+        "chr": _STRING,
+        "pos": _INT,
+        "score": _FLOAT,
+    },
     "stacked_taxonomy": {
         "sample_id": _STRING,
         "taxon": _STRING,
@@ -241,6 +248,41 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "base_change": _STRING,
         "frequency": _NUMERIC,
     },
+    # Two-group comparison computed on demand: one row per observation
+    # (cell, sample) named by `index`; the feature columns are inferred like
+    # complex_heatmap's matrix. The two groups are the dashboard's saved
+    # selection groups, resolved at compute time, not a bound column.
+    "group_compare": {
+        "index": _STRING,
+    },
+    # Isoform structures: one row per exon / CDS block of a transcript on a
+    # base-pair axis, transcripts stacked per gene.
+    "transcript_structure": {
+        "transcript_id": _STRING,
+        "gene_id": _STRING,
+        "chrom": _STRING,
+        "start": _NUMERIC,
+        "end": _NUMERIC,
+        "feature": _STRING,
+        "strand": _STRING,
+    },
+    # Copy-number profile: one row per bin or per called segment with its
+    # log2 ratio; the optional `segment` role tells the two apart.
+    "cnv_profile": {
+        "sample": _STRING,
+        "chrom": _STRING,
+        "start": _NUMERIC,
+        "end": _NUMERIC,
+        "log2": _NUMERIC,
+    },
+    # Chord diagram: one row per link between two loci (fusion partners,
+    # structural-variant breakends, translocations).
+    "genome_chord": {
+        "chrom_a": _STRING,
+        "pos_a": _NUMERIC,
+        "chrom_b": _STRING,
+        "pos_b": _NUMERIC,
+    },
 }
 
 # Per-role column-name aliases used by `suggest_viz_kinds`. The suggester
@@ -336,6 +378,24 @@ ROLE_NAMES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
                 "neg_log_p",
                 "minus_log10_p",
                 "af",
+            }
+        ),
+    },
+    "genomespy_track": {
+        "chr": frozenset({"chr", "chrom", "chromosome", "#chrom", "contig"}),
+        "pos": frozenset({"pos", "position", "bp", "start", "chromstart"}),
+        "score": frozenset(
+            {
+                "score",
+                "p_value",
+                "pvalue",
+                "neg_log_p",
+                "minus_log10_p",
+                "af",
+                "coverage",
+                "depth",
+                "value",
+                "signal",
             }
         ),
     },
@@ -577,6 +637,43 @@ ROLE_NAMES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "base_change": frozenset({"base_change", "change", "substitution", "mutation", "type"}),
         "frequency": frozenset({"frequency", "freq", "rate", "fraction", "value", "damage"}),
     },
+    "group_compare": {
+        "index": frozenset({"index", "cell_id", "barcode", "cell", "sample_id", "sample", "id"}),
+    },
+    "transcript_structure": {
+        "transcript_id": frozenset(
+            {"transcript_id", "transcript", "isoform_id", "isoform", "tx_id"}
+        ),
+        "gene_id": frozenset({"gene_id", "gene", "gene_name", "symbol"}),
+        "chrom": frozenset({"chrom", "chr", "chromosome", "contig", "seqid", "seqname"}),
+        "start": frozenset({"start", "begin", "from", "exon_start", "block_start"}),
+        "end": frozenset({"end", "stop", "to", "exon_end", "block_end"}),
+        "feature": frozenset({"feature", "feature_type", "type", "block", "block_type"}),
+        "strand": frozenset({"strand", "sense", "orientation"}),
+    },
+    "cnv_profile": {
+        "sample": frozenset({"sample", "sample_id", "tumour", "tumor", "library", "id"}),
+        "chrom": frozenset({"chrom", "chr", "chromosome", "contig", "seqid"}),
+        "start": frozenset({"start", "begin", "bin_start", "from", "loc_start"}),
+        "end": frozenset({"end", "stop", "bin_end", "to", "loc_end"}),
+        "log2": frozenset(
+            {"log2", "log2_ratio", "log2ratio", "ratio", "logr", "lrr", "depth_ratio", "seg_mean"}
+        ),
+    },
+    "genome_chord": {
+        "chrom_a": frozenset(
+            {"chrom_a", "chrom1", "chr1", "chr_a", "left_chrom", "chromosome_1", "chrom_left"}
+        ),
+        "pos_a": frozenset(
+            {"pos_a", "pos1", "start1", "breakpoint1", "left_pos", "pos_left", "start_a"}
+        ),
+        "chrom_b": frozenset(
+            {"chrom_b", "chrom2", "chr2", "chr_b", "right_chrom", "chromosome_2", "chrom_right"}
+        ),
+        "pos_b": frozenset(
+            {"pos_b", "pos2", "start2", "breakpoint2", "right_pos", "pos_right", "start_b"}
+        ),
+    },
 }
 
 
@@ -594,6 +691,10 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
     "manhattan": {
         "feature": _STRING,
         "effect": _FLOAT,
+    },
+    "genomespy_track": {
+        "feature": _STRING,
+        "end": _INT,
     },
     "stacked_taxonomy": {},
     "phylogenetic": {
@@ -694,6 +795,27 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "is_cell": _BOOLEAN,
     },
     "damage_profile": {},
+    "group_compare": {
+        "group": _STRING,
+    },
+    "transcript_structure": {
+        "sample": _STRING,
+        "gene_name": _STRING,
+        "transcript_class": _STRING,
+        "expression": _NUMERIC,
+    },
+    "cnv_profile": {
+        "baf": _FLOAT,
+        "copy_number": _NUMERIC,
+        "segment": _STRING,
+        "label": _STRING,
+    },
+    "genome_chord": {
+        "label": _STRING,
+        "weight": _NUMERIC,
+        "category": _STRING,
+        "sample": _STRING,
+    },
 }
 
 
@@ -890,7 +1012,10 @@ def validate_binding(config: VizConfig, dc_schema: dict[str, str]) -> list[Bindi
 # source of truth. Kinds whose Pydantic config has a permissive role schema but
 # whose renderer needs a wide matrix / many set columns get a structural floor;
 # falling short multiplies the score down rather than hiding the kind.
-_MIN_FLOAT_COLS: dict[AdvancedVizKind, int] = {"complex_heatmap": 8}
+# group_compare reads a wide observation x feature matrix exactly like
+# complex_heatmap does, and its only required role is a string row id, so the
+# same gate keeps it from claiming every metadata table.
+_MIN_FLOAT_COLS: dict[AdvancedVizKind, int] = {"complex_heatmap": 8, "group_compare": 8}
 _MIN_INT_COLS: dict[AdvancedVizKind, int] = {"upset_plot": 3}
 _MIN_STRING_COLS: dict[AdvancedVizKind, int] = {"sankey": 2}
 _KIND_REQUIRES_DC_TYPE: dict[AdvancedVizKind, str] = {"phylogenetic": "phylogeny"}
@@ -1268,6 +1393,15 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         "icon": "tabler:chart-histogram",
         "category": "tool",
     },
+    "genomespy_track": {
+        "label": "GenomeSpy track",
+        "description": (
+            "chr / pos / score drawn by GenomeSpy on a chromosome-aware locus axis: "
+            "native genome zoom, points or intervals, click-to-filter. Spike for #1083."
+        ),
+        "icon": "tabler:dna-2",
+        "category": "tool",
+    },
     "stacked_taxonomy": {
         "label": "Stacked taxonomy",
         "description": "Per-sample stacked relative-abundance bar with rank dropdown.",
@@ -1437,6 +1571,38 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
             "end, 5p and 3p panels, C>T / G>A substitutions highlighted."
         ),
         "icon": "tabler:dna-2",
+    },
+    "group_compare": {
+        "label": "Group comparison",
+        "description": (
+            "Differential test between two saved selection groups, computed on "
+            "demand: a volcano of the features and the ranked table behind it."
+        ),
+        "icon": "tabler:arrows-diff",
+    },
+    "transcript_structure": {
+        "label": "Transcript structure",
+        "description": (
+            "Isoforms of one gene stacked on a base-pair axis, exons as blocks "
+            "and introns as lines, novel and known transcripts told apart."
+        ),
+        "icon": "tabler:layout-rows",
+    },
+    "cnv_profile": {
+        "label": "Copy-number profile",
+        "description": (
+            "Log2 ratio per bin along the genome with the called segments over "
+            "it and, when bound, the B-allele frequency underneath."
+        ),
+        "icon": "tabler:chart-dots-3",
+    },
+    "genome_chord": {
+        "label": "Genome chord",
+        "description": (
+            "Chromosomes on a ring, one chord per link between two loci: gene "
+            "fusions, translocations, structural variants."
+        ),
+        "icon": "tabler:circle-dotted",
     },
 }
 

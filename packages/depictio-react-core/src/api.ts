@@ -1022,7 +1022,12 @@ export type AdvancedVizKind =
   | 'scatter_xy'
   | 'contact_map'
   | 'knee_plot'
-  | 'damage_profile';
+  | 'damage_profile'
+  | 'genomespy_track'
+  | 'group_compare'
+  | 'transcript_structure'
+  | 'cnv_profile'
+  | 'genome_chord';
 
 /** Accepted dtypes for one role, plus whether the role is required. Sourced
  *  from the backend canonical schema so the builder never duplicates the

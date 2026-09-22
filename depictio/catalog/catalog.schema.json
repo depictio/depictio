@@ -249,7 +249,12 @@
                 "scatter_xy",
                 "contact_map",
                 "knee_plot",
-                "damage_profile"
+                "damage_profile",
+                "genomespy_track",
+                "group_compare",
+                "transcript_structure",
+                "cnv_profile",
+                "genome_chord"
               ],
               "type": "string"
             },

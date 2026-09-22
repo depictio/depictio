@@ -65,6 +65,7 @@ KIND_SAMPLING_POLICY: dict[AdvancedVizKind, SamplingPolicy] = {
     "volcano": "tail",
     "ma": "tail",
     "manhattan": "tail",
+    "genomespy_track": "tail",
     # Client-side aggregation — a sample is a wrong answer.
     "stacked_taxonomy": "none",
     "rarefaction": "none",
@@ -104,6 +105,16 @@ KIND_SAMPLING_POLICY: dict[AdvancedVizKind, SamplingPolicy] = {
     # table: tiny (positions capped at ~25 either end) and read as a whole
     # curve per panel, same reasoning as ``profile``.
     "damage_profile": "none",
+    # Computed server-side on the full frame; the client draws the result.
+    "group_compare": "none",
+    # A recipe already restricts the rows to one gene's isoforms.
+    "transcript_structure": "none",
+    # Segments are few and every one matters; bins are decimated by the
+    # recipe (``max_bins`` guards the request), never by a uniform sample
+    # that would leave holes in the profile.
+    "cnv_profile": "none",
+    # Links are few (fusions, SVs); ``max_links`` guards the request.
+    "genome_chord": "none",
 }
 
 #: The role whose tail a ``tail`` kind must keep, and whether the interesting
@@ -122,6 +133,7 @@ TAIL_ROLE: dict[AdvancedVizKind, tuple[str, TailDirection]] = {
     "volcano": ("significance", "auto"),
     "ma": ("log2_fold_change", "both"),
     "manhattan": ("score", "auto"),
+    "genomespy_track": ("score", "auto"),
 }
 
 # Both tables are declared over ``AdvancedVizKind`` so a new kind that forgets

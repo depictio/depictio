@@ -237,6 +237,18 @@ export const GROUPING_MODE_BY_KIND: Readonly<Record<AdvancedVizKind, GroupingMod
   contact_map: 'none',
   knee_plot: 'none',
   damage_profile: 'none',
+  // Same genome-wide axis as the Manhattan, so splitting is out for the same
+  // reason; the GenomeSpy spike colours by chromosome only and does not take
+  // the dashboard's groups yet, so it is honest about doing neither.
+  genomespy_track: 'none',
+  // Computed on demand between two groups: the groups are the input, not a
+  // split to apply on top.
+  group_compare: 'none',
+  // One gene's lanes, a segment profile and a chord ring each read as one
+  // figure; per-group copies would not share an axis worth comparing.
+  transcript_structure: 'none',
+  cnv_profile: 'none',
+  genome_chord: 'none',
 };
 
 /** The policy for `vizKind`.

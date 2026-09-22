@@ -118,6 +118,10 @@ export function advancedVizSelectionColumn(metadata: StoredMetadata): string | u
     }
     case 'manhattan':
       return named;
+    case 'genomespy_track':
+      // Same reasoning as the Manhattan: a mark is one feature at one locus and
+      // the dashboard has to name the column a pick stands for.
+      return named;
     case 'profile': {
       const seriesCol =
         typeof config.series_col === 'string' && config.series_col

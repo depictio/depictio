@@ -6,11 +6,12 @@ documentation lines and tab-separated data rows tagged by record type (`SN`,
 (records, SNPs, indels, multiallelic sites); this recipe reads only those.
 
 Multi-caller pipelines (sarek's five germline callers, any tumour/normal
-somatic caller set) write one such file per `<caller>/<sample>/` directory,
-and the file's own `ID 0 <filename>` line never names the caller or the
-sample, both live only in the directory path. The raw DC therefore scans
-with `include_file_paths: source_path` and this recipe reads them off the
-path with a regex, not off the file content.
+somatic caller set) write one such file per sample and caller, but the
+directory order differs between pipelines and even between sarek's docs and
+its megatest, and eager writes a flat directory. Both ids are therefore read
+off the report's `ID 0 <sample>.<caller>...vcf.gz` line (falling back to the
+report's file name), see `depictio.recipes.lib.bcftools_stats`. The raw DC
+scans with `include_file_paths: source_path` so the ids can be joined back.
 
 Row width varies by record type (`SN` is 4 tab-separated fields, `TSTV` is
 8, `SiS`/`AF` are wider still), and `has_header: false` infers the column
@@ -26,6 +27,7 @@ from __future__ import annotations
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.recipes.lib.bcftools_stats import sample_and_caller
 
 RAW_DC_TAG = "bcftools_stats_raw"
 SOURCES: list[RecipeSource] = [RecipeSource(ref="raw", dc_ref=RAW_DC_TAG)]
@@ -49,8 +51,6 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "log10_n_records": pl.Float64,
 }
 
-# reports/bcftools/<caller>/<sample>/<sample>.<caller...>.bcftools_stats.txt
-_PATH_RE = r"reports/bcftools/([^/]+)/([^/]+)/"
 
 # `SN` key text (column c2, colon included) -> output column name.
 _KEY_MAP: dict[str, str] = {
@@ -72,9 +72,8 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     sn = (
         df.filter(pl.col("raw_line").str.starts_with("SN\t"))
         .with_columns(pl.col("raw_line").str.split("\t").alias("fields"))
+        .join(sample_and_caller(df), on="source_path", how="left")
         .with_columns(
-            pl.col("source_path").str.extract(_PATH_RE, 1).alias("caller"),
-            pl.col("source_path").str.extract(_PATH_RE, 2).alias("sample"),
             pl.col("fields").list.get(2).str.strip_chars().alias("key"),
             pl.col("fields").list.get(3).cast(pl.Int64, strict=False).alias("value"),
         )
