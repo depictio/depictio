@@ -245,6 +245,7 @@ STATIC_IDS = {
             "advanced_viz_contact_map": "646b0f3c1e4a2d7f8e5b8d77",
             "advanced_viz_knee_plot": "646b0f3c1e4a2d7f8e5b8d78",
             "advanced_viz_damage_profile": "646b0f3c1e4a2d7f8e5b8d79",
+            "advanced_viz_genomespy_track": "646b0f3c1e4a2d7f8e5b8d7a",
         },
     },
     # nf-core/viralrecon 3.0.0 viral-genome analysis template — five-tab

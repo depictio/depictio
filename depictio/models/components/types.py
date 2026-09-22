@@ -72,6 +72,19 @@ AdvancedVizKind = Literal[
     "contact_map",
     "knee_plot",
     "damage_profile",
+    # Declarative genome track rendered by GenomeSpy (issue #1083). The same
+    # chr / pos / score roles as `manhattan`, drawn on a `locus` scale that
+    # GenomeSpy concatenates and zooms itself. `end_col` turns points into
+    # intervals. Spike: see docs/design/genomespy-eval.md.
+    "genomespy_track",
+    # Kinds from the 2026-09 nf-core audit, each the missing piece of a
+    # reference app: a two-group test computed on demand (CELLxGENE / iSEE),
+    # isoform structures (SQANTI / Swan), a copy-number profile (CNVkit /
+    # cBioPortal) and a chord diagram of inter-locus links (circos).
+    "group_compare",
+    "transcript_structure",
+    "cnv_profile",
+    "genome_chord",
 ]
 
 # Map visualization types

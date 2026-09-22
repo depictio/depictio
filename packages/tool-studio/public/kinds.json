@@ -2,6 +2,168 @@
   "kinds": [
     {
       "category": "plot",
+      "description": "Log2 ratio per bin along the genome with the called segments over it and, when bound, the B-allele frequency underneath.",
+      "heavy": false,
+      "icon": "tabler:chart-dots-3",
+      "label": "Copy-number profile",
+      "required_roles": [
+        "sample",
+        "chrom",
+        "start",
+        "end",
+        "log2"
+      ],
+      "role_names": {
+        "chrom": [
+          "chr",
+          "chrom",
+          "chromosome",
+          "contig",
+          "seqid"
+        ],
+        "end": [
+          "bin_end",
+          "end",
+          "loc_end",
+          "stop",
+          "to"
+        ],
+        "log2": [
+          "depth_ratio",
+          "log2",
+          "log2_ratio",
+          "log2ratio",
+          "logr",
+          "lrr",
+          "ratio",
+          "seg_mean"
+        ],
+        "sample": [
+          "id",
+          "library",
+          "sample",
+          "sample_id",
+          "tumor",
+          "tumour"
+        ],
+        "start": [
+          "begin",
+          "bin_start",
+          "from",
+          "loc_start",
+          "start"
+        ]
+      },
+      "roles": {
+        "baf": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": false
+        },
+        "chrom": {
+          "description": "",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "copy_number": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "end": {
+          "description": "End coordinate of the interval.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "label": {
+          "description": "Optional text label for points.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "log2": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "sample": {
+          "description": "Optional sample column for faceting.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "segment": {
+          "description": "",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "start": {
+          "description": "Start coordinate of the interval.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "cnv_profile"
+    },
+    {
+      "category": "plot",
       "description": "Clustered heatmap with dendrograms + annotation tracks. Server-side clustering via plotly-complexheatmap, dispatched as a Celery task.",
       "heavy": true,
       "icon": "tabler:grid-pattern",
@@ -1183,6 +1345,283 @@
         }
       },
       "viz_kind": "gene_arrow_track"
+    },
+    {
+      "category": "plot",
+      "description": "Chromosomes on a ring, one chord per link between two loci: gene fusions, translocations, structural variants.",
+      "heavy": false,
+      "icon": "tabler:circle-dotted",
+      "label": "Genome chord",
+      "required_roles": [
+        "chrom_a",
+        "pos_a",
+        "chrom_b",
+        "pos_b"
+      ],
+      "role_names": {
+        "chrom_a": [
+          "chr1",
+          "chr_a",
+          "chrom1",
+          "chrom_a",
+          "chrom_left",
+          "chromosome_1",
+          "left_chrom"
+        ],
+        "chrom_b": [
+          "chr2",
+          "chr_b",
+          "chrom2",
+          "chrom_b",
+          "chrom_right",
+          "chromosome_2",
+          "right_chrom"
+        ],
+        "pos_a": [
+          "breakpoint1",
+          "left_pos",
+          "pos1",
+          "pos_a",
+          "pos_left",
+          "start1",
+          "start_a"
+        ],
+        "pos_b": [
+          "breakpoint2",
+          "pos2",
+          "pos_b",
+          "pos_right",
+          "right_pos",
+          "start2",
+          "start_b"
+        ]
+      },
+      "roles": {
+        "category": {
+          "description": "Categorical grouping / annotation.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "chrom_a": {
+          "description": "",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "chrom_b": {
+          "description": "",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "label": {
+          "description": "Optional text label for points.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "pos_a": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "pos_b": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "sample": {
+          "description": "Optional sample column for faceting.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "weight": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        }
+      },
+      "viz_kind": "genome_chord"
+    },
+    {
+      "category": "tool",
+      "description": "chr / pos / score drawn by GenomeSpy on a chromosome-aware locus axis: native genome zoom, points or intervals, click-to-filter. Spike for #1083.",
+      "heavy": false,
+      "icon": "tabler:dna-2",
+      "label": "GenomeSpy track",
+      "required_roles": [
+        "chr",
+        "pos",
+        "score"
+      ],
+      "role_names": {
+        "chr": [
+          "#chrom",
+          "chr",
+          "chrom",
+          "chromosome",
+          "contig"
+        ],
+        "pos": [
+          "bp",
+          "chromstart",
+          "pos",
+          "position",
+          "start"
+        ],
+        "score": [
+          "af",
+          "coverage",
+          "depth",
+          "minus_log10_p",
+          "neg_log_p",
+          "p_value",
+          "pvalue",
+          "score",
+          "signal",
+          "value"
+        ]
+      },
+      "roles": {
+        "chr": {
+          "description": "Chromosome / contig name.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "end": {
+          "description": "End coordinate of the interval.",
+          "dtypes": [
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "feature": {
+          "description": "Optional feature annotation.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "pos": {
+          "description": "Genomic or sequence position (integer).",
+          "dtypes": [
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "score": {
+          "description": "Value plotted on the y-axis (e.g. -log10 p, signal).",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "genomespy_track"
+    },
+    {
+      "category": "plot",
+      "description": "Differential test between two saved selection groups, computed on demand: a volcano of the features and the ranked table behind it.",
+      "heavy": false,
+      "icon": "tabler:arrows-diff",
+      "label": "Group comparison",
+      "required_roles": [
+        "index"
+      ],
+      "role_names": {
+        "index": [
+          "barcode",
+          "cell",
+          "cell_id",
+          "id",
+          "index",
+          "sample",
+          "sample_id"
+        ]
+      },
+      "roles": {
+        "group": {
+          "description": "Grouping column for colouring / faceting.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "index": {
+          "description": "Row identifier used as the heatmap index.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "group_compare"
     },
     {
       "category": "plot",
@@ -2679,6 +3118,186 @@
         }
       },
       "viz_kind": "sunburst"
+    },
+    {
+      "category": "plot",
+      "description": "Isoforms of one gene stacked on a base-pair axis, exons as blocks and introns as lines, novel and known transcripts told apart.",
+      "heavy": false,
+      "icon": "tabler:layout-rows",
+      "label": "Transcript structure",
+      "required_roles": [
+        "transcript_id",
+        "gene_id",
+        "chrom",
+        "start",
+        "end",
+        "feature",
+        "strand"
+      ],
+      "role_names": {
+        "chrom": [
+          "chr",
+          "chrom",
+          "chromosome",
+          "contig",
+          "seqid",
+          "seqname"
+        ],
+        "end": [
+          "block_end",
+          "end",
+          "exon_end",
+          "stop",
+          "to"
+        ],
+        "feature": [
+          "block",
+          "block_type",
+          "feature",
+          "feature_type",
+          "type"
+        ],
+        "gene_id": [
+          "gene",
+          "gene_id",
+          "gene_name",
+          "symbol"
+        ],
+        "start": [
+          "begin",
+          "block_start",
+          "exon_start",
+          "from",
+          "start"
+        ],
+        "strand": [
+          "orientation",
+          "sense",
+          "strand"
+        ],
+        "transcript_id": [
+          "isoform",
+          "isoform_id",
+          "transcript",
+          "transcript_id",
+          "tx_id"
+        ]
+      },
+      "roles": {
+        "chrom": {
+          "description": "",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "end": {
+          "description": "End coordinate of the interval.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "expression": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "feature": {
+          "description": "Optional feature annotation.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "gene_id": {
+          "description": "",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "gene_name": {
+          "description": "",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "sample": {
+          "description": "Optional sample column for faceting.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "start": {
+          "description": "Start coordinate of the interval.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "strand": {
+          "description": "",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "transcript_class": {
+          "description": "",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "transcript_id": {
+          "description": "",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "transcript_structure"
     },
     {
       "category": "plot",

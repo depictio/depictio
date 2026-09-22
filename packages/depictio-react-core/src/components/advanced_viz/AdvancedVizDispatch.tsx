@@ -34,6 +34,11 @@ import ScatterXyRenderer from './ScatterXyRenderer';
 import ContactMapRenderer from './ContactMapRenderer';
 import KneePlotRenderer from './KneePlotRenderer';
 import DamageProfileRenderer from './DamageProfileRenderer';
+import GenomeSpyTrackRenderer from './GenomeSpyTrackRenderer';
+import GroupCompareRenderer from './GroupCompareRenderer';
+import TranscriptStructureRenderer from './TranscriptStructureRenderer';
+import CnvProfileRenderer from './CnvProfileRenderer';
+import GenomeChordRenderer from './GenomeChordRenderer';
 import {
   AdvancedVizDataPopover,
   AdvancedVizExtrasProvider,
@@ -129,6 +134,11 @@ const RENDERERS: Record<string, React.ComponentType<any>> = {
   contact_map: ContactMapRenderer,
   knee_plot: KneePlotRenderer,
   damage_profile: DamageProfileRenderer,
+  genomespy_track: GenomeSpyTrackRenderer,
+  group_compare: GroupCompareRenderer,
+  transcript_structure: TranscriptStructureRenderer,
+  cnv_profile: CnvProfileRenderer,
+  genome_chord: GenomeChordRenderer,
 };
 
 /**

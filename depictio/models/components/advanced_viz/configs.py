@@ -1711,6 +1711,227 @@ class DamageProfileConfig(_BaseVizConfig):
     )
 
 
+class GenomeSpyTrackConfig(_BaseVizConfig):
+    """One genomic track drawn by GenomeSpy on a chromosome-aware ``locus`` axis.
+
+    The spike for issue #1083. Binds the same ``chr / pos / score`` roles as
+    ``manhattan`` so every DC a Manhattan reads renders here unchanged, but the
+    genome axis, the locus zoom and the point picking are GenomeSpy's own rather
+    than rebuilt from Plotly primitives. ``end_col`` turns each row into an
+    interval (``rect`` mark), which covers coverage bins and peak calls.
+    """
+
+    viz_kind: Literal["genomespy_track"] = "genomespy_track"
+
+    chr_col: str = Field(default="chr", description="Column with chromosome / contig name")
+    pos_col: str = Field(default="pos", description="Column with the genomic start position")
+    score_col: str = Field(default="score", description="Column with the y-axis value")
+    feature_col: str | None = Field(
+        default=None, description="Optional column naming the row (SNP, peak, gene) for hover"
+    )
+    end_col: str | None = Field(
+        default=None,
+        description=(
+            "Optional column with the interval end. When set the track draws one "
+            "rectangle per row from pos to end instead of a point."
+        ),
+    )
+    mark: Literal["point", "rect"] = Field(
+        default="point",
+        description="Mark type. ``rect`` needs ``end_col``; without it the renderer falls back to points.",
+    )
+    assembly: str | None = Field(
+        default=None,
+        description=(
+            "GenomeSpy built-in assembly (hg38, hg19, hg18, mm10, mm9, dm6). Null derives "
+            "the contig list and sizes from the data itself, which is what a viral "
+            "reference or a draft assembly needs."
+        ),
+    )
+    score_title: str = Field(default="score", description="Y-axis label")
+    score_threshold: float | None = Field(
+        default=None, description="Horizontal reference rule; None hides it"
+    )
+    point_size: int = Field(default=5, ge=1, le=30, description="Point diameter in pixels")
+    opacity: float = Field(default=0.85, ge=0.05, le=1.0)
+
+    # --- Selection as a cross-filter (same contract as ManhattanConfig) -----
+    selection_enabled: bool = Field(
+        default=False,
+        description=(
+            "Let a click on a mark emit a dashboard filter the Analysis panel can "
+            "turn into a group. Requires ``selection_column``."
+        ),
+    )
+    selection_column: str | None = Field(
+        default=None,
+        description=(
+            "Column the emitted selection values belong to. No default, for the "
+            "same reason as the Manhattan plot: a row here is one feature at one "
+            "locus and the dashboard has to say what a pick means."
+        ),
+    )
+
+
+class GroupCompareConfig(_BaseVizConfig):
+    """Two saved selection groups compared feature by feature, on demand.
+
+    The observations are the rows (``index_col`` names them) and the features
+    are every other numeric column, as in ``complex_heatmap``. The two groups
+    are not bound columns: they are the dashboard's saved selection groups
+    (lasso on an embedding, ticked table rows), resolved to row ids when the
+    ``compute_group_compare`` endpoint runs the test as a background job and
+    caches the result, the same contract as ``compute_embedding``.
+    """
+
+    viz_kind: Literal["group_compare"] = "group_compare"
+
+    index_col: str = Field(
+        default="index", description="Column naming each observation (cell, sample)"
+    )
+    group_col: str | None = Field(
+        default=None,
+        description="Optional column with a precomputed group label, used when no saved groups are picked",
+    )
+    test: Literal["wilcoxon", "t_test"] = Field(
+        default="wilcoxon", description="Per-feature test between the two groups"
+    )
+    log_transform: bool = Field(
+        default=True, description="log1p the feature values before testing (raw counts / UMIs)"
+    )
+    max_features: int = Field(
+        default=2000, ge=10, le=20000, description="Guard on the number of feature columns tested"
+    )
+    min_observations: int = Field(
+        default=3, ge=2, description="Smallest group size the test accepts"
+    )
+    fdr_threshold: float = Field(
+        default=0.05, gt=0, lt=1, description="Significance line on the volcano"
+    )
+    log2fc_threshold: float = Field(
+        default=1.0, ge=0, description="Effect-size lines on the volcano"
+    )
+    top_n_labels: int = Field(
+        default=20, ge=0, le=200, description="Features labelled on the volcano"
+    )
+
+
+class TranscriptStructureConfig(_BaseVizConfig):
+    """Isoforms of one gene on a base-pair axis, one lane per transcript."""
+
+    viz_kind: Literal["transcript_structure"] = "transcript_structure"
+
+    transcript_id_col: str = Field(
+        default="transcript_id", description="Column naming each isoform"
+    )
+    gene_id_col: str = Field(
+        default="gene_id", description="Column naming the gene an isoform belongs to"
+    )
+    chrom_col: str = Field(default="chrom", description="Chromosome / contig of the block")
+    start_col: str = Field(default="start", description="Block start (bp)")
+    end_col: str = Field(default="end", description="Block end (bp)")
+    feature_col: str = Field(default="feature", description="Block type: exon, CDS, UTR")
+    strand_col: str = Field(default="strand", description="Transcript strand: + or -")
+    sample_col: str | None = Field(default=None, description="Optional column selecting a sample")
+    gene_name_col: str | None = Field(default=None, description="Optional readable gene symbol")
+    transcript_class_col: str | None = Field(
+        default=None, description="Optional novelty / class label (known, novel, NIC, NNC)"
+    )
+    expression_col: str | None = Field(
+        default=None, description="Optional per-transcript expression used for lane order or colour"
+    )
+
+    gene: str | None = Field(
+        default=None, description="Gene to draw; null picks the gene with the most transcripts"
+    )
+    max_transcripts: int = Field(default=30, ge=1, le=200, description="Lanes drawn per gene")
+    exon_feature: str = Field(default="exon", description="Feature value drawn as a block")
+    cds_feature: str = Field(default="CDS", description="Feature value drawn as a taller block")
+    colour_by: Literal["transcript_class", "expression", "none"] = Field(
+        default="transcript_class", description="What the lane colour encodes"
+    )
+    colour_scale: ColourScale = Field(default="Viridis")
+
+
+class CnvProfileConfig(_BaseVizConfig):
+    """Copy-number profile: log2 ratio per bin, called segments over it, BAF below."""
+
+    viz_kind: Literal["cnv_profile"] = "cnv_profile"
+
+    sample_col: str = Field(default="sample", description="Column naming each sample")
+    chrom_col: str = Field(default="chrom", description="Chromosome of the bin / segment")
+    start_col: str = Field(default="start", description="Start of the bin / segment (bp)")
+    end_col: str = Field(default="end", description="End of the bin / segment (bp)")
+    log2_col: str = Field(default="log2", description="Log2 copy ratio")
+    baf_col: str | None = Field(
+        default=None, description="Optional B-allele frequency, drawn underneath"
+    )
+    copy_number_col: str | None = Field(
+        default=None, description="Optional integer copy number, colours the segments"
+    )
+    segment_col: str | None = Field(
+        default=None,
+        description="Optional row-type column: rows whose value is ``segment`` draw as segments, the rest as bins",
+    )
+    label_col: str | None = Field(default=None, description="Optional hover label (gene, cytoband)")
+
+    sample: str | None = Field(
+        default=None, description="Sample to draw; null picks the first seen"
+    )
+    chrom: str | None = Field(
+        default=None, description="Chromosome to zoom on; null draws the whole genome"
+    )
+    y_range: float = Field(default=3.0, gt=0, le=10, description="Symmetric log2 axis limit")
+    show_baf: bool = Field(default=True, description="Draw the BAF panel when ``baf_col`` is bound")
+    point_size: int = Field(default=3, ge=1, le=12, description="Bin marker size in pixels")
+    gain_threshold: float = Field(
+        default=0.3, description="Log2 above which a segment reads as a gain"
+    )
+    loss_threshold: float = Field(
+        default=-0.3, description="Log2 below which a segment reads as a loss"
+    )
+    max_bins: int = Field(
+        default=50000, ge=100, le=500000, description="Guard on the number of bin rows requested"
+    )
+
+
+class GenomeChordConfig(_BaseVizConfig):
+    """Chromosomes on a ring, one chord per link between two loci."""
+
+    viz_kind: Literal["genome_chord"] = "genome_chord"
+
+    chrom_a_col: str = Field(default="chrom_a", description="Chromosome of the first locus")
+    pos_a_col: str = Field(default="pos_a", description="Position of the first locus (bp)")
+    chrom_b_col: str = Field(default="chrom_b", description="Chromosome of the second locus")
+    pos_b_col: str = Field(default="pos_b", description="Position of the second locus (bp)")
+    label_col: str | None = Field(
+        default=None, description="Optional link label (fusion name, SV id)"
+    )
+    weight_col: str | None = Field(
+        default=None, description="Optional link weight (supporting reads), drives chord width"
+    )
+    category_col: str | None = Field(
+        default=None, description="Optional link class (fusion type, SV type), drives chord colour"
+    )
+    sample_col: str | None = Field(default=None, description="Optional column selecting a sample")
+
+    assembly: str | None = Field(
+        default=None,
+        description="Chromosome sizes to lay the ring out on (hg38, hg19, mm10); null derives them from the data",
+    )
+    max_links: int = Field(
+        default=500, ge=1, le=5000, description="Guard on the number of chords drawn"
+    )
+    min_weight: float | None = Field(default=None, description="Drop links lighter than this")
+    colour_by: Literal["category", "chrom_a", "none"] = Field(
+        default="category", description="What the chord colour encodes"
+    )
+    show_labels: bool = Field(default=True, description="Label the chromosome arcs")
+    intra_chromosomal: bool = Field(
+        default=True, description="Draw links whose two loci share a chromosome"
+    )
+
+
 VizConfig = Annotated[
     ScatterXyConfig
     | VolcanoConfig
@@ -1743,6 +1964,11 @@ VizConfig = Annotated[
     | SashimiConfig
     | ContactMapConfig
     | KneePlotConfig
-    | DamageProfileConfig,
+    | DamageProfileConfig
+    | GenomeSpyTrackConfig
+    | GroupCompareConfig
+    | TranscriptStructureConfig
+    | CnvProfileConfig
+    | GenomeChordConfig,
     Field(discriminator="viz_kind"),
 ]
