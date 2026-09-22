@@ -1,0 +1,136 @@
+# Megatest manifest for nf-core/mag 5.5.0 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the tables-only
+# subset of it that the template recipes and MultiQC need. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline mag --version 5.5.0 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing
+#
+# Keys are fnmatch globs relative to run_root (here the prefix root) and are
+# mirrored 1:1 below the destination, which becomes the template DATA_ROOT.
+# fnmatch's `*` crosses `/`, so `Annotation/Prokka/*/*.tsv` also matches the
+# per-bin directories two levels down.
+#
+# WHY THIS PREFIX AND NOT THE 5.5.0 RELEASE TAG
+# ---------------------------------------------
+# `results-171cf36971499cea4c9bccac4536cccbfc540e14` is not a release tag sha,
+# so `nfcore_megatest.py` prints a "not a tag sha" warning when it fetches.
+# That is expected. The prefix is the 5.5.0 release candidate: `nextflow.config`
+# at that commit carries `manifest.version = '5.5.0'` and the commit ("chore:
+# update full test resources", 2026-07-28) is four days older than the 5.5.0 tag.
+# It is the only complete mag megatest in the bucket:
+#
+#   * `5dabb015...` (the 5.4.2 release tag sha, what this template used to pin) is
+#     a TRUNCATED S3 SYNC, not a thin run: 7554 keys, 987 non-zero objects and a
+#     minimum non-zero object size of 8.4 MB. Every object under ~8 MB is missing
+#     or zero-byte, which is exactly the set of report tables a dashboard needs
+#     (GTDB-Tk summaries, CheckM2 and QUAST reports, fastp JSON, depths). The run
+#     itself produced them: its `pipeline_info/params.json` has skip_gtdbtk=false,
+#     skip_quast=false, skip_prokka=false, run_checkm2=true and its MultiQC
+#     `report_data_sources` lists QUAST x1283 bins, Prokka x1279 and CheckM2.
+#   * `56abab5b...` (the 5.5.0 release tag sha) is a crashed run: 52 objects, read
+#     QC only.
+#   * `8ac0a2cf...` is 5.6.0dev, not a release.
+#
+# WHAT 171cf369 DOES NOT HAVE
+# ---------------------------
+#   * No `multiqc/` directory at all. The parquet Depictio reads is produced
+#     afterwards by
+#         python -m depictio.dev_scripts.multiqc_reprocess --src <dest> --dest <dest>
+#     over the raw fastp / bowtie2 / QUAST / Prokka / GTDB-Tk inputs fetched
+#     below (same recipe as chipseq 1.2.0, eager 2.4.5 and hic 2.0.0).
+#   * No `GenomeBinning/bin_summary.tsv`, no `GenomeBinning/depths/bins/`, no
+#     `busco_summary.tsv`, no `GUNC/`, no `GenomeBinning/BIgMAG/`. BIN_SUMMARY
+#     and MAG_DEPTHS_SUMMARY did not publish here and 5.5.0 stops publishing
+#     BUSCO directories (CheckM2 only). The per-bin summary this template shows
+#     is rebuilt Depictio-side by `depictio/catalog/mag/bin_summary.py`, which
+#     joins CheckM2 + GTDB-Tk + per-bin QUAST + Prokka.
+#   * No `GenomeBinning/contig_to_bin/contig_to_bin_map.tsv`. That file exists
+#     only under `5dabb015` (5.4.2, 1283 bins) and `8ac0a2cf` (5.6.0dev). Mixing
+#     it in would join a 1283-bin membership map onto this run's 449 bins, so it
+#     is dropped rather than reused. Prokka's GFF is not a substitute: Prokka
+#     renames every contig to an internal `gnl|<centre>|<hash>_N`, so its
+#     coordinates join to nothing outside the bin. There is therefore no
+#     contig to bin membership and no per-bin depth in this template.
+#
+# SIZE NOTE
+# ---------
+# Prokka publishes 449 GFF files totalling 1.1 GB, because each one carries the
+# bin's whole FASTA after `##FASTA`. Only the METAMDBG bins are fetched, 44 of
+# them over three binners, 54 MB: enough for a per-bin locus map, and it keeps
+# the whole fetch at 67 MB. Prokka's per-gene `.tsv` (449 files, 20 MB, ~3 M
+# rows and no coordinates) is left out because the GFF carries the same gene
+# symbols and products with positions; so are Prokka `.log`, Prodigal's
+# whole-assembly GFFs, the assemblies, the bin FASTAs, the BAMs and the CheckM2
+# DIAMOND hit tables.
+pipeline: mag
+version: "5.5.0"
+# s3://nf-core-awsmegatests/mag/results-<results_sha>/ -- the 5.5.0 release
+# candidate, NOT the 5.5.0 tag sha (see the block above).
+results_sha: "171cf36971499cea4c9bccac4536cccbfc540e14"
+run_root: ""
+multiqc:
+  version: "1.35"
+  parquet: multiqc/multiqc_data/multiqc.parquet
+  reprocess: true
+keys:
+  # --- provenance -------------------------------------------------------
+  - pipeline_info/params*.json
+  - pipeline_info/*software*versions*.yml
+  - pipeline_info/execution_trace*.txt
+  # --- read QC (raw MultiQC inputs, re-parsed by MultiQC 1.35) ----------
+  - QC_shortreads/fastp/*.json
+  - QC_shortreads/remove_host/*.log
+  - QC_shortreads/remove_phix/*.log
+  - QC_longreads/NanoPlot/*NanoStats.txt
+  # --- assembly QC ------------------------------------------------------
+  # One QUAST report per assembler x sample, plus the bowtie2 logs of the
+  # reads-back-to-assembly mapping and Flye's own assembly_info table.
+  - Assembly/*/QC/*/QUAST/report.tsv
+  - Assembly/*/QC/*/QUAST/transposed_report.tsv
+  - Assembly/*/QC/*/*.bowtie2.log
+  - Assembly/*/*.assembly_info.txt
+  # --- bin QC -----------------------------------------------------------
+  # CheckM2 publishes both an aggregated
+  # `<asm>-<binner>-...-<sample>_checkm2_report.tsv` and the raw per-run
+  # `quality_report.tsv` (kept so the alternate layout the catalog output
+  # declares is exercised, not scanned by this template). QUAST publishes one
+  # aggregated `*-quast_summary.tsv` per binning run; its per-bin
+  # `transposed_report.tsv` files hold the same rows and are not fetched.
+  - GenomeBinning/QC/CheckM2/*_checkm2_report.tsv
+  - GenomeBinning/QC/CheckM2/*/quality_report.tsv
+  - GenomeBinning/QC/QUAST/*-quast_summary.tsv
+  # --- contig depths ----------------------------------------------------
+  # jgi_summarize_bam_contig_depths output: one row per contig, one depth +
+  # variance column per sample mapped back onto that assembly.
+  - GenomeBinning/depths/contigs/*-depth.txt.gz
+  # --- binner artefacts -------------------------------------------------
+  - GenomeBinning/*/*.summary
+  - GenomeBinning/COMEBin/stats/*/comebin_res.tsv
+  # --- taxonomy ---------------------------------------------------------
+  # GTDB-Tk writes the same summary twice (bin root and classify/); the
+  # classify/ copy is the populated one, the root copy is header-only for the
+  # runs where no bin passed the quality filter.
+  - Taxonomy/GTDB-Tk/*/classify/*.summary.tsv
+  - Taxonomy/GTDB-Tk/*/classify/ani_screen/*.ani_summary.tsv
+  - Taxonomy/GTDB-Tk/*/identify/*markers_summary.tsv
+  # --- annotation -------------------------------------------------------
+  # `.txt` is Prokka's per-bin feature count summary (CDS / tRNA / rRNA), for
+  # every bin; the GFF subset carries the coordinates the per-bin locus map
+  # needs (see the SIZE NOTE above).
+  - Annotation/Prokka/*/*/*.txt
+  - Annotation/Prokka/METAMDBG/*/*.gff
+prefix_keys: []
+renames: {}
+post_fetch_help: |
+  === Rebuild the MultiQC report (the run publishes none) ===
+
+  python -m depictio.dev_scripts.multiqc_reprocess --src {dest} --dest {dest}
+
+  === Quick test commands ===
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli run --template nf-core/mag/5.5.0 --data-root {dest} --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli run --template nf-core/mag/5.5.0 --data-root {dest}

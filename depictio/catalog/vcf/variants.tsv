@@ -1,0 +1,16 @@
+sample	caller	chrom	pos	variant_key	ref	alt	variant_type	qual	filter_status	is_pass	gt	dp	vaf
+NA12878_200M	deepvariant	chr1	14677	chr1:14677:G:A	G	A	SNP	15.8	PASS	true	0/1	13	0.384615
+NA12878_200M	deepvariant	chr1	14907	chr1:14907:A:G	A	G	SNP	25.0	PASS	true	1/1	6	0.833333
+NA12878_200M	deepvariant	chr1	14930	chr1:14930:A:G	A	G	SNP	24.0	PASS	true	1/1	4	1.0
+NA12878_200M	deepvariant	chr1	15906	chr1:15906:A:C	A	C	SNP	25.8	PASS	true	1/1	2	1.0
+NA12878_200M	deepvariant	chr1	16949	chr1:16949:A:C	A	C	SNP	24.5	PASS	true	0/1	39	0.307692
+NA12878_200M	deepvariant	chr1	16957	chr1:16957:G:T	G	T	SNP	0.0	RefCall	false	0/0	41	0.292683
+NA12878_200M	deepvariant	chr1	17006	chr1:17006:A:G	A	G	SNP	21.7	PASS	true	0/1	57	0.210526
+NA12878_200M	deepvariant	chr1	17020	chr1:17020:G:A	G	A	SNP	0.0	RefCall	false	0/0	48	0.375
+NA12878_200M	deepvariant	chr1	17365	chr1:17365:C:G	C	G	SNP	14.2	PASS	true	0/1	55	0.127273
+NA12878_200M	deepvariant	chr1	17385	chr1:17385:G:A	G	A	SNP	26.1	PASS	true	0/1	62	0.403226
+NA12878_200M	deepvariant	chr1	17407	chr1:17407:G:A	G	A	SNP	0.0	RefCall	false	0/0	70	0.2
+NA12878_200M	deepvariant	chr1	17614	chr1:17614:G:A	G	A	SNP	23.8	PASS	true	0/1	28	0.142857
+NA12878_200M	deepvariant	chr1	17626	chr1:17626:G:A	G	A	SNP	0.0	RefCall	false	0/0	29	0.137931
+NA12878_200M	deepvariant	chr1	17722	chr1:17722:A:G	A	G	SNP	0.0	RefCall	false	0/0	13	0.384615
+NA12878_200M	deepvariant	chr1	17730	chr1:17730:C:A	C	A	SNP	0.0	RefCall	false	0/0	11	0.363636

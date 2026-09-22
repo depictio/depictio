@@ -9,33 +9,40 @@ main_dashboard:
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
-  # Two persistent filter groups, because this dashboard has two units. The
-  # sample filter drives the MultiQC panels, the only place a sample means
-  # anything: rnafusion writes one file per tool per sample and none of those
-  # files carries a sample column, so every fusion collection is keyed on the
-  # FUSION instead. The fusion filter is what fans out through the template
-  # links to every caller, and it survives tab switches.
+  # Two persistent filter groups. `Sample filters` is sourced on the
+  # samplesheet, the hub every template links from: it reaches the MultiQC
+  # panels on this tab and, on a cohort run, is what narrows the report to one
+  # library. On the validated single-sample run both controls hold one value
+  # and are inert, which is not wrong: the section is where a cohort's sample
+  # and strandedness go. `Fusion scope` is the dashboard's real unit: rnafusion
+  # writes one file per tool per sample and none of those files carries a
+  # sample column, so every fusion collection is keyed on the fusion name and
+  # the fusion filter is what fans out through the template links to every
+  # caller. The splice-junction table is keyed on the junction and reachable
+  # by neither (see template.yaml links).
   filter_sections:
   - name: Sample filters
     icon: mdi:filter-variant
     color: teal
-    description: Narrows the MultiQC panels
+    description: Applies to the MultiQC panels through the samplesheet link; inert on a single-sample run
     persistent: true
     pin: top
   - name: Fusion scope
     icon: mdi:tune
     color: indigo
-    description: Applies to every fusion tab
+    description: Applies to every tab through the fusion links
     persistent: true
     pin: top
-  - name: Read QC scope
-    icon: mdi:chart-bell-curve
-    color: orange
-    description: Library properties behind the read panels
+  - name: Reference scope
+    icon: mdi:filter-variant
+    color: gray
+    description: Narrows the reference tables on this tab by partner gene and knowledge base
     collapsed: true
-  # `Sample sheet` is pinned to the top and `Reference tables` to the bottom, so
-  # the run metadata and the rows every tile is computed from trail each tab.
-  # Both are declared here, on the tab no route conditional can remove.
+  # `Run at a glance` is pinned to the top and `Reference tables` to the bottom,
+  # so the run headline numbers and the rows every tile is computed from trail
+  # each tab. Both are declared here, on the tab no route conditional can remove.
+  # Being pinned and persistent is also what lets the glance strip sit on a tab
+  # named MultiQC without turning it into a second overview page.
   grid_sections:
   - name: Alignment at a glance
     icon: mdi:chart-box-outline
@@ -50,11 +57,10 @@ main_dashboard:
     color: blue
     description: Insert size, duplication and coverage along the transcript
     collapsed: true
-  - name: Sample sheet
+  - name: Run at a glance
     icon: mdi:table-account
     color: teal
-    description: The samples the run was given
-    collapsed: true
+    description: The run headline numbers and the samples the run was given
     persistent: true
     pin: top
   - name: Reference tables
@@ -82,7 +88,7 @@ main_dashboard:
       breakpoint, and [Picard](https://broadinstitute.github.io/picard/) says
       whether those reads landed on transcripts at all. Everything on the later
       tabs is built from what survives here.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: multiqc
     tag: rnaf-qc-general-stats
     section: Alignment at a glance
@@ -95,7 +101,7 @@ main_dashboard:
     description: One row per sample, pooling the FastQC, fastp, STAR and Picard headline numbers.
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 1, w: 8, h: 4}
+    layout: {x: 0, y: 2, w: 8, h: 4}
   - component_type: multiqc
     tag: rnaf-qc-star-alignment
     section: Alignment at a glance
@@ -108,7 +114,7 @@ main_dashboard:
     description: Uniquely mapped, multi-mapped and unmapped reads per sample.
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 5, w: 4, h: 5}
+    layout: {x: 0, y: 6, w: 4, h: 5}
   - component_type: multiqc
     tag: rnaf-qc-picard-assignment
     section: Alignment at a glance
@@ -121,7 +127,7 @@ main_dashboard:
     description: Coding, UTR, intronic, intergenic and ribosomal share of the aligned bases.
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 5, w: 4, h: 5}
+    layout: {x: 4, y: 6, w: 4, h: 5}
 
   # ---------------------------------------------------------------- read quality
   - component_type: text
@@ -140,7 +146,7 @@ main_dashboard:
       on the raw reads and again after [fastp](https://github.com/OpenGene/fastp).
       The second pass is anchored as fastqc-1 in the report, so the two panels
       below are the same measurement either side of trimming.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: multiqc
     tag: rnaf-qc-fastqc-quality
     section: Read quality
@@ -153,7 +159,7 @@ main_dashboard:
     description: Mean quality at each base position, before trimming.
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 1, w: 4, h: 5}
+    layout: {x: 0, y: 2, w: 4, h: 5}
   - component_type: multiqc
     tag: rnaf-qc-fastp-filtered
     section: Read quality
@@ -166,7 +172,7 @@ main_dashboard:
     description: How many read pairs passed trimming and quality filtering.
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 1, w: 4, h: 5}
+    layout: {x: 4, y: 2, w: 4, h: 5}
   - component_type: multiqc
     tag: rnaf-qc-fastqc-trimmed
     section: Read quality
@@ -179,7 +185,7 @@ main_dashboard:
     description: Distribution of the mean quality per read after trimming.
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 6, w: 8, h: 5}
+    layout: {x: 0, y: 7, w: 8, h: 5}
 
   # ------------------------------------------------------------- library metrics
   - component_type: text
@@ -196,7 +202,7 @@ main_dashboard:
       A short insert size limits how far a discordant mate can reach across a
       breakpoint, and heavy duplication inflates the read counts every caller
       reports. Coverage along the gene body shows any degradation bias.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: multiqc
     tag: rnaf-qc-picard-insert
     section: Library metrics
@@ -209,7 +215,7 @@ main_dashboard:
     description: Fragment-length distribution from Picard CollectInsertSizeMetrics.
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 1, w: 4, h: 5}
+    layout: {x: 0, y: 2, w: 4, h: 5}
   - component_type: multiqc
     tag: rnaf-qc-picard-coverage
     section: Library metrics
@@ -222,7 +228,7 @@ main_dashboard:
     description: Normalised coverage from the 5' to the 3' end of the transcript.
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 1, w: 4, h: 5}
+    layout: {x: 4, y: 2, w: 4, h: 5}
   - component_type: multiqc
     tag: rnaf-qc-star-genecounts
     section: Library metrics
@@ -235,21 +241,90 @@ main_dashboard:
     description: How many reads STAR assigned to genes rather than to no feature or several.
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 6, w: 8, h: 5}
+    layout: {x: 0, y: 7, w: 8, h: 5}
 
-  # ------------------------------------------------------------------ samplesheet
+  # --------------------------------------------------------------- run at a glance
+  # Four run-level numbers that ride every tab. They are deliberately not the
+  # same metrics as the per-tab strips below: those answer the tab's question,
+  # these answer "what did this run produce". Sitting in a pinned persistent
+  # section is also what keeps them legal on a tab named MultiQC.
+  - component_type: card
+    tag: rnaf-glance-card-partners
+    section: Run at a glance
+    workflow_tag: rnafusion
+    data_collection_tag: fusion_consensus
+    use: fusionreport/fusions
+    aggregation: nunique
+    column_name: gene_5p
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: databases
+    top_n_count: 3
+    display: {icon_name: 'mdi:dna', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Distinct 5' partners
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: rnaf-glance-card-callers
+    section: Run at a glance
+    workflow_tag: rnafusion
+    data_collection_tag: caller_evidence
+    use: fusionreport/caller_evidence
+    aggregation: nunique
+    column_name: caller
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: caller
+    display: {icon_name: 'mdi:set-merge', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Callers reporting
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: rnaf-glance-card-arriba-support
+    section: Run at a glance
+    workflow_tag: rnafusion
+    data_collection_tag: arriba_fusions
+    use: arriba/fusions
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: support_fraction
+    column_type: float64
+    display: {icon_name: 'mdi:scale-balance', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Arriba support fraction
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: rnaf-glance-card-junction-unique
+    section: Run at a glance
+    workflow_tag: rnafusion
+    data_collection_tag: splice_junctions
+    use: ctatsplicing/introns
+    aggregation: average
+    column_name: uniq_fraction
+    column_type: float64
+    secondary_layout: gauge
+    coverage_max: 1
+    display: {icon_name: 'mdi:waves', icon_color: '#1E88E5', title_color: '#1E88E5', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Uniquely mapped junctions
+    layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: table
     tag: rnaf-table-samplesheet
-    section: Sample sheet
+    section: Run at a glance
     workflow_tag: rnafusion
     data_collection_tag: samplesheet
     row_selection_enabled: true
     row_selection_column: sample
     title: Run samplesheet
-    description: The samples the run was given, with the declared library strandedness.
+    description: The samples the run was given, with the declared library strandedness. The validated run holds one row.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 0, w: 8, h: 3}
+    layout: {x: 0, y: 2, w: 8, h: 2}
 
   # -------------------------------------------------------------- reference tables
   - component_type: text
@@ -266,7 +341,7 @@ main_dashboard:
       The consensus, evidence, validation and splice-junction rows every panel
       above is computed from. Filters picked in the left panel narrow these
       tables too, and a row selected here narrows the tiles.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: table
     tag: rnaf-ref-table-consensus
     section: Reference tables
@@ -279,7 +354,7 @@ main_dashboard:
     description: Every fusion the run called, with its knowledge-base hits and caller flags.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 1, w: 8, h: 4}
+    layout: {x: 0, y: 2, w: 8, h: 4}
   - component_type: table
     tag: rnaf-ref-table-evidence
     section: Reference tables
@@ -292,7 +367,7 @@ main_dashboard:
     description: One row per fusion and caller, with the raw evidence string.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 5, w: 8, h: 4}
+    layout: {x: 0, y: 6, w: 8, h: 5}
   - component_type: table
     tag: rnaf-ref-table-fi
     section: Reference tables
@@ -305,7 +380,7 @@ main_dashboard:
     description: The calls re-quantified against a fusion contig reference.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 9, w: 8, h: 4}
+    layout: {x: 0, y: 11, w: 8, h: 4}
   - component_type: table
     tag: rnaf-ref-table-junctions
     section: Reference tables
@@ -317,23 +392,43 @@ main_dashboard:
     description: Every junction CTAT-splicing scored, with its read support.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 13, w: 8, h: 4}
+    layout: {x: 0, y: 15, w: 8, h: 7}
 
   # ---------------------------------------------------------------- left panel
+  # `rnaf-filter-sample` (samplesheet.sample) and `rnaf-filter-strandedness`
+  # (samplesheet.strandedness) used to live here. The validated run is a single
+  # sample, so both columns hold exactly one value and neither control could
+  # narrow anything: a filter that cannot change the view is worse than no
+  # filter, because it reads as one that is not working. They are replaced by
+  # the fusion-level controls below, which is the unit this pipeline measures.
   - component_type: interactive
     tag: rnaf-filter-sample
     index: rnaf-sample-filter
     section: Sample filters
-    group: Samples
+    group: Sample scope
     workflow_tag: rnafusion
     data_collection_tag: samplesheet
     interactive_component_type: MultiSelect
     column_name: sample
     column_type: object
-    display: {title_size: md, custom_color: '#26A69A', icon_name: 'mdi:test-tube'}
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:test-tube'}
     placement: left
     title: Sample
     layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: rnaf-filter-strandedness
+    index: rnaf-strandedness-filter
+    section: Sample filters
+    group: Sample scope
+    workflow_tag: rnafusion
+    data_collection_tag: samplesheet
+    interactive_component_type: MultiSelect
+    column_name: strandedness
+    column_type: object
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: Strandedness
+    layout: {x: 0, y: 3, w: 1, h: 3}
   - component_type: interactive
     tag: rnaf-filter-fusion
     index: rnaf-fusion-filter
@@ -376,20 +471,37 @@ main_dashboard:
     placement: left
     title: Fusion Indication Index
     layout: {x: 0, y: 7, w: 1, h: 3}
+  # Tab-local scope for the reference tables this tab carries. Neither column is
+  # wired anywhere else, so these two controls are this tab's own filters rather
+  # than a second copy of another tab's.
   - component_type: interactive
-    tag: rnaf-filter-strandedness
-    index: rnaf-strandedness-filter
-    section: Read QC scope
-    group: Library
+    tag: rnaf-filter-gene5p
+    index: rnaf-gene5p-filter
+    section: Reference scope
+    group: Partners
     workflow_tag: rnafusion
-    data_collection_tag: samplesheet
+    data_collection_tag: fusion_consensus
     interactive_component_type: MultiSelect
-    column_name: strandedness
+    column_name: gene_5p
     column_type: object
-    display: {title_size: md, custom_color: '#F2A93B', icon_name: 'mdi:swap-horizontal'}
+    display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:dna'}
     placement: left
-    title: Strandedness
+    title: 5' partner gene
     layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: rnaf-filter-databases
+    index: rnaf-databases-filter
+    section: Reference scope
+    group: Partners
+    workflow_tag: rnafusion
+    data_collection_tag: fusion_consensus
+    interactive_component_type: MultiSelect
+    column_name: databases
+    column_type: object
+    display: {title_size: md, custom_color: '#F2A93B', icon_name: 'mdi:database-outline'}
+    placement: left
+    title: Knowledge bases hit
+    layout: {x: 0, y: 3, w: 1, h: 3}
 
 tabs:
 - title: Fusion calls
@@ -415,6 +527,10 @@ tabs:
     icon: mdi:relation-many-to-many
     color: violet
     description: Which callers agree, and how the agreement drives the ranking
+  - name: Partner chromosomes
+    icon: mdi:relation-many-to-many
+    color: cyan
+    description: Which contigs the two halves of each call came from
   - name: Ranked calls
     icon: mdi:table
     color: indigo
@@ -435,7 +551,7 @@ tabs:
       every caller into one table and scores each fusion with the Fusion
       Indication Index, which combines caller agreement with how many knowledge
       bases already list the pair.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: card
     tag: rnaf-calls-card-fusions
     section: Calls at a glance
@@ -451,7 +567,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Fusions called
-    layout: {x: 0, y: 1, w: 2, h: 2}
+    layout: {x: 0, y: 2, w: 2, h: 2}
   - component_type: card
     tag: rnaf-calls-card-fii
     section: Calls at a glance
@@ -467,7 +583,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Fusion Indication Index
-    layout: {x: 2, y: 1, w: 2, h: 2}
+    layout: {x: 2, y: 2, w: 2, h: 2}
   - component_type: card
     tag: rnaf-calls-card-agreement
     section: Calls at a glance
@@ -483,7 +599,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Callers per fusion
-    layout: {x: 4, y: 1, w: 2, h: 2}
+    layout: {x: 4, y: 2, w: 2, h: 2}
   - component_type: card
     tag: rnaf-calls-card-databases
     section: Calls at a glance
@@ -500,7 +616,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Knowledge bases
-    layout: {x: 6, y: 1, w: 2, h: 2}
+    layout: {x: 6, y: 2, w: 2, h: 2}
 
   - component_type: text
     tag: rnaf-calls-concordance-intro
@@ -516,7 +632,7 @@ tabs:
       The UpSet counts the fusions each combination of callers found; the bar on
       the far left is the set every caller agreed on. The ranked view below puts
       the same fusions in fusion-report's own order.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: advanced_viz
     tag: rnaf-calls-upset
     index: rnaf-calls-upset
@@ -535,7 +651,7 @@ tabs:
     title: Caller concordance
     description: Each bar is a set of fusions found by exactly that combination of callers. Degree colouring separates unanimous calls from single-caller ones.
     title_size: h3
-    layout: {x: 0, y: 1, w: 8, h: 6}
+    layout: {x: 0, y: 2, w: 8, h: 6}
   - component_type: advanced_viz
     tag: rnaf-calls-lollipop
     index: rnaf-calls-lollipop
@@ -552,7 +668,59 @@ tabs:
     title: Ranked fusions
     description: Every fusion at its position in the fusion-report ranking, coloured by caller agreement and sized by the Fusion Indication Index.
     title_size: h3
-    layout: {x: 0, y: 7, w: 8, h: 6}
+    layout: {x: 0, y: 8, w: 8, h: 6}
+
+  - component_type: text
+    tag: rnaf-calls-chrom-intro
+    section: Partner chromosomes
+    workflow_tag: rnafusion
+    data_collection_tag: arriba_fusions
+    title: Where the two halves came from
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Arriba writes each breakpoint as a contig and a position, so the calls
+      also read as a flow from the contig of the 5' partner to the contig of the
+      3' partner. A band that starts and ends on the same contig is a local
+      rearrangement; a band that crosses is a translocation.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: rnaf-calls-chrom-sankey
+    index: rnaf-calls-chrom-sankey
+    section: Partner chromosomes
+    workflow_tag: rnafusion
+    data_collection_tag: arriba_fusions
+    use: arriba/partner_chrom_sankey
+    config:
+      step_cols: [chrom_5p, chrom_3p]
+      value_col: supporting_reads
+      value_label: supporting reads
+      value_format: count
+      sort_mode: total_flow
+      color_mode: source
+      link_opacity: 0.55
+    title: Partner contigs, 5' to 3'
+    description: One band per call, from the contig carrying the 5' partner to the contig carrying the 3' partner, weighted by the reads supporting the call.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: rnaf-calls-chord
+    index: rnaf-calls-chord
+    section: Partner chromosomes
+    workflow_tag: rnafusion
+    data_collection_tag: arriba_fusion_links
+    use: arriba/partner_chords
+    config:
+      colour_by: category
+      show_labels: true
+      intra_chromosomal: true
+      max_links: 200
+    title: Breakpoint partners on the genome
+    description: The same calls on a chromosome ring, each chord drawn between its two breakpoints, coloured by structural class and thickened by read support. The flow above reads the contig pairs; this reads where on each contig they sit.
+    title_size: h3
+    layout: {x: 0, y: 9, w: 8, h: 8}
 
   - component_type: text
     tag: rnaf-calls-table-intro
@@ -568,7 +736,7 @@ tabs:
       Selecting rows narrows the evidence, validation and protein-domain tiles on
       the other tabs, because the template links every caller collection to this
       one on the fusion name.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: table
     tag: rnaf-calls-table
     section: Ranked calls
@@ -581,7 +749,7 @@ tabs:
     description: Rank, index, knowledge bases and the per-caller flags behind the UpSet.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 1, w: 8, h: 6}
+    layout: {x: 0, y: 2, w: 8, h: 4}
   - component_type: interactive
     tag: rnaf-filter-rank
     index: rnaf-rank-range
@@ -610,6 +778,22 @@ tabs:
     placement: left
     title: Knowledge bases
     layout: {x: 0, y: 3, w: 1, h: 3}
+  # The fusion-level replacement for the dead strandedness control: the contig
+  # pair is what the partner-chromosome flow on this tab is made of.
+  - component_type: interactive
+    tag: rnaf-filter-chrompair
+    index: rnaf-chrompair-filter
+    section: Consensus scope
+    group: Partner contigs
+    workflow_tag: rnafusion
+    data_collection_tag: arriba_fusions
+    interactive_component_type: MultiSelect
+    column_name: chrom_pair
+    column_type: object
+    display: {title_size: md, custom_color: '#26A69A', icon_name: 'mdi:relation-many-to-many'}
+    placement: left
+    title: Partner contigs
+    layout: {x: 0, y: 6, w: 1, h: 3}
 
 - title: Evidence
   subtitle: How much read support each caller found for each fusion, and where the callers disagree
@@ -654,7 +838,7 @@ tabs:
       Each caller counts reads its own way, so the evidence strings are summed
       into one supporting-read figure per fusion and caller. Colour is that
       figure on a log scale, size is the caller's share of the fusion's support.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: card
     tag: rnaf-ev-card-rows
     section: Support across callers
@@ -670,7 +854,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Fusions with evidence
-    layout: {x: 0, y: 1, w: 2, h: 2}
+    layout: {x: 0, y: 2, w: 2, h: 2}
   - component_type: card
     tag: rnaf-ev-card-support
     section: Support across callers
@@ -686,7 +870,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Supporting reads
-    layout: {x: 2, y: 1, w: 2, h: 2}
+    layout: {x: 2, y: 2, w: 2, h: 2}
   - component_type: card
     tag: rnaf-ev-card-total
     section: Support across callers
@@ -702,7 +886,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Total read support
-    layout: {x: 4, y: 1, w: 2, h: 2}
+    layout: {x: 4, y: 2, w: 2, h: 2}
   - component_type: card
     tag: rnaf-ev-card-share
     section: Support across callers
@@ -720,7 +904,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Mean caller share
-    layout: {x: 6, y: 1, w: 2, h: 2}
+    layout: {x: 6, y: 2, w: 2, h: 2}
   - component_type: advanced_viz
     tag: rnaf-ev-dotplot
     index: rnaf-ev-dotplot
@@ -737,7 +921,7 @@ tabs:
     title: Read support per fusion and caller
     description: One dot per fusion and caller. Colour is log10 read support, size is that caller's share of the fusion's total support. An empty column means the caller never reported the fusion.
     title_size: h3
-    layout: {x: 0, y: 3, w: 8, h: 7}
+    layout: {x: 0, y: 4, w: 8, h: 7}
   - component_type: figure
     tag: rnaf-ev-scatter
     index: rnaf-ev-scatter
@@ -777,7 +961,7 @@ tabs:
     title: Arriba against STAR-Fusion
     description: One point per fusion; size is the FusionCatcher support, colour the Fusion Indication Index. Points off the diagonal are the fusions the two callers weigh differently. Select points to filter the dashboard.
     title_size: h3
-    layout: {x: 0, y: 10, w: 8, h: 6}
+    layout: {x: 0, y: 11, w: 8, h: 6}
 
   - component_type: text
     tag: rnaf-ev-caller-intro
@@ -796,7 +980,31 @@ tabs:
       [STAR-Fusion](https://github.com/STAR-Fusion/STAR-Fusion) by splice type,
       [FusionCatcher](https://github.com/ndaniel/fusioncatcher) by the effect it
       predicts on the coding sequence.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: figure
+    tag: rnaf-ev-arriba-type-bar
+    section: Per caller detail
+    workflow_tag: rnafusion
+    data_collection_tag: arriba_fusions
+    use: arriba/type_bars
+    visu_type: bar
+    dict_kwargs: {x: fusion_type, y: supporting_reads, color: confidence}
+    title: Arriba event types
+    description: Read support summed per structural class, split by the confidence Arriba assigned.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 4, h: 5}
+  - component_type: figure
+    tag: rnaf-ev-arriba-site-bar
+    section: Per caller detail
+    workflow_tag: rnafusion
+    data_collection_tag: arriba_fusions
+    use: arriba/site_bars
+    visu_type: bar
+    dict_kwargs: {x: site_5p, y: supporting_reads, color: site_3p}
+    title: Arriba breakpoint sites
+    description: Read support summed per transcript feature the 5' breakpoint fell in, split by the feature on the 3' side. A call on two splice sites is the clean case.
+    title_size: h3
+    layout: {x: 4, y: 2, w: 4, h: 5}
   - component_type: advanced_viz
     tag: rnaf-ev-arriba-dot
     index: rnaf-ev-arriba-dot
@@ -812,7 +1020,7 @@ tabs:
     title: Arriba confidence and support
     description: Colour is log10 supporting reads, size is the share of the local coverage that supports the fusion.
     title_size: h3
-    layout: {x: 0, y: 1, w: 8, h: 6}
+    layout: {x: 0, y: 7, w: 8, h: 6}
   - component_type: advanced_viz
     tag: rnaf-ev-starfusion-dot
     index: rnaf-ev-starfusion-dot
@@ -828,7 +1036,7 @@ tabs:
     title: STAR-Fusion splice type and abundance
     description: Colour is log10 fusion fragments per million, size is the share of the support that crosses the junction.
     title_size: h3
-    layout: {x: 0, y: 7, w: 8, h: 6}
+    layout: {x: 0, y: 13, w: 8, h: 6}
   - component_type: advanced_viz
     tag: rnaf-ev-fusioncatcher-dot
     index: rnaf-ev-fusioncatcher-dot
@@ -844,7 +1052,7 @@ tabs:
     title: FusionCatcher predicted effect and support
     description: Colour is log10 supporting reads, size is the share of that support mapping uniquely.
     title_size: h3
-    layout: {x: 0, y: 13, w: 8, h: 6}
+    layout: {x: 0, y: 19, w: 8, h: 6}
 
   - component_type: table
     tag: rnaf-ev-table-arriba
@@ -884,7 +1092,7 @@ tabs:
     description: Spanning pairs, unique reads, anchor length and the annotation labels.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 8, w: 8, h: 4}
+    layout: {x: 0, y: 8, w: 8, h: 5}
   - component_type: interactive
     tag: rnaf-filter-caller
     index: rnaf-caller-filter
@@ -927,6 +1135,22 @@ tabs:
     placement: left
     title: Caller share
     layout: {x: 0, y: 6, w: 1, h: 3}
+  # The fusion-level replacement for the dead sample control on the per-caller
+  # panels: Arriba's own confidence class, which is what a reader triages by.
+  - component_type: interactive
+    tag: rnaf-filter-confidence
+    index: rnaf-confidence-filter
+    section: Evidence scope
+    group: Callers
+    workflow_tag: rnafusion
+    data_collection_tag: arriba_fusions
+    interactive_component_type: MultiSelect
+    column_name: confidence
+    column_type: object
+    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:check-decagram'}
+    placement: left
+    title: Arriba confidence
+    layout: {x: 0, y: 9, w: 1, h: 3}
 
 - title: FusionInspector and splicing
   subtitle: In-silico validation of the calls, the fusion protein domains and the splice-junction landscape
@@ -976,7 +1200,7 @@ tabs:
       rebuilds a contig for every candidate and re-aligns the reads to it. The
       fusion allelic ratio is the give-away: it weighs the fusion reads against
       the wild-type reads competing on each side.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: card
     tag: rnaf-fi-card-validated
     section: Validated calls
@@ -993,7 +1217,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Validated fusions
-    layout: {x: 0, y: 1, w: 2, h: 2}
+    layout: {x: 0, y: 2, w: 2, h: 2}
   - component_type: card
     tag: rnaf-fi-card-ffpm
     section: Validated calls
@@ -1009,7 +1233,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Fragments per million
-    layout: {x: 2, y: 1, w: 2, h: 2}
+    layout: {x: 2, y: 2, w: 2, h: 2}
   - component_type: card
     tag: rnaf-fi-card-junction
     section: Validated calls
@@ -1025,7 +1249,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Junction-crossing share
-    layout: {x: 4, y: 1, w: 2, h: 2}
+    layout: {x: 4, y: 2, w: 2, h: 2}
   - component_type: card
     tag: rnaf-fi-card-domains
     section: Validated calls
@@ -1041,7 +1265,7 @@ tabs:
     title_size: sm
     title_align: left
     title: 5' domains carried
-    layout: {x: 6, y: 1, w: 2, h: 2}
+    layout: {x: 6, y: 2, w: 2, h: 2}
   - component_type: advanced_viz
     tag: rnaf-fi-dotplot
     index: rnaf-fi-dotplot
@@ -1058,7 +1282,7 @@ tabs:
     title: Validated abundance by predicted protein
     description: Colour is log10 fragments per million after re-alignment, size is the share of the support that crosses the junction. A call with no junction reads lands in the unknown row.
     title_size: h3
-    layout: {x: 0, y: 3, w: 8, h: 6}
+    layout: {x: 0, y: 4, w: 8, h: 6}
   - component_type: figure
     tag: rnaf-fi-far-scatter
     index: rnaf-fi-far-scatter
@@ -1093,7 +1317,7 @@ tabs:
     title: Fusion allelic ratio, both sides
     description: One point per validated call; size is the re-aligned read support. A point high on both axes has little wild-type competition on either side. Select points to filter the domain track below.
     title_size: h3
-    layout: {x: 0, y: 9, w: 8, h: 6}
+    layout: {x: 0, y: 10, w: 8, h: 6}
 
   - component_type: text
     tag: rnaf-fi-domain-intro
@@ -1110,7 +1334,7 @@ tabs:
       in amino-acid coordinates. A PARTIAL suffix means the breakpoint cuts
       through the domain, which the structure below draws as a domain that
       stops where the partner does.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: advanced_viz
     tag: rnaf-fi-domain-track
     index: rnaf-fi-domain-track
@@ -1125,7 +1349,7 @@ tabs:
     title: Fusion protein structure
     description: The six fusions with the most annotated domains, each drawn as its two partners end to end with a lane per partner. A domain that stops where the partner does is one the breakpoint truncates.
     title_size: h3
-    layout: {x: 0, y: 1, w: 8, h: 6}
+    layout: {x: 0, y: 2, w: 8, h: 6}
   - component_type: advanced_viz
     tag: rnaf-fi-domain-lollipop
     index: rnaf-fi-domain-lollipop
@@ -1142,7 +1366,7 @@ tabs:
     title: Domain positions per fusion
     description: Each stem is one Pfam hit at its start position, coloured by partner and sized by how strong the hit is. Clustered stems are a Pfam clan reporting the same region several times.
     title_size: h3
-    layout: {x: 0, y: 7, w: 8, h: 6}
+    layout: {x: 0, y: 8, w: 8, h: 6}
   - component_type: table
     tag: rnaf-fi-domain-table
     section: Fusion protein domains
@@ -1155,7 +1379,7 @@ tabs:
     description: One row per domain, with its amino-acid range and hit strength.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 13, w: 8, h: 4}
+    layout: {x: 0, y: 14, w: 8, h: 7}
 
   - component_type: text
     tag: rnaf-splice-intro
@@ -1172,7 +1396,7 @@ tabs:
       junction in the genes the callers touched. The landscape is keyed on the
       junction, not on the fusion, so it is not narrowed by the fusion filter in
       the left panel.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: card
     tag: rnaf-splice-card-junctions
     section: Splice junctions
@@ -1189,7 +1413,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Junctions scored
-    layout: {x: 0, y: 1, w: 2, h: 2}
+    layout: {x: 0, y: 2, w: 2, h: 2}
   - component_type: card
     tag: rnaf-splice-card-uniq
     section: Splice junctions
@@ -1205,7 +1429,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Unique read support
-    layout: {x: 2, y: 1, w: 2, h: 2}
+    layout: {x: 2, y: 2, w: 2, h: 2}
   - component_type: card
     tag: rnaf-splice-card-total
     section: Splice junctions
@@ -1221,7 +1445,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Reads across junctions
-    layout: {x: 4, y: 1, w: 2, h: 2}
+    layout: {x: 4, y: 2, w: 2, h: 2}
   - component_type: card
     tag: rnaf-splice-card-length
     section: Splice junctions
@@ -1236,7 +1460,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Intron length
-    layout: {x: 6, y: 1, w: 2, h: 2}
+    layout: {x: 6, y: 2, w: 2, h: 2}
   - component_type: advanced_viz
     tag: rnaf-splice-manhattan
     index: rnaf-splice-manhattan
@@ -1255,7 +1479,7 @@ tabs:
     title: Junction support along the genome
     description: One point per splice junction, positioned at its start and raised by the number of uniquely mapping reads crossing it. Selecting points narrows the junction table.
     title_size: h3
-    layout: {x: 0, y: 3, w: 8, h: 6}
+    layout: {x: 0, y: 4, w: 8, h: 6}
   - component_type: advanced_viz
     tag: rnaf-splice-sashimi
     index: rnaf-splice-sashimi
@@ -1270,7 +1494,7 @@ tabs:
     title: Junction arcs over the busiest loci
     description: Each arc is one splice junction, drawn from donor to acceptor and thickened by the reads crossing it. The locus picker opens on the busiest cluster; junctions under two reads are hidden.
     title_size: h3
-    layout: {x: 0, y: 9, w: 8, h: 7}
+    layout: {x: 0, y: 10, w: 8, h: 7}
   - component_type: figure
     tag: rnaf-splice-gene-bar
     section: Splice junctions
@@ -1282,7 +1506,7 @@ tabs:
     title: Junction support per gene
     description: Uniquely mapping reads summed per gene, split by strand.
     title_size: h3
-    layout: {x: 0, y: 16, w: 8, h: 5}
+    layout: {x: 0, y: 17, w: 8, h: 5}
   - component_type: interactive
     tag: rnaf-filter-prot
     index: rnaf-prot-filter

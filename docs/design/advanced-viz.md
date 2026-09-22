@@ -38,7 +38,7 @@ Curated from a 14-item survey across nf-core pipelines, Bioconductor Shiny apps,
 | 9 | Spatial scatter + simple image overlay | spatial transcriptomics, IF imaging (small images) | image opacity, colour-by, ROI lasso | gene set, cell-type filter | ROI cells (sample IDs) | plotly.js image annotation, or deck.gl BitmapLayer + ScatterplotLayer |
 | 10 | Pathway / network (STRING/KEGG) | enrichment, sc, multi-omic | layout algo, edge-confidence slider, colour-by logFC, expand neighbours | gene-set from #1/#3 | selected node → drill-back | cytoscape.js |
 
-**Note on #8:** the igv.js / jbrowse-react framing above predates the `advanced_viz` family. GenomeSpy — a declarative, coordinate-bound track grammar — was evaluated against it in `docs/design/genomespy-eval.md` (#1083) and landed as the `genomespy_track` kind; that document also lists which of the hand-built genome renderers it could replace.
+**Note on #8:** the igv.js / jbrowse-react framing above predates the `advanced_viz` family. GenomeSpy, a declarative, coordinate-bound track grammar, was evaluated against it in `docs/design/genomespy-eval.md` (#1083) and landed as the `genome_view` kind; that document also lists which of the hand-built genome renderers it could replace.
 
 **Note on #9:** kept deliberately lightweight. Single image (PNG/JPG) as background, scatter overlay, lasso ROI. No pyramid / no zarr / no Vitessce. If imaging requirements grow later, swap the renderer for deck.gl + viv without touching the coordination contract.
 
@@ -304,6 +304,7 @@ Anything where p99 latency could exceed ~500ms or memory could spike beyond ~250
 | Pathway (#10) network expansion via STRING/KEGG | external API + graph traversal | `depictio.advanced_viz.pathway_expand` |
 | Volcano label-top-N when N is large (>1000) | layout / collision avoidance | client-side; only server-side if requested as PNG/PDF |
 | Embedding (#2) initial render with >100k points | server-side downsampling / tiling | `depictio.advanced_viz.embedding_tile` |
+| `group_compare` two-group differential test | per-feature test over a wide observation x feature matrix, plus BH correction | `depictio.advanced_viz.compute_group_compare` |
 
 Light operations (threshold filtering on already-loaded data, axis flips, hover formatting) stay in the browser. The principle: **pre-compute on the server, react in the browser.**
 
@@ -369,6 +370,87 @@ Once this MVP is stable, the rest of the catalogue is incremental: each new viz 
 8. **Recipe vs first-class compute** — should clustering/DR kinds be implemented as recipes under the existing `TransformConfig` system (pro: leverages existing scan/materialise pipeline) or as standalone Celery tasks bypassing recipes (pro: tighter typing, no `.py` recipe file per kind)? Recommendation: **standalone Celery tasks** for the eight builtin kinds, while leaving `TransformConfig` available for user-authored custom transforms.
 9. **Worker queue topology** — separate `compute` queue from default? Yes (long jobs shouldn't block previews). Helm chart needs an additional worker deployment.
 10. **DC schema-validation surface** — surface mismatches in editor only, or also at runtime? Recommend both, but editor-time should block save while runtime should display a non-fatal banner.
+
+---
+
+## 7. Kinds added with the nf-core template lots (2026-09)
+
+The kinds below were added in the second template lot and its remediation wave. Each one
+went through the seven registry touchpoints (`types.py`, `CANONICAL_SCHEMAS` / `ROLE_NAMES` /
+`_OPTIONAL_ROLES` / `KIND_METADATA` in `schemas.py`, a `<Kind>Config` in `configs.py`,
+`KIND_SAMPLING_POLICY`), the TypeScript union, `AdvancedVizDispatch` and `splitPanels`, plus a
+showcase tab and a pytest / vitest pair. The `contact_map`, `knee_plot` and `damage_profile`
+kinds of the first lot 2 cut follow the same pattern.
+
+**`genome_view`** (renamed from the spike's `genomespy_track`). A GenomeSpy-backed track:
+required roles `chr`, `pos`, `score`, optional `end` (interval), `feature` (label and selection
+id), `sample` (one lane per value, `facet_by_sample`, capped by `max_facets`) and `category`
+(colour). Marks are `point`, `rect` (needs `end_col`, silently falls back to `point` without it)
+and `bar` (score as height from zero; GenomeSpy core has no line or area mark, so there is no
+smooth coverage curve). An optional gene lane reads a bundled hg38 or mm10 asset
+(`depictio/viewer/public/assets/genomes/*.genes.json`, protein-coding GENCODE basic, built by
+`dev/advanced_viz_kinds/build_genome_gene_assets.py`; `@genome-spy/core` ships chromosome sizes
+only). A brush emits two `InteractiveFilter`s with source `genome_selection`, a `MultiSelect` on
+`chr_col` and a `RangeSlider` on `pos_col`, which `add_filter` already understands, so any tile on
+a collection carrying the same columns narrows with it; `follow_region_filter: true` makes a
+tile zoom to an incoming region instead. Measured on atacseq's `macs2_broad_peaks` (224,137
+rows): one WebGL context against Plotly scattergl's two, gesture frames at the vsync floor for
+both, so the honest reading is "no worse" (`docs/design/genomespy-eval.md`).
+
+**`group_compare`.** Compute on a selection. The first kind whose input is not a column binding
+but a pair of row groups picked in the dashboard: two saved selection groups (a lasso kept
+through "select & compare") or two values of a label column. Both collapse to one
+`{label, column, values}` selector before they leave the browser. The endpoint pair
+`POST /advanced_viz/compute_group_compare` + `GET /advanced_viz/compute_group_compare/{job_id}`
+follows the dispatch / poll / cache contract of `compute_upset`: the cache key hashes the whole
+payload, so re-running an identical comparison is free. The worker loads the collection through
+`load_deltatable_lite` with the dashboard's `filter_metadata`, infers the features from the
+schema as `complex_heatmap` infers its matrix (capped by variance at `max_features`), runs a
+Wilcoxon rank-sum (default) or Welch t-test, Benjamini-Hochberg across the tested features and a
+log2 fold change of the raw means with a pseudocount. The renderer draws a volcano and the ranked
+marker table; thresholds and the label budget are client-side, so moving them never costs a job.
+Known artefact: any numeric column is a feature, so embedding axes stored beside the genes get
+tested too; a feature-exclusion list on the config is the follow-up.
+
+**`transcript_structure`.** The isoforms of one gene as lanes on a base-pair axis: exon blocks,
+coding blocks drawn taller so the UTRs stay visible, introns as thin lines carrying strand
+chevrons. One row per exon or CDS block (`transcript_id`, `gene_id`, `chrom`, `start`, `end`,
+`feature`, `strand`, optionally `sample`, `gene_name`, `transcript_class`, `expression`), which
+is what `gtf/transcripts` makes of any GTF or GFF3 a run publishes (StringTie, bambu
+`extended_annotations.gtf`, gffcompare). Lanes are ordered by expression and cut to
+`max_transcripts`; the novelty class colours them. One gene at a time is deliberate: a track
+showing every locus is a genome browser, and that is `genome_view`'s job.
+
+**`cnv_profile`.** One collection carries both halves of a somatic copy-number call, told apart
+by the optional `segment` role: a bin row is one window of the ratio track and draws as a point,
+a segment row is the caller's own call and draws as a thick horizontal stroke over it, coloured
+gain, neutral or loss by `gain_threshold` / `loss_threshold`. The x axis is the genome with the
+same chromosome offsets `manhattan` uses, so the chromosome Select zooms onto one contig. When
+`baf_col` is bound, a second panel plots the B-allele frequency against a dotted 0.5 rule: that
+panel is the reason the kind exists, because copy-neutral loss of heterozygosity never moves the
+log2 track. Bins go out as `scattergl` and fall back to a downsampled SVG trace when the WebGL
+budget is spent; above `max_bins` they are averaged into windows, never sampled, and segments are
+never thinned. Producers: `cnvkit` (`.cnr` bins + `.cns` segments), `ascat` (allele counts to
+log2 ratio, copy number and expected BAF) and `controlfreec` (segments recovered by run-length
+encoding `MedianRatio`), all on nf-core/sarek's somatic `variant_calling/` layout and gated
+behind a somatic run.
+
+**`genome_chord`.** The one kind with no library behind it: Plotly has no chord trace and d3 is
+not a dependency, so `GenomeChordRenderer` draws plain SVG and keeps every number in
+`genome_chord/chordLayout.ts`, unit-tested without a DOM. Chromosomes are arcs proportional to
+length (hg38 / hg19 / mm10 sizes, or derived from the data), laid clockwise from noon; the chord
+joining two loci is a quadratic Bezier whose control point moves from the rim to the centre as
+the loci move apart, so an intra-chromosomal deletion stays a short arc rather than a spike
+through the picture. Width is log10 of the weight. The server never samples it
+(`KIND_SAMPLING_POLICY: "none"`: a random subset of breakpoint pairs would drop exactly the rare
+translocations the picture exists to show); the renderer sorts by weight and draws the heaviest
+`max_links`, reporting the remainder. Clicking a chord emits a `scatter_selection` filter on
+`label_col`. Producer: `arriba/fusion_links`.
+
+**`contact_map`, `display: triangle`.** Rotates the matrix 45 degrees so genomic position is on
+x alone and a `genome_view` track stacked above shares the axis; `max_separation_bins` caps the
+apex. The pure helper `contactMapTriangle.ts` does the rotation and fills the odd-parity lattice
+gaps from horizontal neighbours.
 
 ---
 

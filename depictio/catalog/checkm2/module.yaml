@@ -1,0 +1,17 @@
+# CheckM2 — completeness and contamination of a metagenome-assembled genome,
+# predicted by a neural network over the gene content rather than by a
+# lineage-specific marker set. Since nf-core/mag 3.3.0 it is the default bin
+# quality step, and from 5.5.0 it is the only one the pipeline publishes
+# (BUSCO directories stopped being emitted).
+#
+# MultiQC has a checkm2 module and `depictio/catalog/multiqc/checkm2.yaml`
+# binds it, but that panel is a general-statistics block: it carries
+# completeness and contamination for the bins MultiQC happened to index and
+# nothing else. The report table CheckM2 itself writes carries thirteen more
+# columns per bin — coding density, contig N50, genome size, GC, gene count —
+# which is what turns a pair of numbers into a bin quality dashboard.
+id: checkm2
+name: CheckM2
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/checkm2/predict
+homepage: https://github.com/chklovski/CheckM2
+description: Machine-learning prediction of genome completeness and contamination for metagenome-assembled genomes.

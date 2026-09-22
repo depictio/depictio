@@ -1,0 +1,16 @@
+id: bismark_window_pca
+name: Library PCA over binned methylation
+mode: exploratory/pca
+description: >-
+  The first components of a PCA over the binned methylome, one point per
+  library. Answers what no per-sample QC number can: whether the libraries
+  separate by the design the sheet declares or by depth, batch and conversion
+  rate. Decomposed with a plain numpy SVD inside the recipe.
+find:
+  path_glob: "**/*.bedGraph.gz"
+recipe: bismark/window_pca.py
+fixture: window_pca.tsv
+renders_as:
+  - { id: pca_embedding, component: advanced_viz, kind: embedding, roles: {sample_id: sample_id, dim_1: dim_1, dim_2: dim_2, dim_3: dim_3, color: group, cluster: cell_line} }
+  - { component: figure, visu_type: scatter, dict_kwargs: {x: dim_1, y: dim_2, color: group, title: Libraries on the first two components of their binned methylome} }
+  - { component: table }

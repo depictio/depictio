@@ -54,8 +54,23 @@ renders_as:
       top_n_count: 4,
     }
   - {
+      component: card,
+      column: assigned_count,
+      aggregation: median,
+      aggregations: [box_plot_stats],
+      secondary_layout: box_plot,
+    }
+  - {
       component: figure,
       visu_type: scatter,
       dict_kwargs: { x: taxa_observed, y: shannon, color: profiler, symbol: platform },
+    }
+  # How concentrated a run's profile is: the share its single top taxon holds,
+  # which separates classifiers reporting a few dominant taxa from those that
+  # spread the same community over a long tail.
+  - {
+      component: figure,
+      visu_type: bar,
+      dict_kwargs: { x: profiler_db, y: top_taxon_fraction, color: profiler },
     }
   - { component: table }

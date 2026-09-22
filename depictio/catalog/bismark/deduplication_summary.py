@@ -33,11 +33,11 @@ Output schema:
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.recipes.lib.bismark_reports import report_lines
 
 RAW_DC_TAG = "bismark_dedup_raw"
 
@@ -53,18 +53,12 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "leftover_sequences": pl.Int64,
 }
 
-SOURCE_PATH_COL = "source_path"
-
-_SUFFIX_RE = re.compile(r"(_\d+)?_val_\d+_bismark_bt2_(pe|se)\.deduplication_report\.txt$")
+# `bismark_[a-z0-9]+`: the bismark_hisat route writes `_bismark_hisat2_`.
+_SUFFIX_RE = re.compile(r"(_\d+)?(_val_\d+)?_bismark_[a-z0-9]+_(pe|se)\.deduplication_report\.txt$")
 
 _TOTAL_RE = re.compile(r"Total number of alignments analysed in [^:]+:\t(\d+)")
 _REMOVED_RE = re.compile(r"Total number duplicated alignments removed:\t(\d+)\s*\(([\d.]+)%\)")
 _LEFTOVER_RE = re.compile(r"Total count of deduplicated leftover sequences:\s*(\d+)")
-
-
-def _sample_id(path: str) -> str:
-    name = Path(str(path)).name
-    return _SUFFIX_RE.sub("", name)
 
 
 def _parse_report(sample: str, text: str) -> dict[str, object]:
@@ -82,22 +76,12 @@ def _parse_report(sample: str, text: str) -> dict[str, object]:
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """Re-assemble each report from its lines, then parse it into one row."""
-    raw = sources["lines"]
-    if raw.is_empty():
-        raise ValueError("bismark_deduplication_summary: the scanned reports are empty")
-    if SOURCE_PATH_COL not in raw.columns:
-        raise ValueError(
-            "bismark_deduplication_summary: the raw scan must carry include_file_paths=source_path"
+    rows = [
+        _parse_report(sample, "\n".join(lines))
+        for sample, lines in report_lines(
+            sources["lines"], "bismark_deduplication_summary", _SUFFIX_RE
         )
-
-    rows: list[dict[str, object]] = []
-    for (source_path,), part in raw.group_by([SOURCE_PATH_COL], maintain_order=True):
-        sample = _sample_id(source_path)
-        text = "\n".join(line or "" for line in part.get_column("line").to_list())
-        rows.append(_parse_report(sample, text))
-
-    if not rows:
-        raise ValueError("bismark_deduplication_summary: no report produced a row")
+    ]
 
     frame = pl.DataFrame(rows, infer_schema_length=None)
     return frame.select(

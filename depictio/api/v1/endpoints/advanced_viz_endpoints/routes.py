@@ -1510,6 +1510,60 @@ def poll_compute_sankey(
     return _poll_compute(job_id, current_user)
 
 
+def _group_selector(raw: Any, side: str) -> dict[str, Any]:
+    """Validate one arm of a group comparison, or raise 400.
+
+    A selector is a column plus the values it captured, which is exactly what
+    a saved selection group is (``GroupRenderDef``) and what a single value of
+    the config's ``group_col`` collapses to. Normalising both into one shape
+    here is what lets the worker treat "two lassos" and "two labels" the same.
+    """
+    if not isinstance(raw, dict):
+        raise HTTPException(status_code=400, detail=f"group_{side} must be an object")
+    column = str(raw.get("column") or "").strip()
+    values = [str(v) for v in (raw.get("values") or []) if v is not None]
+    if not column or not values:
+        raise HTTPException(
+            status_code=400,
+            detail=f"group_{side} needs a column and at least one value",
+        )
+    return {
+        "label": str(raw.get("label") or f"Group {side.upper()}"),
+        "column": column,
+        "values": values,
+    }
+
+
+@advanced_viz_endpoint_router.post("/compute_group_compare")
+def dispatch_compute_group_compare(
+    payload: dict = Body(...),
+    current_user=Depends(get_user_or_anonymous),
+    access_token: str | None = Depends(oauth2_scheme_optional),
+) -> dict[str, Any]:
+    """Dispatch a two-group differential test as a Celery task.
+
+    Same dispatch + poll + cache contract as ``compute_upset``: the cache key
+    hashes the whole payload, so the two group definitions and every statistic
+    tunable pick their own cache entry, and re-running the identical
+    comparison is free.
+    """
+    from depictio.api.v1.celery_tasks import compute_group_compare as compute_task
+
+    payload["group_a"] = _group_selector(payload.get("group_a"), "a")
+    payload["group_b"] = _group_selector(payload.get("group_b"), "b")
+    _apply_link_filters_to_payload(payload, access_token, "group_compare")
+    return _dispatch_compute(payload, "group_compare", compute_task, current_user)
+
+
+@advanced_viz_endpoint_router.get("/compute_group_compare/{job_id}")
+def poll_compute_group_compare(
+    job_id: str,
+    current_user=Depends(get_user_or_anonymous),
+) -> dict[str, Any]:
+    """Poll a previously-dispatched group comparison."""
+    return _poll_compute(job_id, current_user)
+
+
 # The repo is bind-mounted at /app in the backend container, so any path holding
 # a `/depictio/projects/` segment has a container twin at the same suffix.
 _CONTAINER_REPO_ROOT = "/app"

@@ -1,0 +1,18 @@
+id: cellranger_cell_calls_by_method
+name: Cell calls by method
+mode: analysis/cell_calls_by_method
+description: >-
+  One row per barcode any method called a cell, across the Cell Ranger,
+  simpleaf/alevin-fry and kallisto routes plus CellBender on each, on one
+  normalised 16-mer barcode. Cell Ranger's barcodes carry a GEM-well suffix
+  the other routes do not, so the normalisation is the whole point.
+find:
+  path_glob: "**/filtered_feature_bc_matrix/barcodes.tsv.gz"
+recipe: cellranger/cell_calls_by_method.py
+fixture: cell_calls_by_method.tsv
+renders_as:
+  - { id: cell_call_upset, component: advanced_viz, kind: upset_plot, roles: {} }
+  - { id: caller_count_filter, component: interactive, interactive_type: RangeSlider, column_name: n_callers }
+  - { component: card, column: n_callers, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: barcode_core, aggregation: count, secondary_layout: uniqueness }
+  - { component: table }

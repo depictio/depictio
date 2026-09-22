@@ -19,11 +19,17 @@ The per-sample file carries no sample column and the recipe harness concatenates
 the globbed files without their path, so no ``sample`` column can be recovered:
 the fusion call is the unit of analysis.
 
+Each breakpoint is a ``chrom:position`` string, so the recipe also splits the
+chromosome out of both of them and pairs them into ``chrom_pair``. That reads the
+same rows as a partner-chromosome flow (an intra-chromosomal duplication and a
+translocation are different events) and gives a fusion-level grouping on a run
+whose sample column is constant.
+
 Output columns:
-    fusion, gene_5p, gene_3p, breakpoint_5p, breakpoint_3p, site_5p, site_3p,
-    fusion_type, confidence, reading_frame, split_reads, discordant_mates,
-    supporting_reads, coverage, log_support, support_fraction,
-    retained_protein_domains, tags
+    fusion, gene_5p, gene_3p, breakpoint_5p, breakpoint_3p, chrom_5p, chrom_3p,
+    chrom_pair, site_5p, site_3p, fusion_type, confidence, reading_frame,
+    split_reads, discordant_mates, supporting_reads, coverage, log_support,
+    support_fraction, retained_protein_domains, tags
 """
 
 import polars as pl
@@ -51,6 +57,9 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "gene_3p": pl.Utf8,
     "breakpoint_5p": pl.Utf8,
     "breakpoint_3p": pl.Utf8,
+    "chrom_5p": pl.Utf8,
+    "chrom_3p": pl.Utf8,
+    "chrom_pair": pl.Utf8,
     "site_5p": pl.Utf8,
     "site_3p": pl.Utf8,
     "fusion_type": pl.Utf8,
@@ -75,6 +84,18 @@ def _text(name: str) -> pl.Expr:
 def _count(name: str) -> pl.Expr:
     """Read a read-count column as a never-null integer."""
     return pl.col(name).cast(pl.Int64, strict=False).fill_null(0)
+
+
+def _chrom(breakpoint_col: str) -> pl.Expr:
+    """The contig half of Arriba's ``chrom:position`` breakpoint string."""
+    return (
+        pl.col(breakpoint_col)
+        .str.split(":")
+        .list.first()
+        .cast(pl.Utf8)
+        .fill_null("")
+        .replace("", "unknown")
+    )
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
@@ -102,11 +123,19 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     )
 
     local_reads = pl.col("supporting_reads") + pl.col("coverage")
-    return base.with_columns(
-        (pl.col("supporting_reads") + 1).log10().cast(pl.Float64).alias("log_support"),
-        pl.when(local_reads > 0)
-        .then(pl.col("supporting_reads") / local_reads)
-        .otherwise(0.0)
-        .cast(pl.Float64)
-        .alias("support_fraction"),
-    ).select(list(EXPECTED_SCHEMA))
+    return (
+        base.with_columns(
+            (pl.col("supporting_reads") + 1).log10().cast(pl.Float64).alias("log_support"),
+            pl.when(local_reads > 0)
+            .then(pl.col("supporting_reads") / local_reads)
+            .otherwise(0.0)
+            .cast(pl.Float64)
+            .alias("support_fraction"),
+            _chrom("breakpoint_5p").alias("chrom_5p"),
+            _chrom("breakpoint_3p").alias("chrom_3p"),
+        )
+        .with_columns(
+            pl.concat_str("chrom_5p", pl.lit(" to "), "chrom_3p").alias("chrom_pair"),
+        )
+        .select(list(EXPECTED_SCHEMA))
+    )

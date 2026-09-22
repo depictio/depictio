@@ -1,0 +1,16 @@
+barcode_core	cellranger	cellranger_cellbender	simpleaf_cellbender	kallisto	kallisto_cellbender	n_callers
+AAACCTGAGCATCATC	true	true	false	false	false	2
+AAACCTGAGCTAACTC	true	true	false	false	false	2
+AAACCTGAGCTAGTGG	true	true	false	false	false	2
+AAACCTGCACATTAGC	true	true	false	false	false	2
+AAACCTGCACTGTTAG	true	true	false	false	false	2
+AAACCTGCATAGTAAG	true	true	false	false	false	2
+AAACCTGCATGAACCT	true	true	false	false	false	2
+AAACCTGGTAAGAGGA	true	true	false	false	false	2
+AAACCTGGTAGAAGGA	true	true	false	false	false	2
+AAACCTGGTCCAGTGC	true	true	false	false	false	2
+AAACCTGGTGTCTGAT	true	true	false	false	false	2
+AAACCTGGTTTGCATG	true	true	false	false	false	2
+AAACCTGGTTTGTTTC	true	true	false	false	false	2
+AAACCTGTCCGTTGCT	true	true	false	false	false	2
+AAACCTGTCCTGTAGA	true	true	false	false	false	2

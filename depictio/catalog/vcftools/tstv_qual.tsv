@@ -1,0 +1,16 @@
+sample	caller	series	qual_threshold	n_ts_above	n_tv_above	ts_tv_above
+NA12878_200M	deepvariant	NA12878_200M / deepvariant	0.0	28435	11062	2.57051
+NA12878_200M	deepvariant	NA12878_200M / deepvariant	0.1	28348	11005	2.57592
+NA12878_200M	deepvariant	NA12878_200M / deepvariant	0.2	28322	10989	2.5773
+NA12878_200M	deepvariant	NA12878_200M / deepvariant	0.3	28301	10980	2.5775
+NA12878_200M	deepvariant	NA12878_200M / deepvariant	0.4	28286	10973	2.57778
+NA12878_200M	deepvariant	NA12878_200M / deepvariant	0.5	28276	10966	2.57852
+NA12878_200M	deepvariant	NA12878_200M / deepvariant	0.6	28272	10960	2.57956
+NA12878_200M	deepvariant	NA12878_200M / deepvariant	0.7	28265	10953	2.58057
+NA12878_200M	deepvariant	NA12878_200M / deepvariant	0.8	28259	10951	2.58049
+NA12878_200M	deepvariant	NA12878_200M / deepvariant	0.9	28252	10950	2.58009
+NA12878_200M	deepvariant	NA12878_200M / deepvariant	1.0	28250	10947	2.58062
+NA12878_200M	deepvariant	NA12878_200M / deepvariant	1.1	28245	10942	2.58134
+NA12878_200M	deepvariant	NA12878_200M / deepvariant	1.2	28243	10941	2.58139
+NA12878_200M	deepvariant	NA12878_200M / deepvariant	1.3	28240	10940	2.58135
+NA12878_200M	deepvariant	NA12878_200M / deepvariant	1.4	28239	10940	2.58126

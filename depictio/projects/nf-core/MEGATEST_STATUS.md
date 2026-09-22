@@ -45,7 +45,7 @@ and are lower bounds for the big runs.
 | quantms | 1.2.0 | `fa34d79f` | empty | | no | Markers for `mode_dia/`, `mode_lfq/`, `mode_tmt/` and nothing else. Last complete run is 1.1.1 (2023, 224 files). |
 | bacass | 2.6.1 | `5ed7c2dd` | missing | | | No prefix for 2.6.1 and every older prefix (2.1.0 to 2.5.0) is empty: no usable megatest at all. |
 | raredisease | 3.1.2 | `83f2699d` | empty | | no | Every release prefix (2.2.0 to 3.1.2) holds `pipeline_info/` only. |
-| mag | 5.5.0 | `56abab5b` | partial | `.` | no | 43 small files / 11.8 MB under `GenomeBinning/`, `QC_longreads/`, `QC_shortreads/`: passes the heuristic but publishes no MultiQC, bin QC or GTDB-Tk tables. **Selected run is 5.4.2** (`5dabb015`, 7500+ files / 14.7 GB, parquet at `multiqc/multiqc_data/multiqc.parquet`, 10 MB; the 2026-09-05 survey missed it because its listing was capped at 1500 keys). Publishes no bin QC (CheckM/BUSCO/GUNC), no taxonomy (GTDB-Tk) and no QUAST or depth tables at all, confirmed against the local fetch (0 objects under `Taxonomy/`, `QC_shortreads/`, `QC_longreads/` or `Assembly/`). Only `GenomeBinning/` contig-to-bin maps, COMEBin embeddings, assemblies, Prodigal/GenBank annotation (`Annotation/`, 917 files, not locally fetched) and MultiQC are published, so the template built on it stays thin by construction, not by an incomplete build. 5.2.0 and 5.3.0 empty. |
+| mag | 5.5.0 | `56abab5b` | partial | `.` | no | The tagged run crashed after read QC (52 objects). **Selected run is the 5.5.0 release candidate `171cf369`** (15,494 objects, same three CAPES samples, CheckM2 + GTDB-Tk + QUAST + Prokka + contig depths, no `multiqc/`, reprocessed with 1.35). The 5.4.2 prefix `5dabb015` (7554 keys, 987 non-zero objects) is a truncated sync that dropped every object under about 8 MB: the run produced the bin QC and taxonomy tables (its MultiQC `report_data_sources` lists them) but only the large FASTA / GenBank / COMEBin objects survived, which is why the first template looked "thin by construction". 5.2.0 and 5.3.0 empty. |
 | phyloplace | 2.1.0 | `441e351e` | missing | | | 2.0.1 (`3e37f9d7`) is complete and small (25 files / 14.8 MB, parquet present but the MultiQC report carries no module data). 2.0.0 empty. |
 | nanoseq | 3.1.0 | `6e563e54` | empty | | no | Two zero-sized data objects. **Selected run is 3.0.0** (`1e60482a`, 2022, 205 files / 17 GB, pre-parquet MultiQC under `multiqc/minimap2/multiqc_data/`, reprocessed with 1.35). |
 | eager | 2.5.3 | `cc66639a` | empty | | no | 2.5.0 to 2.5.3 hold `pipeline_info/` only. **Selected run is 2.4.5** (`42c9d5f8`, 302 files / 16.3 GB, DSL1, `multiqc/multiqc_data/multiqc_data.json` only, reprocessed with 1.35). 2.4.4 is a byte-identical twin of 2.4.5. |
@@ -85,11 +85,38 @@ dropped because the bucket holds no run for it.
 |---|---|---|---|---|
 | sarek | 3.10.0 | `8ccac7ad37b05dd792447763bf9671b719824587` | `test_full_germline_ncbench_agilent/` | 1.35 native parquet |
 | scrnaseq | 4.2.0 | `3fc17b4f971a89e47c88337de71d0e777ffad8cc` | `aligner_cellranger/` | 1.34 native parquet |
-| mag | 5.4.2 | `5dabb0159ac0104885e09f301db22126e8fcb394` | `.` | native parquet |
+| mag | 5.5.0 (release candidate) | `171cf36971499cea4c9bccac4536cccbfc540e14` | `.` | none published, reprocessed with 1.35 |
 | nanoseq | 3.0.0 | `1e60482a2c4621234393a6eef8e9a104309c20ae` | `.` | pre-parquet (`multiqc/minimap2/multiqc_data/`), reprocessed with 1.35 |
 | eager | 2.4.5 | `42c9d5f8602e5e88fdcec28f194d2cd4cff61c75` | `.` | pre-parquet, reprocessed with 1.35 |
 | methylseq | 2.3.0 | `93bc5811603c287c766a0ff7e03b5b41f4483895` | `bismark/` | pre-parquet, reprocessed with 1.35 |
 | hic | 2.0.0 | `b4d89cfacf97a5835fba804887cf0fc7e0449e8d` | `.` | pre-parquet (`mqc_*.txt`), reprocessed with 1.35 |
+
+### 2026-09-22 remediation wave
+
+What changed in the manifests and pins during the lot 1 + lot 2 remediation:
+
+- **mag re-pinned to the 5.5.0 release candidate** `171cf36971499cea4c9bccac4536cccbfc540e14`
+  (not a tag sha: `manifest.version = '5.5.0'`, "chore: update full test resources", four
+  days before the tag). 15,494 objects, same three CAPES samples as 5.4.2, and the report
+  tables the 5.4.2 sync dropped (CheckM2, GTDB-Tk, QUAST, Prokka, contig depths). No
+  `multiqc/` published: reprocessed with 1.35. The template moved to `mag/5.5.0`; 673 files /
+  65 MB fetched. `resolve` warns about the non-tag sha and keeps the pin.
+- **sarek** now fetches its VCFs: 196 files / 104.3 MB (was 185 / about 60 MB); the useful
+  per-sample x caller `*.filtered.vcf.gz` / `*.variants.vcf.gz` and `*_snpEff.ann.vcf.gz`
+  (20 files, 44 MB), gVCFs and VEP duplicates still excluded. Both FreeBayes
+  `variant_calling/` VCFs are 196-byte symlink-target files on S3, not gzip (SK-D7).
+  Manta's VCFs are real (57 and 72 SV records), contrary to an earlier reading.
+- **differentialabundance**: GSEA report tables are not in the pinned prefix `30ed7741`
+  (its parameter-set directory is only *named* `deseq2_rnaseq_gsea,deseq2_rnaseq_gprofiler2`;
+  it publishes no `tables/gsea/` or `tables/gprofiler2/`). They come from the sibling prefix
+  `47e3d923bbf2311ace0b9dea12d756287798275e`; the fetch command is in the template's
+  megatest.yaml. No prefix of this pipeline publishes gprofiler2 TSVs (`3dd360fe` crashed
+  with `pipeline_info/` only).
+- **taxprofiler** megatest.yaml header said "12 profiler x database combinations"; the run
+  has 20 declared and 18 written.
+- **cutandrun 3.1** (`42502fb4`): 18 collections, 5 tabs, ingested clean on 2026-09-22.
+- methylseq, nanoseq, eager, hic, scrnaseq: manifests unchanged; what changed is what the
+  templates read from them (see each `VALIDATION_REPORT.md`).
 
 ## How to use
 
@@ -136,7 +163,7 @@ version gate, seeding, missing visualisation kinds) are in
   2.1.0, mag 5.2.0 / 5.3.0.
 - **Missing runs** (no prefix for the release sha): airrflow 5.1.1, phyloplace
   2.1.0, bacass 2.6.1. viralrecon 3.0.0 has a prefix but no MultiQC parquet.
-- **Partial runs**: mag 5.5.0 (no MultiQC, no bin-QC or GTDB-Tk tables),
+- **Partial runs**: mag 5.5.0 tag run `56abab5b` (crashed after read QC; the 5.5.0 release candidate `171cf369` is complete and is the pin),
   viralrecon 3.0.0 (nanopore layout only), phyloplace 2.0.1 (parquet without
   module data), sarek (germline only, somatic profiles never run).
 - **Nested run roots**: rnaseq `aligner_star_salmon/` (and `aligner_star_rsem/`),
@@ -153,6 +180,14 @@ version gate, seeding, missing visualisation kinds) are in
   runs span MultiQC 1.31 to 1.35 and are read by a 1.35 reader with no version
   gate in code (the scan regex is the only gate, see the Conventions block in
   `VALIDATION_SCENARIOS.md`).
+- **Defective objects inside otherwise complete runs**: the mag 5.4.2 sync
+  (`5dabb015`) dropped every object under about 8 MB (987 non-zero objects, smallest
+  8.4 MB; `Taxonomy/`, `GenomeBinning/QC/` and `QC_shortreads/` exist as zero-byte
+  markers although the run's own MultiQC `report_data_sources` lists QUAST x1283 bins,
+  Prokka x1279 and CheckM2), and sarek's two FreeBayes `variant_calling/` VCFs are
+  196-byte symlink targets. A complete-looking listing is not a complete run; check the
+  size floor and a few small objects before pinning. Both are worth an nf-core issue
+  (5.4.2 re-sync; 5.5.0 tagged megatest crashed at 52 objects and was never re-run).
 - **Bucket behaviour**: intermittent 503 SlowDown answers (every request here is
   retried with backoff), listings of the big runs run to tens of thousands of keys
   (rnaseq, crisprseq, funcscan), and the same release can be re-synced with a

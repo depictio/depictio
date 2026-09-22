@@ -1,0 +1,34 @@
+id: vcf_variants
+name: Variant calls
+mode: per-variant
+description: >-
+  One row per variant call, read straight out of the caller's own VCF: locus,
+  allele, quality, filter status, genotype, read depth and variant allele
+  fraction. Pipeline-agnostic, and the only collection in a variant-calling
+  template that is granular enough for a caller-against-caller comparison at
+  the variant level rather than at the summary-count level.
+find:
+  path_glob: "**/variant_calling/**/*.vcf.gz"
+  path_glob_alt:
+    - "**/variant_calling/*/*/*.vcf.gz"
+    - "**/*.filtered.vcf.gz"
+recipe: vcf/variants.py
+fixture: variants.tsv
+renders_as:
+  # Depth against allele fraction is the plane a germline callset is read on:
+  # a clean diploid run stacks at 0.5 and 1.0, and everything off those two
+  # bands is either low coverage or a caller artefact.
+  - { id: vaf_against_depth, component: advanced_viz, kind: scatter_xy,
+      roles: {x: dp, y: vaf, label: variant_key, color: caller} }
+  # Rainfall / density along the genome. The manhattan kind takes chr/pos/score
+  # and asks nothing of the score's meaning, so the allele fraction reads as
+  # the y axis honestly once `score_kind` says so.
+  - { id: variant_rainfall, component: advanced_viz, kind: manhattan,
+      roles: {chr: chrom, pos: pos, score: vaf, feature: variant_key} }
+  - { id: variant_genome_view, component: advanced_viz, kind: genome_view,
+      roles: {chr: chrom, pos: pos, score: vaf, feature: variant_key, sample: caller} }
+  - { component: card, column: qual, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: dp, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: vaf, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: figure, visu_type: histogram, dict_kwargs: {x: vaf, color: caller} }
+  - { component: table }

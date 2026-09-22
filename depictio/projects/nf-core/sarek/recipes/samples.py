@@ -17,6 +17,10 @@ Output schema:
     status_label           : Utf8   "Normal" or "Tumor"
     read_depth_millions    : Int64  approximate input read depth, parsed off
                                     the sample name (NA12878_75M -> 75)
+    read_depth_label       : Utf8   the same depth as a label ("75M reads"), so
+                                    the run's one real factor can drive a
+                                    MultiSelect: an Int64 column only takes a
+                                    slider
     n_lanes                : Int64  sequencing lanes merged into the sample
 """
 
@@ -41,6 +45,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "status": pl.Int64,
     "status_label": pl.Utf8,
     "read_depth_millions": pl.Int64,
+    "read_depth_label": pl.Utf8,
     "n_lanes": pl.Int64,
 }
 
@@ -75,6 +80,11 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .then(pl.lit("Normal"))
         .otherwise(pl.lit("Tumor"))
         .alias("status_label"),
+    ).with_columns(
+        pl.when(pl.col("read_depth_millions").is_not_null())
+        .then(pl.concat_str([pl.col("read_depth_millions").cast(pl.Utf8), pl.lit("M reads")]))
+        .otherwise(pl.lit("unknown depth"))
+        .alias("read_depth_label"),
     )
 
     return samples.select(list(EXPECTED_SCHEMA)).sort("sample_id")

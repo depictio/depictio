@@ -110,6 +110,7 @@ import re
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.recipes.lib.cellranger_samples import with_sample_column
 
 MATRIX_DC_TAG = "cellranger_filtered_matrix_raw"
 FEATURES_DC_TAG = "cellranger_filtered_features_raw"
@@ -181,6 +182,11 @@ _PCA_SAMPLE_RE = r"cellranger/count/([^/]+)/outs/analysis/"
 _CELLBENDER_SAMPLE_RE = r"cellranger/([^/]+)/cellbender_removebackground/"
 _DIFFEXP_SAMPLE_RE = r"cellranger/count/([^/]+)/outs/analysis/diffexp/"
 _DIFFEXP_CLUSTER_COL_RE = re.compile(r"^Cluster (\d+) Mean Counts$")
+#: `cellranger_diffexp_raw` scans every clustering Cell Ranger ran (graph-based
+#: plus one per k-means k, see `cellranger/diffexp.py`). The cell hub's
+#: `graphclust` column is the graph-based clustering, so its label may only be
+#: built from the graph-based file.
+_GRAPHCLUST_DIFFEXP_DIR = "analysis/diffexp/gene_expression_graphclust/"
 
 # sc-best-practices MAD multipliers.
 _MAD_K_COUNT = 5.0
@@ -195,20 +201,17 @@ _LABEL_MEAN_MIN = 0.5
 
 
 def _with_sample(df: pl.DataFrame, pattern: str, dc_name: str) -> pl.DataFrame:
-    if "source_path" not in df.columns:
-        raise ValueError(
-            f"cellranger_cell_qc: '{dc_name}' has no 'source_path' column, it must be "
-            "scanned with polars_kwargs.include_file_paths"
-        )
-    out = df.with_columns(pl.col("source_path").str.extract(pattern, 1).alias("sample"))
-    if out.filter(pl.col("sample").is_null()).height:
-        raise ValueError(f"cellranger_cell_qc: a row's source_path in '{dc_name}' did not match")
-    return out
+    return with_sample_column(df, pattern, dc_name, "cellranger_cell_qc")
 
 
 def _cluster_labels(diffexp_raw: pl.DataFrame) -> pl.DataFrame:
     """sample, cluster ("Cluster N") -> cluster_label ("C<n> top1/top2")."""
     df = _with_sample(diffexp_raw, _DIFFEXP_SAMPLE_RE, "diffexp")
+    df = df.filter(pl.col("source_path").str.contains(_GRAPHCLUST_DIFFEXP_DIR, literal=True))
+    if df.height == 0:
+        raise ValueError(
+            "cellranger_cell_qc: no graph-based differential_expression.csv in the diffexp scan"
+        )
     cluster_ids = sorted(
         int(m.group(1)) for c in df.columns if (m := _DIFFEXP_CLUSTER_COL_RE.match(c))
     )
@@ -246,8 +249,7 @@ def _cluster_labels(diffexp_raw: pl.DataFrame) -> pl.DataFrame:
     labels = []
     for (sample, cid), group in ranked.group_by(["sample", "cluster_id"], maintain_order=True):
         top_genes = group.sort("_rank")["gene"].to_list()
-        suffix = "/".join(top_genes) if top_genes else ""
-        label = f"C{cid} {suffix}".strip() if suffix else f"C{cid}"
+        label = f"C{cid} {'/'.join(top_genes)}".strip()
         labels.append({"sample": sample, "cluster_id": cid, "cluster_label": label})
 
     # Clusters with zero qualifying genes still need a bare "C<n>" label.

@@ -1,7 +1,7 @@
 # nf-core/funcscan 4.0.0: Depictio dashboards
 
 This template turns the output of [nf-core/funcscan](https://nf-co.re/funcscan) 4.0.0 into a
-single five-tab Depictio dashboard. The pipeline screens (meta)genome assemblies with four
+single seven-tab Depictio dashboard. The pipeline screens (meta)genome assemblies with four
 independent arms and aggregates each one into a single report:
 
 | Screen | Tools | Aggregator | Headline file |
@@ -25,33 +25,48 @@ collections are `optional: true`) or explicitly with `--var SKIP_ARG=true`,
 ## How the dashboard is built
 
 - **Hub data collection.** `screening_summary` is one row per sample with the counts each
-  arm produced (`arg_hits`, `amp_candidates`, `amp_high_confidence`, `bgc_regions`,
-  `bgc_classes`, `cazymes`, `cazyme_families`, `screens`). It is built by a pipeline-keyed
-  recipe that reads the four screening collections through `dc_ref`, so it is declared
-  **last** in `data_collections`: the CLI resolves a `dc_ref` source by reading the
-  referenced collection back from its Delta table, which only exists once that collection
-  has been processed.
+  arm produced (`arg_hits`, `arg_genes`, `amp_candidates`, `amp_high_confidence`,
+  `bgc_regions`, `bgc_classes`, `cazymes`, `cazyme_families`, `screens`). It is built by
+  `funcscan/screening_summary.py`, a catalog recipe that reads the four screening
+  collections through `dc_ref`, so it is declared **last** in `data_collections`: the CLI
+  resolves a `dc_ref` source by reading the referenced collection back from its Delta
+  table, which only exists once that collection has been processed.
+- **Annotation collection.** `contig_annotation` is the same idea one level down: one row
+  per contig with how many features each screen put on it, plus the contig length and
+  k-mer coverage parsed out of the assembler's own contig name. funcscan publishes no
+  annotation table with the megatest results, but every screen names the contig its
+  feature sits on, so the locus layer is rebuilt from the screens.
 - **Links.** Every screening collection is joined to the hub on `sample`, so the
-  `Sample scope` filter panel reaches all five tabs. Two further links carry a row
-  selection: picking a gene in the hAMRonization table drives the per-sample dot plot, and
-  picking a peptide in the AMPcombi table highlights it in the embedding.
+  `Sample scope` filter panel reaches all seven tabs. Four further links carry the
+  Annotation tab's contig selection into the ARG, AMP, BGC and CAZyme collections, and two
+  more carry a row selection: picking a gene in the hAMRonization table drives the
+  per-sample dot plot, and picking a peptide in the AMPcombi table highlights it in the
+  embedding.
+- **Filters on every tab.** The samplesheet is `sample,fasta` and carries no experimental
+  factor, so the pinned persistent `Sample scope` section holds the sample multi-select
+  plus three hub counts that really do vary across the cohort (ARG hits 217-457, AMP
+  candidates 271-688, CAZyme genes 453-1493). On top of that every tab adds a
+  non-persistent section on its own collection's columns, so no tab depends on the
+  persistent panel alone.
 - **Sections.** Each tab is a stack of named grid sections opened by a short text tile.
   The funnel is the same everywhere: four cards, then the signature view, then the tool
   concordance, then the rows.
-- **Multi-metric cards.** All 20 cards carry a secondary strip: `top_n` breakdowns,
-  Tukey `box_plot`s, `donut` and `composition` splits, `gauge`s, `threshold` pass counts
-  and `histogram`s.
-- **Catalog provenance.** Every advanced visualisation is bound through `use:`
-  (`hamronization/arg_hierarchy`, `combgc/bgc_upset`, `dbcan/cazyme_hierarchy`, ...) so the
-  tile chrome names the catalog render behind it, and every reference table names its
-  catalog output.
+- **Multi-metric cards.** All 32 cards carry a secondary strip: `top_n` breakdowns,
+  Tukey `box_plot`s, `donut` and `composition` splits, `gauge`s and `histogram`s.
+- **Catalog provenance.** Every non-text tile is bound through `use:` (73 of 73), so the
+  tile chrome names the catalog render behind it. The cross-screen tiles that used to be
+  inline now live in a `funcscan` catalog module of their own
+  (`funcscan/screening_summary`, `funcscan/contig_annotation`,
+  `funcscan/software_versions`, `funcscan/samplesheet`).
 - **Pinned reference tables.** The five raw tables sit in a collapsed `Reference tables`
   section that is persistent and pinned to the bottom, so it trails every tab.
-- **No QC tab.** The run wrote a MultiQC 1.34 report, but funcscan feeds MultiQC nothing
-  but software versions: the parquet holds a single `run_metadata` row with no
-  general-statistics table and no module sections. The `multiqc_data` collection stays in
-  the template as `optional: true` for future pipeline versions, and the tool versions
-  reach the UI through the template's `provenance` block instead.
+- **No MultiQC tab.** The run wrote a MultiQC 1.34 report, but funcscan feeds MultiQC
+  nothing but software versions: the parquet holds a single `run_metadata` row,
+  `multiqc.list_plots()` returns two modules with zero plots and `list_samples()` is
+  empty, so a `multiqc` tile would render an empty figure. The `multiqc_data` collection
+  stays in the template as `optional: true` for future pipeline versions, and the one
+  payload the report does carry is read back out of the same parquet by
+  `funcscan/software_versions.py` and shown as a table on the **Run report** tab.
 
 ---
 
@@ -59,21 +74,49 @@ collections are `optional: true`) or explicitly with `--var SKIP_ARG=true`,
 
 The cross-screen tab. **Screening at a glance** carries eight cards over two rows: ARG hits
 with a top-sample breakdown, AMP candidates as a box plot, BGC regions as a donut, CAZymes
-as a gauge, then screens completed against a threshold, high-confidence AMPs as a
-composition, CAZyme families as a histogram and BGC product classes as a top-N strip.
+as a gauge, then distinct resistance genes as a top-N strip, high-confidence AMPs as a
+composition, CAZyme families as a histogram and BGC product classes as a top-N strip. The
+card on `screens` is gone: with all four arms on, every one of the 19 assemblies scores 4,
+so the threshold always read "pass" and told the reader nothing.
 
 **Screen composition** is a grouped, log-scaled bar of the four per-sample counts, so a
 sample whose resistome is empty but whose CAZyme repertoire is large is visible at a
-glance. **Sample comparison** puts an ARG-versus-CAZyme scatter next to the hub table; the
-scatter has point selection on `sample`, and the table row-selects on `sample`, so either
-one narrows every other tab.
+glance. **Sample comparison** puts two views of the same plane side by side: the
+hand-drawn ARG-versus-CAZyme scatter and the `scatter_xy` kind
+(`use: funcscan/screen_scatter`), which labels the four samples with the largest BGC
+count. Both select on `sample`, as does the hub table underneath, so any of the three
+narrows every other tab.
 
-Filters: sample multi-select, a screens-completed range and an ARG-hit range.
+Filters: `Sample scope` (sample, ARG hits, AMP candidates, CAZyme genes) pinned and
+persistent, plus a collapsed tab-local `Cohort thresholds` (BGC regions, BGC classes,
+CAZy families).
 
 ---
 
 ![Screening overview](screenshots/screening-overview.png)
 
+
+## Annotation
+
+The locus layer under the four screens. funcscan annotates each assembly once (Pyrodigal by
+default) and then screens the predicted proteins four times; the annotation tables are not
+published with the megatest results, but every screen names the contig its feature sits on,
+so `contig_annotation` rebuilds the layer from the screens: 29,348 contigs across the 19
+assemblies, with the contig length and k-mer coverage read out of the assembler's own
+contig names (`ERZ1664511.16-NODE-16-length-49668-cov-9.810473`).
+
+**Annotation at a glance**: total features with a per-screen top-N, annotated contigs as a
+donut, contig length as a Tukey box and screens-per-contig as a gauge out of four.
+**Loci** carries the `scatter_xy` of features against contig length on a log x axis
+(`use: funcscan/contig_feature_scatter`), the feature-density histogram and the contig
+table. A short contig high on the y axis is a dense locus rather than a long one, which is
+what the density axis is for. Selecting contigs here carries into the Resistome, AMP, BGC
+and CAZyme tabs through four `contig` links.
+
+Filters: `Locus scope` (leading screen, screens on the contig) and a collapsed
+`Locus thresholds` (contig length, features per kb).
+
+---
 
 ## Resistome
 
@@ -83,6 +126,13 @@ coverage. **Resistance hierarchy** pairs the ARG sunburst
 drug class. The hierarchy deliberately starts at the tool: `antimicrobial_agent` is null for
 about 90% of the rows and the five tools do not share a drug-class vocabulary, so a
 class-first hierarchy would collapse into a single "unclassified" wedge.
+
+Under the gene matrix sits the same counts one level up: the drug-class-by-sample heatmap
+(`use: hamronization/arg_class_heatmap`). 119 gene rows collapse to 34 class rows, with the
+three tool vocabularies folded together (CARD's `macrolide antibiotic; lincosamide ...`,
+AMRFinderPlus's `LINCOSAMIDE/OXAZOLIDINONE/...` and a bare `TETRACYCLINE` are one row), and
+the leading tool and a gene-count band as row annotations. A class every assembly carries
+separates from one only two of them have, which is not readable at gene resolution.
 
 **Tool concordance** stacks the five-set UpSet of which tools called each gene over the
 gene-by-sample dot plot (dot size = fraction of tools agreeing, colour = mean identity).
@@ -103,11 +153,15 @@ Filters: `ARG scope` (tool, drug class) and a collapsed `Hit quality`
 ## AMPs
 
 **AMPs at a glance**: candidate count, ampir probability, peptide length and a
-high-confidence threshold count. **Property space** pairs a hydrophobicity-versus-isoelectric
-point scatter with the AMPcombi embedding coloured by charge class, above the full candidate
-table. The scatter uses physicochemistry rather than tool probability because
-`prob_macrel` is 0 for 8421 of the 8442 candidates in this run, which would give a
-degenerate axis. **Clusters** holds the cluster-size histogram and the cluster table.
+high-confidence threshold count. **Property space** opens with the AMP property plane as a
+`scatter_xy` (`use: ampcombi/amp_property_scatter`): hydrophobicity against the isoelectric
+point, coloured by charge class, sized by peptide length and with a reference line at
+pI 7, where a peptide turns cationic at physiological pH. AMPcombi computes no net charge
+at pH 7, so the isoelectric point is the charge axis it actually reports. Below it sit the
+AMPcombi embedding coloured by charge class and the full candidate table. The plane uses
+physicochemistry rather than tool probability because `prob_macrel` is 0 for 8421 of the
+8442 candidates in this run, which would give a degenerate axis. **Clusters** holds the
+cluster-size histogram and the cluster table.
 
 Filters: `Candidate scope` (charge class) and a collapsed `Peptide properties`
 (maximum tool probability, amino-acid length).
@@ -127,12 +181,22 @@ this run). Agreement is scored on the contig, not on region coordinates: the cal
 disagree on boundaries by design, so a coordinate join would report no overlap at all where
 the biology is the same cluster.
 
+**Region maps** is the coordinate view of the same 155 regions, from
+`combgc/region_track.py`: the GenomeSpy track (`mark: rect`, `end_col` set to the region
+end, so a row is the cluster's footprint rather than a tick at its start), the arrow track
+that re-parameterises the Resistome tab's island pattern (one lane per contig, one arrow
+per region), and a plain `coverage_track` on the same collection that needs no genome
+renderer, so the section is never empty. comBGC reports no orientation for a region, so
+`strand` is GFF's `.` for every row and every arrow is drawn left to right: a drawing
+convention, not a strand call.
+
 The recipes read comBGC's run-level `combgc_complete_summary.tsv` rather than the per-sample
 `reports/combgc/<sample>/combgc_summary.tsv` files, because only the run-level file carries
 every caller (the per-sample files hold the antiSMASH branch alone, 137 of the 155 regions).
 
-Filters: `Cluster scope` (tool, product class) and a collapsed `Region size`
-(length, CDS count).
+Filters: `Cluster scope` (tool, product class, product class on the map) and a collapsed
+`Region size` (length, CDS count, region length on the map). The last filter in each pair
+sits on `combgc_region_track`, which is a different collection from the counts above.
 
 ---
 
@@ -157,3 +221,21 @@ Filters: `CAZyme scope` (class, substrate) and a collapsed `Call confidence`
 (tools agreeing).
 
 ![CAZymes](screenshots/cazymes.png)
+
+---
+
+## Run report
+
+What the pipeline actually ran. funcscan's MultiQC report holds a single `run_metadata` row
+and no plot sections at all, so instead of an empty MultiQC panel this tab reads the
+report's `software_versions` payload back out of the same parquet: 50 rows, one per
+Nextflow process and tool, labelled with the screen the process belongs to (ARG, AMP, BGC,
+CAZyme, Annotation, Taxonomy or Workflow).
+
+**Run at a glance**: distinct tools with a per-screen top-N, processes as a donut, version
+entries as a composition and distinct versions as a top-N over tools. **Tools and versions**
+carries the tools-per-screen bar and the full versions table. A screen that lists no tool
+here did not run, whatever the parameters say, which is the first thing to check when a tab
+comes up empty.
+
+Filters: `Version scope` (screen, tool) and a collapsed `Process scope` (Nextflow process).

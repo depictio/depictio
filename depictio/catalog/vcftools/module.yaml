@@ -1,0 +1,11 @@
+# VCFtools, multi-output tool -> a folder. nf-core pipelines call it once per
+# VCF and publish the small summary tables next to each other; the ones read
+# here are the filter breakdown and the Ts/Tv quality sweep.
+id: vcftools
+name: VCFtools
+description: >-
+  Summary statistics computed directly on a VCF: how the caller's own filters
+  partition the calls, and how the transition/transversion ratio moves as the
+  quality floor is raised.
+homepage: https://vcftools.github.io/
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/vcftools

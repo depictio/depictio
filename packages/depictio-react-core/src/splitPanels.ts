@@ -238,9 +238,10 @@ export const GROUPING_MODE_BY_KIND: Readonly<Record<AdvancedVizKind, GroupingMod
   knee_plot: 'none',
   damage_profile: 'none',
   // Same genome-wide axis as the Manhattan, so splitting is out for the same
-  // reason; the GenomeSpy spike colours by chromosome only and does not take
-  // the dashboard's groups yet, so it is honest about doing neither.
-  genomespy_track: 'none',
+  // reason; the genome view colours by chromosome or by its category column
+  // and does not take the dashboard's groups, so it is honest about doing
+  // neither.
+  genome_view: 'none',
   // Computed on demand between two groups: the groups are the input, not a
   // split to apply on top.
   group_compare: 'none',

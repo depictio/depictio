@@ -27,16 +27,20 @@
 # matrix.mtx.gz (raw 96 MB, filtered 65 MB; both under the 300 MB cap and both
 # read by the barcode-rank recipe: the raw one carries the background droplets,
 # the filtered one says which barcodes are cells), and the analysis/ tables
-# (graph-based clusters, UMAP / t-SNE / PCA projections, PCA variance, per-cluster
-# marker genes). CellBender's metrics and cell-barcode list ride along for
-# provenance.
+# (every clustering Cell Ranger ran, graph-based and k-means, the UMAP / t-SNE /
+# PCA projections, PCA variance, the feature selection behind the PCA
+# (dispersion.csv, features_selected.csv) and the marker genes of every
+# clustering). CellBender's metrics and cell-barcode list ride along for
+# provenance. The analysis/ tables are a few MB in total, so the clustering,
+# diffexp and pca keys are wildcarded over the resolution directory rather than
+# pinned to the graph-based one: the dashboard offers the k-means resolutions as
+# a filter.
 #
 # Not fetched on purpose (any route): possorted_genome_bam.bam / output*.bus
 # (tens of GB), the .h5 / .h5ad / .cloupe / .rds / molecule_info binaries, the
 # mkref/ index references, the alevin-fry map.rad / map.collated.rad and kallisto
 # matrix.ec / transcripts.txt intermediates, CellBender's checkpoint and
-# posterior h5, and the k-means clusterings (the graph-based one is the one Cell
-# Ranger reports on).
+# posterior h5.
 #
 # simpleaf/alevin-fry (aligner_simpleaf/) and kallisto|bustools (aligner_kallisto/)
 # are tables-and-JSON only, no matrices: alevin-fry's per-barcode feature dump
@@ -77,12 +81,14 @@ keys:
   - aligner_cellranger/cellranger/count/*/outs/filtered_feature_bc_matrix/barcodes.tsv.gz
   - aligner_cellranger/cellranger/count/*/outs/filtered_feature_bc_matrix/features.tsv.gz
   - aligner_cellranger/cellranger/count/*/outs/filtered_feature_bc_matrix/matrix.mtx.gz
-  - aligner_cellranger/cellranger/count/*/outs/analysis/clustering/gene_expression_graphclust/clusters.csv
+  - aligner_cellranger/cellranger/count/*/outs/analysis/clustering/*/clusters.csv
   - aligner_cellranger/cellranger/count/*/outs/analysis/umap/*/projection.csv
   - aligner_cellranger/cellranger/count/*/outs/analysis/tsne/*/projection.csv
   - aligner_cellranger/cellranger/count/*/outs/analysis/pca/*/projection.csv
   - aligner_cellranger/cellranger/count/*/outs/analysis/pca/*/variance.csv
-  - aligner_cellranger/cellranger/count/*/outs/analysis/diffexp/gene_expression_graphclust/differential_expression.csv
+  - aligner_cellranger/cellranger/count/*/outs/analysis/pca/*/dispersion.csv
+  - aligner_cellranger/cellranger/count/*/outs/analysis/pca/*/features_selected.csv
+  - aligner_cellranger/cellranger/count/*/outs/analysis/diffexp/*/differential_expression.csv
   - aligner_cellranger/cellranger/*/cellbender_removebackground/*_metrics.csv
   - aligner_cellranger/cellranger/*/cellbender_removebackground/*_cell_barcodes.csv
   # ------------------------------------------------------------------------

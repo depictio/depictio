@@ -1,0 +1,21 @@
+id: adapterremoval_settings
+name: Trimming and collapsing statistics
+description: >-
+  Read pairs in, mates merged, reads discarded and sequences retained, from an
+  AdapterRemoval .settings report. The counts balance exactly, which is what
+  lets a read-fate flow be drawn from them without apportioning anything. One
+  row per report, so a pipeline that trims per lane gets one row per lane.
+find:
+  path_glob: "**/*.settings"
+recipe: adapterremoval/settings.py
+fixture: settings.tsv
+renders_as:
+  - { id: collapse_vs_length, component: advanced_viz, kind: scatter_xy,
+      roles: {x: average_retained_length, y: collapse_rate, label: sample, color: sample, size: retained_reads} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: retained_reads, color: sample, title: Sequences retained per report} }
+  - { component: card, column: total_read_pairs, aggregation: sum, secondary_layout: attrition, attrition_cols: [well_aligned_read_pairs, collapsed_pairs] }
+  - { component: card, column: collapse_rate, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: average_retained_length, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: discard_rate, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: retained_reads, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: table }

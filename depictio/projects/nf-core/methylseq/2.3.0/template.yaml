@@ -102,7 +102,7 @@ workflows:
       # condition split this megatest's SRA/GEO-derived names carry.
       # ----------------------------------------------------------------
       - data_collection_tag: "samples"
-        description: "Per-sample hub: the sample name every Bismark output file uses, split into cell line and condition"
+        description: "Per-sample hub: the sample name every Bismark output file uses, split into cell line, treatment and replicate"
         config:
           type: "Table"
           metatype: "Metadata"
@@ -117,6 +117,9 @@ workflows:
               "gsm_accession": "GEO sample accession"
               "cell_line": "hESC line (MShef11 or MShef4 in this megatest)"
               "condition": "Everything after the cell line in the sample name (e.g. low_oxygen_Q1, bulk, J1)"
+              "treatment": "The condition without its replicate token (low_oxygen, bulk, J in this megatest)"
+              "replicate": "Replicate number inside the treatment; a condition with no replicate token is its own first"
+              "group": "The two-level factor the cohort compares, which the window comparison tests along (here the cell line)"
               "fastq_1": "Read 1 FASTQ path/URL from the samplesheet"
               "fastq_2": "Read 2 FASTQ path/URL from the samplesheet"
 
@@ -151,7 +154,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: "multiqc/multiqc_data/multiqc.parquet"
+                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\\.parquet$"
           dc_specific_properties:
             s3_location: null
             modules:
@@ -213,7 +216,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: ".*_bismark_bt2_(PE|SE)_report\\.txt$"
+                pattern: ".*_bismark_[a-z0-9]+_(PE|SE)_report\\.txt$"
           dc_specific_properties:
             format: "TSV"
             polars_kwargs:
@@ -371,6 +374,387 @@ workflows:
               "pct_methylation": "% methylated calls at this position, CpG context"
               "coverage": "Calls (methylated + unmethylated) behind the percentage"
 
+      # ----------------------------------------------------------------
+      # Bismark run summary (bismark2summary). One table for the whole
+      # run, one row per BAM: the read funnel and the cytosine counts
+      # side by side. A real TSV with a header, so no raw-scan step.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "bismark_summary_report"
+        description: "Bismark's run-level summary, one row per library: read funnel, cytosine counts and the ratios derived from them"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "bismark/summary_report.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library the row belongs to"
+              "total_reads": "Read pairs Bismark analysed"
+              "aligned_reads": "Reads with a unique best alignment"
+              "unaligned_reads": "Reads with no alignment"
+              "ambiguous_reads": "Reads that mapped to more than one place"
+              "duplicate_reads": "Alignments removed as PCR duplicates"
+              "unique_reads": "Alignments kept for methylation extraction"
+              "total_cs": "Cytosines seen in any context"
+              "methylated_cpg": "Methylated CpG calls"
+              "unmethylated_cpg": "Unmethylated CpG calls"
+              "methylated_chg": "Methylated CHG calls"
+              "unmethylated_chg": "Unmethylated CHG calls"
+              "methylated_chh": "Methylated CHH calls"
+              "unmethylated_chh": "Unmethylated CHH calls"
+              "cpgs_called": "Methylated plus unmethylated CpG calls, the last step of the reads-to-methylome funnel"
+              "pct_aligned": "aligned_reads / total_reads * 100"
+              "pct_duplicate": "duplicate_reads / aligned_reads * 100"
+              "pct_cpg_methylation": "Methylated / called CpGs * 100"
+              "pct_chg_methylation": "Methylated / called CHGs * 100"
+              "pct_chh_methylation": "Methylated / called CHHs * 100"
+              "conversion_efficiency_pct": "100 minus the CHH methylation percentage: mammalian CHH methylation is near zero, so an apparent CHH call is an unconverted cytosine"
+
+      # ----------------------------------------------------------------
+      # M-bias, all six tables. The CpG-only `bismark_mbias_curve` above
+      # stays as it is (the catalog-conformance project seeds from its
+      # schema); this one keeps the context and the read as columns so a
+      # single tile plus two filters replaces six panels.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "bismark_mbias_all_contexts"
+        description: "% methylation by read position in all three cytosine contexts, read 1 and read 2, with the context and read as columns"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "bismark/mbias_all_contexts.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library Bismark ran on"
+              "context": "CpG, CHG or CHH"
+              "read": "R1 or R2"
+              "series": "Sample, context and read joined, the profile kind's series role"
+              "position": "Base position inside the read"
+              "pct_methylation": "% methylated calls at this position in this context"
+              "coverage": "Calls (methylated + unmethylated) behind the percentage"
+
+      # ----------------------------------------------------------------
+      # Per-CpG methylation. `bismark/methylation_calls/bedGraph/*.gz` is
+      # 750 MB and 300 million rows for this run, so nothing reads it into
+      # a data collection. The index below is the ordinary raw-scan idiom
+      # with `n_rows: 1`: the scan is lazy, one row per file is read, and
+      # what the recipes take from it is the `source_path` column, which
+      # they then stream themselves (see
+      # depictio/recipes/lib/genomic_bins.py). Seven rows land in Delta.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "bismark_bedgraph_index"
+        description: "One row per per-CpG bedGraph file, carrying its path; the streaming recipes below read the files themselves rather than ingesting 300 million rows"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.bedGraph\\.gz$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              has_header: false
+              skip_rows: 1
+              n_rows: 1
+              new_columns: ["chrom", "start", "end", "pct"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "chrom": "Contig of the file's first CpG, read only to fix the column count"
+              "start": "Start of the file's first CpG"
+              "end": "End of the file's first CpG"
+              "pct": "% methylation of the file's first CpG"
+              "source_path": "The bedGraph this row indexes; the sample name and every binned window are derived from it"
+
+      - data_collection_tag: "bismark_binned_methylation"
+        description: "Genome-wide CpG methylation averaged into 10 kb windows, one row per library per window, streamed out of the per-CpG bedGraphs"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "bismark/binned_methylation.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library the window was measured in"
+              "chromosome": "Contig the window sits on"
+              "start": "Window start, 0-based, a multiple of the 10 kb bin size"
+              "end": "Window end, exclusive"
+              "position": "Window centre, the coordinate a track plots on"
+              "methylation_pct": "Mean % methylation over the window's CpGs"
+              "n_cpg": "CpGs behind that mean"
+
+      - data_collection_tag: "bismark_methylation_density"
+        description: "Distribution of per-CpG methylation in 2 % buckets, one curve per library"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "bismark/methylation_density.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library the CpGs were called in"
+              "series": "The sample, under the name the profile kind binds"
+              "methylation_bin": "Bucket centre, in % methylation"
+              "n_cpgs": "CpGs of this library in the bucket"
+              "fraction_of_cpgs": "n_cpgs as a % of the library's called CpGs"
+
+      - data_collection_tag: "bismark_window_pca"
+        description: "Where each library sits on the first components of a PCA over its binned methylome"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "bismark/window_pca.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Library"
+              "dim_1": "First principal component"
+              "dim_2": "Second principal component"
+              "dim_3": "Third principal component"
+              "cell_line": "hESC line, carried from the sample hub"
+              "treatment": "Treatment, carried from the sample hub"
+              "group": "The two-level factor the cohort compares"
+
+      - data_collection_tag: "bismark_window_correlation"
+        description: "Pairwise Pearson correlation of the libraries over their shared 10 kb windows, square"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "bismark/window_correlation.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library the row belongs to; every other column is a library of the run holding its correlation with the row"
+
+      - data_collection_tag: "bismark_top_variable_windows"
+        description: "The 150 windows whose methylation moves most across the cohort, wide (windows by libraries)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "bismark/top_variable_windows.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "window_id": "The window, as contig:start-end; every remaining column is a library of the run holding its % methylation there"
+              "chromosome": "Contig the window sits on"
+              "window_variance": "Variance of the window's methylation across the libraries"
+
+      - data_collection_tag: "bismark_window_group_compare"
+        description: "Every 10 kb window tested between the two levels of the run's design factor, arcsine-transformed, BH-corrected"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "bismark/window_group_compare.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "window_id": "The window, as contig:start-end"
+              "chromosome": "Contig the window sits on"
+              "position": "Window centre, the Manhattan's x"
+              "start": "Window start"
+              "end": "Window end, exclusive"
+              "group_a": "Level whose methylation is the reference"
+              "group_b": "The other level"
+              "mean_a": "Mean % methylation of group_a's libraries"
+              "mean_b": "Mean % methylation of group_b's libraries"
+              "delta_methylation": "mean_a minus mean_b, in percentage points"
+              "t_statistic": "Pooled t on the arcsine-transformed proportions"
+              "p_value": "Two-sided p"
+              "padj": "Benjamini-Hochberg adjusted p"
+              "neg_log10_padj": "Minus log10 of padj, the Manhattan's y"
+              "direction": "Hypermethylated, Hypomethylated or Not significant, at padj 0.05 and a 10-point difference"
+              "n_cpg_min": "CpGs behind the thinnest library's window mean"
+
+      # ----------------------------------------------------------------
+      # Qualimap BamQC. The tool directory is shared with nf-core/eager,
+      # which owns `depictio/catalog/qualimap/`; these are its outputs,
+      # bound here, not recreated. methylseq writes
+      # qualimap/<sample>/genome_results.txt and
+      # qualimap/<sample>/raw_data_qualimapReport/*.txt, so the sample
+      # lives in a directory, never in the file name: the raw scans read
+      # one LINE per row (a separator the tables cannot contain) and carry
+      # the path through `include_file_paths`.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "qualimap_bamqc_genome_results_raw"
+        description: "Raw Qualimap genome_results.txt reports, one line per row (input of qualimap_bamqc_genome_results)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?genome_results\\.txt$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1f"
+              has_header: false
+              new_columns: ["raw"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw": "One line of the genome_results.txt report"
+              "source_path": "File the line came from; the library id is derived from its parent directory"
+
+      - data_collection_tag: "qualimap_bamqc_genome_results"
+        description: "Per-library depth, mapping quality, error rate and duplication from Qualimap BamQC"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "qualimap/bamqc_genome_results.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library Qualimap ran on"
+              "total_reads": "Reads Qualimap was given"
+              "mapped_reads": "Reads it placed"
+              "percentage_aligned": "mapped_reads / total_reads, Qualimap's own number"
+              "mean_coverage": "Mean depth over the reference, X"
+              "mean_mapping_quality": "Mean MAPQ of mapped reads"
+              "general_error_rate": "Mismatches / mapped bases"
+              "gc_percentage": "GC content of mapped bases"
+              "duplication_rate": "Qualimap's own duplicate estimate, percent"
+
+      - data_collection_tag: "qualimap_coverage_across_reference_raw"
+        description: "Raw Qualimap coverage_across_reference tables, one line per row (input of qualimap_coverage_across_reference)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*coverage_across_reference\\.txt$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1f"
+              has_header: false
+              new_columns: ["raw"]
+              comment_prefix: "#"
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw": "One line of the coverage_across_reference table"
+              "source_path": "File the line came from; the library id is derived from its directory"
+
+      - data_collection_tag: "qualimap_coverage_across_reference"
+        description: "Windowed read depth along the reference, one row per library per window, with each window mapped back onto its contig"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "qualimap/coverage_across_reference.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library Qualimap ran on"
+              "chromosome": "Contig the window falls in"
+              "position": "Window centre on that contig, bp"
+              "coverage": "Mean depth in the window, X"
+              "coverage_std": "Standard deviation of the depth in the window"
+              "global_position": "Window centre on the concatenated reference, bp"
+
+      - data_collection_tag: "qualimap_coverage_histogram_raw"
+        description: "Raw Qualimap coverage_histogram tables, one line per row (input of qualimap_coverage_histogram)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*coverage_histogram\\.txt$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1f"
+              has_header: false
+              new_columns: ["raw"]
+              comment_prefix: "#"
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw": "One line of the coverage_histogram table"
+              "source_path": "File the line came from; the library id is derived from its directory"
+
+      - data_collection_tag: "qualimap_coverage_histogram"
+        description: "How many bases of the reference sit at each read depth, per library"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "qualimap/coverage_histogram.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library Qualimap ran on"
+              "coverage": "Depth, X"
+              "n_genomic_locations": "Bases of the reference at that depth"
+              "fraction": "Share of the reference at that depth, 0 to 1"
+
+      - data_collection_tag: "qualimap_genome_fraction_coverage_raw"
+        description: "Raw Qualimap genome_fraction_coverage tables, one line per row (input of qualimap_genome_fraction_coverage)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*genome_fraction_coverage\\.txt$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1f"
+              has_header: false
+              new_columns: ["raw"]
+              comment_prefix: "#"
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw": "One line of the genome_fraction_coverage table"
+              "source_path": "File the line came from; the library id is derived from its directory"
+
+      - data_collection_tag: "qualimap_genome_fraction_coverage"
+        description: "The share of the reference covered at least X deep, per library"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "qualimap/genome_fraction_coverage.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library Qualimap ran on"
+              "min_coverage": "Depth threshold, X"
+              "genome_fraction_pct": "Share of the reference covered at least that deep, percent"
+
 links:
   # Hub -> everything keyed on the sample name.
   - source_dc_tag: "samples"
@@ -421,4 +805,109 @@ links:
       resolver: "direct"
       target_field: "sample"
     description: "Filter the M-bias curves by the samples picked in the left panel"
+    enabled: true
+
+  # Hub -> the run summary and the per-CpG collections. Every one of these
+  # carries a `sample` column matching the samplesheet name directly, so the
+  # resolver is `direct`; the cohort-level results (correlation, top-variable
+  # windows, group comparison) have libraries as COLUMNS rather than rows and
+  # are filtered by their own tab-local filters instead.
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "bismark_summary_report"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the run summary by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "bismark_mbias_all_contexts"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the per-context M-bias curves by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "bismark_binned_methylation"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the binned methylation track by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "bismark_methylation_density"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the per-CpG methylation density curves by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "bismark_window_pca"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the library PCA by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "qualimap_bamqc_genome_results"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the Qualimap BamQC summary by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "qualimap_coverage_across_reference"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the depth track by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "qualimap_coverage_histogram"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the depth histogram by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "qualimap_genome_fraction_coverage"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the genome-fraction curves by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "bismark_window_correlation"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the window-correlation matrix rows by the samples picked in the left panel"
     enabled: true

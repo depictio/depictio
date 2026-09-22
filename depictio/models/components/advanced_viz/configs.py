@@ -1654,6 +1654,25 @@ class ContactMapConfig(_BaseVizConfig):
         default=False,
         description="Single-pass row/column coverage normalisation before display (not iterative ICE)",
     )
+    display: Literal["square", "triangle"] = Field(
+        default="square",
+        description=(
+            "Square puts genomic position on both axes. Triangle rotates the "
+            "matrix 45 degrees so the diagonal becomes the horizontal axis: x "
+            "is then genomic position on the same scale as a genome_view track "
+            "stacked above it, and y is the separation between the two bins"
+        ),
+    )
+    max_separation_bins: int = Field(
+        default=0,
+        ge=0,
+        le=5000,
+        description=(
+            "Triangle display only: how many bins of separation to draw before "
+            "the apex is cut off. Hi-C signal decays with distance, so the far "
+            "corner flattens the colour scale. 0 keeps every separation"
+        ),
+    )
     max_bins: int = Field(
         default=500,
         ge=10,
@@ -1711,17 +1730,27 @@ class DamageProfileConfig(_BaseVizConfig):
     )
 
 
-class GenomeSpyTrackConfig(_BaseVizConfig):
-    """One genomic track drawn by GenomeSpy on a chromosome-aware ``locus`` axis.
+class GenomeViewConfig(_BaseVizConfig):
+    """A genome view drawn by GenomeSpy on a chromosome-aware ``locus`` axis.
 
-    The spike for issue #1083. Binds the same ``chr / pos / score`` roles as
-    ``manhattan`` so every DC a Manhattan reads renders here unchanged, but the
-    genome axis, the locus zoom and the point picking are GenomeSpy's own rather
-    than rebuilt from Plotly primitives. ``end_col`` turns each row into an
-    interval (``rect`` mark), which covers coverage bins and peak calls.
+    Binds the same ``chr / pos / score`` roles as ``manhattan`` so every DC a
+    Manhattan reads renders here unchanged, but the genome axis, the locus
+    zoom, the mark picking and the region brush are GenomeSpy's own rather than
+    rebuilt from Plotly primitives. ``end_col`` turns each row into an interval
+    (``rect`` mark), which covers coverage bins and peak calls; ``bar`` draws
+    the score as a bar from a baseline, which is the coverage look GenomeSpy
+    has no line mark for.
+
+    An advanced_viz tile binds exactly one data collection, so "multi-track"
+    here means several ``genome_view`` tiles stacked in one dashboard section
+    that share a region filter, not one tile over several collections. The
+    brush emits that region as an ordinary chromosome + position filter pair
+    (see ``genomeRegionFilters`` in ``packages/depictio-react-core/src/
+    selection.ts``) and ``follow_region_filter`` makes a tile zoom to an
+    incoming one.
     """
 
-    viz_kind: Literal["genomespy_track"] = "genomespy_track"
+    viz_kind: Literal["genome_view"] = "genome_view"
 
     chr_col: str = Field(default="chr", description="Column with chromosome / contig name")
     pos_col: str = Field(default="pos", description="Column with the genomic start position")
@@ -1736,9 +1765,55 @@ class GenomeSpyTrackConfig(_BaseVizConfig):
             "rectangle per row from pos to end instead of a point."
         ),
     )
-    mark: Literal["point", "rect"] = Field(
+    sample_col: str | None = Field(
+        default=None,
+        description=(
+            "Optional column naming the sample a row belongs to. Enables "
+            "``facet_by_sample``, which stacks one lane per sample on a shared "
+            "genome axis."
+        ),
+    )
+    category_col: str | None = Field(
+        default=None,
+        description=(
+            "Optional per-row annotation (gene region, peak caller, cluster) used "
+            "as the colour channel in place of the chromosome."
+        ),
+    )
+    mark: Literal["point", "rect", "bar"] = Field(
         default="point",
-        description="Mark type. ``rect`` needs ``end_col``; without it the renderer falls back to points.",
+        description=(
+            "Mark type. ``rect`` needs ``end_col`` and draws one rectangle per "
+            "interval; ``bar`` draws the score as a bar from a baseline (GenomeSpy "
+            "has no line or area mark, so this is the coverage profile look); "
+            "without ``end_col`` both degrade to points."
+        ),
+    )
+    facet_by_sample: bool = Field(
+        default=False,
+        description=(
+            "Stack one lane per value of ``sample_col``, vertically concatenated "
+            "and sharing the genome axis. Needs ``sample_col``."
+        ),
+    )
+    max_facets: int = Field(
+        default=8,
+        ge=1,
+        le=40,
+        description=(
+            "Upper bound on stacked lanes. Beyond it the lanes would be a few "
+            "pixels tall each, so the renderer keeps the first ``max_facets`` "
+            "samples in genome order and says how many it dropped."
+        ),
+    )
+    annotation: Literal["none", "hg38", "mm10"] = Field(
+        default="none",
+        description=(
+            "Gene annotation lane drawn under the data track, from the bundled "
+            "protein-coding gene table for that assembly "
+            "(``assets/genomes/<assembly>.genes.json``, lazily fetched). ``none`` "
+            "draws no lane."
+        ),
     )
     assembly: str | None = Field(
         default=None,
@@ -1754,6 +1829,25 @@ class GenomeSpyTrackConfig(_BaseVizConfig):
     )
     point_size: int = Field(default=5, ge=1, le=30, description="Point diameter in pixels")
     opacity: float = Field(default=0.85, ge=0.05, le=1.0)
+
+    # --- Region brush as a cross-filter ------------------------------------
+    region_filter_enabled: bool = Field(
+        default=True,
+        description=(
+            "Let a brush along the genome axis emit a chromosome multi-select plus "
+            "a position range on this tile's own collection, so other tiles bound "
+            "to the same columns (directly, or through a project link) narrow to "
+            "the brushed region."
+        ),
+    )
+    follow_region_filter: bool = Field(
+        default=False,
+        description=(
+            "Zoom this tile to an incoming region filter instead of showing the "
+            "whole genome. Off by default so a tile keeps its overview unless the "
+            "dashboard asks it to follow."
+        ),
+    )
 
     # --- Selection as a cross-filter (same contract as ManhattanConfig) -----
     selection_enabled: bool = Field(
@@ -1931,6 +2025,28 @@ class GenomeChordConfig(_BaseVizConfig):
         default=True, description="Draw links whose two loci share a chromosome"
     )
 
+    # --- Selection as a cross-filter ---------------------------------------
+    # Off by default, same reasoning as EmbeddingConfig above.
+    selection_enabled: bool = Field(
+        default=False,
+        description=(
+            "Let a click on a chord emit a dashboard filter the Analysis panel "
+            "can turn into a group. Falls back to ``label_col`` when "
+            "``selection_column`` is unset; with neither bound the renderer "
+            "stays inert."
+        ),
+    )
+    selection_column: str | None = Field(
+        default=None,
+        description=(
+            "Column the emitted selection values belong to. Null uses "
+            "``label_col``, because a chord is one named link (a fusion, a pair "
+            "of breakends) and its label is what the other tiles join on. Name "
+            "the sample column instead to select every link of the samples the "
+            "picked chords belong to."
+        ),
+    )
+
 
 VizConfig = Annotated[
     ScatterXyConfig
@@ -1965,7 +2081,7 @@ VizConfig = Annotated[
     | ContactMapConfig
     | KneePlotConfig
     | DamageProfileConfig
-    | GenomeSpyTrackConfig
+    | GenomeViewConfig
     | GroupCompareConfig
     | TranscriptStructureConfig
     | CnvProfileConfig

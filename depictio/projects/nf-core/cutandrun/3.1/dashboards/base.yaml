@@ -2,24 +2,31 @@ version: 1
 # nf-core/cutandrun 3.1 reference dashboard.
 #
 # Funnel: sequencing and enrichment QC (the reprocessed MultiQC report) -> the
-# signal the run actually carries (the fragment-length ladder and the deepTools
-# tables) -> the peaks each sample yielded -> whether the two callers agree
-# about them -> the consensus peak set the replicates reproduce.
-# The sample hub is the anchor: the sample filter in the left panel reaches the
-# MultiQC panels, both peak tables, the SEACR QC summary, the fragment curves
-# and the caller comparison through the project links.
+# signal the run actually carries (the fragment ladder and its nucleosome
+# classes, the spike-in factors, the deepTools tables) -> the peaks each sample
+# yielded and how much of its coverage they hold -> whether the two callers
+# agree about them -> the consensus peak set the replicates reproduce.
+# The sample hub is the anchor: the sample, target and replicate filters in the
+# left panel reach every collection through the project links.
 #
 # The MultiQC tab holds MultiQC panels only. Everything drawn from a table the
-# pipeline published beside the report (the fragment ladder, the fingerprint
-# metrics, the PCA loadings, the correlation matrix) lives on the Signal tab,
-# and the per-sample SEACR yield lives on the Peak calls tab next to the rows it
-# summarises. The two pinned sections are the deliberate exception: the sample
-# sheet and the SEACR summary ride along on every tab, MultiQC included, because
-# the whole dashboard is filtered by them.
+# pipeline published beside the report (the fragment ladder, the spike-in
+# factors, the fingerprint metrics, the PCA loadings, the correlation matrix)
+# lives on the Signal tab, and the per-sample SEACR yield lives on the Peak
+# calls tab next to the rows it summarises. The two pinned sections are the
+# deliberate exception: the sample sheet with the glance strip, and the SEACR
+# summary, ride along on every tab, MultiQC included, because the whole
+# dashboard is filtered by them.
 #
-# The IgG controls are samples here, not noise: they carry the MultiQC panels
-# and the fingerprint that says whether the targets are enriched at all. Only
-# the peak panels omit them, because peak calling never ran on a control.
+# Every tab carries filters on two levels: the pinned persistent Sample filters
+# section (sample, target, replicate, role), which reaches every collection
+# through the links declared in template.yaml, and a tab-local, non-persistent
+# section on that tab's own columns.
+#
+# The IgG controls are samples here, not noise: they carry the MultiQC panels,
+# the spike-in factors and the fingerprint that says whether the targets are
+# enriched at all. Only the peak panels omit them, because peak calling never
+# ran on a control.
 #
 # The MultiQC report bound here was re-generated with MultiQC 1.35 from the
 # run's raw tool outputs; the run itself published MultiQC 1.14, which writes no
@@ -41,8 +48,15 @@ main_dashboard:
     description: Applies to every tab through the project links
     persistent: true
     pin: top
-  - name: QC thresholds
+  # Tab-local and non-persistent: the two sliders are sourced on the spike-in
+  # table, which links back into the MultiQC panels, so they narrow the report
+  # on this tab without following the reader to the peak tabs.
+  - name: Alignment scope
     icon: mdi:tune
+    color: indigo
+    description: Keep only the libraries inside an alignment rate and spike-in factor band
+  - name: QC thresholds
+    icon: mdi:check-decagram
     color: cyan
     description: Yield and signal floors on the per-sample SEACR summary
     collapsed: true
@@ -66,12 +80,14 @@ main_dashboard:
     color: cyan
     description: Whether each target is enriched over the IgG control, and how the samples cluster
   # Pinned to the top and carried by every tab: the design the whole dashboard
-  # is filtered by should be one collapse away wherever the viewer lands.
+  # is filtered by, and the four-card glance strip over it, are on screen
+  # wherever the reader lands. Not collapsed on purpose: a collapsed pin would
+  # hide the glance strip on first paint. A pinned persistent section is the
+  # one thing allowed to hold non-MultiQC tiles on the MultiQC tab.
   - name: Sample sheet
     icon: mdi:table-account
     color: teal
-    description: The sample hub every other tab is filtered by
-    collapsed: true
+    description: The run at a glance, and the sample hub every other tab is filtered by
     persistent: true
     pin: top
   - name: Reference tables
@@ -95,10 +111,11 @@ main_dashboard:
       The reprocessed [MultiQC](https://multiqc.info) report, module by module:
       the general statistics table first, then read quality, alignment to the
       target and the spike-in genome, and how far each target rises above its
-      IgG control. The peaks are on the Peak calls tab.
+      IgG control. The peaks are on the Peak calls tab, the fragment ladder and
+      the spike-in factors on the Signal tab.
     workflow_tag: cutandrun
     data_collection_tag: multiqc_data
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: multiqc
     tag: cr-qc-general-stats
     section: Run at a glance
@@ -111,7 +128,7 @@ main_dashboard:
     description: One row per sample, pooling the FastQC, Trim Galore, Bowtie 2, samtools and MACS2 headline numbers. Use the read toggle to see each read of a pair.
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 1, w: 8, h: 5}
+    layout: {x: 0, y: 2, w: 8, h: 5}
 
   # ------------------------------------------------------------ read quality
   - component_type: text
@@ -130,7 +147,7 @@ main_dashboard:
       here once per read of each library.
     workflow_tag: cutandrun
     data_collection_tag: multiqc_data
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: multiqc
     tag: cr-qc-fastqc-counts
     section: Read quality
@@ -142,7 +159,7 @@ main_dashboard:
     title: Sequence counts
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 1, w: 4, h: 5}
+    layout: {x: 0, y: 2, w: 4, h: 5}
   - component_type: multiqc
     tag: cr-qc-fastqc-quality
     section: Read quality
@@ -154,7 +171,7 @@ main_dashboard:
     title: Per-base sequence quality
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 1, w: 4, h: 5}
+    layout: {x: 4, y: 2, w: 4, h: 5}
   - component_type: multiqc
     tag: cr-qc-fastqc-gc
     section: Read quality
@@ -166,7 +183,7 @@ main_dashboard:
     title: GC content
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 6, w: 4, h: 5}
+    layout: {x: 0, y: 7, w: 4, h: 5}
   - component_type: multiqc
     tag: cr-qc-cutadapt
     section: Read quality
@@ -178,7 +195,7 @@ main_dashboard:
     title: Reads kept after trimming
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 6, w: 4, h: 5}
+    layout: {x: 4, y: 7, w: 4, h: 5}
 
   # -------------------------------------------------- alignment and spike-in
   - component_type: text
@@ -193,10 +210,11 @@ main_dashboard:
       [Bowtie2](https://github.com/BenLangmead/bowtie2) aligns every library
       twice, once against the target genome and once against the E. coli
       spike-in used for normalisation. The spike-in samples carry a .spikein
-      suffix so both sets read side by side.
+      suffix so both sets read side by side, and the two sliders in the left
+      panel narrow these panels to the libraries that pass.
     workflow_tag: cutandrun
     data_collection_tag: multiqc_data
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: multiqc
     tag: cr-qc-bowtie2
     section: Alignment and spike-in
@@ -208,7 +226,7 @@ main_dashboard:
     title: Paired-end alignments
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 1, w: 4, h: 5}
+    layout: {x: 0, y: 2, w: 4, h: 5}
   - component_type: multiqc
     tag: cr-qc-samtools-mapped
     section: Alignment and spike-in
@@ -220,7 +238,7 @@ main_dashboard:
     title: Percent mapped
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 1, w: 4, h: 5}
+    layout: {x: 4, y: 2, w: 4, h: 5}
   - component_type: multiqc
     tag: cr-qc-samtools-insert
     section: Alignment and spike-in
@@ -232,7 +250,7 @@ main_dashboard:
     title: Insert size distribution
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 6, w: 4, h: 5}
+    layout: {x: 0, y: 7, w: 4, h: 5}
   - component_type: multiqc
     tag: cr-qc-samtools-contig
     section: Alignment and spike-in
@@ -244,7 +262,7 @@ main_dashboard:
     title: Mapped reads per contig
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 6, w: 4, h: 5}
+    layout: {x: 4, y: 7, w: 4, h: 5}
 
   # ------------------------------------------------ enrichment over control
   - component_type: text
@@ -263,7 +281,7 @@ main_dashboard:
       are on the Signal tab.
     workflow_tag: cutandrun
     data_collection_tag: multiqc_data
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: multiqc
     tag: cr-qc-deeptools-fingerprint
     section: Enrichment over the control
@@ -275,7 +293,7 @@ main_dashboard:
     title: Fingerprint plot
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 1, w: 4, h: 5}
+    layout: {x: 0, y: 2, w: 4, h: 5}
   - component_type: multiqc
     tag: cr-qc-deeptools-metrics
     section: Enrichment over the control
@@ -287,7 +305,7 @@ main_dashboard:
     title: Fingerprint quality metrics
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 1, w: 4, h: 5}
+    layout: {x: 4, y: 2, w: 4, h: 5}
   - component_type: multiqc
     tag: cr-qc-deeptools-pca
     section: Enrichment over the control
@@ -299,7 +317,7 @@ main_dashboard:
     title: Sample PCA
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 6, w: 4, h: 5}
+    layout: {x: 0, y: 7, w: 4, h: 5}
   - component_type: multiqc
     tag: cr-qc-deeptools-corr
     section: Enrichment over the control
@@ -311,9 +329,13 @@ main_dashboard:
     title: Sample correlation
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 6, w: 4, h: 5}
+    layout: {x: 4, y: 7, w: 4, h: 5}
 
   # ------------------------------------------------------------ sample sheet
+  # The glance strip of the whole dashboard. It sits in the pinned persistent
+  # section on purpose: that section rides every tab, so every tab opens with
+  # the same four numbers about the design as its first row, and the MultiQC
+  # tab keeps holding MultiQC panels in its own sections.
   - component_type: text
     tag: cr-sheet-intro
     section: Sample sheet
@@ -324,20 +346,20 @@ main_dashboard:
     alignment: left
     body: >
       One row per sample, with the target it profiles, its replicate number and
-      the IgG control it was called against. This is the collection the three
+      the IgG control it was called against. This is the collection the four
       sample filters in the left panel are sourced on, so it is what narrows
-      every other tab. The donut counts the same rows by role.
+      every other tab. The four cards count the same rows by role, by target,
+      by sequencing library and by replicate depth.
     workflow_tag: cutandrun
     data_collection_tag: samples
-    layout: {x: 0, y: 0, w: 6, h: 2}
-  # The one card the section carries, beside the intro rather than on a row of
-  # its own: a lone w:2 card would leave six empty columns.
+    layout: {x: 0, y: 2, w: 8, h: 2}
   - component_type: card
-    tag: cr-qc-card-role
-    index: cr-qc-card-role
+    tag: cr-gl-card-role
+    index: cr-gl-card-role
     section: Sample sheet
     workflow_tag: cutandrun
     data_collection_tag: samples
+    use: cutandrun/samples
     aggregation: count
     column_name: sample_id
     column_type: object
@@ -347,18 +369,71 @@ main_dashboard:
     title_size: sm
     title_align: left
     title: Samples by role
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: cr-gl-card-target
+    index: cr-gl-card-target
+    section: Sample sheet
+    workflow_tag: cutandrun
+    data_collection_tag: samples
+    use: cutandrun/samples
+    aggregation: count
+    column_name: target
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: target
+    top_n_count: 3
+    display: {icon_name: 'mdi:dna', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Samples by target
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: cr-gl-card-libraries
+    index: cr-gl-card-libraries
+    section: Sample sheet
+    workflow_tag: cutandrun
+    data_collection_tag: samples
+    use: cutandrun/samples
+    aggregation: sum
+    column_name: n_libraries
+    column_type: int64
+    secondary_layout: composition
+    breakdown_col: target
+    display: {icon_name: 'mdi:shape-outline', icon_color: '#5C6BC0', title_color: '#5C6BC0', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Libraries sequenced
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: cr-gl-card-replicate
+    index: cr-gl-card-replicate
+    section: Sample sheet
+    workflow_tag: cutandrun
+    data_collection_tag: samples
+    use: cutandrun/samples
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: replicate
+    column_type: int64
+    display: {icon_name: 'mdi:relation-many-to-many', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Replicate depth
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: table
     tag: cr-ref-table-samples
     section: Sample sheet
     workflow_tag: cutandrun
     data_collection_tag: samples
+    use: cutandrun/samples
     row_selection_enabled: false
     title: Sample hub
     description: One row per sample, with its target, replicate, role and control.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 2, w: 8, h: 4}
+    layout: {x: 0, y: 4, w: 8, h: 3}
 
   # -------------------------------------------------------- reference tables
   - component_type: text
@@ -376,7 +451,9 @@ main_dashboard:
       the regions themselves are on the Peak calls tab.
     workflow_tag: cutandrun
     data_collection_tag: seacr_peak_summary
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # Four rows in this run, one per target that had peaks called: h 3, not the
+  # h 7 a table of hundreds needs.
   - component_type: table
     tag: cr-ref-table-summary
     section: Reference tables
@@ -388,7 +465,7 @@ main_dashboard:
     description: Region count, bases covered and the width and coverage spreads per sample.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 1, w: 8, h: 4}
+    layout: {x: 0, y: 2, w: 8, h: 3}
 
   # ---------------------------------------------------------------- filters
   - component_type: interactive
@@ -412,6 +489,7 @@ main_dashboard:
     group: Sample scope
     workflow_tag: cutandrun
     data_collection_tag: samples
+    use: cutandrun/sample_target_filter
     interactive_component_type: MultiSelect
     column_name: target
     column_type: object
@@ -419,6 +497,24 @@ main_dashboard:
     placement: left
     title: Target
     layout: {x: 0, y: 3, w: 1, h: 3}
+  # The second real samplesheet factor, two values in this run. It filters on
+  # the categorical twin of `replicate`, because an Int64 column only takes a
+  # slider and a factor wants a MultiSelect.
+  - component_type: interactive
+    tag: cr-filter-replicate
+    index: cr-replicate-filter
+    section: Sample filters
+    group: Sample scope
+    workflow_tag: cutandrun
+    data_collection_tag: samples
+    use: cutandrun/sample_replicate_filter
+    interactive_component_type: MultiSelect
+    column_name: replicate_label
+    column_type: object
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:relation-many-to-many'}
+    placement: left
+    title: Replicate
+    layout: {x: 0, y: 6, w: 1, h: 3}
   - component_type: interactive
     tag: cr-filter-role
     index: cr-role-filter
@@ -432,7 +528,35 @@ main_dashboard:
     display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:shield-check-outline'}
     placement: left
     title: Role
-    layout: {x: 0, y: 6, w: 1, h: 3}
+    layout: {x: 0, y: 9, w: 1, h: 3}
+  - component_type: interactive
+    tag: cr-qc-filter-alignrate
+    index: cr-qc-alignrate-range
+    section: Alignment scope
+    group: Alignment quality
+    workflow_tag: cutandrun
+    data_collection_tag: bowtie2_spikein_factors
+    interactive_component_type: RangeSlider
+    column_name: target_align_rate
+    column_type: float64
+    display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:chart-bar'}
+    placement: left
+    title: Target alignment rate
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: cr-qc-filter-scale
+    index: cr-qc-scale-range
+    section: Alignment scope
+    group: Alignment quality
+    workflow_tag: cutandrun
+    data_collection_tag: bowtie2_spikein_factors
+    interactive_component_type: RangeSlider
+    column_name: scale_factor
+    column_type: float64
+    display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:ruler'}
+    placement: left
+    title: Spike-in scale factor
+    layout: {x: 0, y: 3, w: 1, h: 3}
   - component_type: interactive
     tag: cr-filter-peakcount
     index: cr-peakcount-range
@@ -466,49 +590,85 @@ tabs:
 # ============================================================================
 # Signal
 # ============================================================================
-# Everything the pipeline published as a table beside the MultiQC report. The
-# MultiQC tab draws the pictures MultiQC itself redraws from its parquet; the
-# numbers under them (the fragment histogram, the fingerprint metrics, the PCA
-# loadings and the correlation matrix) never reach a MultiQC panel and are
-# read here instead.
+# Everything the pipeline published as a table beside the MultiQC report: the
+# fragment ladder and the nucleosome classes it bins into, the spike-in factors
+# the coverage is scaled by, and the three deepTools tables the MultiQC
+# pictures are drawn from.
 - title: Signal
-  subtitle: The nucleosomal ladder and the deepTools tables behind the fingerprint, the PCA and the correlation heatmap
+  subtitle: The nucleosomal ladder, the spike-in factors and the deepTools tables behind the fingerprint, the PCA and the correlation heatmap
   tab_order: 2
   tab_icon: mdi:waves
   tab_icon_color: violet
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
+  filter_sections:
+  # Tab-local and non-persistent: three columns that only exist on this tab's
+  # own collections.
+  - name: Signal scope
+    icon: mdi:tune
+    color: violet
+    description: Narrow the ladder, the nucleosome classes and the fingerprint metrics
   grid_sections:
+  - name: Signal at a glance
+    icon: mdi:counter
+    color: violet
+    description: Fragment length, spike-in factor and alignment rate, per library
   - name: Fragment length structure
     icon: mdi:waves
     color: violet
     description: The nucleosomal ladder that says whether the digestion worked
+  - name: Nucleosome classes
+    icon: mdi:chart-donut
+    color: grape
+    description: How much of each library is nucleosome-free, mono, di or multi-nucleosomal
+  - name: Spike-in normalisation
+    icon: mdi:ruler
+    color: indigo
+    description: The carrier depth behind every scale factor the coverage was divided by
   - name: Coverage concentration and sample similarity
     icon: mdi:chart-line
     color: cyan
     description: How concentrated each library's coverage is, and which libraries look alike
   components:
-  # ------------------------------------------------------- fragment structure
+  # -------------------------------------------------------- signal at a glance
   - component_type: text
-    tag: cr-qc-frag-intro
-    section: Fragment length structure
-    title: The nucleosomal ladder
+    tag: cr-sg-intro
+    section: Signal at a glance
+    title: What the libraries carry
     title_size: sm
     title_align: left
     order: 2
     alignment: left
     body: >
-      MNase cuts around nucleosomes, so a working experiment has a sharp
-      sub-nucleosomal peak below about 120 bp next to a mononucleosomal
-      shoulder around 180 bp. The two shaded bands mark both.
+      Four numbers about the material itself, before any peak is called: how
+      long the fragments are, how many were measured, how much carrier DNA each
+      library held (which is what the coverage is divided by) and how much of
+      it reached the target genome.
     workflow_tag: cutandrun
     data_collection_tag: seacr_fragment_lengths
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: card
-    tag: cr-qc-card-frags
-    index: cr-qc-card-frags
-    section: Fragment length structure
+    tag: cr-sg-card-fraglen
+    index: cr-sg-card-fraglen
+    section: Signal at a glance
+    workflow_tag: cutandrun
+    data_collection_tag: seacr_fragment_lengths
+    use: seacr/fragment_lengths
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: fragment_length
+    column_type: int64
+    display: {icon_name: 'mdi:ruler', icon_color: '#5C6BC0', title_color: '#5C6BC0', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Fragment length
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cr-sg-card-frags
+    index: cr-sg-card-frags
+    section: Signal at a glance
     workflow_tag: cutandrun
     data_collection_tag: seacr_fragment_lengths
     use: seacr/fragment_lengths
@@ -522,57 +682,59 @@ tabs:
     title_size: sm
     title_align: left
     title: Fragments measured
-    layout: {x: 0, y: 1, w: 2, h: 2}
+    layout: {x: 2, y: 2, w: 2, h: 2}
   - component_type: card
-    tag: cr-qc-card-fraglen
-    index: cr-qc-card-fraglen
-    section: Fragment length structure
+    tag: cr-sg-card-scale
+    index: cr-sg-card-scale
+    section: Signal at a glance
     workflow_tag: cutandrun
-    data_collection_tag: seacr_fragment_lengths
-    use: seacr/fragment_lengths
+    data_collection_tag: bowtie2_spikein_factors
+    use: bowtie2/spikein_factors
     aggregation: median
     aggregations: [box_plot_stats]
     secondary_layout: box_plot
-    column_name: fragment_length
-    column_type: int64
-    display: {icon_name: 'mdi:ruler', icon_color: '#5C6BC0', title_color: '#5C6BC0', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Fragment length
-    layout: {x: 2, y: 1, w: 2, h: 2}
-  - component_type: card
-    tag: cr-qc-card-fragpeak
-    index: cr-qc-card-fragpeak
-    section: Fragment length structure
-    workflow_tag: cutandrun
-    data_collection_tag: seacr_fragment_lengths
-    use: seacr/fragment_lengths
-    aggregation: max
-    column_name: fraction
+    column_name: scale_factor
     column_type: float64
-    secondary_layout: histogram
-    display: {icon_name: 'mdi:waves', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
+    display: {icon_name: 'mdi:shape-outline', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: Tallest length bin
-    layout: {x: 4, y: 1, w: 2, h: 2}
+    title: Spike-in scale factor
+    layout: {x: 4, y: 2, w: 2, h: 2}
   - component_type: card
-    tag: cr-qc-card-fragtarget
-    index: cr-qc-card-fragtarget
+    tag: cr-sg-card-alignrate
+    index: cr-sg-card-alignrate
+    section: Signal at a glance
+    workflow_tag: cutandrun
+    data_collection_tag: bowtie2_spikein_factors
+    use: bowtie2/spikein_factors
+    aggregation: average
+    column_name: target_align_rate
+    column_type: float64
+    secondary_layout: gauge
+    coverage_max: 100
+    display: {icon_name: 'mdi:check-decagram', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Target alignment rate
+    layout: {x: 6, y: 2, w: 2, h: 2}
+
+  # ------------------------------------------------------- fragment structure
+  - component_type: text
+    tag: cr-qc-frag-intro
     section: Fragment length structure
+    title: The nucleosomal ladder
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      MNase cuts around nucleosomes, so a working experiment has a sharp
+      sub-nucleosomal peak below about 120 bp next to a mononucleosomal
+      shoulder around 180 bp. The two shaded bands mark both, and the
+      cumulative curve beside it says how early a library's fragments pile up.
     workflow_tag: cutandrun
     data_collection_tag: seacr_fragment_lengths
-    use: seacr/fragment_lengths
-    aggregation: count
-    column_name: target
-    column_type: object
-    secondary_layout: donut
-    breakdown_col: target
-    display: {icon_name: 'mdi:chart-donut', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Length bins by target
-    layout: {x: 6, y: 1, w: 2, h: 2}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: figure
     tag: cr-qc-fig-fragments
     index: cr-qc-fig-fragments
@@ -616,7 +778,7 @@ tabs:
     title: Fragment length distribution
     description: The share of each sample's fragments at every length. The shaded bands are the sub-nucleosomal and mononucleosomal windows.
     title_size: h3
-    layout: {x: 0, y: 3, w: 4, h: 6}
+    layout: {x: 0, y: 2, w: 4, h: 6}
   - component_type: figure
     tag: cr-qc-fig-fragments-cum
     section: Fragment length structure
@@ -628,7 +790,177 @@ tabs:
     title: Cumulative fragment length
     description: The share of a sample's fragments at most this long. A curve that rises early is dominated by short, sub-nucleosomal fragments.
     title_size: h3
-    layout: {x: 4, y: 3, w: 4, h: 6}
+    layout: {x: 4, y: 2, w: 4, h: 6}
+
+  # --------------------------------------------------------- nucleosome classes
+  - component_type: text
+    tag: cr-sg-class-intro
+    section: Nucleosome classes
+    title: How much of the library is nucleosome-free
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The same histogram, binned at the conventional MNase boundaries:
+      sub-nucleosomal below 120 bp, mononucleosomal to 250 bp, dinucleosomal to
+      450 bp and multi-nucleosomal above it. A sharp mark such as H3K4me3 is
+      expected to carry more sub-nucleosomal material than a broad one such as
+      H3K27me3, and the last card is that contrast as a single ratio per
+      sample.
+    workflow_tag: cutandrun
+    data_collection_tag: seacr_fragment_classes
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: cr-sg-card-classcomp
+    index: cr-sg-card-classcomp
+    section: Nucleosome classes
+    workflow_tag: cutandrun
+    data_collection_tag: seacr_fragment_classes
+    use: seacr/fragment_classes
+    aggregation: sum
+    column_name: n_fragments
+    column_type: int64
+    secondary_layout: donut
+    breakdown_col: fragment_class
+    display: {icon_name: 'mdi:chart-donut', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Fragments by class
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cr-sg-card-classshare
+    index: cr-sg-card-classshare
+    section: Nucleosome classes
+    workflow_tag: cutandrun
+    data_collection_tag: seacr_fragment_classes
+    use: seacr/fragment_classes
+    aggregation: max
+    column_name: fraction
+    column_type: float64
+    secondary_layout: top_n
+    breakdown_col: fragment_class
+    top_n_count: 4
+    display: {icon_name: 'mdi:shape-outline', icon_color: '#D81B60', title_color: '#D81B60', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Largest class share
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cr-sg-card-classlen
+    index: cr-sg-card-classlen
+    section: Nucleosome classes
+    workflow_tag: cutandrun
+    data_collection_tag: seacr_fragment_classes
+    use: seacr/fragment_classes
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: median_length
+    column_type: float64
+    display: {icon_name: 'mdi:ruler', icon_color: '#5C6BC0', title_color: '#5C6BC0', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Class median length
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cr-sg-card-monosub
+    index: cr-sg-card-monosub
+    section: Nucleosome classes
+    workflow_tag: cutandrun
+    data_collection_tag: seacr_fragment_classes
+    use: seacr/fragment_classes
+    aggregation: max
+    column_name: mono_to_sub
+    column_type: float64
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 4
+    display: {icon_name: 'mdi:scale-balance', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Mononucleosome ratio
+    layout: {x: 6, y: 2, w: 2, h: 2}
+  - component_type: figure
+    tag: cr-sg-fig-classstack
+    section: Nucleosome classes
+    workflow_tag: cutandrun
+    data_collection_tag: seacr_fragment_classes
+    use: seacr/seacr_fragment_class_stack
+    visu_type: bar
+    dict_kwargs: {x: sample, y: fraction, color: fragment_class, barmode: stack}
+    title: Fragment classes per sample
+    description: Each library split into the four nucleosome classes, as a share of its own fragments.
+    title_size: h3
+    layout: {x: 0, y: 4, w: 8, h: 6}
+  - component_type: table
+    tag: cr-sg-table-classes
+    section: Nucleosome classes
+    workflow_tag: cutandrun
+    data_collection_tag: seacr_fragment_classes
+    use: seacr/fragment_classes
+    row_selection_enabled: false
+    title: Fragment classes
+    description: Four rows per sample, with the fragments, the share and the median length of each class.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 10, w: 8, h: 4}
+
+  # ------------------------------------------------------ spike-in normalisation
+  - component_type: text
+    tag: cr-sg-spike-intro
+    section: Spike-in normalisation
+    title: What the coverage was divided by
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Every library is aligned twice, and the carrier depth of the second
+      alignment is what says how much material it really held. The pipeline
+      turns that into one multiplier per sample and applies it to the bedGraph
+      every caller reads. The run publishes no scale-factor table, so these
+      rows are recomputed from the two Bowtie 2 logs as normalisation_c over
+      the spike-in aligned pairs.
+    workflow_tag: cutandrun
+    data_collection_tag: bowtie2_spikein_factors
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: figure
+    tag: cr-sg-fig-scale
+    section: Spike-in normalisation
+    workflow_tag: cutandrun
+    data_collection_tag: bowtie2_spikein_factors
+    use: bowtie2/spikein_factor_bar
+    visu_type: bar
+    dict_kwargs: {x: sample, y: scale_factor, color: sample}
+    title: Spike-in scale factor per sample
+    description: The multiplier each library's coverage was divided by. A library with little carrier DNA gets a large factor.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 4, h: 6}
+  - component_type: figure
+    tag: cr-sg-fig-depth
+    section: Spike-in normalisation
+    workflow_tag: cutandrun
+    data_collection_tag: bowtie2_spikein_factors
+    use: bowtie2/spikein_depth_scatter
+    visu_type: scatter
+    dict_kwargs: {x: spikein_aligned, y: target_aligned, color: sample}
+    title: Target depth against spike-in depth
+    description: The two alignments side by side. The larger a library's spike-in share, the smaller its scale factor, which is why the IgG controls tend to sit low.
+    title_size: h3
+    layout: {x: 4, y: 2, w: 4, h: 6}
+  - component_type: table
+    tag: cr-sg-table-spike
+    section: Spike-in normalisation
+    workflow_tag: cutandrun
+    data_collection_tag: bowtie2_spikein_factors
+    use: bowtie2/spikein_factors
+    row_selection_enabled: false
+    title: Spike-in factors
+    description: One row per sample, with both alignment depths, both rates and the factor derived from them.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 8, w: 8, h: 3}
 
   # --------------------------------------- coverage concentration / similarity
   - component_type: text
@@ -647,7 +979,7 @@ tabs:
       PCA loadings and the correlation matrix.
     workflow_tag: cutandrun
     data_collection_tag: deeptools_fingerprint_metrics
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: advanced_viz
     tag: cr-qc-av-fingerprint
     index: cr-qc-av-fingerprint
@@ -676,7 +1008,7 @@ tabs:
     title: "Coverage concentration per library"
     description: "plotFingerprint's own quality metrics: the targets sit apart from the IgG controls, which look uniform. Point size is how much of the genome carries no reads at all."
     title_size: h3
-    layout: {x: 0, y: 1, w: 8, h: 7}
+    layout: {x: 0, y: 2, w: 8, h: 7}
   - component_type: advanced_viz
     tag: cr-qc-av-pca
     index: cr-qc-av-pca
@@ -694,7 +1026,7 @@ tabs:
     title: "Samples on the first two components"
     description: "The PCA deepTools ran over the genome-wide bin counts; replicates of one target cluster, a library that lands with the controls did not enrich."
     title_size: h3
-    layout: {x: 0, y: 8, w: 8, h: 7}
+    layout: {x: 0, y: 9, w: 8, h: 7}
   - component_type: advanced_viz
     tag: cr-qc-av-corr
     index: cr-qc-av-corr
@@ -717,13 +1049,57 @@ tabs:
     title: "Sample correlation matrix"
     description: "Pairwise correlation of the genome-wide bin counts, clustered on both axes; a block that spans two targets is a swap or a contamination."
     title_size: h3
-    layout: {x: 0, y: 15, w: 8, h: 8}
+    layout: {x: 0, y: 16, w: 8, h: 8}
+
+  # ---------------------------------------------------------------- filters
+  - component_type: interactive
+    tag: cr-sg-filter-class
+    index: cr-sg-class-filter
+    section: Signal scope
+    group: Signal columns
+    workflow_tag: cutandrun
+    data_collection_tag: seacr_fragment_classes
+    interactive_component_type: MultiSelect
+    column_name: fragment_class
+    column_type: object
+    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: Nucleosome class
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: cr-sg-filter-fraglen
+    index: cr-sg-fraglen-range
+    section: Signal scope
+    group: Signal columns
+    workflow_tag: cutandrun
+    data_collection_tag: seacr_fragment_lengths
+    interactive_component_type: RangeSlider
+    column_name: fragment_length
+    column_type: int64
+    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:ruler'}
+    placement: left
+    title: Fragment length
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: cr-sg-filter-auc
+    index: cr-sg-auc-range
+    section: Signal scope
+    group: Signal columns
+    workflow_tag: cutandrun
+    data_collection_tag: deeptools_fingerprint_metrics
+    interactive_component_type: RangeSlider
+    column_name: auc_ratio
+    column_type: float64
+    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:chart-line'}
+    placement: left
+    title: Coverage concentration
+    layout: {x: 0, y: 6, w: 1, h: 3}
 
 # ============================================================================
 # Peak calls
 # ============================================================================
 - title: Peak calls
-  subtitle: What SEACR and MACS2 each called on every sample, where the signal sits and how wide the calls are
+  subtitle: What SEACR and MACS2 each called on every sample, how much of the library's coverage the calls hold and where along the genome they sit
   tab_order: 3
   tab_icon: mdi:chart-scatter-plot
   tab_icon_color: indigo
@@ -734,16 +1110,20 @@ tabs:
   - name: Peak scope
     icon: mdi:tune
     color: indigo
-    description: Keep only the SEACR regions inside a width and coverage band
+    description: Keep only the SEACR regions inside a width and coverage band, on chosen contigs
   grid_sections:
   - name: SEACR peak yield
     icon: mdi:counter
     color: indigo
     description: How many regions each sample contributed, and how strong they are
+  - name: Signal budget
+    icon: mdi:chart-donut
+    color: teal
+    description: How much of a library's fragment coverage its own peaks hold
   - name: Signal along the genome
-    icon: mdi:chart-scatter-plot
+    icon: mdi:dna
     color: cyan
-    description: Every region at its maximum-signal position, height is the coverage it carries
+    description: Every region as an interval on a chromosome-aware axis, height is the coverage it carries
   - name: MACS2 alongside
     icon: mdi:chart-bar
     color: violet
@@ -766,10 +1146,11 @@ tabs:
     body: >
       One row per region per sample. The cards count the regions and summarise
       their width and coverage; the sliders in the left panel narrow every
-      panel on this tab to a band of each.
+      panel on this tab to a band of each, and the sample filters above them
+      narrow it to a subset of the design.
     workflow_tag: cutandrun
     data_collection_tag: seacr_peaks
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: card
     tag: cr-pk-card-count
     index: cr-pk-card-count
@@ -787,7 +1168,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Regions in view
-    layout: {x: 0, y: 1, w: 2, h: 2}
+    layout: {x: 0, y: 2, w: 2, h: 2}
   - component_type: card
     tag: cr-pk-card-width
     index: cr-pk-card-width
@@ -804,7 +1185,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Region width
-    layout: {x: 2, y: 1, w: 2, h: 2}
+    layout: {x: 2, y: 2, w: 2, h: 2}
   - component_type: card
     tag: cr-pk-card-signal
     index: cr-pk-card-signal
@@ -820,7 +1201,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Total coverage in regions
-    layout: {x: 4, y: 1, w: 2, h: 2}
+    layout: {x: 4, y: 2, w: 2, h: 2}
   - component_type: card
     tag: cr-pk-card-density
     index: cr-pk-card-density
@@ -839,7 +1220,120 @@ tabs:
     title_size: sm
     title_align: left
     title: Coverage per base
-    layout: {x: 6, y: 1, w: 2, h: 2}
+    layout: {x: 6, y: 2, w: 2, h: 2}
+
+  # ------------------------------------------------------------ signal budget
+  - component_type: text
+    tag: cr-pk-frip-intro
+    section: Signal budget
+    title: How much of the library the peaks hold
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The fraction of reads in peaks is the signal-to-noise number of a
+      chromatin experiment. SEACR reports no read count, so it is built in base
+      pairs of fragment coverage: the summed region signal, de-scaled by the
+      spike-in factor the pipeline applied to the bedGraph, over the total the
+      fragment-length histogram accounts for. The donut is that split for the
+      libraries in view.
+    workflow_tag: cutandrun
+    data_collection_tag: frip
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: cr-pk-card-frip-comp
+    index: cr-pk-card-frip-comp
+    section: Signal budget
+    workflow_tag: cutandrun
+    data_collection_tag: frip
+    use: cutandrun/frip
+    aggregation: sum
+    column_name: coverage_bp
+    column_type: float64
+    secondary_layout: donut
+    breakdown_col: signal_class
+    display: {icon_name: 'mdi:chart-donut', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Coverage in peaks
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cr-pk-card-frip-spread
+    index: cr-pk-card-frip-spread
+    section: Signal budget
+    workflow_tag: cutandrun
+    data_collection_tag: frip
+    use: cutandrun/frip
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: frip
+    column_type: float64
+    display: {icon_name: 'mdi:chart-bell-curve', icon_color: '#5C6BC0', title_color: '#5C6BC0', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: FRiP across samples
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cr-pk-card-frip-worst
+    index: cr-pk-card-frip-worst
+    section: Signal budget
+    workflow_tag: cutandrun
+    data_collection_tag: frip
+    use: cutandrun/frip
+    aggregation: min
+    column_name: fraction
+    column_type: float64
+    secondary_layout: gauge
+    coverage_max: 1
+    display: {icon_name: 'mdi:alert-outline', icon_color: '#D81B60', title_color: '#D81B60', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Weakest split
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: cr-pk-card-frip-peaks
+    index: cr-pk-card-frip-peaks
+    section: Signal budget
+    workflow_tag: cutandrun
+    data_collection_tag: frip
+    use: cutandrun/frip
+    aggregation: max
+    column_name: n_peaks
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 4
+    display: {icon_name: 'mdi:counter', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Regions per sample
+    layout: {x: 6, y: 2, w: 2, h: 2}
+  - component_type: figure
+    tag: cr-pk-fig-frip
+    section: Signal budget
+    workflow_tag: cutandrun
+    data_collection_tag: frip
+    use: cutandrun/frip_composition_bar
+    visu_type: bar
+    dict_kwargs: {x: sample, y: fraction, color: signal_class, barmode: stack}
+    title: Fragment coverage inside and outside peaks
+    description: Each library's coverage split in two. A library whose peaks hold little of it either failed or was called too strictly.
+    title_size: h3
+    layout: {x: 0, y: 4, w: 8, h: 6}
+  - component_type: table
+    tag: cr-pk-table-frip
+    section: Signal budget
+    workflow_tag: cutandrun
+    data_collection_tag: frip
+    use: cutandrun/frip
+    row_selection_enabled: false
+    title: Signal budget
+    description: Two rows per sample, with the coverage in base pairs, the fraction and the spike-in factor divided out of it.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 10, w: 8, h: 3}
 
   # ------------------------------------------------------ signal on genome
   - component_type: text
@@ -852,31 +1346,53 @@ tabs:
     alignment: left
     body: >
       [SEACR](https://github.com/FredHutch/SEACR) reports no p-value, so the
-      track height is the coverage the region carries. Lasso points on the
-      scatter below to keep only those regions in the tables at the bottom of
-      this tab.
+      track height is the coverage the region carries. The genome view draws
+      every call as the interval it is, on a chromosome-aware axis that zooms;
+      the coverage track below reads the same columns through the Plotly
+      renderer, so the section still answers the question if the genome canvas
+      is unavailable. Lasso the scatter to keep only those regions in the
+      tables at the bottom of this tab.
     workflow_tag: cutandrun
     data_collection_tag: seacr_peaks
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 3}
   - component_type: advanced_viz
-    tag: cr-pk-av-manhattan
-    index: cr-pk-av-manhattan
+    tag: cr-pk-av-track
+    index: cr-pk-av-track
     section: Signal along the genome
     workflow_tag: cutandrun
     data_collection_tag: seacr_peaks
-    use: seacr/seacr_peak_signal
+    use: seacr/seacr_peak_track
     config:
-      feature_col: peak_id
-      score_kind: "log10(signal)"
-      color_by_columns: [sample]
-      default_color_by: sample
+      # `rect` needs an end column, which the role binding supplies: a SEACR
+      # call is an interval, not a point at its summit.
+      mark: rect
+      score_title: log10 total coverage
+      opacity: 0.8
+      # No `assembly`: the contig list is derived from the data, so a run on a
+      # non-human reference renders here unchanged.
       selection_enabled: true
       selection_column: peak_id
-      top_n_labels: 10
-    title: SEACR signal along the genome
-    description: Every region at its maximum-signal position; height is log10 of the total fragment coverage, colour is the sample.
+    title: SEACR regions along the genome
+    description: Every region as an interval on a chromosome-aware axis; height is log10 of the total fragment coverage. Click a region to carry it into the tables below.
     title_size: h3
-    layout: {x: 0, y: 1, w: 8, h: 7}
+    layout: {x: 0, y: 3, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: cr-pk-av-coverage
+    index: cr-pk-av-coverage
+    section: Signal along the genome
+    workflow_tag: cutandrun
+    data_collection_tag: seacr_peaks
+    use: seacr/seacr_peak_coverage
+    config:
+      y_scale: linear
+      smoothing_window: 0
+      color_by: sample
+      facet_by_sample: false
+      show_annotation_lane: false
+    title: SEACR coverage profile per sample
+    description: The same regions as a coverage profile, one trace per sample, drawn without the genome canvas.
+    title_size: h3
+    layout: {x: 0, y: 10, w: 8, h: 7}
   - component_type: figure
     tag: cr-pk-fig-signal
     index: cr-pk-fig-signal
@@ -919,7 +1435,7 @@ tabs:
     title: Total against maximum coverage
     description: The 2000 strongest regions in view; point size is the region width. Lasso to select regions.
     title_size: h3
-    layout: {x: 0, y: 8, w: 4, h: 6}
+    layout: {x: 0, y: 17, w: 4, h: 6}
   - component_type: figure
     tag: cr-pk-fig-width
     section: Signal along the genome
@@ -931,7 +1447,7 @@ tabs:
     title: SEACR region width
     description: How wide the calls are, per sample. A broad mark gives far wider regions than a sharp one.
     title_size: h3
-    layout: {x: 4, y: 8, w: 4, h: 6}
+    layout: {x: 4, y: 17, w: 4, h: 6}
 
   # -------------------------------------------------------- macs2 alongside
   - component_type: text
@@ -949,7 +1465,7 @@ tabs:
       a result rather than a gap.
     workflow_tag: cutandrun
     data_collection_tag: macs2_peaks
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: card
     tag: cr-pk-macs-card-count
     index: cr-pk-macs-card-count
@@ -967,7 +1483,7 @@ tabs:
     title_size: sm
     title_align: left
     title: MACS2 peaks
-    layout: {x: 0, y: 1, w: 2, h: 2}
+    layout: {x: 0, y: 2, w: 2, h: 2}
   - component_type: card
     tag: cr-pk-macs-card-width
     index: cr-pk-macs-card-width
@@ -984,7 +1500,7 @@ tabs:
     title_size: sm
     title_align: left
     title: MACS2 peak width
-    layout: {x: 2, y: 1, w: 2, h: 2}
+    layout: {x: 2, y: 2, w: 2, h: 2}
   - component_type: card
     tag: cr-pk-macs-card-fold
     index: cr-pk-macs-card-fold
@@ -1000,7 +1516,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Fold enrichment
-    layout: {x: 4, y: 1, w: 2, h: 2}
+    layout: {x: 4, y: 2, w: 2, h: 2}
   - component_type: card
     tag: cr-pk-macs-card-q
     index: cr-pk-macs-card-q
@@ -1019,7 +1535,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Best q-value
-    layout: {x: 6, y: 1, w: 2, h: 2}
+    layout: {x: 6, y: 2, w: 2, h: 2}
   - component_type: advanced_viz
     tag: cr-pk-av-macs-manhattan
     index: cr-pk-av-macs-manhattan
@@ -1038,7 +1554,7 @@ tabs:
     title: MACS2 significance along the genome
     description: Every MACS2 peak at its summit; height is -log10 of the q-value. A sample with no peaks contributes nothing here.
     title_size: h3
-    layout: {x: 0, y: 3, w: 8, h: 7}
+    layout: {x: 0, y: 4, w: 8, h: 7}
 
   # ------------------------------------------------------------ peak tables
   - component_type: text
@@ -1051,11 +1567,11 @@ tabs:
     alignment: left
     body: >
       Both callers' rows, filtered by everything above. Ticking a row selects
-      the region, which is the same key the scatter emits, so the two stay on
-      the same call.
+      the region, which is the same key the scatter and the genome view emit,
+      so the three stay on the same call.
     workflow_tag: cutandrun
     data_collection_tag: seacr_peaks
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: table
     tag: cr-pk-table-seacr
     section: Peak tables
@@ -1068,7 +1584,7 @@ tabs:
     description: Coordinates, width and the two coverage measures for every SEACR call.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 1, w: 8, h: 5}
+    layout: {x: 0, y: 2, w: 8, h: 7}
   - component_type: table
     tag: cr-pk-table-macs
     section: Peak tables
@@ -1081,7 +1597,7 @@ tabs:
     description: Coordinates, summit, fold enrichment and significance for every MACS2 call.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 6, w: 8, h: 5}
+    layout: {x: 0, y: 9, w: 8, h: 7}
 
   # ---------------------------------------------------------------- filters
   - component_type: interactive
@@ -1112,6 +1628,20 @@ tabs:
     placement: left
     title: Coverage per base
     layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: cr-pk-filter-chr
+    index: cr-pk-chr-filter
+    section: Peak scope
+    group: SEACR regions
+    workflow_tag: cutandrun
+    data_collection_tag: seacr_peaks
+    interactive_component_type: MultiSelect
+    column_name: chr
+    column_type: object
+    display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:dna'}
+    placement: left
+    title: Contig
+    layout: {x: 0, y: 6, w: 1, h: 3}
 
 # ============================================================================
 # Caller agreement
@@ -1145,7 +1675,7 @@ tabs:
   - name: Comparison table
     icon: mdi:table
     color: grape
-    description: The eight rows behind the panels on this tab
+    description: The per-sample, per-caller rows behind the panels on this tab
   components:
   - component_type: text
     tag: cr-ca-intro
@@ -1161,13 +1691,14 @@ tabs:
       disagree is where the biology of the mark shows.
     workflow_tag: cutandrun
     data_collection_tag: caller_agreement
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: card
     tag: cr-ca-card-peaks
     index: cr-ca-card-peaks
     section: Agreement at a glance
     workflow_tag: cutandrun
     data_collection_tag: caller_agreement
+    use: cutandrun/caller_agreement
     aggregation: sum
     column_name: n_peaks
     column_type: int64
@@ -1178,13 +1709,14 @@ tabs:
     title_size: sm
     title_align: left
     title: Peaks called
-    layout: {x: 0, y: 1, w: 2, h: 2}
+    layout: {x: 0, y: 2, w: 2, h: 2}
   - component_type: card
     tag: cr-ca-card-shared
     index: cr-ca-card-shared
     section: Agreement at a glance
     workflow_tag: cutandrun
     data_collection_tag: caller_agreement
+    use: cutandrun/caller_agreement
     aggregation: average
     aggregations: [box_plot_stats]
     secondary_layout: box_plot
@@ -1194,13 +1726,14 @@ tabs:
     title_size: sm
     title_align: left
     title: Share reproduced
-    layout: {x: 2, y: 1, w: 2, h: 2}
+    layout: {x: 2, y: 2, w: 2, h: 2}
   - component_type: card
     tag: cr-ca-card-gauge
     index: cr-ca-card-gauge
     section: Agreement at a glance
     workflow_tag: cutandrun
     data_collection_tag: caller_agreement
+    use: cutandrun/caller_agreement
     aggregation: min
     column_name: frac_shared
     column_type: float64
@@ -1210,13 +1743,14 @@ tabs:
     title_size: sm
     title_align: left
     title: Worst agreement
-    layout: {x: 4, y: 1, w: 2, h: 2}
+    layout: {x: 4, y: 2, w: 2, h: 2}
   - component_type: card
     tag: cr-ca-card-unique
     index: cr-ca-card-unique
     section: Agreement at a glance
     workflow_tag: cutandrun
     data_collection_tag: caller_agreement
+    use: cutandrun/caller_agreement
     aggregation: sum
     column_name: n_unique
     column_type: int64
@@ -1226,7 +1760,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Calls only one made
-    layout: {x: 6, y: 1, w: 2, h: 2}
+    layout: {x: 6, y: 2, w: 2, h: 2}
 
   - component_type: text
     tag: cr-ca-dot-intro
@@ -1239,23 +1773,19 @@ tabs:
     body: >
       In the dot plot, colour is how many peaks the caller made and size is how
       much of them the other caller reproduced. A large pale dot is a caller
-      that called little but agreed; a small dark one called a lot alone.
+      that called little but agreed; a small dark one called a lot alone. The
+      scatter below puts the two callers on the two axes, one point per sample.
     workflow_tag: cutandrun
     data_collection_tag: caller_agreement
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: advanced_viz
     tag: cr-ca-av-dotplot
     index: cr-ca-av-dotplot
     section: Caller against caller
     workflow_tag: cutandrun
     data_collection_tag: caller_agreement
-    viz_kind: dot_plot
+    use: cutandrun/caller_yield_dots
     config:
-      viz_kind: dot_plot
-      cluster_col: sample
-      gene_col: caller
-      mean_expression_col: log10_n_peaks
-      frac_expressing_col: frac_shared
       colour_scale: Viridis
       gene_sort: name
       cluster_sort: name
@@ -1267,13 +1797,14 @@ tabs:
     # Four rows, not seven: the y axis holds exactly two callers, and the
     # renderer fills whatever tile it is given, so the extra height is spent
     # spreading two rows of dots over half a screen.
-    layout: {x: 0, y: 1, w: 8, h: 4}
+    layout: {x: 0, y: 2, w: 8, h: 4}
   - component_type: figure
     tag: cr-ca-fig-scatter
     index: cr-ca-fig-scatter
     section: Caller against caller
     workflow_tag: cutandrun
     data_collection_tag: caller_agreement
+    use: cutandrun/caller_peak_scatter
     mode: code
     visu_type: scatter
     code_content: |
@@ -1332,42 +1863,77 @@ tabs:
     title: MACS2 against SEACR, per sample
     description: One point per sample; size is the mean share of calls the two callers share. Points far off the dotted line are samples the callers see very differently.
     title_size: h3
-    layout: {x: 0, y: 8, w: 4, h: 6}
+    layout: {x: 0, y: 6, w: 8, h: 6}
+
+  - component_type: text
+    tag: cr-ca-diverge-intro
+    section: Where they diverge
+    title: What only one caller saw
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The left bars count the calls the other caller never made; the right ones
+      are the same thing as a share of what the caller called. A caller with a
+      tall left bar and a low right one is calling a peak set the other model
+      does not recognise at all.
+    workflow_tag: cutandrun
+    data_collection_tag: caller_agreement
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: figure
     tag: cr-ca-fig-unique
     section: Where they diverge
     workflow_tag: cutandrun
     data_collection_tag: caller_agreement
+    use: cutandrun/caller_unique_bar
     visu_type: bar
     dict_kwargs: {x: sample, y: n_unique, color: caller, barmode: group}
     title: Calls the other caller did not make
     description: How many of each caller's peaks the other one never called, per sample.
     title_size: h3
-    layout: {x: 4, y: 8, w: 4, h: 6}
+    layout: {x: 0, y: 2, w: 4, h: 6}
   - component_type: figure
     tag: cr-ca-fig-frac
     section: Where they diverge
     workflow_tag: cutandrun
     data_collection_tag: caller_agreement
+    use: cutandrun/caller_shared_bar
     visu_type: bar
     dict_kwargs: {x: sample, y: frac_shared, color: caller, barmode: group}
     title: Share of calls the other caller reproduced
     description: The fraction of each caller's peaks that overlap at least one peak of the other caller.
     title_size: h3
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    layout: {x: 4, y: 2, w: 4, h: 6}
 
+  - component_type: text
+    tag: cr-ca-table-intro
+    section: Comparison table
+    title: The rows behind this tab
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One row per sample and caller, including the samples a caller returned
+      nothing for. Ticking a row keeps that sample in the peak panels of the
+      other tabs.
+    workflow_tag: cutandrun
+    data_collection_tag: caller_agreement
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: table
     tag: cr-ca-table
     section: Comparison table
     workflow_tag: cutandrun
     data_collection_tag: caller_agreement
+    use: cutandrun/caller_agreement
     row_selection_enabled: true
     row_selection_column: sample
     title: Caller comparison
-    description: One row per sample and caller. Ticking a row keeps that sample in the peak panels of the other tabs.
+    description: One row per sample and caller, with the peaks called, the overlap and the widths behind them.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 1, w: 8, h: 5}
+    layout: {x: 0, y: 2, w: 8, h: 3}
 
   # ---------------------------------------------------------------- filters
   - component_type: interactive
@@ -1414,7 +1980,7 @@ tabs:
   - name: Consensus scope
     icon: mdi:tune
     color: grape
-    description: Replicate support and interval width to keep in view
+    description: Replicate support, interval width and member count to keep in view
   grid_sections:
   - name: Consensus at a glance
     icon: mdi:counter
@@ -1448,7 +2014,7 @@ tabs:
       interval only one replicate found is the weaker half of the set.
     workflow_tag: cutandrun
     data_collection_tag: seacr_consensus_peaks
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: card
     tag: cr-cons-card-count
     index: cr-cons-card-count
@@ -1466,7 +2032,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Consensus intervals
-    layout: {x: 0, y: 1, w: 2, h: 2}
+    layout: {x: 0, y: 2, w: 2, h: 2}
   - component_type: card
     tag: cr-cons-card-support
     index: cr-cons-card-support
@@ -1483,7 +2049,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Replicates per interval
-    layout: {x: 2, y: 1, w: 2, h: 2}
+    layout: {x: 2, y: 2, w: 2, h: 2}
   - component_type: card
     tag: cr-cons-card-donut
     index: cr-cons-card-donut
@@ -1500,7 +2066,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Intervals by support
-    layout: {x: 4, y: 1, w: 2, h: 2}
+    layout: {x: 4, y: 2, w: 2, h: 2}
   - component_type: card
     tag: cr-cons-card-signal
     index: cr-cons-card-signal
@@ -1516,7 +2082,7 @@ tabs:
     title_size: sm
     title_align: left
     title: Coverage per interval
-    layout: {x: 6, y: 1, w: 2, h: 2}
+    layout: {x: 6, y: 2, w: 2, h: 2}
 
   - component_type: text
     tag: cr-cons-upset-intro
@@ -1532,7 +2098,7 @@ tabs:
       the single-replicate bars are what one replicate saw alone.
     workflow_tag: cutandrun
     data_collection_tag: seacr_consensus_peaks
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: advanced_viz
     tag: cr-cons-av-upset
     index: cr-cons-av-upset
@@ -1552,7 +2118,7 @@ tabs:
     title: Consensus interval overlap
     description: Intersections of the replicates calling each consensus interval, largest first.
     title_size: h3
-    layout: {x: 0, y: 1, w: 8, h: 7}
+    layout: {x: 0, y: 2, w: 8, h: 7}
 
   - component_type: text
     tag: cr-cons-repro-intro
@@ -1568,7 +2134,7 @@ tabs:
       both replicates found are the wider ones.
     workflow_tag: cutandrun
     data_collection_tag: seacr_consensus_peaks
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: figure
     tag: cr-cons-fig-repro
     index: cr-cons-fig-repro
@@ -1611,7 +2177,7 @@ tabs:
     title: Reproducible share per target
     description: Each target's consensus set split by how many replicates called the interval; the bar labels are interval counts.
     title_size: h3
-    layout: {x: 0, y: 1, w: 4, h: 6}
+    layout: {x: 0, y: 2, w: 4, h: 6}
   - component_type: figure
     tag: cr-cons-fig-width
     section: How reproducible
@@ -1623,8 +2189,23 @@ tabs:
     title: Interval width by replicate support
     description: Intervals both replicates called are wider than the ones only one of them found.
     title_size: h3
-    layout: {x: 4, y: 1, w: 4, h: 6}
+    layout: {x: 4, y: 2, w: 4, h: 6}
 
+  - component_type: text
+    tag: cr-cons-table-intro
+    section: Consensus table
+    title: The merged intervals
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Every consensus interval of every target, with the member peaks behind it
+      and the replicates that supported them. Ticking a row keeps that interval
+      in view across the tab.
+    workflow_tag: cutandrun
+    data_collection_tag: seacr_consensus_peaks
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: table
     tag: cr-cons-table
     section: Consensus table
@@ -1637,7 +2218,7 @@ tabs:
     description: Coordinates, member peak count, replicate support and coverage for every merged interval.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 1, w: 8, h: 5}
+    layout: {x: 0, y: 2, w: 8, h: 7}
 
   # ---------------------------------------------------------------- filters
   - component_type: interactive
@@ -1668,3 +2249,17 @@ tabs:
     placement: left
     title: Interval width
     layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: cr-cons-filter-members
+    index: cr-cons-members-range
+    section: Consensus scope
+    group: Consensus
+    workflow_tag: cutandrun
+    data_collection_tag: seacr_consensus_peaks
+    interactive_component_type: RangeSlider
+    column_name: num_peaks
+    column_type: int64
+    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:counter'}
+    placement: left
+    title: Member peaks
+    layout: {x: 0, y: 6, w: 1, h: 3}

@@ -11,6 +11,6 @@ recipe: kallisto/run_metrics.py
 fixture: run_metrics.tsv
 renders_as:
   - { component: card, column: p_pseudoaligned, aggregation: average, secondary_layout: gauge, coverage_max: 1.0 }
-  - { component: card, column: cells_called, aggregation: max }
-  - { component: card, column: n_barcodes, aggregation: max }
+  - { component: card, column: cells_called, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: n_barcodes, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
   - { component: table }

@@ -1,0 +1,14 @@
+# NanoPlot, the long-read QC suite. Its NanoStat summary is the one long-read
+# report every Nanopore pipeline publishes, and it is plain text rather than a
+# table: a free-form block of `Key: value` lines, a yield-above-quality-cutoff
+# ladder and two "top 5" blocks. MultiQC parses part of it into the general
+# statistics table, which is where these numbers were reachable until now, but
+# a MultiQC panel is not a data collection: nothing could filter on it, card it
+# or plot the ladder. The two outputs here read the file itself.
+id: nanoplot
+name: NanoPlot
+description: >-
+  Quality control for long-read sequencing: read length, read quality and
+  yield summaries computed from a FASTQ, a sequencing summary or an alignment.
+homepage: https://github.com/wdecoster/NanoPlot
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/nanoplot

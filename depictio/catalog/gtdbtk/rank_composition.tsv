@@ -1,0 +1,16 @@
+sample_id	sample	assembler	binner	rank	taxon	abundance
+FLYE-MaxBin2-CAPES_S11	CAPES_S11	FLYE	MaxBin2	class	Bacteroidia	2
+MEGAHIT-MetaBinner-CAPES_S7	CAPES_S7	MEGAHIT	MetaBinner	class	Negativicutes	1
+SPAdes-MetaBinner-CAPES_S11	CAPES_S11	SPAdes	MetaBinner	class	Coriobacteriia	1
+SPAdes-MetaBinner-CAPES_S7	CAPES_S7	SPAdes	MetaBinner	domain	Bacteria	9
+MEGAHIT-MetaBinner-CAPES_S7	CAPES_S7	MEGAHIT	MetaBinner	family	Enterobacteriaceae	2
+SPAdes-MetaBAT2-CAPES_S21	CAPES_S21	SPAdes	MetaBAT2	family	Burkholderiaceae_F	1
+SPAdes-MetaBinner-CAPES_S7	CAPES_S7	SPAdes	MetaBinner	family	Bifidobacteriaceae	1
+MEGAHIT-MetaBAT2-CAPES_S7	CAPES_S7	MEGAHIT	MetaBAT2	genus	Streptococcus	1
+SPAdes-MetaBAT2-CAPES_S11	CAPES_S11	SPAdes	MetaBAT2	genus	Bifidobacterium	2
+SPAdes-MetaBinner-CAPES_S11	CAPES_S11	SPAdes	MetaBinner	genus	Acidaminococcus	2
+SPAdes-MetaBinner-CAPES_S7	CAPES_S7	SPAdes	MetaBinner	genus	Bacteroides	3
+MEGAHIT-MetaBAT2-CAPES_S7	CAPES_S7	MEGAHIT	MetaBAT2	order	Lachnospirales	1
+SPAdes-MetaBAT2-CAPES_S21	CAPES_S21	SPAdes	MetaBAT2	order	Lachnospirales	4
+SPAdes-MetaBinner-CAPES_S7	CAPES_S7	SPAdes	MetaBinner	order	Actinomycetales	1
+MEGAHIT-SemiBin2-CAPES_S21	CAPES_S21	MEGAHIT	SemiBin2	phylum	Bacteroidota	5

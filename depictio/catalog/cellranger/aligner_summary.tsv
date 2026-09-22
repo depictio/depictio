@@ -1,0 +1,4 @@
+aligner	cells_called	cellbender_cells	median_umi_per_cell	mapping_rate
+cellranger	8767	8805	4801.0	0.761
+kallisto	8514	8765		0.597
+simpleaf	8779	8821	4960.0	0.8449

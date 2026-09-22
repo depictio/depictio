@@ -1,7 +1,7 @@
 # GenomeSpy for genome-scale tracks — evaluation and spike (#1083)
 
-**Status:** Evaluation + landed spike (`viz_kind: genomespy_track`). Replacement of existing
-renderers is proposed, not done.
+**Status:** Evaluation, then a landed kind (`viz_kind: genome_view`, renamed from the spike's
+`genomespy_track`). Replacement of existing renderers is proposed, not done.
 **Audience:** maintainers deciding whether GenomeSpy earns a place in `advanced_viz`.
 **Related:** `docs/design/advanced-viz.md` (row #8, §4 Layer B),
 `depictio/projects/nf-core/TEMPLATE_BOTTLENECKS.md` ("Where the boundary with JBrowse sits"),
@@ -50,13 +50,15 @@ filter, which is what the Analysis panel already turns into a group. Interval se
 declared as a param (`{ select: { type: "interval", encodings: ["x"] } }`) and read with
 `api.getParam("brush").subscribe(v => v.intervals.x)`; the value is a linearised genome
 interval, which is exactly the `contexts.locus` channel the design doc's §4 Layer B describes
-and never got built. The spike declares the param and subscribes to it; nothing consumes the
-interval yet.
+and never got built. The kind now consumes it: the brushed interval is mapped back to a
+chromosome plus a base-pair range and emitted as two ordinary interactive filters (§6), so the
+region reaches every other tile through the existing filter pipeline rather than a new channel.
 
 ### 2.3 Does it fit the `webglBudget.ts` slot accounting?
 
-Yes, and cheaply. One `embed()` is one canvas and **one** WebGL context; a Plotly `scattergl`
-costs three. The spike asks for one slot with `useWebglSlot(true)` and, when refused, passes
+Yes, and cheaply. One `embed()` is one canvas and **one** WebGL context. Measured on the same
+dashboard (§5), a Plotly `scattergl` manhattan tile allocated **two** WebGL contexts plus a 2D
+canvas, against **one** context and one canvas for the genome view. The spike asks for one slot with `useWebglSlot(true)` and, when refused, passes
 `renderer: "canvas"`: GenomeSpy's Canvas2D backend keeps every feature (zoom, brush, picking)
 and only paints slower, so the fallback is not the downsampled-SVG compromise `adaptGlTrace`
 has to make. `MAX_GL_PLOTS = 4` is tuned for Plotly's three-canvas cost; if GenomeSpy tracks
@@ -115,7 +117,7 @@ Plotly figures. A colour-scheme switch rebuilds the spec and re-embeds.
 
 | Renderer | Built by hand today | GenomeSpy equivalent | Decision |
 |---|---|---|---|
-| `manhattan` (Plotly `scattergl`, 3 GL contexts) | chromosome sort, concatenated axis, alternating bands, threshold, top-N labels, lasso → filter | `locus` axis, `rule`, `text` (top-k via transform), interval brush | **Candidate 1.** Replace after the measurement in §5 on `macs2_broad_peaks` (atacseq) if latency is no worse and the selection→filter path is kept |
+| `manhattan` (Plotly `scattergl`, 3 GL contexts) | chromosome sort, concatenated axis, alternating bands, threshold, top-N labels, lasso → filter | `locus` axis, `rule`, `text` (top-k via transform), interval brush | **Candidate 1.** §5 now says latency is a wash and the context cost halves; what still blocks the swap is the top-N label pass and lasso-to-group parity, not performance |
 | `coverage_track` (Plotly + Celery `compute_coverage_track`) | server binning / smoothing, per-sample facets, annotation lane | `rect` with `x2`, `vconcat` with shared `x` | **Candidate 2.** Keep the Celery aggregation, change the rendering |
 | `gene_arrow_track` (Plotly shapes) | lane packing, strand arrows, labels | `pileup` transform, `rect` / `text` marks | Candidate 3, low traffic |
 | `sashimi` (junction arcs only, coverage delegated) | arcs | `link` mark + coverage `rect` in one `vconcat` | After candidate 2: it reunites the two halves the JBrowse boundary split |
@@ -129,25 +131,67 @@ path; (c) removes code (renderer lines plus tests); (d) still works on the `canv
 when the GL budget is spent. The old `viz_kind` string stays as an alias in `RENDERERS` for one
 release, the way `ancombc_differentials` does.
 
-## 5. Measurement protocol (not run: no browser against a live instance here)
+## 5. Measurement (run 2026-09-22)
 
-Same collection (`macs2_broad_peaks`, nf-core/atacseq, ~10⁵ rows) bound to a `manhattan` tile
-and a `genomespy_track` tile on one dashboard. A Playwright spec records, for each tile:
-fetch-complete → first painted frame; median frame time over ten wheel-zoom and ten drag-pan
-gestures; the same two numbers with the GL budget exhausted (mount four `scattergl` tiles
-first) so the `canvas` fallback is measured too. Report both backends. The showcase tab
-`genomespy_track.yaml` sits next to `manhattan.yaml` on the same `manhattan_demo` collection
-for an eyeball comparison before that is automated.
+Same collection bound to both renderers on one dashboard: `macs2_broad_peaks`
+(nf-core/atacseq megatest), 224 137 rows, 11 columns, 24 chromosomes, 6 samples. Headless
+Chromium 151.0.7922.34 at 1600x1000, `--enable-precise-memory-info`, driven by Playwright.
+WebGL contexts are counted by instrumenting `HTMLCanvasElement.prototype.getContext` at call
+time and attributing each canvas to its `.react-grid-item`: probing afterwards with
+`getContext()` allocates a context on any canvas that has none, which is the number being
+measured.
 
-## 6. What the spike ships
+The dev viewer container could not serve the run. Its `node_modules` live in the image
+(`docker-compose.dev.yaml` mounts source only), so `@genome-spy/core` is unresolvable there
+until the image is rebuilt and Vite fails the transform. The numbers below come from a host
+Vite dev server proxying the same API, which means they include dev-mode module loading and
+are an upper bound on first paint, not a production figure.
 
-- Backend: `GenomeSpyTrackConfig` (chr / pos / score, optional `feature_col` and `end_col`,
-  `mark`, `assembly`, `score_threshold`, `point_size`, `opacity`, selection fields); roles and
-  aliases in `schemas.py`; `tail` sampling; catalog and Tool Studio snapshots regenerated.
-- Frontend: `genomespy/genomeSpySpec.ts` (pure spec builder + tests), `genomespy/useGenomeSpy.ts`
-  (embed / finalize / pick / brush / `datasets.set`), `GenomeSpyTrackRenderer.tsx`, dispatch and
-  chunking entries. `@genome-spy/core` pinned at 0.88.1.
-- Showcase: the `GenomeSpy track` tab of `advanced_viz_showcase`, bound to `manhattan_demo`.
+| | `manhattan` (Plotly `scattergl`) | `genome_view` (GenomeSpy, WebGL) |
+|---|---|---|
+| WebGL contexts | 2 | 1 |
+| Canvases | 3 (2 GL + 1 2D) | 1 |
+| Median wheel-zoom frame | 8.3 ms | 8.3 ms |
+| Median drag-pan frame | 8.3 ms | 8.3 ms |
 
-Not shipped: interval brush → `contexts.locus` consumer, analysis-group colouring, file-backed
-sources, any renderer replacement.
+Shared, whole-page: first canvas painted 3.45 s after navigation, settled at 5.95 s, 91.4 MB
+used JS heap, no console errors. Both tiles sit at the vsync floor of the 120 Hz display
+during gestures, so 8.3 ms is the monitor, not either renderer: neither is the bottleneck at
+this row count, and the honest reading is "no worse", not "faster".
+
+**The Canvas2D fallback is still unmeasured.** Disabling WebGL at the browser level is not a
+valid method here, because Plotly then throws "Unable to initialize WebGL" and the comparison
+collapses. The replacement, saturating the budget by mounting four `scattergl` tiles first,
+did not settle: three manhattan tiles took 6 contexts between them and the fourth tile and the
+genome view had painted no canvas at all 18.8 s in, so the gesture numbers collected there
+describe an empty tile. That scenario needs a longer settle window, or a smaller collection,
+before it says anything.
+
+## 6. What the kind ships
+
+- Backend: `GenomeViewConfig` (chr / pos / score, optional `feature`, `end`, `sample`,
+  `category`; `mark`, `facet_by_sample`, `max_facets`, `annotation`, `assembly`,
+  `score_threshold`, `point_size`, `opacity`, `region_filter_enabled`,
+  `follow_region_filter`, selection fields); roles and aliases in `schemas.py`; `tail`
+  sampling on `score`.
+- Frontend: `genomespy/genomeSpySpec.ts` (pure spec builder), `genomespy/geneAnnotations.ts`
+  (lazy gene asset loader), `genomespy/genomeViewData.ts` (fetch + filter plumbing, testable
+  without a DOM), `genomespy/useGenomeSpy.ts` (embed / finalize / pick / brush / `zoomTo` /
+  `datasets.set`), `GenomeViewRenderer.tsx`, dispatch and chunking entries.
+  `@genome-spy/core` pinned at 0.88.1.
+- Marks: `point`, `rect` (needs `end`), `bar` (score as height from a baseline, the coverage
+  look). GenomeSpy core has no line or area mark, so a smooth coverage curve is not available;
+  `bar` is the closest reading.
+- Multi-track: an advanced_viz tile binds one data collection, so several genome tiles are
+  stacked in one section and linked by the region filter. `facet_by_sample` stacks one lane
+  per sample inside a single tile as a `vconcat` sharing the x scale, capped by `max_facets`.
+- Gene annotation: `annotation: hg38 | mm10 | none` draws a rect plus text lane under the
+  data, from a lazily fetched asset under `depictio/viewer/public/assets/genomes/`.
+- Region brush to filter: the brushed interval becomes a `MultiSelect` on the chromosome
+  column and a `RangeSlider` on the position column, both with source `genome_selection`, so
+  any tile bound to a collection carrying the same columns (directly or through a project
+  link) narrows with it. `follow_region_filter` makes a tile zoom to an incoming region
+  instead of contributing one.
+- Showcase: the `Genome view` tab of `advanced_viz_showcase`.
+
+Not shipped: analysis-group colouring, file-backed sources, any renderer replacement.

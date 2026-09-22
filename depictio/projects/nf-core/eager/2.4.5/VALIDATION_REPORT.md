@@ -117,6 +117,27 @@ distribution, Variant depths); no `bcftools/stats_summary` or `_tstv` table is r
 from this template, to avoid depending on an output that may not exist yet when this
 template's own tests run standalone.
 
+### EA-D7: a de-anchored scan pattern swallowed MultiQC's own summary table
+
+Caught by the first live ingest, not by any offline check. Widening the Qualimap
+`genome_results.txt` scan from `.*_stats/genome_results\.txt$` to
+`.*genome_results\.txt$` (so the template stops depending on the `_rmdup_stats/`
+directory name and ports to eager 3.x) also matched
+`multiqc/multiqc_data/multiqc_qualimap_bamqc_genome_results.txt`, MultiQC's own flattened
+summary of the same data. The raw collection picked up 3 files instead of 2, and
+`qualimap/bamqc_genome_results.py` failed on the third with
+`pattern not found: 'number of reads = ([\d,]+)'`.
+
+Fixed by anchoring the pattern at the start of the basename: `genome_results\.txt$`. The
+scan regex is `re.match`ed against the basename first, so a leading `.*` is never needed and
+actively harmful next to a MultiQC report directory whose files are all named
+`multiqc_<module>_<table>.txt`. Every scan pattern in this template was then replayed
+against the real data root and checked for the same collision; the other seventeen are
+clean, and the five optional collections correctly match nothing.
+
+Worth noting beyond this template: any nf-core template whose scan pattern for a tool's own
+output starts with `.*` is one MultiQC module name away from the same failure.
+
 ## Commands run
 
 ```bash
@@ -185,3 +206,271 @@ here follows).
   dedicated MultiQC section) deserves a small dedicated `endorspy/` catalog tool and card ,
   out of scope for this pass since the brief only named `samtools/flagstat`,
   `qualimap/bamqc_genome_results` and the damage-profile binding.
+
+---
+
+# 2026-09-22: lot 2 remediation pass
+
+**Worktree / branch:** `feat-nfcore-templates-lot2` (`feat/nfcore-templates-lot2`, PR #1102)
+**Stack:** API `http://localhost:8112`, viewer `http://localhost:5612`, Mongo `localhost:27112`
+**Run:** `~/Data/depictio-nfcore/eager/2.4.5/megatest`, two Atlantic cod libraries,
+six sequencing lanes, reprocessed MultiQC 1.35 report.
+
+## What the audit found
+
+The 2026-09-17 pass built five tabs and 52 components on six data collections, and left
+most of what eager publishes unread. Specifically:
+
+- The Genotyping tab was one text tile and four MultiQC panels: the GATK HaplotypeCaller
+  VCF statistics on disk (`bcftools/stats/*.vcf.stats`) were bound to nothing.
+- No tab filled a card row, and only 2 of 8 cards carried a `box_plot` secondary strip.
+- `endorspy/*_endogenous_dna_mqc.json`, the headline ancient-DNA number, was reachable
+  only through MultiQC's general-statistics table.
+- `damageprofiler/*/lgdistribution.txt` (fragment length), `deduplication/*_rmdup.metrics`,
+  `adapterremoval/*.settings` and ten raw Qualimap tables per library (including the
+  627-row `coverage_across_reference.txt`) were all unread.
+- The hub carried filters on constants: `ea-filter-udg` was a `Select` with one value, and
+  organism, sequencing type and strandedness were likewise single-valued.
+- eager's only genuine multi-value factor, the sequencing lane, was invisible, because the
+  hub collapses six lanes onto two libraries.
+
+## What this pass added
+
+### New catalog outputs (five tools)
+
+| Output | Rows on this run | Notes |
+| --- | --- | --- |
+| `qualimap/coverage_across_reference` | 1252 (626/library) | windowed depth, mapped back onto contigs |
+| `qualimap/coverage_histogram` | 289 | bases at each depth |
+| `qualimap/genome_fraction_coverage` | 102 | share of the reference at each depth threshold |
+| `qualimap/coverage_per_contig` | 454 (227 contigs x 2) | depth per contig, relative to the library mean |
+| `damageprofiler/lgdistribution` | 688 | fragment length per library and strand |
+| `damageprofiler/authenticity` | 2 | second-order: deamination against fragment length |
+| `endorspy/endogenous` | 2 | endogenous DNA before and after filtering |
+| `picard/markduplicates_metrics` | 2 | `## METRICS CLASS` block of `*_rmdup.metrics` |
+| `adapterremoval/settings` | 6 (one per lane) | `[Trimming statistics]` block |
+
+`depictio/catalog/picard/` and `depictio/catalog/adapterremoval/` and
+`depictio/catalog/endorspy/` are new tool directories; `qualimap/` and `damageprofiler/`
+gained outputs beside the ones they already had. All five parse the library or lane id out
+of `source_path` rather than matching directory names in a scan regex, so the scan patterns
+stay file-name-only and the template ports to eager 3.x's layout.
+
+`depictio/recipes/lib/qualimap_raw.py` is a new shared helper: the four Qualimap recipes all
+need the same sample-id recovery, which has to tolerate both `raw_data_qualimapReport/` and
+`raw_data/` layouts and strip the `_stats` / `_rmdup` / `_bamqc` stage tails Qualimap's
+output directory carries.
+
+### New pipeline-local recipes
+
+- `eager/lane_stats.py` (6 rows): joins the AdapterRemoval reports to the samplesheet on a
+  key rebuilt from the R1 file name plus the `Lane` column
+  (`pl.format("{}_L{}", r1_stem, Lane)`), with a run-accession fallback for a hand-written
+  samplesheet whose R1 spelling differs. This is what makes lane (4 distinct values) and
+  run accession (6) real filter factors, replacing the dead constant filters.
+- `eager/read_fate.py` (12 rows): the five-stage flow, chained exactly, see EA-V1 below.
+
+### Dashboard
+
+Eight tabs, 151 components. Every tab opens with a four-card row that fills the eight-column
+width; 21 of 40 cards carry a `box_plot` strip, the rest `top_n`, `donut` or `attrition`.
+Three persistent sections (the four-card run strip, the library sheet, the BamQC reference
+table) are pinned to every tab including MultiQC, which the MultiQC-only rule exempts pinned
+persistent sections from. Every tab declares its own local filter section on the factor that
+tab varies over.
+
+Dropped: `ea-filter-udg` and the organism / sequencing-type / strandedness filters, all
+single-valued on this run. They remain as columns in the hub table.
+
+Two tabs are gated on branches this megatest did not enable. `Contamination and sex` and
+`Metagenomic screening` each open with a text tile saying which modules did not run, and
+then show the data that is on disk and answers the nearest question: per-contig relative
+depth for the first, the off-target fraction for the second. Their collections
+(`sexdeterrmine`, `mtnucratio`, `nuclear_contamination`, `maltextract_heatmap`,
+`kraken_report`) are declared `optional: true` with the globs the eager output docs publish,
+so a run that does enable them ingests with no template edit.
+
+## Verifications
+
+### EA-V1: the read-fate flow closes exactly, with no apportioning
+
+AdapterRemoval's own identity holds per lane:
+
+```
+2 x total_read_pairs = retained_reads + collapsed_pairs + discarded_reads
+```
+
+and, summed over a library's lanes, `retained_reads` equals the pre-filter flagstat total to
+the read: 71 388 991 on COD076E1bL1, 69 615 709 on COD092E1bL1i69. The remaining stages
+chain exactly too: mapped 25 154 106, passed the quality filter 16 801 402 (which is also
+MarkDuplicates' `UNPAIRED_READS_EXAMINED`), duplicates 4 682 948, unique 12 118 454.
+
+Collapsing is modelled as an outflow at the trimming step, not a stage of its own. One read
+of each merged pair stops existing there, and no report says which of the survivors were
+merged, so a collapse stage would have to apportion the mapped reads between collapsed and
+uncollapsed. As an outflow it is exact.
+
+### EA-V2: the coverage track's contig mapping is correct
+
+Qualimap reports window centres on a single concatenated reference axis with no contig
+column. `qualimap/coverage_across_reference.py` takes the same run's `genome_results.txt` as
+an *optional* second source, builds a running sum of the `Coverage per contig` lengths and
+maps each window with a per-sample `join_asof(strategy="backward")`. Checked against the
+reference: 626 windows per library, maximum global position 669 958 061 against a genome of
+669 966 409, 227 contigs recovered, and the mitochondrion `NC_002081.1` lands at local
+position 8348, exactly half of its 16 696 bp length, which is the single window that fits
+it. With the optional source absent the recipe falls back to one pseudo-contig, `genome`.
+
+### EA-V3: the bcftools join key is `Sample_Name`, not `Library_ID`
+
+`bcftools stats` reads its sample name from the VCF header (`COD076`), not the BAM's library
+id (`COD076E1bL1`). The hub therefore carries a second `Sample` filter on `sample_name`, and
+the template two extra links with `source_column: sample_name` for `bcftools_stats_summary`
+and `bcftools_stats_tstv`. Without them the genotyping tiles silently filter to nothing.
+
+### EA-V4: the mitochondrial signal is real
+
+`qualimap/coverage_per_contig` puts `NC_002081.1` at 53.1X against a 0.89X nuclear mean, a
+relative depth of 59.4. That is the mitochondrial-to-nuclear ratio MTNucRatio would have
+reported had it run, and it is why the `Contamination and sex` tab can answer the nearest
+question despite the branch being off.
+
+## Commands run
+
+```bash
+uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py -q -k eager
+# 10 passed, 863 deselected
+
+uv run pytest depictio/tests/models/test_catalog.py -q
+# 95 passed, 4 failed, none in this template's tools; see "Cross-agent" below
+
+uv run python -m depictio.cli run --template nf-core/eager/2.4.5 \
+  --data-root ~/Data/depictio-nfcore/eager/2.4.5/megatest --dry-run
+# ✅ 8/8 steps
+
+uv run ruff format <12 recipe .py files> && uv run ruff check <same>   # clean
+uv run pre-commit run --files <every file this pass touched>           # all hooks passed
+```
+
+Every recipe was additionally run against the real megatest files, building the raw frame
+the way each DC's `polars_kwargs` will, and asserting both the dtype of every column in
+`EXPECTED_SCHEMA` and the column order. Every `use:` in the dashboard was resolved through
+`catalog_source_for_use` (88 refs, 0 unresolved) and every column the dashboard names
+(`column_name`, `breakdown_col`, `attrition_cols`, `step_cols`, `dict_kwargs`, and every
+advanced-viz role) was checked to exist in the frame its data collection will hold, with
+`column_type` checked against the frame's real dtype. 0 mismatches.
+
+## Live ingest, 2026-09-22
+
+```bash
+curl -X DELETE .../projects/delete?project_id=<previous lot2-eager>
+nohup uv run python -m depictio.cli run \
+  --CLI-config-path ~/.depictio/CLI.feat-nfcore-templates-lot2-112.yaml \
+  --template nf-core/eager/2.4.5 \
+  --data-root ~/Data/depictio-nfcore/eager/2.4.5/megatest \
+  --project-name lot2-eager > /tmp/claude-502/ingest-eager2.log 2>&1 &
+# ✅ Depictio-CLI run completed successfully! (8/8 steps)
+# 31 data collections processed, 5 optional skipped (sexdeterrmine, mtnucratio,
+# nuclear_contamination, maltextract_heatmap, kraken_report)
+```
+
+Project `6ab2b00b2a5cbf9bc537a7e1`. Every non-optional collection has rows:
+
+| Collection | Rows | Collection | Rows |
+| --- | --- | --- | --- |
+| `samples` | 2 | `qualimap_bamqc_genome_results` | 2 |
+| `adapterremoval_settings` | 6 | `qualimap_coverage_per_contig` | 454 |
+| `eager_lane_stats` | 6 | `qualimap_coverage_across_reference` | 1252 |
+| `samtools_flagstat` | 4 | `qualimap_coverage_histogram` | 289 |
+| `endorspy_endogenous` | 2 | `qualimap_genome_fraction_coverage` | 102 |
+| `picard_markduplicates_metrics` | 2 | `preseq_complexity_curve` | 399 |
+| `eager_read_fate` | 12 | `damageprofiler_misincorporation` | 180 |
+| `bcftools_stats_summary` | 2 | `damageprofiler_lgdistribution` | 688 |
+| `bcftools_stats_tstv` | 2 | `damageprofiler_authenticity` | 2 |
+
+All 8 tabs imported, 151 components, matching the YAML exactly:
+
+| Tab | Dashboard id | Components |
+| --- | --- | --- |
+| MultiQC (main) | `6ab2b02f1b869aaa995ec18c` | 22 |
+| Run and library hub | `6ab2b02f1b869aaa995ec18d` | 13 |
+| Reads and read fate | `6ab2b02f1b869aaa995ec18e` | 14 |
+| Mapping, endogenous DNA and duplication | `6ab2b0301b869aaa995ec18f` | 26 |
+| Damage authentication | `6ab2b0301b869aaa995ec190` | 22 |
+| Contamination and sex | `6ab2b0301b869aaa995ec191` | 12 |
+| Coverage and genotyping | `6ab2b0301b869aaa995ec192` | 30 |
+| Metagenomic screening | `6ab2b0301b869aaa995ec193` | 12 |
+
+All 13 `advanced_viz` tiles landed with their kind and catalog provenance intact
+(`scatter_xy` x5, `profile` x4, `sankey`, `damage_profile`, `coverage_track`,
+`genome_view`), checked in Mongo rather than the viewer, which is the known
+`use:`-import silent-no-kind failure mode and did not occur here.
+
+Every row count and dashboard id above was read back a second time straight from Mongo
+(`mongodb://localhost:27112/depictioDB`), because the lot 2 API wedged shortly after the
+ingest finished. The 30 non-MultiQC, non-optional collections each have a `deltatables`
+document whose latest aggregation carries the expected column count, and the row counts
+match the API's to the row. The seven tab documents hang off the main one by
+`parent_dashboard_id`, and 22 + 13 + 14 + 26 + 22 + 12 + 30 + 12 = 151 components, which is
+exactly what `dashboards/base.yaml` declares. Six collections have no deltatable, which is
+correct: `multiqc_data` is a MultiQC collection, and the five gated ones were skipped.
+
+No screenshots were taken in this pass. The lot 2 dev viewer predates the
+`@genome-spy/core` install and fails any advanced-viz tile with
+"Failed to fetch dynamically imported module" until the image is rebuilt; that is a
+stack issue, not a template one.
+
+## Cross-agent worktree notes
+
+Two `test_catalog.py` failures are outside this template's partition and are recorded here
+only so a rebuild does not attribute them to it:
+
+- `test_committed_json_schema_is_current` for `catalog.schema.json` and `output.schema.json`
+  is stale because the advanced-viz kind registry gained `genome_view` in this same lot.
+  Those files are on the shared do-not-edit list; the kind agent or the main session
+  regenerates them with `depictio dev catalog schema`.
+- `test_every_bundled_card_declares_a_secondary_strip` and
+  `test_cli_validate_exits_zero_on_bundled_catalog` fail on `cellbender`, `kallisto`,
+  `qcatch`, `simpleaf`, `cellranger`, `cooltools` and `gtdbtk`, all other agents' tools.
+
+Catalog loading is all-or-nothing, so any one tool's breakage fails every catalog test. An
+earlier run of this pass failed 30 tests purely because `depictio/catalog/bismark` still
+declared the pre-rename `genomespy_track` kind; that resolved on its own once the other
+agent landed the rename.
+
+## `use:` coverage
+
+88 of 104 dense (non-text, non-interactive) dashboard tiles carry a `use:`: 84.6%. The 16
+without one all read this pipeline's own tables: the library hub, the per-lane trimming
+ledger (`eager_lane_stats`) and the read-fate flow (`eager_read_fate`). No catalog module
+owns a pipeline's sample sheet, its lane ledger, or a flow assembled from four different
+tools' reports, so those stay pipeline-local, as in every other nf-core template here.
+
+## Open questions
+
+- No per-caller dot plot on the genotyping tab. This run genotyped with one caller, so the
+  comparison would have a single column. `bcftools/stats_summary` already carries the
+  `caller` column a multi-caller run would need, so adding it later is a dashboard change
+  only.
+- `damageprofiler/authenticity`'s `fraction_under_70bp` uses a fixed 70 bp threshold
+  (`SHORT_FRAGMENT_BP`). It is the conventional ancient-DNA cutoff but it is a constant in
+  the recipe, not a template variable; a study working on a different fragment regime would
+  want it configurable.
+- The `Contamination and sex` and `Metagenomic screening` optional collections have never
+  been exercised against a run that enables them. Their globs come from the eager output
+  documentation, not from data, so the first real run of either branch may need the scan
+  patterns adjusted.
+- EA-D2 (the hand-reconstructed samplesheet at a fixed path) is unchanged from the previous
+  pass and still applies: `input/benchmarking_vikingfish.tsv` must be copied into the
+  `--data-root` by hand.
+
+## 2026-09-22 review fixes
+
+- `dashboards/base.yaml`: tab-local, non-persistent `Glance scope` section on the main tab, a
+  `RangeSlider` on `damageprofiler_authenticity.ct_5p_first` (the DC behind the pinned damage
+  card), so the MultiQC tab has its own control beside the pinned ones.
+- No new pinned samplesheet factor: `organism` (`Gadus_morhua`), `seq_type` (`PE`) and
+  `udg_treatment` (`none`) each carry a single value across the six rows of
+  `input/benchmarking_vikingfish.tsv`, so a filter on any of them would be dead on the
+  reference run. They stay in the hub table.
+- `test_shipped_dashboard_yamls.py -k eager` passes.

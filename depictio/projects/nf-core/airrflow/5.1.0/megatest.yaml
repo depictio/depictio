@@ -34,8 +34,11 @@ keys:
   # MultiQC parquet (fastp + FastQC modules, raw and post-assembly reads).
   - multiqc/multiqc_data/multiqc.parquet
   # enchantR repertoire analysis report: Hill diversity profiles with bootstrap
-  # CIs, the clone size table, pairwise clonal overlap and per-sample clone
-  # counts. clone_sizes_table.tsv is the bulk of the download (about 2.7 MB).
+  # CIs, the bootstrapped rank-abundance curve, the clone size table, pairwise
+  # clonal overlap and per-sample clone counts. clonal_abundance.tsv is the bulk
+  # of the download (about 17 MB); the recipe thins it to 200 points per sample
+  # at ingest, so only the fetch pays for it, not the dashboard.
+  - clonal_analysis/repertoire_analysis/repertoire_analysis_report/tables/clonal_abundance.tsv
   - clonal_analysis/repertoire_analysis/repertoire_analysis_report/tables/clonal_diversity.tsv
   - clonal_analysis/repertoire_analysis/repertoire_analysis_report/tables/clonal_overlap.tsv
   - clonal_analysis/repertoire_analysis/repertoire_analysis_report/tables/clone_sizes_table.tsv
@@ -51,10 +54,6 @@ keys:
   - parsed_logs/Table_sequences_process.tsv
   #
   # Deliberately NOT fetched:
-  #   clonal_abundance.tsv (17 MB) is alakazam's bootstrapped rank-abundance
-  #     curve. clone_sizes_table.tsv already carries rank and frequency per
-  #     clone, which is what the dashboard's rank-abundance panel plots; the
-  #     extra file is five times the rest of the subset for a confidence ribbon.
   #   repertoire_comparison/Sequence_numbers_summary/Table_sequences_assembly.tsv
   #     is byte-identical to parsed_logs/Table_sequences_process.tsv.
   #   parsed_logs/Table_all_details_*.tsv and report_file_size/ are the

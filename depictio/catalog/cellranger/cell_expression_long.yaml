@@ -1,0 +1,18 @@
+id: cellranger_cell_expression_long
+name: Marker expression per cell, long
+mode: analysis/cell_expression_long
+description: >-
+  The curated panel half of the cell x gene matrix, melted to one row per
+  (cell, gene), so a distribution plot can show the spread of one marker
+  across clusters rather than the cluster mean a dot plot draws.
+find:
+  path_glob: "**/filtered_feature_bc_matrix/matrix.mtx.gz"
+recipe: cellranger/cell_expression_long.py
+fixture: cell_expression_long.tsv
+renders_as:
+  - { id: marker_by_cluster, component: figure, visu_type: box, dict_kwargs: {x: cluster_label, y: expression, color: cluster_label, title: Marker expression per cluster} }
+  - { id: marker_by_gene, component: figure, visu_type: box, dict_kwargs: {x: gene, y: expression, color: gene, title: Marker expression per gene} }
+  - { id: marker_gene_picker, component: interactive, interactive_type: Select, column_name: gene }
+  - { id: marker_expression_filter, component: interactive, interactive_type: RangeSlider, column_name: expression }
+  - { component: card, column: expression, aggregation: median, secondary_layout: box_plot, aggregations: [box_plot_stats] }
+  - { component: table }

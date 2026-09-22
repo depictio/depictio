@@ -221,3 +221,121 @@ pre-commit run --files <every file this pass touched>               # all hooks 
 - No `.db_seeds/*.json` generated (only `.gitkeep`: needs a real ingested run to export from).
 - No dashboard screenshots (`docs/dashboards.md` has no image links yet).
 - No git writes, no docker, no `uv sync`/`pnpm`/`npm`/`pip` (per the worktree's hard rules).
+
+---
+
+# 2026-09-22: lot 2 remediation pass
+
+Scope: portability of the scan regexes, the grid/card/table audit findings, the unread
+`analysis/` files, and a keystone per-cell expression matrix with a two-group comparison.
+
+## Portability (the finding that mattered most)
+
+12 scan regexes and 2 provenance globs were anchored on `aligner_cellranger/`, a directory that
+exists only because the megatest publishes all three `--aligner` routes side by side. An ordinary
+run writes one route and its results root IS that directory, so every one of those scans matched
+nothing. All 31 `pattern:` / `glob:` lines are now `(?:.*/)?`-anchored or route-agnostic; the
+three CellBender scans stay separated by the tool directory in the path (`cellranger/`,
+`simpleaf/`, `kallisto/`), which is what actually distinguishes them.
+
+## New data collections
+
+Two raw scans (`cellranger_dispersion_raw`, `cellranger_features_selected_raw`) and six
+transformed collections, all authored as catalog outputs under `depictio/catalog/cellranger/`:
+
+| Output | Rows on pbmc8k | Notes |
+| --- | --- | --- |
+| `cell_expression` | 8 767 x 127 (121 genes) | panel = top-5 markers per graph-based cluster, the curated PBMC panel, top-30 dispersion; CD3D detected in 55.96% of cells, median 1.11 |
+| `cell_expression_long` | 70 686 | curated panel only, 150 cells per cluster; `box` is not in `figure_builder._SAMPLABLE_PLOT_TYPES`, so the cap has to live in the recipe |
+| `hvg_dispersion` | 22 835 | 20 785 selected / 2 050 not selected; top HVGs PPBP, PF4, IGJ, GNG11, SDPR |
+| `cell_cycle` | 8 767 | 43 S genes and 54 G2/M genes present in the reference; G1 5 290 / G2M 1 867 / S 1 610 |
+| `cell_funnel` | 1 | 499 387 barcodes, 8 767 called (1.76%), 8 743 CellBender, 8 645 QC pass (98.61%) |
+| `diffexp` (widened) | 6 800 | graphclust 1 400 plus kmeans_2..kmeans_10; graphclust labels byte-identical to the cell hub's |
+
+`cell_calls_by_method` and `aligner_summary` moved from `recipes/` into the catalog; only
+`samples.py` stays pipeline-local.
+
+## Audit findings, all closed
+
+- 6 grid rows that did not fill the 8-column grid: now 0 partial rows across the 9 tabs
+  (audited by summing `layout.w` per (section, y)).
+- 11 bare cards: every card now carries a secondary strip. 20 `box_plot` cards with
+  `aggregations: [box_plot_stats]` were added, on a hub that previously had none.
+- 19 tiles without `use:`: now 2, both on the pipeline-local `samples` collection, which has no
+  catalog tool by design.
+- 6 over-tall tables for 1-10 rows trimmed (h4-6 to h3-5).
+- `sc-cc-fig-hist` histogrammed the geometrically thinned barcode-rank collection, so its bar
+  heights were off by roughly 40x. Dropped, replaced by the honest `attrition` waterfall on
+  `cell_funnel`.
+- The pinned filter section was described as "mito %" while the control is `n_umi`; wording fixed
+  in `base.yaml` and `docs/dashboards.md`.
+- Dot plot: `max_genes` 100 to 40 and `h` 7 to 12 (14 clusters x 5 markers is 70 rows in an
+  h7 tile).
+- Embeddings: 4 stacked 8x7 tiles to a 2x2 grid at w4.
+- `analysis/pca/*/dispersion.csv` and `features_selected.csv` were fetched and never read; they
+  now back the Feature selection section.
+- Only the graph-based `differential_expression.csv` was scanned while 9 k-means files sat on
+  disk; the scan is widened and a tab-local Clustering resolution Select exposes them.
+
+## Discrepancies (`SC-D<n>` continued)
+
+- **SC-D9** `cellranger/marker_expression` was already taken by the per-cluster (gene x cluster)
+  dot-plot table, so the keystone wide matrix is named `cellranger/cell_expression` and its melt
+  `cellranger/cell_expression_long`.
+- **SC-D10** `group_compare` infers its feature columns from the numeric columns of the bound
+  collection, so `umap_1` / `umap_2` are tested alongside the 121 genes. Duplicating an 8 MB
+  table to drop two columns is worse than the artefact; the tile's text says to read a hit named
+  after an axis as an artefact of the layout. A feature-exclusion list on the kind would fix it.
+- **SC-D11** The MultiQC tab carries the two pinned persistent filter sections but no tab-local
+  one: the purity test forbids non-MultiQC tiles there, and the MultiQC parquet is filtered by
+  sample mapping rather than by column.
+- **SC-D12** A `threshold` card with `threshold_value: 0.0` fails the shipped-dashboard gate,
+  which tests the value for truthiness rather than for being set. The cell-cycle card uses 0.05.
+- **SC-D13** Six bundled cards in `cellbender/`, `kallisto/`, `qcatch/` and `simpleaf/` had no
+  secondary strip (pre-existing at HEAD, newly caught by
+  `test_every_bundled_card_declares_a_secondary_strip`). Fixed with `secondary_layout: histogram`;
+  these four tools are used by this template only.
+- **SC-D14** The catalog validator rejects `aggregation: sum` on a Boolean column, so the bundled
+  `cellbender_cell` card render is `count` + `composition`. The dashboard-level Boolean sum cards
+  are pre-existing and left as they are (polars sums a Boolean fine).
+
+## Commands run
+
+```bash
+uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py -q -k scrnaseq
+# 10 passed
+
+uv run pytest depictio/tests/models/test_catalog.py -q
+# 95 passed, 4 failed: 2 stale *.schema.json (regenerated by the main session, not editable here)
+# and 2 from other agents' catalog dirs (cooltools_insulation, gtdbtk_summary).
+# Every cellranger / simpleaf / cellbender / qcatch / kallisto failure is fixed.
+
+uv run python -m depictio.cli run --template nf-core/scrnaseq/4.2.0 \
+  --data-root ~/Data/depictio-nfcore/scrnaseq/4.2.0/megatest --dry-run
+# 8/8 steps passed
+```
+
+## Not done
+
+- **No re-ingest and no screenshots.** The API on port 8112 stopped answering
+  (`curl /utils/status` times out) after the dry run, and the brief says not to restart anything;
+  the lot 2 dev viewer also needs an image rebuild before any advanced_viz tile renders. The
+  project `lot2-scrnaseq` (`6aabc8dc19d44b8c1b14191e`) was therefore NOT deleted and NOT
+  re-ingested: it still holds the pre-remediation dashboard.
+- `.db_seeds/*.json` is still only `.gitkeep`; it needs an ingested run to export from.
+
+## 2026-09-22 review fixes
+
+- `dashboards/base.yaml` main tab: opens with a four-card glance strip in `Run at a glance`
+  (`persistent: true, pin: top`): cells called (top-n by sample), median genes per cell (box
+  plot), sequencing saturation and reads in cells (gauges), all on `cellranger_metrics` via
+  `cellranger/metrics_summary`. The MultiQC intro and general statistics panel moved to a new
+  `MultiQC general statistics` section. Tab-local, non-persistent `Glance scope`: a
+  `RangeSlider` on `cellranger_metrics.estimated_cells`.
+- `Cell calling` tab: `Calling funnel` is now the first grid section and opens with four
+  `w: 2, h: 2` cards (waterfall attrition, cells called, called cells passing QC, and a new
+  `sc-cc-card-pctcalled` box plot on `pct_called`); the intro text and funnel table follow at
+  `y: 2` and `y: 4`. The knee-plot section comes second.
+- `sc-cl-av-sankey` description no longer contains `>` ("graphclust, then kmeans_6, then
+  kmeans_10").
+- `test_shipped_dashboard_yamls.py -k scrnaseq` passes. `.db_seeds` not regenerated here.

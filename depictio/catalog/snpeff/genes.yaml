@@ -1,0 +1,22 @@
+id: snpeff_genes
+name: Per-gene variant burden
+mode: gene-level
+description: >-
+  One row per gene and callset with the number of variants SnpEff assigned to
+  it in each impact class, summed over the gene's transcripts. The cheapest
+  gene-level view a variant-calling run publishes, and the input of the gene
+  overlap, the burden heatmap and the oncoplot.
+find:
+  path_glob: "**/*_snpEff.genes.txt"
+recipe: snpeff/genes.py
+fixture: genes.tsv
+renders_as:
+  - { id: gene_burden_top, component: card, column: n_variants, aggregation: sum,
+      secondary_layout: top_n, breakdown_col: gene_name, top_n_count: 5 }
+  - { component: card, column: n_high, aggregation: sum, secondary_layout: top_n,
+      breakdown_col: caller, top_n_count: 3 }
+  - { component: card, column: n_coding, aggregation: median, aggregations: [box_plot_stats],
+      secondary_layout: box_plot }
+  - { component: figure, visu_type: bar,
+      dict_kwargs: {x: biotype, y: n_variants, color: caller, barmode: group} }
+  - { component: table }

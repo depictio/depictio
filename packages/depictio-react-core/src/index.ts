@@ -366,7 +366,11 @@ export {
   clearFiltersBySource,
   hasSelectionFilters,
   enrichFilterWithDcId,
+  genomeRegionFilters,
+  genomePosFilterIndex,
+  regionFromFilters,
 } from './selection';
+export type { GenomeRegionSelection } from './selection';
 
 // Map panel: a map lifted out of the grid, available from every tab as a
 // floating card or as a dock under the filter panel. Mount both shells — each

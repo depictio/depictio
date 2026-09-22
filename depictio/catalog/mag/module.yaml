@@ -1,0 +1,19 @@
+# nf-core/mag's own aggregate outputs, and the aggregates it stops short of.
+#
+# Two of the three outputs here are produced by the pipeline (the per-contig
+# depth tables MetaBAT2 is fed). The third, `bin_summary`, is not: nf-core/mag
+# has a BIN_SUMMARY process that joins bin depth, CheckM2, GTDB-Tk and QUAST
+# into one per-bin table, and some megatest runs publish it while others do not
+# (the 5.5.0 release-candidate run does not). Rather than make the whole bin
+# story depend on whether that one file exists, `bin_summary` rebuilds the join
+# from the four tool outputs, which every run publishes. When the pipeline's own
+# file is there, the two agree; when it is not, the dashboard still has its
+# headline table.
+#
+# This is a pipeline namespace, not a tool: the file shapes are nf-core/mag's
+# published layout rather than any single program's output format.
+id: mag
+name: nf-core/mag
+source_url: https://github.com/nf-core/mag
+homepage: https://nf-co.re/mag
+description: Aggregate per-bin and per-contig tables of the nf-core/mag metagenome assembly and binning pipeline.

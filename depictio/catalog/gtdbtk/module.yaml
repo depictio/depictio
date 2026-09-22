@@ -1,0 +1,18 @@
+# GTDB-Tk: taxonomic placement of a metagenome-assembled genome against the
+# Genome Taxonomy Database, either by average nucleotide identity to a
+# reference genome or by placement in the GTDB reference tree.
+#
+# It is the step that turns "bin 17 of the MetaBAT2 run" into an organism, and
+# nothing else in a metagenome pipeline produces a name. MultiQC has no GTDB-Tk
+# module at all, so without this tool the taxonomy of a run reaches a dashboard
+# nowhere.
+#
+# The summary table is a seven-rank lineage packed into one semicolon-separated
+# string with Greengenes-style prefixes (`d__Bacteria;p__Bacillota;...`). The
+# recipe splits it into one column per rank, which is what makes a phylum
+# filter, a stacked composition and a sunburst possible.
+id: gtdbtk
+name: GTDB-Tk
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/gtdbtk/classifywf
+homepage: https://ecogenomics.github.io/GTDBTk/
+description: Taxonomic classification of metagenome-assembled genomes against the Genome Taxonomy Database.

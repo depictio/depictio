@@ -312,3 +312,111 @@ actually spelled `--update-config`), and then again at step 6 with one
 working incantation is `run --update-config --overwrite`; with it, step 8 updates the four
 dashboards in place rather than accumulating new ones, because the main dashboard's title
 matches the one already stored.
+
+---
+
+## 2026-09-22: lot 1 remediation pass
+
+Three files the pipeline had been writing all along were bound for the first time, and the
+scan pattern that pinned the report to one aligner route was widened.
+
+### What changed
+
+| Area | Change |
+|---|---|
+| `template.yaml` | MultiQC scan pattern is now aligner-agnostic and accepts both MultiQC data-dir spellings |
+| `template.yaml` | New collections `deseq2_qc_pca`, `deseq2_qc_dists`, `rseqc_read_distribution_raw`, `rseqc_read_distribution`, all optional |
+| `template.yaml` | Six new links, from `samplesheet.sample` and from `sample_overview.sample_id`, onto the three new readable collections |
+| `dashboards/base.yaml` | `Sample relationships` carries the pipeline's own DESeq2 QC PCA and its distance matrix; the static MultiQC similarity image is gone |
+| `dashboards/base.yaml` | `Library composition` carries the RSeQC read distribution at two resolutions |
+| `dashboards/base.yaml` | Text tiles over 120 characters raised to `h: 2` or `h: 3`, with the tiles below them moved down |
+| `depictio/catalog/deseq2/` | New outputs `qc_pca` and `qc_sample_dists`, keyed on the file suffix so chipseq and atacseq can reuse them |
+| `depictio/catalog/rseqc/` | New module and the `read_distribution` output |
+
+### Commands run
+
+```bash
+uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py -q -k "rnaseq and not rnafusion"
+# 20 passed
+```
+
+The two catalog recipes were run directly against
+`~/Data/depictio-nfcore/rnaseq/3.26.0/megatest`: `deseq2/qc_pca` returns 8 rows and 5 columns,
+`deseq2/qc_sample_dists` returns 8 rows and 9 columns (the index plus one column per sample),
+and `rseqc/read_distribution` turns 128 raw report lines into 128 rows whose region-class
+shares sum to exactly 1.0 for each of the 8 samples.
+
+### Decisions
+
+#### RS-C7: the DESeq2 QC files are read, not recomputed
+
+The template already had a recomputed PCA (`salmon/pca`, over the log2(TPM + 1) matrix with
+depictio's own top-N and centring choices). The new tile is a different thing on purpose: it is
+the pipeline's own figure, so a reader comparing the dashboard against the MultiQC report sees
+the same points rather than a second opinion they then have to reconcile. Both are kept, side
+by side, and the intro tile says which is which.
+
+#### RS-C8: the read distribution is differenced before it is stacked
+
+RSeQC's `TSS_up_5kb` row counts the tags in `TSS_up_1kb` again and `TSS_up_10kb` counts both,
+so a stacked bar built from the rows as published reports the promoter signal three times. The
+recipe differences the bands into disjoint rings, which is what MultiQC's own RSeQC panel does,
+and publishes `Total Tags` minus `Total Assigned Tags` as an explicit `Other_intergenic` row so
+that the composition sums to one instead of to an unstated number below one.
+
+#### RS-C9: the DESeq2 QC outputs key on the suffix, not on the pipeline
+
+nf-core/chipseq and nf-core/atacseq run the same `deseq2_qc.r`. Keying the globs on
+`**/*pca.vals.txt` and `**/*sample.dists.txt` rather than on `star_salmon/deseq2_qc/` means
+those templates bind the same two catalog outputs rather than forking them. Their runs publish
+the MultiQC custom-content flavour instead, so the recipes also parse a `#`-commented header,
+and a template with only that flavour repoints the source with `source_overrides`. A pipeline
+that runs DESeq2 once per contrast (chipseq writes one consensus directory per antibody)
+matches several files at once, which the resolver concatenates, so such a template has to
+narrow the glob to one contrast rather than bind the output as is.
+
+### Discrepancies
+
+#### RS-D8: the MultiQC pattern was pinned to `star_salmon/`
+
+The pattern read `multiqc/star_salmon/multiqc_report_data/multiqc.parquet`. That is the path
+this megatest run happens to write, but a `--skip_alignment` run writes `multiqc/salmon/`, so
+the `PSEUDOALIGNER_ONLY` route repointed every expression collection correctly and then found
+no MultiQC report at all. The pattern is now
+`(?:.*/)?multiqc(?:/[^/]+)?/multiqc(?:_report)?_data/multiqc\.parquet$`, which accepts any
+route directory, both MultiQC data-dir spellings, and a match from any depth. Not verified
+against a real `--skip_alignment` run: no such megatest prefix is published.
+
+#### RS-D9: the strandedness card described a column with one value
+
+`rna-qc-card-strandedness` drew a composition donut over `samplesheet.strandedness`, which
+holds `reverse` for all 8 samples, so the card was a single slice and the donut said nothing.
+The samplesheet's derived `read_type` is constant for the same reason (every row has a second
+FASTQ). Both are still worth showing in the sheet itself; neither is worth a card.
+
+#### RS-D10: a card over the two-rank read distribution would double count
+
+The read-distribution frame carries region-class rows and the feature rows they are made of, so
+a card that sums `tag_count` reports twice the library. The bundled card counts distinct
+annotation names per class instead, which is rank-safe. Any dashboard adding a numeric card
+over this collection has to pair it with a rank filter.
+
+#### RS-D11: whole-catalog tests were red from other work in flight
+
+`test_catalog.py::test_every_bundled_card_declares_a_secondary_strip`,
+`test_cli_validate_exits_zero_on_bundled_catalog` and the two
+`test_committed_json_schema_is_current` cases failed during this pass on `cellbender`,
+`kallisto`, `qcatch`, `simpleaf`, `cooltools` and `gtdbtk`, none of which are touched here.
+Catalog loading is all-or-nothing, so a half-written tool directory anywhere reddens the whole
+suite. The rnaseq-scoped shipped-dashboard tests pass.
+
+## 2026-09-22 review fixes
+
+`Expression heatmap` tab opens on a four-card glance strip on `sample_overview`
+(`salmon/sample_pca`: libraries by condition, median TPM, genes expressed, genes
+detected); the matrix DC itself only has `gene_name` plus run-named sample columns, so the
+strip reads the per-library overview the pinned scope reaches. `Heatmap scope` rebound from
+the two samplesheet columns (duplicates of the pinned scope) to one
+`expression_heatmap.gene_name` multi-select. Not done: pinned `strandedness` / `read_type`
+factors. On the reference samplesheet all 8 libraries are `reverse` and paired-end, so both
+columns are constant and stay out per the dead-filter rule.

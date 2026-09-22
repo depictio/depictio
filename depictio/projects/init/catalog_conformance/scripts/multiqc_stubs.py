@@ -1795,6 +1795,130 @@ def prokka(sample: str) -> dict[str, str]:
     }
 
 
+def _spp_bar(
+    sample: str, anchor: str, title: str, ylab: str, value: float, ymin: int
+) -> dict[str, str]:
+    """One phantompeakqualtools / FRiP custom-content bar file, as nf-core's
+    ChIP-family pipelines write them: the `#id` header is the section anchor,
+    one headerless `sample\tvalue` row below it.
+    """
+    return {
+        f"{sample}_{anchor}_mqc.tsv": (
+            f"#id: '{anchor}'\n"
+            f"#section_name: 'MERGED LIB: {title}'\n"
+            "#plot_type: 'bargraph'\n"
+            f"#anchor: '{anchor}'\n"
+            "#pconfig:\n"
+            f"#    title: '{title}'\n"
+            f"#    ylab: '{ylab}'\n"
+            f"#    ymin: {ymin}\n"
+            f"{sample}\t{value:.6f}\n"
+        )
+    }
+
+
+def frip_score(sample: str) -> dict[str, str]:
+    """`*_peaks.FRiP_mqc.tsv` from nf-core chipseq / atacseq / cutandrun."""
+    return _spp_bar(sample, "frip_score", "FRiP score", "FRiP score", _vary(sample, 5, 60) / 100, 0)
+
+
+def nsc_coefficient(sample: str) -> dict[str, str]:
+    """`*_spp_nsc_mqc.tsv` from phantompeakqualtools via run_spp.R."""
+    return _spp_bar(
+        sample,
+        "nsc_coefficient",
+        "spp NSC coefficient",
+        "NSC coefficient",
+        1 + _vary(sample, 5, 40) / 100,
+        1,
+    )
+
+
+def rsc_coefficient(sample: str) -> dict[str, str]:
+    """`*_spp_rsc_mqc.tsv` from phantompeakqualtools via run_spp.R."""
+    return _spp_bar(
+        sample,
+        "rsc_coefficient",
+        "spp RSC coefficient",
+        "RSC coefficient",
+        _vary(sample, 8, 120) / 10,
+        0,
+    )
+
+
+def strand_shift_correlation(sample: str) -> dict[str, str]:
+    """`*_spp_correlation_mqc.tsv`: cross-correlation per strand shift, one
+    headerless `shift\tcorrelation` row per 5 bp from -500 to 1500, with a
+    phantom peak at the read length and the real one at the fragment length.
+    """
+    fragment = _vary(sample, 150, 260)
+    rows = []
+    for shift in range(-500, 1505, 5):
+        base = 0.18 + 0.02 * max(0.0, 1 - abs(shift) / 1500)
+        phantom = 0.015 * max(0.0, 1 - abs(shift - 50) / 20)
+        real = 0.06 * max(0.0, 1 - abs(shift - fragment) / 60)
+        rows.append(f"{shift}\t{base + phantom + real:.6f}")
+    return {
+        f"{sample}_strand_shift_correlation_mqc.tsv": (
+            "#id: 'strand_shift_correlation'\n"
+            "#section_name: 'MERGED LIB: spp strand-shift correlation'\n"
+            "#plot_type: 'linegraph'\n"
+            "#anchor: 'strand_shift_correlation'\n"
+            "#pconfig:\n"
+            "#    title: 'Strand-shift correlation plot'\n"
+            "#    ylab: 'Cross-correlation'\n"
+            "#    xlab: 'Strand-shift (bp)'\n" + "\n".join(rows) + "\n"
+        )
+    }
+
+
+def gtdbtk(sample: str) -> dict[str, str]:
+    """GTDB-Tk `*.bac120.summary.tsv`: MultiQC keys on the 20-column header
+    and skips any row whose width differs, so every column is written even
+    when its value is `N/A`, as GTDB-Tk itself does.
+    """
+    header = (
+        "user_genome\tclassification\tclosest_genome_reference\t"
+        "closest_genome_reference_radius\tclosest_genome_taxonomy\tclosest_genome_ani\t"
+        "closest_genome_af\tclosest_placement_reference\tclosest_placement_radius\t"
+        "closest_placement_taxonomy\tclosest_placement_ani\tclosest_placement_af\t"
+        "pplacer_taxonomy\tclassification_method\tnote\t"
+        "other_related_references(genome_id,species_name,radius,ANI,AF)\tmsa_percent\t"
+        "translation_table\tred_value\twarnings"
+    )
+    lineage = (
+        "d__Bacteria;p__Bacteroidota;c__Bacteroidia;o__Bacteroidales;"
+        "f__Tannerellaceae;g__Parabacteroides;s__Parabacteroides distasonis"
+    )
+    ani = 95 + _vary(sample, 0, 49) / 10
+    af = _vary(sample, 60, 95) / 100
+    row = "\t".join(
+        [
+            f"{sample}.1.fa",
+            lineage,
+            "GCF_000012845.1",
+            "95.0",
+            lineage,
+            f"{ani:.2f}",
+            f"{af:.3f}",
+            "N/A",
+            "N/A",
+            "N/A",
+            "N/A",
+            "N/A",
+            lineage.rsplit(";", 1)[0] + ";s__",
+            "taxonomic classification defined by topology and ANI",
+            "N/A",
+            "N/A",
+            f"{_vary(sample, 70, 99)}.0",
+            "11",
+            "N/A",
+            "N/A",
+        ]
+    )
+    return {f"{sample}.bac120.summary.tsv": header + "\n" + row + "\n"}
+
+
 STUB_BUILDERS = {
     "adapterremoval": adapterremoval,
     "ataqv": ataqv,
@@ -1812,7 +1936,9 @@ STUB_BUILDERS = {
     "fastp": fastp,
     "fastqc": fastqc,
     "featurecounts": featurecounts,
+    "frip": frip_score,
     "gatk": gatk,
+    "gtdbtk": gtdbtk,
     "happy": happy,
     "hicpro": hicpro,
     "ivar": ivar,
@@ -1821,21 +1947,24 @@ STUB_BUILDERS = {
     "malt": malt,
     "metaphlan": metaphlan,
     "mosdepth": mosdepth,
-    "nanostat": nanostat,
     "nanoq": nanoq,
+    "nanostat": nanostat,
     "nonpareil": nonpareil,
+    "nsc": nsc_coefficient,
     "picard": picard,
     "porechop": porechop,
     "preseq": preseq,
     "prokka": prokka,
     "qualimap": qualimap,
     "quast": quast,
+    "rsc": rsc_coefficient,
     "rseqc": rseqc,
     "salmon": salmon,
     "samtools": samtools,
     "snpeff": snpeff,
     "sompy": sompy,
     "star": star,
+    "strand": strand_shift_correlation,
     "summary": summary,
     "truvari": truvari,
     "vcftools": vcftools,

@@ -39,27 +39,39 @@ Data comes from the AWS megatest run
 - **Catalog provenance.** 42 of the 74 tiles carry a `use:` handle, so the tile chrome shows
   which catalog tool and output the panel comes from. Nine of those name an advanced-viz
   render directly and inherit its kind and column bindings from the catalog.
+- **A glance strip on every tab.** `Run at a glance` is pinned to the top of every tab and
+  is not collapsed: four run-level cards (distinct 5' partners, callers reporting, Arriba
+  support fraction, uniquely mapped junctions) followed by the run samplesheet. Being
+  pinned and persistent is also what lets it sit on the MultiQC tab without turning that
+  tab into a second overview page.
 - **Pinned reference tables.** The rows behind every tile sit in a collapsed
-  `Reference tables` section pinned to the bottom of every tab, next to a collapsed
-  `Sample sheet` section pinned to the top.
+  `Reference tables` section pinned to the bottom of every tab.
 
 ### How the filters compose
 
-Two filter sections on the main tab are `persistent` and pinned to the top, so they appear
-on every tab:
+One filter section on the main tab is `persistent` and pinned to the top, so it appears on
+every tab:
 
 | Section | Control | Collection | Reaches |
 |---|---|---|---|
-| `Sample filters` | `sample` MultiSelect | `samplesheet` | the MultiQC panels, through the `sample_mapping` link |
+| `Sample filters` | `sample` MultiSelect, `strandedness` MultiSelect | `samplesheet` | the MultiQC panels, through the `sample_mapping` link |
 | `Fusion scope` | `fusion` MultiSelect, `tool_support` MultiSelect, `fii` RangeSlider | `fusion_consensus` | every fusion collection, through the `direct` links |
 
-Each tab then adds its own collapsed group, which narrows that tab's own collection:
+`Sample filters` is sourced on the samplesheet, the hub the template links from. On the
+validated run it is inert: a single library means `sample` and `strandedness` each hold one
+value, and a control with one value cannot narrow anything. That is not a defect but the
+shape of the run; on a cohort the same two controls narrow the MultiQC panels to one
+library. The fusion collections carry no sample column, so the sample scope stops at the
+report and `Fusion scope`, the unit this pipeline actually measures, is what fans out to
+every caller. The splice-junction table is keyed on the junction and reachable by neither.
+
+Each tab then adds its own collapsed group, which narrows that tab's own collections:
 
 | Tab | Section | Controls |
 |---|---|---|
-| main | `Read QC scope` | `strandedness` |
-| Fusion calls | `Consensus scope` | `rank`, `n_databases` |
-| Evidence | `Evidence scope` | `caller`, `supporting_reads`, `evidence_fraction` |
+| main | `Reference scope` | `gene_5p`, `databases` (both on `fusion_consensus`, narrowing the pinned reference tables) |
+| Fusion calls | `Consensus scope` | `rank`, `n_databases`, `chrom_pair` |
+| Evidence | `Evidence scope` | `caller`, `supporting_reads`, `evidence_fraction`, `confidence` |
 | FusionInspector and splicing | `Validation scope` | `prot_fusion_type`, `ffpm` |
 | FusionInspector and splicing | `Splicing scope` | `chrom`, `uniq_mapped` |
 
@@ -122,6 +134,15 @@ calls separate from single-caller ones at a glance. The lollipop
 (`use: fusionreport/fii_lollipop`) plots each fusion at its rank with the index as the stem
 height, coloured by agreement.
 
+`Partner chromosomes` reads the same calls as loci rather than as names. Arriba writes each
+breakpoint as a contig and a position, so `arriba/fusions.py` splits the contig out of both
+and `arriba/fusion_links.py` parses the positions as integers. The flow
+(`use: arriba/partner_chrom_sankey`) runs from the contig carrying the 5' partner to the
+contig carrying the 3' partner, weighted by supporting reads, so a local rearrangement and a
+translocation separate. The chord below it (`use: arriba/partner_chords`) puts the same
+links on a chromosome ring, coloured by structural class, which adds where on each contig
+the breakpoints sit. `chrom_pair` in `Consensus scope` narrows both.
+
 `Ranked calls` is the consensus table itself, the hub: picking rows here drives every other
 tab.
 
@@ -130,6 +151,13 @@ tab.
 ## Evidence
 
 The same fusions seen through each caller's own read counts.
+
+`Per caller detail` now opens with Arriba's two composition bars
+(`use: arriba/type_bars` and `use: arriba/site_bars`): read support summed per structural
+class split by confidence, and read support summed per transcript feature the 5' breakpoint
+fell in split by the feature on the 3' side. A call on two splice sites is the clean case;
+an intronic or UTR breakpoint is where a caller is guessing. `confidence` in
+`Evidence scope` narrows both, and the three per-caller dot plots follow underneath.
 
 `Support across callers` opens with four cards on `caller_evidence`
 (`use: fusionreport/caller_evidence`): fusions with evidence as a composition by caller, the
@@ -194,8 +222,7 @@ The megatest is one library, so these panels are correct but have nothing to com
 
 | Panel | What degenerates |
 |---|---|
-| `Sample filters`, `Read QC scope` | one option each, so the filter can only select all or nothing |
-| `Run samplesheet` | one row |
+| `Run samplesheet` | one row, so the table is sized `h: 2` rather than for a cohort |
 | `Reads kept by fastp`, `STAR alignment scores`, `STAR gene-count assignment`, `Insert size distribution`, `Coverage along the gene body`, `Where the bases landed` | one series per panel |
 | `General statistics` | five rows, but they are one sample's read files, not five samples |
 | the whole per-caller pooling described above | invisible here, because there is only one sample to pool |
@@ -203,12 +230,13 @@ The megatest is one library, so these panels are correct but have nothing to com
 The fusion tabs are unaffected: the UpSet and the dot plots compare **callers**, not
 samples, and every filter acts on a fusion attribute.
 
-Two consequences of the sample naming are worth knowing before reading the QC tab. MultiQC
-sees five sample ids (`test`, `test_1`, `test_2`, `test_trimmed_1`, `test_trimmed_2`) which
-canonicalise to two, `test` and `test_trimmed`. The samplesheet only knows `test`, so
-picking it in the persistent `Sample filters` empties the `Trimmed read quality` tile and
-drops the post-trim series from the raw FastQC tiles. Leave the sample filter clear on this
-run; on a real multi-sample run the same applies to the trimmed panels only.
+The sample filter that used to sit in the persistent group is gone for the same reason, and
+its removal also retires a trap: MultiQC sees five sample ids here (`test`, `test_1`,
+`test_2`, `test_trimmed_1`, `test_trimmed_2`) which canonicalise to two, `test` and
+`test_trimmed`, while the samplesheet only knows `test`. Picking `test` in the old filter
+emptied the `Trimmed read quality` tile and dropped the post-trim series from the raw FastQC
+tiles. On a real multi-sample run a sample filter is worth having back, with that
+`_trimmed` mismatch in mind.
 
 The fusions are also synthetic. Twelve of the twenty are textbook cancer fusions that all
 three callers find and two knowledge bases already list, so their Fusion Indication Index is
@@ -233,7 +261,8 @@ The recipes ship as six catalog tools, each a folder with `module.yaml` plus
 |---|---|---|---|
 | `fusionreport` | `fusions` | One row per fusion with its knowledge base hits, index, per caller flags and rank | UpSet, lollipop, bar, 4 cards, table |
 | `fusionreport` | `caller_evidence` | One row per fusion and caller with the read support that caller reported | Dot plot, 4 cards, table |
-| `arriba` | `fusions` | Arriba calls with split reads, discordant mates, coverage, confidence, reading frame | Dot plot, cards, table |
+| `arriba` | `fusions` | Arriba calls with split reads, discordant mates, coverage, confidence, reading frame and both partner contigs | Dot plot, partner-contig sankey, 3 bars, cards, table |
+| `arriba` | `fusion_links` | The same calls as breakpoint pairs, both loci split into contig and integer position | Chord diagram, bar, cards, table |
 | `starfusion` | `fusions` | STAR-Fusion calls with junction and spanning counts, splice type, normalised abundance | Dot plot, cards, table |
 | `fusioncatcher` | `fusion_genes` | FusionCatcher genes with spanning pairs, unique reads, anchor length, predicted effect | Dot plot, cards, table |
 | `fusioninspector` | `fusions` | The calls re-quantified against a fusion contig reference, with allelic ratios | Dot plot, 4 cards, table |

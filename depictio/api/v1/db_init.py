@@ -415,7 +415,14 @@ async def create_initial_dashboards(
                 "gsea_running_score",
                 "sashimi",
                 "scatter_xy",
-                "genomespy_track",
+                "genome_view",
+                "contact_map",
+                "knee_plot",
+                "damage_profile",
+                "group_compare",
+                "transcript_structure",
+                "cnv_profile",
+                "genome_chord",
             )
         ),
         # nf-core/viralrecon multi-tab dashboard. Seed JSONs are snapshotted

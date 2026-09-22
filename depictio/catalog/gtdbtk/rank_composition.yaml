@@ -1,0 +1,29 @@
+id: gtdbtk_rank_composition
+name: Recovered community per binning run
+mode: rank-composition
+description: >-
+  The community each binning run recovered, as bins per taxon at the rank you
+  pick. Two binners on the same assembly rarely recover the same set, and this
+  is where that shows: a binner that finds ten phyla where its neighbour finds
+  four is either more sensitive or splitting one genome into pieces, and the
+  bin quality tiles next to it say which.
+find:
+  path_glob: "**/classify/*.summary.tsv"
+  path_glob_alt:
+    - "**/gtdbtk*.bac*.summary.tsv"
+    - "**/gtdbtk*.ar*.summary.tsv"
+    - "**/*.bac*.summary.tsv"
+    - "**/*.ar*.summary.tsv"
+recipe: gtdbtk/rank_composition.py
+fixture: rank_composition.tsv
+renders_as:
+  - { id: recovered_community, component: advanced_viz, kind: stacked_taxonomy,
+      roles: {sample_id: sample_id, taxon: taxon, rank: rank, abundance: abundance} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: sample_id, y: abundance, color: taxon, title: Bins per taxon and binning run} }
+  - { component: card, column: taxon, aggregation: nunique,
+      secondary_layout: top_n, breakdown_col: binner, top_n_count: 5 }
+  - { component: card, column: abundance, aggregation: sum,
+      secondary_layout: composition, breakdown_col: assembler }
+  - { component: card, column: abundance, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

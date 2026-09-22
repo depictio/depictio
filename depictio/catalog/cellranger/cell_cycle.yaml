@@ -1,0 +1,19 @@
+id: cellranger_cell_cycle
+name: Cell-cycle phase
+mode: analysis/cell_cycle
+description: >-
+  S and G2/M scores per cell from the Tirosh gene sets, and the phase call
+  that follows from them. Tells a cluster that is a distinct cell type apart
+  from one that is the same cell type, cycling.
+find:
+  path_glob: "**/filtered_feature_bc_matrix/matrix.mtx.gz"
+recipe: cellranger/cell_cycle.py
+fixture: cell_cycle.tsv
+renders_as:
+  - { id: phase_scatter, component: advanced_viz, kind: scatter_xy, roles: {x: s_score, y: g2m_score, color: phase, label: barcode} }
+  - { id: phase_by_cluster, component: figure, visu_type: bar, dict_kwargs: {x: cluster_label, color: phase, title: Cell-cycle phase per cluster} }
+  - { id: phase_filter, component: interactive, interactive_type: MultiSelect, column_name: phase }
+  - { component: card, column: barcode, aggregation: count, secondary_layout: donut, breakdown_col: phase, top_n_count: 3 }
+  - { component: card, column: s_score, aggregation: median, secondary_layout: box_plot, aggregations: [box_plot_stats] }
+  - { component: card, column: g2m_score, aggregation: median, secondary_layout: box_plot, aggregations: [box_plot_stats] }
+  - { component: table }

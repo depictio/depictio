@@ -12,4 +12,6 @@ fixture: marker_expression.tsv
 renders_as:
   - { id: marker_dotplot, component: advanced_viz, kind: dot_plot, roles: {cluster: cluster_label, gene: gene, mean_expression: mean_expression, frac_expressing: frac_expressing} }
   - { component: card, column: gene, aggregation: nunique, secondary_layout: top_n, breakdown_col: cluster_label, top_n_count: 3 }
+  - { component: card, column: mean_expression, aggregation: median, secondary_layout: box_plot, aggregations: [box_plot_stats] }
+  - { component: card, column: frac_expressing, aggregation: average, secondary_layout: gauge, coverage_max: 1.0 }
   - { component: table }

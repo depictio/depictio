@@ -67,4 +67,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("eigval2").cast(pl.Float64, strict=False),
         pl.col("eigval3").cast(pl.Float64, strict=False),
     )
-    return df.select(list(EXPECTED_SCHEMA)).sort(["chrom"])
+    return df.select(list(EXPECTED_SCHEMA)).sort(["sample", "resolution", "chrom"])

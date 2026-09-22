@@ -1,30 +1,40 @@
 version: 1
 # nf-core/eager 2.4.5 reference dashboard.
 #
-# Funnel: sequencing and trimming QC (the reprocessed MultiQC report) -> how
-# many reads mapped and were removed as duplicates -> how much of the genome
-# they cover and how much more sequencing would buy -> whether the damage
-# pattern at the read ends says the DNA is ancient -> the genotypes called from
-# it. The library hub is the anchor: the library filter in the left panel
-# reaches the MultiQC panels and every per-library table through the project
-# links, and the damage tab carries a selection forward to the coverage and
-# complexity tables that say whether that library's read is trustworthy.
+# Funnel, one tab per question an ancient-DNA run has to answer:
+#   MultiQC              what every module reported, as the report itself
+#   Run and library hub  what was sequenced, and what each lane contributed
+#   Reads and read fate  where every sequenced read ended up, as one flow
+#   Mapping, endogenous DNA and duplication
+#                        how much of the extract is the target organism, and
+#                        how much of that survives filtering and deduplication
+#   Damage authentication
+#                        is it ancient: terminal deamination against fragment
+#                        length, then each signal's full profile
+#   Contamination and sex
+#                        the branch that did not run here, and the per-contig
+#                        depth a sex or aneuploidy call would be made from
+#   Coverage and genotyping
+#                        depth along the reference and the variants called
+#   Metagenomic screening
+#                        the branch that did not run here, and the off-target
+#                        fraction it would have worked on
 #
-# The MultiQC tab holds MultiQC panels only. Everything drawn from a table
-# eager or this template's own recipes published beside the report (the
-# library hub, the flagstat and BamQC summaries, the complexity curve, the
-# misincorporation profile) lives on its own tab. Two pinned sections are the
-# exception: the library sheet and the coverage/duplication reference table
-# ride along on every tab, MultiQC included, because the whole dashboard is
-# filtered by them.
-#
-# No bcftools stats table is bound here: `bcftools/stats_*` catalog outputs are
-# nf-core/sarek's (see the pipeline's CLAUDE.md ownership split), so the
-# Genotyping tab reads the bcftools MultiQC panels only.
+# Three pinned sections ride every tab, including MultiQC: the four-card run
+# strip, the library sheet the whole dashboard is filtered by, and the BamQC
+# reference table the left-panel thresholds read. The MultiQC tab holds MultiQC
+# panels only; everything drawn from a table eager or this template's recipes
+# published beside the report lives on its own tab.
 #
 # The MultiQC report bound here was re-generated with MultiQC 1.35 from the
 # run's raw tool outputs; the run itself published MultiQC 1.13.dev0, which
 # writes no parquet. Module and plot names are therefore the 1.35 ones.
+#
+# Two tabs are gated on pipeline branches this megatest did not enable
+# (sex determination, MTNucRatio, ANGSD contamination, MALT/HOPS/Kraken). Their
+# data collections are declared `optional: true` in template.yaml with the globs
+# the eager output docs publish, and each tab opens with a text tile saying so,
+# then shows the data that IS on disk and answers the nearest question.
 main_dashboard:
   title: nf-core/eager
   subtitle: "nf-core/eager 2.4.5 megatest: two Atlantic cod libraries, BWA-mapped, Picard-deduplicated and damage-profiled"
@@ -45,21 +55,23 @@ main_dashboard:
   - name: QC thresholds
     icon: mdi:tune
     color: cyan
-    description: Coverage and duplication floors on the per-library BamQC summary
+    description: Coverage, duplication and endogenous-DNA floors, applied on every tab
     collapsed: true
     persistent: true
     pin: bottom
+  - name: Glance scope
+    icon: mdi:tune
+    color: orange
+    description: Terminal C-to-T damage window on the authenticity summary the pinned glance strip reads
   grid_sections:
+  # Pinned to the top and carried by every tab: four headline numbers, then
+  # the design the whole dashboard is filtered by, one collapse away.
   - name: Run at a glance
     icon: mdi:counter
     color: teal
-    description: One row per library, pooling the headline numbers of every module
-  - name: Read quality and trimming
-    icon: mdi:chart-bell-curve
-    color: blue
-    description: FastQC and AdapterRemoval as MultiQC reports them
-  # Pinned to the top and carried by every tab: the design the whole dashboard
-  # is filtered by should be one collapse away wherever the viewer lands.
+    description: The four numbers an ancient-DNA run is read on, on every tab
+    persistent: true
+    pin: top
   - name: Sample sheet
     icon: mdi:table-account
     color: teal
@@ -74,34 +86,172 @@ main_dashboard:
     collapsed: true
     persistent: true
     pin: bottom
+  - name: MultiQC overview
+    icon: mdi:view-dashboard-outline
+    color: orange
+    description: One row per library, pooling the headline numbers of every module
+  - name: Read quality and trimming
+    icon: mdi:chart-bell-curve
+    color: blue
+    description: FastQC and AdapterRemoval as MultiQC reports them
   components:
-  # ------------------------------------------------------------- at a glance
+  # ------------------------------------------------------- run at a glance
+  - component_type: card
+    tag: ea-glance-card-endogenous
+    index: ea-glance-card-endogenous
+    section: Run at a glance
+    workflow_tag: eager
+    data_collection_tag: endorspy_endogenous
+    use: endorspy/endogenous
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: endogenous_dna
+    column_type: float64
+    display: {icon_name: 'mdi:dna', icon_color: '#26A69A', title_color: '#26A69A', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Endogenous DNA (%)
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: ea-glance-card-damage
+    index: ea-glance-card-damage
+    section: Run at a glance
+    workflow_tag: eager
+    data_collection_tag: damageprofiler_authenticity
+    use: damageprofiler/authenticity
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: terminal_damage
+    column_type: float64
+    display: {icon_name: 'mdi:dna', icon_color: '#EF5350', title_color: '#EF5350', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Terminal deamination
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: ea-glance-card-coverage
+    index: ea-glance-card-coverage
+    section: Run at a glance
+    workflow_tag: eager
+    data_collection_tag: qualimap_bamqc_genome_results
+    use: qualimap/bamqc_genome_results
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: mean_coverage
+    column_type: float64
+    display: {icon_name: 'mdi:waves', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Mean coverage (X)
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: ea-glance-card-lanes
+    index: ea-glance-card-lanes
+    section: Run at a glance
+    workflow_tag: eager
+    data_collection_tag: samples
+    aggregation: sum
+    column_name: n_lanes
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: sample_id
+    top_n_count: 2
+    display: {icon_name: 'mdi:layers-outline', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Lanes merged
+    layout: {x: 6, y: 0, w: 2, h: 2}
+
+  # ------------------------------------------------------------ sample sheet
+  - component_type: text
+    tag: ea-sheet-intro
+    section: Sample sheet
+    title: The design behind every panel
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One row per library, with the biological sample it was prepared from, the
+      organism and how many sequencing lanes eager merged into it. The library
+      filter in the left panel is sourced here, so this is what narrows every
+      other tab; the sample filter beside it is what reaches the genotyping
+      tiles, which key on the sample rather than the library.
+    workflow_tag: eager
+    data_collection_tag: samples
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: table
+    tag: ea-sheet-table
+    section: Sample sheet
+    workflow_tag: eager
+    data_collection_tag: samples
+    row_selection_enabled: false
+    title: Library hub
+    description: One row per library, with its sample, organism, UDG treatment and lane count.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 2, w: 8, h: 3}
+
+  # -------------------------------------------------------- reference metrics
+  - component_type: text
+    tag: ea-ref-intro
+    section: Reference metrics
+    title: Coverage and duplication behind every panel
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The per-library [Qualimap](http://qualimap.conesalab.org) BamQC summary
+      the left-panel thresholds read. The coverage figures and the depth
+      profiles are on the Coverage and genotyping tab.
+    workflow_tag: eager
+    data_collection_tag: qualimap_bamqc_genome_results
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: table
+    tag: ea-ref-table-qualimap
+    section: Reference metrics
+    workflow_tag: eager
+    data_collection_tag: qualimap_bamqc_genome_results
+    use: qualimap/bamqc_genome_results
+    row_selection_enabled: false
+    title: BamQC summary
+    description: Mean coverage, mapping quality, error rate and duplication per library.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 1, w: 8, h: 3}
+
+  # ------------------------------------------------------- MultiQC overview
   - component_type: text
     tag: ea-qc-intro
-    section: Run at a glance
+    section: MultiQC overview
     title: An ancient-DNA run, from reads to authentication
     title_size: sm
     title_align: left
     order: 2
     alignment: left
     body: >
-      The reprocessed [MultiQC](https://multiqc.info) report, module by
-      module: the general statistics table first, then read quality and
-      trimming. Mapping, duplication, coverage, library complexity and the
-      damage signature each have their own tab.
+      The reprocessed [MultiQC](https://multiqc.info) report, module by module:
+      the general statistics table first, then read quality and trimming.
+      Mapping, endogenous DNA, duplication, coverage, damage and genotyping
+      each have their own tab, built from the tool outputs directly rather than
+      from the report.
     workflow_tag: eager
     data_collection_tag: multiqc_data
     layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: multiqc
     tag: ea-qc-general-stats
-    section: Run at a glance
+    section: MultiQC overview
     workflow_tag: eager
     data_collection_tag: multiqc_data
     use: multiqc/general_stats
     selected_module: general_stats
     selected_plot: general_stats
     title: General statistics
-    description: One row per library, pooling the headline numbers of every module that ran, including endorSpy's endogenous DNA percentage, which has no panel of its own.
+    description: One row per library, pooling the headline numbers of every module that ran, including endorSpy's endogenous DNA percentage.
     title_size: sm
     title_align: left
     layout: {x: 0, y: 1, w: 8, h: 5}
@@ -119,12 +269,12 @@ main_dashboard:
       [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) on
       the raw lanes, plus what
       [AdapterRemoval](https://github.com/MikkelSchubert/adapterremoval)
-      trimmed and collapsed into single merged reads, ancient DNA fragments
-      are usually shorter than the read length, so a high collapse rate is
-      expected, not a warning sign.
+      trimmed and collapsed into single merged reads. Ancient DNA fragments are
+      usually shorter than the read length, so a high collapse rate is expected
+      here, not a warning sign.
     workflow_tag: eager
     data_collection_tag: multiqc_data
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: multiqc
     tag: ea-qc-fastqc-counts
     section: Read quality and trimming
@@ -136,7 +286,7 @@ main_dashboard:
     title: Sequence counts
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 1, w: 4, h: 5}
+    layout: {x: 0, y: 2, w: 4, h: 5}
   - component_type: multiqc
     tag: ea-qc-fastqc-quality
     section: Read quality and trimming
@@ -148,7 +298,7 @@ main_dashboard:
     title: Per-base sequence quality
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 1, w: 4, h: 5}
+    layout: {x: 4, y: 2, w: 4, h: 5}
   - component_type: multiqc
     tag: ea-qc-fastqc-gc
     section: Read quality and trimming
@@ -160,7 +310,7 @@ main_dashboard:
     title: GC content
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 6, w: 4, h: 5}
+    layout: {x: 0, y: 7, w: 4, h: 5}
   - component_type: multiqc
     tag: ea-qc-fastqc-adapter
     section: Read quality and trimming
@@ -172,7 +322,7 @@ main_dashboard:
     title: Adapter content
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 6, w: 4, h: 5}
+    layout: {x: 4, y: 7, w: 4, h: 5}
   - component_type: multiqc
     tag: ea-qc-ar-retained
     section: Read quality and trimming
@@ -184,7 +334,7 @@ main_dashboard:
     title: Retained, discarded and collapsed reads
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 11, w: 4, h: 5}
+    layout: {x: 0, y: 12, w: 4, h: 5}
   - component_type: multiqc
     tag: ea-qc-ar-length
     section: Read quality and trimming
@@ -196,88 +346,12 @@ main_dashboard:
     title: Collapsed-read length distribution
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 11, w: 4, h: 5}
-
-  # ------------------------------------------------------------ sample sheet
-  - component_type: text
-    tag: ea-sheet-intro
-    section: Sample sheet
-    title: The design behind every panel
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      One row per library, with the biological sample it was prepared from,
-      the organism and how many sequencing lanes eager merged into it. This
-      is the collection the library filter in the left panel is sourced on,
-      so it is what narrows every other tab.
-    workflow_tag: eager
-    data_collection_tag: samples
-    layout: {x: 0, y: 0, w: 6, h: 2}
-  - component_type: card
-    tag: ea-sheet-card-lanes
-    index: ea-sheet-card-lanes
-    section: Sample sheet
-    workflow_tag: eager
-    data_collection_tag: samples
-    aggregation: sum
-    column_name: n_lanes
-    column_type: int64
-    secondary_layout: top_n
-    breakdown_col: sample_id
-    top_n_count: 2
-    display: {icon_name: 'mdi:layers-outline', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Lanes merged
-    layout: {x: 6, y: 0, w: 2, h: 2}
-  - component_type: table
-    tag: ea-sheet-table
-    section: Sample sheet
-    workflow_tag: eager
-    data_collection_tag: samples
-    row_selection_enabled: false
-    title: Library hub
-    description: One row per library, with its sample, organism and lane count.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 2, w: 8, h: 4}
-
-  # -------------------------------------------------------- reference metrics
-  - component_type: text
-    tag: ea-ref-intro
-    section: Reference metrics
-    title: Coverage and duplication behind every panel
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      The per-library [Qualimap](http://qualimap.conesalab.org) BamQC summary
-      the two left-panel sliders read. The design each library belongs to is
-      in the Sample sheet section, pinned to the top of every tab; the
-      coverage figure and cards are on the Coverage & complexity tab.
-    workflow_tag: eager
-    data_collection_tag: qualimap_bamqc_genome_results
-    layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: table
-    tag: ea-ref-table-qualimap
-    section: Reference metrics
-    workflow_tag: eager
-    data_collection_tag: qualimap_bamqc_genome_results
-    use: qualimap/bamqc_genome_results
-    row_selection_enabled: false
-    title: BamQC summary
-    description: Mean coverage, mapping quality, error rate and duplication per library.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 1, w: 8, h: 4}
+    layout: {x: 4, y: 12, w: 4, h: 5}
 
   # ---------------------------------------------------------------- filters
   - component_type: interactive
-    tag: ea-filter-sample
-    index: ea-sample-filter
+    tag: ea-filter-library
+    index: ea-library-filter
     section: Sample filters
     group: Sample scope
     workflow_tag: eager
@@ -290,18 +364,18 @@ main_dashboard:
     title: Library
     layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: interactive
-    tag: ea-filter-udg
-    index: ea-udg-filter
+    tag: ea-filter-sample
+    index: ea-sample-filter
     section: Sample filters
     group: Sample scope
     workflow_tag: eager
     data_collection_tag: samples
-    interactive_component_type: Select
-    column_name: udg_treatment
+    interactive_component_type: MultiSelect
+    column_name: sample_name
     column_type: object
-    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:flask-outline'}
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:account-group-outline'}
     placement: left
-    title: UDG treatment
+    title: Sample
     layout: {x: 0, y: 3, w: 1, h: 3}
   - component_type: interactive
     tag: ea-filter-coverage
@@ -331,30 +405,710 @@ main_dashboard:
     placement: left
     title: Duplication rate
     layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: ea-filter-endogenous
+    index: ea-endogenous-range
+    section: QC thresholds
+    group: Coverage and duplication
+    workflow_tag: eager
+    data_collection_tag: endorspy_endogenous
+    interactive_component_type: RangeSlider
+    column_name: endogenous_dna
+    column_type: float64
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:dna'}
+    placement: left
+    title: Endogenous DNA
+    layout: {x: 0, y: 6, w: 1, h: 3}
+
+  # Tab-local, not persistent: this tab's own control beside the pinned ones.
+  # It narrows the pinned glance strip that rides this tab.
+  - component_type: interactive
+    tag: ea-mq-filter-damage
+    index: ea-mq-damage-range
+    section: Glance scope
+    group: Damage
+    workflow_tag: eager
+    data_collection_tag: damageprofiler_authenticity
+    interactive_component_type: RangeSlider
+    column_name: ct_5p_first
+    column_type: float64
+    display: {title_size: md, custom_color: '#FB8C00', icon_name: 'mdi:chart-bell-curve'}
+    placement: left
+    title: C-to-T at the first 5p base
+    layout: {x: 0, y: 0, w: 1, h: 3}
 
 tabs:
 # ============================================================================
-# Mapping & duplication
+# Run and library hub
 # ============================================================================
-- title: Mapping & duplication
-  subtitle: How many reads placed before and after the mapping-quality filter, and how many were removed as PCR duplicates
+- title: Run and library hub
+  subtitle: What was sequenced, and what each of the six lanes contributed to the two libraries
   tab_order: 2
+  tab_icon: mdi:table-account
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Lane filters
+    icon: mdi:filter-variant
+    color: blue
+    description: Narrow the per-lane tiles on this tab
+  grid_sections:
+  - name: Libraries and lanes
+    icon: mdi:table-account
+    color: teal
+    description: One row per lane, with the library eager merged it into
+  - name: Lane yield
+    icon: mdi:chart-bar
+    color: blue
+    description: What each lane returned after trimming and collapsing
+  components:
+  - component_type: interactive
+    tag: ea-hub-filter-lane
+    index: ea-hub-lane-filter
+    section: Lane filters
+    group: Lane scope
+    workflow_tag: eager
+    data_collection_tag: eager_lane_stats
+    interactive_component_type: MultiSelect
+    column_name: lane
+    column_type: object
+    display: {title_size: md, custom_color: '#42A5F5', icon_name: 'mdi:layers-outline'}
+    placement: left
+    title: Lane
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: ea-hub-filter-run
+    index: ea-hub-run-filter
+    section: Lane filters
+    group: Lane scope
+    workflow_tag: eager
+    data_collection_tag: eager_lane_stats
+    interactive_component_type: MultiSelect
+    column_name: run_accession
+    column_type: object
+    display: {title_size: md, custom_color: '#42A5F5', icon_name: 'mdi:database-outline'}
+    placement: left
+    title: Sequencing run
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: ea-hub-filter-retained
+    index: ea-hub-retained-range
+    section: Lane filters
+    group: Lane scope
+    workflow_tag: eager
+    data_collection_tag: eager_lane_stats
+    interactive_component_type: RangeSlider
+    column_name: retained_reads
+    column_type: int64
+    display: {title_size: md, custom_color: '#42A5F5', icon_name: 'mdi:counter'}
+    placement: left
+    title: Retained reads
+    layout: {x: 0, y: 6, w: 1, h: 3}
+
+  - component_type: text
+    tag: ea-hub-intro
+    section: Libraries and lanes
+    title: Two libraries, six lanes
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      eager trims and collapses each sequencing lane on its own, then merges
+      the lanes into a library before mapping. The lane is therefore the only
+      samplesheet column with more than one value in this run, and the
+      AdapterRemoval reports are the only per-lane numbers eager publishes.
+      Everything downstream is per library.
+    workflow_tag: eager
+    data_collection_tag: eager_lane_stats
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: ea-hub-card-reads
+    index: ea-hub-card-reads
+    section: Libraries and lanes
+    workflow_tag: eager
+    data_collection_tag: eager_lane_stats
+    aggregation: sum
+    secondary_layout: attrition
+    attrition_cols: [retained_reads, collapsed_pairs]
+    column_name: total_reads
+    column_type: int64
+    display: {icon_name: 'mdi:counter', icon_color: '#26A69A', title_color: '#26A69A', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Reads sequenced
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: ea-hub-card-retained
+    index: ea-hub-card-retained
+    section: Libraries and lanes
+    workflow_tag: eager
+    data_collection_tag: eager_lane_stats
+    aggregation: sum
+    secondary_layout: top_n
+    breakdown_col: sample_id
+    top_n_count: 2
+    column_name: retained_reads
+    column_type: int64
+    display: {icon_name: 'mdi:filter-variant', icon_color: '#42A5F5', title_color: '#42A5F5', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Reads kept for mapping
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: ea-hub-card-length
+    index: ea-hub-card-length
+    section: Libraries and lanes
+    workflow_tag: eager
+    data_collection_tag: eager_lane_stats
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: average_retained_length
+    column_type: float64
+    display: {icon_name: 'mdi:ruler', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Mean retained length (bp)
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: ea-hub-card-collapse
+    index: ea-hub-card-collapse
+    section: Libraries and lanes
+    workflow_tag: eager
+    data_collection_tag: eager_lane_stats
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: collapse_rate
+    column_type: float64
+    display: {icon_name: 'mdi:set-merge', icon_color: '#AB47BC', title_color: '#AB47BC', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Collapse rate
+    layout: {x: 6, y: 2, w: 2, h: 2}
+  - component_type: table
+    tag: ea-hub-table-lanes
+    section: Libraries and lanes
+    workflow_tag: eager
+    data_collection_tag: eager_lane_stats
+    row_selection_enabled: false
+    title: Per-lane trimming and collapsing
+    description: One row per lane, with the library it was merged into and what AdapterRemoval returned.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 4, w: 8, h: 4}
+
+  - component_type: text
+    tag: ea-hub-yield-intro
+    section: Lane yield
+    title: What each lane returned
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The two libraries were prepared and sequenced differently enough to show
+      it here: one discards under a tenth of its reads on quality and length,
+      the other a quarter, and the collapse rates differ with it.
+    workflow_tag: eager
+    data_collection_tag: eager_lane_stats
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: figure
+    tag: ea-hub-fig-retained
+    index: ea-hub-fig-retained
+    section: Lane yield
+    workflow_tag: eager
+    data_collection_tag: eager_lane_stats
+    visu_type: bar
+    dict_kwargs: {x: lane_id, y: retained_reads, color: sample_id}
+    title: Reads kept for mapping, per lane
+    description: Sequences AdapterRemoval wrote out, which is exactly what the mapper was given.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 8, h: 6}
+  - component_type: advanced_viz
+    tag: ea-hub-av-collapse
+    index: ea-hub-av-collapse
+    section: Lane yield
+    workflow_tag: eager
+    data_collection_tag: eager_lane_stats
+    use: adapterremoval/collapse_vs_length
+    config:
+      x_col: average_retained_length
+      y_col: collapse_rate
+      label_col: lane_id
+      color_col: sample_id
+      size_col: retained_reads
+      x_title: Mean retained length (bp)
+      y_title: Collapse rate
+      top_n_labels: 6
+    title: Collapse rate against retained length
+    description: A lane whose inserts are shorter than the read length collapses more of its pairs, so the two move together within a library and separate between them.
+    title_size: h3
+    layout: {x: 0, y: 7, w: 8, h: 7}
+  - component_type: figure
+    tag: ea-hub-fig-discard
+    index: ea-hub-fig-discard
+    section: Lane yield
+    workflow_tag: eager
+    data_collection_tag: eager_lane_stats
+    visu_type: bar
+    dict_kwargs: {x: lane_id, y: discard_rate, color: sample_id}
+    title: Share of reads discarded on quality or length, per lane
+    description: Reads AdapterRemoval dropped before mapping, as a fraction of everything sequenced on that lane.
+    title_size: h3
+    layout: {x: 0, y: 14, w: 8, h: 6}
+
+# ============================================================================
+# Reads and read fate
+# ============================================================================
+- title: Reads and read fate
+  subtitle: Where every sequenced read ends up, from trimming and collapsing through mapping, the quality filter and deduplication
+  tab_order: 3
+  tab_icon: mdi:relation-many-to-many
+  tab_icon_color: grape
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Fate filters
+    icon: mdi:filter-variant
+    color: grape
+    description: Narrow the flow to one stage outcome
+  grid_sections:
+  - name: Read fate
+    icon: mdi:relation-many-to-many
+    color: grape
+    description: One flow per library, exact at every stage
+  - name: Trimming and collapsing
+    icon: mdi:chart-bell-curve
+    color: blue
+    description: What AdapterRemoval did, as MultiQC reports it and as the reports themselves say
+  components:
+  - component_type: interactive
+    tag: ea-fate-filter-trimming
+    index: ea-fate-trimming-filter
+    section: Fate filters
+    group: Fate scope
+    workflow_tag: eager
+    data_collection_tag: eager_read_fate
+    interactive_component_type: MultiSelect
+    column_name: step_trimming
+    column_type: object
+    display: {title_size: md, custom_color: '#AB47BC', icon_name: 'mdi:filter-variant'}
+    placement: left
+    title: Trimming outcome
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: ea-fate-filter-duplication
+    index: ea-fate-duplication-filter
+    section: Fate filters
+    group: Fate scope
+    workflow_tag: eager
+    data_collection_tag: eager_read_fate
+    interactive_component_type: MultiSelect
+    column_name: step_duplication
+    column_type: object
+    display: {title_size: md, custom_color: '#AB47BC', icon_name: 'mdi:set-merge'}
+    placement: left
+    title: Final fate
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: ea-fate-filter-lane
+    index: ea-fate-lane-filter
+    section: Fate filters
+    group: Fate scope
+    workflow_tag: eager
+    data_collection_tag: eager_lane_stats
+    interactive_component_type: MultiSelect
+    column_name: lane
+    column_type: object
+    display: {title_size: md, custom_color: '#AB47BC', icon_name: 'mdi:layers-outline'}
+    placement: left
+    title: Lane
+    layout: {x: 0, y: 6, w: 1, h: 3}
+
+  - component_type: text
+    tag: ea-fate-intro
+    section: Read fate
+    title: Five stages, and the reads that fall out at each
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Trimming drops short and low-quality reads, collapsing merges two
+      overlapping mates into one sequence, mapping drops everything that is not
+      the target organism, the mapping-quality filter drops ambiguous
+      placements and deduplication drops PCR copies. Nothing here is
+      apportioned: the AdapterRemoval counts balance exactly, and their
+      retained total is the flagstat total to the read, so the flow closes
+      stage by stage. Collapsing is an outflow rather than a stage of its own
+      because one read of each merged pair stops existing there, and no report
+      says which of the survivors were merged.
+    workflow_tag: eager
+    data_collection_tag: eager_read_fate
+    layout: {x: 0, y: 0, w: 8, h: 3}
+  - component_type: card
+    tag: ea-fate-card-total
+    index: ea-fate-card-total
+    section: Read fate
+    workflow_tag: eager
+    data_collection_tag: eager_read_fate
+    aggregation: sum
+    secondary_layout: top_n
+    breakdown_col: step_trimming
+    top_n_count: 3
+    column_name: reads
+    column_type: int64
+    display: {icon_name: 'mdi:counter', icon_color: '#AB47BC', title_color: '#AB47BC', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Reads accounted for
+    layout: {x: 0, y: 3, w: 2, h: 2}
+  - component_type: card
+    tag: ea-fate-card-final
+    index: ea-fate-card-final
+    section: Read fate
+    workflow_tag: eager
+    data_collection_tag: eager_read_fate
+    aggregation: sum
+    secondary_layout: donut
+    breakdown_col: step_duplication
+    column_name: reads
+    column_type: int64
+    display: {icon_name: 'mdi:chart-donut', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Reads by final fate
+    layout: {x: 2, y: 3, w: 2, h: 2}
+  - component_type: card
+    tag: ea-fate-card-discard
+    index: ea-fate-card-discard
+    section: Read fate
+    workflow_tag: eager
+    data_collection_tag: eager_lane_stats
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: discard_rate
+    column_type: float64
+    display: {icon_name: 'mdi:delete-outline', icon_color: '#EF5350', title_color: '#EF5350', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Discard rate
+    layout: {x: 4, y: 3, w: 2, h: 2}
+  - component_type: card
+    tag: ea-fate-card-collapse
+    index: ea-fate-card-collapse
+    section: Read fate
+    workflow_tag: eager
+    data_collection_tag: eager_lane_stats
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: collapse_rate
+    column_type: float64
+    display: {icon_name: 'mdi:set-merge', icon_color: '#42A5F5', title_color: '#42A5F5', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Collapse rate
+    layout: {x: 6, y: 3, w: 2, h: 2}
+  - component_type: advanced_viz
+    tag: ea-fate-av-sankey
+    index: ea-fate-av-sankey
+    section: Read fate
+    workflow_tag: eager
+    viz_kind: sankey
+    data_collection_tag: eager_read_fate
+    config:
+      viz_kind: sankey
+      step_cols:
+      - step_sequencing
+      - step_trimming
+      - step_mapping
+      - step_filtering
+      - step_duplication
+      value_col: reads
+      value_label: reads
+      value_format: count
+      sort_mode: total_flow
+      color_mode: source
+      link_opacity: 0.55
+      show_node_labels: true
+    title: Read fate, sequencing to deduplication
+    description: Every sequenced read, followed to where it stopped. Pick a library in the left panel to see one flow at a time.
+    title_size: h3
+    layout: {x: 0, y: 5, w: 8, h: 9}
+  - component_type: table
+    tag: ea-fate-table
+    section: Read fate
+    workflow_tag: eager
+    data_collection_tag: eager_read_fate
+    row_selection_enabled: false
+    title: Read fate, as counts
+    description: One row per library and path through the five stages, with the reads that took it.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 14, w: 8, h: 5}
+
+  - component_type: text
+    tag: ea-fate-trim-intro
+    section: Trimming and collapsing
+    title: What AdapterRemoval did
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The same step as MultiQC reports it, next to the per-lane numbers read
+      straight out of the settings files. A collapsed read is one sequence
+      spanning a whole ancient fragment, which is why the mapper sees fewer
+      sequences than the sequencer produced.
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: multiqc
+    tag: ea-fate-mqc-retained
+    section: Trimming and collapsing
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    selected_module: adapterremoval
+    selected_plot: Retained and Discarded Reads
+    use: multiqc/adapterremoval
+    title: Retained, discarded and collapsed reads (MultiQC)
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 2, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ea-fate-mqc-length
+    section: Trimming and collapsing
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    selected_module: adapterremoval
+    selected_plot: Length Distribution
+    use: multiqc/adapterremoval
+    title: Collapsed-read length distribution (MultiQC)
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 2, w: 4, h: 5}
+  - component_type: figure
+    tag: ea-fate-fig-collapsed
+    index: ea-fate-fig-collapsed
+    section: Trimming and collapsing
+    workflow_tag: eager
+    data_collection_tag: eager_lane_stats
+    visu_type: bar
+    dict_kwargs: {x: lane_id, y: collapsed_pairs, color: sample_id}
+    title: Pairs merged into one sequence, per lane
+    description: Read pairs whose two mates overlapped and were collapsed; each of these cost the run one read and gained it a full fragment.
+    title_size: h3
+    layout: {x: 0, y: 7, w: 8, h: 6}
+
+# ============================================================================
+# Mapping, endogenous DNA and duplication
+# ============================================================================
+- title: Mapping, endogenous DNA and duplication
+  subtitle: How much of each extract is the target organism, and how much of that survives the quality filter and deduplication
+  tab_order: 4
   tab_icon: mdi:chart-bar
   tab_icon_color: indigo
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
+  filter_sections:
+  - name: Mapping filters
+    icon: mdi:filter-variant
+    color: indigo
+    description: Narrow this tab by filter stage or by how on-target a library is
   grid_sections:
+  - name: Endogenous DNA
+    icon: mdi:dna
+    color: teal
+    description: The share of each extract that is the target organism
   - name: Alignment
     icon: mdi:chart-bar
     color: indigo
     description: Reads placed before and after eager's mapping-quality filter
-  - name: Duplication
+  - name: Duplication and complexity
     icon: mdi:set-merge
     color: grape
-    description: PCR duplicates Picard MarkDuplicates removed
+    description: PCR duplicates removed, and what more sequencing would still buy
   components:
-  # ------------------------------------------------------------- alignment
+  - component_type: interactive
+    tag: ea-map-filter-stage
+    index: ea-map-stage-filter
+    section: Mapping filters
+    group: Mapping scope
+    workflow_tag: eager
+    data_collection_tag: samtools_flagstat
+    interactive_component_type: Select
+    column_name: stage
+    column_type: object
+    display: {title_size: md, custom_color: '#5C6BC0', icon_name: 'mdi:filter-variant'}
+    placement: left
+    title: Filter stage
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: ea-map-filter-post
+    index: ea-map-post-range
+    section: Mapping filters
+    group: Mapping scope
+    workflow_tag: eager
+    data_collection_tag: endorspy_endogenous
+    interactive_component_type: RangeSlider
+    column_name: endogenous_dna_post
+    column_type: float64
+    display: {title_size: md, custom_color: '#5C6BC0', icon_name: 'mdi:dna'}
+    placement: left
+    title: Endogenous DNA after filtering
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: ea-map-filter-dup
+    index: ea-map-dup-range
+    section: Mapping filters
+    group: Mapping scope
+    workflow_tag: eager
+    data_collection_tag: picard_markduplicates_metrics
+    interactive_component_type: RangeSlider
+    column_name: percent_duplication
+    column_type: float64
+    display: {title_size: md, custom_color: '#5C6BC0', icon_name: 'mdi:set-merge'}
+    placement: left
+    title: Picard duplication
+    layout: {x: 0, y: 6, w: 1, h: 3}
+
+  - component_type: text
+    tag: ea-endo-intro
+    section: Endogenous DNA
+    title: How much of this extract is the organism
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      [endorS.py](https://github.com/aidaanva/endorS.py) divides the reads that
+      map to the reference by the reads the mapper was given. It is the
+      headline number of an ancient-DNA screen: the rest is soil, excavator and
+      lab. The second number is the same fraction after the quality filter and
+      deduplication, and the gap between them is how much on-target signal is
+      lost to ambiguous placement and PCR copies.
+    workflow_tag: eager
+    data_collection_tag: endorspy_endogenous
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: ea-endo-card-raw
+    index: ea-endo-card-raw
+    section: Endogenous DNA
+    workflow_tag: eager
+    data_collection_tag: endorspy_endogenous
+    use: endorspy/endogenous
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: endogenous_dna
+    column_type: float64
+    display: {icon_name: 'mdi:dna', icon_color: '#26A69A', title_color: '#26A69A', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Endogenous DNA (%)
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: ea-endo-card-post
+    index: ea-endo-card-post
+    section: Endogenous DNA
+    workflow_tag: eager
+    data_collection_tag: endorspy_endogenous
+    use: endorspy/endogenous
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: endogenous_dna_post
+    column_type: float64
+    display: {icon_name: 'mdi:check-decagram', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: After filtering (%)
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: ea-endo-card-loss
+    index: ea-endo-card-loss
+    section: Endogenous DNA
+    workflow_tag: eager
+    data_collection_tag: endorspy_endogenous
+    use: endorspy/endogenous
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: endogenous_dna_loss
+    column_type: float64
+    display: {icon_name: 'mdi:trending-down', icon_color: '#EF5350', title_color: '#EF5350', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Lost to filtering (pp)
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: ea-endo-card-offtarget
+    index: ea-endo-card-offtarget
+    section: Endogenous DNA
+    workflow_tag: eager
+    data_collection_tag: endorspy_endogenous
+    use: endorspy/endogenous
+    aggregation: average
+    secondary_layout: donut
+    breakdown_col: sample
+    column_name: off_target_pct
+    column_type: float64
+    display: {icon_name: 'mdi:chart-donut', icon_color: '#AB47BC', title_color: '#AB47BC', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Off target (%)
+    layout: {x: 6, y: 2, w: 2, h: 2}
+  - component_type: advanced_viz
+    tag: ea-endo-av-prepost
+    index: ea-endo-av-prepost
+    section: Endogenous DNA
+    workflow_tag: eager
+    data_collection_tag: endorspy_endogenous
+    use: endorspy/endogenous_pre_post
+    config:
+      x_title: Endogenous DNA before filtering (%)
+      y_title: Endogenous DNA after filtering (%)
+      reference_line: diagonal
+      top_n_labels: 4
+      marker_size: 14
+    title: Endogenous DNA, before against after filtering
+    description: Distance below the diagonal is the on-target signal lost to the quality filter and deduplication.
+    title_size: h3
+    layout: {x: 0, y: 4, w: 8, h: 7}
+  - component_type: figure
+    tag: ea-endo-fig-bar
+    index: ea-endo-fig-bar
+    section: Endogenous DNA
+    workflow_tag: eager
+    data_collection_tag: endorspy_endogenous
+    use: endorspy/endogenous
+    visu_type: bar
+    dict_kwargs: {x: sample, y: endogenous_dna, color: sample}
+    title: Endogenous DNA per library
+    description: Share of the mapper's input that placed on the reference.
+    title_size: h3
+    layout: {x: 0, y: 11, w: 8, h: 6}
+  - component_type: table
+    tag: ea-endo-table
+    section: Endogenous DNA
+    workflow_tag: eager
+    data_collection_tag: endorspy_endogenous
+    use: endorspy/endogenous
+    row_selection_enabled: false
+    title: Endogenous DNA per library
+    description: Before and after filtering, the drop between them, and the off-target remainder.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 17, w: 8, h: 3}
+
   - component_type: text
     tag: ea-map-intro
     section: Alignment
@@ -366,11 +1120,11 @@ tabs:
     body: >
       [samtools flagstat](http://www.htslib.org/) before and after eager's
       mapping-quality filter. A low pre-filter mapped percentage is normal
-      here, most of a sediment or bone extract's DNA is environmental, not
-      the target organism's.
+      here: most of a sediment or bone extract's DNA is environmental, not the
+      target organism's.
     workflow_tag: eager
     data_collection_tag: samtools_flagstat
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: figure
     tag: ea-map-fig-bar
     index: ea-map-fig-bar
@@ -383,42 +1137,7 @@ tabs:
     title: Mapped reads before and after the filter
     description: Reads flagged mapped by samtools flagstat, per library and stage.
     title_size: h3
-    layout: {x: 0, y: 1, w: 8, h: 6}
-  - component_type: card
-    tag: ea-map-card-mapped
-    index: ea-map-card-mapped
-    section: Alignment
-    workflow_tag: eager
-    data_collection_tag: samtools_flagstat
-    use: samtools/flagstat
-    aggregation: sum
-    secondary_layout: top_n
-    breakdown_col: sample
-    top_n_count: 2
-    column_name: mapped_reads
-    column_type: int64
-    display: {icon_name: 'mdi:chart-bar', icon_color: '#5C6BC0', title_color: '#5C6BC0', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Mapped reads
-    layout: {x: 0, y: 7, w: 2, h: 2}
-  - component_type: card
-    tag: ea-map-card-pct
-    index: ea-map-card-pct
-    section: Alignment
-    workflow_tag: eager
-    data_collection_tag: samtools_flagstat
-    use: samtools/flagstat
-    aggregation: average
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: mapped_pct
-    column_type: float64
-    display: {icon_name: 'mdi:percent-outline', icon_color: '#5C6BC0', title_color: '#5C6BC0', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Mapped percentage
-    layout: {x: 2, y: 7, w: 2, h: 2}
+    layout: {x: 0, y: 2, w: 8, h: 6}
   - component_type: multiqc
     tag: ea-map-mqc-flagstat
     section: Alignment
@@ -430,7 +1149,19 @@ tabs:
     title: Flagstat (MultiQC)
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 7, w: 4, h: 5}
+    layout: {x: 0, y: 8, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ea-map-mqc-flagstat-pct
+    section: Alignment
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    selected_module: samtools
+    selected_plot: 'Flagstat: Percentage of total'
+    use: multiqc/samtools
+    title: Flagstat, as a percentage (MultiQC)
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 8, w: 4, h: 5}
   - component_type: table
     tag: ea-map-table
     section: Alignment
@@ -439,226 +1170,85 @@ tabs:
     use: samtools/flagstat
     row_selection_enabled: false
     title: Flagstat, pre- and post-filter
-    description: One row per (library, stage), total, mapped, duplicate and properly-paired counts.
+    description: One row per library and stage, with total, mapped, duplicate and properly-paired counts.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 12, w: 8, h: 7}
+    layout: {x: 0, y: 13, w: 8, h: 3}
 
-  # ------------------------------------------------------------ duplication
   - component_type: text
     tag: ea-dup-intro
-    section: Duplication
-    title: PCR duplicates
+    section: Duplication and complexity
+    title: PCR duplicates, and whether more sequencing would help
     title_size: sm
     title_align: left
     order: 2
     alignment: left
     body: >
-      [Picard MarkDuplicates](https://broadinstitute.github.io/picard/)
-      flags PCR duplicates on the mapped, filtered BAM. Low-input ancient DNA
-      libraries commonly run higher duplication than a modern shotgun
-      library at the same depth.
+      [Picard MarkDuplicates](https://broadinstitute.github.io/picard/) flags
+      PCR copies on the mapped, filtered BAM, and
+      [preseq](http://smithlabresearch.org/software/preseq/) extrapolates how
+      many new unique molecules the next reads would buy. Read the two
+      together: high duplication with a flattened complexity curve means the
+      extract, not the sequencing, is the limit.
     workflow_tag: eager
-    data_collection_tag: multiqc_data
-    layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: multiqc
-    tag: ea-dup-mqc-picard
-    section: Duplication
-    workflow_tag: eager
-    data_collection_tag: multiqc_data
-    selected_module: picard
-    selected_plot: Mark Duplicates
-    use: multiqc/picard
-    title: Mark Duplicates (MultiQC)
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 1, w: 8, h: 6}
+    data_collection_tag: picard_markduplicates_metrics
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: card
     tag: ea-dup-card-rate
     index: ea-dup-card-rate
-    section: Duplication
+    section: Duplication and complexity
     workflow_tag: eager
-    data_collection_tag: qualimap_bamqc_genome_results
-    use: qualimap/bamqc_genome_results
+    data_collection_tag: picard_markduplicates_metrics
+    use: picard/markduplicates_metrics
     aggregation: average
     aggregations: [box_plot_stats]
     secondary_layout: box_plot
-    column_name: duplication_rate
+    column_name: percent_duplication
     column_type: float64
     display: {icon_name: 'mdi:set-merge', icon_color: '#AB47BC', title_color: '#AB47BC', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: Duplication rate (Qualimap)
-    layout: {x: 0, y: 7, w: 2, h: 2}
-
-# ============================================================================
-# Coverage & complexity
-# ============================================================================
-- title: Coverage & complexity
-  subtitle: How much of the genome each library covers, and how much more sequencing would still buy
-  tab_order: 3
-  tab_icon: mdi:waves
-  tab_icon_color: cyan
-  icon: /assets/images/workflows/nf-core.png
-  icon_color: green
-  workflow_system: nf-core
-  grid_sections:
-  - name: Genome coverage
-    icon: mdi:waves
-    color: cyan
-    description: Depth, mapping quality and GC content from Qualimap BamQC
-  - name: Library complexity
-    icon: mdi:chart-line
-    color: blue
-    description: How many new molecules the next million reads would buy, from preseq
-  components:
-  # ------------------------------------------------------------ coverage
-  - component_type: text
-    tag: ea-cov-intro
-    section: Genome coverage
-    title: How deep, and how even
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      [Qualimap](http://qualimap.conesalab.org) BamQC on the mapped,
-      deduplicated BAM. Ancient shotgun libraries are usually shallow (well
-      under 1X here); the coverage histogram on the MultiQC panel shows how
-      that depth is distributed across the genome.
-    workflow_tag: eager
-    data_collection_tag: qualimap_bamqc_genome_results
-    layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: figure
-    tag: ea-cov-fig-bar
-    index: ea-cov-fig-bar
-    section: Genome coverage
-    workflow_tag: eager
-    data_collection_tag: qualimap_bamqc_genome_results
-    use: qualimap/bamqc_genome_results
-    visu_type: bar
-    dict_kwargs: {x: sample, y: mean_coverage, color: sample}
-    title: Mean genome coverage per library
-    description: Mean depth over the reference, from Qualimap BamQC.
-    title_size: h3
-    layout: {x: 0, y: 1, w: 8, h: 6}
+    title: Duplication rate
+    layout: {x: 0, y: 2, w: 2, h: 2}
   - component_type: card
-    tag: ea-cov-card-mean
-    index: ea-cov-card-mean
-    section: Genome coverage
+    tag: ea-dup-card-dups
+    index: ea-dup-card-dups
+    section: Duplication and complexity
     workflow_tag: eager
-    data_collection_tag: qualimap_bamqc_genome_results
-    use: qualimap/bamqc_genome_results
-    aggregation: average
+    data_collection_tag: picard_markduplicates_metrics
+    use: picard/markduplicates_metrics
+    aggregation: sum
     secondary_layout: top_n
     breakdown_col: sample
     top_n_count: 2
-    column_name: mean_coverage
-    column_type: float64
-    display: {icon_name: 'mdi:waves', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
+    column_name: duplicate_reads
+    column_type: int64
+    display: {icon_name: 'mdi:content-duplicate', icon_color: '#EF5350', title_color: '#EF5350', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: Mean coverage
-    layout: {x: 0, y: 7, w: 2, h: 2}
+    title: Duplicates removed
+    layout: {x: 2, y: 2, w: 2, h: 2}
   - component_type: card
-    tag: ea-cov-card-gc
-    index: ea-cov-card-gc
-    section: Genome coverage
+    tag: ea-dup-card-kept
+    index: ea-dup-card-kept
+    section: Duplication and complexity
     workflow_tag: eager
-    data_collection_tag: qualimap_bamqc_genome_results
-    use: qualimap/bamqc_genome_results
-    aggregation: average
+    data_collection_tag: picard_markduplicates_metrics
+    use: picard/markduplicates_metrics
+    aggregation: sum
     secondary_layout: donut
     breakdown_col: sample
-    column_name: gc_percentage
-    column_type: float64
+    column_name: reads_after_dedup
+    column_type: int64
     display: {icon_name: 'mdi:chart-donut', icon_color: '#26A69A', title_color: '#26A69A', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: GC content
-    layout: {x: 2, y: 7, w: 2, h: 2}
-  - component_type: multiqc
-    tag: ea-cov-mqc-hist
-    section: Genome coverage
-    workflow_tag: eager
-    data_collection_tag: multiqc_data
-    selected_module: qualimap
-    selected_plot: Coverage histogram
-    use: multiqc/qualimap
-    title: Coverage histogram (MultiQC)
-    title_size: sm
-    title_align: left
-    layout: {x: 4, y: 7, w: 4, h: 5}
-  - component_type: multiqc
-    tag: ea-cov-mqc-cumulative
-    section: Genome coverage
-    workflow_tag: eager
-    data_collection_tag: multiqc_data
-    selected_module: qualimap
-    selected_plot: Cumulative genome coverage
-    use: multiqc/qualimap
-    title: Cumulative genome coverage (MultiQC)
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 12, w: 4, h: 5}
-  - component_type: multiqc
-    tag: ea-cov-mqc-gc
-    section: Genome coverage
-    workflow_tag: eager
-    data_collection_tag: multiqc_data
-    selected_module: qualimap
-    selected_plot: GC content distribution
-    use: multiqc/qualimap
-    title: GC content distribution (MultiQC)
-    title_size: sm
-    title_align: left
-    layout: {x: 4, y: 12, w: 4, h: 5}
-  - component_type: table
-    tag: ea-cov-table
-    section: Genome coverage
-    workflow_tag: eager
-    data_collection_tag: qualimap_bamqc_genome_results
-    use: qualimap/bamqc_genome_results
-    row_selection_enabled: false
-    title: BamQC summary
-    description: Mean coverage, mapping quality, error rate and duplication per library.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 17, w: 8, h: 7}
-
-  # -------------------------------------------------------- library complexity
-  - component_type: text
-    tag: ea-complex-intro
-    section: Library complexity
-    title: Is this library sequenced out?
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      [preseq lc_extrap](http://smithlabresearch.org/software/preseq/)
-      extrapolates how many additional unique molecules the next reads would
-      buy. A curve still climbing steeply means the library has more to give;
-      one that has flattened means the extract, not the sequencing, is the
-      limit.
-    workflow_tag: eager
-    data_collection_tag: preseq_complexity_curve
-    layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: advanced_viz
-    tag: ea-complex-av-curve
-    section: Library complexity
-    workflow_tag: eager
-    data_collection_tag: preseq_complexity_curve
-    use: preseq/complexity_curve
-    config: {series_col: sample, x_col: total_reads, y_col: expected_distinct, lower_col: lower_ci, upper_col: upper_ci}
-    title: Library complexity curve
-    description: Expected distinct molecules against total reads, extrapolated per library. This run's preseq step wrote no bootstrap confidence interval, so the ribbon is flat.
-    title_size: h3
-    layout: {x: 0, y: 1, w: 8, h: 7}
+    title: Unique reads kept
+    layout: {x: 4, y: 2, w: 2, h: 2}
   - component_type: card
-    tag: ea-complex-card-distinct
-    index: ea-complex-card-distinct
-    section: Library complexity
+    tag: ea-dup-card-distinct
+    index: ea-dup-card-distinct
+    section: Duplication and complexity
     workflow_tag: eager
     data_collection_tag: preseq_complexity_curve
     use: preseq/complexity_curve
@@ -672,10 +1262,50 @@ tabs:
     title_size: sm
     title_align: left
     title: Peak expected distinct
-    layout: {x: 0, y: 8, w: 2, h: 2}
+    layout: {x: 6, y: 2, w: 2, h: 2}
+  - component_type: advanced_viz
+    tag: ea-dup-av-scatter
+    index: ea-dup-av-scatter
+    section: Duplication and complexity
+    workflow_tag: eager
+    data_collection_tag: picard_markduplicates_metrics
+    use: picard/duplication_vs_depth
+    config:
+      x_title: Unique reads kept
+      y_title: Duplication rate
+      top_n_labels: 4
+      marker_size: 14
+    title: Duplication against what survived it
+    description: A library high on this plane paid for its depth in PCR copies rather than in molecules.
+    title_size: h3
+    layout: {x: 0, y: 4, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: ea-complex-av-curve
+    index: ea-complex-av-curve
+    section: Duplication and complexity
+    workflow_tag: eager
+    data_collection_tag: preseq_complexity_curve
+    use: preseq/complexity_curve
+    config: {series_col: sample, x_col: total_reads, y_col: expected_distinct, lower_col: lower_ci, upper_col: upper_ci}
+    title: Library complexity curve
+    description: Expected distinct molecules against total reads, extrapolated per library. This run's preseq step wrote no bootstrap confidence interval, so the ribbon is flat.
+    title_size: h3
+    layout: {x: 0, y: 11, w: 8, h: 7}
+  - component_type: multiqc
+    tag: ea-dup-mqc-picard
+    section: Duplication and complexity
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    selected_module: picard
+    selected_plot: Mark Duplicates
+    use: multiqc/picard
+    title: Mark Duplicates (MultiQC)
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 18, w: 4, h: 5}
   - component_type: multiqc
     tag: ea-complex-mqc
-    section: Library complexity
+    section: Duplication and complexity
     workflow_tag: eager
     data_collection_tag: multiqc_data
     selected_module: preseq
@@ -684,41 +1314,227 @@ tabs:
     title: Complexity curve (MultiQC)
     title_size: sm
     title_align: left
-    layout: {x: 2, y: 8, w: 6, h: 5}
+    layout: {x: 4, y: 18, w: 4, h: 5}
   - component_type: table
-    tag: ea-complex-table
-    section: Library complexity
+    tag: ea-dup-table
+    section: Duplication and complexity
     workflow_tag: eager
-    data_collection_tag: preseq_complexity_curve
-    use: preseq/complexity_curve
+    data_collection_tag: picard_markduplicates_metrics
+    use: picard/markduplicates_metrics
     row_selection_enabled: false
-    title: Complexity curve, per library
-    description: total_reads / expected_distinct pairs the curve above is drawn from.
+    title: Duplication metrics per library
+    description: Reads examined, duplicates flagged and what is left, from Picard MarkDuplicates.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 13, w: 8, h: 7}
+    layout: {x: 0, y: 23, w: 8, h: 3}
 
 # ============================================================================
 # Damage authentication
 # ============================================================================
 - title: Damage authentication
-  subtitle: The C>T / G>A misincorporation signature at the read ends, the ancient-DNA authenticity read
-  tab_order: 4
+  subtitle: "Is it ancient: terminal deamination against fragment length, then each signal's full profile"
+  tab_order: 5
   tab_icon: mdi:dna
   tab_icon_color: red
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
+  filter_sections:
+  - name: Damage filters
+    icon: mdi:filter-variant
+    color: red
+    description: Narrow the profiles to one read end, position window or strand
   grid_sections:
+  - name: Authenticity plane
+    icon: mdi:chart-scatter-plot
+    color: red
+    description: The two signals against each other, one point per library
   - name: Misincorporation signature
     icon: mdi:dna
     color: red
     description: Substitution frequency by distance from the read end, from DamageProfiler
+  - name: Fragment length
+    icon: mdi:ruler
+    color: orange
+    description: How long the mapped fragments are, per library and strand
   components:
+  - component_type: interactive
+    tag: ea-dmg-filter-end
+    index: ea-dmg-end-filter
+    section: Damage filters
+    group: Damage scope
+    workflow_tag: eager
+    data_collection_tag: damageprofiler_misincorporation
+    interactive_component_type: Select
+    column_name: end
+    column_type: object
+    display: {title_size: md, custom_color: '#EF5350', icon_name: 'mdi:dna'}
+    placement: left
+    title: Read end
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: ea-dmg-filter-position
+    index: ea-dmg-position-range
+    section: Damage filters
+    group: Damage scope
+    workflow_tag: eager
+    data_collection_tag: damageprofiler_misincorporation
+    interactive_component_type: RangeSlider
+    column_name: position
+    column_type: int64
+    display: {title_size: md, custom_color: '#EF5350', icon_name: 'mdi:ruler'}
+    placement: left
+    title: Distance from the read end
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: ea-dmg-filter-strand
+    index: ea-dmg-strand-filter
+    section: Damage filters
+    group: Damage scope
+    workflow_tag: eager
+    data_collection_tag: damageprofiler_lgdistribution
+    interactive_component_type: Select
+    column_name: strand
+    column_type: object
+    display: {title_size: md, custom_color: '#FB8C00', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: Strand
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: interactive
+    tag: ea-dmg-filter-length
+    index: ea-dmg-length-range
+    section: Damage filters
+    group: Damage scope
+    workflow_tag: eager
+    data_collection_tag: damageprofiler_lgdistribution
+    interactive_component_type: RangeSlider
+    column_name: length
+    column_type: int64
+    display: {title_size: md, custom_color: '#FB8C00', icon_name: 'mdi:ruler'}
+    placement: left
+    title: Fragment length
+    layout: {x: 0, y: 9, w: 1, h: 3}
+
+  - component_type: text
+    tag: ea-auth-intro
+    section: Authenticity plane
+    title: Two signals, and why neither is enough alone
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Ancient DNA gives itself away twice: cytosines deaminate at the ends of a
+      fragment, so the first base of a read is misread far more often than the
+      middle, and depurination breaks the molecule, so fragments rarely survive
+      past about 100 bp. A modern contaminant is long and undamaged, an ancient
+      extract is short and damaged, and DNA that is short but undamaged is
+      usually over-sheared modern material rather than old. Plotted against
+      each other the three separate; read on their own, none of them does.
+    workflow_tag: eager
+    data_collection_tag: damageprofiler_authenticity
+    layout: {x: 0, y: 0, w: 8, h: 3}
+  - component_type: card
+    tag: ea-auth-card-ct
+    index: ea-auth-card-ct
+    section: Authenticity plane
+    workflow_tag: eager
+    data_collection_tag: damageprofiler_authenticity
+    use: damageprofiler/authenticity
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: ct_5p_first
+    column_type: float64
+    display: {icon_name: 'mdi:dna', icon_color: '#EF5350', title_color: '#EF5350', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Deamination at the 5 prime end
+    layout: {x: 0, y: 3, w: 2, h: 2}
+  - component_type: card
+    tag: ea-auth-card-ga
+    index: ea-auth-card-ga
+    section: Authenticity plane
+    workflow_tag: eager
+    data_collection_tag: damageprofiler_authenticity
+    use: damageprofiler/authenticity
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: ga_3p_first
+    column_type: float64
+    display: {icon_name: 'mdi:dna', icon_color: '#D81B60', title_color: '#D81B60', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Deamination at the 3 prime end
+    layout: {x: 2, y: 3, w: 2, h: 2}
+  - component_type: card
+    tag: ea-auth-card-length
+    index: ea-auth-card-length
+    section: Authenticity plane
+    workflow_tag: eager
+    data_collection_tag: damageprofiler_authenticity
+    use: damageprofiler/authenticity
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: mean_length
+    column_type: float64
+    display: {icon_name: 'mdi:ruler', icon_color: '#FB8C00', title_color: '#FB8C00', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Mean fragment length (bp)
+    layout: {x: 4, y: 3, w: 2, h: 2}
+  - component_type: card
+    tag: ea-auth-card-short
+    index: ea-auth-card-short
+    section: Authenticity plane
+    workflow_tag: eager
+    data_collection_tag: damageprofiler_authenticity
+    use: damageprofiler/authenticity
+    aggregation: sum
+    secondary_layout: donut
+    breakdown_col: sample
+    column_name: n_reads
+    column_type: int64
+    display: {icon_name: 'mdi:chart-donut', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Fragments profiled
+    layout: {x: 6, y: 3, w: 2, h: 2}
+  - component_type: advanced_viz
+    tag: ea-auth-av-plane
+    index: ea-auth-av-plane
+    section: Authenticity plane
+    workflow_tag: eager
+    data_collection_tag: damageprofiler_authenticity
+    use: damageprofiler/authenticity_plane
+    config:
+      x_title: Mean fragment length (bp)
+      y_title: Deamination at the first 5 prime base
+      top_n_labels: 4
+      marker_size: 16
+    title: The ancient-DNA plane
+    description: Short and damaged is ancient, long and undamaged is modern contamination, short and undamaged is usually over-sheared modern DNA. Marker size is the number of fragments each library contributed.
+    title_size: h3
+    layout: {x: 0, y: 5, w: 8, h: 7}
+  - component_type: table
+    tag: ea-auth-table
+    section: Authenticity plane
+    workflow_tag: eager
+    data_collection_tag: damageprofiler_authenticity
+    use: damageprofiler/authenticity
+    row_selection_enabled: false
+    title: Authenticity summary per library
+    description: Terminal deamination at both ends against the substitution background, next to the fragment length statistics.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 12, w: 8, h: 3}
+
   - component_type: text
     tag: ea-dmg-intro
     section: Misincorporation signature
-    title: Does this library look ancient?
+    title: The full misincorporation profile
     title_size: sm
     title_align: left
     order: 2
@@ -726,24 +1542,23 @@ tabs:
     body: >
       [DamageProfiler](https://github.com/Integrative-Transcriptomics/DamageProfiler)
       counts, at each position from a read end, how often the reference base
-      was read as something else. Authentic ancient DNA shows C>T
-      substitutions rising sharply at the 5' end and the complementary G>A
-      rise at the 3' end, both well above the flat background every other
-      substitution type traces out. A run with no such rise, on fresh
-      material, is not damage, it is contamination or a library-prep
-      artefact.
+      was read as something else. Authentic ancient DNA rises sharply in the
+      first few positions and decays to the flat background every other
+      substitution type traces out. A run with no such rise, on fresh material,
+      is not damage: it is contamination or a library-prep artefact.
     workflow_tag: eager
     data_collection_tag: damageprofiler_misincorporation
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: advanced_viz
     tag: ea-dmg-av-profile
+    index: ea-dmg-av-profile
     section: Misincorporation signature
     workflow_tag: eager
     data_collection_tag: damageprofiler_misincorporation
     use: damageprofiler/misincorporation
     config: {}
-    title: Misincorporation profile, 5' and 3'
-    description: C>T and G>A frequency by position from the read end, every other substitution pooled as the background it is read against.
+    title: Misincorporation profile, both read ends
+    description: The two deamination substitutions by position from the read end, every other substitution pooled as the background they are read against.
     title_size: h3
     layout: {x: 0, y: 2, w: 8, h: 7}
   - component_type: figure
@@ -756,27 +1571,9 @@ tabs:
     visu_type: line
     dict_kwargs: {x: position, y: frequency, color: base_change}
     title: Misincorporation frequency by position
-    description: One line per substitution class, pooled across libraries and read ends.
+    description: One line per substitution class, pooled across libraries and read ends unless the left panel narrows them.
     title_size: h3
     layout: {x: 0, y: 9, w: 8, h: 6}
-  - component_type: card
-    tag: ea-dmg-card-ct
-    index: ea-dmg-card-ct
-    section: Misincorporation signature
-    workflow_tag: eager
-    data_collection_tag: damageprofiler_misincorporation
-    use: damageprofiler/misincorporation
-    aggregation: max
-    secondary_layout: top_n
-    breakdown_col: base_change
-    top_n_count: 3
-    column_name: frequency
-    column_type: float64
-    display: {icon_name: 'mdi:dna', icon_color: '#EF5350', title_color: '#EF5350', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Peak substitution frequency
-    layout: {x: 0, y: 15, w: 2, h: 2}
   - component_type: multiqc
     tag: ea-dmg-mqc-5p
     section: Misincorporation signature
@@ -785,10 +1582,10 @@ tabs:
     selected_module: damageprofiler
     selected_plot: 5P misincorporation plot
     use: multiqc/damageprofiler
-    title: 5' misincorporation (MultiQC)
+    title: 5 prime misincorporation (MultiQC)
     title_size: sm
     title_align: left
-    layout: {x: 2, y: 15, w: 3, h: 5}
+    layout: {x: 0, y: 15, w: 4, h: 5}
   - component_type: multiqc
     tag: ea-dmg-mqc-3p
     section: Misincorporation signature
@@ -797,10 +1594,10 @@ tabs:
     selected_module: damageprofiler
     selected_plot: 3P misincorporation plot
     use: multiqc/damageprofiler
-    title: 3' misincorporation (MultiQC)
+    title: 3 prime misincorporation (MultiQC)
     title_size: sm
     title_align: left
-    layout: {x: 5, y: 15, w: 3, h: 5}
+    layout: {x: 4, y: 15, w: 4, h: 5}
   - component_type: table
     tag: ea-dmg-table
     section: Misincorporation signature
@@ -809,44 +1606,703 @@ tabs:
     use: damageprofiler/misincorporation
     row_selection_enabled: false
     title: Misincorporation table
-    description: One row per (library, read end, position, substitution class).
+    description: One row per library, read end, position and substitution class.
     title_size: h3
     title_align: left
     layout: {x: 0, y: 20, w: 8, h: 7}
 
-# ============================================================================
-# Genotyping
-# ============================================================================
-- title: Genotyping
-  subtitle: Variant calls from GATK HaplotypeCaller, summarised by bcftools stats
-  tab_order: 5
-  tab_icon: mdi:scale-balance
-  tab_icon_color: grape
-  icon: /assets/images/workflows/nf-core.png
-  icon_color: green
-  workflow_system: nf-core
-  grid_sections:
-  - name: Variant calls
-    icon: mdi:scale-balance
-    color: grape
-    description: bcftools stats over the HaplotypeCaller VCFs, no per-variant table is bound here, only the MultiQC summary (bcftools/stats_* is nf-core/sarek's catalog output)
-  components:
   - component_type: text
-    tag: ea-geno-intro
-    section: Variant calls
-    title: What GATK called
+    tag: ea-len-intro
+    section: Fragment length
+    title: How long the surviving fragments are
     title_size: sm
     title_align: left
     order: 2
     alignment: left
     body: >
-      [bcftools stats](https://samtools.github.io/bcftools/) over the
-      GATK HaplotypeCaller VCFs. Read this next to the coverage tab: a
-      shallow, damaged library calls far fewer confident variants than its
-      raw read count alone would suggest.
+      The mapped fragment length distribution, per library and strand. Both
+      libraries here peak in the high forties with over ninety percent of
+      fragments under 70 bp, which is the shape an ancient extract has and a
+      modern library does not.
+    workflow_tag: eager
+    data_collection_tag: damageprofiler_lgdistribution
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: ea-len-av-profile
+    index: ea-len-av-profile
+    section: Fragment length
+    workflow_tag: eager
+    data_collection_tag: damageprofiler_lgdistribution
+    use: damageprofiler/fragment_length_profile
+    config:
+      x_title: Fragment length (bp)
+      y_title: Share of the library's reads
+    title: Fragment length distribution
+    description: One curve per library and strand, normalised so libraries of different depth are comparable.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 7}
+  - component_type: multiqc
+    tag: ea-len-mqc-forward
+    section: Fragment length
     workflow_tag: eager
     data_collection_tag: multiqc_data
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    selected_module: damageprofiler
+    selected_plot: Forward read length distribution
+    use: multiqc/damageprofiler
+    title: Forward read length distribution (MultiQC)
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 9, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ea-len-mqc-reverse
+    section: Fragment length
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    selected_module: damageprofiler
+    selected_plot: Reverse read length distribution
+    use: multiqc/damageprofiler
+    title: Reverse read length distribution (MultiQC)
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 9, w: 4, h: 5}
+  - component_type: table
+    tag: ea-len-table
+    section: Fragment length
+    workflow_tag: eager
+    data_collection_tag: damageprofiler_lgdistribution
+    use: damageprofiler/lgdistribution
+    row_selection_enabled: false
+    title: Fragment length table
+    description: One row per library, strand and length, with the reads at that length and their share.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 14, w: 8, h: 7}
+
+# ============================================================================
+# Contamination and sex
+# ============================================================================
+- title: Contamination and sex
+  subtitle: The branch this run did not enable, and the per-contig depth a sex or aneuploidy call would be made from
+  tab_order: 6
+  tab_icon: mdi:scale-balance
+  tab_icon_color: cyan
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Contig filters
+    icon: mdi:filter-variant
+    color: cyan
+    description: Narrow the per-contig tiles by name, size or relative depth
+  grid_sections:
+  - name: What did not run
+    icon: mdi:alert-outline
+    color: yellow
+    description: The optional eager modules this megatest left off, and what stands in for them
+  - name: Per-contig depth
+    icon: mdi:chart-scatter-plot
+    color: cyan
+    description: Depth per reference sequence, relative to the library's own genome-wide mean
+  components:
+  - component_type: interactive
+    tag: ea-sex-filter-contig
+    index: ea-sex-contig-filter
+    section: Contig filters
+    group: Contig scope
+    workflow_tag: eager
+    data_collection_tag: qualimap_coverage_per_contig
+    interactive_component_type: MultiSelect
+    column_name: chromosome
+    column_type: object
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:dna'}
+    placement: left
+    title: Contig
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: ea-sex-filter-relative
+    index: ea-sex-relative-range
+    section: Contig filters
+    group: Contig scope
+    workflow_tag: eager
+    data_collection_tag: qualimap_coverage_per_contig
+    interactive_component_type: RangeSlider
+    column_name: relative_coverage
+    column_type: float64
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:scale-balance'}
+    placement: left
+    title: Relative depth
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: ea-sex-filter-length
+    index: ea-sex-length-range
+    section: Contig filters
+    group: Contig scope
+    workflow_tag: eager
+    data_collection_tag: qualimap_coverage_per_contig
+    interactive_component_type: RangeSlider
+    column_name: length
+    column_type: int64
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:ruler'}
+    placement: left
+    title: Contig length
+    layout: {x: 0, y: 6, w: 1, h: 3}
+
+  - component_type: text
+    tag: ea-sex-gate
+    section: What did not run
+    title: Sex determination and contamination were switched off in this run
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      This megatest ran with Sex.DetERRmine, MTNucRatio and the ANGSD
+      X-chromosome contamination estimate disabled, and the reference is
+      Atlantic cod, which has no assembled sex chromosome to call from anyway.
+      The template declares those three collections as optional, with the file
+      names the eager output documentation publishes, so a run that enables
+      them ingests with no template edit. What is on disk instead is the
+      per-contig depth below, which is the quantity all three build on: a sex
+      call is a depth ratio between a sex chromosome and the autosomes, and a
+      contamination estimate needs the same per-contig baseline. The
+      mitochondrion is visible here as the one sequence at roughly sixty times
+      the nuclear depth, which is the mitochondrial-to-nuclear ratio MTNucRatio
+      would have reported.
+    workflow_tag: eager
+    data_collection_tag: qualimap_coverage_per_contig
+    layout: {x: 0, y: 0, w: 8, h: 3}
+  - component_type: card
+    tag: ea-sex-card-relative
+    index: ea-sex-card-relative
+    section: What did not run
+    workflow_tag: eager
+    data_collection_tag: qualimap_coverage_per_contig
+    use: qualimap/coverage_per_contig
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: relative_coverage
+    column_type: float64
+    display: {icon_name: 'mdi:scale-balance', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Relative depth
+    layout: {x: 0, y: 3, w: 2, h: 2}
+  - component_type: card
+    tag: ea-sex-card-top
+    index: ea-sex-card-top
+    section: What did not run
+    workflow_tag: eager
+    data_collection_tag: qualimap_coverage_per_contig
+    use: qualimap/coverage_per_contig
+    aggregation: max
+    secondary_layout: top_n
+    breakdown_col: chromosome
+    top_n_count: 3
+    column_name: mean_coverage
+    column_type: float64
+    display: {icon_name: 'mdi:waves', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Deepest contig (X)
+    layout: {x: 2, y: 3, w: 2, h: 2}
+  - component_type: card
+    tag: ea-sex-card-bases
+    index: ea-sex-card-bases
+    section: What did not run
+    workflow_tag: eager
+    data_collection_tag: qualimap_coverage_per_contig
+    use: qualimap/coverage_per_contig
+    aggregation: sum
+    secondary_layout: top_n
+    breakdown_col: chromosome
+    top_n_count: 3
+    column_name: mapped_bases
+    column_type: int64
+    display: {icon_name: 'mdi:counter', icon_color: '#26A69A', title_color: '#26A69A', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Mapped bases
+    layout: {x: 4, y: 3, w: 2, h: 2}
+  - component_type: card
+    tag: ea-sex-card-length
+    index: ea-sex-card-length
+    section: What did not run
+    workflow_tag: eager
+    data_collection_tag: qualimap_coverage_per_contig
+    use: qualimap/coverage_per_contig
+    aggregation: sum
+    secondary_layout: donut
+    breakdown_col: sample
+    column_name: length
+    column_type: int64
+    display: {icon_name: 'mdi:chart-donut', icon_color: '#AB47BC', title_color: '#AB47BC', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Reference bases
+    layout: {x: 6, y: 3, w: 2, h: 2}
+
+  - component_type: text
+    tag: ea-sex-contig-intro
+    section: Per-contig depth
+    title: Where the reads landed, sequence by sequence
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One point per reference sequence, its length against its depth relative
+      to the library's own genome-wide mean. An even library sits on the 1.0
+      line; a sequence far above it has soaked up reads, which for the
+      mitochondrion is expected and for anything else is worth a look.
+    workflow_tag: eager
+    data_collection_tag: qualimap_coverage_per_contig
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: ea-sex-av-contig
+    index: ea-sex-av-contig
+    section: Per-contig depth
+    workflow_tag: eager
+    data_collection_tag: qualimap_coverage_per_contig
+    use: qualimap/contig_depth_scatter
+    config:
+      x_title: Contig length (bp)
+      y_title: Depth relative to the library mean
+      log_x: true
+      log_y: true
+      reference_line: horizontal
+      reference_value: 1.0
+      top_n_labels: 5
+    title: Relative depth against contig length
+    description: Short contigs scatter widely because a handful of reads moves their mean; the chromosomes cluster tightly on 1.0, and the mitochondrion sits far above it.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 7}
+  - component_type: figure
+    tag: ea-sex-fig-relative
+    index: ea-sex-fig-relative
+    section: Per-contig depth
+    workflow_tag: eager
+    data_collection_tag: qualimap_coverage_per_contig
+    use: qualimap/coverage_per_contig
+    visu_type: bar
+    dict_kwargs: {x: chromosome, y: relative_coverage, color: sample}
+    title: Depth per contig, relative to the library mean
+    description: Use the contig filter in the left panel to narrow this to the named chromosomes.
+    title_size: h3
+    layout: {x: 0, y: 9, w: 8, h: 6}
+  - component_type: table
+    tag: ea-sex-table
+    section: Per-contig depth
+    workflow_tag: eager
+    data_collection_tag: qualimap_coverage_per_contig
+    use: qualimap/coverage_per_contig
+    row_selection_enabled: false
+    title: Coverage per contig
+    description: One row per library and reference sequence, with its length, mapped bases and depth.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 15, w: 8, h: 7}
+
+# ============================================================================
+# Coverage and genotyping
+# ============================================================================
+- title: Coverage and genotyping
+  subtitle: Depth along the reference and how it is distributed, next to the variants GATK called from it
+  tab_order: 7
+  tab_icon: mdi:waves
+  tab_icon_color: blue
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Coverage filters
+    icon: mdi:filter-variant
+    color: cyan
+    description: Narrow the track and the depth curves to a region or a depth band
+  grid_sections:
+  - name: Depth along the reference
+    icon: mdi:waves
+    color: cyan
+    description: Windowed depth, mapped back onto the contig each window falls in
+  - name: Depth distribution
+    icon: mdi:chart-bell-curve
+    color: blue
+    description: How that depth is spread across the reference
+  - name: Variant calls
+    icon: mdi:scale-balance
+    color: grape
+    description: bcftools stats over the GATK HaplotypeCaller VCFs
+  components:
+  - component_type: interactive
+    tag: ea-cov-filter-chrom
+    index: ea-cov-chrom-filter
+    section: Coverage filters
+    group: Region scope
+    workflow_tag: eager
+    data_collection_tag: qualimap_coverage_across_reference
+    interactive_component_type: MultiSelect
+    column_name: chromosome
+    column_type: object
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:dna'}
+    placement: left
+    title: Contig
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: ea-cov-filter-position
+    index: ea-cov-position-range
+    section: Coverage filters
+    group: Region scope
+    workflow_tag: eager
+    data_collection_tag: qualimap_coverage_across_reference
+    interactive_component_type: RangeSlider
+    column_name: position
+    column_type: int64
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:ruler'}
+    placement: left
+    title: Position on the contig
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: ea-cov-filter-depth
+    index: ea-cov-depth-range
+    section: Coverage filters
+    group: Region scope
+    workflow_tag: eager
+    data_collection_tag: qualimap_genome_fraction_coverage
+    interactive_component_type: RangeSlider
+    column_name: min_coverage
+    column_type: int64
+    display: {title_size: md, custom_color: '#42A5F5', icon_name: 'mdi:waves'}
+    placement: left
+    title: Depth threshold
+    layout: {x: 0, y: 6, w: 1, h: 3}
+
+  - component_type: text
+    tag: ea-cov-intro
+    section: Depth along the reference
+    title: How deep, and how even
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      [Qualimap](http://qualimap.conesalab.org) BamQC windows the whole
+      reference and reports a mean depth per window. Qualimap writes those
+      windows on a single concatenated axis, so the template maps each one back
+      onto the contig it falls in using the per-contig lengths from the same
+      report, which is what makes the contig filter in the left panel work.
+    workflow_tag: eager
+    data_collection_tag: qualimap_coverage_across_reference
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    tag: ea-cov-card-mean
+    index: ea-cov-card-mean
+    section: Depth along the reference
+    workflow_tag: eager
+    data_collection_tag: qualimap_coverage_across_reference
+    use: qualimap/coverage_across_reference
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: coverage
+    column_type: float64
+    display: {icon_name: 'mdi:waves', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Windowed depth (X)
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: ea-cov-card-peak
+    index: ea-cov-card-peak
+    section: Depth along the reference
+    workflow_tag: eager
+    data_collection_tag: qualimap_coverage_across_reference
+    use: qualimap/coverage_across_reference
+    aggregation: max
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 2
+    column_name: coverage
+    column_type: float64
+    display: {icon_name: 'mdi:chart-line', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Deepest window (X)
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: ea-cov-card-std
+    index: ea-cov-card-std
+    section: Depth along the reference
+    workflow_tag: eager
+    data_collection_tag: qualimap_coverage_across_reference
+    use: qualimap/coverage_across_reference
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: coverage_std
+    column_type: float64
+    display: {icon_name: 'mdi:chart-bell-curve', icon_color: '#42A5F5', title_color: '#42A5F5', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Depth spread within a window
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    tag: ea-cov-card-fraction
+    index: ea-cov-card-fraction
+    section: Depth along the reference
+    workflow_tag: eager
+    data_collection_tag: qualimap_genome_fraction_coverage
+    use: qualimap/genome_fraction_coverage
+    aggregation: max
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 2
+    column_name: genome_fraction_pct
+    column_type: float64
+    display: {icon_name: 'mdi:percent-outline', icon_color: '#26A69A', title_color: '#26A69A', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Genome covered at 1X (%)
+    layout: {x: 6, y: 2, w: 2, h: 2}
+  - component_type: advanced_viz
+    tag: ea-cov-av-track
+    index: ea-cov-av-track
+    section: Depth along the reference
+    workflow_tag: eager
+    data_collection_tag: qualimap_coverage_across_reference
+    use: qualimap/reference_coverage_track
+    config:
+      smoothing_window: 0
+      facet_by_sample: true
+      color_by: sample
+    title: Depth along the reference
+    description: One lane per library. Narrow to a single contig in the left panel to read a chromosome on its own coordinates.
+    title_size: h3
+    layout: {x: 0, y: 4, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: ea-cov-av-genomeview
+    index: ea-cov-av-genomeview
+    section: Depth along the reference
+    workflow_tag: eager
+    data_collection_tag: qualimap_coverage_across_reference
+    use: qualimap/reference_genome_view
+    config:
+      score_title: Mean depth (X)
+      mark: point
+      point_size: 4
+    title: Depth on a chromosome-aware genome axis
+    description: The same windows drawn by GenomeSpy on a locus scale, with the contigs laid out in reference order and native zoom.
+    title_size: h3
+    layout: {x: 0, y: 11, w: 8, h: 7}
+  - component_type: table
+    tag: ea-cov-table-track
+    section: Depth along the reference
+    workflow_tag: eager
+    data_collection_tag: qualimap_coverage_across_reference
+    use: qualimap/coverage_across_reference
+    row_selection_enabled: false
+    title: Windowed depth
+    description: One row per library and window, with the contig it falls in and its position on both the contig and the concatenated reference.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 18, w: 8, h: 7}
+
+  - component_type: text
+    tag: ea-dist-intro
+    section: Depth distribution
+    title: Spread thin, or piled up
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      A mean depth well under 1X says nothing about whether the reads are
+      spread over the genome once or piled on a tenth of it. These two curves
+      do: the first is how many bases sit at each depth, the second is the
+      share of the reference covered at least that deep.
+    workflow_tag: eager
+    data_collection_tag: qualimap_coverage_histogram
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: ea-dist-av-hist
+    index: ea-dist-av-hist
+    section: Depth distribution
+    workflow_tag: eager
+    data_collection_tag: qualimap_coverage_histogram
+    use: qualimap/depth_histogram_profile
+    config:
+      x_title: Depth (X)
+      y_title: Share of the reference
+      log_y: true
+    title: Depth histogram
+    description: Share of the reference at each depth, per library, on a log scale so the long tail stays readable.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: ea-dist-av-fraction
+    index: ea-dist-av-fraction
+    section: Depth distribution
+    workflow_tag: eager
+    data_collection_tag: qualimap_genome_fraction_coverage
+    use: qualimap/genome_fraction_profile
+    config:
+      x_title: Depth threshold (X)
+      y_title: Genome covered (%)
+    title: Share of the reference covered at least X deep
+    description: "The cumulative read on a shallow library: where this curve meets 1X is how much of the genome was seen at all."
+    title_size: h3
+    layout: {x: 0, y: 9, w: 8, h: 7}
+  - component_type: multiqc
+    tag: ea-dist-mqc-hist
+    section: Depth distribution
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    selected_module: qualimap
+    selected_plot: Coverage histogram
+    use: multiqc/qualimap
+    title: Coverage histogram (MultiQC)
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 16, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ea-dist-mqc-cumulative
+    section: Depth distribution
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    selected_module: qualimap
+    selected_plot: Cumulative genome coverage
+    use: multiqc/qualimap
+    title: Cumulative genome coverage (MultiQC)
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 16, w: 4, h: 5}
+  - component_type: table
+    tag: ea-dist-table
+    section: Depth distribution
+    workflow_tag: eager
+    data_collection_tag: qualimap_genome_fraction_coverage
+    use: qualimap/genome_fraction_coverage
+    row_selection_enabled: false
+    title: Genome fraction by depth threshold
+    description: One row per library and depth threshold, with the share of the reference reaching it.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 21, w: 8, h: 7}
+
+  - component_type: text
+    tag: ea-geno-intro
+    section: Variant calls
+    title: What GATK called, and why the ratio is low
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      [bcftools stats](https://samtools.github.io/bcftools/) over the GATK
+      HaplotypeCaller VCFs. Read this next to the coverage curves above: a
+      shallow, damaged library calls far fewer confident variants than its raw
+      read count suggests. The transition to transversion ratio is worth a
+      second look on ancient data, because deamination turns cytosines into
+      thymines, which is a transition, so an undamaged-model caller reads
+      damage as extra real variants.
+    workflow_tag: eager
+    data_collection_tag: bcftools_stats_summary
+    layout: {x: 0, y: 0, w: 8, h: 3}
+  - component_type: card
+    tag: ea-geno-card-snps
+    index: ea-geno-card-snps
+    section: Variant calls
+    workflow_tag: eager
+    data_collection_tag: bcftools_stats_summary
+    use: bcftools/stats_summary
+    aggregation: sum
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 2
+    column_name: n_snps
+    column_type: int64
+    display: {icon_name: 'mdi:scale-balance', icon_color: '#AB47BC', title_color: '#AB47BC', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: SNPs called
+    layout: {x: 0, y: 3, w: 2, h: 2}
+  - component_type: card
+    tag: ea-geno-card-indels
+    index: ea-geno-card-indels
+    section: Variant calls
+    workflow_tag: eager
+    data_collection_tag: bcftools_stats_summary
+    use: bcftools/stats_summary
+    aggregation: sum
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 2
+    column_name: n_indels
+    column_type: int64
+    display: {icon_name: 'mdi:shape-outline', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Indels called
+    layout: {x: 2, y: 3, w: 2, h: 2}
+  - component_type: card
+    tag: ea-geno-card-tstv
+    index: ea-geno-card-tstv
+    section: Variant calls
+    workflow_tag: eager
+    data_collection_tag: bcftools_stats_tstv
+    use: bcftools/stats_tstv
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: ts_tv
+    column_type: float64
+    display: {icon_name: 'mdi:scale-balance', icon_color: '#EF5350', title_color: '#EF5350', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Ts to Tv ratio
+    layout: {x: 4, y: 3, w: 2, h: 2}
+  - component_type: card
+    tag: ea-geno-card-multi
+    index: ea-geno-card-multi
+    section: Variant calls
+    workflow_tag: eager
+    data_collection_tag: bcftools_stats_summary
+    use: bcftools/stats_summary
+    aggregation: sum
+    secondary_layout: donut
+    breakdown_col: sample
+    column_name: n_multiallelic_sites
+    column_type: int64
+    display: {icon_name: 'mdi:chart-donut', icon_color: '#26A69A', title_color: '#26A69A', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Multiallelic sites
+    layout: {x: 6, y: 3, w: 2, h: 2}
+  - component_type: figure
+    tag: ea-geno-fig-snps
+    index: ea-geno-fig-snps
+    section: Variant calls
+    workflow_tag: eager
+    data_collection_tag: bcftools_stats_summary
+    use: bcftools/stats_summary
+    visu_type: bar
+    dict_kwargs: {x: sample, y: n_snps, color: sample}
+    title: SNPs called per sample
+    description: Rows of the VCF carrying a single-nucleotide variant, per biological sample.
+    title_size: h3
+    layout: {x: 0, y: 5, w: 8, h: 6}
+  - component_type: figure
+    tag: ea-geno-fig-tstv
+    index: ea-geno-fig-tstv
+    section: Variant calls
+    workflow_tag: eager
+    data_collection_tag: bcftools_stats_tstv
+    use: bcftools/stats_tstv
+    visu_type: bar
+    dict_kwargs: {x: sample, y: ts_tv, color: sample}
+    title: Transition to transversion ratio per sample
+    description: A germline call set usually lands near 2.0; deamination pushes it up, and a shallow, noisy call set pushes it down.
+    title_size: h3
+    layout: {x: 0, y: 11, w: 8, h: 6}
   - component_type: multiqc
     tag: ea-geno-mqc-subtypes
     section: Variant calls
@@ -858,7 +2314,7 @@ tabs:
     title: Substitution types (MultiQC)
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 1, w: 4, h: 5}
+    layout: {x: 0, y: 17, w: 4, h: 5}
   - component_type: multiqc
     tag: ea-geno-mqc-quality
     section: Variant calls
@@ -870,7 +2326,7 @@ tabs:
     title: Variant quality (MultiQC)
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 1, w: 4, h: 5}
+    layout: {x: 4, y: 17, w: 4, h: 5}
   - component_type: multiqc
     tag: ea-geno-mqc-indels
     section: Variant calls
@@ -882,7 +2338,7 @@ tabs:
     title: Indel length distribution (MultiQC)
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 6, w: 4, h: 5}
+    layout: {x: 0, y: 22, w: 4, h: 5}
   - component_type: multiqc
     tag: ea-geno-mqc-depths
     section: Variant calls
@@ -894,4 +2350,241 @@ tabs:
     title: Variant depths (MultiQC)
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 6, w: 4, h: 5}
+    layout: {x: 4, y: 22, w: 4, h: 5}
+  - component_type: table
+    tag: ea-geno-table-summary
+    section: Variant calls
+    workflow_tag: eager
+    data_collection_tag: bcftools_stats_summary
+    use: bcftools/stats_summary
+    row_selection_enabled: false
+    title: Variant counts per sample and caller
+    description: Records, SNPs, indels and multiallelic sites, straight out of the bcftools stats SN block.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 27, w: 8, h: 3}
+  - component_type: table
+    tag: ea-geno-table-tstv
+    section: Variant calls
+    workflow_tag: eager
+    data_collection_tag: bcftools_stats_tstv
+    use: bcftools/stats_tstv
+    row_selection_enabled: false
+    title: Transition and transversion counts
+    description: The TSTV block of the same reports, with the ratio computed on all alleles and on the first alternate only.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 30, w: 8, h: 3}
+
+# ============================================================================
+# Metagenomic screening
+# ============================================================================
+- title: Metagenomic screening
+  subtitle: The branch this run did not enable, and the off-target fraction it would have worked on
+  tab_order: 8
+  tab_icon: mdi:bacteria-outline
+  tab_icon_color: lime
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Off-target filters
+    icon: mdi:filter-variant
+    color: lime
+    description: Narrow by how much of a library missed the reference
+  grid_sections:
+  - name: What did not run
+    icon: mdi:alert-outline
+    color: yellow
+    description: The optional eager screen this megatest left off, and what stands in for it
+  - name: Off-target fraction
+    icon: mdi:bacteria-outline
+    color: lime
+    description: The share of each library that did not place on the target reference
+  components:
+  - component_type: interactive
+    tag: ea-meta-filter-offtarget
+    index: ea-meta-offtarget-range
+    section: Off-target filters
+    group: Off-target scope
+    workflow_tag: eager
+    data_collection_tag: endorspy_endogenous
+    interactive_component_type: RangeSlider
+    column_name: off_target_pct
+    column_type: float64
+    display: {title_size: md, custom_color: '#C0CA33', icon_name: 'mdi:bacteria-outline'}
+    placement: left
+    title: Off-target share
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: ea-meta-filter-stage
+    index: ea-meta-stage-filter
+    section: Off-target filters
+    group: Off-target scope
+    workflow_tag: eager
+    data_collection_tag: samtools_flagstat
+    interactive_component_type: Select
+    column_name: stage
+    column_type: object
+    display: {title_size: md, custom_color: '#C0CA33', icon_name: 'mdi:filter-variant'}
+    placement: left
+    title: Filter stage
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+  - component_type: text
+    tag: ea-meta-gate
+    section: What did not run
+    title: No metagenomic screen ran on this megatest
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      eager can hand the reads that do not map to the target reference to MALT
+      and MaltExtract, or to Kraken, to say what else is in the extract. This
+      megatest enabled none of them, so there is no taxon table to show. The
+      template declares the MaltExtract authentication heatmap and the Kraken
+      report as optional collections, with the file names the eager output
+      documentation publishes, so a run that enables either ingests with no
+      template edit. What is on disk instead is the size of the problem: nearly
+      two thirds of each library did not place on the cod reference, and that
+      is exactly the fraction a screen would have classified.
+    workflow_tag: eager
+    data_collection_tag: endorspy_endogenous
+    layout: {x: 0, y: 0, w: 8, h: 3}
+  - component_type: card
+    tag: ea-meta-card-offtarget
+    index: ea-meta-card-offtarget
+    section: What did not run
+    workflow_tag: eager
+    data_collection_tag: endorspy_endogenous
+    use: endorspy/endogenous
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: off_target_pct
+    column_type: float64
+    display: {icon_name: 'mdi:bacteria-outline', icon_color: '#C0CA33', title_color: '#C0CA33', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Off target (%)
+    layout: {x: 0, y: 3, w: 2, h: 2}
+  - component_type: card
+    tag: ea-meta-card-endogenous
+    index: ea-meta-card-endogenous
+    section: What did not run
+    workflow_tag: eager
+    data_collection_tag: endorspy_endogenous
+    use: endorspy/endogenous
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: endogenous_dna
+    column_type: float64
+    display: {icon_name: 'mdi:dna', icon_color: '#26A69A', title_color: '#26A69A', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: On target (%)
+    layout: {x: 2, y: 3, w: 2, h: 2}
+  - component_type: card
+    tag: ea-meta-card-reads
+    index: ea-meta-card-reads
+    section: What did not run
+    workflow_tag: eager
+    data_collection_tag: samtools_flagstat
+    use: samtools/flagstat
+    aggregation: sum
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 2
+    column_name: total_reads
+    column_type: int64
+    display: {icon_name: 'mdi:counter', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Reads screened
+    layout: {x: 4, y: 3, w: 2, h: 2}
+  - component_type: card
+    tag: ea-meta-card-mapped
+    index: ea-meta-card-mapped
+    section: What did not run
+    workflow_tag: eager
+    data_collection_tag: samtools_flagstat
+    use: samtools/flagstat
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: mapped_pct
+    column_type: float64
+    display: {icon_name: 'mdi:percent-outline', icon_color: '#5C6BC0', title_color: '#5C6BC0', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Mapped (%)
+    layout: {x: 6, y: 3, w: 2, h: 2}
+
+  - component_type: text
+    tag: ea-meta-intro
+    section: Off-target fraction
+    title: How much of each library missed the reference
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The complement of the endogenous fraction, per library, next to the two
+      FastQC panels that are the only screen this run actually carries: an
+      unexpected GC peak or a duplication profile that does not match the
+      target organism is the cheapest hint that something else is in the
+      extract.
+    workflow_tag: eager
+    data_collection_tag: endorspy_endogenous
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: figure
+    tag: ea-meta-fig-offtarget
+    index: ea-meta-fig-offtarget
+    section: Off-target fraction
+    workflow_tag: eager
+    data_collection_tag: endorspy_endogenous
+    use: endorspy/endogenous
+    visu_type: bar
+    dict_kwargs: {x: sample, y: off_target_pct, color: sample}
+    title: Off-target share per library
+    description: Reads that did not place on the cod reference, as a percentage of the mapper's input.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 6}
+  - component_type: multiqc
+    tag: ea-meta-mqc-gc
+    section: Off-target fraction
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Per Sequence GC Content
+    use: multiqc/fastqc
+    title: GC content (MultiQC)
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 8, w: 4, h: 5}
+  - component_type: multiqc
+    tag: ea-meta-mqc-dup
+    section: Off-target fraction
+    workflow_tag: eager
+    data_collection_tag: multiqc_data
+    selected_module: fastqc
+    selected_plot: Sequence Duplication Levels
+    use: multiqc/fastqc
+    title: Sequence duplication levels (MultiQC)
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 8, w: 4, h: 5}
+  - component_type: table
+    tag: ea-meta-table
+    section: Off-target fraction
+    workflow_tag: eager
+    data_collection_tag: endorspy_endogenous
+    use: endorspy/endogenous
+    row_selection_enabled: false
+    title: On and off target per library
+    description: The endogenous fraction and its complement, which is what a metagenomic screen would have been given.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 13, w: 8, h: 3}

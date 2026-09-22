@@ -6,8 +6,14 @@ import { AdvancedVizKind, fetchAdvancedVizData, InteractiveFilter, StoredMetadat
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { COLOUR_SCALES, type ColourScale } from './colourScales';
 import { coarsenBins } from './contactMapBinning';
+import { rotateToTriangle } from './contactMapTriangle';
 import { applyDataTheme, applyLayoutTheme, plotlyThemeFragment } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
+
+/** Square puts genomic position on both axes; triangle rotates the matrix 45
+ *  degrees so x alone carries position, on the same scale a `genome_view`
+ *  track above it uses, and y carries the separation between the two bins. */
+type ContactMapDisplay = 'square' | 'triangle';
 
 /** Mirrors `ContactMapConfig` in depictio/models/components/advanced_viz/configs.py.
  *  Every key read here has a field there, and `test_advanced_viz_config_alignment`
@@ -25,6 +31,8 @@ interface ContactMapConfig {
   log_scale?: boolean;
   colour_scale?: ColourScale;
   balance?: boolean;
+  display?: ContactMapDisplay;
+  max_separation_bins?: number;
   max_bins?: number;
 }
 
@@ -100,6 +108,10 @@ const ContactMapRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
   );
   const [balance, setBalance] = usePersistedVizControl<boolean>(metadata, 'balance', config.balance ?? false);
   const [chrom, setChrom] = usePersistedVizControl<string | null>(metadata, 'chrom', config.chrom ?? null);
+  // Authored-only: both are read from the component's config and have no
+  // control in the panel below, so neither setter is bound to anything.
+  const [display] = usePersistedVizControl<ContactMapDisplay>(metadata, 'display', config.display ?? 'square');
+  const [maxSeparationBins] = usePersistedVizControl<number>(metadata, 'max_separation_bins', config.max_separation_bins ?? 0);
 
   const requiredCols = useMemo(() => {
     const cols = [
@@ -205,7 +217,6 @@ const ContactMapRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
     const { buckets, index } = coarsenBins(sortedStarts, maxBins);
     const size = buckets.length;
 
-    const z: (number | null)[][] = Array.from({ length: size }, () => new Array(size).fill(0));
     const rawSum: number[][] = Array.from({ length: size }, () => new Array(size).fill(0));
     for (const { a, b, count } of cells) {
       const ia = index.get(a)!;
@@ -230,14 +241,53 @@ const ContactMapRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
       );
     }
 
-    for (let i = 0; i < size; i++) {
-      for (let j = 0; j < size; j++) {
-        // log10 of positive values only: balanced (ICE) contacts sit far below 1, where
-        // log1p flattens everything to ~0. Empty cells stay blank instead of -Infinity.
-        const v = matrix[i][j];
-        z[i][j] = logScale ? (v > 0 ? Math.log10(v) : null) : v;
-      }
+    // log10 of positive values only: balanced (ICE) contacts sit far below 1, where
+    // log1p flattens everything to ~0. Empty cells stay blank instead of -Infinity.
+    const scaled = (v: number | null): number | null => {
+      if (v === null) return null;
+      if (!logScale) return v;
+      return v > 0 ? Math.log10(v) : null;
+    };
+    const colourbarTitle = logScale ? 'log10(value)' : 'value';
+
+    if (display === 'triangle') {
+      const { z: rotated, positionIndex, separations } = rotateToTriangle(matrix, maxSeparationBins);
+      if (rotated.length === 0) return null;
+      // A rotated column can land between two buckets (index i.5): that column
+      // holds the contact between bin i and bin i+1, which belongs over their
+      // midpoint.
+      const positionAt = (p: number) => {
+        const lo = buckets[Math.floor(p)] ?? 0;
+        const hi = buckets[Math.ceil(p)] ?? lo;
+        return (lo + hi) / 2;
+      };
+      const binWidth = size > 1 ? (buckets[size - 1] - buckets[0]) / (size - 1) : 0;
+      return {
+        data: [
+          {
+            type: 'heatmap' as const,
+            x: positionIndex.map(positionAt),
+            y: separations.map((sep) => sep * binWidth),
+            z: rotated.map((row) => row.map((v) => scaled(v))),
+            colorscale: colourScale,
+            showscale: true,
+            colorbar: { thickness: 10, len: 0.75, title: { text: colourbarTitle } },
+            hovertemplate: `${effectiveChrom}:%{x}<br>separation: %{y}<br>value: %{z:.3g}<extra></extra>`,
+          },
+        ],
+        layout: {
+          ...plotlyThemeFragment(isDark, theme),
+          margin: { l: 70, r: 20, t: 12, b: 50 },
+          // Genomic position on x alone, so a genome_view track stacked in the
+          // same section lines up with the matrix bin for bin.
+          xaxis: { automargin: true, showgrid: false, title: { text: effectiveChrom } },
+          yaxis: { automargin: true, showgrid: false, title: { text: 'separation (bp)' } },
+          autosize: true,
+        },
+      };
     }
+
+    const z = matrix.map((row) => row.map((v) => scaled(v)));
 
     const labels = buckets.map((b) => `${effectiveChrom}:${Math.round(b / 1000)}kb`);
 
@@ -250,7 +300,7 @@ const ContactMapRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
           z,
           colorscale: colourScale,
           showscale: true,
-          colorbar: { thickness: 10, len: 0.75, title: { text: logScale ? 'log10(value)' : 'value' } },
+          colorbar: { thickness: 10, len: 0.75, title: { text: colourbarTitle } },
           hovertemplate: '%{x} × %{y}<br>value: %{z:.3g}<extra></extra>',
         },
       ],
@@ -262,7 +312,19 @@ const ContactMapRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
         autosize: true,
       },
     };
-  }, [rows, effectiveChrom, config, maxBins, balance, logScale, colourScale, isDark, theme]);
+  }, [
+    rows,
+    effectiveChrom,
+    config,
+    maxBins,
+    balance,
+    logScale,
+    colourScale,
+    display,
+    maxSeparationBins,
+    isDark,
+    theme,
+  ]);
 
   const controls = (
     <Stack gap="xs">

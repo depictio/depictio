@@ -4,14 +4,22 @@ mode: fusion-detection
 description: >-
   Fusion calls Arriba retained, one row per call. The recipe labels each fusion
   from its two partner genes, sums the split reads, discordant mates and local
-  coverage into one evidence block, and derives a log-scaled support and the
-  fraction of local reads that support the call.
+  coverage into one evidence block, derives a log-scaled support and the
+  fraction of local reads that support the call, and splits the contig out of
+  each breakpoint so the partners can be read as a chromosome flow.
 find: { filename: "*.arriba.fusions.tsv" }
 recipe: arriba/fusions.py
 fixture: fusions.tsv
 renders_as:
   - { id: evidence_dot_plot, component: advanced_viz, kind: dot_plot, roles: {cluster: confidence, gene: fusion, mean_expression: log_support, frac_expressing: support_fraction} }
-  - { component: figure, visu_type: bar, dict_kwargs: {x: fusion_type, y: supporting_reads, color: reading_frame} }
+  # Partner chromosomes as a flow: how a fusion circos reads without an assembly
+  # to lay a ring out on. Source contig on the left, partner contig on the right.
+  - { id: partner_chrom_sankey, component: advanced_viz, kind: sankey, roles: {steps: [chrom_5p, chrom_3p]} }
+  # The two composition bars Arriba's own report leads with: what kind of event
+  # each call is, and which transcript feature each breakpoint fell in.
+  - { id: type_bars, component: figure, visu_type: bar, dict_kwargs: {x: fusion_type, y: supporting_reads, color: confidence} }
+  - { id: site_bars, component: figure, visu_type: bar, dict_kwargs: {x: site_5p, y: supporting_reads, color: site_3p} }
+  - { id: type_frame_bars, component: figure, visu_type: bar, dict_kwargs: {x: fusion_type, y: supporting_reads, color: reading_frame} }
   - { component: card, column: supporting_reads, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
   - { component: card, column: fusion, aggregation: nunique, secondary_layout: top_n, breakdown_col: confidence, top_n_count: 3 }
   - { component: card, column: split_reads, aggregation: sum, secondary_layout: donut, breakdown_col: fusion_type }

@@ -2549,6 +2549,103 @@ def compute_sankey(payload: dict) -> dict:
     }
 
 
+def _given(payload: dict, key: str, default: float | int) -> float | int:
+    """A value the caller sent, or the service default when the key is absent.
+
+    ``payload.get(key) or default`` would turn an explicit 0 (no fold-change
+    threshold, no labels) into the fallback; only a missing or null key does.
+    """
+    value = payload.get(key)
+    return default if value is None else value
+
+
+@celery_app.task(
+    name="depictio.advanced_viz.compute_group_compare",
+    soft_time_limit=300,
+    time_limit=600,
+)
+def compute_group_compare(payload: dict) -> dict:
+    """Test every feature of a wide matrix between two groups of its rows.
+
+    Input payload:
+        {
+          "wf_id": str, "dc_id": str,
+          "index_col": str,
+          "group_a": {"label": str, "column": str, "values": [str]},
+          "group_b": {"label": str, "column": str, "values": [str]},
+          "test": "wilcoxon" | "t_test",
+          "log_transform": bool,
+          "max_features": int,
+          "min_observations": int,
+          "fdr_threshold": float,
+          "log2fc_threshold": float,
+          "top_n_labels": int,
+          "filter_metadata": [...],
+        }
+
+    The whole frame is loaded rather than a column projection: the features
+    are inferred from the schema, the way ``complex_heatmap`` infers its
+    matrix, so there is no column list to push down. ``filter_metadata`` is
+    applied exactly as the ``/data`` endpoint applies it, which is what makes
+    the comparison respect the dashboard's filters.
+
+    Returns the ranked per-feature rows plus the group sizes; the volcano and
+    the marker table are both drawn client-side from them.
+    """
+    from depictio.api.v1.db import deltatables_collection
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+    from depictio.api.v1.services.group_compare import group_compare_from_frame
+
+    wf_id = payload.get("wf_id")
+    dc_id = payload.get("dc_id")
+    group_a = payload.get("group_a") or {}
+    group_b = payload.get("group_b") or {}
+    filter_metadata = payload.get("filter_metadata") or []
+
+    if not wf_id or not dc_id:
+        raise ValueError("compute_group_compare: wf_id and dc_id are required")
+    if not group_a or not group_b:
+        raise ValueError("compute_group_compare: two groups are required")
+
+    dt_doc = deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc_id))})
+    if not dt_doc or not dt_doc.get("delta_table_location"):
+        raise ValueError("compute_group_compare: DC has no materialised Delta table")
+    init_data = {
+        str(dc_id): {
+            "delta_location": dt_doc["delta_table_location"],
+            "dc_type": "table",
+            "size_bytes": 0,
+        }
+    }
+
+    started = time.monotonic()
+    df = load_deltatable_lite(
+        workflow_id=ObjectId(str(wf_id)),
+        data_collection_id=str(dc_id),
+        metadata=filter_metadata or None,
+        init_data=init_data,
+    )
+    load_ms = int((time.monotonic() - started) * 1000)
+    logger.info("compute_group_compare: loaded %d rows in %dms", df.height, load_ms)
+
+    return {
+        **group_compare_from_frame(
+            df,
+            index_col=str(payload.get("index_col") or "index"),
+            group_a=group_a,
+            group_b=group_b,
+            test=str(payload.get("test") or "wilcoxon"),
+            log_transform=bool(payload.get("log_transform", True)),
+            max_features=int(_given(payload, "max_features", 2000)),
+            min_observations=int(_given(payload, "min_observations", 3)),
+            fdr_threshold=float(_given(payload, "fdr_threshold", 0.05)),
+            log2fc_threshold=float(_given(payload, "log2fc_threshold", 1.0)),
+            top_n_labels=int(_given(payload, "top_n_labels", 20)),
+        ),
+        "load_ms": load_ms,
+    }
+
+
 __all__: list[str] = [
     "build_figure_preview",
     "analyze_figure_code",
@@ -2559,4 +2656,5 @@ __all__: list[str] = [
     "compute_upset",
     "compute_coverage_track",
     "compute_sankey",
+    "compute_group_compare",
 ]

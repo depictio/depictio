@@ -1,0 +1,22 @@
+id: bismark_window_group_compare
+name: Window methylation group comparison
+mode: differential/windows
+description: >-
+  Every 10 kb window tested between the two levels of the run's design factor,
+  on the arcsine square-root transform of its methylation proportion, corrected
+  with Benjamini-Hochberg. nf-core/methylseq ships no differential-methylation
+  caller at any version, so this is the screen the published files support: a
+  region ranking on library-level replication, not a called DMR set.
+find:
+  path_glob: "**/*.bedGraph.gz"
+recipe: bismark/window_group_compare.py
+fixture: window_group_compare.tsv
+renders_as:
+  - { id: window_volcano, component: advanced_viz, kind: volcano, roles: {feature_id: window_id, effect_size: delta_methylation, significance: padj, label: window_id, category: direction} }
+  - { id: window_manhattan, component: advanced_viz, kind: manhattan, roles: {chr: chromosome, pos: position, score: neg_log10_padj, feature: window_id, effect: delta_methylation} }
+  - { component: card, column: delta_methylation, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: direction, aggregation: count, secondary_layout: donut, breakdown_col: direction }
+  - { component: card, column: window_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: chromosome, top_n_count: 3 }
+  - { component: card, column: neg_log10_padj, aggregation: max, aggregations: [box_plot_stats], secondary_layout: histogram }
+  - { component: figure, visu_type: histogram, dict_kwargs: {x: delta_methylation, color: direction} }
+  - { component: table, row_selection_enabled: true, row_selection_column: window_id }

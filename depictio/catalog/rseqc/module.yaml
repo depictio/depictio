@@ -1,0 +1,14 @@
+# RSeQC is a multi-output tool, so it gets a folder. Identity comes from the
+# nf-core meta.yml `nf_core_url` points at, so it is not duplicated here.
+#
+# nf-core/rnaseq runs RSeQC's read_distribution, infer_experiment, inner_distance,
+# bam_stat and junction_annotation and publishes each as a plain text report per
+# sample. MultiQC renders them as static panels; the outputs here parse the same
+# files into data collections, so the panels follow the dashboard's filters.
+id: rseqc
+name: RSeQC
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/rseqc/readdistribution
+homepage: https://rseqc.sourceforge.net
+edam_topics:
+  - http://edamontology.org/topic_3170 # RNA-Seq
+  - http://edamontology.org/topic_3168 # Sequencing

@@ -113,13 +113,14 @@ workflows:
           metatype: "Metadata"
           source: "transformed"
           transform:
-            recipe: "nf-core/cutandrun/samples.py"
+            recipe: "cutandrun/samples.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:
               "sample_id": "<group>_R<replicate>, the key every other collection is linked on"
               "target": "Samplesheet group: the histone mark or the IgG control"
               "replicate": "Replicate number inside the group"
+              "replicate_label": "R1, R2 and so on: the same factor as a categorical a MultiSelect can filter"
               "role": "target or IgG control"
               "is_control": "True for the IgG control samples"
               "control_target": "Group of the control this sample was called against"
@@ -161,7 +162,11 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: "multiqc/multiqc_data/multiqc.parquet"
+                # Portable across layouts (lint F7): a real run writes
+                # `multiqc/<aligner>/multiqc_data/` and the reprocessed
+                # artefact sits at the run root, so neither directory level is
+                # spelled out literally.
+                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\\.parquet$"
           dc_specific_properties:
             s3_location: null
             modules:
@@ -210,6 +215,56 @@ workflows:
                 - "PCA plot"
                 - "Fingerprint plot"
                 - "Fingerprint quality metrics"
+
+      # ----------------------------------------------------------------
+      # Spike-in normalisation. Every library is aligned twice, and the two
+      # Bowtie 2 logs are what the scale factor is made of. Both sets are read
+      # through ONE scan (the file names differ by a `.spikein.` infix), one
+      # line per row, because only a scan carries the file path into the frame.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "bowtie2_logs_raw"
+        description: "Raw Bowtie 2 summary logs of both alignments, one line per row (input of bowtie2_spikein_factors)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.bowtie2\\.log$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              has_header: false
+              new_columns: ["line"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+              truncate_ragged_lines: true
+            columns_description:
+              "line": "One line of a Bowtie 2 summary, as prose"
+              "source_path": "File the line came from; the sample and the genome are derived from it"
+
+      - data_collection_tag: "bowtie2_spikein_factors"
+        description: "Per-sample spike-in normalisation: target depth, spike-in depth and the scale factor the pipeline divides the coverage by"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "bowtie2/spikein_factors.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample both alignments belong to"
+              "total_pairs": "Read pairs that entered both alignments"
+              "target_aligned": "Pairs aligned concordantly to the target genome"
+              "target_align_rate": "Bowtie 2's overall alignment rate against the target genome, in percent"
+              "spikein_aligned": "Pairs aligned concordantly to the spike-in genome"
+              "spikein_align_rate": "Same rate against the spike-in genome, in percent"
+              "spikein_fraction": "spikein_aligned / total_pairs, the carrier share of the library"
+              "target_per_spikein": "target_aligned / spikein_aligned, the enrichment ratio"
+              "scale_factor": "normalisation_c / spikein_aligned, the multiplier applied to the bedGraph (normalisation_c defaults to 10000)"
 
       # ----------------------------------------------------------------
       # deepTools signal QC. MultiQC draws the fingerprint curve and the PCA
@@ -456,6 +511,61 @@ workflows:
               "cumulative_fraction": "Share of the sample's fragments at most that long"
 
       # ----------------------------------------------------------------
+      # The same histogram binned into nucleosome classes: the ladder says
+      # "this looks like chromatin", the classes say how much of the library
+      # is nucleosome-free, which is what separates a sharp mark from a broad
+      # one.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "seacr_fragment_classes"
+        description: "Fragment lengths binned into sub-nucleosomal, mononucleosomal, dinucleosomal and multi-nucleosomal classes, per sample"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "seacr/fragment_classes.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the fragments came from"
+              "target": "Group the sample belongs to"
+              "fragment_class": "Sub-nucleosomal, Mononucleosomal, Dinucleosomal or Multi-nucleosomal"
+              "class_order": "1 to 4, so a stacked bar orders the classes by length"
+              "n_fragments": "Fragments of the sample in that class"
+              "fraction": "Share of the sample's fragments in that class"
+              "median_length": "Median fragment length inside the class, in bp"
+              "mono_to_sub": "Mononucleosomal over sub-nucleosomal fragments, one value per sample"
+
+      # ----------------------------------------------------------------
+      # FRiP. SEACR reports no read count, so the fraction is built in base
+      # pairs of fragment coverage: the summed region signal, de-scaled by the
+      # spike-in factor the pipeline applied to the bedGraph, over the total
+      # the fragment-length histogram accounts for. Long on purpose, two rows
+      # per sample, so a donut reads it as a composition.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "frip"
+        description: "Each sample's fragment coverage split into the part inside its own peaks and the part outside them"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cutandrun/frip.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the coverage belongs to"
+              "target": "Group the sample belongs to"
+              "signal_class": "In peaks or Outside peaks"
+              "coverage_bp": "Base pairs of fragment coverage in that class"
+              "fraction": "coverage_bp over the sample's total fragment coverage"
+              "frip": "The sample's fraction inside peaks, repeated on both of its rows"
+              "n_peaks": "Regions SEACR called for the sample"
+              "peak_span_bp": "Base pairs those regions span"
+              "fragment_bp": "Base pairs all of the sample's fragments covered"
+              "scale_factor": "Spike-in factor divided out of the peak signal, 1.0 when the run was not scaled"
+
+      # ----------------------------------------------------------------
       # Caller agreement. Reads the two peak collections and the hub
       # through `dc_ref`, so it runs after all three. A target a caller
       # returned nothing for still gets a row, with n_peaks 0.
@@ -467,7 +577,7 @@ workflows:
           metatype: "Aggregate"
           source: "transformed"
           transform:
-            recipe: "nf-core/cutandrun/caller_agreement.py"
+            recipe: "cutandrun/caller_agreement.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -527,6 +637,39 @@ links:
     description: "Filter the fragment-length curves by the samples picked in the left panel"
     enabled: true
 
+  # The new signal collections, keyed on the same hub sample id, so the pinned
+  # sample / target / replicate filters reach the Signal and Peak calls tabs
+  # instead of stopping at the MultiQC panels.
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "bowtie2_spikein_factors"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the spike-in factors by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "seacr_fragment_classes"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the fragment-class composition by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "frip"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the signal budget by the samples picked in the left panel"
+    enabled: true
+
   - source_dc_tag: "samples"
     source_column: "sample_id"
     target_dc_tag: "caller_agreement"
@@ -583,6 +726,19 @@ links:
       resolver: "direct"
       target_field: "sample"
     description: "Carry a sample selected on the caller comparison over to its SEACR QC row"
+    enabled: true
+
+  # The alignment-rate and scale-factor sliders on the MultiQC tab are sourced
+  # on the spike-in table, so they only narrow the report if the reverse link
+  # exists.
+  - source_dc_tag: "bowtie2_spikein_factors"
+    source_column: "sample"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Carry the alignment and spike-in thresholds over to the MultiQC panels"
     enabled: true
 
   - source_dc_tag: "seacr_peaks"

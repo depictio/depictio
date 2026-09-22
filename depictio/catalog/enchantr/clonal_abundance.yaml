@@ -1,0 +1,36 @@
+id: enchantr_clonal_abundance
+name: Clonal rank abundance
+mode: repertoire-analysis/abundance
+description: >-
+  alakazam rank-abundance curve per sample: the bootstrapped relative abundance
+  of every clone against its rank within the sample, with the confidence band
+  the bootstrap gives it. The band is what separates a genuinely expanded head
+  from one estimated off a handful of sequences.
+find: { path_glob: "**/repertoire_analysis_report/tables/clonal_abundance.tsv" }
+recipe: enchantr/clonal_abundance.py
+fixture: clonal_abundance.tsv
+renders_as:
+  # The curve itself: one series per sample over the rank axis, with the
+  # bootstrap interval drawn as a ribbon around it.
+  - id: abundance_ribbon
+    component: advanced_viz
+    kind: profile
+    roles: { series: sample_id, x: rank, y: p, lower: lower, upper: upper }
+  # How much of the repertoire the single largest clone holds, per sample.
+  - {
+      component: card,
+      column: p,
+      aggregation: max,
+      aggregations: [box_plot_stats],
+      secondary_layout: box_plot,
+    }
+  # How wide the interval is where it matters, i.e. how well backed the head is.
+  - {
+      component: card,
+      column: upper,
+      aggregation: average,
+      secondary_layout: top_n,
+      breakdown_col: sample_id,
+      top_n_count: 3,
+    }
+  - { component: table }

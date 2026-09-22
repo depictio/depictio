@@ -90,11 +90,38 @@ workflows:
         - "{DATA_ROOT}"
     data_collections:
       # ----------------------------------------------------------------
-      # Hub: the design sheet the pipeline derived, one row per ChIP sample
-      # with the input control it was called against and its antibody.
+      # Hub: every library of the run with its experimental factors as
+      # columns. The pipeline's own `design_controls.csv` is not enough for
+      # that on two counts, both fixed by the recipe:
+      #   * the conditions the run was built to compare (NTKO / TKO,
+      #     E2 / VEH) live only inside the sample NAMES, so a reader could
+      #     filter by antibody but not by the thing under test;
+      #   * the sheet lists the 8 ChIP libraries and none of the 8 input
+      #     controls, although the controls appear in every QC collection.
+      # `replicatesExist` and `multipleGroups` are dropped: the pipeline
+      # writes 1 in both for every row here, so they back a dead filter.
       # ----------------------------------------------------------------
       - data_collection_tag: "design"
-        description: "Per-ChIP design: sample, its input control and the antibody (the hub every sample filter starts from)"
+        description: "Per-library hub: the ChIPs and their input controls, with the antibody, the condition and the replicate parsed out of the sample names"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/chipseq/design_factors.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Library identifier, the key every other collection is linked on"
+              "role": "ChIP or input control"
+              "is_control": "True for the input control libraries"
+              "antibody": "Antibody the ChIP was raised against, or the control's own prefix; the consensus peak sets are built per antibody"
+              "condition": "Experimental condition parsed out of the sample name (NTKO / TKO, E2 / VEH in the megatest)"
+              "replicate": "Replicate tag parsed out of the sample name"
+              "control_id": "Input control this ChIP was called against; empty on a control row"
+
+      - data_collection_tag: "design_controls"
+        description: "The design sheet the pipeline derived, one row per ChIP with its input control and antibody"
         config:
           type: "Table"
           metatype: "Metadata"
@@ -106,9 +133,9 @@ workflows:
           dc_specific_properties:
             format: "CSV"
             columns_description:
-              "sample_id": "ChIP sample identifier, the key every other collection is linked on"
+              "sample_id": "ChIP sample identifier"
               "control_id": "Input control the peaks were called against"
-              "antibody": "Antibody the ChIP was raised against; the consensus peak sets are built per antibody"
+              "antibody": "Antibody the ChIP was raised against"
               "replicatesExist": "1 when the antibody has more than one replicate"
               "multipleGroups": "1 when the antibody was assayed in more than one condition"
 
@@ -141,7 +168,10 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: "multiqc/multiqc_data/multiqc.parquet"
+                # Layout-agnostic on purpose (lint rule F7): a real run writes
+                # multiqc/<peak route>/multiqc_data/, the reprocessed artefact
+                # sits at multiqc/multiqc_data/, and neither prefix is anchored.
+                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\\.parquet$"
           dc_specific_properties:
             s3_location: null
             modules:
@@ -392,10 +422,17 @@ workflows:
               annotation:
                 # Per-sample tables of the merged-library level only. The recipe's
                 # own glob is layout-agnostic and would also take the consensus
-                # tables and, on atacseq, the merged-REPLICATE copy of the whole
-                # peak tree, concatenating two aggregation levels into one table
-                # under a `sample` column that then means two different things.
-                glob_pattern: "bwa/mergedLibrary/macs/*/*_peaks.annotatePeaks.txt"
+                # tables and the merged-REPLICATE copy of the whole peak tree,
+                # concatenating two aggregation levels into one table under a
+                # `sample` column that then means two different things.
+                #
+                # Lint rule F7: the aligner directory is NOT spelled out. It was
+                # `bwa/mergedLibrary/...`, which exists only because this megatest
+                # aligned with BWA; a `--aligner bowtie2` run of the same pipeline
+                # writes `bowtie2/mergedLibrary/` and matched nothing. Only
+                # `mergedLibrary` is anchored, and that is the aggregation level
+                # every chipseq 1.2.0 run publishes, not a mirror artefact.
+                glob_pattern: "**/mergedLibrary/macs/*/*_peaks.annotatePeaks.txt"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -526,6 +563,58 @@ workflows:
               "significant": "padj < 0.05 and |log2fc| >= 1"
               "direction": "up / down / not significant"
 
+      # ----------------------------------------------------------------
+      # DESeq2 sample-space QC. `deseq2_qc.r` writes the principal
+      # components and the sample-to-sample distance matrix of the count
+      # matrix it tested, as MultiQC custom content (`*_mqc.tsv`) rather
+      # than as the plain `.txt` a single-matrix pipeline publishes, so
+      # both collections repoint the catalog recipe's glob.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "deseq2_qc_pca"
+        description: "Principal components of the consensus count matrix DESeq2 tested, one PCA per antibody, with the variance each component explains"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          # NOT the catalog `deseq2/qc_pca.py`: that recipe maps the component
+          # columns to the embedding roles by POSITION on the concatenated
+          # frame, and chipseq writes one PCA per antibody whose headers carry
+          # different variance percentages. The concat then spreads two
+          # matrices over four columns and half the cohort comes out null on
+          # dim_1 / dim_2. The pipeline-local recipe resolves the components
+          # per matrix and keeps the catalog output's column names, so the
+          # dashboard still binds `use: deseq2/qc_pca_embedding`.
+          transform:
+            recipe: "nf-core/chipseq/deseq2_qc_pca.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Library the PCA placed"
+              "consensus_set": "Which count matrix the components come from, named after the samples in it"
+              "dim_1": "First principal component, inside that matrix"
+              "dim_2": "Second principal component, inside that matrix"
+              "dim_1_percent": "Variance the first component explains in that matrix"
+              "dim_2_percent": "Variance the second component explains in that matrix"
+
+      - data_collection_tag: "deseq2_qc_sample_dists"
+        description: "Euclidean distance between every pair of libraries on DESeq2 rlog values, one square matrix per antibody"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "deseq2/qc_sample_dists.py"
+            source_overrides:
+              dists:
+                # chipseq publishes the matrix only in its MultiQC
+                # custom-content flavour; the recipe's own glob wants the
+                # plain `.txt` a single-matrix pipeline writes.
+                glob_pattern: "**/*sample.dists_mqc.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Row label: the library the distances are measured from. The remaining columns are one per library of the same matrix; a pair from two different antibodies is empty, because the two matrices were never compared."
+
 links:
   # Hub -> everything keyed on the ChIP sample name.
   - source_dc_tag: "design"
@@ -650,4 +739,112 @@ links:
       resolver: "direct"
       target_field: "sample"
     description: "Filter the TSS distance profiles by the samples picked on the design sheet"
+    enabled: true
+
+  # Library-level scope. The FastQC and Trim Galore panels are keyed on the
+  # sequencing library (<sample>_T<n>), not on the merged sample, so the library
+  # sheet reaches the MultiQC report on its own key.
+  - source_dc_tag: "design_reads"
+    source_column: "sample_id"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Filter the read-level MultiQC panels by the sequencing libraries picked in the left panel"
+    enabled: true
+
+  # The consensus sets and the DESeq2 contrasts are per ANTIBODY, not per
+  # sample: a consensus set is named after the longest common prefix of the
+  # samples merged into it (EZH2_IP, FOXA1_IP) and a contrast after the two
+  # groups compared (EZH2_IP_NTKOvsEZH2_IP_TKO). The `wildcard` resolver matches
+  # a target value that starts with the antibody, which is what makes the
+  # persistent antibody filter reach the Consensus and Differential binding
+  # tabs. A per-sample link cannot exist there: neither collection has a sample
+  # column, because both aggregate over samples by construction.
+  - source_dc_tag: "design"
+    source_column: "antibody"
+    target_dc_tag: "macs2_consensus_boolean"
+    target_type: "table"
+    link_config:
+      resolver: "wildcard"
+      target_field: "consensus_set"
+    description: "Narrow the consensus overlap panels to the antibody picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "design"
+    source_column: "antibody"
+    target_dc_tag: "macs2_consensus_fc"
+    target_type: "table"
+    link_config:
+      resolver: "wildcard"
+      target_field: "consensus_set"
+    description: "Narrow the consensus signal heatmap to the antibody picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "design"
+    source_column: "antibody"
+    target_dc_tag: "deseq2_results"
+    target_type: "table"
+    link_config:
+      resolver: "wildcard"
+      target_field: "contrast"
+    description: "Narrow the differential binding panels to the contrasts of the antibody picked in the left panel"
+    enabled: true
+
+  # Interval-level selection. A DESeq2 row scores one consensus interval, and
+  # that is the interval the consensus tables carry: `gene_id` here is the
+  # `interval_id` there. Without this pair `deseq2_results` was bound by four
+  # tabs' worth of tiles and reachable by no filter at all.
+  - source_dc_tag: "macs2_consensus_boolean"
+    source_column: "interval_id"
+    target_dc_tag: "deseq2_results"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "gene_id"
+    description: "Carry a consensus interval selected on the overlap panels over to its differential binding row"
+    enabled: true
+
+  - source_dc_tag: "deseq2_results"
+    source_column: "gene_id"
+    target_dc_tag: "macs2_consensus_boolean"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "interval_id"
+    description: "Carry an interval selected on the differential binding panels back to the consensus tables"
+    enabled: true
+
+  # Sample-space QC is per library again, so it rejoins the hub on the sample
+  # name; the antibody link narrows the PCA to one matrix, which is the only
+  # scale on which its axes mean anything.
+  - source_dc_tag: "design"
+    source_column: "sample_id"
+    target_dc_tag: "deseq2_qc_pca"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the count-matrix PCA by the libraries picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "design"
+    source_column: "antibody"
+    target_dc_tag: "deseq2_qc_pca"
+    target_type: "table"
+    link_config:
+      resolver: "wildcard"
+      target_field: "consensus_set"
+    description: "Narrow the count-matrix PCA to the antibody picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "design"
+    source_column: "sample_id"
+    target_dc_tag: "deseq2_qc_sample_dists"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the sample distance matrix by the libraries picked in the left panel"
     enabled: true

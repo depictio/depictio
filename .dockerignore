@@ -79,7 +79,11 @@ __pycache__/
 # -----------------------------
 # Exclude Node.js Dependencies (if applicable)
 # -----------------------------
-node_modules/
+# Root and nested (packages/*, depictio/viewer): a dockerignore pattern without
+# `**` only matches at the context root, so the host pnpm symlink farms were
+# copied over the image's own install and dangled whenever the host and the
+# image used different pnpm majors.
+**/node_modules/
 
 # -----------------------------
 # Exclude Temporary Files and OS Files

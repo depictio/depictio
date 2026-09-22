@@ -105,7 +105,7 @@ export default defineConfig({
             return 'vendor-cytoscape';
           }
           // GenomeSpy is `import()`ed by its adapter hook only, so this chunk is
-          // async and only a dashboard with a genomespy_track tile fetches it.
+          // async and only a dashboard with a genome_view tile fetches it.
           if (id.includes('@genome-spy')) {
             return 'vendor-genomespy';
           }

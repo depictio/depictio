@@ -35,11 +35,11 @@ Output schema:
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.recipes.lib.bismark_reports import report_lines
 
 #: Data-collection tag the recipe reads (see module docstring).
 RAW_DC_TAG = "bismark_alignment_raw"
@@ -57,11 +57,13 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "not_unique": pl.Int64,
 }
 
-SOURCE_PATH_COL = "source_path"
-
 # TrimGalore always merges a pair's report under the read-1 basename
-# (`_1_val_1` / `_val_1`), so the suffix strips both PE and SE reports.
-_SUFFIX_RE = re.compile(r"(_\d+)?_val_\d+_bismark_bt2_(PE|SE)_report\.txt$")
+# (`_1_val_1` / `_val_1`), so the suffix strips both PE and SE reports. Both
+# tokens are optional: a `--skip_trimming` run names the report after the raw
+# FASTQ, and the id must still be the one the other bismark recipes yield.
+# `bismark_[a-z0-9]+` rather than `bismark_bt2`: methylseq publishes the same
+# report shape on the bismark_hisat route, where the infix is `_bismark_hisat2_`.
+_SUFFIX_RE = re.compile(r"(_\d+)?(_val_\d+)?_bismark_[a-z0-9]+_(PE|SE)_report\.txt$")
 
 _FIELDS: dict[str, re.Pattern[str]] = {
     "pairs_analysed": re.compile(
@@ -82,11 +84,6 @@ _FIELDS: dict[str, re.Pattern[str]] = {
 }
 
 
-def _sample_id(path: str) -> str:
-    name = Path(str(path)).name
-    return _SUFFIX_RE.sub("", name)
-
-
 def _first_group(match: re.Match[str]) -> str:
     return next(g for g in match.groups() if g is not None)
 
@@ -105,22 +102,10 @@ def _parse_report(sample: str, text: str) -> dict[str, object]:
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """Re-assemble each report from its lines, then parse it into one row."""
-    raw = sources["lines"]
-    if raw.is_empty():
-        raise ValueError("bismark_alignment_summary: the scanned reports are empty")
-    if SOURCE_PATH_COL not in raw.columns:
-        raise ValueError(
-            "bismark_alignment_summary: the raw scan must carry include_file_paths=source_path"
-        )
-
-    rows: list[dict[str, object]] = []
-    for (source_path,), part in raw.group_by([SOURCE_PATH_COL], maintain_order=True):
-        sample = _sample_id(source_path)
-        text = "\n".join(line or "" for line in part.get_column("line").to_list())
-        rows.append(_parse_report(sample, text))
-
-    if not rows:
-        raise ValueError("bismark_alignment_summary: no report produced a row")
+    rows = [
+        _parse_report(sample, "\n".join(lines))
+        for sample, lines in report_lines(sources["lines"], "bismark_alignment_summary", _SUFFIX_RE)
+    ]
 
     frame = pl.DataFrame(rows, infer_schema_length=None)
     return frame.select(

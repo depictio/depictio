@@ -1,0 +1,63 @@
+id: gsea_report
+name: GSEA enrichment report
+mode: enrichment/gsea
+description: >-
+  Gene sets enriched at one pole of a contrast, from the report tables a
+  pre-ranked GSEA run publishes. Neither the contrast nor the pole is a column of
+  those files, so the recipe recovers both from the file name and stacks every
+  report into one frame. The leading-edge percentage is parsed out of the string
+  GSEA writes for a human reader, and an FDR q-value of zero, which is what GSEA
+  writes below its resolution, is clipped at the run's own floor rather than sent
+  to infinity.
+find:
+  path_glob: "**/tables/gsea/**/*.gsea_report_for_*.tsv"
+recipe: gsea/report.py
+fixture: report.tsv
+renders_as:
+  # The signature panel: one dot per set, placed on its normalised enrichment
+  # score, sized by how many of its genes were found and coloured by
+  # significance, split by the pole the set came up at.
+  - id: gsea_dotplot
+    component: advanced_viz
+    kind: enrichment
+    roles:
+      { term: term, nes: nes, padj: fdr_qvalue, gene_count: size, source: phenotype }
+  # The same scores as ranked bars, which is the view that compares two
+  # contrasts rather than two poles of one.
+  - id: gsea_nes_bars
+    component: advanced_viz
+    kind: da_barplot
+    roles:
+      { feature_id: term, contrast: contrast, lfc: nes, significance: fdr_qvalue, label: phenotype }
+  - {
+      component: card,
+      column: term,
+      aggregation: nunique,
+      secondary_layout: top_n,
+      breakdown_col: phenotype,
+      top_n_count: 4,
+    }
+  - {
+      component: card,
+      column: nes,
+      aggregation: max,
+      aggregations: [box_plot_stats],
+      secondary_layout: box_plot,
+    }
+  - {
+      component: card,
+      column: fdr_qvalue,
+      aggregation: median,
+      secondary_layout: threshold,
+      threshold_value: 0.05,
+      threshold_direction: max,
+      threshold_warn: 0.25,
+    }
+  - {
+      component: card,
+      column: leading_edge_percent,
+      aggregation: average,
+      secondary_layout: gauge,
+      coverage_max: 100,
+    }
+  - { component: table, row_selection_enabled: true, row_selection_column: term }

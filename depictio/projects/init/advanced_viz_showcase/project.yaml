@@ -753,4 +753,110 @@ workflows:
               base_change: "Substitution class: C>T, G>A, T>C, A>G or other."
               frequency: "Substitution frequency at that position. C>T at 5p and G>A at 3p are the deamination signature; every other class sits near background."
 
+      - id: "646b0f3c1e4a2d7f8e5b8d8b"
+        data_collection_tag: "group_compare_demo"
+        description: "A 600 cell by 60 gene matrix in 3 clusters, with two planted marker genes per cluster: the wide shape a two-group differential test reads"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/group_compare_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              cell_id: "Observation identifier, one per row. The comparison names its rows with it; a lasso saved as a selection group captures its values."
+              cluster: "Precomputed cluster label: cluster_1, cluster_2 or cluster_3. What the two group pickers fall back to when no selection group has been saved."
+              gene_01: "Marker of cluster_1: eight times the background level in those cells, near background elsewhere."
+              gene_02: "Second marker of cluster_1."
+              gene_03: "Marker of cluster_2."
+              gene_04: "Second marker of cluster_2."
+              gene_05: "Marker of cluster_3."
+              gene_06: "Second marker of cluster_3."
+              gene_07: "Mildly enriched in cluster_3 only, so the effect-size line has something to cut."
+              gene_08: "Mildly enriched in cluster_3 only."
+              gene_09: "Mildly depleted in cluster_3 only."
+              gene_10: "Background gene. gene_10 through gene_60 are drawn from one distribution with no cluster structure, which is what puts the cloud around zero on the volcano."
+
+      # Isoform structures. The id sits in the 8d9x block rather than after the
+      # 8d8x run because five kind agents added a DC to this file at once, and a
+      # block of its own is what keeps the reserved ids from colliding.
+      - id: "646b0f3c1e4a2d7f8e5b8d9c"
+        data_collection_tag: "transcript_structure_demo"
+        description: "Eight isoforms across two genes: exon skipping, an alternative first exon, an alternative 3' end, a retained intron and one novel transcript"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/transcript_structure_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              transcript_id: "Isoform the block belongs to. One lane of the plot per distinct value."
+              gene_id: "Gene the isoform belongs to. The renderer draws one gene at a time and this is what it selects on."
+              gene_name: "Readable gene symbol, shown in the gene picker beside the identifier."
+              chrom: "Sequence the blocks sit on. Both genes of this demo are on chr7."
+              start: "Block start in base pairs, 1-based inclusive as a GTF writes it."
+              end: "Block end in base pairs, inclusive."
+              feature: "Block type: exon, or CDS for the coding part of the same exon. CDS blocks are drawn taller, which is what leaves the UTRs visible either side of the ORF."
+              strand: "Transcript strand. DPX1 is on the plus strand, DPX2 on the minus; the chevrons on the intron lines point the way each transcript is read."
+              transcript_class: "Novelty class the caller assigned: known, NIC (novel in catalogue, reuses known junctions), NNC (novel, does not) or novel. Colours the lanes."
+              sample: "Library the annotation was assembled from. One library here, so every isoform gets a lane of its own."
+              expression: "Per-transcript expression in TPM. Orders the lanes, drives the bar beside each of them, and is the alternative lane colouring."
+
+      - id: "646b0f3c1e4a2d7f8e5b8d8e"
+        data_collection_tag: "genome_chord_demo"
+        description: "40 rearrangement links over the 24 GRCh38 chromosomes: 6 recurrent heavy partners against a background of one-off events, in 4 classes"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/genome_chord_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              chrom_a: "Chromosome of the first breakpoint. Named as GRCh38 names them, so the ring can be laid out on the real chromosome lengths."
+              pos_a: "Position of the first breakpoint, in base pairs along chrom_a."
+              chrom_b: "Chromosome of the second breakpoint. Equal to chrom_a for the intra-chromosomal classes."
+              pos_b: "Position of the second breakpoint, in base pairs along chrom_b."
+              label: "Name of the link. The six recurrent events carry their gene-pair name; the rest are numbered. This is the column a click on a chord filters on."
+              weight: "Supporting reads. Spans two orders of magnitude, which is what the log-scaled chord width is for."
+              category: "Event class: translocation, inversion, deletion or duplication. Colours the chords; only translocations join two chromosomes."
+
+      - id: "646b0f3c1e4a2d7f8e5b8d8d"
+        data_collection_tag: "cnv_profile_demo"
+        description: "A synthetic somatic copy-number profile: 20 000 bins over 5 chromosomes for 2 tumour samples, with the called segments in the same table"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/cnv_profile_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              sample: "Tumour sample the profile belongs to. TUMOUR_A carries six planted events, TUMOUR_B four different ones, so the sample selector changes the picture."
+              chrom: "Chromosome of the bin or segment, on a synthetic 5-contig genome."
+              start: "Start of the 20 kb bin, or of the called segment, in base pairs."
+              end: "End of the same bin or segment."
+              log2: "Log2 copy ratio against a diploid baseline. Around 0 for a balanced region, +0.58 for three copies, -1 for one, -2.6 for a homozygous deletion."
+              baf: "B-allele frequency. A balanced region sits at 0.5; an unbalanced one splits into two bands, which is the only signal a copy-neutral LOH gives."
+              copy_number: "Absolute copy number called for the row. Colours the bins when it is bound."
+              segment: "Row type: bin for the evidence, segment for the call. This is what lets one collection carry both tracks."
+              label: "Short call label on the segments (CN 3 gain, CN 2 copy-neutral LOH). Empty on the bins, which have nothing to name."
+
 # No joins. Filters in each dashboard are scoped to a single DC.

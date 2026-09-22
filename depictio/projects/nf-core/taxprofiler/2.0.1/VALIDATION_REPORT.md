@@ -378,3 +378,194 @@ existing dashboard by title, the rename cannot overwrite in place: the old famil
 `Taxprofiler Metagenomic Profiling`, because the dashboard's `project_tag` is resolved by name
 and the two must stay consistent. Post-rename family: `6a9c2cbe30851b3fe171814b` (main, 31
 components) plus `Profiles` (17), `Concordance` (14) and `Confidence` (14).
+
+---
+
+# Remediation pass, 2026-09-22
+
+**Worktree / branch:** `depictio-worktrees/feat-nfcore-templates-lot2` (`feat/nfcore-templates-lot2`, PR #1102)
+**Validator:** `uv run python -m depictio.cli` against the lot 2 docker stack
+(API `:8112`, viewer `:5612`, Mongo `:27112`,
+config `~/.depictio/CLI.feat-nfcore-templates-lot2-112.yaml`).
+
+## What the audit found, and what changed
+
+| Finding | Fix |
+|---|---|
+| `Samples` was `persistent: true` with no `pin`, so it stayed on the landing tab | `pin: top` added; the section now rides every tab |
+| `database_sheet`, `melon_ranks`, `sylph_profile`, `taxpasta_matrix` were orphans: no `links:` reached them, so no filter applied | four new links (see below), except `melon_ranks`, which genuinely cannot take one (TP-D8) |
+| No glance strip: the only two cards were both broken down by `instrument_platform` and sat inside a collapsed section | a persistent pinned `Run at a glance` section of four cards, four different shapes; the duplicate `Sequencing runs` card is gone (its reading is now the `Sequencing run` slider) |
+| Tabs carried no tab-local filter section | every tab declares one on its own columns |
+| No diversity section although `shannon` was already ingested | a new `Depth and diversity` tab with `Coverage redundancy` and `Alpha diversity` |
+| `nonpareil/nonpareil_all_samples.tsv` was fetched and never read | a new `nonpareil` catalog module with two outputs |
+
+### New links in `template.yaml`
+
+| Source | Target | Resolver | Why |
+|---|---|---|---|
+| `samplesheet.sample` | `taxpasta_lineage.sample` | direct | the new hierarchy collection |
+| `samplesheet.sample` | `sylph_profile.sample_id` | direct | sylph's merged profile names its samples `sample_id`, not `sample`, which is why the persistent filter used to stop at the containment table |
+| `samplesheet.sample` | `nonpareil_summary.sample`, `nonpareil_curves.sample` | direct | the Nonpareil collections |
+| `taxpasta_profiles.database` | `database_sheet.db_name` | direct | no sample column exists on the sheet; the profiling scope is what can narrow it |
+| `taxpasta_profiles.name` | `taxpasta_matrix.taxon` | direct | the matrix is wide, its columns are the runs; its rows are taxa, which is what the profile filters select |
+
+### New content
+
+* **`depictio/catalog/nonpareil/`** (new module): `summary` (one row per sequencing library:
+  redundancy, coverage, effort sequenced, effort projected for 95 percent coverage, diversity
+  index, and the derived depth multiple) and `curves` (the coverage curve that library's fitted
+  model describes, 200 points per series, bound to the `profile` kind).
+* **`depictio/recipes/lib/nonpareil.py`**: the arithmetic behind the curve. See TP-D9.
+* **`depictio/catalog/taxpasta/lineage.{yaml,py,tsv}`**: the hub rows with the seven NCBI ranks
+  widened into their own columns, ancestry recovered from the indented kraken2 / krakenuniq
+  reports. Binds `sunburst` (Profiles / `Lineage rings`) and `sankey` (Concordance /
+  `Taxonomic flow`, root to species with the unclassified branch as its own flow).
+* **`taxpasta/sample_summary.yaml`**: two renders added, an `assigned_count` box-plot card and
+  a top-taxon-share bar figure.
+* **Five tabs** instead of four: MultiQC, Depth and diversity, Profiles, Concordance,
+  Confidence. Every tab opens with a four-card strip (`w: 2`, `h: 2`, x 0/2/4/6) and carries a
+  non-persistent filter section on its own columns, on top of the pinned `Samples` section.
+
+## Commands run
+
+```bash
+uv run pytest depictio/tests/recipes/test_nonpareil_curves.py -q          # 10 passed
+uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py -q -k taxprofiler
+                                                                          # 10 passed
+uv run pytest depictio/tests/models/test_catalog.py -q                    # 93 passed, 6 failed
+#   the six failures name cellbender / kallisto / qcatch / simpleaf / cooltools / gtdbtk /
+#   funcscan and the two regenerated JSON schemas: other agents' half-written dirs on the
+#   same branch, none of them nonpareil or taxpasta.
+uv run python -m depictio.cli run --template nf-core/taxprofiler/2.0.1 \
+  --data-root ~/Data/depictio-nfcore/taxprofiler/2.0.1/megatest --dry-run  # 8/8 steps
+uv run ruff format <new .py> && uv run ruff check <new .py>                # clean
+```
+
+## Ingestion result: 15 / 15 data collections processed
+
+Project `Taxprofiler Metagenomic Profiling`, id `6ab2aa1a15d579800f73d51b`; dashboard family
+`6ab2aa40fbe776a1a573e26f`. Row counts read back from
+`GET /depictio/api/v1/deltatables/shape/{dc_id}`:
+
+| Data collection | Rows | Columns |
+|---|---|---|
+| `samplesheet` | 7 | 8 |
+| `database_sheet` | 20 | 7 |
+| `taxon_names` | 429 | 3 |
+| `taxpasta_profiles` | 5652 | 10 |
+| `taxpasta_lineage` | 5652 | 18 |
+| `taxpasta_matrix` | 60 | 63 |
+| `taxpasta_embedding` | 60 | 8 |
+| `taxpasta_presence` | 1871 | 15 |
+| `taxpasta_sample_summary` | 60 | 11 |
+| `sylph_ani` | 352 | 12 |
+| `sylph_profile` | 1811 | 5 |
+| `melon_ranks` | 64 | 11 |
+| `nonpareil_summary` | 4 | 10 |
+| `nonpareil_curves` | 800 | 8 |
+| `multiqc_data` | MultiQC report, no Delta table | 1 report |
+
+Screenshots, one per tab, viewport 1600x1000, written to
+`/tmp/claude-502/shots-taxprofiler/{0-multiqc,1-depth-diversity,2-profiles,3-concordance,4-confidence}.png`.
+Only `0-multiqc.png` shows the dashboard. The four other tabs each hold at least one
+advanced visualisation, and on the day of this pass the lot 2 dev viewer could not load the
+advanced visualisation chunk at all, so those four captures show the viewer error card
+instead of the tiles (TP-D13). The dashboards themselves were validated through the API.
+
+| Tab | Dashboard id | Title |
+|---|---|---|
+| 0 | `6ab2aa40fbe776a1a573e26f` | MultiQC (main tab) |
+| 1 | `6ab2aa40fbe776a1a573e270` | Depth and diversity |
+| 2 | `6ab2aa40fbe776a1a573e271` | Profiles |
+| 3 | `6ab2aa40fbe776a1a573e272` | Concordance |
+| 4 | `6ab2aa40fbe776a1a573e273` | Confidence |
+
+## New discrepancies
+
+### TP-D8: `melon_ranks` cannot be linked to the sample scope
+
+Melon writes one table per sample under `melon/<database>/<sample>_<database>/`, and the
+sample id lives only in that path. `melon/ranks.py` reads the glob without
+`include_file_paths`, so the rows arrive pooled and the collection has no sample, library or
+run column for a link to resolve against. A `samplesheet.sample` link would therefore either
+match nothing or, worse, silently empty the Genome copies section whenever a short-read-only
+classifier is selected, so none was added. The section instead declares its own `Melon phylum`
+filter in `Profile scope`, which is the only control that reaches it, and the section's text
+tile says so. Making melon per-sample is a one-line change to a recipe this template does not
+own (`read_kwargs={"include_file_paths": "source_path"}` plus the sample recovery
+`taxpasta/profiles.py` already does); it is reported rather than made here.
+
+### TP-D9: the Nonpareil curve is reconstructed from the summary, not read from a `.npo`
+
+`NONPAREIL_SET` merges the per-library `.npo` files into `nonpareil_all_samples.tsv`, six
+fitted numbers per library, and nf-core/taxprofiler does not publish the `.npo` files
+themselves, so the per-effort redundancy samples are not on disk. The curve is therefore
+rebuilt from Nonpareil's own model: coverage against sequencing effort is the CDF of a gamma
+distribution on `ln(effort)`, whose mean is the published `diversity` (Nd) and whose 95th
+percentile is `ln(LRstar)`. Two equations, two unknowns; `depictio/recipes/lib/nonpareil.py`
+solves them and samples the result over a log-spaced effort axis.
+
+The check that this is a reconstruction and not an invention is the third number, `C`, which
+the fit never sees: evaluating the fitted model at each library's own `LR` reproduces the
+published coverage to +0.024, +0.027, +0.032 and +0.043 absolute. The sign is the expected
+one, because `C` is the last coverage actually observed and the model is the smooth curve
+fitted through it. `depictio/tests/recipes/test_nonpareil_curves.py` pins all of this against
+the real megatest rows. The incomplete gamma is written out (series plus continued fraction)
+rather than imported from scipy, which reaches the environment only as a transitive
+dependency of `umap-learn`.
+
+Consequence for the tile: only the four Illumina libraries appear. taxprofiler routes
+Nonpareil at short reads only, so the three nanopore samples have no curve, and `MOCK_003`
+contributes two curves because it was sequenced over two runs.
+
+### TP-D10: 6 percent of the hub rows have no lineage, and all of kmcp's do
+
+`taxpasta/lineage.py` recovers ancestry by walking the indentation of the kraken2 and
+krakenuniq reports, then joins it onto the hub by NCBI taxonomy id. Measured on this run:
+5268 of 5652 rows (93.2 percent) get a lineage, 51 are the profilers' explicit `unclassified`
+rows (taxonomy id 0) and 333 resolve to `unresolved`. Per profiler the unresolved share is 0
+for bracken, kaiju and krakenuniq, under 1 percent for centrifuge and kraken2, 2 to 11 percent
+for megan6, diamond, metaphlan and mOTUs, and **100 percent for kmcp**, whose database is
+keyed on identifiers no kraken-style report in the run names. The three fills are kept
+distinct on purpose (`unclassified` for reads no taxon was assigned, `unresolved` for a taxon
+no report placed, nearest-known-ancestor carried forward for a gap inside an otherwise known
+lineage) so the rings and the flow do not pool three different kinds of absence into one arc.
+
+### TP-D11: `megatest.yaml` still says twelve profiler / database combinations
+
+The header comment of `megatest.yaml` describes the run as "12 profiler x database
+combinations". The database sheet declares 20, taxpasta writes 18 tables and 17 of them carry
+rows (ganon's are all zero, TP-D1). The keys themselves are correct and fetch everything the
+template reads, including `nonpareil/nonpareil_all_samples.tsv`, so the file was left alone
+under the "only when the keys change" rule; the comment is wrong and should be corrected in a
+pass that is allowed to touch it.
+
+### TP-D12: the landing tab's tab-local filter section reads a taxpasta collection
+
+Every other tab's non-persistent filter section is declared on that tab's own data
+collections. The MultiQC landing tab cannot do the same: its own collection is
+`multiqc_data`, a MultiQC-type collection that hosts no `interactive` component, so its
+`Read stats` section filters `taxpasta_sample_summary` instead. The section is still
+tab-local and still non-persistent; it just narrows the run set rather than the MultiQC
+panels, which the `Samples` section already reaches through the `sample_mapping` link.
+
+### TP-D13: four of the five tab screenshots could not be taken
+
+The lot 2 dev viewer answered every dashboard that holds an advanced visualisation with
+"Viewer crashed: Failed to fetch dynamically imported module". The lazy advanced visualisation
+chunk imports the GenomeSpy renderer, and the viewer process could not resolve
+`@genome-spy/core/genome/genomes.js`, a dependency added to the repository after that process
+had started. It is an environment state, not a template defect: nothing in this template
+references GenomeSpy, the landing tab renders, and every collection the four tabs bind was
+verified through the API instead. The four captures should be retaken once the viewer is
+rebuilt, against the dashboard ids listed above.
+
+## 2026-09-22 review fixes
+
+MultiQC scan regex brought to the mandated form
+(`(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\.parquet$`) and the database sheet
+pattern un-anchored from `input/` (`(?:.*/)?database.*\.csv$`, description reworded).
+Not done: a `samplesheet -> melon_ranks` link. The melon recipe pools the long-read samples
+and emits no sample column (the sample name lives only in the file path), so there is no
+target field to link on; the tile intro already says the sample scope stops there. Adding
+one would need a catalog recipe change outside this template.

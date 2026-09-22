@@ -10,4 +10,8 @@ find:
 recipe: cellranger/library_metrics_long.py
 fixture: library_metrics_long.tsv
 renders_as:
+  - { id: library_metric_picker, component: interactive, interactive_type: Select, column_name: metric }
+  - { id: library_status_picker, component: interactive, interactive_type: SegmentedControl, column_name: status }
+  - { component: card, column: value, aggregation: median, secondary_layout: box_plot, aggregations: [box_plot_stats] }
+  - { component: card, column: metric, aggregation: nunique, secondary_layout: top_n, breakdown_col: status, top_n_count: 3 }
   - { component: table }

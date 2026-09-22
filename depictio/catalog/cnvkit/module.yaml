@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=../module.schema.json
+# CNVkit — multi-output tool, so a folder. Lightweight: identity is derived
+# from the nf-core meta.yml that `nf_core_url` points at (not duplicated).
+# nf-core/sarek runs `cnvkit/batch`, which emits the .cnr bins and the .cns
+# segments this catalog binds.
+id: cnvkit
+name: CNVkit
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/cnvkit/batch
+biotools_url: https://bio.tools/cnvkit

@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=../output.schema.json
+id: controlfreec_cnv_ratio
+name: Copy-number ratio windows
+mode: freec
+description: >-
+  Control-FREEC's per-window copy ratios and the segments they encode. Per the
+  Control-FREEC documentation the _ratio.txt file carries Chromosome, Start,
+  Ratio, MedianRatio and CopyNumber, plus BAF, estimatedBAF, Genotype and
+  UncertaintyOfGT when a SNV file was supplied. MedianRatio is the segment
+  value written on every window the segment covers, so a run of identical
+  values is one segment: the windows and the recovered segments land in the
+  same table, told apart by the segment column.
+find:
+  path_glob: "**/variant_calling/controlfreec/*/*_ratio.txt"
+recipe: controlfreec/cnv_ratio.py
+fixture: cnv_ratio.tsv
+renders_as:
+  - { id: controlfreec_profile, component: advanced_viz, kind: cnv_profile, roles: {sample: sample, chrom: chrom, start: start, end: end, log2: log2, baf: baf, copy_number: copy_number, segment: segment, label: label} }
+  - { id: controlfreec_log2_spread, component: card, column: log2, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: controlfreec_cn_mix, component: card, column: copy_number, aggregation: median, secondary_layout: composition, breakdown_col: label }
+  - { component: table, columns: [sample, chrom, start, end, log2, baf, copy_number, segment] }

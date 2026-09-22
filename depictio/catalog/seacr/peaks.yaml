@@ -16,6 +16,12 @@ renders_as:
   # Where the signal is, then how the two coverage measures relate and how wide
   # the calls are behind them.
   - { id: seacr_peak_signal, component: advanced_viz, kind: manhattan, roles: {chr: chr, pos: summit, score: log10_total_signal} }
+  # The same three roles on a chromosome-aware locus axis, plus `end` so a call
+  # is drawn as the interval it is rather than as a point at its summit. The
+  # coverage track binds the same columns through the Plotly renderer, which is
+  # what a tab falls back to when the GenomeSpy canvas is unavailable.
+  - { id: seacr_peak_track, component: advanced_viz, kind: genome_view, roles: {chr: chr, pos: start, score: log10_total_signal, feature: peak_id, end: end} }
+  - { id: seacr_peak_coverage, component: advanced_viz, kind: coverage_track, roles: {chromosome: chr, position: start, value: log10_total_signal, end: end, sample: sample} }
   - { id: seacr_signal_scatter, component: figure, visu_type: scatter, dict_kwargs: {x: total_signal, y: max_signal, color: sample, title: Total against maximum signal} }
   - { id: seacr_width_hist, component: figure, visu_type: histogram, dict_kwargs: {x: width, color: sample, title: Peak width distribution} }
   # How many regions and where they concentrate, then the spread of width,

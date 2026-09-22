@@ -114,8 +114,8 @@ template:
     # derived from the repertoire analysis and find-threshold reports goes.
     - if_var_present: "SKIP_CLONAL_ANALYSIS"
       remove_dc_tags:
-        ["repertoire_summary", "clonal_diversity", "clone_sizes", "clone_sets",
-         "clonal_overlap", "threshold_summary"]
+        ["repertoire_summary", "clonal_diversity", "clonal_abundance", "clone_sizes",
+         "clone_sets", "clonal_overlap", "threshold_summary"]
       dashboards: ["dashboards/base.yaml"]
     # --skip_report: repertoire_comparison/ is absent, which also removes the
     # Change-O half of the sequence funnel (sequence_counts falls back to the
@@ -167,7 +167,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: "multiqc/multiqc_data/multiqc\\.parquet"
+                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\\.parquet$"
           dc_specific_properties:
             # airrflow runs FastQC twice (raw reads and post-assembly), so
             # MultiQC anchors the second instance as 'fastqc-1'. Both spellings
@@ -238,9 +238,19 @@ workflows:
               "subject_id": "Donor or subject the sample came from; airrflow defines clones within this group"
               "species": "Species the repertoire was sequenced from"
               "pcr_target_locus": "Targeted receptor locus (IG or TR)"
-              "tissue": "Tissue the sample was taken from"
+              # airrflow's samplesheet schema keeps `treatment`, `tissue` and
+              # `population` as free submitter columns, and the megatest
+              # submitters used them in that order for sampling site, timepoint
+              # and sorted cell type. `treatment` is therefore the column that
+              # actually varies here (lymph node against brain lesion), which is
+              # the contrast the dashboard groups on; `tissue` holds the single
+              # timepoint the study collected. Read the values, not the names.
+              "treatment": "Free submitter column; on this cohort the sampling site (lymph node or brain lesion)"
+              "tissue": "Free submitter column; on this cohort the collection timepoint"
+              "population": "Sorted cell population the library was built from"
               "sex": "Subject sex"
               "age": "Subject age"
+              "biomaterial_provider": "Institution that provided the material"
 
       # ----------------------------------------------------------------
       # Recipe-transformed data collections (enchantR catalog tool).
@@ -316,6 +326,30 @@ workflows:
               "d_lower": "Lower bound of the bootstrap confidence interval"
               "d_upper": "Upper bound of the bootstrap confidence interval"
               "e": "Evenness at this order"
+
+      - data_collection_tag: "clonal_abundance"
+        # alakazam's estimateAbundance needs enough sequences to bootstrap, so a
+        # sample that contributed a handful of clones is simply absent from the
+        # table (SRR1383456, 27 sequences, on the 5.1.0 megatest). The whole
+        # table is absent when the repertoire report was not run.
+        optional: true
+        description: "Bootstrapped rank abundance of every clone with its confidence band, one row per clone"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "enchantr/clonal_abundance.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample identifier"
+              "subject_id": "Donor the sample came from"
+              "clone_id": "Clone identifier, unique within the subject"
+              "rank": "Abundance rank within the sample, 1 being the largest clone"
+              "p": "Bootstrapped relative abundance of the clone in its sample"
+              "p_sd": "Standard deviation of the bootstrapped abundance"
+              "lower": "Lower edge of the bootstrap confidence interval"
+              "upper": "Upper edge of the bootstrap confidence interval"
 
       - data_collection_tag: "clone_sizes"
         description: "Every clone with its size, within-sample abundance rank and homeostasis size class"
@@ -552,6 +586,51 @@ links:
     description: "Filter the clonal overlap matrix by the repertoire summary selection"
     enabled: true
 
-  # clone_sets is keyed by clone, not by sample: its sample columns are the set
-  # membership flags, so a row filter would have nothing to match. Left unlinked.
-  # threshold_summary is per subject (two rows here) and carries no sample_id.
+  - source_dc_tag: "repertoire_summary"
+    source_column: "sample_id"
+    target_dc_tag: "clonal_abundance"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the rank abundance curves by the repertoire summary selection"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample_id"
+    target_dc_tag: "clonal_abundance"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the rank abundance curves by samplesheet samples"
+    enabled: true
+
+  # clone_sets is keyed by clone, not by sample: its sample columns ARE the set
+  # membership flags, so a row filter finds nothing to match and
+  # `load_deltatable_lite` skips it. The link is still what carries the sample
+  # filter this far, and `_narrow_wide_matrix_columns` then mirrors it onto the
+  # column set by matching the filter's VALUES against the column names, which
+  # is what makes the UpSet follow the persistent sample scope.
+  - source_dc_tag: "samplesheet"
+    source_column: "sample_id"
+    target_dc_tag: "clone_sets"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Narrow the shared clone UpSet to the samplesheet samples"
+    enabled: true
+
+  # threshold_summary is per subject (two rows here) and carries no sample_id,
+  # so the subject filter is what reaches it. Without this link the clonal
+  # threshold tiles ignore every filter on the dashboard.
+  - source_dc_tag: "samplesheet"
+    source_column: "subject_id"
+    target_dc_tag: "threshold_summary"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "subject_id"
+    description: "Filter the fitted clonal threshold by samplesheet subjects"
+    enabled: true

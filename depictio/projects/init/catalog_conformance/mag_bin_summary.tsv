@@ -1,0 +1,16 @@
+bin_id	sample	assembler	binner	completeness	contamination	quality_score	quality_tier	mimag_tier	total_length	n_contigs	n50	gc_percent	cds	trna	rrna	cds_per_mbp	meets_mimag_rna	domain	phylum	class_name	order	family	genus	species	rank_assigned	classified	sources_present
+FLYE-MaxBin2-CAPES_S11.001	CAPES_S11	FLYE	MaxBin2	72.57	16.41	-9.480000000000004	Contaminated	Contaminated	7482446	9	2331977	39.22	14926	132	0	1994.8022344564868	false									false	3
+FLYE-MetaBAT2-CAPES_S11.26	CAPES_S11	FLYE	MetaBAT2	22.32	8.29	-19.129999999999995	Low quality	Low quality draft	2250783	182	15156	50.71	3240	18	0	1439.4990543290937	false									false	3
+FLYE-MetaBinner-CAPES_S11.5	CAPES_S11	FLYE	MetaBinner	42.64	5.06	17.340000000000003	Low quality	Low quality draft	4685702	5	1012487	41.88	9709	74	22	2072.048115735913	true									false	3
+FLYE-SemiBin2-CAPES_S11_32	CAPES_S11	FLYE	SemiBin2					Unknown	249246	1	249246	43.2	546	0	0	2190.606870320888	false									false	2
+MEGAHIT-COMEBin-CAPES_S7.3309	CAPES_S7	MEGAHIT	COMEBin	92.69	42.67	-120.66000000000003	Contaminated	Contaminated	7815260	3048	3070	53.54														false	2
+MEGAHIT-MetaBAT2-CAPES_S21.28	CAPES_S21	MEGAHIT	MetaBAT2	7.52	0.0	7.52	Low quality	Low quality draft	274311	75	4494	48.74	238	8	0	867.6283488449243	false									false	3
+MEGAHIT-MetaBAT2-CAPES_S7.20	CAPES_S7	MEGAHIT	MetaBAT2	22.03	0.0	22.03	Low quality	Low quality draft	911253	94	12744	51.59	843	2	1	925.0998350622714	false									false	3
+MEGAHIT-MetaBinner-CAPES_S21.13	CAPES_S21	MEGAHIT	MetaBinner	70.64	0.67	67.29	Medium quality	Medium quality draft	4634074	155	55885	41.14	3570	45	4	770.3804470968741	true	Bacteria	Bacteroidota	Bacteroidia	Bacteroidales	Bacteroidaceae	Bacteroides	Bacteroides ovatus	species	true	4
+MEGAHIT-SemiBin2-CAPES_S21_18	CAPES_S21	MEGAHIT	SemiBin2	17.63	0.07	17.279999999999998	Low quality	Low quality draft	599733	131	4940	51.32	518	6	0	863.7176877043619	false									false	3
+METAMDBG-MetaBAT2-CAPES_S7.10	CAPES_S7	METAMDBG	MetaBAT2	11.5	4.08	-8.899999999999999	Low quality	Low quality draft	1456689	123	12344	57.35	1949	11	2	1337.9657565890868	false									false	3
+SPAdes-MetaBAT2-CAPES_S11.11	CAPES_S11	SPAdes	MetaBAT2	45.58	0.07	45.23	Low quality	Low quality draft	2163543	248	12089	43.65	1581	7	0	730.7458183174543	false									false	3
+SPAdes-MetaBAT2-CAPES_S11.4	CAPES_S11	SPAdes	MetaBAT2	59.85	0.45	57.6	Medium quality	Medium quality draft	1216379	34	55191	59.38	1004	30	1	825.4006358215655	false	Bacteria	Actinomycetota	Actinomycetes	Actinomycetales	Bifidobacteriaceae	Bifidobacterium	Bifidobacterium adolescentis	species	true	4
+SPAdes-MetaBAT2-CAPES_S21.24	CAPES_S21	SPAdes	MetaBAT2	50.95	0.0	50.95	Medium quality	Medium quality draft	1932964	34	65848	44.55	1547	16	0	800.3253035235007	false	Bacteria	Bacteroidota	Bacteroidia	Bacteroidales	Bacteroidaceae	Bacteroides	Bacteroides hominis	species	true	4
+SPAdes-MetaBAT2-CAPES_S7.23	CAPES_S7	SPAdes	MetaBAT2	9.96	0.0	9.96	Low quality	Low quality draft	327666	19	28505	50.08	310	4	0	946.0853430017152	false									false	3
+SPAdes-MetaBinner-CAPES_S11.18	CAPES_S11	SPAdes	MetaBinner	62.72	0.89	58.269999999999996	Medium quality	Medium quality draft	1500083	547	2810	38.7	1252	8	0	834.6204843332004	false	Bacteria	Bacillota	Clostridia	Lachnospirales	Lachnospiraceae	Lachnospira	Lachnospira eligens_A	species	true	4

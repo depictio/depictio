@@ -115,8 +115,10 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "score": _FLOAT,
     },
     # Same three roles as `manhattan`, drawn by GenomeSpy on a locus scale. Kept
-    # identical on purpose so any DC a Manhattan binds renders here unchanged.
-    "genomespy_track": {
+    # identical on purpose so any DC a Manhattan binds renders here unchanged;
+    # the optional roles (end, sample, category) are what turn the same rows
+    # into intervals, per-sample lanes and a coloured coverage profile.
+    "genome_view": {
         "chr": _STRING,
         "pos": _INT,
         "score": _FLOAT,
@@ -381,7 +383,7 @@ ROLE_NAMES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
             }
         ),
     },
-    "genomespy_track": {
+    "genome_view": {
         "chr": frozenset({"chr", "chrom", "chromosome", "#chrom", "contig"}),
         "pos": frozenset({"pos", "position", "bp", "start", "chromstart"}),
         "score": frozenset(
@@ -692,9 +694,14 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "feature": _STRING,
         "effect": _FLOAT,
     },
-    "genomespy_track": {
+    # `end` makes a row an interval (peak, coverage bin), `sample` stacks one
+    # lane per sample on a shared genome axis, `category` colours the marks by
+    # a per-row annotation (gene region, peak caller) instead of by chromosome.
+    "genome_view": {
         "feature": _STRING,
         "end": _INT,
+        "sample": _STRING,
+        "category": _STRING,
     },
     "stacked_taxonomy": {},
     "phylogenetic": {
@@ -1393,11 +1400,12 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         "icon": "tabler:chart-histogram",
         "category": "tool",
     },
-    "genomespy_track": {
-        "label": "GenomeSpy track",
+    "genome_view": {
+        "label": "Genome view",
         "description": (
             "chr / pos / score drawn by GenomeSpy on a chromosome-aware locus axis: "
-            "native genome zoom, points or intervals, click-to-filter. Spike for #1083."
+            "native genome zoom, points, intervals or coverage bars, per-sample lanes, "
+            "a gene annotation lane, and a region brush that filters the dashboard."
         ),
         "icon": "tabler:dna-2",
         "category": "tool",

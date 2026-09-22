@@ -204,6 +204,12 @@ STATIC_IDS = {
             "contact_map_demo": "646b0f3c1e4a2d7f8e5b8d88",
             "knee_plot_demo": "646b0f3c1e4a2d7f8e5b8d89",
             "damage_profile_demo": "646b0f3c1e4a2d7f8e5b8d8a",
+            # Kinds added with the lot 2 remediation wave; ids as declared in
+            # the showcase project.yaml (transcript_structure took 8d9c).
+            "group_compare_demo": "646b0f3c1e4a2d7f8e5b8d8b",
+            "cnv_profile_demo": "646b0f3c1e4a2d7f8e5b8d8d",
+            "genome_chord_demo": "646b0f3c1e4a2d7f8e5b8d8e",
+            "transcript_structure_demo": "646b0f3c1e4a2d7f8e5b8d9c",
         },
         "dashboards": {
             # Main tab reuses the project_id so get_child_tabs(main_id) finds
@@ -245,7 +251,11 @@ STATIC_IDS = {
             "advanced_viz_contact_map": "646b0f3c1e4a2d7f8e5b8d77",
             "advanced_viz_knee_plot": "646b0f3c1e4a2d7f8e5b8d78",
             "advanced_viz_damage_profile": "646b0f3c1e4a2d7f8e5b8d79",
-            "advanced_viz_genomespy_track": "646b0f3c1e4a2d7f8e5b8d7a",
+            "advanced_viz_genome_view": "646b0f3c1e4a2d7f8e5b8d7a",
+            "advanced_viz_group_compare": "646b0f3c1e4a2d7f8e5b8d7b",
+            "advanced_viz_transcript_structure": "646b0f3c1e4a2d7f8e5b8d7c",
+            "advanced_viz_cnv_profile": "646b0f3c1e4a2d7f8e5b8d7d",
+            "advanced_viz_genome_chord": "646b0f3c1e4a2d7f8e5b8d7e",
         },
     },
     # nf-core/viralrecon 3.0.0 viral-genome analysis template — five-tab

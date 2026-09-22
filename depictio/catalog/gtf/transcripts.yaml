@@ -1,0 +1,37 @@
+id: gtf_transcripts
+name: Transcript structures
+mode: exon-blocks
+description: >-
+  Exon and CDS blocks of every transcript in a run's GTF/GFF annotations, one
+  row per block, carrying the gene, the strand, the novelty class and the
+  per-transcript expression when the writer recorded one.
+find:
+  path_glob: "**/*.gtf"
+  path_glob_alt: # compressed annotations, and bambu's run-level extended one
+    - "**/*.gtf.gz"
+    - "**/bambu/extended_annotations.gtf"
+recipe: gtf/transcripts.py
+fixture: transcripts.tsv
+renders_as:
+  - id: transcript_structures
+    component: advanced_viz
+    kind: transcript_structure
+    roles:
+      transcript_id: transcript_id
+      gene_id: gene_id
+      chrom: chrom
+      start: start
+      end: end
+      feature: feature
+      strand: strand
+      sample: sample
+      gene_name: gene_name
+      transcript_class: transcript_class
+      expression: expression
+  # How many isoforms the annotation carries, and which genes carry most of
+  # them: the one number that says whether a run found novel structure at all.
+  - { component: card, column: transcript_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: gene_name, top_n_count: 3 }
+  # Expression is long-tailed across isoforms, so the Tukey strip says more
+  # about it than the median on its own.
+  - { component: card, column: expression, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

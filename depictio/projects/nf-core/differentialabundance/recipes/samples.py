@@ -9,6 +9,14 @@ keeps every other column under a sanitised name, and joins the per-sample
 DESeq2 size factor (``other/deseq2/*.deseq2.sizefactors.tsv``, identical
 across contrasts, so the mean over contrasts is taken).
 
+A study is rarely one factor. The same ranking that picks ``group`` also
+publishes the next three factor-like columns as ``factor_2``, ``factor_3`` and
+``factor_4``, so a shipped dashboard can put a persistent filter on each without
+knowing what any run's sheet calls them. Their source column names are published
+as ``factor_2_name`` and friends, which is what a panel shows a reader instead of
+"factor 2". Every column also keeps its own sanitised name, so nothing is hidden
+by the aliasing; a run with fewer factors simply has fewer of these columns.
+
 Sources:
     samplesheet  ``input/samplesheet.tsv`` by default; the template repoints it
                  at ``{SAMPLESHEET_FILE}`` (TSV or CSV; a CSV read with a tab
@@ -17,7 +25,9 @@ Sources:
                  ``sizeFactor``).
 
 Output:
-    sample_id : Utf8, group : Utf8, size_factor : Float64, <sanitised sheet columns> : Utf8
+    sample_id : Utf8, group : Utf8, size_factor : Float64,
+    factor_2 .. factor_4 : Utf8 (when the sheet has that many factors),
+    factor_2_name .. factor_4_name : Utf8, <sanitised sheet columns> : Utf8
 """
 
 from __future__ import annotations
@@ -51,6 +61,14 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
 OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 MAX_LEVELS = 12
+# Highest `factor_<n>` alias rank published. `group` is factor 1, so this
+# publishes factor_2 to factor_4: three aliases beside the condition, which
+# covers the designs this pipeline is used for (treatment, timepoint, batch)
+# without turning a sheet of free-text columns into a wall of dead filters.
+N_FACTOR_ALIASES = 4
+# A filter is only worth a control when it has at least two levels and few
+# enough to pick from; above this a column is an identifier, not a factor.
+MAX_FILTER_LEVELS = 6
 
 
 def sanitise_column(name: str) -> str:
@@ -135,7 +153,27 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     else:
         samples = samples.with_columns(pl.lit("all").alias("group"))
 
+    # Stable aliases for the factors after the leading one. `factor_columns`
+    # is already sorted by level count, so factor_2 is the next most
+    # factor-like column. Columns with more levels than a reader can pick from
+    # are skipped here even though they stay in the frame under their own name.
+    ordered_aliases: list[str] = []
+    rank = 2
+    for col in factors[1:]:
+        if rank > N_FACTOR_ALIASES:
+            break
+        source = renamed[col]
+        levels = samples.get_column(source).cast(pl.Utf8).drop_nulls().n_unique()
+        if levels > MAX_FILTER_LEVELS:
+            continue
+        samples = samples.with_columns(
+            pl.col(source).fill_null("unknown").alias(f"factor_{rank}"),
+            pl.lit(col).alias(f"factor_{rank}_name"),
+        )
+        ordered_aliases += [f"factor_{rank}", f"factor_{rank}_name"]
+        rank += 1
+
     result = samples.join(sizes, on="sample_id", how="left")
-    ordered = ["sample_id", "group", "size_factor"]
+    ordered = ["sample_id", "group", "size_factor", *ordered_aliases]
     ordered += [c for c in result.columns if c not in ordered]
     return result.select(ordered).sort("sample_id")

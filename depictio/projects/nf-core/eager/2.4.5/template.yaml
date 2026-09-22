@@ -12,10 +12,13 @@
 # ============================================================================
 #
 # SCOPE
-# eager 2.x is a DSL1 pipeline with many optional branches (sex determination,
-# MTNucRatio, mapDamage, bedtools, MALT/Kraken metagenomic screening). None of
-# those ran in this megatest, so none of those collections are declared ,
-# adding them is a template variant, not a fix to this one.
+# eager 2.x is a DSL1 pipeline with many optional branches. Sex determination,
+# MTNucRatio, ANGSD nuclear contamination, mapDamage, bedtools and the
+# MALT / HOPS / Kraken metagenomic screen did not run in this megatest. The five
+# collections at the end of this file declare them anyway, with the globs the
+# eager output docs publish and `optional: true`, so a run that DID enable them
+# ingests without a template edit; here they are skipped, and the two dashboard
+# tabs that would read them say so in a text tile rather than rendering empty.
 #
 # MULTIQC WAS REPROCESSED.
 # The run shipped MultiQC 1.13.dev0, which writes `multiqc_data.json` and no
@@ -43,14 +46,21 @@
 # `{DATA_ROOT}/input/benchmarking_vikingfish.tsv` by hand (see VALIDATION_REPORT.md).
 #
 # LAYOUT NOTE. Every scan regex matches on file NAME, never on the per-sample
-# directory names (`<library>_rmdup/`, `<library>_rmdup_stats/`) three of the
-# recipes below have to parse instead, nf-core/eager publishes those names
-# from `--dedupper` (`markduplicates` here; `dedup` writes a different suffix),
-# so a run with `--dedupper dedup` still ingests.
+# directory names (`<library>_rmdup/`, `<library>_rmdup_stats/`) the recipes
+# below parse instead. nf-core/eager publishes those names from `--dedupper`
+# (`markduplicates` here; `dedup` writes a different suffix), so a run with
+# `--dedupper dedup` still ingests, and so do eager 3.x's renamed directories.
+#
+# ORDERING MATTERS. Data collections are ingested in declaration order (the CLI
+# is sequential unless DEPICTIO_INGEST_DC_WORKERS is set) and a recipe that
+# reads another collection through `dc_ref` reads its Delta table. Every raw
+# scan is therefore declared before the recipe that consumes it, and the three
+# second-order recipes (eager_lane_stats, eager_read_fate,
+# damageprofiler_authenticity) after the tidied collections they join.
 template:
   template_id: "nf-core/eager/2.4.5"
-  description: "nf-core/eager template: ancient-DNA QC funnel from raw reads to authenticated damage, endogenous DNA, duplication, coverage and the C-to-T and G-to-A misincorporation signature, next to the called genotypes."
-  version: "1.0.0"
+  description: "nf-core/eager template: ancient-DNA QC funnel from raw reads through adapter trimming and collapsing, endogenous DNA, duplication and coverage, to the terminal deamination signature that authenticates the library and the genotypes called from it."
+  version: "1.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing eager output (fastqc/, adapterremoval/, samtools/, deduplication/, damageprofiler/, qualimap/, preseq/, endorspy/, bcftools/, pipeline_info/) plus the reprocessed multiqc/multiqc_data/multiqc.parquet, and input/benchmarking_vikingfish.tsv (see the LAYOUT NOTE above)."
@@ -96,7 +106,9 @@ workflows:
       # Hub: one row per eager LIBRARY (`Library_ID`), the name every
       # downstream output uses once eager has merged its lanes. See
       # recipes/samples.py for why the hub keys on Library_ID, not the
-      # samplesheet's Sample_Name.
+      # samplesheet's Sample_Name. `sample_name` is kept because the two
+      # genotyping collections key on it instead: bcftools stats runs on
+      # the per-sample VCF, not the per-library BAM.
       # ----------------------------------------------------------------
       - data_collection_tag: "samples"
         description: "Per-library hub: the library id every eager output uses, its biological sample, organism and how many sequencing lanes were merged into it"
@@ -109,8 +121,8 @@ workflows:
           dc_specific_properties:
             format: "TSV"
             columns_description:
-              "sample_id": "Library_ID, the key every other collection is linked on"
-              "sample_name": "Sample_Name, the biological sample the library was prepared from"
+              "sample_id": "Library_ID, the key every per-library collection is linked on"
+              "sample_name": "Sample_Name, the biological sample the library was prepared from, and the key the genotyping collections are linked on"
               "organism": "Samplesheet Organism"
               "seq_type": "SE or PE"
               "udg_treatment": "UDG treatment applied before library prep (none, half, full)"
@@ -129,7 +141,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: "multiqc/multiqc_data/multiqc.parquet"
+                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\\.parquet$"
           dc_specific_properties:
             s3_location: null
             modules:
@@ -180,6 +192,445 @@ workflows:
                 - "Variant depths"
 
       # ----------------------------------------------------------------
+      # AdapterRemoval, one report per LANE. The only per-lane numbers
+      # eager publishes, and the head of the read-fate accounting: twice
+      # the pair count equals the retained reads plus the reads merged
+      # away by collapsing plus the discarded mates, exactly.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "adapterremoval_settings_raw"
+        description: "Raw AdapterRemoval settings reports, one line per row (input of adapterremoval_settings)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.settings$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1f"
+              has_header: false
+              new_columns: ["raw"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw": "One line of the AdapterRemoval settings report"
+              "source_path": "File the line came from; the lane id is derived from its name"
+
+      - data_collection_tag: "adapterremoval_settings"
+        description: "Trimming and collapsing statistics per sequencing lane, from AdapterRemoval"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "adapterremoval/settings.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Report id, here the trimmed FASTQ name plus the lane number"
+              "total_read_pairs": "Read pairs AdapterRemoval was given"
+              "total_reads": "Reads it was given (twice the pairs on a paired run)"
+              "well_aligned_read_pairs": "Pairs whose two mates overlapped"
+              "unaligned_read_pairs": "Pairs whose mates did not overlap"
+              "discarded_reads": "Reads dropped on quality or minimum length"
+              "singleton_reads": "Reads kept without their mate"
+              "collapsed_pairs": "Pairs merged into one sequence, full length plus truncated"
+              "truncated_collapsed_pairs": "Of those, the ones trimmed after merging"
+              "retained_reads": "Sequences written out, the mapper's input"
+              "retained_nucleotides": "Bases in them"
+              "average_retained_length": "Mean length of a retained sequence, bp"
+              "collapse_rate": "collapsed_pairs over total_read_pairs, 0 to 1"
+              "discard_rate": "discarded_reads over total_reads, 0 to 1"
+
+      - data_collection_tag: "eager_lane_stats"
+        description: "One row per sequencing lane, joining the AdapterRemoval report to the samplesheet so each lane carries the library it was merged into"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/eager/lane_stats.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "lane_id": "The AdapterRemoval report's own id"
+              "sample_id": "Library_ID the lane was merged into"
+              "sample_name": "Sample_Name the library was prepared from"
+              "lane": "Samplesheet Lane, the only samplesheet factor with more than one value in this run"
+              "run_accession": "Sequencing run the lane's reads came from"
+              "seq_type": "SE or PE"
+              "strandedness": "Library strandedness (single, double)"
+              "total_read_pairs": "Read pairs AdapterRemoval was given"
+              "total_reads": "Reads it was given"
+              "discarded_reads": "Reads it dropped on quality or minimum length"
+              "collapsed_pairs": "Pairs it merged into one sequence"
+              "retained_reads": "Sequences it wrote out, the mapper's input"
+              "retained_nucleotides": "Bases in them"
+              "average_retained_length": "Mean retained length, bp"
+              "collapse_rate": "collapsed_pairs over total_read_pairs, 0 to 1"
+              "discard_rate": "discarded_reads over total_reads, 0 to 1"
+
+      # ----------------------------------------------------------------
+      # samtools flagstat, before and after eager's mapping-quality filter.
+      # Both directories write files literally named `*flagstat.stats`; the
+      # sample and the stage live only in the path, never in the report text,
+      # so the raw scan reads it one LINE per row (see catalog/samtools/flagstat.py).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samtools_flagstat_raw"
+        description: "Raw samtools flagstat reports, pre- and post-filter, one line per row (input of samtools_flagstat)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*flagstat\\.stats$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1f"
+              has_header: false
+              new_columns: ["raw"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw": "One line of the flagstat report"
+              "source_path": "File the line came from; sample and filter stage are derived from it"
+
+      - data_collection_tag: "samtools_flagstat"
+        description: "Alignment flagstat, one row per (library, filter stage)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "samtools/flagstat.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library the report was written for"
+              "stage": "pre-filter or post-filter"
+              "total_reads": "QC-passed plus QC-failed reads"
+              "mapped_reads": "Reads flagged mapped"
+              "mapped_pct": "mapped over total, as flagstat reports it"
+              "duplicate_reads": "Reads flagged duplicate"
+              "properly_paired_reads": "Reads in a properly paired pair"
+              "properly_paired_pct": "properly paired over total"
+              "singleton_pct": "singletons over total"
+
+      # ----------------------------------------------------------------
+      # endorS.py endogenous DNA: the headline ancient-DNA number, which
+      # the run publishes as MultiQC custom content and which, before this
+      # collection existed, was reachable only inside the general
+      # statistics panel, where nothing could plot or threshold it.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "endorspy_endogenous_raw"
+        description: "Raw endorS.py MultiQC custom-content JSON, one line per row (input of endorspy_endogenous)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*_endogenous_dna(?:_mqc)?\\.json$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1f"
+              has_header: false
+              new_columns: ["raw"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw": "One line of the endorS.py JSON document"
+              "source_path": "File the line came from"
+
+      - data_collection_tag: "endorspy_endogenous"
+        description: "Endogenous DNA percentage per library, before and after the quality filter and deduplication"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "endorspy/endogenous.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library endorS.py ran on"
+              "endogenous_dna": "On-target share of the raw alignment, percent"
+              "endogenous_dna_post": "Same after the quality filter and deduplication, percent"
+              "endogenous_dna_loss": "The drop between the two, percentage points"
+              "off_target_pct": "100 minus endogenous_dna: the share a metagenomic screen would work on"
+
+      # ----------------------------------------------------------------
+      # Picard MarkDuplicates. The report's own LIBRARY field is the read
+      # group's, which this run never set (it reads "Unknown Library"), so
+      # the recipe recovers the library from the report's file name.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "picard_markduplicates_metrics_raw"
+        description: "Raw Picard MarkDuplicates metrics reports, one line per row (input of picard_markduplicates_metrics)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.metrics(?:\\.txt)?$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1f"
+              has_header: false
+              new_columns: ["raw"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw": "One line of the MarkDuplicates report"
+              "source_path": "File the line came from; the library id is derived from its name"
+
+      - data_collection_tag: "picard_markduplicates_metrics"
+        description: "Reads examined, duplicates flagged and the resulting duplication rate, per library"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "picard/markduplicates_metrics.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library MarkDuplicates ran on"
+              "library": "Picard's own LIBRARY field, as written (the read group's, often unset)"
+              "unpaired_reads_examined": "Single-end reads considered, which is all of them on a collapsed library"
+              "read_pairs_examined": "Read pairs considered"
+              "unmapped_reads": "Reads MarkDuplicates could not place"
+              "unpaired_read_duplicates": "Single-end duplicates flagged"
+              "read_pair_duplicates": "Paired duplicates flagged"
+              "read_pair_optical_duplicates": "Of those, the optical duplicates"
+              "duplicate_reads": "unpaired plus twice the paired duplicates"
+              "reads_after_dedup": "Examined reads left once duplicates are removed"
+              "percent_duplication": "Picard's own PERCENT_DUPLICATION, 0 to 1"
+              "estimated_library_size": "Picard's library-size estimate (null when it reports none)"
+
+      - data_collection_tag: "eager_read_fate"
+        description: "Where every sequenced read ends up: one row per library and fate path, from trimming and collapsing through mapping, the quality filter and deduplication"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/eager/read_fate.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library the reads belong to"
+              "step_sequencing": "Stage 1 node: everything sequenced"
+              "step_trimming": "Stage 2: retained, merged on collapse, or discarded"
+              "step_mapping": "Stage 3: mapped or unmapped"
+              "step_filtering": "Stage 4: passed or below the mapping-quality filter"
+              "step_duplication": "Stage 5: unique or PCR duplicate"
+              "reads": "Reads taking that path"
+
+      # ----------------------------------------------------------------
+      # Qualimap BamQC. genome_results.txt feeds two collections: the
+      # per-library summary and the per-contig block at its end. The raw
+      # tables under raw_data_qualimapReport/ each get their own scan,
+      # matched on file NAME so the directory Qualimap interposes
+      # (`raw_data_qualimapReport/` since 2.2, `raw_data/` before it) never
+      # has to be guessed.
+      #
+      # The pattern is anchored at the START of the basename on purpose:
+      # `.*genome_results\.txt$` also matches MultiQC's own summary table,
+      # `multiqc_data/multiqc_qualimap_bamqc_genome_results.txt`, which has
+      # none of Qualimap's key lines and fails the recipe.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "qualimap_bamqc_genome_results_raw"
+        description: "Raw Qualimap genome_results.txt reports, one line per row (input of qualimap_bamqc_genome_results and qualimap_coverage_per_contig)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "genome_results\\.txt$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1f"
+              has_header: false
+              new_columns: ["raw"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw": "One line of the genome_results.txt report"
+              "source_path": "File the line came from; the library id is derived from its parent directory"
+
+      - data_collection_tag: "qualimap_bamqc_genome_results"
+        description: "Per-library depth, mapping quality, error rate and duplication from Qualimap BamQC"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "qualimap/bamqc_genome_results.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library Qualimap ran on"
+              "total_reads": "Reads Qualimap was given"
+              "mapped_reads": "Reads it placed"
+              "percentage_aligned": "mapped_reads over total_reads, Qualimap's own number"
+              "mean_coverage": "Mean depth over the reference, X"
+              "mean_mapping_quality": "Mean MAPQ of mapped reads"
+              "general_error_rate": "Mismatches over mapped bases"
+              "gc_percentage": "GC content of mapped bases"
+              "duplication_rate": "Qualimap's own duplicate estimate, percent"
+
+      - data_collection_tag: "qualimap_coverage_per_contig"
+        description: "Per-contig length, mapped bases and mean depth, plus the depth relative to the library's own genome-wide mean"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "qualimap/coverage_per_contig.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library Qualimap ran on"
+              "chromosome": "Contig or chromosome name"
+              "length": "Contig length, bp"
+              "mapped_bases": "Bases of mapped reads placed on the contig"
+              "mean_coverage": "Mean depth over the contig, X"
+              "coverage_std": "Standard deviation of that depth"
+              "relative_coverage": "mean_coverage over the library's genome-wide mean, so 1.0 is average"
+
+      - data_collection_tag: "qualimap_coverage_across_reference_raw"
+        description: "Raw Qualimap coverage_across_reference tables, one line per row (input of qualimap_coverage_across_reference)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*coverage_across_reference\\.txt$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1f"
+              has_header: false
+              new_columns: ["raw"]
+              comment_prefix: "#"
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw": "One line of the windowed coverage table"
+              "source_path": "File the line came from; the library id is derived from its directory"
+
+      - data_collection_tag: "qualimap_coverage_across_reference"
+        description: "Windowed read depth along the reference, each window mapped back onto its contig from the per-contig lengths in genome_results.txt"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "qualimap/coverage_across_reference.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library Qualimap ran on"
+              "chromosome": "Contig the window falls in"
+              "position": "Window centre on that contig, bp"
+              "coverage": "Mean depth in the window, X"
+              "coverage_std": "Standard deviation of the depth in the window"
+              "global_position": "Window centre on the concatenated reference, bp"
+
+      - data_collection_tag: "qualimap_coverage_histogram_raw"
+        description: "Raw Qualimap coverage_histogram tables, one line per row (input of qualimap_coverage_histogram)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*coverage_histogram\\.txt$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1f"
+              has_header: false
+              new_columns: ["raw"]
+              comment_prefix: "#"
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw": "One line of the depth histogram"
+              "source_path": "File the line came from; the library id is derived from its directory"
+
+      - data_collection_tag: "qualimap_coverage_histogram"
+        description: "How many bases of the reference sit at each read depth, per library"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "qualimap/coverage_histogram.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library Qualimap ran on"
+              "coverage": "Depth, X"
+              "n_genomic_locations": "Bases of the reference at that depth"
+              "fraction": "Share of the reference at that depth, 0 to 1"
+
+      - data_collection_tag: "qualimap_genome_fraction_coverage_raw"
+        description: "Raw Qualimap genome_fraction_coverage tables, one line per row (input of qualimap_genome_fraction_coverage)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*genome_fraction_coverage\\.txt$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1f"
+              has_header: false
+              new_columns: ["raw"]
+              comment_prefix: "#"
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw": "One line of the cumulative coverage curve"
+              "source_path": "File the line came from; the library id is derived from its directory"
+
+      - data_collection_tag: "qualimap_genome_fraction_coverage"
+        description: "Share of the reference covered at least X deep, per library: the number a shallow shotgun library is really judged on"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "qualimap/genome_fraction_coverage.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library Qualimap ran on"
+              "min_coverage": "Depth threshold, X"
+              "genome_fraction_pct": "Share of the reference covered at least that deep, percent"
+
+      # ----------------------------------------------------------------
       # Preseq library complexity. Catalog-owned recipe (preseq/complexity_curve.py)
       # is NOT reused directly: eager's lc_extrap writes `<library>.filtered.preseq`
       # with only total_reads/distinct_reads and no bootstrap CI, which the shared
@@ -224,111 +675,13 @@ workflows:
               "expected_distinct": "Unique molecules expected at that depth"
               "lower_ci": "Lower bound of the 95% interval (null: this run wrote no bootstrap CI)"
               "upper_ci": "Upper bound of the 95% interval (null, same reason)"
-              "ci_width": "upper_ci - lower_ci (null, same reason)"
+              "ci_width": "upper_ci minus lower_ci (null, same reason)"
 
       # ----------------------------------------------------------------
-      # samtools flagstat, before and after eager's mapping-quality filter.
-      # Both directories write files literally named `*flagstat.stats`; the
-      # sample and the stage live only in the path, never in the report text,
-      # so the raw scan reads it one LINE per row (see catalog/samtools/flagstat.py).
-      # ----------------------------------------------------------------
-      - data_collection_tag: "samtools_flagstat_raw"
-        description: "Raw samtools flagstat reports, pre- and post-filter, one line per row (input of samtools_flagstat)"
-        config:
-          type: "Table"
-          metatype: "Aggregate"
-          scan:
-            mode: "recursive"
-            scan_parameters:
-              regex_config:
-                pattern: ".*flagstat\\.stats$"
-          dc_specific_properties:
-            format: "TSV"
-            polars_kwargs:
-              separator: "\x1f"
-              has_header: false
-              new_columns: ["raw"]
-              include_file_paths: "source_path"
-              infer_schema_length: 0
-            columns_description:
-              "raw": "One line of the flagstat report"
-              "source_path": "File the line came from; sample and filter stage are derived from it"
-
-      - data_collection_tag: "samtools_flagstat"
-        description: "Alignment flagstat, one row per (library, filter stage)"
-        config:
-          type: "Table"
-          metatype: "Aggregate"
-          source: "transformed"
-          transform:
-            recipe: "samtools/flagstat.py"
-          dc_specific_properties:
-            format: "TSV"
-            columns_description:
-              "sample": "Library the report was written for"
-              "stage": "pre-filter or post-filter"
-              "total_reads": "QC-passed + QC-failed reads"
-              "mapped_reads": "Reads flagged mapped"
-              "mapped_pct": "mapped / total, as flagstat reports it"
-              "duplicate_reads": "Reads flagged duplicate"
-              "properly_paired_reads": "Reads in a properly paired pair"
-              "properly_paired_pct": "properly paired / total"
-              "singleton_pct": "singletons / total"
-
-      # ----------------------------------------------------------------
-      # Qualimap BamQC genome_results.txt. The report never names the
-      # sample (titled "BamQC report" regardless of input); the library
-      # lives only in the parent directory, so this is the same raw-scan
-      # idiom as flagstat (see catalog/qualimap/bamqc_genome_results.py).
-      # ----------------------------------------------------------------
-      - data_collection_tag: "qualimap_bamqc_genome_results_raw"
-        description: "Raw Qualimap genome_results.txt reports, one line per row (input of qualimap_bamqc_genome_results)"
-        config:
-          type: "Table"
-          metatype: "Aggregate"
-          scan:
-            mode: "recursive"
-            scan_parameters:
-              regex_config:
-                pattern: ".*_stats/genome_results\\.txt$"
-          dc_specific_properties:
-            format: "TSV"
-            polars_kwargs:
-              separator: "\x1f"
-              has_header: false
-              new_columns: ["raw"]
-              include_file_paths: "source_path"
-              infer_schema_length: 0
-            columns_description:
-              "raw": "One line of the genome_results.txt report"
-              "source_path": "File the line came from; the library id is derived from its parent directory"
-
-      - data_collection_tag: "qualimap_bamqc_genome_results"
-        description: "Per-library depth, mapping quality, error rate and duplication from Qualimap BamQC"
-        config:
-          type: "Table"
-          metatype: "Aggregate"
-          source: "transformed"
-          transform:
-            recipe: "qualimap/bamqc_genome_results.py"
-          dc_specific_properties:
-            format: "TSV"
-            columns_description:
-              "sample": "Library Qualimap ran on"
-              "total_reads": "Reads Qualimap was given"
-              "mapped_reads": "Reads it placed"
-              "percentage_aligned": "mapped_reads / total_reads, Qualimap's own number"
-              "mean_coverage": "Mean depth over the reference, X"
-              "mean_mapping_quality": "Mean MAPQ of mapped reads"
-              "general_error_rate": "Mismatches / mapped bases"
-              "gc_percentage": "GC content of mapped bases"
-              "duplication_rate": "Qualimap's own duplicate estimate, percent"
-
-      # ----------------------------------------------------------------
-      # DamageProfiler misincorporation. A real TSV (three `#` comment
-      # lines then a header), so the raw scan reads it as such; only the
-      # library, which lives in the parent directory, not the file, and
-      # the read end, in the filename, not a column, need the recipe.
+      # DamageProfiler. Three collections: the misincorporation table (a
+      # real TSV behind three `#` comment lines), the fragment length
+      # distribution, and the per-library summary that pairs the two into
+      # the plane an authenticity call is actually made on.
       # ----------------------------------------------------------------
       - data_collection_tag: "damageprofiler_misincorporation_raw"
         description: "Raw DamageProfiler misincorporation tables, both read ends (input of damageprofiler_misincorporation)"
@@ -351,7 +704,7 @@ workflows:
               "source_path": "File the row came from; the library and the read end are derived from it"
 
       - data_collection_tag: "damageprofiler_misincorporation"
-        description: "Misincorporation frequency by position, both read ends, C to T and G to A kept apart from every other substitution"
+        description: "Misincorporation frequency by position, both read ends, the two deamination substitutions kept apart from every other substitution"
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -367,8 +720,253 @@ workflows:
               "base_change": "C>T, G>A, or other (the twelve remaining substitution types, summed)"
               "frequency": "Substitution frequency at that position"
 
+      - data_collection_tag: "damageprofiler_lgdistribution_raw"
+        description: "Raw DamageProfiler fragment length tables (input of damageprofiler_lgdistribution)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*lgdistribution\\.txt$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              comment_prefix: "#"
+              include_file_paths: "source_path"
+            columns_description:
+              "Std": "Strand the reads mapped to"
+              "Length": "Fragment length, bp"
+              "Occurrences": "Reads of that length on that strand"
+              "source_path": "File the row came from; the library is derived from its parent directory"
+
+      - data_collection_tag: "damageprofiler_lgdistribution"
+        description: "Mapped fragment length distribution per library and strand, the second ancient-DNA authenticity signal"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "damageprofiler/lgdistribution.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library DamageProfiler ran on"
+              "strand": "Strand the reads mapped to"
+              "series": "Library and strand together, one curve of the length profile"
+              "length": "Fragment length, bp"
+              "occurrences": "Reads of that length on that strand"
+              "fraction": "Share of that library and strand's reads, 0 to 1"
+
+      - data_collection_tag: "damageprofiler_authenticity"
+        description: "One row per library pairing the two authenticity signals: terminal deamination at the first base of a read, and mapped fragment length"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "damageprofiler/authenticity.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library DamageProfiler ran on"
+              "ct_5p_first": "C to T frequency at the first 5 prime base"
+              "ga_3p_first": "G to A frequency at the first 3 prime base"
+              "terminal_damage": "Mean of the two, the headline damage number"
+              "background": "Every other substitution at the same positions, pooled"
+              "mean_length": "Mean mapped fragment length, bp"
+              "median_length": "Median mapped fragment length, bp"
+              "fraction_under_70bp": "Share of mapped fragments shorter than 70 bp, 0 to 1"
+              "n_reads": "Mapped fragments the length distribution counted"
+
+      # ----------------------------------------------------------------
+      # bcftools stats over the HaplotypeCaller VCFs. eager writes them
+      # flat (`bcftools/stats/<sample>.vcf.stats`) while sarek nests them
+      # per caller and per sample, so the shared catalog recipes read both
+      # ids off the report's own `ID` line rather than off the directory
+      # order. These two collections key on Sample_Name, not Library_ID:
+      # the VCF is per biological sample.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "bcftools_stats_raw"
+        description: "Raw bcftools stats reports, one line per row (input of bcftools_stats_summary and bcftools_stats_tstv)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.(?:vcf\\.stats|bcftools_stats\\.txt)$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1f"
+              has_header: false
+              new_columns: ["raw_line"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw_line": "One line of the bcftools stats report"
+              "source_path": "File the line came from; sample and caller are read off the report's ID line"
+
+      - data_collection_tag: "bcftools_stats_summary"
+        description: "Variant record counts per sample and caller: SNPs, indels and multiallelic sites"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "bcftools/stats_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample_Name the VCF was called for"
+              "caller": "Variant caller the VCF came from (haplotypecaller in this run)"
+              "n_records": "Rows in the VCF"
+              "n_no_alts": "Reference-only sites"
+              "n_snps": "Rows carrying a SNP"
+              "n_mnps": "Rows carrying a multi-nucleotide substitution"
+              "n_indels": "Rows carrying an insertion or a deletion"
+              "n_others": "Rows carrying anything else"
+              "n_multiallelic_sites": "Sites with more than one alternate allele"
+              "n_multiallelic_snp_sites": "Of those, the SNP sites"
+              "snp_fraction": "n_snps over n_records, 0 to 1"
+              "log10_n_records": "log10 of the record count, so callers of very different yield share one axis"
+
+      - data_collection_tag: "bcftools_stats_tstv"
+        description: "Transition to transversion ratio per sample and caller"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "bcftools/stats_tstv.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample_Name the VCF was called for"
+              "caller": "Variant caller the VCF came from"
+              "ts": "Transitions called"
+              "tv": "Transversions called"
+              "ts_tv": "Their ratio; deamination inflates it when the caller assumes undamaged DNA"
+              "ts_1st_alt": "Transitions counted on the first alternate allele only"
+              "tv_1st_alt": "Transversions counted on the first alternate allele only"
+              "ts_tv_1st_alt": "Their ratio"
+
+      # ----------------------------------------------------------------
+      # OPTIONAL BRANCHES, none of which ran in this megatest.
+      # The patterns are the file names nf-core/eager's output docs list,
+      # matched on NAME so they survive the 2.x to 3.x directory renames.
+      # With `optional: true` a run that did not enable the branch skips
+      # the collection instead of failing the ingest, and a run that did
+      # enable it picks the files up with no template edit. No dashboard
+      # tile binds them, so nothing renders empty here; the two tabs that
+      # would read them carry a text tile saying the branch did not run.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "sexdeterrmine"
+        description: "Sex.DetERRmine relative X and Y coverage per library (optional, needs --run_sexdeterrmine)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*(?:SexDet|sexdeterrmine)\\.tsv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "source_path": "File the row came from"
+
+      - data_collection_tag: "mtnucratio"
+        description: "MTNucRatio mitochondrial to nuclear read ratio per library (optional, needs --run_mtnucratio)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.mtnucratio(?:\\.json)?$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "source_path": "File the row came from"
+
+      - data_collection_tag: "nuclear_contamination"
+        description: "ANGSD X-chromosome contamination estimates, method of moments and maximum likelihood (optional, needs --run_nuclear_contamination)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*nuclear_contamination(?:_mqc)?\\.txt$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "source_path": "File the row came from"
+
+      - data_collection_tag: "maltextract_heatmap"
+        description: "HOPS / MaltExtract taxon authentication overview, the Wevid heatmap table (optional, needs --run_maltextract)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*heatmap_overview_Wevid\\.tsv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "source_path": "File the row came from"
+
+      - data_collection_tag: "kraken_report"
+        description: "Kraken metagenomic classification report, merged across libraries (optional, needs --metagenomic_tool kraken)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*kraken(?:_merged_report|_parsed)?\\.(?:csv|tsv)$"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "source_path": "File the row came from"
+
 links:
-  # Hub -> everything, keyed on the library id.
+  # ---- Hub to everything keyed on the LIBRARY id -------------------------
   - source_dc_tag: "samples"
     source_column: "sample_id"
     target_dc_tag: "multiqc_data"
@@ -411,6 +1009,46 @@ links:
 
   - source_dc_tag: "samples"
     source_column: "sample_id"
+    target_dc_tag: "qualimap_coverage_per_contig"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the per-contig depth table by the libraries picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "qualimap_coverage_across_reference"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the coverage track by the libraries picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "qualimap_coverage_histogram"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the depth histogram by the libraries picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "qualimap_genome_fraction_coverage"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the cumulative coverage curve by the libraries picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
     target_dc_tag: "damageprofiler_misincorporation"
     target_type: "table"
     link_config:
@@ -419,8 +1057,92 @@ links:
     description: "Filter the damage profile by the libraries picked in the left panel"
     enabled: true
 
-  # Reverse links: pick a library on the damage profile, carry it to the
-  # coverage and complexity tables that explain whether it is trustworthy.
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "damageprofiler_lgdistribution"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the fragment length profile by the libraries picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "damageprofiler_authenticity"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the authenticity plane by the libraries picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "endorspy_endogenous"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the endogenous DNA tiles by the libraries picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "picard_markduplicates_metrics"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the duplication metrics by the libraries picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "eager_lane_stats"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the per-lane trimming table by the libraries picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "eager_read_fate"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the read-fate flow by the libraries picked in the left panel"
+    enabled: true
+
+  # ---- Hub to the genotyping collections, keyed on Sample_Name ----------
+  # bcftools stats ran on the per-sample VCF, so its `sample` column holds
+  # COD076, not COD076E1bL1. The hub carries both ids, which is the only
+  # reason these two tiles can be filtered from the same left panel as the
+  # rest of the dashboard.
+  - source_dc_tag: "samples"
+    source_column: "sample_name"
+    target_dc_tag: "bcftools_stats_summary"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the variant counts by the biological samples behind the libraries picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_name"
+    target_dc_tag: "bcftools_stats_tstv"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the Ts to Tv ratio by the biological samples behind the libraries picked in the left panel"
+    enabled: true
+
+  # ---- Reverse links: a selection on one panel reaches its context ------
   - source_dc_tag: "damageprofiler_misincorporation"
     source_column: "sample"
     target_dc_tag: "qualimap_bamqc_genome_results"
@@ -439,4 +1161,24 @@ links:
       resolver: "direct"
       target_field: "sample"
     description: "Carry a library selected on the damage profile over to its complexity curve"
+    enabled: true
+
+  - source_dc_tag: "damageprofiler_authenticity"
+    source_column: "sample"
+    target_dc_tag: "damageprofiler_lgdistribution"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Carry a library selected on the authenticity plane over to its full length profile"
+    enabled: true
+
+  - source_dc_tag: "endorspy_endogenous"
+    source_column: "sample"
+    target_dc_tag: "samtools_flagstat"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Carry a library selected on the endogenous DNA tiles over to its flagstat rows"
     enabled: true

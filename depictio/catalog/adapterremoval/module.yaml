@@ -1,0 +1,9 @@
+# AdapterRemoval: adapter trimming, quality trimming and, for overlapping
+# mates, collapsing into one sequence. One output here, the .settings report's
+# [Trimming statistics] section; the [Length distribution] table in the same
+# file reaches dashboards through MultiQC's AdapterRemoval panel.
+id: adapterremoval
+name: AdapterRemoval
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/adapterremoval
+homepage: https://github.com/MikkelSchubert/adapterremoval
+biotools_url: https://bio.tools/adapterremoval

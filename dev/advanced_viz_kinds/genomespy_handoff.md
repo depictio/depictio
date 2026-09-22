@@ -3,10 +3,21 @@
 Scope boundary from issue #1083: these kinds draw binned or summarised rows
 only, never per-base signal, reads, or gene models, which is JBrowse
 territory. Every *coordinate-bound* kind (a chromosome plus a start) carries
-that pair so a later GenomeSpy spec can bind the same rows with a `mark`,
-without a schema change. This page is that handoff for the three kinds added
-in lot 2, plus `coverage_track`'s new `mark` setting, which exists for the
-same reason.
+that pair so a GenomeSpy spec can bind the same rows with a `mark`, without a
+schema change. This page is that handoff for the three kinds added in lot 2,
+plus `coverage_track`'s new `mark` setting, which exists for the same reason.
+
+The spec builder that consumes this handoff now exists: `genome_view`
+(renamed from the spike's `genomespy_track`), in
+`packages/depictio-react-core/src/components/advanced_viz/genomespy/`.
+Three of its grammar limits, verified against `@genome-spy/core` 0.88.1, bound
+everything below and correct two claims earlier revisions of this page made:
+
+| Claim | Fact in 0.88.1 |
+| --- | --- |
+| "GenomeSpy's own `line` mark" | **There is no line or area mark.** `markTypes` in `view/unitView.js` is point / rect / arrow / rule / tick / link / text. A profile is `rect` anchored at a baseline, which `genome_view` exposes as `mark: "bar"`. |
+| "`facet_by_sample` maps to GenomeSpy's `sample` facet" | `facet` is an **app-level** feature; core's `FacetSpec` is undocumented. Per-sample lanes are a hand-built `vconcat`, one view per sample, each narrowed by a `filter` transform over one shared dataset. |
+| a second genomic axis for `contact_map` | Still absent. `contact_map` stays on Plotly; the two are linked by the region filter instead (see below). |
 
 Being coordinate-bound is a property of the *rows*, not of the kind's name:
 `knee_plot` and `damage_profile` are summaries over rank / read-position, not
@@ -48,6 +59,14 @@ mirrors the upper triangle across the diagonal; see
 `ContactMapRenderer.tsx` and `contactMapBinning.ts::coarsenBins` for the
 resolution guard (`max_bins`).
 
+**What is wired today instead.** A `genome_view` tile over the 1D Hi-C tracks
+(insulation, E1, boundaries) and a `contact_map` tile over the matrix share the
+dashboard's region filter: a brush on the genome axis publishes a `chrom`
+multi-select plus a `start` range through `genomeRegionFilters`, which the
+contact map receives as an ordinary filter on its own collection. That is the
+pyGenomeTracks reading (a matrix over aligned 1D tracks on one x range) without
+the second genomic axis GenomeSpy does not have.
+
 ## `knee_plot` (out of scope)
 
 Row contract: `sample` (string), `rank` (number, ascending from 1),
@@ -80,11 +99,36 @@ carries what a GenomeSpy spec would set as its mark:
 
 | `mark` value | GenomeSpy mark | Encoding                              |
 | ------------ | --------------- | -------------------------------------- |
-| `"line"`     | GenomeSpy's own `"line"` mark | `x` = `position`, `y` = `value` |
-| `"rect"`     | `rect`           | `x`/`x2` = bin `position`/`end`, `y2` = `value` |
+| `"line"`     | none (no line mark exists) | closest reading is `genome_view`'s `"bar"`: `rect` with `y` = `value`, `y2` = `{datum: 0}` |
+| `"rect"`     | `rect`           | `x`/`x2` = bin `position`/`end`, `y` = `value` |
 | `"point"`    | `point`          | `x` = `position`, `y` = `value`        |
 
-`facet_by_sample` maps to GenomeSpy's `sample` facet the same way `sample`
-already facets this renderer's per-sample lanes. Both fields are optional and
-default to today's rendering; see `CoverageTrackConfig` in
-`depictio/models/components/advanced_viz/configs.py`.
+`facet_by_sample` becomes a `vconcat` of one view per sample sharing the x
+scale, not a GenomeSpy `facet` (which is app-only). Both fields are optional
+and default to today's rendering; see `CoverageTrackConfig` in
+`depictio/models/components/advanced_viz/configs.py`. Note that `mark: "line"`
+has no GenomeSpy equivalent: a collection bound to `genome_view` instead draws
+that profile as `mark: "bar"`.
+
+## `genome_view` (the consumer)
+
+Row contract (`CANONICAL_SCHEMAS["genome_view"]` plus `_OPTIONAL_ROLES`):
+
+| Role       | Column config   | Type   | Required | What it turns on                       |
+| ---------- | --------------- | ------ | -------- | -------------------------------------- |
+| `chr`      | `chr_col`       | string | yes      | the locus axis, and the chromosome half of the region filter |
+| `pos`      | `pos_col`       | int    | yes      | mark position, and the range half of the region filter |
+| `score`    | `score_col`     | float  | yes      | the y axis                             |
+| `end`      | `end_col`       | int    | no       | `rect` intervals, and the span of a bar |
+| `feature`  | `feature_col`   | string | no       | hover identity, and what a click filters on |
+| `sample`   | `sample_col`    | string | no       | `facet_by_sample`: one `vconcat` lane per sample |
+| `category` | `category_col`  | string | no       | colour channel in place of the chromosome |
+
+Deliberately identical required roles to `manhattan`, so any collection one of
+them binds the other renders unchanged.
+
+A tile binds exactly one data collection, so a multi-track genome view is
+several `genome_view` tiles stacked in one dashboard section sharing a region
+filter, not one tile over N collections. Within one tile, `facet_by_sample`
+gives per-sample lanes (capped by `max_facets`) because those rows do come from
+one collection.

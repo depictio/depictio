@@ -1490,10 +1490,10 @@
     },
     {
       "category": "tool",
-      "description": "chr / pos / score drawn by GenomeSpy on a chromosome-aware locus axis: native genome zoom, points or intervals, click-to-filter. Spike for #1083.",
+      "description": "chr / pos / score drawn by GenomeSpy on a chromosome-aware locus axis: native genome zoom, points, intervals or coverage bars, per-sample lanes, a gene annotation lane, and a region brush that filters the dashboard.",
       "heavy": false,
       "icon": "tabler:dna-2",
-      "label": "GenomeSpy track",
+      "label": "Genome view",
       "required_roles": [
         "chr",
         "pos",
@@ -1528,6 +1528,14 @@
         ]
       },
       "roles": {
+        "category": {
+          "description": "Categorical grouping / annotation.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
         "chr": {
           "description": "Chromosome / contig name.",
           "dtypes": [
@@ -1572,6 +1580,14 @@
           ],
           "required": true
         },
+        "sample": {
+          "description": "Optional sample column for faceting.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
         "score": {
           "description": "Value plotted on the y-axis (e.g. -log10 p, signal).",
           "dtypes": [
@@ -1581,7 +1597,7 @@
           "required": true
         }
       },
-      "viz_kind": "genomespy_track"
+      "viz_kind": "genome_view"
     },
     {
       "category": "plot",
