@@ -30,6 +30,11 @@ H3K27me3 in two replicates each, plus two IgG controls.
   are the libraries clean and is the target enriched over its control, what the signal
   underneath that looks like, what did each caller call, how much of that the two callers
   share, and how much of it both replicates of a target support.
+- **Controls where they are the analysis.** The locus navigator, the fragment track's view
+  switch, the fingerprint scatter, the PCA and the caller dot plot draw their encoding
+  controls as chips under the title (`controls_placement: header`); every other tile keeps
+  them in the settings popover. Every threshold `RangeSlider` draws the column histogram above
+  it (`show_histogram: true`).
 - **The sample hub is the hub.** `samples` is one row per library with its target, its
   replicate number and its role (target or control). A persistent `Sample filters` section
   (sample, target, replicate, role) is pinned to the top of every tab, and the template's
@@ -128,6 +133,19 @@ contrast as one number per sample. On this megatest H3K27me3_R1 is the most nucl
 library at a ratio of 8.5 and H3K4me3_R2 the least at 3.1, which is the direction a broad mark
 against a sharp one should give.
 
+`Fragment pile-up around the peaks` is the deepTools heatmap of a CUT&RUN run rebuilt from the
+fragment BEDs the pipeline publishes (`*.frags.cut.bed`), since no bigWig or computeMatrix
+output is mirrored. The new catalog output `seacr/frags_profile` keeps, per sample, the 500
+strongest SEACR regions whose 6 kb windows do not overlap, and counts the fragments over
+every 100 bp bin of each window, per million fragments of the sample. The `signal_matrix` tile
+draws regions down and offsets across, one panel per sample with the mean profile on top; a
+code-mode line figure puts the four mean profiles on one axis. On this megatest H3K4me3
+peaks at about 140 (R1) and 59 (R2) fragments per million at the summit against 2 at 3 kb,
+while H3K27me3 only rises from about 4 to 15 (R1): sharp against broad, from the fragments
+themselves. It sits on this tab rather than under
+the locus navigator on purpose: the navigator's region reaches `seacr_frags_profile` through
+its region link, which would narrow the matrix to the handful of regions on screen.
+
 `Spike-in normalisation` is what the coverage was divided by. Every library is aligned twice
 and the carrier depth of the second alignment says how much material it really held; the
 pipeline turns that into `normalisation_c / spikein_aligned_pairs` and applies it to the
@@ -135,6 +153,12 @@ bedGraph every caller reads. The run publishes no scale-factor table, so these r
 recomputed from the two Bowtie 2 logs. The spread is large and meaningful: the IgG controls
 carry 3 % carrier DNA and get a factor near 0.16, while H3K27me3_R1 carries 0.006 % and gets
 55.9.
+
+`Library duplication` reads samtools flagstat on the marked-duplicate BAMs (the shared
+`samtools/flagstat` recipe) and draws the duplicate share per library and against depth. The
+pipeline flags duplicates in the target BAMs rather than removing them, so the share inflates
+every coverage number downstream. On this megatest the targets sit between 1 % and 6.5 %
+while the IgG controls, which hold the least material, reach 35 % and 86 %.
 
 `Coverage concentration and sample similarity` reads the three tables behind the deepTools
 panels on the MultiQC tab. `use: deeptools/fingerprint_scatter` puts every library on one
@@ -159,11 +183,28 @@ raw ratios span 2.3 to 48 across the four targets, whose factors span 2.9 to 55.
 dividing the factor back out collapses them to 0.67 to 0.86. The donut is the in-peaks against
 outside-peaks composition, the stacked bar is the same split per sample.
 
-`Signal along the genome` draws every region as the interval it is on a chromosome-aware
-`genome_view` axis with height `log10(total signal)`, with a `coverage_track` below it reading
-the same columns through the Plotly renderer so the section still answers the question if the
-genome canvas is unavailable. Under them sit a code-mode scatter of total against maximum
-coverage carrying `selection_enabled` on `peak_id`, and a width histogram.
+The code-mode scatter of total against maximum coverage (selection on `peak_id`) and the
+region-width histogram sit in the yield section under the cards.
+
+`Peak calls locus` is the locus section: four tiles on one region and one x axis. The
+navigator on top is a `genome_view` of every SEACR region (`use: seacr/seacr_peak_track`,
+rect marks, locus field in the header). It sets no `assembly`: SEACR also calls regions on
+alt and unplaced contigs that the hg38 contig table does not list, and GenomeSpy rejects the
+whole spec on the first unknown contig, so the axis is derived from the rows and gene symbol
+search is off. It opens on
+`default_region: chr9:130,850,000-131,350,000`, from the 3' end of ABL1 to PLPP7, because every
+track of the megatest has data there: H3K4me3 calls two sharp regions on the NUP214 and FAM78A
+promoters in both replicates, H3K27me3 covers LAMC3 and FIBCD1 with some thirty regions per
+replicate, MACS2 and the consensus sets call the same places, and the fragment windows of the
+strongest regions of all four samples sit inside it. Under it, three tracks follow the region
+through the `region` links declared in `template.yaml` (`seacr_peaks -> seacr_frags_profile`,
+`-> macs2_peaks`, `-> seacr_consensus_peaks`): the fragment pile-up (`coverage_track`, one lane
+per sample, header switch between the Plotly track and the GenomeSpy locus view), the MACS2
+calls and the consensus intervals (`genome_view` with `follow_region_filter`; the consensus
+track carries the hg38 gene lane, its rows already narrowed to chr9). Only the
+navigator's region travels through those links; the sidebar Contig filter narrows the SEACR
+calls alone. The earlier `coverage_track` over the SEACR calls was removed: it drew the same
+rows as the navigator (lint `test_no_double_track_binding`).
 
 `MACS2 alongside` is the same fragments through a background-model caller: four cards (peaks,
 width, fold enrichment, best q-value) and a manhattan panel over `-log10(q)`. Note that it
@@ -172,7 +213,8 @@ enrichment at all, so its track plots coverage while the MACS2 panel plots signi
 
 `Peak tables`, collapsed, holds both callers' rows with row selection on `peak_id`.
 
-The left rail filters on region width, coverage per base and contig.
+The left rail filters on region width and coverage per base (both sliders draw the column
+histogram) and on contig.
 
 ---
 
@@ -232,7 +274,7 @@ it.
 ## Reproducing
 
 ```bash
-# 1. Fetch the megatest subset (103 files, 90 MB)
+# 1. Fetch the megatest subset (107 files, about 250 MB with the four fragment BEDs)
 bash depictio/projects/nf-core/cutandrun/3.1/download_test_data.sh \
   ~/Data/depictio-nfcore/cutandrun/3.1/megatest
 

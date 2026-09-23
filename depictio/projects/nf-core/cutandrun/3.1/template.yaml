@@ -595,6 +595,113 @@ workflows:
               "other_caller": "The caller compared against"
               "n_peaks_other": "Peaks that other caller called for the same sample"
 
+      # ----------------------------------------------------------------
+      # Duplication. MultiQC's samtools module shows the flagstat counts as
+      # a stacked bar; the per-sample duplicate share a CUT&RUN reader
+      # checks first (a low-input library saturates fast) needs the counts
+      # as a table. Only the marked-duplicate BAMs' reports are read: the
+      # IgG controls also get a deduplicated twin under dedup/, whose
+      # report would count the same sample twice.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samtools_flagstat_raw"
+        description: "Raw samtools flagstat reports of the marked-duplicate target BAMs, one line per row (input of samtools_flagstat)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?markdup/[^/]+\\.flagstat$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1f"
+              has_header: false
+              new_columns: ["raw"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw": "One line of a flagstat report"
+              "source_path": "File the line came from; the sample is derived from it"
+
+      - data_collection_tag: "samtools_flagstat"
+        description: "Per-sample alignment counts from samtools flagstat on the marked-duplicate BAM: total, mapped, properly paired and duplicate reads"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "samtools/flagstat.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the BAM belongs to"
+              "stage": "Always pre-filter here: cutandrun reports the marked BAM before any filter"
+              "total_reads": "QC-passed plus QC-failed reads"
+              "mapped_reads": "Reads flagged mapped"
+              "mapped_pct": "Mapped over total, in percent"
+              "duplicate_reads": "Reads Picard MarkDuplicates flagged as duplicates"
+              "properly_paired_reads": "Reads in a properly paired pair"
+              "properly_paired_pct": "Properly paired over total, in percent"
+              "singleton_pct": "Reads whose mate did not map, in percent"
+
+      # ----------------------------------------------------------------
+      # Fragment pile-up around the SEACR regions. The fragment BEDs
+      # (`*.frags.cut.bed`, tens of MB per library) are what SEACR called
+      # from; the raw scan only exists so the recipe can read the sample
+      # off the file name. Both collections are optional: a run published
+      # without the fragment BEDs, or a mirror that skipped them, ingests
+      # everything else and the pile-up tiles drop out.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "seacr_frags_raw"
+        description: "Raw per-sample fragment BEDs, one fragment per row (input of seacr_frags_profile)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.frags\\.cut\\.bed$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              has_header: false
+              new_columns: ["chr", "start", "end"]
+              include_file_paths: "source_path"
+            columns_description:
+              "chr": "Chromosome"
+              "start": "Fragment start (0-based)"
+              "end": "Fragment end"
+              "source_path": "File the row came from; the sample name is derived from it"
+
+      - data_collection_tag: "seacr_frags_profile"
+        description: "Fragments piled up in 100 bp bins on a 6 kb window around the summit of each sample's 500 strongest non-overlapping SEACR regions, per million fragments"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "seacr/frags_profile.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the fragments and the region belong to"
+              "target": "Group the sample belongs to"
+              "peak_id": "SEACR region the window is centred on (seacr_peaks.peak_id)"
+              "peak_rank": "1 for the sample's strongest kept region"
+              "chr": "Chromosome"
+              "summit": "The region's summit"
+              "offset_bp": "Bin start minus the summit bin start, in bp"
+              "bin_start": "Genomic start of the bin (0-based)"
+              "bin_end": "Genomic end of the bin"
+              "fragments": "Fragments overlapping the bin"
+              "cpm": "Fragments overlapping the bin per million fragments of the sample"
+
 links:
   # Hub -> everything keyed on the sample name.
   - source_dc_tag: "samples"
@@ -780,4 +887,63 @@ links:
       resolver: "direct"
       target_field: "sample"
     description: "Filter the correlation matrix rows by the samples picked on the samplesheet"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "samtools_flagstat"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the duplication counts by the samples picked on the samplesheet"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "seacr_frags_profile"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the fragment pile-up by the samples picked in the left panel"
+    enabled: true
+
+  # Locus section (Peak calls tab). The SEACR navigator emits a chromosome
+  # and a position range on its own columns (chr, start); these links rename
+  # them onto each track's coordinate columns, so a brush or a typed locus on
+  # the navigator moves the fragment pile-up, the MACS2 calls and the
+  # consensus intervals with it. Only the navigator's region travels this
+  # way: the sidebar Contig filter narrows the SEACR calls alone.
+  - id: seacr_peaks_region_to_seacr_frags_profile
+    source_dc_tag: "seacr_peaks"
+    source_column: "chr"
+    target_dc_tag: "seacr_frags_profile"
+    target_type: "table"
+    link_config:
+      resolver: "region"
+      columns: {chrom: "chr", pos: "bin_start"}
+    description: "A region brushed or typed on the SEACR navigator narrows the fragment pile-up"
+    enabled: true
+
+  - id: seacr_peaks_region_to_macs2_peaks
+    source_dc_tag: "seacr_peaks"
+    source_column: "chr"
+    target_dc_tag: "macs2_peaks"
+    target_type: "table"
+    link_config:
+      resolver: "region"
+      columns: {chrom: "chr", pos: "start"}
+    description: "A region brushed or typed on the SEACR navigator narrows the MACS2 calls"
+    enabled: true
+
+  - id: seacr_peaks_region_to_seacr_consensus_peaks
+    source_dc_tag: "seacr_peaks"
+    source_column: "chr"
+    target_dc_tag: "seacr_consensus_peaks"
+    target_type: "table"
+    link_config:
+      resolver: "region"
+      columns: {chrom: "chr", pos: "start"}
+    description: "A region brushed or typed on the SEACR navigator narrows the consensus intervals"
     enabled: true

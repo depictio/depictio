@@ -518,3 +518,86 @@ scatter description now describe the mechanism). Not done: rebinding the tab-loc
 the pinned `samples` and `seacr_peak_summary` tables, both already filtered, and `samples`
 has no numeric column for the two sliders; the `bowtie2_spikein_factors -> multiqc_data`
 link is what makes them narrow the report, so the binding is functional as declared.
+
+## 2026-09-23 wave 2b: locus section, fragment pile-up, duplication
+
+What changed:
+
+- Peak calls: `Signal along the genome` became the `Peak calls locus` section. The SEACR
+  navigator (`genome_view`, `controls_placement: header`, `region_filter_enabled`,
+  `default_region: chr9:130,850,000-131,350,000`) drives three tracks through three new
+  `region` links in `template.yaml`: the fragment pile-up (`coverage_track`,
+  `views: [track, locus]`), the MACS2 calls and the consensus intervals with the hg38 gene
+  lane (`genome_view`, `follow_region_filter`). The `coverage_track` on `seacr_peaks` was
+  removed (it doubled the navigator: `test_no_double_track_binding`). The width histogram and
+  the total-against-maximum scatter moved to the yield section.
+- New catalog output `seacr/frags_profile` (recipe, fixture, renders `frags_pileup_matrix`
+  signal_matrix and `frags_pileup_track` coverage_track) over two new optional collections,
+  `seacr_frags_raw` (scan of `*.frags.cut.bed`) and `seacr_frags_profile`. Bound on the Signal
+  tab (`Fragment pile-up around the peaks`: signal_matrix + a code-mode mean profile) and on
+  the locus section. New render `seacr/seacr_consensus_track` (genome_view) in
+  `consensus_peaks.yaml`.
+- Signal: `Library duplication` section on two new collections, `samtools_flagstat_raw`
+  (scan anchored on `markdup/`, the IgG `dedup/` twin would double-count) and
+  `samtools_flagstat` (shared `samtools/flagstat` recipe): duplicate share per library and
+  against depth.
+- `controls_placement: header` on the navigator, the fragment track, the fingerprint
+  scatter, the PCA and the caller dot plot; `show_histogram: true` on all 11 RangeSliders.
+- `megatest.yaml`: new key `*.frags.cut.bed` (4 files, 168 MB, fetched with
+  `scripts/nfcore_megatest.py fetch --key`).
+
+Discrepancies:
+
+### CR-D19: the navigator carries no `assembly`
+
+SEACR calls regions on alt and unplaced contigs (`chr17_GL000205v2_random`, `chrUn_*`).
+With `assembly: hg38` GenomeSpy threw `Unknown chromosome/contig` on the first such row and
+the tile failed (`Cannot read properties of undefined (reading 'subscribeMarkEvent')`). The
+navigator derives its axis from the rows, so gene-symbol search in its locus field is off;
+the gene lane rides the consensus track, whose rows arrive already narrowed to chr9. A
+renderer-side fix (drop rows on contigs the assembly does not list) would restore both.
+
+### CR-D20: the fragment BEDs are large, so the pile-up keeps 500 regions per sample
+
+`*.frags.cut.bed` holds every fragment (7.05 M rows over the four targets). The raw scan
+keeps them (a glob source cannot carry the file path: `pl.read_csv` has no
+`include_file_paths` in the pinned polars), and the recipe keeps, per sample, the 500
+strongest SEACR regions whose 6 kb windows do not overlap (122 000 rows, 4 s). The locus
+fragment track is therefore drawn only inside those windows; the tile description says so.
+
+### CR-D21: the pile-up matrix sits on the Signal tab, not under the navigator
+
+The navigator's region reaches `seacr_frags_profile` through its region link, which on the
+Peak calls tab narrowed the matrix to the 20 regions on screen. On the Signal tab the matrix
+shows all 2 000.
+
+### CR-D22: the navigator draws a sample of the SEACR calls
+
+`seacr_peaks` has 433 629 rows and the navigator is not narrowed by its own region, so it
+shows a sample of them at the default region; the tracks under it are narrowed and complete.
+
+Commands and results:
+
+- `uv run pytest -q depictio/tests/models/test_shipped_dashboard_yamls.py -k cutandrun`:
+  10 passed; `test_no_double_track_binding --runxfail` no longer lists cutandrun.
+- `uv run pytest -q depictio/tests/models/test_catalog.py depictio/tests/recipes/test_seacr_frags_profile.py`:
+  102 passed.
+- Recipe on the real megatest files: 122 000 rows, 0 duplicate genomic bins; mean fragments
+  per million at the summit against 3 kb: H3K4me3 140.5 / 59.3 against 2.2 / 2.6, H3K27me3
+  15.0 / 5.9 against 4.3 / 1.8.
+- `depictio.cli run --dry-run`: 8/8 steps.
+- Ingest on the lot 2 stack: 22/22 collections, `seacr_frags_raw` 7 051 185 rows,
+  `seacr_frags_profile` 122 000, `samtools_flagstat` 6 (targets 1.0 to 6.5 % duplicates, IgG
+  35 and 86 %). The three new `use:` tiles were stored without `viz_kind` because the backend
+  catalog cache predated them (last StatReload 09:05 UTC); patched in place through
+  `/dashboards/save` for the live check, which showed the MACS2, consensus and fragment tracks
+  following the default region (33, 34 and 1 220 rows) and the matrix rendering.
+- Re-ingest on fresh containers (project 6ab3d8499aabb660c9aec0c2, tabs
+  6ab3d88930116ab0896e41e5..e9): 22/22 collections with the same row counts, and every stored
+  advanced_viz carries a `viz_kind` (Signal: signal_matrix, scatter_xy, embedding,
+  complex_heatmap; Peak calls: genome_view x3, coverage_track, manhattan). Typing
+  `chr9:131,000,000-131,200,000` in the navigator moved every track: fragment pile-up 1 220 to
+  702 rows, MACS2 33 to 18, consensus 34 to 7, each echo line on the new region, axes
+  rescaled. The navigator itself stays at 9 920 rows (its chr9 rows, not narrowed by its own
+  position filter) and its axis zoomed to about chr9:130.3-133.0 Mb rather than the exact
+  window typed (CR-D22 reading: the navigator shows its chromosome, the tracks the region).

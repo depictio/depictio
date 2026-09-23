@@ -466,6 +466,23 @@ workflows:
               "peak_count": "Peaks of that sample falling in the bin"
               "fraction": "peak_count over the sample's peaks inside the window"
 
+      - data_collection_tag: "macs2_summit_profile"
+        description: "Every sample's peak calls aggregated on a 4 kb window centred on their summits: the average peak footprint and the other samples' summits around each summit"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "macs2/summit_profile.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the anchor summits were called in"
+              "offset_bp": "Bin centre, signed bp from the summit (50 bp bins, -2 kb to +2 kb)"
+              "n_summits": "Summits of that sample used as anchors"
+              "peak_footprint": "Share of the sample's peaks whose interval still covers that offset from their own summit"
+              "neighbour_summit_density": "Summits called in the other samples of the run, per anchor summit and per kb, in that bin"
+
       - data_collection_tag: "macs2_consensus_boolean"
         description: "Consensus peak intervals per antibody against the samples that called them, as 0/1 set columns"
         config:
@@ -739,6 +756,41 @@ links:
       resolver: "direct"
       target_field: "sample"
     description: "Filter the TSS distance profiles by the samples picked on the design sheet"
+    enabled: true
+
+  - source_dc_tag: "design"
+    source_column: "sample_id"
+    target_dc_tag: "macs2_summit_profile"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the summit-centred profiles by the samples picked on the design sheet"
+    enabled: true
+
+  # Genomic region. The Locus tab's navigator (a genome_view on macs2_peaks)
+  # emits a chromosome and a position filter on open (its default_region) and
+  # on every brush or locus entry. These two links rename that pair onto the
+  # other collections the tab stacks under it, so every track shows the same
+  # region. The persistent sample filter reaches them through the links above.
+  - source_dc_tag: "macs2_peaks"
+    source_column: "chr"
+    target_dc_tag: "macs2_consensus_boolean"
+    target_type: "table"
+    link_config:
+      resolver: "region"
+      columns: {chrom: "chr", pos: "start"}
+    description: "A region brushed or typed on the peak navigator narrows the consensus intervals"
+    enabled: true
+
+  - source_dc_tag: "macs2_peaks"
+    source_column: "chr"
+    target_dc_tag: "homer_annotated_peaks"
+    target_type: "table"
+    link_config:
+      resolver: "region"
+      columns: {chrom: "chr", pos: "start"}
+    description: "A region brushed or typed on the peak navigator narrows the HOMER annotation track"
     enabled: true
 
   # Library-level scope. The FastQC and Trim Galore panels are keyed on the
