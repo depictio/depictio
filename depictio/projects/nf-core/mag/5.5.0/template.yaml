@@ -314,6 +314,49 @@ workflows:
               "depth_variance": "Variance of that depth"
 
       # ----------------------------------------------------------------
+      # Two views of the same depth tables. The Nx curve reads every
+      # contig length (the fasta is not published, the depth tables list
+      # every contig); the recruitment matrix is the assembly-level stand-in
+      # for the bin by sample depth heatmap, whose input
+      # (GenomeBinning/depths/bins/) this run does not publish.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "assembly_nx"
+        description: "Nx curve per assembly: for every percent of the assembled bases, the contig length that reaches it (Nx) and how many contigs it took (Lx), contigs of at least 500 bp as in QUAST"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/mag/nx_curve.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "assembly_id": "Assembly, assembler and sample"
+              "assembler": "Assembler that built it"
+              "sample": "Sample the assembly was built from"
+              "nx": "Percent of the assembly's bases, 0 to 100"
+              "contig_length": "Nx: length of the contig at which the longest contigs reach that percent"
+              "n_contigs": "Lx: how many contigs it took to reach that percent"
+              "total_length": "Bases in contigs of at least 500 bp"
+
+      - data_collection_tag: "assembly_recruitment"
+        description: "One row per assembly, one column per sample whose reads were mapped back: the assembly's length-weighted mean depth in that sample, over contigs of at least 1 kbp"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/mag/assembly_recruitment.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "assembly_id": "Assembly, assembler and sample"
+              "assembler": "Assembler that built it"
+              "sample": "Sample the assembly was built from"
+
+      # ----------------------------------------------------------------
       # Bin QC. CheckM2 gives completeness and contamination, QUAST the
       # assembly statistics of the same bins.
       # ----------------------------------------------------------------
@@ -698,6 +741,22 @@ links:
 
   - source_dc_tag: "samples"
     source_column: "sample_id"
+    target_dc_tag: "assembly_nx"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the Nx curves by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "assembly_recruitment"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the recruitment matrix by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
     target_dc_tag: "checkm2_quality_report"
     target_type: "table"
     link_config: {resolver: "direct", target_field: "sample"}
@@ -865,6 +924,22 @@ links:
     target_type: "table"
     link_config: {resolver: "direct", target_field: "assembler"}
     description: "Carry the assembler picked in the left panel over to the contig coverage"
+    enabled: true
+
+  - source_dc_tag: "bin_summary"
+    source_column: "assembler"
+    target_dc_tag: "assembly_nx"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "assembler"}
+    description: "Carry the assembler picked in the left panel over to the Nx curves"
+    enabled: true
+
+  - source_dc_tag: "bin_summary"
+    source_column: "assembler"
+    target_dc_tag: "assembly_recruitment"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "assembler"}
+    description: "Carry the assembler picked in the left panel over to the recruitment matrix"
     enabled: true
 
   # Reverse links: a bin picked on the headline table carries its own identity

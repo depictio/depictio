@@ -149,3 +149,52 @@ uv run python -m depictio.cli run --template nf-core/mag/5.5.0 \
   `input/samplesheet.full.v4.csv`, so a filter on it would be dead on the reference run. It
   stays in the hub table.
 - `test_shipped_dashboard_yamls.py -k mag` passes.
+
+## 2026-09-23 wave 2b (analysis modes, header controls, record card)
+
+What changed:
+
+- Bins tab: completeness against contamination is cut into MIMAG `quadrants` at
+  x 90 / y 5 (the CheckM2 half of the high-quality draft); the old 5 percent
+  reference line is gone.
+- Bin detail tab: the MIMAG scatter carries the same quadrants, selects on
+  `bin_id`, and sits beside a `record_card` (w 3) on `bin_summary` with
+  `default_record: SPAdes-MetaBAT2-CAPES_S7.15` (a high-quality Klebsiella
+  pneumoniae draft, 96.3 / 1.25) and GTDB search links on genus and species.
+- Contigs tab: length against depth stays in points mode (`density: false`,
+  `density_threshold: 20000`, see MG-D14); new section
+  "Cross-sample recruitment" with a `complex_heatmap` (log1p) on the new
+  `assembly_recruitment` collection.
+- Assembly tab: new section "Nx curve" with a `profile` on the new
+  `assembly_nx` collection (N50 marked), plus an assembly MultiSelect on it.
+- `controls_placement: header` on every scatter_xy tile (9) and on the
+  stacked_taxonomy rank tile; `show_histogram: true` on all 8 RangeSliders.
+- Two pipeline-local recipes, `recipes/nx_curve.py` (contig lengths off the raw
+  depth scan, QUAST's 500 bp floor, 101 points per assembly) and
+  `recipes/assembly_recruitment.py` (length-weighted mean depth per assembly and
+  read sample, pivoted wide), with links from `samples` (sample) and
+  `bin_summary` (assembler). Tests: `depictio/tests/recipes/test_mag_assembly_views.py`.
+
+Discrepancies:
+
+- **MG-D11. No bin by sample depth.** `GenomeBinning/depths/bins/` and any
+  contig-to-bin membership are not published, so the canonical bin by sample
+  heatmap cannot be built; the assembly by read-sample recruitment matrix is
+  the honest level above.
+- **MG-D12. No contig GC.** GC against coverage coloured by bin needs contig GC
+  (assembly FASTA) and contig-to-bin membership; neither is published. The
+  length against depth scatter gets the density mode instead.
+- **MG-D13. Nx covers nine of ten assemblies.** The curve reads the depth
+  tables; QUAST reports ten assemblies, nine have a depth table. At x = 50 the
+  curve equals the QUAST N50 (MEGAHIT-CAPES_S7: 12 863 bp both).
+- **MG-D14. Density on log axes crashes the tab.** With the scatter's density
+  view on log axes (set explicitly, or switched on by itself above 3000 rows,
+  which the 9 539-row sample exceeds) headless Chromium crashed the Contigs tab
+  9 of 9 times; points mode and a linear density did not crash in 9 runs. The
+  tile is pinned to points mode until the renderer is fixed.
+
+Results: `test_shipped_dashboard_yamls.py -k mag` 30 passed; `test_catalog.py`
+99 passed; the recipe tests 2 passed; dry run 8/8. Live ingest as `lot2-mag`
+(project 6ab3caf59cf1ab2ab1503cbc, dashboard 6ab3cb74e8b8ace33d32c8b1):
+`assembly_nx` 909 rows, `assembly_recruitment` 9 x 6, every other collection
+unchanged (contig_depths 222 165, bin_summary 479).
