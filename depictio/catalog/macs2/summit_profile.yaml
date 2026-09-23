@@ -1,0 +1,27 @@
+id: macs2_summit_profile
+name: Summit-centred peak profile
+mode: peaks/summit_profile
+description: >-
+  The peak calls of every sample aggregated on a 4 kb window centred on their
+  summits, in 50 bp bins: the share of the sample's peaks still covering each
+  offset (the average peak footprint), and how densely the other samples of the
+  run place their own summits around this sample's summits. Derived from the
+  narrowPeak intervals only, so it is a peak-call aggregate and not a read
+  coverage metagene.
+# Reads the macs2_peaks collection through dc_ref (the recipe never globs), so
+# the find below only says which run directories the output applies to: the
+# ones holding narrowPeak calls. broadPeak calls carry no summit.
+find:
+  path_glob: "**/*_peaks.narrowPeak"
+recipe: macs2/summit_profile.py
+fixture: summit_profile.tsv
+renders_as:
+  # Cross-sample summit concordance first: a central spike is agreement between
+  # libraries, a flat curve is none.
+  - { id: summit_concordance_profile, component: advanced_viz, kind: profile, roles: {series: sample, x: offset_bp, y: neighbour_summit_density} }
+  # The same grid, read as the average shape of one call around its summit.
+  - { id: summit_footprint_profile, component: advanced_viz, kind: profile, roles: {series: sample, x: offset_bp, y: peak_footprint} }
+  - { component: figure, visu_type: line, dict_kwargs: {x: offset_bp, y: neighbour_summit_density, color: sample, title: Other samples' summits around each summit} }
+  - { component: card, column: neighbour_summit_density, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: peak_footprint, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

@@ -254,7 +254,9 @@
                 "group_compare",
                 "transcript_structure",
                 "cnv_profile",
-                "genome_chord"
+                "genome_chord",
+                "record_card",
+                "parallel_coordinates"
               ],
               "type": "string"
             },
@@ -290,6 +292,7 @@
                 "line",
                 "bar",
                 "box",
+                "violin",
                 "histogram",
                 "heatmap"
               ],
