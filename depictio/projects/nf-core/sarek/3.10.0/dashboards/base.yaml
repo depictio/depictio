@@ -572,6 +572,7 @@ main_dashboard:
     interactive_component_type: RangeSlider
     column_name: ts_tv
     column_type: float64
+    show_histogram: true
     display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:scale-balance'}
     placement: left
     title: Ts/Tv ratio
@@ -600,11 +601,20 @@ tabs:
 # ============================================================================
 # mosdepth ran twice per sample, on the duplicate-marked and on the
 # recalibrated CRAM, and wrote a per-contig summary and a per-target bed. The
-# bed is 212k targets per sample and stage; the recipe bins it to 1 Mb windows
-# before anything draws it. The sex check is mosdepth's X/Y coverage as MultiQC
-# exported it.
+# bed is 212k targets per sample and stage. mosdepth_regions bins it to 1 Mb
+# windows (mosdepth_windows renames them to chrom / pos) for the genome-wide
+# navigator; mosdepth_targets keeps it per target for the depth track under it,
+# which is only ever read narrowed to a region.
+# The sex check is mosdepth's X/Y coverage as MultiQC exported it.
+#
+# Locus section (plan C.5): one genome_view navigator on mosdepth_windows opens
+# on the TP53 neighbourhood and drives three tracks through the region links in
+# template.yaml (per-target depth, the calls with the hg38 gene lane) and
+# through follow_region_filter (the annotated VCFs read from their files).
+# coverage_track and genome_view never share a collection here, which
+# test_no_double_track_binding enforces.
 - title: Cohort QC
-  subtitle: How deeply the Agilent exome was covered, contig by contig and megabase by megabase
+  subtitle: How deeply the Agilent exome was covered, contig by contig and target by target, with the calls on the same axis
   tab_order: 2
   tab_icon: mdi:chart-bell-curve
   tab_icon_color: blue
@@ -615,16 +625,16 @@ tabs:
   - name: Coverage scope
     icon: mdi:filter-variant
     color: blue
-    description: Which mosdepth pass and which contigs to keep in view
+    description: Which mosdepth pass and which contigs to keep in view; the pass reaches the navigator and the per-contig summary
   grid_sections:
   - name: Coverage at a glance
     icon: mdi:counter
     color: blue
     description: The four numbers that size the run's coverage
-  - name: Depth along the genome
-    icon: mdi:chart-line
+  - name: One locus, three tracks
+    icon: mdi:dna
     color: indigo
-    description: Mean depth in 1 Mb windows, as a track and on a genome axis
+    description: A depth navigator driving the per-target depth, the calls over the genes and the annotated VCFs on one axis
   - name: Depth per contig
     icon: mdi:chart-bar
     color: cyan
@@ -672,40 +682,40 @@ tabs:
     title_align: left
     title: Depth per contig
     layout: {x: 0, y: 2, w: 2, h: 2}
+  # Per-target depth over the whole exome. Cards do not read a genome_selection
+  # region, so these stay run-wide while the locus section below narrows.
   - component_type: card
     tag: sk-cov-card-window
     index: sk-cov-card-window
     section: Coverage at a glance
     workflow_tag: sarek
-    data_collection_tag: mosdepth_regions
-    use: mosdepth/regions
+    data_collection_tag: mosdepth_targets
     aggregation: median
     aggregations: [box_plot_stats]
-    column_name: value
+    column_name: depth
     column_type: float64
     secondary_layout: box_plot
     display: {icon_name: 'mdi:chart-line', icon_color: '#3949AB', title_color: '#3949AB', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: Depth per megabase
+    title: Depth per capture target
     layout: {x: 2, y: 2, w: 2, h: 2}
   - component_type: card
     tag: sk-cov-card-targets
     index: sk-cov-card-targets
     section: Coverage at a glance
     workflow_tag: sarek
-    data_collection_tag: mosdepth_regions
-    use: mosdepth/regions
+    data_collection_tag: mosdepth_targets
     aggregation: sum
-    column_name: n_targets
+    column_name: target_bp
     column_type: int64
     secondary_layout: top_n
-    breakdown_col: chromosome
-    top_n_count: 3
+    breakdown_col: sample_stage
+    top_n_count: 4
     display: {icon_name: 'mdi:map-marker-outline', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
     title_size: sm
     title_align: left
-    title: Capture targets
+    title: Captured bases per lane
     layout: {x: 4, y: 2, w: 2, h: 2}
   - component_type: card
     tag: sk-cov-card-xy
@@ -728,52 +738,115 @@ tabs:
 
   - component_type: text
     tag: sk-cov-track-intro
-    section: Depth along the genome
-    title: Mean depth in 1 Mb windows
+    section: One locus, three tracks
+    title: The TP53 neighbourhood, depth and calls on one axis
     title_size: sm
     title_align: left
     order: 2
     alignment: left
     body: >
-      The per-target bed binned to megabase windows, weighted by target length,
-      one lane per sample and mosdepth pass. This is an exome, so the windows
-      are the depth over the capture targets inside them and the gaps between
-      target-free megabases are real. The second tile draws the same rows as
-      intervals on a chromosome-aware genome axis.
+      The section opens on chr17:7,400,000-8,000,000 around TP53. The navigator
+      is mean depth in 1 Mb windows over the whole genome; type a locus or a
+      gene in its header, or brush its axis, and the tracks below follow: depth
+      per capture target for each sample and pass, the calls of each caller
+      over the hg38 genes, and the annotated VCFs read from their files. Look
+      for Pro72Arg at chr17:7,676,154: four callers make it, and HaplotypeCaller
+      filters it at 200M reads while passing it at 75M.
     workflow_tag: sarek
-    data_collection_tag: mosdepth_regions
+    data_collection_tag: mosdepth_windows
     layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: advanced_viz
-    tag: sk-cov-av-track
-    index: sk-cov-av-track
-    section: Depth along the genome
-    workflow_tag: sarek
-    data_collection_tag: mosdepth_regions
-    use: mosdepth/coverage_track_regions
-    config:
-      smoothing_window: 0
-      y_scale: log
-      color_by: sample
-    title: Coverage track, one lane per sample and pass
-    description: Target-length-weighted mean depth per megabase window, on a log depth axis so the 75M and the 200M library sit on the same plot.
-    title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 7}
   - component_type: advanced_viz
     tag: sk-cov-av-genome
     index: sk-cov-av-genome
-    section: Depth along the genome
+    section: One locus, three tracks
     workflow_tag: sarek
-    data_collection_tag: mosdepth_regions
-    use: mosdepth/genomespy_regions
+    data_collection_tag: mosdepth_windows
+    viz_kind: genome_view
     config:
+      viz_kind: genome_view
+      controls_placement: header
+      chr_col: chrom
+      pos_col: pos
+      end_col: end
+      score_col: depth
+      feature_col: sample_stage
       mark: rect
       assembly: hg38
       score_title: mean depth
       opacity: 0.8
-    title: The same windows as intervals, on a genome axis
-    description: Each megabase window drawn from its start to its end on a chromosome-aware locus scale, which a point track cannot express. Drag to zoom into a region.
+      default_region: "chr17:7,400,000-8,000,000"
+      region_filter_enabled: true
+    title: Depth navigator, 1 Mb windows
+    description: Target-length-weighted mean depth per megabase window on the hg38 axis. The locus field in the header (a region or a gene symbol) and a brush on this axis move every track below.
     title_size: h3
-    layout: {x: 0, y: 9, w: 8, h: 7}
+    layout: {x: 0, y: 2, w: 8, h: 3}
+  - component_type: advanced_viz
+    tag: sk-cov-av-track
+    index: sk-cov-av-track
+    section: One locus, three tracks
+    workflow_tag: sarek
+    data_collection_tag: mosdepth_targets
+    viz_kind: coverage_track
+    config:
+      viz_kind: coverage_track
+      chromosome_col: chrom
+      position_col: pos
+      end_col: end
+      value_col: depth
+      sample_col: sample_stage
+      view_mode: facet
+      color_by: sample
+      mark: rect
+      smoothing_window: 0
+      show_annotation_lane: false
+      view: track
+      views: [track]
+    title: Depth per capture target
+    description: One lane per sample and mosdepth pass, one bar per capture target at its mean depth, clamped to the navigator's region. The gaps are the genome between exons, not drop-outs.
+    title_size: h3
+    layout: {x: 0, y: 5, w: 8, h: 4}
+  - component_type: advanced_viz
+    tag: sk-cov-av-calls
+    index: sk-cov-av-calls
+    section: One locus, three tracks
+    workflow_tag: sarek
+    data_collection_tag: vcf_variants
+    use: vcf/variant_genome_view
+    config:
+      mark: point
+      assembly: hg38
+      annotation: hg38
+      score_title: variant allele fraction
+      point_size: 5
+      facet_by_sample: true
+      max_facets: 5
+      region_filter_enabled: false
+      follow_region_filter: true
+    title: Calls over the genes, one lane per caller
+    description: Every call in the region at its allele fraction, one lane per caller, over the bundled hg38 gene lane. Heterozygous calls sit near 0.5, homozygous ones near 1.
+    title_size: h3
+    layout: {x: 0, y: 9, w: 8, h: 5}
+  - component_type: advanced_viz
+    tag: sk-cov-av-vcf
+    index: sk-cov-av-vcf
+    section: One locus, three tracks
+    workflow_tag: sarek
+    data_collection_tag: snpeff_vcf_files
+    viz_kind: genome_view
+    config:
+      viz_kind: genome_view
+      source: file
+      chr_col: chrom
+      pos_col: pos
+      assembly: hg38
+      point_size: 6
+      file_max_lanes: 8
+      region_filter_enabled: false
+      follow_region_filter: true
+    title: The annotated VCFs, read from the files
+    description: The snpEff-annotated VCF of each callset, range-read by the browser through its tabix index for the window in view, one lane per callset. It starts fetching below 1 Mb, which the default region already is.
+    title_size: h3
+    layout: {x: 0, y: 14, w: 8, h: 5}
 
   - component_type: text
     tag: sk-cov-contig-intro
@@ -919,7 +992,7 @@ tabs:
     section: Coverage scope
     group: Coverage scope
     workflow_tag: sarek
-    data_collection_tag: mosdepth_regions
+    data_collection_tag: mosdepth_windows
     interactive_component_type: Select
     column_name: stage
     column_type: object
@@ -933,9 +1006,9 @@ tabs:
     section: Coverage scope
     group: Coverage scope
     workflow_tag: sarek
-    data_collection_tag: mosdepth_regions
+    data_collection_tag: mosdepth_windows
     interactive_component_type: MultiSelect
-    column_name: chromosome
+    column_name: chrom
     column_type: object
     display: {title_size: md, custom_color: '#3949AB', icon_name: 'mdi:dna'}
     placement: left
@@ -989,6 +1062,14 @@ tabs:
     icon: mdi:chart-bar
     color: indigo
     description: Every caller's record counts side by side
+  - name: Mutation spectra
+    icon: mdi:chart-bar
+    color: violet
+    description: The substitution classes behind each caller's Ts/Tv, and its indel lengths, as shares of its own calls
+  - name: Callset QC profile
+    icon: mdi:chart-timeline-variant
+    color: blue
+    description: Eight QC numbers per callset on one plot, one line per sample and caller
   - name: Filters and what they cost
     icon: mdi:filter-variant
     color: orange
@@ -1122,6 +1203,7 @@ tabs:
     data_collection_tag: bcftools_stats_summary
     use: bcftools/caller_yield_dotplot
     config:
+      controls_placement: header
       colour_scale: Viridis
       gene_sort: name
       cluster_sort: name
@@ -1154,6 +1236,83 @@ tabs:
     description: One bar per sample. FreeBayes' MNP calls are counted separately from its indels, which is why they do not add up to its SNP and indel total.
     title_size: h3
     layout: {x: 4, y: 7, w: 4, h: 6}
+
+  - component_type: text
+    tag: sk-vc-spectra-intro
+    section: Mutation spectra
+    title: Ts/Tv drawn as the bars it is made of
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Each callset is normalised to its own total, so the bars compare shapes,
+      not yields. C to T and T to C are the transitions; a germline exome is
+      dominated by them, and a caller whose four transversion bars rise is the
+      one with the lower Ts/Tv. DeepVariant's lower ratio comes from the
+      RefCall records it keeps in the VCF. Indels read left to right from
+      deletions to insertions; single-base events dominate every caller.
+    workflow_tag: sarek
+    data_collection_tag: bcftools_substitution_spectrum
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: figure
+    tag: sk-vc-fig-sbs
+    section: Mutation spectra
+    workflow_tag: sarek
+    data_collection_tag: bcftools_substitution_spectrum
+    visu_type: bar
+    dict_kwargs: {x: substitution_class, y: fraction, color: callset, barmode: group}
+    title: Substitution spectrum, six pyrimidine classes
+    description: Share of each callset's SNVs per class, strand-folded onto the pyrimidine reference. C to T and T to C are transitions, the other four transversions.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 6}
+  - component_type: figure
+    tag: sk-vc-fig-indel-length
+    section: Mutation spectra
+    workflow_tag: sarek
+    data_collection_tag: bcftools_indel_spectrum
+    visu_type: bar
+    dict_kwargs: {x: length, y: fraction, color: callset, barmode: group}
+    title: Indel length spectrum, deletions negative
+    description: Share of each callset's indels at each length within 20 bp. Manta is left out, its events are longer than the window.
+    title_size: h3
+    layout: {x: 0, y: 8, w: 8, h: 6}
+
+  - component_type: text
+    tag: sk-vc-profile-intro
+    section: Callset QC profile
+    title: Eight QC numbers, one line per callset
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One polyline per sample and caller across record count, SNP fraction,
+      Ts/Tv, multiallelic share, PASS share, het to hom ratio, median depth and
+      median heterozygous allele fraction. Lines of one caller that run
+      parallel at both depths are a caller behaving consistently; brush an axis
+      to keep the callsets inside a range. Manta has no SNV and is left out.
+    workflow_tag: sarek
+    data_collection_tag: callset_qc
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: sk-vc-av-profile
+    index: sk-vc-av-profile
+    section: Callset QC profile
+    workflow_tag: sarek
+    data_collection_tag: callset_qc
+    viz_kind: parallel_coordinates
+    config:
+      viz_kind: parallel_coordinates
+      controls_placement: header
+      sample_col: callset
+      group_col: caller
+      scale: minmax
+      metric_cols: [n_records, snp_fraction, ts_tv, multiallelic_pct, pass_pct, het_hom_ratio, median_dp, median_het_vaf]
+    title: Callset QC profile
+    description: Each axis is rescaled so the axes are comparable while the tick labels keep their units. Colour is the caller.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 8}
 
   - component_type: text
     tag: sk-vc-filter-intro
@@ -1553,14 +1712,17 @@ tabs:
     data_collection_tag: vcf_variants
     use: vcf/vaf_against_depth
     config:
+      controls_placement: header
       x_title: read depth at the call
       y_title: variant allele fraction
       log_x: true
       marker_size: 4
       reference_line: horizontal
       reference_value: 0.5
-    title: Allele fraction against depth, per caller
-    description: One point per call, colour by caller, depth on a log axis. The line marks the heterozygous expectation.
+      density: true
+      density_bins: 40
+    title: Allele fraction against depth, as a density
+    description: The calls binned on depth (log axis) and allele fraction, from the same row sample the scatter draws, so the heterozygous band at 0.5 and the homozygous band at 1 read as ridges rather than as a solid blob. The line marks the heterozygous expectation.
     title_size: h3
     layout: {x: 0, y: 2, w: 8, h: 7}
   - component_type: figure
@@ -1599,10 +1761,11 @@ tabs:
     data_collection_tag: vcf_variants
     use: vcf/variant_rainfall
     config:
-      score_kind: variant allele fraction
+      mode: rainfall
+      rainfall_class_col: variant_type
       marker_size_below: 3
-    title: Calls along the genome, coloured by contig
-    description: One point per call at its position, height is its allele fraction. Read the density, not the height.
+    title: Rainfall, distance to the previous call
+    description: One point per call at its position, height is log10 of the distance to the previous call on the same contig, colour is the variant type. Clusters of short distances are gene-dense exons on target, not kataegis, on a germline exome.
     title_size: h3
     layout: {x: 0, y: 2, w: 8, h: 7}
   - component_type: advanced_viz
@@ -1613,6 +1776,7 @@ tabs:
     data_collection_tag: vcf_variants
     use: vcf/variant_genome_view
     config:
+      controls_placement: header
       mark: point
       assembly: hg38
       score_title: variant allele fraction
@@ -1693,6 +1857,21 @@ tabs:
     placement: left
     title: Contig
     layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: interactive
+    tag: sk-cc-filter-dp
+    index: sk-cc-dp-filter
+    section: Call scope
+    group: Call scope
+    workflow_tag: sarek
+    data_collection_tag: vcf_variants
+    interactive_component_type: RangeSlider
+    column_name: dp
+    column_type: int64
+    show_histogram: true
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:chart-bell-curve'}
+    placement: left
+    title: Depth at the call
+    layout: {x: 0, y: 9, w: 1, h: 3}
 
 # ============================================================================
 # Consequences
@@ -1875,10 +2054,11 @@ tabs:
     alignment: left
     body: >
       Every call carries SnpEff's most severe annotation for it, so the
-      composition below answers to the depth, quality and contig pickers that
-      the published summary cannot. The scatter asks whether the HIGH-impact
-      calls sit at the same depth as the rest, which is the first thing to
-      check before acting on one.
+      composition below answers to the pickers the published summary cannot.
+      The scatter asks whether the HIGH-impact calls sit at the same depth as
+      the rest. Click a call and the card beside it shows that variant in every
+      callset that made it; it opens on TP53 Pro72Arg, which HaplotypeCaller
+      filters at 200M reads and passes at 75M.
     workflow_tag: sarek
     data_collection_tag: snpeff_ann_variants
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1890,14 +2070,41 @@ tabs:
     data_collection_tag: snpeff_ann_variants
     use: snpeff/annotated_vaf_against_depth
     config:
+      controls_placement: header
       x_title: read depth at the call
       y_title: variant allele fraction
       log_x: true
       marker_size: 4
+      selection_enabled: true
+      selection_column: variant_key
+      legend_pos: bottom
     title: Allele fraction against depth, coloured by impact
-    description: One point per annotated call. A HIGH-impact call at low depth and low allele fraction is the one to distrust.
+    description: One point per annotated call. A HIGH-impact call at low depth and low allele fraction is the one to distrust. Click a point to open it in the card.
     title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 7}
+    layout: {x: 0, y: 2, w: 5, h: 9}
+  - component_type: advanced_viz
+    tag: sk-cs-av-record
+    index: sk-cs-av-record
+    section: Impact per call
+    workflow_tag: sarek
+    data_collection_tag: snpeff_ann_variants
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      id_col: variant_key
+      title_col: gene
+      selection_source: any
+      default_record: "chr17:7676154:G:C"
+      sections:
+        Locus: [chrom, pos, ref, alt, variant_type]
+        Call: [sample, caller, filter_status, gt, qual, dp, vaf]
+        Consequence: [gene, gene_id, impact, consequence, hgvs_p, aa_pos]
+      link_templates:
+        gene_id: "https://www.ensembl.org/Homo_sapiens/Gene/Summary?g={value}"
+    title: Variant record
+    description: The selected call as a fact panel, one card per callset that made it, with the gene linked to Ensembl.
+    title_size: h3
+    layout: {x: 5, y: 2, w: 3, h: 9}
   - component_type: figure
     tag: sk-cs-fig-impact
     section: Impact per call
@@ -1909,7 +2116,7 @@ tabs:
     title: Allele fraction by impact class
     description: If the impact classes sat at different allele fractions, the annotation would be tracking coverage rather than biology. They do not.
     title_size: h3
-    layout: {x: 0, y: 9, w: 8, h: 6}
+    layout: {x: 0, y: 11, w: 8, h: 6}
 
   - component_type: text
     tag: sk-cs-calls-intro

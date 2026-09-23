@@ -101,17 +101,38 @@ effects by impact and by genomic region, VEP's general statistics and its SIFT s
 Coverage is the ceiling on everything the other four tabs do, so it comes first. Every panel
 here is computed from mosdepth's own output files, not from MultiQC.
 
-`Depth per megabase` is the resolution jump: mosdepth's per-target `regions.bed.gz` is 850k
-intervals, binned to 1 Mb windows (10,836 rows) and drawn twice, deliberately. The
-`coverage_track` panel gives one lane per sample and per processing pass, reading like a
-genome browser's depth track; the `genome_view` panel draws the same windows as intervals on a
-genome axis (`mark: rect`, so each window is a box spanning its own start and end rather than a
-point at its midpoint). Same data, two idioms: the track is for reading a contig's shape, the
-genome view is for placing a region against the whole assembly.
+`One locus, three tracks` is a locus section: four tiles that share one region and one
+x-axis, opening on the TP53 neighbourhood (`chr17:7,400,000-8,000,000`).
+
+- The navigator is a `genome_view` on `mosdepth_windows`: mosdepth's per-target
+  `regions.bed.gz` (850k intervals) binned to 1 Mb windows (10,836 rows, the catalog's
+  `mosdepth_regions` renamed to `chrom` / `pos`), so it can hold the whole genome. Its
+  header carries the locus field (a region or a gene symbol); typing there or brushing its
+  axis emits a chromosome and a position filter.
+- `Depth per capture target` is a `coverage_track` on `mosdepth_targets`, the same bed kept
+  per target. A region link in `template.yaml` carries the navigator's filters to it, so it
+  draws only the few hundred targets in view, one lane per sample and mosdepth pass. The `.md` and `.recal` lanes are identical on this run (SK-D9).
+- `Calls over the genes` is a `genome_view` on `vcf_variants`, reached the same way, one lane
+  per caller, over the bundled hg38 gene lane.
+- `The annotated VCFs, read from the files` is a `genome_view` with `source: file` on the
+  `snpeff_vcf_files` indexed_file collection: the eight snpEff-annotated SNV/indel VCFs and
+  their tabix indexes, uploaded as files and range-read by the browser for the window in view.
+
+All four name their coordinates `chrom` / `pos`. That is not cosmetic: a `genome_view` that
+follows a region only recognises the region filters on the column names it binds itself, so
+the navigator reads a renamed copy of the windows rather than `mosdepth_regions`.
+
+At the default region, look for TP53 Pro72Arg at `chr17:7,676,154`: DeepVariant, FreeBayes,
+HaplotypeCaller and Strelka all make it, and HaplotypeCaller's CNN filter drops it at 200M
+reads while passing it at 75M. The glance cards `Depth per capture target` and
+`Captured bases per lane` read `mosdepth_targets` over the whole exome: cards do not read a
+genome region, so they stay run-wide while the tracks narrow.
 
 `Depth per contig` reads mosdepth's `summary.txt`: mean, min and max depth per contig, and the
 difference between a whole contig and the Agilent capture targets inside it. The `mosdepth pass`
-filter separates the duplicate-marked pass from the recalibrated one.
+filter separates the duplicate-marked pass from the recalibrated one, on the navigator and on
+these bars; the per-target track keeps all four lanes, because a second link between the
+navigator's collection and the per-target one would collide with the region link (SK-D15).
 
 `X to Y ratio` is a sex check built from the same summaries: chromosome X mean depth against
 chromosome Y mean depth, one point per sample and pass. Both libraries read XX on this run.
@@ -129,6 +150,18 @@ How much each of the five callers called, and what its own filters threw away.
 `Caller yield and SNP fraction, per sample` puts all five callers and both depths on one plane
 as a dot plot: colour is `log10(records)`, size is the SNP fraction of that caller's records
 (0 for Manta), next to grouped bars of SNP and indel counts.
+
+`Mutation spectra` draws the Ts/Tv ratio as the bars it is made of: the `bcftools stats`
+substitution block folded onto the six pyrimidine classes (C to T and T to C are the
+transitions), and its indel-length block within 20 bp, each normalised to its callset's own
+total so callers compare on shape rather than yield. DeepVariant's lower Ts/Tv (1.82 against
+2.5 to 2.6) comes from the RefCall records it keeps in its VCF: its PASS SNPs alone read 2.58,
+its RefCall records 0.38.
+
+`Callset QC profile` is a `parallel_coordinates` tile over `callset_qc`, one polyline per
+sample and caller across record count, SNP fraction, Ts/Tv, multiallelic share, PASS share,
+het to hom ratio, median depth and median heterozygous allele fraction. Manta, which calls no
+SNV, is left out. Brushing an axis emits a range filter.
 
 `What each caller threw away` is new in this lot: VCFtools' `FILTER.summary` per caller, as a
 stacked bar of calls per FILTER partition plus its table. This is where a caller's internal
@@ -164,14 +197,19 @@ across the two depths is sensitivity.
 from SnpEff's per-gene tables: callers that disagree on thousands of individual positions often
 agree almost completely on which genes are hit.
 
-`Allele fraction against depth, per caller` is the plane a germline callset is read on: a clean
-diploid run stacks at 0.5 and 1.0, and everything off those two bands is either low coverage or
-a caller artefact. The companion histogram shows the same distribution per caller.
+`Allele fraction against depth, as a density` is the plane a germline callset is read on: a
+clean diploid run stacks at 0.5 and 1.0, and everything off those two bands is either low
+coverage or a caller artefact. A marker cloud of that many calls is a solid blob, so the tile
+draws a binned 2D histogram (`density: true`) over the row sample the viewer fetches (about
+10k of the 286k calls), not over every call. The companion histogram shows the same
+distribution per caller. The `Depth at the call` slider in the left panel draws the depth
+distribution above itself.
 
-`Where the calls fall` draws the calls along the genome twice: a `manhattan` panel with allele
-fraction on y (a rainfall-style density read), and a `genome_view` with one lane per caller
-(`facet_by_sample: true`), so a region where one caller fires and the others do not is visible
-as a gap in a lane.
+`Where the calls fall` draws the calls along the genome twice: a `manhattan` panel in
+`mode: rainfall` (log10 of the distance to the previous call on the same contig, coloured by
+variant type; on a germline exome the short-distance clusters are gene-dense exons, not
+kataegis), and a `genome_view` with one lane per caller (`facet_by_sample: true`), so a region
+where one caller fires and the others do not is visible as a gap in a lane.
 
 ---
 
@@ -187,7 +225,10 @@ both is a tab where a parsing mistake is visible rather than silent.
 at a time via the `SnpEff section` filter.
 
 `The same composition, recomputed on the calls` is the computed side: allele fraction against
-depth coloured by impact class, and the allele-fraction distribution per impact class. HIGH
+depth coloured by impact class, and the allele-fraction distribution per impact class. A click
+on the scatter fills the `Variant record` card beside it (a `record_card` keyed on
+`variant_key`), one card per callset that made the call, with the gene linked to Ensembl; the
+card opens on TP53 Pro72Arg (`chr17:7676154:G:C`). HIGH
 impact is 3,744 of the 371,068 annotations here, so it is a thin band next to MODIFIER's
 168,740 and needs the impact filter to be read at all.
 

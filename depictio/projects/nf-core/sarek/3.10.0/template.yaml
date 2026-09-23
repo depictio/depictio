@@ -331,6 +331,48 @@ workflows:
               "label": "Categorical label of the row; null in the numeric sections"
               "count": "How many records fall in the bin"
 
+      # Two spectra cut out of the melted blocks above, each normalised to its
+      # callset's own total so callers compare on shape rather than yield. A
+      # figure cannot filter its collection to one section on its own, which is
+      # why they are collections rather than two views of the long table.
+      - data_collection_tag: "bcftools_substitution_spectrum"
+        description: "SNV substitution spectrum per callset, folded onto the six pyrimidine classes and split into transitions and transversions"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/sarek/substitution_spectrum.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the VCF was called on"
+              "caller": "Germline caller the VCF came from"
+              "callset": "Sample and caller together"
+              "substitution_class": "Substitution folded onto its pyrimidine reference (C to A, C to G, C to T, T to A, T to C, T to G)"
+              "mutation_class": "transition (C to T, T to C) or transversion (the other four)"
+              "count": "SNVs of that class in the callset"
+              "fraction": "Share of the callset's SNVs in that class"
+
+      - data_collection_tag: "bcftools_indel_spectrum"
+        description: "Indel length spectrum per callset, deletions negative, within 20 bp either side"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/sarek/indel_spectrum.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the VCF was called on"
+              "caller": "Germline caller the VCF came from"
+              "callset": "Sample and caller together"
+              "length": "Indel length in base pairs, negative for a deletion"
+              "indel_class": "insertion or deletion"
+              "count": "Indels of that length in the callset"
+              "fraction": "Share of all the callset's indels at that length"
+
       # ----------------------------------------------------------------
       # Coverage. mosdepth runs twice per sample (on the duplicate-marked and
       # on the recalibrated CRAM), so every coverage collection carries a
@@ -380,6 +422,53 @@ workflows:
               "sample": "Sample the depth was measured on"
               "stage": "Which CRAM mosdepth ran on: md (duplicate-marked) or recal (recalibrated)"
               "sample_stage": "Sample and stage together, the lane label of the coverage track"
+              "n_targets": "Capture targets that fall in the window"
+
+      # The same per-target bed, unbinned, for the Cohort QC locus section. It
+      # is large (one row per target, sample and pass) and only ever read
+      # narrowed to a region, through the region link from mosdepth_regions,
+      # which is what keeps a track on it at a few hundred rows.
+      - data_collection_tag: "mosdepth_targets"
+        description: "Mean read depth per capture target, per sample and mosdepth stage; the locus section's depth track"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/sarek/mosdepth_targets.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "chrom": "Contig the target sits on"
+              "pos": "Target start, 0-based"
+              "end": "Target end"
+              "depth": "Mean read depth over the target"
+              "sample": "Sample the depth was measured on"
+              "stage": "Which CRAM mosdepth ran on: md (duplicate-marked) or recal (recalibrated)"
+              "sample_stage": "Sample and stage together, the lane label of the depth track"
+              "target_bp": "Target length in base pairs"
+
+      # The same 1 Mb windows as mosdepth_regions, renamed to chrom / pos: the
+      # locus section's navigator reads it, and a genome_view that follows a
+      # region only recognises filters on the column names it binds itself.
+      - data_collection_tag: "mosdepth_windows"
+        description: "Mean read depth in 1 Mb windows under the locus section's shared coordinate names; the depth navigator"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/sarek/mosdepth_windows.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "chrom": "Contig the window sits on"
+              "pos": "Window start"
+              "end": "Window end"
+              "depth": "Target-length-weighted mean depth in the window"
+              "sample": "Sample the depth was measured on"
+              "stage": "Which CRAM mosdepth ran on: md (duplicate-marked) or recal (recalibrated)"
+              "sample_stage": "Sample and stage together"
               "n_targets": "Capture targets that fall in the window"
 
       - data_collection_tag: "mosdepth_summary_raw"
@@ -825,6 +914,60 @@ workflows:
               "n_variants": "Variants behind the cell"
 
       # ----------------------------------------------------------------
+      # One QC profile per callset, for the parallel-coordinates tile: the
+      # bcftools summary, its Ts/Tv and what the annotated VCF says about
+      # FILTER, zygosity, depth and allele fraction, joined on sample and caller.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "callset_qc"
+        description: "One row per callset (sample and caller) with the eight numbers a germline callset is judged on"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/sarek/callset_qc.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "callset": "Sample and caller together, one polyline"
+              "sample": "Sample the VCF was called on"
+              "caller": "Germline caller the VCF came from"
+              "n_records": "Records in the VCF"
+              "snp_fraction": "SNPs over records"
+              "ts_tv": "Transitions over transversions; an exome sits near 2.5 to 3"
+              "multiallelic_pct": "Multiallelic sites per hundred records"
+              "pass_pct": "Calls the caller kept, per hundred"
+              "het_hom_ratio": "Heterozygous over homozygous-alternate PASS calls"
+              "median_dp": "Median read depth at the call"
+              "median_het_vaf": "Median allele fraction of heterozygous PASS calls; near 0.5 for a clean caller"
+
+      # ----------------------------------------------------------------
+      # The annotated VCFs as files, not rows: copied to object storage with
+      # their tabix index and range-read by the browser for the window in
+      # view, so the locus section can draw every call with its INFO fields
+      # without materialising them again. One object per callset, named after
+      # the file (NA12878_75M.deepvariant, ...). Structural-variant callers are
+      # left out: their symbolic alleles do not draw as point variants. Optional
+      # because a run fetched without the .tbi sidecars has nothing to upload.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "snpeff_vcf_files"
+        description: "snpEff-annotated VCF per callset with its tabix index, read by the browser for the region in view"
+        optional: true
+        config:
+          type: "indexed_file"
+          metatype: "Metadata"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "^(?!.*\\.(?:manta|tiddit)\\.).*_snpEff\\.ann\\.vcf\\.gz$"
+          dc_specific_properties:
+            format: "vcf"
+            assembly: "hg38"
+            sample_regex: "(?P<sample>[^/]+?)_snpEff\\.ann\\.vcf\\.gz$"
+            max_file_size_mb: 32
+
+      # ----------------------------------------------------------------
       # SOMATIC. None of the collections below has a single file in this
       # megatest: sarek 3.10.0 publishes no tumour/normal profile, so ASCAT,
       # CNVkit, ControlFREEC, MSIsensor-pro and NGSCheckMate never execute
@@ -1116,26 +1259,6 @@ links:
     description: "Filter the per-gene burden by the samples picked in the left panel"
     enabled: true
 
-  - source_dc_tag: "mosdepth_regions"
-    source_column: "stage"
-    target_dc_tag: "mosdepth_summary"
-    target_type: "table"
-    link_config:
-      resolver: "direct"
-      target_field: "stage"
-    description: "Carry the mosdepth stage picked on the coverage tab over to the per-contig summary"
-    enabled: true
-
-  - source_dc_tag: "mosdepth_regions"
-    source_column: "chromosome"
-    target_dc_tag: "mosdepth_summary"
-    target_type: "table"
-    link_config:
-      resolver: "direct"
-      target_field: "chrom"
-    description: "Carry the contig picked on the coverage tab over to the per-contig summary"
-    enabled: true
-
   - source_dc_tag: "bcftools_stats_summary"
     source_column: "caller"
     target_dc_tag: "bcftools_stats_sections"
@@ -1254,4 +1377,136 @@ links:
       resolver: "direct"
       target_field: "sample"
     description: "Carry a sample selected on the variant counts table over to its Ts/Tv rows"
+    enabled: true
+
+  # ----------------------------------------------------------------
+  # Cohort QC locus section. The navigator (a genome_view on
+  # mosdepth_windows) emits a chromosome and a position filter on its own
+  # `chrom` / `pos` columns; these carry that pair to the two collections
+  # stacked under it, so the per-target depth and the calls narrow to the same
+  # region. No data is read to resolve them (resolver: region). All three name
+  # their coordinates chrom / pos, which is also what lets the followers zoom
+  # on the region client side. The file-backed VCF track needs no link: it
+  # follows the region filter itself and reads only the window in view. The
+  # per-contig summary has no region link, yet live it shows only the
+  # region's contig (observed 2026-09-23, VALIDATION_REPORT.md SK-D18).
+  #
+  # No second (value) link may join mosdepth_windows to mosdepth_targets or
+  # vcf_variants: the link resolver finds a link by its source and target
+  # collections, so a direct `stage` link on the same pair is answered with
+  # the region link and fails ("Unknown resolver type: region", SK-D15). The
+  # stage picker therefore narrows the navigator and the per-contig summary
+  # only; the per-target track keeps its four lanes.
+  # ----------------------------------------------------------------
+  - source_dc_tag: "mosdepth_windows"
+    source_column: "chrom"
+    target_dc_tag: "mosdepth_targets"
+    target_type: "table"
+    link_config:
+      resolver: "region"
+      columns: {chrom: "chrom", pos: "pos"}
+    description: "A region typed or brushed on the depth navigator narrows the per-target depth track"
+    enabled: true
+
+  - source_dc_tag: "mosdepth_windows"
+    source_column: "chrom"
+    target_dc_tag: "vcf_variants"
+    target_type: "table"
+    link_config:
+      resolver: "region"
+      columns: {chrom: "chrom", pos: "pos"}
+    description: "A region typed or brushed on the depth navigator narrows the calls track"
+    enabled: true
+
+  - source_dc_tag: "mosdepth_windows"
+    source_column: "stage"
+    target_dc_tag: "mosdepth_summary"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "stage"
+    description: "Carry the mosdepth pass picked on the coverage tab over to the per-contig summary"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "mosdepth_windows"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the depth navigator by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "mosdepth_targets"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the per-target depth track by the samples picked in the left panel"
+    enabled: true
+
+  # Spectra and the callset QC profile: the hub's sample filter and the
+  # Variant yield tab's caller picker reach them like every other bcftools
+  # collection.
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "bcftools_substitution_spectrum"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the substitution spectrum by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "bcftools_indel_spectrum"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the indel length spectrum by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "callset_qc"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the callset QC profile by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "bcftools_stats_summary"
+    source_column: "caller"
+    target_dc_tag: "bcftools_substitution_spectrum"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "caller"
+    description: "Carry the caller picked on the Variant yield tab over to the substitution spectrum"
+    enabled: true
+
+  - source_dc_tag: "bcftools_stats_summary"
+    source_column: "caller"
+    target_dc_tag: "bcftools_indel_spectrum"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "caller"
+    description: "Carry the caller picked on the Variant yield tab over to the indel length spectrum"
+    enabled: true
+
+  - source_dc_tag: "bcftools_stats_summary"
+    source_column: "caller"
+    target_dc_tag: "callset_qc"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "caller"
+    description: "Carry the caller picked on the Variant yield tab over to the callset QC profile"
     enabled: true

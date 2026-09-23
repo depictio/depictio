@@ -85,6 +85,12 @@ keys:
   - variant_calling/manta/*/*.diploid_sv.vcf.gz
   - variant_calling/strelka/*/*.variants.vcf.gz
   - annotation/*/*/*_snpEff.ann.vcf.gz
+  # Their tabix indexes (3-235 kB each, fetched 2026-09-23), so the annotated
+  # VCFs can also be ingested as the `snpeff_vcf_files` indexed_file
+  # collection and range-read by the browser in the Cohort QC locus section.
+  # The variant_calling/ twins' indexes are not needed: no tile reads those
+  # files as files.
+  - annotation/*/*/*_snpEff.ann.vcf.gz.tbi
   # --- annotation summaries: snpEff's CSV stats + per-gene effect counts. VEP
   # writes only *_VEP.ann.summary.html, which MultiQC parses and nothing else can.
   - reports/snpeff/*/*/*_snpEff.csv
