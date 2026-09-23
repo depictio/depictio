@@ -564,6 +564,10 @@ tabs:
     icon: mdi:chart-donut
     color: teal
     description: What kind of RNA each library is made of, and how many genes it reaches
+  - name: Library QC profile
+    icon: mdi:chart-timeline-variant
+    color: orange
+    description: Every MultiQC headline metric of a library on one line, so the odd library out shows as a line that bends away
   components:
   - component_type: text
     tag: rna-ovw-intro
@@ -684,6 +688,7 @@ tabs:
       point_size: 12
       show_density: false
       selection_enabled: true
+      controls_placement: header
     title: Sample PCA on Salmon TPMs
     description: One point per library. Points far from their replicate are the ones to check on the QC tab.
     title_size: h3
@@ -705,6 +710,7 @@ tabs:
       selection_enabled: true
       selection_column: sample_id
       hover_cols: [dim_1_percent, dim_2_percent]
+      controls_placement: header
     title: DESeq2 QC PCA (pipeline)
     description: The pipeline's own PCA on the regularised-log counts, read from deseq2.pca.vals.txt rather than recomputed.
     title_size: h3
@@ -803,10 +809,59 @@ tabs:
       sample_sort: input
       sort_by: abundance
       top_n: 12
+      controls_placement: header
     title: Where the reads landed on the annotation
     description: Share of each library's tags per annotation feature, from the RSeQC read_distribution reports.
     title_size: h3
     layout: {x: 0, y: 9, w: 8, h: 6}
+
+  - component_type: text
+    tag: rna-ovw-qcprofile-intro
+    section: Library QC profile
+    workflow_tag: rnaseq
+    data_collection_tag: general_stats
+    title: The odd library out, across every metric at once
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One line per library across eleven MultiQC general statistics, from
+      read depth through trimming, mapping, duplication and coverage bias,
+      coloured by condition. A library that is unremarkable on every single
+      metric can still bend away from its replicates on several at once. Drag
+      along an axis to keep the libraries inside that range; the unique
+      mapping slider on the left shows the distribution you are cutting.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: rna-ovw-qcprofile
+    index: rna-ovw-qcprofile-parcoords
+    section: Library QC profile
+    workflow_tag: rnaseq
+    data_collection_tag: general_stats
+    viz_kind: parallel_coordinates
+    config:
+      viz_kind: parallel_coordinates
+      sample_col: sample
+      group_col: condition
+      scale: minmax
+      metric_cols:
+        - total_reads_m
+        - pct_trimmed
+        - pct_gc
+        - pct_uniquely_mapped
+        - pct_salmon_mapped
+        - pct_duplication
+        - dupradar_intercept
+        - pct_exonic
+        - bias_5_3
+        - error_rate
+        - insert_size
+      controls_placement: header
+    title: Per-library QC profile
+    description: Eleven MultiQC general statistics per library, each axis rescaled to its own range while the ticks keep the original units. Brushing an axis filters the libraries.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 8}
 
   - component_type: interactive
     tag: rna-ovw-filter-group
@@ -832,6 +887,7 @@ tabs:
     interactive_component_type: RangeSlider
     column_name: genes_expressed
     column_type: int64
+    show_histogram: true
     display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:counter'}
     placement: left
     title: Genes expressed
@@ -846,10 +902,26 @@ tabs:
     interactive_component_type: RangeSlider
     column_name: median_tpm
     column_type: float64
+    show_histogram: true
     display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:chart-bell-curve'}
     placement: left
     title: Median TPM
     layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: interactive
+    tag: rna-ovw-filter-unique-mapping
+    index: rna-ovw-unique-mapping-range
+    section: Library scope
+    group: QC profile
+    workflow_tag: rnaseq
+    data_collection_tag: general_stats
+    interactive_component_type: RangeSlider
+    column_name: pct_uniquely_mapped
+    column_type: float64
+    show_histogram: true
+    display: {title_size: md, custom_color: '#F2A93B', icon_name: 'mdi:target'}
+    placement: left
+    title: Uniquely mapped (%)
+    layout: {x: 0, y: 9, w: 1, h: 3}
 
 - title: Expression heatmap
   subtitle: The 500 most variable genes, clustered, with the samplesheet design on top
@@ -1051,6 +1123,10 @@ tabs:
     icon: mdi:counter
     color: green
     description: What the current gene and sample selection covers
+  - name: Gene record
+    icon: mdi:dna
+    color: teal
+    description: Pick a gene on the mean-variance plane and read its record beside it
   - name: Expression by condition
     icon: mdi:chart-bell-curve
     color: green
@@ -1139,6 +1215,78 @@ tabs:
     title_size: sm
     title_align: left
     layout: {x: 6, y: 2, w: 2, h: 2}
+
+  - component_type: text
+    tag: rna-gene-record-intro
+    section: Gene record
+    workflow_tag: rnaseq
+    data_collection_tag: gene_summary
+    title: Genes that separate the conditions sit high on this plane
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One point per expressed gene: mean log2(TPM + 1) across the libraries
+      against its spread, coloured by the condition it peaks in. The card opens
+      on HBG2, the fetal globin that K562 expresses and the other lines do not.
+      Click a point to swap the card to that gene and narrow the box plot and
+      the gene rows below to it; the Ensembl identifier links out.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: rna-gene-record-plane
+    index: rna-gene-record-plane
+    section: Gene record
+    workflow_tag: rnaseq
+    data_collection_tag: gene_summary
+    viz_kind: scatter_xy
+    config:
+      viz_kind: scatter_xy
+      x_col: mean_log2_tpm
+      y_col: sd_log2_tpm
+      label_col: gene_name
+      color_col: top_condition
+      x_title: Mean log2(TPM + 1)
+      y_title: Standard deviation of log2(TPM + 1)
+      marker_size: 4
+      opacity: 0.6
+      marker_outline: false
+      top_n_labels: 10
+      # About 19,000 expressed genes: keep the points (a click needs a point)
+      # rather than the binned view the renderer switches to above 3,000 rows.
+      # The reader can still turn density on from the header.
+      density_threshold: 40000
+      selection_enabled: true
+      selection_column: gene_id
+      legend_pos: bottom
+      controls_placement: header
+    title: Mean-variance plane
+    description: Every gene expressed at 1 TPM or more in at least one library. Selection is on the Ensembl gene id, which the card beside it and the gene explorer read.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 5, h: 9}
+  - component_type: advanced_viz
+    tag: rna-gene-record-card
+    index: rna-gene-record-card
+    section: Gene record
+    workflow_tag: rnaseq
+    data_collection_tag: gene_summary
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      id_col: gene_id
+      title_col: gene_name
+      selection_source: any
+      default_record: ENSG00000196565
+      sections:
+        Gene: [gene_name, gene_id]
+        Expression: [mean_log2_tpm, sd_log2_tpm, max_tpm, libraries_detected]
+        Where it peaks: [top_condition, top_sample, log2fc_top_vs_rest]
+      link_templates:
+        gene_id: "https://www.ensembl.org/id/{value}"
+    title: Gene record
+    description: The picked gene as a fact panel. Ensembl resolves the stable identifier for any species, so the link holds on a mouse run too.
+    title_size: h3
+    layout: {x: 5, y: 2, w: 3, h: 9}
 
   - component_type: text
     tag: rna-gene-box-intro
@@ -1268,7 +1416,23 @@ tabs:
     interactive_component_type: RangeSlider
     column_name: log2_tpm
     column_type: float64
+    show_histogram: true
     display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:chart-bell-curve'}
     placement: left
     title: log2(TPM + 1)
     layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: interactive
+    tag: rna-gene-filter-plane-mean
+    index: rna-gene-plane-mean-range
+    section: Gene scope
+    group: Mean-variance plane
+    workflow_tag: rnaseq
+    data_collection_tag: gene_summary
+    interactive_component_type: RangeSlider
+    column_name: mean_log2_tpm
+    column_type: float64
+    show_histogram: true
+    display: {title_size: md, custom_color: '#0E9384', icon_name: 'mdi:chart-bell-curve'}
+    placement: left
+    title: Mean log2(TPM + 1)
+    layout: {x: 0, y: 9, w: 1, h: 3}

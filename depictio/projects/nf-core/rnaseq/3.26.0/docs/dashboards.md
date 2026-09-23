@@ -112,6 +112,16 @@ the tags that fall in no feature at all as an explicit `Other_intergenic` row, w
 makes the composition sum to one. The rank switch moves between the five region classes and
 the individual RSeQC features.
 
+`Library QC profile` draws every library as one line across eleven MultiQC general statistics
+(reads in millions, trimmed share, GC, unique STAR mapping, Salmon mapping, Picard duplication,
+the dupRadar intercept, exonic share, Qualimap 5 prime to 3 prime bias, error rate, insert size),
+coloured by condition, each axis rescaled to its own range. The pipeline-local recipe
+`nf-core/rnaseq/general_stats.py` reads `multiqc_general_stats.txt` and folds the per-read-file
+FastQC and Cutadapt rows onto their library. Brushing an axis filters the libraries; the
+`Uniquely mapped (%)` slider in `Library scope` draws the same distribution above its handles.
+The embeddings and the composition strip keep their axis, colour-by and rank controls in the
+tile header rather than behind the settings icon.
+
 ![Expression overview](screenshots/expression-overview.png)
 
 ## Expression heatmap
@@ -141,6 +151,15 @@ highest-expressed genes left after filtering and draws one box per gene and cond
 the comparison a UI figure cannot express: the grouping is computed from the filtered frame
 rather than declared up front. Selecting boxes filters on `gene_name`, and the `Gene rows`
 table below selects rows on the same column, so the figure and the table drive each other.
+
+`Gene record` is the master/detail pair. The pipeline runs no differential test, so the
+picking surface is the mean-variance plane: one point per expressed gene, mean log2(TPM + 1)
+against its standard deviation across the libraries, coloured by the condition it peaks in
+(recipe `nf-core/rnaseq/gene_summary.py` on the merged Salmon TPM matrix). The card beside it
+opens on HBG2, the fetal globin K562 expresses and the other lines do not; clicking a point
+swaps it to that gene and, through the `gene_summary` to `gene_expression` link on `gene_id`,
+narrows the box plot and the gene rows below. The Ensembl identifier links out through
+`https://www.ensembl.org/id/`, which resolves a stable id for any species.
 
 Start from the `Gene` filter. With no gene picked the panels describe all 153968 gene-sample
 rows, which is a distribution of the whole transcriptome rather than a comparison.

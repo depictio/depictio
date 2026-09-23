@@ -420,3 +420,46 @@ the two samplesheet columns (duplicates of the pinned scope) to one
 `expression_heatmap.gene_name` multi-select. Not done: pinned `strandedness` / `read_type`
 factors. On the reference samplesheet all 8 libraries are `reverse` and paired-end, so both
 columns are constant and stay out per the dead-filter rule.
+
+## 2026-09-23: wave 2b (analysis controls, QC profile, gene record)
+
+What changed:
+
+- Expression overview: new `Library QC profile` section, a `parallel_coordinates` tile on
+  a new `general_stats` DC (pipeline-local recipe `nf-core/rnaseq/general_stats.py`: eleven
+  MultiQC general statistics per library, per-read-file FastQC and Cutadapt rows folded onto
+  their library, `condition` from the sample name). Linked from `samplesheet` and
+  `sample_overview` on `sample`. A tab-local `Uniquely mapped (%)` RangeSlider with
+  `show_histogram`. Both embeddings and the RSeQC composition strip use
+  `controls_placement: header`.
+- Gene explorer: new `Gene record` section, a `scatter_xy` mean-variance plane (mean against
+  standard deviation of log2(TPM + 1), coloured by the condition each gene peaks in, selection
+  on `gene_id`) beside a `record_card` (`default_record` HBG2, `ENSG00000196565`, Ensembl link
+  template `https://www.ensembl.org/id/{value}`). New `gene_summary` DC (pipeline-local recipe
+  `nf-core/rnaseq/gene_summary.py`) linked to `gene_expression` on `gene_id`, so a pick also
+  narrows the box plot and the gene rows. Tab-local `Mean log2(TPM + 1)` slider.
+- `show_histogram: true` on every expression threshold slider (genes expressed, median TPM,
+  log2 TPM). Conditionals: `general_stats` joins `SKIP_MULTIQC`, `gene_summary` joins
+  `SKIP_QUANTIFICATION_MERGE` and `PSEUDOALIGNER_ONLY`.
+
+Commands and results:
+
+- `pytest depictio/tests/models/test_shipped_dashboard_yamls.py -k "rnaseq or differentialabundance"`: 30 passed.
+- `pytest depictio/tests/models/test_catalog.py`: 99 passed.
+- `pytest depictio/tests/recipes/test_rnaseq_gene_record_recipes.py`: 2 passed.
+- Dry run and a full `run` against `megatest/` (lot 2 stack, port 8112): 8/8 steps.
+  `general_stats` 8 rows x 13, `gene_summary` 19,246 rows x 9, the rest unchanged
+  (`gene_expression` 153,968, `gene_counts` 57,773).
+- Live: the QC profile draws 8 lines over 11 axes; the plane draws 9,513 points (the scatter
+  route returns a sampled frame above 10k rows).
+
+Discrepancies:
+
+- RS-D12: parallel-coordinates axis labels are the raw column names, and at w 8 the two
+  longest (`pct_uniquely_mapped`, `pct_salmon_mapped`) overlap. The kind has no axis-label
+  field; shorter column names would fix it at the cost of the slider and descriptions.
+- RS-D13: the pipeline runs no differential test, so there is no p-value histogram, no
+  volcano and no enrichment on this template; those live on nf-core/differentialabundance.
+- RS-D14: `gene_summary` backs two tiles from a pipeline-local recipe. It is a candidate for
+  a `salmon/gene_summary` catalog output (the brief did not assign catalog modules to this
+  agent).

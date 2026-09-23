@@ -89,14 +89,19 @@ sanitised name in the sheet, so nothing is hidden by the aliasing.
 * **Calls at a glance**: features tested with the up/down/not-significant split (top 3),
   the log2 fold-change spread, the call composition, and the strongest signal on a gauge
   scaled to 300 (`-log10(padj)`; see the cap note below).
-* **Volcano and MA**: `deseq2/volcano` and `deseq2/ma`, both cut at the pipeline's own
-  thresholds (padj 0.05, two-fold change).
-* **Test diagnostics**: `deseq2/qq` against the uniform null, beside a code-mode scatter
+* **Volcano and MA**: one `deseq2/volcano` tile with a view switch in its header
+  (`views: [volcano, ma]`), cut at the pipeline's own thresholds (padj 0.05, two-fold
+  change). The MA view reads `log2_base_mean` on x.
+* **Test diagnostics**: the raw p-value histogram, one panel per contrast (flat with a
+  spike at zero is a well-specified test), beside the same volcano tile opened on its QQ
+  view against the uniform null, and below them a code-mode scatter
   that pairs the first two contrasts (by id) gene by gene. That tile needs a per-contrast reshape, which
   is why it is the one figure written in code rather than UI mode. Selecting a point
   carries its `gene_id` to the annotated table and to the pinned results table.
 * **Gene table**: the annotated calls with row selection on `gene_id`, the other half of
-  the selection pair.
+  the selection pair, above a gene record (`record_card`) that follows the selection, one
+  card per contrast, and opens on Uchl1. The Ensembl identifier links out through
+  `https://www.ensembl.org/id/`.
 
 ![Differential expression](screenshots/differential-expression.png)
 
@@ -152,7 +157,8 @@ enriched at the other are the two ends of one comparison, not two findings.
   normalised enrichment score as a Tukey box plot, the median FDR against a 0.05 cut-off,
   and the mean leading-edge share on a gauge.
 * **Enriched sets**: one dot per set on its normalised enrichment score, sized by how many
-  of its genes were found in the ranked list and coloured by significance.
+  of its genes were found in the ranked list and coloured by significance. This is the
+  `dot_plot` kind on its `enrichment` view, with colour and sort in the tile header.
 * **Scores side by side**: the same scores as bars grouped by contrast, which is the view
   that answers whether a set moved in both comparisons or only one.
 * **Set table**: one row per set and pole, selectable.
