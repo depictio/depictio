@@ -25,6 +25,7 @@ import {
   plotlyAxisOverrides,
   plotlyThemeFragment,
 } from './plotlyTheme';
+import { regionXRange, useFollowedRegion } from './genomicAxis';
 import { usePersistedVizControl } from './usePersistedVizControl';
 
 /** Mirrors `GeneArrowTrackConfig` in
@@ -323,6 +324,21 @@ const GeneArrowTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .map(([contig]) => contig);
   }, [features]);
+
+  // ---- Following a region someone else brushed ----------------------------
+  // The contig role here is the `contig_col`, which is the chromosome role of
+  // every other genomic kind. A region naming a contig this tile holds moves
+  // the lane filter onto it and, in absolute alignment, clamps the axis to the
+  // window. `selectedContigs` is plain state, so an effect may set it.
+  const followedRegion = useFollowedRegion(metadata, config, filters);
+  useEffect(() => {
+    if (!followedRegion || !allContigs.includes(followedRegion.chrom)) return;
+    setSelectedContigs((current) =>
+      current.length === 1 && current[0] === followedRegion.chrom
+        ? current
+        : [followedRegion.chrom],
+    );
+  }, [followedRegion, allContigs]);
 
   /**
    * Lanes, in draw order, after the contig filter and the lane budget.
@@ -623,7 +639,18 @@ const GeneArrowTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
           text: align === 'region' ? 'Offset from region start (bp)' : 'Position (bp)',
           font: { size: 11 },
         },
-        range: [xMin - pad, xMax + pad],
+        // Region alignment re-expresses x as an offset from each lane's region
+        // start, so an absolute window means nothing there.
+        range: (() => {
+          const window =
+            align === 'absolute' &&
+            followedRegion &&
+            lanes.some((l) => l.contig === followedRegion.chrom)
+              ? regionXRange(followedRegion)
+              : null;
+          if (!window) return [xMin - pad, xMax + pad];
+          return window[1] < xMin || window[0] > xMax ? [xMin - pad, xMax + pad] : window;
+        })(),
         zeroline: false,
         automargin: true,
       },
@@ -657,32 +684,45 @@ const GeneArrowTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
     align,
     boxWidth,
     config.class_col,
+    followedRegion,
   ]);
 
   const hasRegions = Boolean(config.region_start_col && config.region_end_col);
 
-  const controls = useMemo(
+  // Encoding tier: which contigs become lanes, how many, in what order, and
+  // what the x axis is measured from. Labels, the region box and the arrow
+  // height are paint on those lanes.
+  const primaryControls = useMemo(
     () => (
-      <Stack gap="xs">
+      <>
         <MultiSelect
           size="xs"
-          label="Contigs"
+          w={220}
+          label={
+            followedRegion && allContigs.includes(followedRegion.chrom)
+              ? `Contigs (following ${followedRegion.chrom})`
+              : 'Contigs'
+          }
           value={selectedContigs}
           onChange={setSelectedContigs}
           data={allContigs.map((c) => ({ value: c, label: c }))}
           placeholder={rows ? 'All contigs' : 'Loading…'}
           searchable
           clearable
+          comboboxProps={{ withinPortal: true }}
         />
         <Select
           size="xs"
+          w={100}
           label="Lanes shown"
           value={String(maxLanes)}
           onChange={(v) => setMaxLanes(Number(v ?? '8'))}
           data={LANE_CHOICES}
+          comboboxProps={{ withinPortal: true }}
         />
         <Select
           size="xs"
+          w={170}
           label="Lane order"
           value={laneOrder}
           onChange={(v) => setLaneOrder((v as 'features' | 'name') ?? 'features')}
@@ -690,13 +730,8 @@ const GeneArrowTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
             { value: 'features', label: 'Most features first' },
             { value: 'name', label: 'Contig name' },
           ]}
+          comboboxProps={{ withinPortal: true }}
         />
-        {truncatedLanes > 0 ? (
-          <Text size="xs" c="dimmed">
-            {truncatedLanes} more contig{truncatedLanes === 1 ? '' : 's'} not shown — raise the lane
-            budget or pick contigs above.
-          </Text>
-        ) : null}
         {hasRegions ? (
           <Stack gap={4}>
             <Text size="xs" fw={500}>
@@ -704,7 +739,7 @@ const GeneArrowTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
             </Text>
             <SegmentedControl
               size="xs"
-              fullWidth
+              w={200}
               value={align}
               onChange={(v) => setAlign(v as 'absolute' | 'region')}
               data={[
@@ -713,6 +748,20 @@ const GeneArrowTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
               ]}
             />
           </Stack>
+        ) : null}
+      </>
+    ),
+    [selectedContigs, allContigs, followedRegion, rows, maxLanes, laneOrder, hasRegions, align],
+  );
+
+  const controls = useMemo(
+    () => (
+      <Stack gap="xs">
+        {truncatedLanes > 0 ? (
+          <Text size="xs" c="dimmed">
+            {truncatedLanes} more contig{truncatedLanes === 1 ? '' : 's'} not shown: raise the lane
+            budget or pick contigs.
+          </Text>
         ) : null}
         <Stack gap={4}>
           <Text size="xs" fw={500}>
@@ -750,14 +799,8 @@ const GeneArrowTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
       </Stack>
     ),
     [
-      selectedContigs,
-      allContigs,
-      rows,
-      maxLanes,
-      laneOrder,
       truncatedLanes,
       hasRegions,
-      align,
       showRegions,
       showLabels,
       arrowHeight,
@@ -770,6 +813,7 @@ const GeneArrowTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
     <AdvancedVizFrame
       title={metadata.title || 'Gene arrow track'}
       subtitle={(metadata as { description?: string; subtitle?: string }).description}
+      primaryControls={primaryControls}
       controls={controls}
       loading={loading}
       error={error}

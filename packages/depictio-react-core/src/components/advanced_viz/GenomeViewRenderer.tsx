@@ -40,7 +40,15 @@ import {
 import type { Contig, GenomeRegion, GenomeViewConfig } from './genomespy/genomeSpySpec';
 import { loadGeneAnnotation } from './genomespy/geneAnnotations';
 import type { GeneAnnotation } from './genomespy/geneAnnotations';
+import { defaultRegionFilters, ownRegionKey, ownRegionZoom } from './genomespy/defaultRegion';
 import { filtersForGenomeViewFetch, loadGenomeViewRows } from './genomespy/genomeViewData';
+import LocusInput from './genomespy/LocusInput';
+import {
+  buildFileGenomeSpec,
+  fetchIndexedFileManifest,
+  fileTrackOptions,
+} from './genomespy/fileSpec';
+import type { IndexedFileManifest } from './genomespy/fileSpec';
 import {
   loadAssemblyContigs,
   setGenomeSpyRows,
@@ -99,6 +107,19 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   const theme = useMantineTheme();
   const isDark = colorScheme === 'dark';
   const config = (metadata.config || {}) as GenomeViewConfig;
+
+  /**
+   * `source: 'file'` is a different data path, not a different look.
+   *
+   * A table-backed tile fetches rows and hands GenomeSpy a materialised
+   * dataset; a file-backed one hands it presigned URLs and GenomeSpy range-
+   * loads the visible window from the bucket itself. So in file mode this
+   * component fetches a manifest instead of rows, builds the spec from
+   * `fileSpec.ts` instead of `genomeSpySpec.ts`, and asks the embed hook for
+   * the fat GenomeSpy bundle, which is the only one that registers the vcf /
+   * bam / bigwig / bigbed / gff3 / tabix parsers.
+   */
+  const fileMode = config.source === 'file';
 
   // Tier-2 controls. Defaults agree with GenomeViewConfig's own.
   const [mark, setMark] = usePersistedVizControl<'point' | 'rect' | 'bar'>(metadata, 'mark', 'point');
@@ -183,7 +204,38 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [estimated, setEstimated] = useState(false);
 
+  // ---- File-backed tracks: the manifest, not the rows ---------------------
+  const [manifest, setManifest] = useState<IndexedFileManifest | null>(null);
   useEffect(() => {
+    if (!fileMode) {
+      setManifest(null);
+      return undefined;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setFetchError(null);
+    // The URLs in the manifest are presigned and expire (15 minutes), so this
+    // re-runs on the refresh tick like any other fetch; a stale URL would
+    // otherwise start 403ing mid-pan.
+    fetchIndexedFileManifest(String(metadata.dc_id ?? ''), (url) =>
+      fetch(url, { credentials: 'include' }),
+    )
+      .then((m) => {
+        if (!cancelled) setManifest(m);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setFetchError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fileMode, metadata.dc_id, refreshTick]);
+
+  useEffect(() => {
+    if (fileMode) return undefined;
     let cancelled = false;
     setLoading(true);
     setFetchError(null);
@@ -208,6 +260,7 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
       cancelled = true;
     };
   }, [
+    fileMode,
     metadata.wf_id,
     metadata.dc_id,
     JSON.stringify(requiredCols),
@@ -219,10 +272,16 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   // ---- Assets: built-in contigs and the gene lane -------------------------
   // Both are static per assembly and memoised process-wide, so four hg38 tiles
   // on one dashboard pay for them once.
+  // In file mode the collection itself can name the assembly, which is the one
+  // place that knows what the files were called against; the tile's own
+  // setting still wins when it has one.
+  const trackAssembly = fileMode
+    ? (effectiveConfig.assembly ?? manifest?.assembly ?? null)
+    : effectiveConfig.assembly;
   const [assemblyContigs, setAssemblyContigs] = useState<Contig[] | null>(null);
   useEffect(() => {
     let cancelled = false;
-    const name = effectiveConfig.assembly;
+    const name = trackAssembly;
     if (!name || !BUILTIN_ASSEMBLIES.includes(name)) {
       setAssemblyContigs(null);
       return undefined;
@@ -233,7 +292,7 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     return () => {
       cancelled = true;
     };
-  }, [effectiveConfig.assembly]);
+  }, [trackAssembly]);
 
   const [geneAnnotation, setGeneAnnotation] = useState<GeneAnnotation | null>(null);
   useEffect(() => {
@@ -245,6 +304,24 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
       cancelled = true;
     };
   }, [effectiveConfig.annotation]);
+
+  // Gene symbols for the locus field. The lane above is opt-in (a navigator
+  // usually hides it), but "type MYC" must still resolve, so the search table
+  // falls back to the track's assembly when no lane is drawn.
+  const [searchAnnotation, setSearchAnnotation] = useState<GeneAnnotation | null>(null);
+  const searchAssembly =
+    effectiveConfig.annotation && effectiveConfig.annotation !== 'none'
+      ? effectiveConfig.annotation
+      : trackAssembly;
+  useEffect(() => {
+    let cancelled = false;
+    loadGeneAnnotation(searchAssembly).then((g) => {
+      if (!cancelled) setSearchAnnotation(g);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [searchAssembly]);
 
   // One GenomeSpy embed is one WebGL context, a third of what a Plotly
   // scattergl costs, so it competes for a slot like any point cloud. Without
@@ -308,8 +385,49 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     themeColors.zeroLineColor,
     palette.join(','),
   ]);
-  const spec = (built?.spec ?? null) as RootSpec | null;
-  const contigs = built?.contigs ?? null;
+  // The file-backed spec. Built from the manifest, so it changes when the
+  // presigned URLs are refreshed; that is a genuine remount, since the lazy
+  // sources hold the old URLs.
+  const [fileSpecError, setFileSpecError] = useState<string | null>(null);
+  const builtFile = useMemo(() => {
+    if (!fileMode || !manifest) return null;
+    try {
+      const out = buildFileGenomeSpec({
+        manifest,
+        options: fileTrackOptions(effectiveConfig, { opacity, pointSize }),
+        colors: {
+          textColor: themeColors.textColor,
+          gridColor: themeColors.gridColor,
+          ruleColor: themeColors.zeroLineColor,
+          palette,
+        },
+        assemblyContigs,
+        assembly: effectiveConfig.assembly ?? null,
+        regionBrushEnabled,
+      });
+      setFileSpecError(null);
+      return out;
+    } catch (err) {
+      setFileSpecError(err instanceof Error ? err.message : String(err));
+      return null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    fileMode,
+    manifest,
+    effectiveConfig,
+    opacity,
+    pointSize,
+    assemblyContigs,
+    regionBrushEnabled,
+    themeColors.textColor,
+    themeColors.gridColor,
+    themeColors.zeroLineColor,
+    palette.join(','),
+  ]);
+
+  const spec = ((fileMode ? builtFile?.spec : built?.spec) ?? null) as RootSpec | null;
+  const contigs = (fileMode ? builtFile?.contigs : built?.contigs) ?? null;
 
   const emitSelection = useCallback(
     (values: string[]) => {
@@ -328,19 +446,24 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   );
 
   const [brushedRegion, setBrushedRegion] = useState<string | null>(null);
+  // True while a zoom issued from code (locus field, default region, filter
+  // reset, followed region) is in flight: a brush event fired by that zoom is
+  // not the reader's gesture and must not be re-emitted as a filter.
+  const zoomingFromCodeRef = useRef(false);
+  // Key of the region this tile's own brush last published, so the own-region
+  // zoom below can tell "the reader just dragged" from "the locus field moved".
+  const brushedKeyRef = useRef<string | null>(null);
   const handleBrush = useCallback(
     (interval: number[] | null) => {
       if (!onFilterChange || !contigs) return;
+      if (zoomingFromCodeRef.current) return;
       const region = regionFromInterval(contigs, interval);
       setBrushedRegion(regionLabel(region));
       // Two entries, one per column: `mergeFiltersBySource` keys on
       // (index, source) and they carry different indices, so they coexist.
-      for (const filter of genomeRegionFilters(
-        metadata,
-        config.chr_col,
-        config.pos_col,
-        region,
-      )) {
+      const pair = genomeRegionFilters(metadata, config.chr_col, config.pos_col, region);
+      brushedKeyRef.current = ownRegionKey(pair, metadata.index) || null;
+      for (const filter of pair) {
         onFilterChange(filter);
       }
     },
@@ -350,6 +473,8 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   const containerRef = useRef<HTMLDivElement | null>(null);
   const { api, error: embedError } = useGenomeSpy(containerRef, spec, {
     backend,
+    // Only a file-backed spec needs the parsers, so only it pays for them.
+    lazySources: fileMode,
     onPick: selectionEnabled ? handlePick : undefined,
     onBrush: regionBrushEnabled ? handleBrush : undefined,
   });
@@ -359,9 +484,31 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   // `datasets.set` with the same content is a harmless no-op. An empty fetch
   // swaps in an empty dataset rather than tearing the embed down.
   useEffect(() => {
-    if (!api || !liveData) return;
+    // File mode has no `datasets` to swap: each lane's lazy source refetches
+    // on its own when the domain moves.
+    if (fileMode || !api || !liveData) return;
     setGenomeSpyRows(api, liveData);
-  }, [api, liveData]);
+  }, [fileMode, api, liveData]);
+
+  // Every programmatic zoom goes through here so the brush handler can ignore
+  // what it provokes. The flag drops a frame after the zoom settles, since
+  // GenomeSpy publishes param changes on its own render tick.
+  const zoomFromCode = useCallback(
+    async (region: { chrom: string; start: number; end: number } | null) => {
+      if (!api) return;
+      zoomingFromCodeRef.current = true;
+      try {
+        await zoomToRegion(api, region, contigs);
+      } catch {
+        // A zoom on a view torn down mid-flight is not worth a tile error.
+      } finally {
+        requestAnimationFrame(() => {
+          zoomingFromCodeRef.current = false;
+        });
+      }
+    },
+    [api, contigs],
+  );
 
   // ---- Following someone else's region ------------------------------------
   const incomingRegion = useMemo(
@@ -373,26 +520,140 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     if (!incomingRegion) return;
     // A chromosome with no range means "the whole contig", which needs the
     // contig's own length rather than an infinite end.
-    const size = contigs?.find((c) => c.name === incomingRegion.chrom)?.size;
-    const end = Number.isFinite(incomingRegion.end)
-      ? incomingRegion.end
-      : (size ?? incomingRegion.start + 1);
-    void zoomToRegion(api, { chrom: incomingRegion.chrom, start: incomingRegion.start, end });
-  }, [api, followRegion, incomingRegion, contigs]);
+    void zoomFromCode(incomingRegion);
+  }, [api, followRegion, incomingRegion, zoomFromCode]);
+
+  // ---- Zooming to the region this tile emitted ------------------------------
+  // The fetch strips this tile's own region (so a brush can widen again), which
+  // is also why the tile never followed its own locus field or default region.
+  // The fetch stays whole-genome; only the visible domain moves here.
+  // `ownRegionZoom` owns the decision; the refs own what it compares against.
+  const ownRegionKeyRef = useRef('');
+  const zoomedByCodeRef = useRef(false);
+  const zoomedApiRef = useRef<typeof api>(null);
+  useEffect(() => {
+    if (!api) return;
+    if (zoomedApiRef.current !== api) {
+      // A rebuilt embed (spec, backend or theme changed) opens on the whole
+      // genome again, so the region in force has to be re-applied to it.
+      zoomedApiRef.current = api;
+      ownRegionKeyRef.current = '';
+      zoomedByCodeRef.current = false;
+    }
+    const { decision, key } = ownRegionZoom({
+      filters,
+      componentIndex: metadata.index,
+      chrColumn: config.chr_col,
+      posColumn: config.pos_col,
+      previousKey: ownRegionKeyRef.current,
+      brushedKey: brushedKeyRef.current,
+      zoomedByCode: zoomedByCodeRef.current,
+      followedRegion: incomingRegion,
+    });
+    ownRegionKeyRef.current = key;
+    if (decision.action === 'none') {
+      // A brush of the reader's own supersedes any earlier zoom from code.
+      if (key && key === brushedKeyRef.current) zoomedByCodeRef.current = false;
+      return;
+    }
+    zoomedByCodeRef.current = decision.action === 'zoom';
+    void zoomFromCode(decision.action === 'zoom' ? decision.region : null);
+  }, [api, filters, metadata.index, config.chr_col, config.pos_col, incomingRegion, zoomFromCode]);
+
+  // ---- The locus field ----------------------------------------------------
+  // Reads the region back off the *unstripped* filters, this tile's own
+  // included: the field is the section's address bar, so it must show where
+  // the reader is even when that is where they just sent everyone.
+  const displayedRegion = useMemo(
+    () => regionFromFilters(filters, config.chr_col, config.pos_col),
+    [filters, config.chr_col, config.pos_col],
+  );
+  // ---- Opening on the section's default region ----------------------------
+  // The section's address is written in the YAML rather than typed by the
+  // reader, once, so a locus section never opens on the whole genome or on
+  // nothing. `defaultRegionFilters` owns every reason not to emit; the ref
+  // owns "once", which is what keeps a reader who clears the region from
+  // being sent straight back to it.
+  const contigNames = useMemo(() => (contigs ?? []).map((c) => c.name), [contigs]);
+  const defaultRegionDecided = useRef(false);
+  useEffect(() => {
+    if (defaultRegionDecided.current || !onFilterChange) return;
+    // A locus is resolved against the contigs the data carries, so there is
+    // nothing to decide before they are known: `chr7` and `7` are the same
+    // place, and a filter carrying the wrong spelling selects no rows at all.
+    if (!contigNames.length) return;
+    // One decision per session, emitted or not: coming back through here after
+    // the reader has moved on would undo their move.
+    defaultRegionDecided.current = true;
+    const toEmit = defaultRegionFilters({
+      metadata,
+      chrColumn: config.chr_col,
+      posColumn: config.pos_col,
+      defaultRegion: config.default_region,
+      enabled: regionBrushEnabled,
+      contigs: contigNames,
+      genes: geneAnnotation?.genes ?? null,
+      filters,
+    });
+    if (!toEmit) return;
+    for (const filter of toEmit) onFilterChange(filter);
+  }, [
+    onFilterChange,
+    contigNames,
+    metadata,
+    config.chr_col,
+    config.pos_col,
+    config.default_region,
+    regionBrushEnabled,
+    geneAnnotation,
+    filters,
+  ]);
+
+  const locusControls = (
+    <LocusInput
+      metadata={metadata}
+      chrColumn={config.chr_col}
+      posColumn={config.pos_col}
+      contigs={contigs}
+      genes={searchAnnotation?.genes ?? null}
+      onFilterChange={regionBrushEnabled ? onFilterChange : undefined}
+      region={displayedRegion}
+    />
+  );
 
   const counts = useMemo(() => {
+    if (fileMode) {
+      if (!manifest) return undefined;
+      // No row count to report: the browser only ever holds the window it is
+      // looking at, so what the chrome can honestly say is how many files the
+      // collection published and how many got a lane.
+      const out: Record<string, number> = { files: manifest.files.length, [backend]: 1 };
+      if (builtFile?.lanes.length) out.lanes = builtFile.lanes.length;
+      return out;
+    }
     if (!rows) return undefined;
     const out: Record<string, number> = { rows: rowCount, [backend]: 1 };
     if (built?.facets.length) out.lanes = built.facets.length;
     if (built?.geneCount) out.genes = built.geneCount;
     return out;
-  }, [rows, rowCount, backend, built?.facets.length, built?.geneCount]);
+  }, [
+    fileMode,
+    manifest,
+    builtFile?.lanes.length,
+    rows,
+    rowCount,
+    backend,
+    built?.facets.length,
+    built?.geneCount,
+  ]);
 
   // The frame replaces its children with `emptyMessage`, which would unmount
   // the container under a live embed and strand it on a detached node. So the
   // frame's message is only used before any embed exists; once one is up, an
   // empty fetch is reported by an overlay and the container stays mounted.
-  const noRows = Boolean(rows) && rowCount === 0;
+  const noRows = fileMode
+    ? Boolean(manifest) && (builtFile?.lanes.length ?? 0) === 0
+    : Boolean(rows) && rowCount === 0;
 
   const canFacet = Boolean(config.sample_col);
   const annotationHint =
@@ -400,9 +661,33 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
       ? 'No gene of this assembly falls on the contigs in view.'
       : null;
 
+  const fileControls = fileMode ? (
+    <Stack gap={4}>
+      <Text size="xs" fw={500}>
+        File-backed track
+      </Text>
+      <Text size="xs" c="dimmed">
+        {manifest
+          ? `${manifest.format.toUpperCase()} read from storage as you zoom in. ` +
+            `${builtFile?.lanes.length ?? 0} of ${manifest.files.length} sample(s) drawn.`
+          : 'Reading the collection manifest.'}
+      </Text>
+      {builtFile && builtFile.droppedLanes > 0 ? (
+        <Text size="xs" c="dimmed">
+          {builtFile.droppedLanes} more sample(s) not drawn; raise the lane cap on the tile.
+        </Text>
+      ) : null}
+      <Text size="xs" c="dimmed">
+        Marks, lanes and the threshold rule come from the file itself, so this tile only offers
+        the cosmetic controls below.
+      </Text>
+    </Stack>
+  ) : null;
+
   const controls = (
     <Stack gap="xs">
-      <Stack gap={4}>
+      {fileControls}
+      <Stack gap={4} display={fileMode ? 'none' : undefined}>
         <Text size="xs" fw={500}>
           Mark
         </Text>
@@ -422,7 +707,7 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
             : 'Bind an end column to draw intervals. GenomeSpy has no line mark, so a coverage profile is drawn as bars.'}
         </Text>
       </Stack>
-      <Stack gap={4}>
+      <Stack gap={4} display={fileMode ? 'none' : undefined}>
         <Text size="xs" fw={500}>
           Per-sample lanes
         </Text>
@@ -465,6 +750,7 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
         size="xs"
         label="Threshold rule"
         placeholder="none"
+        display={fileMode ? 'none' : undefined}
         value={scoreThreshold ?? ''}
         onChange={(v) => setScoreThreshold(typeof v === 'number' ? v : null)}
       />
@@ -482,6 +768,7 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
         size="xs"
         label="Gene annotation lane"
         description="Protein-coding genes under the track; labels appear as you zoom in"
+        display={fileMode ? 'none' : undefined}
         value={annotation}
         onChange={(v) => setAnnotation((v as 'none' | 'hg38' | 'mm10') ?? 'none')}
         data={[
@@ -529,10 +816,13 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
       title={metadata.title || 'Genome view'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
       counts={counts}
+      primaryControls={locusControls}
       controls={controls}
-      loading={loading && !rows}
-      error={fetchError ?? embedError}
-      emptyMessage={noRows && !spec ? 'No rows' : undefined}
+      loading={loading && !rows && !manifest}
+      error={fetchError ?? fileSpecError ?? embedError}
+      emptyMessage={
+        noRows && !spec ? (fileMode ? 'No indexed file to draw' : 'No rows') : undefined
+      }
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
     >

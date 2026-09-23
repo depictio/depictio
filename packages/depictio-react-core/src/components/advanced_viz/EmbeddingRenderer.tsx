@@ -30,11 +30,13 @@ import {
   advancedVizSelectionFilter,
   extractScatterSelection,
   filtersExcludingOwn,
+  hasOwnSelection,
 } from '../../selection';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyThemeColors } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { splitFigureByGroups } from './groupSplit';
+import { useSelectionRevision } from './selectionGesture';
 import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
 
@@ -141,10 +143,14 @@ const EmbeddingRenderer: React.FC<Props> = ({
   const [legendPos, setLegendPos] = usePersistedVizControl<LegendPos>(metadata, 'legend_pos', 'right');
   const [ncontours, setNcontours] = usePersistedVizControl(metadata, 'ncontours', 14);
   const [densityOpacity, setDensityOpacity] = usePersistedVizControl(metadata, 'density_opacity', 0.45);
+  // An explicit `color_col` is the author's colour; `cluster_col` is what the
+  // legend and centroids group on, and only colours the map when nothing else
+  // was named. Two tiles on one collection that differ only by `color_col`
+  // must not draw the same picture.
   const [colorBy, setColorBy] = usePersistedVizControl<string | null>(
     metadata,
     'default_color_by',
-    config.cluster_col || config.color_col || null,
+    config.color_col || config.cluster_col || null,
   );
   const [showDensity, setShowDensity] = usePersistedVizControl(metadata, 'show_density', false);
 
@@ -243,6 +249,9 @@ const EmbeddingRenderer: React.FC<Props> = ({
   const filtersForFetch = useMemo(
     () => filtersExcludingOwn(filters, metadata.index, 'scatter_selection'),
     [filters, metadata.index],
+  );
+  const selectionRevision = useSelectionRevision(
+    hasOwnSelection(filters, metadata.index, 'scatter_selection'),
   );
 
   const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
@@ -785,6 +794,10 @@ const EmbeddingRenderer: React.FC<Props> = ({
         // `refreshTick` like FigureRenderer: a realtime tick still
         // repaints, a filter change does not.
         uirevision: `tick-${refreshTick ?? 0}`,
+        // The selected points are keyed separately, so an outside clear (the
+        // selection saved as a group, or removed from the filter summary)
+        // undims the cloud without dropping the zoom. See useSelectionRevision.
+        selectionrevision: `sel-${selectionRevision}`,
         ...(actuallyRender3D ? { scene: scene3D, uirevision: 'embedding-3d' } : layout2D),
         ...(!actuallyRender3D && centroidAnnotations.length > 0
           ? { annotations: centroidAnnotations }
@@ -815,6 +828,7 @@ const EmbeddingRenderer: React.FC<Props> = ({
     rows,
     config,
     refreshTick,
+    selectionRevision,
     selectionEnabled,
     selectionColumn,
     selectionInOwnSlot,
@@ -926,24 +940,65 @@ const EmbeddingRenderer: React.FC<Props> = ({
     return typeof vs[0] === 'number';
   }, [rows, colorBy]);
 
+  // Encoding tier: the reduction method, the number of dimensions on screen
+  // and what the colour means. Those three are the analysis; the method's own
+  // hyper-parameters, the point paint and the overlays refine it and stay in
+  // the second tier.
+  const primaryControls = useMemo(
+    () => (
+      <>
+        {liveMode ? (
+          <Select
+            size="xs"
+            w={130}
+            label="Method"
+            value={method}
+            onChange={(v) => v && setMethod(v as ComputeMethod)}
+            data={[
+              { value: 'pca', label: 'PCA' },
+              { value: 'umap', label: 'UMAP' },
+              { value: 'tsne', label: 't-SNE' },
+              { value: 'pcoa', label: 'PCoA' },
+            ]}
+          />
+        ) : null}
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            View
+          </Text>
+          <SegmentedControl
+            size="xs"
+            value={view3D ? '3d' : '2d'}
+            onChange={(v) => setView3D(v === '3d')}
+            data={[
+              { value: '2d', label: '2D' },
+              { value: '3d', label: '3D' },
+            ]}
+            disabled={!liveMode && !has3DConfigured}
+          />
+        </Stack>
+        {colorOptions.length > 0 ? (
+          <Select
+            size="xs"
+            w={170}
+            label="Colour by"
+            value={colorBy}
+            onChange={setColorBy}
+            data={colorOptions}
+            searchable
+            clearable
+          />
+        ) : null}
+      </>
+    ),
+    [liveMode, method, view3D, has3DConfigured, colorBy, colorOptions],
+  );
+
   const controls = useMemo(
     () => (
       <Stack gap="xs">
         {liveMode ? (
           <>
-            <Select
-              size="xs"
-              label="Method"
-              value={method}
-              onChange={(v) => v && setMethod(v as ComputeMethod)}
-              data={[
-                { value: 'pca', label: 'PCA' },
-                { value: 'umap', label: 'UMAP' },
-                { value: 'tsne', label: 't-SNE' },
-                { value: 'pcoa', label: 'PCoA' },
-              ]}
-              description="Dim-reduction algorithm dispatched as a Celery task"
-            />
             {method === 'umap' ? (
               <Group gap="xs" grow>
                 <NumberInput
@@ -991,24 +1046,6 @@ const EmbeddingRenderer: React.FC<Props> = ({
             ) : null}
           </>
         ) : null}
-        {/* View 2D/3D toggle. In precomputed mode this is only meaningful when
-            the DC has a dim_3_col; in live mode the user can opt into 3D and
-            n_components flips to 3 automatically. */}
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            View
-          </Text>
-          <SegmentedControl
-            size="xs"
-            value={view3D ? '3d' : '2d'}
-            onChange={(v) => setView3D(v === '3d')}
-            data={[
-              { value: '2d', label: '2D' },
-              { value: '3d', label: '3D' },
-            ]}
-            disabled={!liveMode && !has3DConfigured}
-          />
-        </Stack>
         <Select
           size="xs"
           label="Plot style"
@@ -1022,27 +1059,14 @@ const EmbeddingRenderer: React.FC<Props> = ({
           description="Axis furniture drawn around the points"
           allowDeselect={false}
         />
-        <Group gap="xs" grow>
-          <NumberInput
-            size="xs"
-            label="Point size"
-            value={pointSize}
-            onChange={(v) => setPointSize(Math.max(1, Number(v) || 6))}
-            min={1}
-            max={30}
-          />
-          {colorOptions.length > 0 ? (
-            <Select
-              size="xs"
-              label="Colour by"
-              value={colorBy}
-              onChange={setColorBy}
-              data={colorOptions}
-              searchable
-              clearable
-            />
-          ) : null}
-        </Group>
+        <NumberInput
+          size="xs"
+          label="Point size"
+          value={pointSize}
+          onChange={(v) => setPointSize(Math.max(1, Number(v) || 6))}
+          min={1}
+          max={30}
+        />
         {colorByIsNumeric ? (
           <Stack gap={4}>
             <Text size="xs" fw={500}>
@@ -1208,6 +1232,7 @@ const EmbeddingRenderer: React.FC<Props> = ({
     <AdvancedVizFrame
       title={metadata.title || 'Embedding'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
+      primaryControls={primaryControls}
       controls={controls}
       loading={loading}
       error={error}

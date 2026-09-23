@@ -26,7 +26,7 @@ from typing import Literal
 
 from depictio.models.components.types import AdvancedVizKind
 
-SamplingPolicy = Literal["hash", "none", "tail", "log_rank"]
+SamplingPolicy = Literal["hash", "none", "tail", "log_rank", "head"]
 
 #: Which reduction each kind's renderer can survive.
 #:
@@ -51,6 +51,15 @@ SamplingPolicy = Literal["hash", "none", "tail", "log_rank"]
 #:                ``log_spaced_rank_thin``; the ``/data`` endpoint keeps those
 #:                ranks for every sample and falls back to ``hash`` when no
 #:                ``rank`` column is bound.
+#: ``head``     : the first N rows of the filtered frame, in scan order. The
+#:                weakest reduction here and deliberately so: it is for the
+#:                kinds whose renderer draws one mark per row and stops being
+#:                legible long before the row budget runs out, where "the rows
+#:                the collection happens to start with" is as good an answer as
+#:                a uniform sample and is cheap to explain to a reader ("the
+#:                first 2000 samples"). A uniform sample of a parallel-
+#:                coordinates plot is not more faithful, it is a different
+#:                arbitrary subset that changes on every reload.
 KIND_SAMPLING_POLICY: dict[AdvancedVizKind, SamplingPolicy] = {
     # Point clouds — uniform is faithful.
     "embedding": "hash",
@@ -115,6 +124,12 @@ KIND_SAMPLING_POLICY: dict[AdvancedVizKind, SamplingPolicy] = {
     "cnv_profile": "none",
     # Links are few (fusions, SVs); ``max_links`` guards the request.
     "genome_chord": "none",
+    # One row, picked by a selection. There is nothing to reduce, and a sample
+    # could drop exactly the row the reader clicked.
+    "record_card": "none",
+    # See the ``head`` docstring above; ``ParallelCoordinatesConfig.max_rows``
+    # is the budget the renderer asks for.
+    "parallel_coordinates": "head",
 }
 
 #: The role whose tail a ``tail`` kind must keep, and whether the interesting

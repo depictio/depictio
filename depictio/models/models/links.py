@@ -27,6 +27,7 @@ class LinkConfig(BaseModel):
     - pattern: Template substitution (e.g., "{sample}.bam" -> "S1.bam")
     - regex: Match target values using regex pattern
     - wildcard: Glob-style matching (e.g., "S1*" matches "S1_R1.bam")
+    - region: Rename a genomic region onto the target's own coordinate columns
 
     Example:
         LinkConfig(
@@ -34,11 +35,32 @@ class LinkConfig(BaseModel):
             mappings={"S1": ["S1_R1", "S1_R2"], "S2": ["S2_R1"]},
             target_field="sample_name"
         )
+
+    The ``region`` resolver is the one that reads no data at all. A genomic
+    region travels the dashboard as two ordinary filters, a chromosome
+    multi-select and a position range (``genomeRegionFilters`` in
+    ``packages/depictio-react-core/src/selection.ts``), and a chromosome name
+    and a base-pair coordinate mean the same thing in every collection of the
+    same assembly. Only the column *names* differ, which is what ``columns``
+    carries:
+
+        LinkConfig(
+            resolver="region",
+            columns={"chrom": "chromosome", "pos": "position"},
+        )
     """
 
-    resolver: Literal["direct", "sample_mapping", "pattern", "regex", "wildcard"] = Field(
+    resolver: Literal["direct", "sample_mapping", "pattern", "regex", "wildcard", "region"] = Field(
         default="direct",
         description="Resolution strategy for mapping source values to target identifiers",
+    )
+
+    columns: dict[str, str] | None = Field(
+        default=None,
+        description="Role to target-column mapping for the 'region' resolver: "
+        "'chrom' names the target's chromosome column and 'pos' its coordinate "
+        "column. Ignored by every other resolver, which map values rather than "
+        "column names.",
     )
 
     mappings: dict[str, list[str]] | None = Field(
@@ -74,6 +96,24 @@ class LinkConfig(BaseModel):
         if v is not None and "{sample}" not in v:
             raise ValueError("Pattern must contain {sample} placeholder")
         return v
+
+    @model_validator(mode="after")
+    def validate_region_columns(self) -> "LinkConfig":
+        """A region link is nothing but its target columns, so it must name them.
+
+        Caught here rather than at resolution time: a region link missing a
+        column would silently rewrite nothing, which reads on the dashboard as
+        a tile that ignores the brush.
+        """
+        if self.resolver != "region":
+            return self
+        columns = self.columns or {}
+        missing = [role for role in ("chrom", "pos") if not columns.get(role)]
+        if missing:
+            raise ValueError(
+                f"resolver 'region' needs link_config.columns for {', '.join(missing)}"
+            )
+        return self
 
 
 class DCLink(BaseModel):
@@ -242,6 +282,17 @@ class LinkResolutionRequest(BaseModel):
             "target_dc_id -> source_dc_id, source_column is read on the link's target, "
             "and the resolved values name the link's source_column. Only links using "
             "the 'direct' resolver can be walked this way; any other answers 404."
+        ),
+    )
+
+    range_filter: bool = Field(
+        default=False,
+        description=(
+            "filter_values is the [low, high] pair of a RangeSlider or DateRangePicker on "
+            "source_column, to be read as an inclusive range rather than a set of two "
+            "values. The rows inside the range are translated to the link's join column "
+            "before resolving, so a position or q-value slider reaches the linked "
+            "collection as the ids it selects, not as two ids that do not exist."
         ),
     )
 

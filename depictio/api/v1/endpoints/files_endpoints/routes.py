@@ -12,9 +12,13 @@ from pymongo.errors import BulkWriteError
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import db
-from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.api.v1.s3 import s3_client
 from depictio.models.models.base import convert_objectid_to_str
+from depictio.models.models.data_collections_types.indexed_file import (
+    DEFAULT_INDEX_SUFFIX,
+    indexed_file_s3_key,
+)
 from depictio.models.models.files import File
 
 files_endpoint_router = APIRouter()
@@ -290,3 +294,205 @@ async def serve_image(
         # exception details (which may include S3 internals) to the client.
         logger.error(f"Error serving image {bucket}/{key}: {e}")
         raise HTTPException(status_code=500, detail="Error retrieving image")
+
+
+# ---------------------------------------------------------------------------
+# indexed_file DCs: presigned, range-capable URLs
+# ---------------------------------------------------------------------------
+#
+# GenomeSpy's lazy data sources (vcf, bam, bigwig, bigbed, gff3, tabix,
+# indexedFasta) read their objects straight from storage with HTTP range
+# requests, so the bytes must never pass through this API. What the API hands
+# out is a short-lived presigned URL and the manifest saying which samples
+# exist. Two consequences shape the code below:
+#
+# 1. The URL is signed against the *browser-reachable* endpoint
+#    (``settings.minio.external_url``), not the in-cluster one. SigV4 signs the
+#    host, so a URL signed for ``http://minio:9000`` fails from a browser even
+#    when the bytes are reachable another way.
+# 2. The storage must send CORS headers for Range, and expose
+#    Content-Range / Accept-Ranges. See the MinIO service in
+#    docker-compose.dev.yaml and docs/indexed-files.md.
+
+#: Lifetime of a presigned indexed-file URL. Long enough for a reader to pan a
+#: track, short enough that a leaked link dies on its own.
+INDEXED_FILE_URL_TTL_SECONDS = 15 * 60
+
+_presign_client = None
+
+
+def _presigning_s3_client():
+    """boto3 client whose signatures are valid for the browser's endpoint.
+
+    Built lazily and once: instantiating a boto3 client costs a session load,
+    and this one is only needed by deployments that expose indexed files.
+    """
+    global _presign_client
+    if _presign_client is None:
+        import boto3
+        from botocore.client import Config
+
+        _presign_client = boto3.client(
+            "s3",
+            aws_access_key_id=settings.minio.aws_access_key_id,
+            aws_secret_access_key=settings.minio.aws_secret_access_key,
+            endpoint_url=settings.minio.external_url,
+            verify=settings.minio.verify_tls,
+            config=Config(signature_version="s3v4"),
+        )
+    return _presign_client
+
+
+def presign_indexed_file(key: str, ttl_seconds: int = INDEXED_FILE_URL_TTL_SECONDS) -> str:
+    """Presigned GET URL for one bucket object, valid for ``ttl_seconds``."""
+    return _presigning_s3_client().generate_presigned_url(
+        "get_object",
+        Params={"Bucket": settings.minio.bucket, "Key": key},
+        ExpiresIn=ttl_seconds,
+    )
+
+
+def _indexed_file_dc_properties(dc_oid: ObjectId) -> dict:
+    """``dc_specific_properties`` of an indexed_file DC, from the project doc.
+
+    Data collections live embedded under ``workflows[].data_collections[]``;
+    there is no top-level document to look up. Returns an empty dict when the
+    DC is not an indexed_file one, which the callers turn into a 404.
+    """
+    from depictio.api.v1.db import projects_collection
+
+    project_doc = projects_collection.find_one(
+        {"workflows.data_collections._id": dc_oid},
+        {"workflows.data_collections": 1},
+    )
+    if not project_doc:
+        return {}
+    for wf in project_doc.get("workflows", []) or []:
+        for dc in wf.get("data_collections", []) or []:
+            if (dc.get("_id") or dc.get("id")) != dc_oid:
+                continue
+            config = dc.get("config") or {}
+            if str(config.get("type", "")).lower() != "indexed_file":
+                return {}
+            return config.get("dc_specific_properties") or {}
+    return {}
+
+
+def _effective_index_suffix(properties: dict) -> str:
+    """Index suffix for a DC's properties dict, falling back to the format default."""
+    explicit = properties.get("index_suffix")
+    if explicit is not None:
+        return str(explicit)
+    return DEFAULT_INDEX_SUFFIX.get(str(properties.get("format", "")).lower(), "")
+
+
+@files_endpoint_router.get("/indexed/{data_collection_id}")
+async def list_indexed_files(
+    data_collection_id: str,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Manifest of an indexed_file DC: one entry per sample, with presigned URLs.
+
+    This is what a file-backed track fetches before it builds its GenomeSpy
+    spec: it needs the format (which lazy source to declare), the assembly and,
+    per sample, a URL for the object and one for its index.
+    """
+    try:
+        dc_oid = ObjectId(str(data_collection_id))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid dc_id: {exc}") from exc
+
+    _assert_indexed_file_access(dc_oid, current_user)
+
+    properties = _indexed_file_dc_properties(dc_oid)
+    if not properties:
+        raise HTTPException(
+            status_code=404, detail="Data collection not found or not an indexed_file collection."
+        )
+
+    index_suffix = _effective_index_suffix(properties)
+    docs = files_collection.find(
+        {"data_collection_id": dc_oid, "s3_key": {"$ne": None}},
+        {"sample": 1, "filename": 1, "filesize": 1, "s3_key": 1, "index_s3_key": 1},
+    )
+
+    entries = []
+    for doc in docs:
+        key = doc.get("s3_key")
+        if not key:
+            continue
+        index_key = doc.get("index_s3_key")
+        entries.append(
+            {
+                "sample": doc.get("sample") or "",
+                "name": doc.get("filename") or posixpath.basename(str(key)),
+                "size_bytes": doc.get("filesize"),
+                "url": presign_indexed_file(str(key)),
+                "index_url": presign_indexed_file(str(index_key)) if index_key else None,
+            }
+        )
+    entries.sort(key=lambda e: (e["sample"], e["name"]))
+
+    return {
+        "data_collection_id": str(dc_oid),
+        "format": str(properties.get("format", "")).lower(),
+        "index_suffix": index_suffix,
+        "assembly": properties.get("assembly"),
+        "sample_col": properties.get("sample_col", "sample"),
+        "expires_in": INDEXED_FILE_URL_TTL_SECONDS,
+        "files": entries,
+    }
+
+
+@files_endpoint_router.get("/{data_collection_id}/{sample}/{name}")
+async def get_indexed_file_url(
+    data_collection_id: str,
+    sample: str,
+    name: str,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Presigned URL for one object of an indexed_file DC, valid 15 minutes.
+
+    The key is rebuilt from the path parameters through ``indexed_file_s3_key``
+    rather than read from the request, so a caller-supplied ``sample`` or
+    ``name`` cannot reach outside the DC's own prefix. The object must also be
+    registered for this DC, which is what stops a reader with access to one DC
+    from guessing keys in another.
+    """
+    try:
+        dc_oid = ObjectId(str(data_collection_id))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid dc_id: {exc}") from exc
+
+    _assert_indexed_file_access(dc_oid, current_user)
+
+    try:
+        key = indexed_file_s3_key(str(dc_oid), unquote(sample), unquote(name))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    doc = files_collection.find_one(
+        {"data_collection_id": dc_oid, "$or": [{"s3_key": key}, {"index_s3_key": key}]},
+        {"filesize": 1, "index_filesize": 1, "s3_key": 1},
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="File not found for this data collection.")
+
+    is_index = doc.get("s3_key") != key
+    return {
+        "url": presign_indexed_file(key),
+        "expires_in": INDEXED_FILE_URL_TTL_SECONDS,
+        "size_bytes": doc.get("index_filesize") if is_index else doc.get("filesize"),
+    }
+
+
+def _assert_indexed_file_access(dc_oid: ObjectId, current_user) -> None:
+    """Project-level read check, shared with the advanced-viz DC routes.
+
+    Imported lazily: ``advanced_viz_endpoints`` and this module are both pulled
+    in by ``routers.py``, and a module-level import would tie their import
+    order together for no gain.
+    """
+    from depictio.api.v1.endpoints.advanced_viz_endpoints.routes import _assert_dc_access
+
+    _assert_dc_access(dc_oid, current_user)

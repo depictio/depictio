@@ -24,6 +24,18 @@ import AdvancedVizFrame from './AdvancedVizFrame';
 import { namedColumns } from './namedColumns';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
+import { demandForItems } from './contentDemand';
+
+/** The shortest a heatmap row may be drawn and still be read as a band rather
+ *  than a line. Below this the matrix stops being a picture of the data. */
+const MIN_CELL_PX = 12;
+/** Column labels along the bottom, the title strip and the colourbar, none of
+ *  which scale with the number of rows. */
+const HEATMAP_CHROME_PX = 130;
+/** The column dendrogram, drawn above the matrix when the columns cluster. */
+const COL_DENDROGRAM_PX = 70;
+/** One column-annotation strip. */
+const ANNOTATION_BAND_PX = 22;
 
 interface ComplexHeatmapConfig {
   /** Deprecated/unused: data comes from the component's resolved dc_id
@@ -272,6 +284,18 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
     [colAnnotationCols, colAnnotationOptions],
   );
 
+  // The rows the server actually painted, at the shortest cell still worth
+  // calling a band, plus the bands that sit above them: the column dendrogram
+  // when the columns cluster, and one strip per drawn annotation. Row
+  // annotations are a right-side strip and cost no height.
+  const drawnRows = dims?.rows ?? 0;
+  const bandsPx =
+    (clusterCols ? COL_DENDROGRAM_PX : 0) + drawnColAnnotations.length * ANNOTATION_BAND_PX;
+  const contentDemand = useMemo(
+    () => demandForItems(drawnRows, MIN_CELL_PX, HEATMAP_CHROME_PX + bandsPx),
+    [drawnRows, bandsPx],
+  );
+
   const colAnnotationData = useMemo(
     () => [
       ...colAnnotationOptions.map((value) => ({ value, label: value })),
@@ -317,11 +341,16 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
   // a fresh JSX reference on every render would refire the publish effect →
   // setState → re-render → fresh JSX → loop (manifested as React's
   // "Maximum update depth exceeded" warning).
-  const controls = useMemo(
+  // Encoding tier: normalisation and the two clustering choices decide what
+  // the matrix *is*, each of them re-runs the Celery build. The annotation
+  // tracks and the build status describe the same matrix, so they stay behind
+  // the icon.
+  const primaryControls = useMemo(
     () => (
-      <Stack gap="xs">
+      <>
         <Select
           size="xs"
+          w={170}
           label="Normalisation"
           value={normalize}
           onChange={(v) => v && setNormalize(v as typeof normalize)}
@@ -331,10 +360,10 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
             { value: 'col_z', label: 'Column z-score' },
             { value: 'log1p', label: 'log1p' },
           ]}
-          description="Applied before clustering + colourisation"
         />
         <Select
           size="xs"
+          w={150}
           label="Clustering method"
           value={clusterMethod}
           onChange={(v) => v && setClusterMethod(v as typeof clusterMethod)}
@@ -345,28 +374,26 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
             { value: 'average', label: 'Average' },
           ]}
         />
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Cluster rows
-          </Text>
-          <Switch
+        <Switch
           size="xs"
           checked={clusterRows}
           onChange={(e) => setClusterRows(e.currentTarget.checked)}
           label="Cluster rows"
         />
-        </Stack>
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Cluster cols
-          </Text>
-          <Switch
+        <Switch
           size="xs"
           checked={clusterCols}
           onChange={(e) => setClusterCols(e.currentTarget.checked)}
           label="Cluster columns"
         />
-        </Stack>
+      </>
+    ),
+    [normalize, clusterMethod, clusterRows, clusterCols],
+  );
+
+  const controls = useMemo(
+    () => (
+      <Stack gap="xs">
         <MultiSelect
           size="xs"
           label="Row annotations"
@@ -404,10 +431,6 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
       </Stack>
     ),
     [
-      normalize,
-      clusterMethod,
-      clusterRows,
-      clusterCols,
       rowAnnotationCols,
       annotationOptions,
       drawnColAnnotations,
@@ -422,7 +445,9 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
     <AdvancedVizFrame
       title={metadata.title || 'ComplexHeatmap'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
+      primaryControls={primaryControls}
       controls={controls}
+      contentDemand={contentDemand}
       loading={loading}
       error={error}
       emptyMessage={undefined}

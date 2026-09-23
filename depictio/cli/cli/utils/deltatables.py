@@ -7,6 +7,7 @@ from deltalake.exceptions import TableNotFoundError
 from pydantic import validate_call
 
 from depictio.cli.cli.utils.api_calls import (
+    api_create_files,
     api_get_files_by_dc_id,
     api_upsert_deltatable,
 )
@@ -17,6 +18,12 @@ from depictio.cli.cli_logging import logger
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.cli import CLIConfig
 from depictio.models.models.data_collections import DataCollection
+from depictio.models.models.data_collections_types.indexed_file import (
+    DCIndexedFileConfig,
+    indexed_file_s3_key,
+    indexed_file_s3_prefix,
+    sample_from_path,
+)
 from depictio.models.models.data_collections_types.phylogeny import phylogeny_s3_key
 from depictio.models.models.files import File
 from depictio.models.models.s3 import PolarsStorageOptions
@@ -600,6 +607,11 @@ def client_aggregate_data(
     if data_collection.config.type.lower() == "phylogeny":
         return process_phylogeny_data_collection(data_collection, CLI_config, overwrite)
 
+    # indexed_file DCs have no delta table either; the files and their indexes are
+    # copied to S3 and read straight from the browser over HTTP range requests.
+    if data_collection.config.type.lower() == "indexed_file":
+        return process_indexed_file_data_collection(data_collection, CLI_config, overwrite)
+
     # Handle transformed (recipe-based) data collections. A `materialized`
     # transform keeps the recipe for lineage but ships a pre-computed seed file,
     # so it falls through to the file-scan path instead of re-running the recipe.
@@ -1026,6 +1038,186 @@ def process_phylogeny_data_collection(
     return {
         "result": "success",
         "message": f"Phylogeny tree available at {s3_location}",
+    }
+
+
+def plan_indexed_file_uploads(
+    files: Iterable[File],
+    dc_id: str,
+    dc_config: DCIndexedFileConfig,
+) -> tuple[list[dict], list[str]]:
+    """Decide what an ``indexed_file`` DC uploads, without touching S3.
+
+    Pure so the CLI tests can cover the interesting parts (sample naming, the
+    index sidecar, the size cap, duplicate samples) with no network and no
+    bucket. Returns ``(uploads, skipped)`` where each upload is
+    ``{file, sample, key, index_path, index_key, index_size}``; ``file`` is the
+    original :class:`File` so the caller can stamp the keys back onto it.
+
+    A sample that appears twice keeps its first file: the DC's contract is one
+    object per sample, and silently overwriting would make which file wins
+    depend on scan order.
+    """
+    uploads: list[dict] = []
+    skipped: list[str] = []
+    seen_samples: set[str] = set()
+    index_suffix = dc_config.effective_index_suffix
+    size_cap_bytes = dc_config.max_file_size_mb * 1024 * 1024
+
+    for file_obj in files:
+        path = file_obj.file_location
+        if file_obj.filesize > size_cap_bytes:
+            skipped.append(
+                f"{path} ({file_obj.filesize / (1024 * 1024):.0f} MB above the "
+                f"{dc_config.max_file_size_mb} MB cap)"
+            )
+            continue
+
+        sample = sample_from_path(path, dc_config.sample_regex)
+        if sample in seen_samples:
+            skipped.append(f"{path} (sample {sample!r} already taken by an earlier file)")
+            continue
+        seen_samples.add(sample)
+
+        name = os.path.basename(path)
+        try:
+            key = indexed_file_s3_key(dc_id, sample, name)
+        except ValueError as exc:
+            skipped.append(f"{path} ({exc})")
+            continue
+
+        index_path: str | None = None
+        index_key: str | None = None
+        index_size: int | None = None
+        if index_suffix:
+            candidate = f"{path}{index_suffix}"
+            if os.path.exists(candidate):
+                index_path = candidate
+                index_key = indexed_file_s3_key(dc_id, sample, f"{name}{index_suffix}")
+                index_size = os.path.getsize(candidate)
+            else:
+                skipped.append(f"{path} (no {index_suffix} index beside it)")
+                seen_samples.discard(sample)
+                continue
+
+        uploads.append(
+            {
+                "file": file_obj,
+                "sample": sample,
+                "key": key,
+                "index_path": index_path,
+                "index_key": index_key,
+                "index_size": index_size,
+            }
+        )
+
+    return uploads, skipped
+
+
+def process_indexed_file_data_collection(
+    data_collection: DataCollection,
+    CLI_config: CLIConfig,
+    overwrite: bool = False,
+) -> dict[str, str]:
+    """Mirror an ``indexed_file`` DC's files and their indexes to S3.
+
+    No delta table: the browser reads the objects themselves over HTTP range
+    requests (GenomeSpy's lazy sources), so ingest is a copy plus a record of
+    where each sample's object landed. The keys are stamped back onto the file
+    documents, which is what ``GET /files/{dc_id}/{sample}/{name}`` signs.
+
+    Args:
+        data_collection: the ``indexed_file`` DataCollection.
+        CLI_config: CLI configuration with API URL, credentials and S3 storage.
+        overwrite: re-upload objects that already exist in the bucket.
+
+    Returns:
+        Result dict with success/error status.
+    """
+    logger.info(f"Processing indexed_file data collection: {data_collection.data_collection_tag}")
+
+    dc_id = str(data_collection.id)
+    dc_config = data_collection.config.dc_specific_properties
+    if not isinstance(dc_config, DCIndexedFileConfig):
+        return {
+            "result": "error",
+            "message": "indexed_file DC without an indexed_file configuration",
+        }
+
+    try:
+        files = fetch_file_data(dc_id, CLI_config)
+    except Exception as e:
+        return {"result": "error", "message": f"No files found for indexed_file DC: {e}"}
+
+    uploads, skipped = plan_indexed_file_uploads(files, dc_id, dc_config)
+    for reason in skipped:
+        logger.warning(f"indexed_file: skipping {reason}")
+
+    if not uploads:
+        return {
+            "result": "error",
+            "message": (
+                "No uploadable files for indexed_file data collection "
+                f"{data_collection.data_collection_tag}"
+            ),
+        }
+
+    bucket = CLI_config.s3_storage.bucket
+    client = _s3_client(CLI_config)
+
+    def _already_there(key: str) -> bool:
+        try:
+            client.head_object(Bucket=bucket, Key=key)
+            return True
+        except Exception:
+            return False
+
+    updated: list[File] = []
+    for upload in uploads:
+        file_obj: File = upload["file"]
+        for local_path, key in (
+            (file_obj.file_location, upload["key"]),
+            (upload["index_path"], upload["index_key"]),
+        ):
+            if not local_path or not key:
+                continue
+            if not overwrite and _already_there(key):
+                logger.debug(f"indexed_file: {key} already in the bucket, skipping upload")
+                continue
+            try:
+                logger.info(f"Uploading indexed file: {local_path} -> s3://{bucket}/{key}")
+                client.upload_file(local_path, bucket, key)
+            except Exception as e:
+                return {
+                    "result": "error",
+                    "message": f"Failed to upload {local_path} to s3://{bucket}/{key}: {e}",
+                }
+
+        file_obj.sample = upload["sample"]
+        file_obj.s3_key = upload["key"]
+        file_obj.index_s3_key = upload["index_key"]
+        file_obj.index_filesize = upload["index_size"]
+        updated.append(file_obj)
+
+    response = api_create_files(updated, CLI_config, update=True)
+    if response.status_code != 200:
+        return {
+            "result": "error",
+            "message": f"Failed to record indexed file locations: {response.text}",
+        }
+
+    rich_print_checked_statement(
+        f"indexed_file data collection processed: {data_collection.data_collection_tag} "
+        f"({len(updated)} sample(s), {len(skipped)} skipped)",
+        "success",
+    )
+
+    return {
+        "result": "success",
+        "message": (
+            f"{len(updated)} indexed file(s) available under "
+            f"s3://{bucket}/{indexed_file_s3_prefix(dc_id, '')}".rstrip("/")
+        ),
     }
 
 

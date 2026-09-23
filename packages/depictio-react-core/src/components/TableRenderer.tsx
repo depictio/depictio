@@ -29,6 +29,7 @@ import { useNewItemIds } from '../hooks/useNewItemIds';
 import { useTransientFlag } from '../hooks/useTransientFlag';
 import { ActiveHighlight } from '../highlight';
 import { useUiScale } from '../uiScale';
+import { rowsForHeight, useContentDemand } from './autofit';
 import RefetchOverlay from './RefetchOverlay';
 import ComponentSkeleton from './ComponentSkeleton';
 import { useReportLoadStatus } from './DashboardLoadingProvider';
@@ -67,6 +68,12 @@ const SERVER_MAX_LIMIT = 500;
 // Hard ceiling on rows pulled fully into the browser via "Show all" — beyond
 // this the client-side grid would jank; we truncate and warn instead.
 const TABLE_FULL_LOAD_CAP = 20000;
+// Everything a table tile spends on itself before a single data row: the
+// component header, the Paper's padding, the title line and AG Grid's
+// pagination footer. Only ever an estimate, being a few pixels out costs at
+// most part of one grid row, and the clamp in `fitLayoutHeights` bounds the
+// rest.
+const TABLE_CHROME_PX = 96;
 
 const clampPageSize = (v: unknown): number =>
   typeof v === 'number' && v > 0 ? Math.min(Math.floor(v), SERVER_MAX_LIMIT) : DEFAULT_PAGE_SIZE;
@@ -622,6 +629,37 @@ const TableRenderer: React.FC<TableRendererProps> = ({
     () => Array.from(new Set([pageSize, 10, 25, 50, 100])).sort((a, b) => a - b),
     [pageSize],
   );
+
+  // How tall this table's content is, in grid rows: the chrome it always
+  // carries, its header, and the rows one page actually shows. A six-row data
+  // collection is a six-row table however big the tile is, and the reader gets
+  // the rest of the row back. Published as a demand rather than measured off
+  // the DOM because AG Grid stretches to its container, so measuring it would
+  // only ever report the tile back to itself.
+  //
+  // A full page asks for far more than any tile will give it; the grid caps a
+  // table at the height its author chose (see `FIT_POLICIES`), so this number
+  // only ever makes a table smaller.
+  //
+  // `total` is the filtered row count the server reported, so the demand
+  // follows a filter down to its last few rows and back up again.
+  const visibleRows = showAll
+    ? Math.min(allRows?.length ?? 0, pageSize)
+    : Math.min(total, pageSize);
+  const contentDemand = useMemo(
+    () =>
+      ready && visibleRows > 0
+        ? {
+            rows: rowsForHeight(
+              TABLE_CHROME_PX +
+                Math.round((metadata.compact ? 32 : 48) * uiScale) +
+                visibleRows * Math.round((metadata.compact ? 28 : 42) * uiScale),
+            ),
+          }
+        : null,
+    [ready, visibleRows, metadata.compact, uiScale],
+  );
+  useContentDemand(metadata.index, contentDemand);
 
   // The table is "reduced" whenever the full set spans more than one page.
   const hasReduction = ready && (total > pageSize || showAll);

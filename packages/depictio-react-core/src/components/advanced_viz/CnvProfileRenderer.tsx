@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  SegmentedControl,
   Select,
   Slider,
   Stack,
@@ -13,6 +14,13 @@ import Plot from 'react-plotly.js';
 import { AdvancedVizKind, fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import { adaptGlTrace, useWebglSlot } from '../../webglBudget';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import CnvLocusView from './cnv_profile/CnvLocusView';
+import { MAX_LOCUS_LANES, toLocusData } from './cnv_profile/cnvLocusSpec';
+import type { CnvLocusColors } from './cnv_profile/cnvLocusSpec';
+import { ANNOTATION_ASSEMBLIES } from './genomespy/genomeSpySpec';
+import { loadGeneAnnotation } from './genomespy/geneAnnotations';
+import type { GeneAnnotation } from './genomespy/geneAnnotations';
+import { filtersForGenomeViewFetch } from './genomespy/genomeViewData';
 import {
   buildGenomeAxis,
   classifyLog2,
@@ -32,6 +40,7 @@ import {
   plotlyThemeColors,
   plotlyThemeFragment,
 } from './plotlyTheme';
+import { regionXRange, useFollowedRegion } from './genomicAxis';
 import { usePersistedVizControl } from './usePersistedVizControl';
 
 /** Mirrors `CnvProfileConfig` in depictio/models/components/advanced_viz/configs.py.
@@ -55,13 +64,27 @@ interface CnvProfileConfig {
   gain_threshold?: number;
   loss_threshold?: number;
   max_bins?: number;
+  view?: CnvView;
+  views?: CnvView[] | null;
+  minor_copy_number_col?: string | null;
+  annotation?: GeneLane;
+  facet_by_sample?: boolean;
 }
 
 interface Props {
   metadata: StoredMetadata & { viz_kind?: string; config?: CnvProfileConfig };
   filters: InteractiveFilter[];
   refreshTick?: number;
+  /** Absent on read-only hosts; the locus brush emits the region through it. */
+  onFilterChange?: (filter: InteractiveFilter) => void;
 }
+
+/** `plotly` is the genome-wide Plotly profile; `locus` the GenomeSpy ASCAT
+ *  layout over the same rows (see cnv_profile/cnvLocusSpec.ts). */
+const ALL_VIEWS = ['plotly', 'locus'] as const;
+type CnvView = (typeof ALL_VIEWS)[number];
+const VIEW_LABEL: Record<CnvView, string> = { plotly: 'Profile', locus: 'Locus' };
+type GeneLane = 'none' | 'hg38' | 'mm10';
 
 // The server does not reduce this kind (`KIND_SAMPLING_POLICY["cnv_profile"]
 // is "none"`): dropping rows at random would erase a focal amplification, and
@@ -168,7 +191,7 @@ CnvProfilePlot.displayName = 'CnvProfilePlot';
  * budget is exhausted (`webglBudget.ts`), which is what keeps a whole-exome
  * profile of 200k bins on a dashboard next to other GL plots.
  */
-const CnvProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
+const CnvProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilterChange }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
   const isDark = colorScheme === 'dark';
@@ -180,6 +203,16 @@ const CnvProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
   const [showBaf, setShowBaf] = usePersistedVizControl<boolean>(metadata, 'show_baf', config.show_baf ?? true);
   const [yRange, setYRange] = usePersistedVizControl<number>(metadata, 'y_range', config.y_range ?? DEFAULT_Y_RANGE);
   const [pointSize, setPointSize] = usePersistedVizControl<number>(metadata, 'point_size', config.point_size ?? DEFAULT_POINT_SIZE);
+  const [view, setView] = usePersistedVizControl<CnvView>(metadata, 'view', 'plotly');
+  const [facetBySample, setFacetBySample] = usePersistedVizControl<boolean>(metadata, 'facet_by_sample', false);
+  const [annotation, setAnnotation] = usePersistedVizControl<GeneLane>(metadata, 'annotation', 'none');
+
+  const offeredViews = useMemo<CnvView[]>(() => {
+    const allowed = config.views?.length ? config.views : [...ALL_VIEWS];
+    return ALL_VIEWS.filter((v) => allowed.includes(v));
+  }, [config.views]);
+  const activeView: CnvView = offeredViews.includes(view) ? view : (offeredViews[0] ?? 'plotly');
+  const locus = activeView === 'locus';
 
   const gainThreshold = config.gain_threshold ?? DEFAULT_GAIN_THRESHOLD;
   const lossThreshold = config.loss_threshold ?? DEFAULT_LOSS_THRESHOLD;
@@ -195,6 +228,7 @@ const CnvProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
       config.log2_col,
       config.baf_col,
       config.copy_number_col,
+      config.minor_copy_number_col,
       config.segment_col,
       config.label_col,
     ]) {
@@ -209,9 +243,18 @@ const CnvProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
     config.log2_col,
     config.baf_col,
     config.copy_number_col,
+    config.minor_copy_number_col,
     config.segment_col,
     config.label_col,
   ]);
+
+  // The locus brush writes a region filter on this collection's own columns.
+  // Fetching through it would narrow the tile to what it just brushed and leave
+  // no way back out, the same rule every selection source follows.
+  const filtersForFetch = useMemo(
+    () => filtersForGenomeViewFetch(filters, metadata.index),
+    [filters, metadata.index],
+  );
 
   const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -233,7 +276,7 @@ const CnvProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
       wfId,
       dcId,
       columns,
-      filters,
+      filters: filtersForFetch,
       vizKind: CNV_PROFILE_VIZ_KIND,
       roles: {
         sample: config.sample_col,
@@ -261,7 +304,7 @@ const CnvProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
     return () => {
       cancelled = true;
     };
-  }, [metadata.wf_id, metadata.dc_id, JSON.stringify(columns), JSON.stringify(filters), refreshTick]);
+  }, [metadata.wf_id, metadata.dc_id, JSON.stringify(columns), JSON.stringify(filtersForFetch), refreshTick]);
 
   const parsed = useMemo(
     () =>
@@ -274,6 +317,7 @@ const CnvProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
             log2: config.log2_col,
             baf: config.baf_col,
             copyNumber: config.copy_number_col,
+            minorCopyNumber: config.minor_copy_number_col,
             segment: config.segment_col,
             label: config.label_col,
           })
@@ -290,10 +334,21 @@ const CnvProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
   const allChroms = useMemo(() => sortChromosomes(parsed.map((r) => r.chrom)), [parsed]);
 
   const activeSample = sample && samples.includes(sample) ? sample : (samples[0] ?? null);
-  const activeChrom = chrom && chrom !== ALL_CHROMOSOMES && allChroms.includes(chrom) ? chrom : null;
+
+  // A region brushed elsewhere on this collection's own chrom/start/end
+  // columns takes the chromosome control's place while it is set: the tile is
+  // then showing the locus the section is on, not the one its author saved.
+  // Derived rather than written into the control, because a persisted control
+  // must only ever record a choice a person made.
+  const followedRegion = useFollowedRegion(metadata, config, filters);
+  const regionChrom =
+    followedRegion && allChroms.includes(followedRegion.chrom) ? followedRegion.chrom : null;
+  const activeChrom =
+    regionChrom ??
+    (chrom && chrom !== ALL_CHROMOSOMES && allChroms.includes(chrom) ? chrom : null);
 
   const figure = useMemo(() => {
-    if (!rows || parsed.length === 0) return null;
+    if (locus || !rows || parsed.length === 0) return null;
 
     const inScope = parsed.filter(
       (r) =>
@@ -456,10 +511,15 @@ const CnvProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
     }
 
     const wholeGenome = activeChrom === null;
+    // One chromosome is drawn on its own, so its offset is 0 and the region's
+    // bp coordinates are the axis coordinates. `regionXRange` is null for a
+    // whole contig, which leaves the axis on the data's own extent.
+    const regionWindow =
+      regionChrom && activeChrom === regionChrom ? regionXRange(followedRegion) : null;
     const xaxis: Record<string, unknown> = {
       ...axisTheme,
       title: { text: wholeGenome ? 'Genome position' : `${activeChrom} position` },
-      range: axis.range,
+      range: regionWindow ?? axis.range,
       anchor: hasBafPanel ? 'y2' : 'y',
       ...(wholeGenome
         ? { tickmode: 'array', tickvals: axis.tickvals, ticktext: axis.ticktext, showgrid: false }
@@ -496,10 +556,13 @@ const CnvProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
       },
     };
   }, [
+    locus,
     rows,
     parsed,
     activeSample,
     activeChrom,
+    regionChrom,
+    followedRegion,
     allChroms,
     config.baf_col,
     config.copy_number_col,
@@ -514,29 +577,89 @@ const CnvProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
     theme,
   ]);
 
-  const controls = (
-    <Stack gap="xs">
-      {samples.length > 1 ? (
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Sample
-          </Text>
-          <Select
-            size="xs"
-            data={samples}
-            value={activeSample}
-            onChange={(value) => setSample(value)}
-            allowDeselect={false}
-            searchable={samples.length > 8}
-          />
-        </Stack>
+  // ---- Locus view -----------------------------------------------------------
+  const facetOn = locus && facetBySample && samples.length > 1;
+  const locusLanes = useMemo(
+    () => (facetOn ? samples.slice(0, MAX_LOCUS_LANES) : activeSample !== null ? [activeSample] : ['']),
+    [facetOn, samples, activeSample],
+  );
+  const locusData = useMemo(
+    () =>
+      locus
+        ? toLocusData(parsed, {
+            samples: facetOn ? locusLanes : activeSample !== null ? [activeSample] : null,
+            gain: gainThreshold,
+            loss: lossThreshold,
+            maxBins,
+          })
+        : [],
+    [locus, parsed, facetOn, locusLanes, activeSample, gainThreshold, lossThreshold, maxBins],
+  );
+
+  const [geneAnnotation, setGeneAnnotation] = useState<GeneAnnotation | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    if (!locus) return undefined;
+    loadGeneAnnotation(annotation).then((g) => {
+      if (!cancelled) setGeneAnnotation(g);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [locus, annotation]);
+
+  const locusColors = useMemo<CnvLocusColors>(() => {
+    const { textColor, gridColor } = plotlyThemeColors(isDark, theme);
+    return {
+      textColor,
+      gridColor,
+      bin: binTints(isDark, theme)[0],
+      baf: theme.colors.teal[isDark ? 4 : 7],
+      segment: classColours(isDark, theme),
+      major: theme.colors.red[isDark ? 4 : 6],
+      minor: theme.colors.green[isDark ? 4 : 6],
+      gene: theme.colors.indigo[isDark ? 4 : 6],
+    };
+  }, [isDark, theme]);
+
+  // ---- Controls ---------------------------------------------------------------
+  // Encoding tier: which plot, which sample, which part of the genome. The frame
+  // draws it in the header, the rail or ahead of the popover, per placement.
+  const primaryControls = (
+    <>
+      {offeredViews.length > 1 ? (
+        <SegmentedControl
+          size="xs"
+          value={activeView}
+          onChange={(v) => setView(v as CnvView)}
+          data={offeredViews.map((v) => ({ value: v, label: VIEW_LABEL[v] }))}
+        />
       ) : null}
-      <Stack gap={4}>
-        <Text size="xs" fw={500}>
-          Chromosome
-        </Text>
+      {samples.length > 1 && !facetOn ? (
         <Select
           size="xs"
+          w={150}
+          aria-label="Sample"
+          data={samples}
+          value={activeSample}
+          onChange={(value) => setSample(value)}
+          allowDeselect={false}
+          searchable={samples.length > 8}
+        />
+      ) : null}
+      {locus && samples.length > 1 ? (
+        <Switch
+          size="xs"
+          checked={facetBySample}
+          onChange={(e) => setFacetBySample(e.currentTarget.checked)}
+          label={`All samples (up to ${MAX_LOCUS_LANES})`}
+        />
+      ) : null}
+      {!locus ? (
+        <Select
+          size="xs"
+          w={150}
+          aria-label="Chromosome"
           data={[
             { value: ALL_CHROMOSOMES, label: 'Whole genome' },
             ...allChroms.map((c) => ({ value: c, label: c })),
@@ -546,7 +669,23 @@ const CnvProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
           allowDeselect={false}
           searchable={allChroms.length > 8}
         />
-      </Stack>
+      ) : null}
+    </>
+  );
+
+  // Cosmetic tier: how the chosen plot looks.
+  const controls = (
+    <Stack gap="xs">
+      {regionChrom && !locus ? (
+        <Text size="xs" c="dimmed">
+          Following the dashboard region on {regionChrom}.
+        </Text>
+      ) : null}
+      {locus ? (
+        <Text size="xs" c="dimmed">
+          Scroll to zoom, drag to pan. {onFilterChange ? 'Shift-drag brushes a region the other genomic tiles follow.' : ''}
+        </Text>
+      ) : null}
       <Stack gap={4}>
         <Text size="xs" fw={500}>
           log2 axis limit
@@ -575,22 +714,64 @@ const CnvProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
           label="Show BAF panel"
         />
       ) : null}
+      {locus ? (
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            Gene lane
+          </Text>
+          <Select
+            size="xs"
+            value={annotation}
+            onChange={(v) => setAnnotation((v as GeneLane) ?? 'none')}
+            data={[
+              { value: 'none', label: 'None' },
+              ...ANNOTATION_ASSEMBLIES.map((a) => ({ value: a, label: a })),
+            ]}
+            allowDeselect={false}
+          />
+        </Stack>
+      ) : null}
     </Stack>
   );
+
+  // The frame appends the region filter itself, brushed here or elsewhere.
+  const echo = locus ? (facetOn ? `${locusLanes.length} samples` : (activeSample ?? undefined)) : undefined;
 
   return (
     <AdvancedVizFrame
       estimated={estimated}
       title={metadata.title || 'Copy-number profile'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
+      primaryControls={primaryControls}
       controls={controls}
+      echo={echo}
       loading={loading}
       error={error}
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}
       dataRows={rows ?? undefined}
       dataColumns={columns}
     >
-      {figure ? <CnvProfilePlot figure={figure} isDark={isDark} theme={theme} /> : null}
+      {locus && rows ? (
+        <CnvLocusView
+          metadata={metadata}
+          data={locusData}
+          lanes={locusLanes}
+          faceted={facetOn}
+          showBaf={Boolean(config.baf_col) && showBaf}
+          yRange={yRange}
+          pointSize={pointSize}
+          gainThreshold={gainThreshold}
+          lossThreshold={lossThreshold}
+          colors={locusColors}
+          genes={annotation === 'none' ? null : (geneAnnotation?.genes ?? null)}
+          backend={glGranted ? 'webgl' : 'canvas'}
+          chromColumn={config.chrom_col}
+          startColumn={config.start_col}
+          followedRegion={followedRegion}
+          onFilterChange={onFilterChange}
+        />
+      ) : null}
+      {!locus && figure ? <CnvProfilePlot figure={figure} isDark={isDark} theme={theme} /> : null}
     </AdvancedVizFrame>
   );
 };

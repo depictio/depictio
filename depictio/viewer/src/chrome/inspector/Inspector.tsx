@@ -62,8 +62,12 @@ const Inspector: React.FC<InspectorProps> = ({ dashboard, dashboardId }) => {
 
   // Selecting a plain figure while the Controls tab is active would otherwise
   // leave the panel on a tab that no longer exists, showing an empty body.
+  // Either tier is enough to earn the Controls tab: a renderer whose controls
+  // are all encoding ones publishes `primaryControls` and no `controls`.
+  const hasControls = Boolean(extras?.controls || extras?.primaryControls);
+
   const activeTab: InspectorTab =
-    (inspectorTab === 'controls' && !extras?.controls) ||
+    (inspectorTab === 'controls' && !hasControls) ||
     (inspectorTab === 'data' && !extras?.data)
       ? 'info'
       : inspectorTab;
@@ -105,7 +109,7 @@ const Inspector: React.FC<InspectorProps> = ({ dashboard, dashboardId }) => {
         style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
       >
         <Tabs.List grow>
-          {extras?.controls && (
+          {hasControls && (
             <Tabs.Tab
               value="controls"
               leftSection={<Icon icon="tabler:adjustments-horizontal" width={14} />}
@@ -129,10 +133,16 @@ const Inspector: React.FC<InspectorProps> = ({ dashboard, dashboardId }) => {
         {/* The same JSX the settings popover shows, minus the popover — which
             also drops the reason that popover needs `closeOnClickOutside`:
             portalled Mantine Selects have nothing left to close. */}
-        {extras?.controls && (
+        {hasControls && (
           <Tabs.Panel value="controls" style={{ flex: 1, minHeight: 0 }}>
             <ScrollArea h="100%" type="auto" px="sm" py="xs">
-              {extras.controls}
+              {/* Encoding first, cosmetics after: the same order the popover
+                  uses, and the order a reader asks the questions in, what is
+                  plotted before how it looks. */}
+              <Stack gap="sm">
+                {extras?.primaryControls}
+                {extras?.controls}
+              </Stack>
             </ScrollArea>
           </Tabs.Panel>
         )}

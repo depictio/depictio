@@ -87,13 +87,26 @@ AdvancedVizKind = Literal[
     "transcript_structure",
     "cnv_profile",
     "genome_chord",
+    # A reader-facing pair rather than a new chart family. `record_card` is the
+    # detail half of a master/detail dashboard: it shows ONE row of a
+    # collection, picked by a selection another tile emits, as labelled fields
+    # and links instead of a mark. `parallel_coordinates` is the many-metric
+    # view a scatter cannot give: one polyline per sample across N axes, which
+    # is how a QC table with a dozen columns is read as a whole.
+    "record_card",
+    "parallel_coordinates",
 ]
 
 # Map visualization types
 MapType = Literal["scatter_map", "density_map", "choropleth_map"]
 
-# Chart/visualization types (from figure_component/definitions.py)
-ChartType = Literal["scatter", "line", "bar", "box", "histogram", "heatmap"]
+# Chart/visualization types (from figure_component/definitions.py).
+# ``violin`` is the per-cluster distribution every single-cell tool draws beside
+# its dot plot. The API has always been able to render it (``px.violin`` is in
+# the plotly-express map, and the aggregation planner has a violin branch), but
+# the model constant did not list it, so a template asking for one failed
+# validation before it reached either.
+ChartType = Literal["scatter", "line", "bar", "box", "violin", "histogram", "heatmap"]
 
 # Aggregation functions (from card_component/utils.py AGGREGATION_MAPPING)
 AggregationFunction = Literal[

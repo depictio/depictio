@@ -127,3 +127,45 @@ def test_preprocessing_block_keeps_its_indentation() -> None:
     assert analysis["is_valid"]
     assert "    totals[key] = 1" in analysis["preprocessing_code"]
     compile(analysis["preprocessing_code"], "<preprocessing>", "exec")
+
+
+def test_figure_assigned_inside_a_branch_stays_in_its_block() -> None:
+    """A ``fig =`` under ``if`` / ``else`` is one statement, not a line to lift.
+
+    The scanner took the first line starting with ``fig =`` wherever it stood,
+    re-emitted it at column 0 and appended the rest verbatim, so the branch's
+    remaining lines came back as "unexpected indent" and the tile showed a
+    syntax error for code that was correct.
+    """
+    code = "\n".join(
+        [
+            "contrasts = sorted(df['contrast_id'].unique().to_list())",
+            "if len(contrasts) >= 2:",
+            "    paired = df.filter(pl.col('contrast_id') == contrasts[0])",
+            "    fig = px.scatter(",
+            "        paired.to_pandas(), x='x', y='y',",
+            "    )",
+            "    fig.add_hline(y=0)",
+            "else:",
+            "    fig = px.scatter(df.to_pandas(), x='x', y='y')",
+            "fig.update_traces(marker={'size': 6})",
+        ]
+    )
+    analysis = analyze_constrained_code(code)
+
+    assert analysis["is_valid"], analysis["error_message"]
+    assert (
+        analysis["preprocessing_code"] == "contrasts = sorted(df['contrast_id'].unique().to_list())"
+    )
+    figure_code = analysis["figure_code"]
+    assert figure_code.startswith("if len(contrasts) >= 2:")
+    assert "    fig.add_hline(y=0)" in figure_code
+    assert figure_code.rstrip().endswith("fig.update_traces(marker={'size': 6})")
+    compile(figure_code, "<figure_code>", "exec")
+
+
+def test_code_that_does_not_parse_still_names_the_missing_figure() -> None:
+    analysis = analyze_constrained_code("x = (1,")
+
+    assert not analysis["is_valid"]
+    assert "fig = px.function" in analysis["error_message"]

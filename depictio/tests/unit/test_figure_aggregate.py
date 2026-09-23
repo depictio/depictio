@@ -14,6 +14,7 @@ import pytest
 
 from depictio.api.v1.services.figure.aggregate import (
     build_aggregated_figure,
+    figure_content_demand,
     plan_aggregation,
 )
 from depictio.api.v1.services.figure.figure_builder import (
@@ -496,3 +497,63 @@ def test_density_with_a_log_axis_goes_back_to_px(frame):
     assert plan_aggregation("density_contour", {"x": "v", "y": "w", "log_y": True}) is None
     # Without the log axis it still plans.
     assert plan_aggregation("density_heatmap", {"x": "v", "y": "w"}) is not None
+
+
+# ---------------------------------------------------------------------------
+# Content demand (what a figure tells the grid about its own height)
+# ---------------------------------------------------------------------------
+
+
+def _bar(categories: list[str]) -> dict:
+    return {"data": [{"type": "bar", "x": categories, "y": [1] * len(categories)}], "layout": {}}
+
+
+def test_two_bars_ask_for_two_rows():
+    """The whole point: a two-category bar chart is not a five-row tile."""
+    assert figure_content_demand("bar", _bar(["a", "b"])) == {"rows": 2}
+
+
+def test_the_demand_grows_with_the_categories():
+    two = figure_content_demand("bar", _bar(["a", "b"]))["rows"]
+    twelve = figure_content_demand("bar", _bar([str(i) for i in range(12)]))["rows"]
+    assert twelve > two
+
+
+def test_a_horizontal_bar_is_counted_on_its_own_axis():
+    horizontal = {
+        "data": [{"type": "bar", "orientation": "h", "y": ["a", "b", "c"], "x": [1, 2, 3]}],
+        "layout": {},
+    }
+    assert figure_content_demand("bar", horizontal) == figure_content_demand(
+        "bar", _bar(["a", "b", "c"])
+    )
+
+
+def test_a_box_counts_its_groups_not_its_rows():
+    """Raw box traces repeat the group label per observation."""
+    raw = {"data": [{"type": "box", "x": ["a"] * 500 + ["b"] * 500, "y": [1] * 1000}], "layout": {}}
+    assert figure_content_demand("box", raw) == {"rows": 2}
+
+
+def test_faceted_rows_stack_their_demands():
+    faceted = {
+        "data": [{"type": "bar", "x": ["a", "b"], "y": [1, 2]}],
+        "layout": {
+            "yaxis": {"domain": [0.0, 0.3]},
+            "yaxis2": {"domain": [0.35, 0.65]},
+            "yaxis3": {"domain": [0.7, 1.0]},
+        },
+    }
+    assert (
+        figure_content_demand("bar", faceted)["rows"]
+        > figure_content_demand("bar", _bar(["a", "b"]))["rows"]
+    )
+
+
+def test_point_plots_have_no_opinion_about_height():
+    """Ten thousand points want the same box as ten."""
+    scatter = {"data": [{"type": "scatter", "x": [1, 2, 3], "y": [1, 2, 3]}], "layout": {}}
+    assert figure_content_demand("scatter", scatter) is None
+    assert figure_content_demand("line", scatter) is None
+    assert figure_content_demand("bar", {"data": [], "layout": {}}) is None
+    assert figure_content_demand("bar", None) is None

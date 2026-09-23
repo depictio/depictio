@@ -76,3 +76,28 @@ export function rotateToTriangle(
     separations: Array.from({ length: rows }, (_, y) => y),
   };
 }
+
+/** The two readings of a contact matrix. Mirrors `ContactMapConfig.display`. */
+export type ContactMapDisplay = 'square' | 'triangle';
+
+/**
+ * Which reading to draw, given what the author wrote and where the dashboard
+ * is.
+ *
+ * A square matrix is the right default on its own: it is the familiar Hi-C
+ * figure and it needs no axis to align with. The moment a region filter
+ * reaches the tile, though, the tile is part of a locus view, and only the
+ * triangle puts genomic position on x where the tracks stacked under it put
+ * it. So the region flips the default, and nothing else does.
+ *
+ * `pinned` is what stops that from being a hijack: an author who wrote
+ * `display` in the YAML, and a reader who has touched the control, both mean
+ * it, and a region must not silently overrule either.
+ */
+export function displayForRegion(
+  current: ContactMapDisplay,
+  opts: { pinned: boolean; hasRegion: boolean },
+): ContactMapDisplay {
+  if (opts.pinned) return current;
+  return opts.hasRegion ? 'triangle' : current;
+}

@@ -279,7 +279,10 @@ def test_every_timed_component_shows_something_different():
     for comp in by_type["table"]:
         signatures.add(("table", comp.data_collection_tag, tuple(comp.columns)))
     for comp in by_type["advanced_viz"]:
-        signatures.add(("advanced_viz", comp.data_collection_tag, comp.viz_kind))
+        # ``ma`` and ``qq`` are views of ``volcano`` since the kind aliases landed:
+        # same kind, different plot, so the view is part of what the tile shows.
+        view = getattr(comp.config, "view", None)
+        signatures.add(("advanced_viz", comp.data_collection_tag, comp.viz_kind, view))
 
     timed = by_type["figure"] + by_type["table"] + by_type["advanced_viz"]
     assert len(signatures) == len(timed) == 30

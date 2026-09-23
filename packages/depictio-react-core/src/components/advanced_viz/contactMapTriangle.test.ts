@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { rotateToTriangle } from './contactMapTriangle';
+import { displayForRegion, rotateToTriangle } from './contactMapTriangle';
 
 describe('rotateToTriangle', () => {
   it('puts the diagonal on the bottom row and the far corner at the apex', () => {
@@ -68,5 +68,29 @@ describe('rotateToTriangle', () => {
 
   it('survives an empty matrix', () => {
     expect(rotateToTriangle([])).toEqual({ z: [], positionIndex: [], separations: [] });
+  });
+});
+
+describe('displayForRegion', () => {
+  it('draws a square when no region has reached the tile', () => {
+    expect(displayForRegion('square', { pinned: false, hasRegion: false })).toBe('square');
+  });
+
+  it('flips to the triangle once the tile is following a region', () => {
+    // The triangle is the only reading whose x axis is genomic position, so
+    // it is the only one a genome_view track above it can line up with.
+    expect(displayForRegion('square', { pinned: false, hasRegion: true })).toBe('triangle');
+  });
+
+  it('leaves an authored square alone even inside a region', () => {
+    expect(displayForRegion('square', { pinned: true, hasRegion: true })).toBe('square');
+  });
+
+  it('keeps the reader on the square they just picked', () => {
+    expect(displayForRegion('square', { pinned: true, hasRegion: true })).toBe('square');
+  });
+
+  it('never flips a triangle back', () => {
+    expect(displayForRegion('triangle', { pinned: false, hasRegion: false })).toBe('triangle');
   });
 });

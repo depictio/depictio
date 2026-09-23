@@ -502,3 +502,56 @@ def test_a_tool_link_costs_the_tile_nothing():
     assert _rendered_length(plain) == len(plain)
     # A bare bracket pair is not a link and keeps its characters.
     assert _rendered_length("see [1] below") == len("see [1] below")
+
+
+def _viz_kind_of(comp: dict[str, Any]) -> str:
+    """The kind a component ends up rendering as, `use:` renders included.
+
+    A catalog render carries its kind in the catalog rather than in the YAML,
+    so the raw key is read first and the model is asked only when it is absent.
+    """
+    kind = comp.get("viz_kind") or (comp.get("config") or {}).get("viz_kind")
+    if kind:
+        return str(kind)
+    try:
+        return str(AdvancedVizLiteComponent.model_validate(comp).viz_kind or "")
+    except Exception:
+        return ""
+
+
+@pytest.mark.no_db
+def test_no_double_track_binding():
+    """One collection, one track: `coverage_track` and `genome_view` on the same
+    DC in one tab are two drawings of the same rows.
+
+    They are not the same tile and both are worth keeping as kinds
+    (`coverage_track` owns the Celery binning, the smoothing and the
+    median+IQR ribbon; `genome_view` owns the chromosome axis, the zoom and the
+    region brush), but binding both on one collection gives the reader two
+    tiles saying the same thing, one of which is always the less legible. The
+    answer is one tile with `views: [track, locus]`.
+
+    Enforced since wave 2b (2026-09-23): the six templates that bound both
+    (eager, sarek, methylseq, atacseq, chipseq, cutandrun, plus funcscan and hic)
+    now keep one navigator per collection and reach the other tracks through
+    region links.
+    """
+    offenders: list[str] = []
+    for path in _shipped_yamls():
+        doc = yaml.safe_load(path.read_text())
+        if not isinstance(doc, dict):
+            continue
+        for label, tab in _tabs_of(doc):
+            kinds_by_dc: dict[str, set[str]] = {}
+            for comp in tab.get("components") or []:
+                if not isinstance(comp, dict) or comp.get("component_type") != "advanced_viz":
+                    continue
+                kind = _viz_kind_of(comp)
+                if not kind:
+                    continue
+                dc = str(comp.get("data_collection_tag") or comp.get("dc_tag") or "?")
+                kinds_by_dc.setdefault(dc, set()).add(kind)
+            for dc, kinds in sorted(kinds_by_dc.items()):
+                if {"coverage_track", "genome_view"} <= kinds:
+                    offenders.append(f"{_rel(path)} {label} on '{dc}'")
+    assert not offenders, "coverage_track and genome_view bound on one DC:\n" + "\n".join(offenders)

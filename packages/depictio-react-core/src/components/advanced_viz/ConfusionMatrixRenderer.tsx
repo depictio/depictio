@@ -158,22 +158,31 @@ const ConfusionMatrixRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     };
   }, [rows, config, showFractions, mode, colorscale, showColorbar, fontSize, isDark, theme]);
 
+  // Normalisation decides what the colours mean, so it leads; the annotation
+  // format, the scale and the font are how the same matrix is painted.
+  const primaryControls = useMemo(
+    () => (
+      <Select
+        size="xs"
+        w={180}
+        label="Normalise"
+        value={mode}
+        onChange={(v) => setMode((v as NormalizeMode) || 'per_caller')}
+        data={[
+          { value: 'per_caller', label: 'Per caller (column)' },
+          { value: 'per_truth', label: 'Per row (TP/FP/FN)' },
+          { value: 'none', label: 'None (raw scale)' },
+        ]}
+        comboboxProps={{ withinPortal: true }}
+      />
+    ),
+    [mode],
+  );
+
   const controls = useMemo(
     () => (
       <Stack gap="xs">
         <Switch size="xs" checked={showFractions} onChange={(e) => setShowFractions(e.currentTarget.checked)} label="Show fractions" />
-        <Select
-          size="xs"
-          label="Normalise"
-          value={mode}
-          onChange={(v) => setMode((v as NormalizeMode) || 'per_caller')}
-          data={[
-            { value: 'per_caller', label: 'Per caller (column)' },
-            { value: 'per_truth', label: 'Per row (TP/FP/FN)' },
-            { value: 'none', label: 'None (raw scale)' },
-          ]}
-          comboboxProps={{ withinPortal: true }}
-        />
         <Select
           size="xs"
           label="Colour scale"
@@ -189,13 +198,14 @@ const ConfusionMatrixRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
         </Stack>
       </Stack>
     ),
-    [showFractions, mode, colorscale, showColorbar, fontSize],
+    [showFractions, colorscale, showColorbar, fontSize],
   );
 
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Confusion matrix'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
+      primaryControls={primaryControls}
       controls={controls}
       loading={loading}
       error={error}

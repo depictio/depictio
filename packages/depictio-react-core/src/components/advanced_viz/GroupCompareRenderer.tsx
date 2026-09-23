@@ -33,8 +33,9 @@ import {
   plotlyThemeFragment,
 } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
+import { createAutoRunGate } from './group_compare/autoRun';
 import {
-  defaultGroupPair,
+  configuredGroupPair,
   groupCompareOptions,
   LABEL_VALUE_SOURCE,
   SAVED_GROUP_SOURCE,
@@ -52,6 +53,9 @@ interface GroupCompareConfig {
   fdr_threshold?: number;
   log2fc_threshold?: number;
   top_n_labels?: number;
+  default_group_a?: string | null;
+  default_group_b?: string | null;
+  auto_run?: boolean;
 }
 
 interface Props {
@@ -139,13 +143,17 @@ const GroupCompareRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
   const [pickB, setPickB] = useState<string | null>(null);
   // Seeded from the options rather than persisted: which two groups to
   // compare is a question about this reader's session, and a lasso one person
-  // saved does not exist in another viewer's dashboard.
+  // saved does not exist in another viewer's dashboard. The config's
+  // `default_group_a` / `default_group_b` name the pair a dashboard author
+  // wants the tile to open on; a reader's own pick survives new options.
+  const defaultA = config.default_group_a ?? null;
+  const defaultB = config.default_group_b ?? null;
   useEffect(() => {
     const known = new Set(options.map((o) => o.value));
-    const [a, b] = defaultGroupPair(options);
+    const [a, b] = configuredGroupPair(options, defaultA, defaultB);
     setPickA((prev) => (prev && known.has(prev) ? prev : a));
     setPickB((prev) => (prev && known.has(prev) ? prev : b));
-  }, [options]);
+  }, [options, defaultA, defaultB]);
 
   const selectorA = useMemo(() => selectorFor(options, pickA), [options, pickA]);
   const selectorB = useMemo(() => selectorFor(options, pickB), [options, pickB]);
@@ -188,10 +196,14 @@ const GroupCompareRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
   // Bumped on every dispatch and on unmount, so a poll that comes back after
   // the reader changed their mind lands on a stale token and is dropped.
   const runToken = useRef(0);
+  // `auto_run`: at most one dispatch per request key per mount (see autoRun.ts).
+  const autoRun = config.auto_run ?? false;
+  const autoGate = useRef(createAutoRunGate());
 
   useEffect(
     () => () => {
       runToken.current += 1;
+      autoGate.current.reset();
       if (pollTimer.current) clearTimeout(pollTimer.current);
     },
     [],
@@ -277,6 +289,15 @@ const GroupCompareRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
     filters,
     requestKey,
   ]);
+
+  // Read through a ref so the effect below fires on the request key alone: a
+  // threshold or label-budget change re-renders `compare` but must not queue
+  // a job, since the server's answer would be the same rows.
+  const compareRef = useRef(compare);
+  compareRef.current = compare;
+  useEffect(() => {
+    if (autoGate.current.claim(requestKey, autoRun, canRun)) compareRef.current();
+  }, [autoRun, canRun, requestKey]);
 
   const points = useMemo(
     () => (result ? volcanoPoints(result.rows, fdrThreshold, log2fcThreshold) : []),
@@ -394,13 +415,52 @@ const GroupCompareRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
     [result, points],
   );
 
-  const controls = useMemo(
+  const selectData = useMemo(
+    () =>
+      [SAVED_GROUP_SOURCE, LABEL_VALUE_SOURCE]
+        .map((source) => ({
+          group: source,
+          items: options
+            .filter((o) => o.source === source)
+            .map((o) => ({ value: o.value, label: o.label })),
+        }))
+        .filter((g) => g.items.length > 0),
+    [options],
+  );
+
+  // Encoding tier: the two groups and the test are what the result IS, so
+  // they sit in the header when the tile asks for `controls_placement:
+  // header`. The transform and the two thresholds refine it and live in the
+  // settings tier with the label budget.
+  const primaryControls = useMemo(
     () => (
-      <Stack gap="xs">
+      <>
         <Select
           size="xs"
+          w={150}
+          label="Group A"
+          placeholder="Pick a group"
+          value={pickA}
+          onChange={setPickA}
+          data={selectData}
+          searchable
+          data-testid="group-compare-pick-a"
+        />
+        <Select
+          size="xs"
+          w={150}
+          label="Group B"
+          placeholder="Pick a group"
+          value={pickB}
+          onChange={setPickB}
+          data={selectData}
+          searchable
+          data-testid="group-compare-pick-b"
+        />
+        <Select
+          size="xs"
+          w={160}
           label="Test"
-          description="Rank-sum is distribution-free; Welch assumes roughly normal values"
           value={test}
           onChange={(v) => v && setTest(v as 'wilcoxon' | 't_test')}
           data={[
@@ -408,20 +468,23 @@ const GroupCompareRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
             { value: 't_test', label: 'Welch t-test' },
           ]}
         />
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Values
-          </Text>
-          <Switch
-            size="xs"
-            checked={logTransform}
-            onChange={(e) => setLogTransform(e.currentTarget.checked)}
-            label="log1p before testing"
-            description="Welch only: the rank-sum test is invariant under it"
-          />
-        </Stack>
+      </>
+    ),
+    [pickA, pickB, selectData, test],
+  );
+
+  const controls = useMemo(
+    () => (
+      <>
+        <Switch
+          size="xs"
+          checked={logTransform}
+          onChange={(e) => setLogTransform(e.currentTarget.checked)}
+          label="log1p before testing"
+        />
         <NumberInput
           size="xs"
+          w={120}
           label="FDR threshold"
           value={fdrThreshold}
           onChange={(v) => setFdrThreshold(Math.min(0.999, Math.max(0.0001, Number(v) || 0.05)))}
@@ -432,6 +495,7 @@ const GroupCompareRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
         />
         <NumberInput
           size="xs"
+          w={130}
           label="|log2FC| threshold"
           value={log2fcThreshold}
           onChange={(v) => setLog2fc(Math.max(0, Number(v) || 0))}
@@ -441,16 +505,34 @@ const GroupCompareRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
         />
         <NumberInput
           size="xs"
+          w={110}
           label="Top-N labels"
           value={topN}
           onChange={(v) => setTopN(Math.max(0, Math.min(200, Number(v) || 0)))}
           min={0}
           max={200}
         />
-      </Stack>
+      </>
     ),
-    [test, logTransform, fdrThreshold, log2fcThreshold, topN],
+    [logTransform, fdrThreshold, log2fcThreshold, topN],
   );
+
+  // The one line under the title: which two groups are being compared, and how
+  // many observations each side actually contributed.
+  const pickedLabelA = useMemo(() => selectorA?.label ?? null, [selectorA]);
+  const pickedLabelB = useMemo(() => selectorB?.label ?? null, [selectorB]);
+  const echo = useMemo(() => {
+    if (result) {
+      const overlap = result.overlap_dropped
+        ? `, ${result.overlap_dropped} in both dropped`
+        : '';
+      return (
+        `A: ${result.group_a.label} (n=${result.group_a.n}) vs ` +
+        `B: ${result.group_b.label} (n=${result.group_b.n})${overlap}`
+      );
+    }
+    return pickedLabelA && pickedLabelB ? `A: ${pickedLabelA} vs B: ${pickedLabelB}` : undefined;
+  }, [result, pickedLabelA, pickedLabelB]);
 
   const status = useMemo(() => {
     if (run.phase === 'queued') return { color: 'grape', text: 'Queued' };
@@ -477,26 +559,15 @@ const GroupCompareRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
     return { color: 'gray', text: 'Ready' };
   }, [run, stale, result, canRun, sameSelection]);
 
-  const selectData = useMemo(
-    () =>
-      [SAVED_GROUP_SOURCE, LABEL_VALUE_SOURCE]
-        .map((source) => ({
-          group: source,
-          items: options
-            .filter((o) => o.source === source)
-            .map((o) => ({ value: o.value, label: o.label })),
-        }))
-        .filter((g) => g.items.length > 0),
-    [options],
-  );
-
   const busy = run.phase === 'queued' || run.phase === 'running';
 
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Group comparison'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
+      primaryControls={primaryControls}
       controls={controls}
+      echo={echo}
       loading={false}
       error={null}
       dataRows={dataRows}
@@ -505,33 +576,15 @@ const GroupCompareRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
       tierAnnotation={tierAnnotation}
     >
       <Stack gap="xs" style={{ height: '100%' }}>
-        <Group gap="xs" wrap="wrap" align="flex-end">
-          <Select
-            size="xs"
-            label="Group A"
-            placeholder="Pick a group"
-            value={pickA}
-            onChange={setPickA}
-            data={selectData}
-            searchable
-            style={{ minWidth: 150 }}
-          />
-          <Select
-            size="xs"
-            label="Group B"
-            placeholder="Pick a group"
-            value={pickB}
-            onChange={setPickB}
-            data={selectData}
-            searchable
-            style={{ minWidth: 150 }}
-          />
-          <Button size="xs" onClick={compare} disabled={!canRun} loading={busy}>
-            Compare
-          </Button>
+        <Group gap="xs" wrap="nowrap">
           <Badge size="sm" color={status.color} variant="light" radius="sm">
             {status.text}
           </Badge>
+          {!autoRun || run.phase === 'failed' || stale ? (
+            <Button size="xs" variant="light" onClick={compare} disabled={!canRun} loading={busy}>
+              Compare
+            </Button>
+          ) : null}
         </Group>
 
         <div style={{ flex: '1 1 auto', minHeight: 140, position: 'relative' }}>
@@ -543,11 +596,32 @@ const GroupCompareRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
               style={{ width: '100%', height: '100%' }}
               config={{ displaylogo: false, responsive: true } as any}
             />
-          ) : (
-            <Text size="xs" c="dimmed">
-              No comparison yet. Pick two groups and press Compare: the test runs on the server and
-              the result is cached, so the same comparison comes back instantly.
+          ) : busy ? (
+            <Text size="sm" c="dimmed">
+              Comparing {pickedLabelA} with {pickedLabelB} on the server. The first run of a
+              comparison takes a few seconds; the result is cached, so reopening this tab or
+              picking the same two groups again is instant.
             </Text>
+          ) : (
+            <Stack gap={6} maw={560} data-testid="group-compare-empty">
+              <Text size="sm" fw={500}>
+                What this tile compares
+              </Text>
+              <Text size="sm" c="dimmed">
+                Group A and group B are two sets of rows (cells, samples) of this table. Every
+                numeric column is tested between them, one test per feature, and drawn as effect
+                size against significance: a positive log2 fold change means higher in A. Pick
+                the two groups in the Group A and Group B menus (tile header, or the settings
+                popover)
+                {autoRun ? '; the comparison then runs by itself.' : ', then press Compare.'}
+              </Text>
+              <Text size="sm" c="dimmed">
+                A group is either a value of the {groupCol ? `"${groupCol}" ` : ''}label column
+                (a cluster, a condition), or a selection saved from another tile: lasso or
+                box-select points on a scatter or embedding, then save the selection as a group
+                from the Analysis panel. Saved groups are listed first in both menus.
+              </Text>
+            </Stack>
           )}
         </div>
 

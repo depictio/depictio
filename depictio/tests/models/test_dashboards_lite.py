@@ -744,6 +744,127 @@ class TestDashboardDataLite:
 
 
 # ============================================================================
+# Test content-aware sizing (`layout.fit` and the dashboard switch)
+# ============================================================================
+
+
+class TestComponentFit:
+    """`fit` rides inside the layout block in YAML and on stored_metadata in Mongo.
+
+    The two ends differ on purpose: the layout block is where an author says
+    how big a tile is, and `stored_metadata` is the only place the React grid
+    can read it from, react-grid-layout drops unknown keys off a layout item
+    on the first drag.
+    """
+
+    @staticmethod
+    def _layout(component) -> dict:
+        """The component's layout block, whether it is a dict or a lite model."""
+        if isinstance(component, dict):
+            return component.get("layout") or {}
+        return getattr(component, "layout", None) or {}
+
+    def test_to_full_lifts_fit_out_of_the_layout_block(self):
+        dash = DashboardDataLite(
+            title="Fit",
+            components=[
+                {
+                    "tag": "fig-1",
+                    "component_type": "figure",
+                    "visu_type": "bar",
+                    "layout": {"x": 0, "y": 0, "w": 4, "h": 3, "fit": "auto"},
+                },
+                {
+                    "tag": "text-1",
+                    "component_type": "text",
+                    "body": "hello",
+                    "layout": {"x": 4, "y": 0, "w": 4, "h": 2, "fit": "fixed"},
+                },
+            ],
+        )
+        stored = dash.to_full()["stored_metadata"]
+        assert stored[0]["fit"] == "auto"
+        assert stored[1]["fit"] == "fixed"
+        # The layout item itself carries geometry only.
+        layout_item = dash.to_full()["right_panel_layout_data"][0]
+        assert "fit" not in layout_item
+        assert (layout_item["w"], layout_item["h"]) == (4, 3)
+
+    def test_to_full_writes_nothing_when_the_author_said_nothing(self):
+        dash = DashboardDataLite(
+            title="Fit",
+            components=[
+                {
+                    "tag": "fig-1",
+                    "component_type": "figure",
+                    "visu_type": "bar",
+                    "layout": {"x": 0, "y": 0, "w": 4, "h": 3},
+                }
+            ],
+        )
+        # Absent means the per-type default, which is the renderer's business.
+        assert "fit" not in dash.to_full()["stored_metadata"][0]
+
+    def test_from_full_exports_fit_inside_the_layout_block(self):
+        full = {
+            "title": "Fit",
+            "stored_metadata": [
+                {
+                    "index": "uuid-1",
+                    "component_type": "figure",
+                    "visu_type": "bar",
+                    "fit": "fixed",
+                    "workflow_tag": "python/test",
+                    "data_collection_tag": "test_data",
+                }
+            ],
+            "right_panel_layout_data": [{"i": "box-uuid-1", "x": 0, "y": 0, "w": 4, "h": 3}],
+        }
+        lite = DashboardDataLite.from_full(full)
+        assert self._layout(lite.components[0])["fit"] == "fixed"
+
+    def test_from_full_omits_fit_when_the_component_has_none(self):
+        full = {
+            "title": "Fit",
+            "stored_metadata": [
+                {
+                    "index": "uuid-1",
+                    "component_type": "figure",
+                    "visu_type": "bar",
+                    "workflow_tag": "python/test",
+                    "data_collection_tag": "test_data",
+                }
+            ],
+            "right_panel_layout_data": [{"i": "box-uuid-1", "x": 0, "y": 0, "w": 4, "h": 3}],
+        }
+        lite = DashboardDataLite.from_full(full)
+        assert "fit" not in self._layout(lite.components[0])
+
+    def test_fit_survives_a_yaml_round_trip(self):
+        original = DashboardDataLite(
+            title="Fit",
+            components=[
+                {
+                    "tag": "text-1",
+                    "component_type": "text",
+                    "body": "hello",
+                    "layout": {"x": 0, "y": 0, "w": 8, "h": 2, "fit": "fixed"},
+                }
+            ],
+        )
+        restored = DashboardDataLite.from_yaml(original.to_yaml())
+        assert self._layout(restored.components[0])["fit"] == "fixed"
+        assert restored.to_full()["stored_metadata"][0]["fit"] == "fixed"
+
+    def test_autofit_is_on_unless_the_dashboard_says_otherwise(self):
+        assert DashboardDataLite(title="Fit").autofit is True
+        assert DashboardDataLite.from_full({"title": "Fit", "stored_metadata": []}).autofit is True
+        off = DashboardDataLite.from_full({"title": "Fit", "stored_metadata": [], "autofit": False})
+        assert off.autofit is False
+        assert off.to_full()["autofit"] is False
+
+
+# ============================================================================
 # Test to_full() Tag Resolution Structure
 # ============================================================================
 

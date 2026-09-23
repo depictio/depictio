@@ -264,17 +264,20 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
     };
   }, [rows, config, ranks, startRankIdx, maxDepth, colourByIdx, palette, showCounts, minPercent, colorScheme, theme, colourRankUniverse, isDark]);
 
-  const controls = useMemo(
+  // Encoding tier: which ranks the rings are built from and which one carries
+  // the colour. The palette, the minimum arc and the labels are paint on the
+  // same hierarchy.
+  const primaryControls = useMemo(
     () => {
       const visibleEnd = Math.min(ranks.length, startRankIdx + maxDepth);
       const colourOptions = ranks.filter((_, i) => i >= startRankIdx && i < visibleEnd);
       const maxDepthAllowed = Math.max(1, ranks.length - startRankIdx);
       return (
-      <Stack gap="xs">
+      <>
         <Select
           size="xs"
+          w={160}
           label="Start from rank"
-          description="Innermost ring — pick a deeper rank to collapse outer splits"
           value={ranks[startRankIdx] ?? null}
           onChange={(v) => v != null && setStartRank(v)}
           data={ranks}
@@ -282,6 +285,7 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
         />
         <Select
           size="xs"
+          w={160}
           label="Colour by rank"
           value={ranks[colourByIdx] ?? null}
           onChange={(v) => v != null && setColourByRank(v)}
@@ -290,13 +294,22 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
         />
         <NumberInput
           size="xs"
+          w={110}
           label="Max depth"
-          description={`1–${maxDepthAllowed}; 3 keeps rings readable`}
           value={maxDepth}
           onChange={(v) => setMaxDepth(Math.max(1, Math.min(maxDepthAllowed, Number(v) || 1)))}
           min={1}
           max={maxDepthAllowed}
         />
+      </>
+      );
+    },
+    [colourByIdx, ranks, startRankIdx, maxDepth],
+  );
+
+  const controls = useMemo(
+    () => (
+      <Stack gap="xs">
         <Select
           size="xs"
           label="Palette"
@@ -320,21 +333,15 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
           step={0.5}
           decimalScale={1}
         />
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Show
-          </Text>
-          <Switch
+        <Switch
           size="xs"
           checked={showCounts}
           onChange={(e) => setShowCounts(e.currentTarget.checked)}
           label="Show % on arcs"
         />
-        </Stack>
       </Stack>
-      );
-    },
-    [colourByIdx, ranks, startRankIdx, maxDepth, palette, minPercent, showCounts],
+    ),
+    [palette, minPercent, showCounts, brandPalette],
   );
 
   return (
@@ -342,6 +349,7 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
       estimated={estimated}
       title={metadata.title || 'Sunburst'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
+      primaryControls={primaryControls}
       controls={controls}
       loading={loading}
       error={error}

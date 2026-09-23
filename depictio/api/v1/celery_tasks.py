@@ -618,6 +618,20 @@ def build_figure_preview(payload: dict) -> dict:
             "frame_bytes": df.estimated_size() if df is not None else 0,
         },
     }
+    # Grid rows this figure's content needs, for a tile whose `fit` is `auto`.
+    # Counted here because a Plotly figure fills whatever box it is given: the
+    # client can measure the box, never the two bars inside it. Absent for the
+    # visu types where the count says nothing about the height a reader wants.
+    try:
+        from depictio.api.v1.services.figure.aggregate import figure_content_demand
+
+        demand = figure_content_demand(visu_type, fig_dict)
+    except Exception as exc:  # a sizing hint is never worth losing a figure over
+        logger.warning(f"celery_tasks.build_figure_preview: content demand skipped: {exc}")
+        demand = None
+    if demand:
+        response_metadata["content_demand"] = demand
+
     if code_error:
         # Surface the underlying Plotly error to the React Code-mode Status
         # alert so it flips to red. The error figure is still in `figure` so
@@ -2646,6 +2660,234 @@ def compute_group_compare(payload: dict) -> dict:
     }
 
 
+@celery_app.task(
+    name="depictio.advanced_viz.compute_contact_map",
+    soft_time_limit=180,
+    time_limit=300,
+)
+def compute_contact_map(payload: dict) -> dict:
+    """One region of a Hi-C matrix at one resolution.
+
+    Input payload:
+        {
+          "wf_id": str, "dc_id": str,
+          "chrom1_col": str, "start1_col": str,
+          "chrom2_col": str, "start2_col": str, "count_col": str,
+          "end1_col": str | null, "end2_col": str | null,
+          "sample_col": str | null, "resolution_col": str | null,
+          "chrom": str | null, "start": number | null, "end": number | null,
+          "resolution": int | null,   # null = the server picks one
+          "pixels": int | null,       # tile width, drives the pick
+          "target_bins_per_pixel": number | null,
+          "sample": str | null,
+          "max_cells": int | null,
+          "filter_metadata": [...],
+        }
+
+    The resolution is a partition of the DC (``cooler/contact_matrix.py``
+    writes one row set per bin size), so choosing it is a filter, not a
+    computation: the cost of a zoomed-out view is paid by reading fewer, wider
+    bins rather than by coarsening millions of fine ones after the fact.
+
+    A DC with no resolution column is not multi-resolution. Then this returns
+    the requested region of the whole frame, which is what the renderer got
+    before the column existed.
+    """
+    import polars as pl
+
+    from depictio.api.v1.db import deltatables_collection
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+    from depictio.api.v1.services.contact_map import (
+        DEFAULT_MAX_CELLS,
+        apply_window,
+        choose_resolution,
+        coarsest_within_budget,
+        resolve_resolution_column,
+        summarise,
+    )
+
+    wf_id = payload.get("wf_id")
+    dc_id = payload.get("dc_id")
+    chrom1_col = payload.get("chrom1_col")
+    start1_col = payload.get("start1_col")
+    chrom2_col = payload.get("chrom2_col")
+    start2_col = payload.get("start2_col")
+    count_col = payload.get("count_col")
+    end1_col = payload.get("end1_col")
+    end2_col = payload.get("end2_col")
+    sample_col = payload.get("sample_col")
+    filter_metadata = payload.get("filter_metadata") or []
+
+    if not wf_id or not dc_id:
+        raise ValueError("compute_contact_map: wf_id and dc_id are required")
+    if not (chrom1_col and start1_col and chrom2_col and start2_col and count_col):
+        raise ValueError(
+            "compute_contact_map: chrom1_col, start1_col, chrom2_col, start2_col "
+            "and count_col are required"
+        )
+
+    dt_doc = deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc_id))})
+    if not dt_doc or not dt_doc.get("delta_table_location"):
+        raise ValueError("compute_contact_map: DC has no materialised Delta table")
+    init_data = {
+        str(dc_id): {
+            "delta_location": dt_doc["delta_table_location"],
+            "dc_type": "table",
+            "size_bytes": 0,
+        }
+    }
+
+    # Whether this DC is multi-resolution is a property of the table, not of
+    # the dashboard: ask the scan rather than trust the component config, so a
+    # YAML written before the column existed still zooms.
+    resolution_col: str | None = None
+    try:
+        from depictio.api.v1.deltatables_utils import _create_delta_scan
+
+        scan = _create_delta_scan(dt_doc["delta_table_location"], "table")
+        resolution_col = resolve_resolution_column(
+            list(scan.collect_schema().names()), payload.get("resolution_col")
+        )
+    except Exception as exc:  # pragma: no cover - introspection is best effort
+        logger.warning("compute_contact_map: schema introspection failed: %s", exc)
+
+    project_cols = [
+        c
+        for c in (
+            chrom1_col,
+            start1_col,
+            end1_col,
+            chrom2_col,
+            start2_col,
+            end2_col,
+            count_col,
+            sample_col,
+            resolution_col,
+        )
+        if c
+    ]
+
+    started = time.monotonic()
+    df = load_deltatable_lite(
+        workflow_id=ObjectId(str(wf_id)),
+        data_collection_id=str(dc_id),
+        metadata=filter_metadata or None,
+        select_columns=list(dict.fromkeys(project_cols)),
+        init_data=init_data,
+    )
+    load_ms = int((time.monotonic() - started) * 1000)
+    compute_started = time.monotonic()
+
+    sample = payload.get("sample")
+    if sample and sample_col:
+        df = df.filter(pl.col(sample_col) == sample)
+
+    resolutions: list[int] = []
+    if resolution_col and df.height:
+        resolutions = sorted(
+            {
+                int(v)
+                for v in df.get_column(resolution_col).unique().to_list()
+                if v is not None and int(v) > 0
+            }
+        )
+
+    chrom = payload.get("chrom") or None
+    start = payload.get("start")
+    end = payload.get("end")
+    span = (
+        float(end) - float(start)
+        if start is not None and end is not None and float(end) > float(start)
+        else None
+    )
+    max_cells = int(payload.get("max_cells") or DEFAULT_MAX_CELLS)
+
+    requested = payload.get("resolution")
+    resolution: int | None = None
+    if resolutions:
+        if requested and int(requested) in resolutions:
+            resolution = int(requested)
+        else:
+            resolution = choose_resolution(
+                resolutions, span, payload.get("pixels"), payload.get("target_bins_per_pixel")
+            )
+            resolution = coarsest_within_budget(resolutions, resolution, span, max_cells)
+        df = df.filter(pl.col(resolution_col) == resolution)
+
+    df = apply_window(
+        df,
+        chrom1_col=chrom1_col,
+        start1_col=start1_col,
+        chrom2_col=chrom2_col,
+        start2_col=start2_col,
+        end1_col=end1_col,
+        end2_col=end2_col,
+        chrom=chrom,
+        start=None if start is None else float(start),
+        end=None if end is None else float(end),
+        resolution=resolution,
+    )
+    df = df.sort([chrom1_col, start1_col, start2_col])
+
+    truncated = df.height > max_cells
+    if truncated:
+        # Only reachable on a single-resolution DC too fine for the window  -
+        # there is no coarser partition to step up to. Keep the densest cells
+        # (they are sorted by position, so this keeps a contiguous corner) and
+        # say so, rather than pretend the matrix is complete.
+        df = df.head(max_cells)
+
+    region = (
+        {"chrom": chrom, "start": start, "end": end}
+        if chrom and start is not None and end is not None
+        else ({"chrom": chrom, "start": None, "end": None} if chrom else None)
+    )
+
+    rows: dict[str, list] = {}
+    for col in project_cols:
+        if col and col not in rows:
+            rows[col] = df.get_column(col).to_list()
+
+    compute_ms = int((time.monotonic() - compute_started) * 1000)
+    logger.info(
+        "compute_contact_map: %d cells, resolution=%s, chrom=%s in %dms (load %dms)",
+        df.height,
+        resolution,
+        chrom,
+        compute_ms,
+        load_ms,
+    )
+    return {
+        "rows": rows,
+        "columns": {
+            "chrom1": chrom1_col,
+            "start1": start1_col,
+            "end1": end1_col,
+            "chrom2": chrom2_col,
+            "start2": start2_col,
+            "end2": end2_col,
+            "count": count_col,
+            "sample": sample_col,
+            "resolution": resolution_col,
+        },
+        "summary": summarise(
+            df,
+            chrom1_col=chrom1_col,
+            start1_col=start1_col,
+            resolution_col=resolution_col,
+            sample_col=sample_col,
+            resolutions=resolutions,
+            resolution=resolution,
+            region=region,
+            pixels=payload.get("pixels"),
+            truncated=truncated,
+        ),
+        "row_count": int(df.height),
+        "load_ms": load_ms,
+        "compute_ms": compute_ms,
+    }
+
+
 __all__: list[str] = [
     "build_figure_preview",
     "analyze_figure_code",
@@ -2655,6 +2897,7 @@ __all__: list[str] = [
     "compute_complex_heatmap",
     "compute_upset",
     "compute_coverage_track",
+    "compute_contact_map",
     "compute_sankey",
     "compute_group_compare",
 ]

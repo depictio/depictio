@@ -265,6 +265,28 @@ class DashboardDataLite(BaseModel):
         "inspected in a funnel overview.",
     )
 
+    # Where advanced-viz tiles draw their controls, dashboard-wide. A default,
+    # not an override: a tile that states its own `controls_placement` keeps it.
+    # Ships as `popover`, i.e. exactly today's behaviour, so switching a whole
+    # dashboard to inline controls stays an explicit choice.
+    advanced_viz_controls: Literal["popover", "rail", "header"] = Field(
+        default="popover",
+        description="Default placement of advanced-viz controls on this dashboard: "
+        "popover keeps them behind the settings icon, header draws the encoding "
+        "controls under each tile title, rail draws every control beside the plot.",
+    )
+
+    # Content-aware tile heights, dashboard-wide. On by default: a tile that
+    # holds two bars should not spend five rows saying so. Switching it off
+    # sizes every tile from its stored height alone, which is what dashboards
+    # did before, so an author who laid a tab out by hand can keep it exactly.
+    autofit: bool = Field(
+        default=True,
+        description="Let tiles take the height their content needs, within per-type "
+        "bounds and levelled row by row. Components carrying `layout.fit: fixed`, and "
+        "tiles a user has resized by hand, keep their stored height either way.",
+    )
+
     # Left filter panel presentation (ordering + icons for named sections)
     filter_sections: list[FilterSectionSpec] = Field(
         default_factory=list,
@@ -401,6 +423,8 @@ class DashboardDataLite(BaseModel):
         "icon_variant",
         "workflow_system",
         "funnel_filtering",
+        "advanced_viz_controls",
+        "autofit",
         "filter_sections",
         "grid_sections",
         "brand_theme",
@@ -973,6 +997,13 @@ class DashboardDataLite(BaseModel):
             # Layout fields - read from stored_layout_data lookup (keyed by component index)
             comp_index_str = str(comp.get("index", ""))
             comp_layout = layout_lookup.get(comp_index_str, {"x": 0, "y": 0, "w": 6, "h": 4})
+            # `fit` travels inside the layout block, because that is the only
+            # thing it is about, and only when it was set: absent means the
+            # per-type default, and writing it on every component would say
+            # something the author never did.
+            comp_fit = comp.get("fit")
+            if comp_fit in ("auto", "fixed"):
+                comp_layout = {**comp_layout, "fit": comp_fit}
             lite_comp["layout"] = comp_layout
 
             # Placement & grouping — the mirror of what `to_full` writes, so an
@@ -986,7 +1017,14 @@ class DashboardDataLite(BaseModel):
             # map is noise, and the map branch below would then have no way to
             # take it back out.
             default_placement = _DEFAULT_PLACEMENT.get(comp_type)
-            for field in ("placement", "group", "section", "timescale", "show_marks"):
+            for field in (
+                "placement",
+                "group",
+                "section",
+                "timescale",
+                "show_marks",
+                "show_histogram",
+            ):
                 val = comp.get(field)
                 if val is None:
                     continue
@@ -1151,6 +1189,8 @@ class DashboardDataLite(BaseModel):
             filter_sections=dashboard_data.get("filter_sections") or [],
             grid_sections=dashboard_data.get("grid_sections") or [],
             funnel_filtering=bool(dashboard_data.get("funnel_filtering", True)),
+            advanced_viz_controls=dashboard_data.get("advanced_viz_controls") or "popover",
+            autofit=bool(dashboard_data.get("autofit", True)),
             brand_theme=cls._exportable_brand_theme(dashboard_data.get("brand_theme")),
             # Tab fields
             is_main_tab=dashboard_data.get("is_main_tab", True),
@@ -1245,6 +1285,8 @@ class DashboardDataLite(BaseModel):
             "filter_sections": [s.model_dump() for s in self.filter_sections],
             "grid_sections": [s.model_dump() for s in self.grid_sections],
             "funnel_filtering": self.funnel_filtering,
+            "advanced_viz_controls": self.advanced_viz_controls,
+            "autofit": self.autofit,
             "brand_theme": self.brand_theme.model_dump(exclude_none=True)
             if self.brand_theme
             else None,
@@ -1276,6 +1318,16 @@ class DashboardDataLite(BaseModel):
             # else. Written here rather than per-branch so a new component type
             # can't silently lose it.
             full_comp["section"] = comp_dict.get("section")
+
+            # Sizing intent, for the same reason and in the same place: it
+            # applies to every component type and the grid reads it off
+            # `stored_metadata`, never off the layout item, react-grid-layout
+            # drops keys it does not know on the first drag. Written only when
+            # the author set one, so the per-type default stays visible as the
+            # absence of a value.
+            comp_fit = comp_dict.get("fit")
+            if comp_fit in ("auto", "fixed"):
+                full_comp["fit"] = comp_fit
 
             if comp_type == "figure":
                 # Support figure_params (new YAML key) and dict_kwargs (legacy/internal)
@@ -1351,6 +1403,7 @@ class DashboardDataLite(BaseModel):
                         "group": comp_dict.get("group"),
                         "timescale": comp_dict.get("timescale"),
                         "show_marks": comp_dict.get("show_marks"),
+                        "show_histogram": comp_dict.get("show_histogram"),
                     }
                 )
                 for f in ["title_size", "custom_color", "icon_name"]:
@@ -1578,6 +1631,15 @@ class DashboardData(MongoModel):
     # Funnel filtering (issue #939). On by default; authors opt out per
     # dashboard from the settings drawer.
     funnel_filtering: bool = True
+    # Dashboard-wide default for where advanced-viz tiles draw their controls.
+    # `popover` for every dashboard saved before this existed, which is what
+    # they already did; a tile's own `controls_placement` still wins.
+    advanced_viz_controls: Literal["popover", "rail", "header"] = "popover"
+    # Content-aware tile heights. True for every dashboard saved before this
+    # existed: the per-type defaults leave figures and MultiQC panels at their
+    # stored height, and the types that do fit only grow unless the reader can
+    # see them change. False pins every tile to its stored height.
+    autofit: bool = True
     # Dashboard-level brand override (logo, palette, surfaces, figure
     # defaults). None for dashboards saved before the feature existed — those
     # inherit the instance branding exactly as they did before.

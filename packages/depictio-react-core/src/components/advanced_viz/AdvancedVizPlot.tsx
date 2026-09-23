@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import Plot from 'react-plotly.js';
 
 import { adaptGlTraces, PlotlyTrace, useWebglSlot } from '../../webglBudget';
+import { useGestureGuardedSelection } from './selectionGesture';
 
 /**
  * `react-plotly.js`'s `Plot` with the WebGL budget applied to its traces.
@@ -15,10 +16,18 @@ import { adaptGlTraces, PlotlyTrace, useWebglSlot } from '../../webglBudget';
  * `scatter3d` counts toward the budget but cannot be downgraded — there is no
  * SVG 3D renderer. A 3D plot that misses out still draws, so a dashboard
  * combining five marker clouds *and* a 3D embedding can still lose a context.
+ *
+ * `onSelected` is gesture-guarded (see selectionGesture): the empty
+ * re-selection every `Plotly.react` emits never reaches the renderer.
  */
 const AdvancedVizPlot: React.FC<
   { data: unknown[] } & Omit<React.ComponentProps<typeof Plot>, 'data'>
-> = ({ data, ...rest }) => {
+> = ({ data, onSelected, onSelecting, ...rest }) => {
+  const guarded = useGestureGuardedSelection(onSelected);
+  const handleSelecting = (event: Parameters<NonNullable<typeof onSelecting>>[0]) => {
+    guarded.onSelecting?.();
+    onSelecting?.(event);
+  };
   const traces = (data as PlotlyTrace[]) || [];
   // Asked from the trace types rather than unconditionally: these renderers
   // appear once per dashboard, so acquisition order hardly matters, while
@@ -27,7 +36,14 @@ const AdvancedVizPlot: React.FC<
   const needsGl = traces.some((t) => t?.type === 'scattergl' || t?.type === 'scatter3d');
   const glGranted = useWebglSlot(needsGl);
   const adapted = useMemo(() => adaptGlTraces(traces, glGranted), [data, glGranted]);
-  return <Plot data={adapted as never} {...rest} />;
+  return (
+    <Plot
+      data={adapted as never}
+      {...rest}
+      onSelecting={onSelected || onSelecting ? handleSelecting : undefined}
+      onSelected={guarded.onSelected}
+    />
+  );
 };
 
 export default AdvancedVizPlot;

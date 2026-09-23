@@ -10,6 +10,7 @@ import { usePersistedVizControl } from './usePersistedVizControl';
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
+import { demandForItems } from './contentDemand';
 
 interface DaBarplotConfig {
   feature_id_col: string;
@@ -36,6 +37,14 @@ const POSITIVE = '#1f77b4';
 const NEGATIVE = '#d62728';
 const FADED = 'rgba(127,127,127,0.45)';
 const ALL_TAB = 'all';
+
+// Per-panel height for the faceted "All" view. Tight enough to fit several
+// contrasts in view without forcing scroll for 2-3 panels.
+const FACETED_PANEL_HEIGHT = 240;
+/** `Stack gap="md"` between the faceted panels, plus the stack's own padding. */
+const FACET_GAP_PX = 20;
+/** The tab strip above the panels and the axis furniture below the last one. */
+const TABS_CHROME_PX = 72;
 
 type FeatureRow = { feat: string; label: string; lfc: number; sig: number };
 
@@ -251,11 +260,14 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
   // render — an unmemoised element re-fires the frame's publish effect and loops
   // it against ComponentRenderer's setState ("Maximum update depth exceeded").
   // Mirrors the other renderers (Sunburst/Volcano/…) which already memoise this.
-  const controls = useMemo(
+  // Both of these decide which features are on screen at all, so the whole
+  // tier is the encoding one and nothing is left for the cosmetic popover.
+  const primaryControls = useMemo(
     () => (
-      <Stack gap="xs">
+      <>
         <NumberInput
           size="xs"
+          w={130}
           label="Top-N per panel"
           value={topN}
           onChange={(v) => setTopN(Math.max(1, Number(v) || 15))}
@@ -264,6 +276,7 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
         />
         <NumberInput
           size="xs"
+          w={150}
           label="Significance threshold"
           value={sigThreshold}
           onChange={(v) => setSigThreshold(Math.max(0, Math.min(1, Number(v) || 0.05)))}
@@ -272,14 +285,25 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
           step={0.01}
           decimalScale={3}
         />
-      </Stack>
+      </>
     ),
     [topN, sigThreshold],
   );
 
-  // Per-panel height for the faceted "All" view. Tight enough to fit several
-  // contrasts in view without forcing scroll for 2–3 panels.
-  const FACETED_PANEL_HEIGHT = 240;
+  // One facet per contrast on screen, each at the height the faceted view
+  // gives it. The single-contrast tab is the same panel without the stack, so
+  // it asks for one facet's worth. Counted off `contrastNames`, not
+  // `drawnPanels`: the panels are rebuilt on every render (colour, threshold,
+  // grouping) and a demand keyed on them would republish on each one.
+  const contentDemand = useMemo(
+    () =>
+      demandForItems(
+        activeTab === ALL_TAB ? contrastNames.length : activeTab ? 1 : 0,
+        FACETED_PANEL_HEIGHT + FACET_GAP_PX,
+        TABS_CHROME_PX,
+      ),
+    [activeTab, contrastNames.length],
+  );
 
   const renderAllFaceted = () => (
     <ScrollArea style={{ width: '100%', height: '100%' }}>
@@ -325,7 +349,8 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
     <AdvancedVizFrame
       title={metadata.title || 'DA barplot'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
-      controls={controls}
+      primaryControls={primaryControls}
+      contentDemand={contentDemand}
       loading={loading}
       error={error}
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}

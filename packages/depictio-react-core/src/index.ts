@@ -13,6 +13,15 @@ import './plotlyStrictMode';
 
 // Grid + top-level renderer
 export { default as DashboardGrid } from './components/DashboardGrid';
+// Content-aware sizing: the demand channel renderers publish on, and the two
+// predicates a host needs to offer "size this tile to its content" as an action.
+export {
+  publishContentDemand,
+  useContentDemand,
+  effectiveFit,
+  isAutofitted,
+} from './components/autofit';
+export type { ContentDemand, FitMode } from './components/autofit';
 export { default as PersistentSectionsHost } from './components/PersistentSectionsHost';
 export type { PersistentSectionsHostProps } from './components/PersistentSectionsHost';
 // The grid's own geometry + per-type default box, for consumers that render a
@@ -136,6 +145,15 @@ export type {
   VizConfigDraftSink,
   VizConfigPatch,
 } from './components/advanced_viz/AdvancedVizConfigDraft';
+// Dashboard-level default for where advanced-viz controls are drawn. Free of
+// renderer imports, like the two providers above, so the app shell can mount it
+// without pulling the plotly-heavy lazy chunk onto its boot path.
+export {
+  AdvancedVizPlacementDefaultProvider,
+  CONTROLS_PLACEMENTS,
+  isControlsPlacement,
+} from './components/advanced_viz/AdvancedVizInlineControls';
+export type { ControlsPlacement } from './components/advanced_viz/AdvancedVizInlineControls';
 // The shared show-data grid, so the inspector can dock the same table the
 // renderers' popovers show.
 export { default as DataGridBody } from './components/data/DataGridBody';

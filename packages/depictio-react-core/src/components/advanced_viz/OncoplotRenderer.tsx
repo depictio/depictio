@@ -24,6 +24,14 @@ import {
   plotlyThemeFragment,
 } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
+import { demandForItems } from './contentDemand';
+
+/** Room one gene's row of cells needs to read as a band rather than a line. */
+const GENE_ROW_PX = 22;
+/** Fixed furniture: the per-sample mutation-count track along the top
+ *  (xaxis2), the tilted sample labels along the bottom (b: 100) and the
+ *  figure's own top margin. */
+const ONCOPLOT_CHROME_PX = 220;
 
 interface OncoplotConfig {
   sample_id_col: string;
@@ -168,6 +176,8 @@ const OncoplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
     }
 
     return {
+      // Matrix rows on screen, one per gene. Feeds the content demand.
+      genesDrawn: orderedGenes.length,
       data: [
         // Main heatmap on a 4-row × 4-col layout. Bottom-left (xaxis=x,
         // yaxis=y) is the matrix; xaxis2 (top) is per-sample mutation
@@ -267,23 +277,26 @@ const OncoplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
     };
   }, [rows, config, sortByFreq, colorScheme, theme, mutationUniverse]);
 
-  const controls = useMemo(
+  // The gene ordering is the oncoplot's one analytical choice, so it is the
+  // encoding tier and there is no cosmetic tier to keep behind the icon.
+  const primaryControls = useMemo(
     () => (
-      <Stack gap="xs">
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Sort
-          </Text>
-          <Switch
-          size="xs"
-          checked={sortByFreq}
-          onChange={(e) => setSortByFreq(e.currentTarget.checked)}
-          label="Sort by mutation frequency"
-        />
-        </Stack>
-      </Stack>
+      <Switch
+        size="xs"
+        checked={sortByFreq}
+        onChange={(e) => setSortByFreq(e.currentTarget.checked)}
+        label="Sort by mutation frequency"
+      />
     ),
     [sortByFreq],
+  );
+
+  // One matrix row per gene, under the per-sample count track. Keyed on the
+  // count, so re-sorting the same genes republishes nothing.
+  const genesDrawn = figure?.genesDrawn ?? 0;
+  const contentDemand = useMemo(
+    () => demandForItems(genesDrawn, GENE_ROW_PX, ONCOPLOT_CHROME_PX),
+    [genesDrawn],
   );
 
   return (
@@ -291,7 +304,8 @@ const OncoplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
       estimated={estimated}
       title={metadata.title || 'Oncoplot'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
-      controls={controls}
+      primaryControls={primaryControls}
+      contentDemand={contentDemand}
       loading={loading}
       error={error}
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}

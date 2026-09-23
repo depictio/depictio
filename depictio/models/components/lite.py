@@ -80,6 +80,15 @@ class BaseLiteComponent(BaseModel):
         "section's icon and default collapse state via the dashboard-level "
         "`filter_sections` (left panel) or `grid_sections` (main grid) list.",
     )
+    fit: Literal["auto", "fixed"] | None = Field(
+        default=None,
+        description="Whether the tile's height follows its content ('auto') or stays at the "
+        "height the layout gives it ('fixed'). Written in YAML inside the layout block, as "
+        "`layout: {x, y, w, h, fit: fixed}`. Unset means the per-type default: content-fitted "
+        "for text, card, table and advanced_viz, fixed for figure and multiqc, whose aspect "
+        "ratio is an authoring decision. The editor writes 'fixed' when a reader resizes a "
+        "tile by hand, so a height set on purpose is never argued with.",
+    )
 
     # Data source references (human-readable tags)
     workflow_tag: str = Field(default="", description="Workflow tag (e.g., 'python/iris_workflow')")
@@ -523,6 +532,11 @@ class InteractiveLiteComponent(BaseLiteComponent):
         "Timeline). When omitted, the renderer picks a sensible default — visible for "
         "ungrouped components, hidden for components inside a 'group' for higher "
         "compaction. Set explicitly to True/False to override.",
+    )
+    show_histogram: bool | None = Field(
+        default=None,
+        description="RangeSlider only: draw the column's histogram above the slider so the "
+        "reader sees the distribution they are thresholding. Omitted means off.",
     )
 
     # Styling (optional)

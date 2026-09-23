@@ -265,6 +265,23 @@ export function genomeRegionFilters(
 }
 
 /**
+ * The columns one genomic tile binds for the region roles.
+ *
+ * Every genomic kind names these three differently (`chr_col`/`pos_col`,
+ * `chromosome_col`/`position_col`, `chrom_col`/`start_col`/`end_col`,
+ * `contig_col`, `chrom1_col`/`start1_col`), so the mapping from a kind's
+ * config to this shape lives in one place:
+ * `components/advanced_viz/genomicAxis.ts`.
+ */
+export interface RegionRoleColumns {
+  chrom: string;
+  start: string;
+  /** Interval kinds only (a bin, an exon, a segment). A range filter on the
+   *  end column widens the region the same way one on the start column does. */
+  end?: string;
+}
+
+/**
  * Read a region back out of the dashboard's filter list, for a tile that
  * follows one instead of emitting it.
  *
@@ -273,23 +290,51 @@ export function genomeRegionFilters(
  * position columns drives it, so a plain `Chromosome` multi-select in the left
  * panel zooms a following tile exactly as another tile's brush does. Only a
  * single chromosome yields a region: "chr1 and chr7" is not somewhere to zoom.
+ *
+ * Two call shapes, because the roles a kind binds are not always two columns:
+ * the historical `(filters, chrColumn, posColumn)` and a role map
+ * `(filters, {chrom, start, end?})` for interval kinds, where a range filter
+ * on either coordinate column contributes to the region.
  */
+export function regionFromFilters(
+  filters: InteractiveFilter[],
+  roles: RegionRoleColumns,
+): { chrom: string; start: number; end: number } | null;
 export function regionFromFilters(
   filters: InteractiveFilter[],
   chrColumn: string,
   posColumn: string,
+): { chrom: string; start: number; end: number } | null;
+export function regionFromFilters(
+  filters: InteractiveFilter[],
+  chrOrRoles: string | RegionRoleColumns,
+  posColumn?: string,
 ): { chrom: string; start: number; end: number } | null {
+  const roles: RegionRoleColumns =
+    typeof chrOrRoles === 'string'
+      ? { chrom: chrOrRoles, start: posColumn ?? '' }
+      : chrOrRoles;
   let chrom: string | null = null;
   let range: [number, number] | null = null;
   for (const f of filters) {
     const column = f.column_name ?? f.metadata?.column_name;
-    if (column === chrColumn && Array.isArray(f.value)) {
+    if (column === roles.chrom && Array.isArray(f.value)) {
       if (f.value.length !== 1) return null;
       chrom = String(f.value[0]);
-    } else if (column === posColumn && Array.isArray(f.value) && f.value.length === 2) {
+    } else if (
+      (column === roles.start || (roles.end && column === roles.end)) &&
+      Array.isArray(f.value) &&
+      f.value.length === 2
+    ) {
       const lo = Number(f.value[0]);
       const hi = Number(f.value[1]);
-      if (Number.isFinite(lo) && Number.isFinite(hi) && hi > lo) range = [lo, hi];
+      if (Number.isFinite(lo) && Number.isFinite(hi) && hi > lo) {
+        // Start and end columns of the same interval kind describe one span,
+        // so two range filters widen to their union rather than the last seen.
+        range = range
+          ? [Math.min(range[0], lo), Math.max(range[1], hi)]
+          : [lo, hi];
+      }
     }
   }
   if (!chrom) return null;
@@ -312,6 +357,21 @@ export function filtersExcludingOwn(
   source: InteractiveFilterSource,
 ): InteractiveFilter[] {
   return filters.filter((f) => !(f.index === componentIndex && f.source === source));
+}
+
+/** Whether the dashboard still holds a non-empty selection this component emitted. */
+export function hasOwnSelection(
+  filters: InteractiveFilter[],
+  componentIndex: string,
+  source: InteractiveFilterSource,
+): boolean {
+  return filters.some(
+    (f) =>
+      f.index === componentIndex &&
+      f.source === source &&
+      Array.isArray(f.value) &&
+      f.value.length > 0,
+  );
 }
 
 /**

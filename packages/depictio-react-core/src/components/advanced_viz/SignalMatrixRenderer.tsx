@@ -634,22 +634,16 @@ const SignalMatrixRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
     theme,
   ]);
 
-  const controls = useMemo(
+  // Encoding tier: the row order and the binning decide which regions are a
+  // row at all, which is what a metagene heatmap is read for. The colour scale
+  // and the mean profile ride on top of that matrix.
+  const primaryControls = useMemo(
     () => (
-      <Stack gap="xs">
+      <>
         <Select
           size="xs"
-          label="Colour scale"
-          value={colourScale}
-          onChange={(v) => v && setColourScale(v as ColourScale)}
-          data={COLOUR_SCALES as unknown as string[]}
-          allowDeselect={false}
-          comboboxProps={{ withinPortal: true }}
-        />
-        <Select
-          size="xs"
+          w={190}
           label="Row order"
-          description="Columns are positions and are never reordered"
           value={sortBy}
           onChange={(v) => v && setSortBy(v as SortBy)}
           data={[
@@ -661,8 +655,8 @@ const SignalMatrixRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
         />
         <NumberInput
           size="xs"
+          w={120}
           label="Max rows"
-          description="Regions are averaged into this many bins, never truncated"
           value={maxRows}
           onChange={(v) => {
             const next = typeof v === 'number' ? v : Number(v);
@@ -672,6 +666,23 @@ const SignalMatrixRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
           max={20000}
           step={100}
           clampBehavior="strict"
+        />
+      </>
+    ),
+    [sortBy, maxRows],
+  );
+
+  const controls = useMemo(
+    () => (
+      <Stack gap="xs">
+        <Select
+          size="xs"
+          label="Colour scale"
+          value={colourScale}
+          onChange={(v) => v && setColourScale(v as ColourScale)}
+          data={COLOUR_SCALES as unknown as string[]}
+          allowDeselect={false}
+          comboboxProps={{ withinPortal: true }}
         />
         <Stack gap={4}>
           <Text size="xs" fw={500}>
@@ -699,13 +710,14 @@ const SignalMatrixRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
         ) : null}
       </Stack>
     ),
-    [colourScale, sortBy, maxRows, showProfile, matrix],
+    [colourScale, showProfile, matrix],
   );
 
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Signal matrix'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
+      primaryControls={primaryControls}
       controls={controls}
       loading={loading}
       error={error}

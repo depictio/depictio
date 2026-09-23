@@ -30,6 +30,9 @@
  */
 
 export interface GenomeViewConfig {
+  /** `table` reads rows from /advanced_viz/data; `file` hands GenomeSpy an
+   *  indexed file it range-loads itself (see fileSpec.ts). */
+  source?: 'table' | 'file';
   chr_col: string;
   pos_col: string;
   score_col: string;
@@ -48,8 +51,20 @@ export interface GenomeViewConfig {
   opacity?: number;
   region_filter_enabled?: boolean;
   follow_region_filter?: boolean;
+  /** `chr1:10,000,000-12,000,000`: the region the section opens on, emitted
+   *  once on the tile's first render. See `defaultRegion.ts`. */
+  default_region?: string | null;
   selection_enabled?: boolean;
   selection_column?: string | null;
+  // --- source: 'file' only -------------------------------------------------
+  file_info_fields?: string[] | null;
+  file_category_field?: string | null;
+  file_categories?: string[] | null;
+  file_add_chr_prefix?: boolean;
+  file_window_size?: number | null;
+  file_max_lanes?: number;
+  file_tabix_columns?: string[] | null;
+  file_bam_view?: 'coverage' | 'pileup';
 }
 
 export interface GenomeSpyThemeColors {

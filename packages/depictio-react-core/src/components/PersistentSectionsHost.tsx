@@ -45,6 +45,9 @@ export interface PersistentSectionsHostProps {
    *  fanned out here can only be changed on the tab that owns it, so the editor
    *  puts a jump to that tab where the "…" sits on an editable section. */
   renderSectionActions?: (section: PersistentSection) => React.ReactNode;
+  /** The viewing dashboard's autofit switch. False sizes every pinned tile from
+   *  its stored height alone, as the tab's own grid then does. */
+  autofit?: boolean;
 }
 
 /** A section fanned out from another tab is keyed by owner + name: two tabs
@@ -78,6 +81,7 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
   groupRender,
   bulkOptions,
   renderSectionActions,
+  autofit = true,
 }) => {
   const renderable = useMemo(
     () =>
@@ -275,6 +279,7 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
                             false,
                           ),
                           autoHeights,
+                          autofit,
                         ),
                       )}
                       breakpoints={GRID_BREAKPOINTS}

@@ -138,6 +138,8 @@ describe('splitPanels', () => {
       'transcript_structure',
       'cnv_profile',
       'genome_chord',
+      'record_card',
+      'parallel_coordinates',
     ];
 
     it('places every model kind in its bucket, and no kind twice', () => {

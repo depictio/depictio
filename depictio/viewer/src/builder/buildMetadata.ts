@@ -201,6 +201,7 @@ function buildInteractive(
     group?: string;
     placement?: string;
     show_marks?: boolean;
+    show_histogram?: boolean;
   }>(state.config);
   // Mirror Dash design_interactive: the form surfaces only the basics, no
   // default value/range, marks, or scale. Those are derived at render time.
@@ -232,6 +233,11 @@ function buildInteractive(
     group: c.group?.trim() || undefined,
     placement,
     show_marks: c.show_marks,
+    // Authored in YAML rather than in the form (`InteractiveComponent.
+    // show_histogram`), so the builder's job here is only to carry it through:
+    // `loadExisting` seeds the config bag from the stored metadata, and
+    // without this line saving an edit would silently drop the setting.
+    show_histogram: c.show_histogram,
   };
 }
 

@@ -7,6 +7,7 @@ Dash UI layer. Only the parsing/validation helpers live here; the UI
 construction code remains in the Dash module.
 """
 
+import ast
 import re
 from typing import Any, Dict
 
@@ -15,35 +16,57 @@ import polars as pl
 from depictio.api.v1.configs.logging_init import logger
 
 
-def analyze_constrained_code(code: str) -> dict[str, Any]:
+def _assigns_fig(node: ast.AST) -> bool:
+    """Whether *node* (or anything inside it) assigns the name ``fig``."""
+    for sub in ast.walk(node):
+        if isinstance(sub, ast.Assign):
+            targets = sub.targets
+        elif isinstance(sub, (ast.AnnAssign, ast.AugAssign)):
+            targets = [sub.target]
+        else:
+            continue
+        if any(isinstance(t, ast.Name) and t.id == "fig" for t in targets):
+            return True
+    return False
+
+
+def _kept_lines(lines: list[str]) -> list[str]:
+    """Drop blank and comment lines, keep each line's own indentation."""
+    return [line.rstrip() for line in lines if line.strip() and not line.strip().startswith("#")]
+
+
+def _split_by_ast(code: str) -> tuple[list[str], str | None, str | None] | None:
+    """Split *code* at the first top-level statement that assigns ``fig``.
+
+    The statement is taken whole, so a ``fig = px.scatter(...)`` written
+    inside an ``if`` / ``else`` (one branch per shape of the data) stays in its
+    block instead of being lifted out of it. The line scanner below took the
+    first line that started with ``fig =`` wherever it stood, re-emitted it at
+    column 0 and appended the rest verbatim, so the still-indented lines of
+    that branch came back as "unexpected indent". Returns ``None`` when the
+    code does not parse, so the scanner can name the problem as it did before.
     """
-    Analyze code with df_modified constraint.
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return None
+    src_lines = code.split("\n")
+    for stmt in tree.body:
+        if not _assigns_fig(stmt):
+            continue
+        start, end = stmt.lineno - 1, stmt.end_lineno or stmt.lineno
+        preprocessing_lines = _kept_lines(src_lines[:start])
+        figure_line = "\n".join(src_lines[start:end])
+        post_figure_lines = _kept_lines(src_lines[end:])
+        full_figure_code = (
+            figure_line + "\n" + "\n".join(post_figure_lines) if post_figure_lines else figure_line
+        )
+        return preprocessing_lines, figure_line, full_figure_code
+    return [], None, None
 
-    Expects code format:
-    - Optional: Multiple lines defining df_modified (multi-line preprocessing support)
-    - Required: fig = px.function(df or df_modified, ...)
 
-    Multi-line preprocessing example:
-        df_temp = df.filter(pl.col('x') > 0)
-        df_modified = df_temp.group_by('y').agg(pl.mean('z'))
-        fig = px.bar(df_modified, x='y', y='z')
-
-    Args:
-        code: Python code string
-
-    Returns:
-        Dictionary with analysis results
-    """
-    if not code or not code.strip():
-        return {
-            "has_preprocessing": False,
-            "preprocessing_code": None,
-            "figure_code": None,
-            "uses_modified_df": False,
-            "is_valid": False,
-            "error_message": "Empty code",
-        }
-
+def _split_by_scan(code: str) -> tuple[list[str], str | None, str | None]:
+    """Line scanner fallback for code that does not parse."""
     # Split into lines, preserving structure for multi-line statements
     all_lines = code.split("\n")
 
@@ -60,7 +83,6 @@ def analyze_constrained_code(code: str) -> dict[str, Any]:
     preprocessing_lines = []
     figure_line = None
     post_figure_lines: list[str] = []
-    uses_modified_df = False
 
     # Track multi-line statements
     in_figure_statement = False
@@ -80,7 +102,6 @@ def analyze_constrained_code(code: str) -> dict[str, Any]:
             # Check if it's a complete single-line statement
             if figure_open_parens == 0:
                 figure_line = line
-                uses_modified_df = "df_modified" in line
                 in_figure_statement = False
                 post_figure_lines = [r for r, _ in lines[idx + 1 :]]
                 break
@@ -93,7 +114,6 @@ def analyze_constrained_code(code: str) -> dict[str, Any]:
             if figure_open_parens == 0:
                 # Join with newlines to preserve Python syntax for multi-line statements
                 figure_line = "\n".join(figure_parts)
-                uses_modified_df = "df_modified" in figure_line
                 in_figure_statement = False
                 logger.debug(
                     f"Found multi-line figure: {figure_line[:80]}... ({len(figure_parts)} lines)"
@@ -147,6 +167,43 @@ def analyze_constrained_code(code: str) -> dict[str, Any]:
         logger.debug(f"Keeping {len(post_figure_lines)} post-figure line(s) verbatim")
     else:
         full_figure_code = figure_line
+    return preprocessing_lines, figure_line, full_figure_code
+
+
+def analyze_constrained_code(code: str) -> dict[str, Any]:
+    """
+    Analyze code with df_modified constraint.
+
+    Expects code format:
+    - Optional: Multiple lines defining df_modified (multi-line preprocessing support)
+    - Required: fig = px.function(df or df_modified, ...)
+
+    Multi-line preprocessing example:
+        df_temp = df.filter(pl.col('x') > 0)
+        df_modified = df_temp.group_by('y').agg(pl.mean('z'))
+        fig = px.bar(df_modified, x='y', y='z')
+
+    Args:
+        code: Python code string
+
+    Returns:
+        Dictionary with analysis results
+    """
+    if not code or not code.strip():
+        return {
+            "has_preprocessing": False,
+            "preprocessing_code": None,
+            "figure_code": None,
+            "uses_modified_df": False,
+            "is_valid": False,
+            "error_message": "Empty code",
+        }
+
+    split = _split_by_ast(code)
+    if split is None:
+        split = _split_by_scan(code)
+    preprocessing_lines, figure_line, full_figure_code = split
+    uses_modified_df = bool(figure_line and "df_modified" in figure_line)
 
     # Validation
     if not figure_line:

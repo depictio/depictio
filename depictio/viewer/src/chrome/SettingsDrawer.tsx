@@ -22,6 +22,8 @@ import {
   useResolvedBrandTheme,
   Z_LAYERS,
   type BrandTheme,
+  isControlsPlacement,
+  type ControlsPlacement,
   type DashboardData,
   type LogoMode,
 } from 'depictio-react-core';
@@ -355,6 +357,12 @@ interface SettingsDrawerProps {
   /** Editor-only: persists the dashboard's `funnel_filtering` field (issue
    *  #939). Omitted in the viewer, where the drawer stays read-only. */
   onToggleFunnelFiltering?: (enabled: boolean) => void;
+  /** Editor-only: persists the dashboard's default placement for advanced-viz
+   *  controls. Omitted in the viewer, where the block is not rendered. */
+  onChangeAdvancedVizControls?: (placement: ControlsPlacement) => void;
+  /** Editor-only: persists the dashboard's `autofit` field. Omitted in the
+   *  viewer, where the block is not rendered. */
+  onToggleAutofit?: (enabled: boolean) => void;
   /** Editor only: uploads a dashboard logo (the server stamps it on the
    *  dashboard's brand theme) — reject to surface an error. */
   onUploadLogo?: (file: File) => Promise<void>;
@@ -377,6 +385,8 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   dashboard,
   onChangeBrandTheme,
   onToggleFunnelFiltering,
+  onChangeAdvancedVizControls,
+  onToggleAutofit,
   onUploadLogo,
 }) => (
   <Drawer
@@ -418,6 +428,53 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
           </Text>
         </Group>
         <FontSizeBlock />
+        {onToggleAutofit && (
+          <>
+            <Divider />
+            <Stack gap={4} data-testid="autofit-section">
+              <Text fw={500} size="sm">
+                Fit tiles to their content
+              </Text>
+              <Switch
+                label="Size tiles to what they hold"
+                description="Text, cards, tables and advanced visualisations take the height their content needs, levelled row by row. A tile you resize by hand keeps the height you gave it."
+                checked={dashboard?.autofit !== false}
+                onChange={(e) => onToggleAutofit(e.currentTarget.checked)}
+              />
+            </Stack>
+          </>
+        )}
+        {onChangeAdvancedVizControls && (
+          <>
+            <Divider />
+            <Stack gap={4} data-testid="advanced-viz-controls-section">
+              <Text fw={500} size="sm">
+                Advanced viz controls
+              </Text>
+              <Text size="xs" c="dimmed">
+                Where every advanced visualisation draws its controls. A tile that carries
+                its own placement keeps it.
+              </Text>
+              <SegmentedControl
+                size="xs"
+                fullWidth
+                data={[
+                  { value: 'popover', label: 'Popover' },
+                  { value: 'header', label: 'Under title' },
+                  { value: 'rail', label: 'Side rail' },
+                ]}
+                value={
+                  isControlsPlacement(dashboard?.advanced_viz_controls)
+                    ? dashboard.advanced_viz_controls
+                    : 'popover'
+                }
+                onChange={(value) =>
+                  isControlsPlacement(value) && onChangeAdvancedVizControls(value)
+                }
+              />
+            </Stack>
+          </>
+        )}
         {onChangeBrandTheme && (
           <>
             <Divider />

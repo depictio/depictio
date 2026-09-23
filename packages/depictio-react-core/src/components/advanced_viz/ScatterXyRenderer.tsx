@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Group,
   NumberInput,
+  SegmentedControl,
   Select,
   Slider,
   Stack,
@@ -24,9 +25,11 @@ import {
   advancedVizSelectionFilter,
   extractScatterSelection,
   filtersExcludingOwn,
+  hasOwnSelection,
 } from '../../selection';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { looksContinuous } from './colourScales';
+import { densityHeatmap } from './densityBins';
 import {
   applyDataTheme,
   applyLayoutTheme,
@@ -35,12 +38,13 @@ import {
   plotlyThemeFragment,
 } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
+import { highlightPredicate, ReferenceHighlight, ReferenceLine } from './scatterReference';
+import { useGestureGuardedSelection, useSelectionRevision } from './selectionGesture';
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
 
 type LegendPos = 'right' | 'bottom' | 'none';
-type ReferenceLine = 'none' | 'diagonal' | 'horizontal' | 'vertical';
 
 /** Mirrors `ScatterXyConfig` in
  *  depictio/models/components/advanced_viz/configs.py. Every key read here has
@@ -67,6 +71,18 @@ interface ScatterXyConfig {
   legend_pos?: LegendPos;
   selection_enabled?: boolean;
   selection_column?: string | null;
+  density?: boolean;
+  density_threshold?: number;
+  density_bins?: number;
+  quadrants?: Quadrants | null;
+}
+
+/** `{x, y, labels?}`, validated on the model side; `labels` is ordered
+ *  top-left, top-right, bottom-left, bottom-right. */
+interface Quadrants {
+  x: number;
+  y: number;
+  labels?: string[] | null;
 }
 
 interface Props {
@@ -108,6 +124,13 @@ const PLOT_CONFIG_SELECT = {
 // fall back to the default there; this list is deliberately the verified subset.
 const COLOUR_SCALES = ['Viridis', 'Cividis', 'RdBu', 'Blackbody'] as const;
 
+// 0: the tile never leaves the point view on its own. An author who wants the
+// automatic switch names the row count (`density_threshold`).
+const DEFAULT_DENSITY_THRESHOLD = 0;
+const DEFAULT_DENSITY_BINS = 60;
+// Opacity kept by the points on the side of the guide not being looked at.
+const DIMMED_OPACITY = 0.2;
+
 const PALETTE = TAB10_PALETTE;
 
 const num = (v: unknown): number | null => {
@@ -133,6 +156,7 @@ const ScatterXyPlot = React.memo<{
     () => applyLayoutTheme(figure.layout as any, isDark, theme),
     [figure.layout, isDark, theme],
   );
+  const selection = useGestureGuardedSelection(onSelected);
   return (
     <Plot
       data={themedData as any}
@@ -140,7 +164,8 @@ const ScatterXyPlot = React.memo<{
       useResizeHandler
       style={PLOT_STYLE}
       config={plotConfig as any}
-      onSelected={onSelected}
+      onSelecting={selection.onSelecting}
+      onSelected={selection.onSelected}
       onClick={onClick}
       onDeselect={onDeselect}
     />
@@ -164,6 +189,9 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
   const config = (metadata.config || {}) as ScatterXyConfig;
   const isDark = colorScheme === 'dark';
   const themeColors = plotlyThemeColors(isDark, theme);
+  // Quadrant labels are furniture, so they sit a step back from the body text
+  // colour without dropping under the contrast the scheme's background gives.
+  const quadrantLabelColor = theme.colors.gray[isDark ? 6 : 7];
 
   // Tier-2 controls. Defaults agree with ScatterXyConfig's own, so an
   // unconfigured component and a configured one draw the same cloud.
@@ -185,11 +213,30 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
     'reference_line',
     'none',
   );
+  // The value a horizontal or vertical guide sits at. Persisted with the line
+  // itself: a guide the reader cannot place is a guide they cannot use.
+  const [refValue, setRefValue] = usePersistedVizControl<number | null>(
+    metadata,
+    'reference_value',
+    null,
+  );
+  // The side of the guide the reader is asked to look at; the other side is
+  // dimmed, as the Manhattan plot does around its score threshold.
+  const [refHighlight, setRefHighlight] = usePersistedVizControl<ReferenceHighlight>(
+    metadata,
+    'reference_highlight',
+    'none',
+  );
   const [legendPos, setLegendPos] = usePersistedVizControl<LegendPos>(
     metadata,
     'legend_pos',
     'right',
   );
+  const [density, setDensity] = usePersistedVizControl<boolean>(metadata, 'density', false);
+  // Past `density_threshold` rows a marker cloud is a solid blob, so the tile
+  // switches itself. That is a data-derived decision, not an authored one, so
+  // it stays out of the persisted config; a reader's own pick overrides both.
+  const [densityOverride, setDensityOverride] = useState<boolean | null>(null);
 
   // ---- Selection as a cross-filter ---------------------------------------
   // Resolved through selection.ts (named column, else the label column), so the
@@ -212,6 +259,9 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
   const filtersForFetch = useMemo(
     () => filtersExcludingOwn(filters, metadata.index, 'scatter_selection'),
     [filters, metadata.index],
+  );
+  const selectionRevision = useSelectionRevision(
+    hasOwnSelection(filters, metadata.index, 'scatter_selection'),
   );
 
   const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
@@ -298,6 +348,16 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
     [config.color_col, points],
   );
 
+  const densityThreshold = config.density_threshold ?? DEFAULT_DENSITY_THRESHOLD;
+  const densityBins = config.density_bins ?? DEFAULT_DENSITY_BINS;
+  const densityView =
+    densityOverride ??
+    (density || (densityThreshold > 0 && (points?.length ?? 0) > densityThreshold));
+  // A box select over a binned density catches no points, and every
+  // `Plotly.react` would then report an empty selection and clear whatever the
+  // reader had filtered on. Selection is a point-view capability.
+  const selectionActive = selectionEnabled && !densityView;
+
   const figure = useMemo(() => {
     if (!points) return null;
     if (points.length === 0) return null;
@@ -312,6 +372,13 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
     const sizeVals = points.map((p) => p.size).filter((s): s is number => s !== null && s > 0);
     const sizeMax = sizeVals.length ? Math.max(...sizeVals) : 0;
     const sizeref = sizeMax > 0 ? (2 * sizeMax) / (maxSize * maxSize) : undefined;
+
+    // Highlighting one side of the guide dims the other to a fifth of its
+    // opacity, per point, so colour-by and size stay readable through it.
+    const highlighted = densityView ? null : highlightPredicate(refLine, refValue, refHighlight);
+    const pointOpacity = (pts: typeof points): number | number[] =>
+      highlighted ? pts.map((p) => (highlighted(p) ? opacity : opacity * DIMMED_OPACITY)) : opacity;
+    const highlightedCount = highlighted ? points.filter(highlighted).length : null;
 
     const markerCommon = {
       opacity,
@@ -329,7 +396,33 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
 
     const data: Record<string, unknown>[] = [];
 
-    if (config.color_col && numericColour) {
+    if (densityView) {
+      // One counted cell per `density_bins` x `density_bins` grid square
+      // instead of one marker per row. The cells are counted here and handed
+      // to a `heatmap` with explicit edges: `histogram2d` binning on a log
+      // axis crashed the tab (see `densityHeatmap`).
+      const grid = densityHeatmap(
+        points.map((p) => p.x),
+        points.map((p) => p.y),
+        { logX, logY, bins: densityBins },
+      );
+      if (grid) {
+        data.push({
+          type: 'heatmap' as const,
+          x: grid.xEdges,
+          y: grid.yEdges,
+          z: grid.z,
+          colorscale: colourScale,
+          colorbar: { thickness: 10, len: 0.75, title: { text: 'count', side: 'right' } },
+          hovertemplate: `${xTitle}: %{x}<br>${yTitle}: %{y}<br>count: %{z}<extra></extra>`,
+          showlegend: false,
+          name: yTitle,
+        });
+      }
+    } else if (config.color_col && numericColour) {
+      // `customdata` is one array per point: slot 0 is the selection key.
+      // `extractScatterSelection` and `splitFigureByGroups` both index slot 0,
+      // and a bare string there reads as its first character.
       // One trace, colour as a continuous scale with a colorbar.
       data.push({
         type: 'scattergl' as const,
@@ -337,9 +430,10 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
         x: points.map((p) => p.x),
         y: points.map((p) => p.y),
         text: points.map((p) => p.label),
-        customdata: points.map((p) => p.key),
+        customdata: points.map((p) => [p.key]),
         marker: {
           ...markerCommon,
+          opacity: pointOpacity(points),
           size: sizeref !== undefined ? points.map((p) => p.size ?? 0) : markerSize,
           color: points.map((p) => num(p.colour) ?? 0),
           colorscale: colourScale,
@@ -370,9 +464,10 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
           x: group.map((p) => p.x),
           y: group.map((p) => p.y),
           text: group.map((p) => p.label),
-          customdata: group.map((p) => p.key),
+          customdata: group.map((p) => [p.key]),
           marker: {
             ...markerCommon,
+            opacity: pointOpacity(group),
             color: colourMap.get(name),
             size: sizeref !== undefined ? group.map((p) => p.size ?? 0) : markerSize,
           },
@@ -387,9 +482,10 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
         x: points.map((p) => p.x),
         y: points.map((p) => p.y),
         text: points.map((p) => p.label),
-        customdata: points.map((p) => p.key),
+        customdata: points.map((p) => [p.key]),
         marker: {
           ...markerCommon,
+          opacity: pointOpacity(points),
           color: palette[0],
           size: sizeref !== undefined ? points.map((p) => p.size ?? 0) : markerSize,
         },
@@ -398,21 +494,25 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
       });
     }
 
-    // Plotly places shapes and annotations on a log axis in log10 units, while
-    // trace data on that same axis is passed untransformed. A raw value here
-    // therefore lands at 10^value: the showcase diagonal ends at 45, which
-    // stretched both axes out to 10^45 and squeezed all 900 points into the
-    // bottom-left corner. Non-positive values have no place on a log axis, so
-    // they drop out rather than becoming -Infinity.
+    // Plotly 2 places annotations on a log axis in log10 units, while trace
+    // data on that same axis is passed untransformed. A raw value there lands
+    // at 10^value. Shapes are the exception: they take data units on every
+    // axis type (`shapes/helpers.js`, `rangeToShapePosition`), so a log10
+    // value handed to a shape is read as a raw one, and the diagonal once
+    // stretched the axes down to 10^-64. Non-positive values have no place on
+    // a log axis, so they drop out rather than becoming -Infinity.
     const axisCoord = (v: number, log: boolean): number | null =>
       !log ? v : v > 0 ? Math.log10(v) : null;
+    const shapeCoord = (v: number, log: boolean): number | null => (!log || v > 0 ? v : null);
 
     // Labels for the most notable points. Ranked by the size column when one is
     // bound, because that is what the reader is being asked to look at;
     // otherwise by distance from the y origin, which is the volcano convention.
+    // With a highlighted side, only that side is ranked, so the labels sit on
+    // the points that kept their colour.
     const annotations: Record<string, unknown>[] = [];
-    if (topN > 0 && config.label_col) {
-      const ranked = [...points].sort((a, b) =>
+    if (topN > 0 && config.label_col && !densityView) {
+      const ranked = (highlighted ? points.filter(highlighted) : [...points]).sort((a, b) =>
         sizeMax > 0 ? (b.size ?? 0) - (a.size ?? 0) : Math.abs(b.y) - Math.abs(a.y),
       );
       for (const p of ranked.slice(0, topN)) {
@@ -444,22 +544,60 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
         const hi = Math.max(...spanning.map((p) => Math.max(p.x, p.y)));
         shapes.push({
           type: 'line',
-          x0: axisCoord(lo, logX),
-          y0: axisCoord(lo, logY),
-          x1: axisCoord(hi, logX),
-          y1: axisCoord(hi, logY),
+          x0: shapeCoord(lo, logX),
+          y0: shapeCoord(lo, logY),
+          x1: shapeCoord(hi, logX),
+          y1: shapeCoord(hi, logY),
           line: guide,
         });
       }
-    } else if (refLine === 'horizontal' && config.reference_value !== null) {
-      const v = axisCoord(config.reference_value ?? 0, logY);
+    } else if (refLine === 'horizontal' && refValue != null) {
+      const v = shapeCoord(refValue, logY);
       if (v !== null) {
         shapes.push({ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: v, y1: v, line: guide });
       }
-    } else if (refLine === 'vertical' && config.reference_value !== null) {
-      const v = axisCoord(config.reference_value ?? 0, logX);
+    } else if (refLine === 'vertical' && refValue != null) {
+      const v = shapeCoord(refValue, logX);
       if (v !== null) {
         shapes.push({ type: 'line', yref: 'paper', y0: 0, y1: 1, x0: v, x1: v, line: guide });
+      }
+    }
+
+    // Quadrants: the two cuts that turn the plane into the four named regions
+    // a reader is actually looking for (MIMAG completeness vs contamination is
+    // the canonical case). Same muted guide style as the reference lines, and
+    // the labels sit in the corners of the plotting area rather than on the
+    // lines, so they never land on top of a point cluster.
+    const quadrants = config.quadrants ?? null;
+    if (quadrants) {
+      const qx = axisCoord(Number(quadrants.x), logX);
+      const qy = axisCoord(Number(quadrants.y), logY);
+      if (qx !== null && Number.isFinite(qx)) {
+        shapes.push({ type: 'line', yref: 'paper', y0: 0, y1: 1, x0: qx, x1: qx, line: guide });
+      }
+      if (qy !== null && Number.isFinite(qy)) {
+        shapes.push({ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: qy, y1: qy, line: guide });
+      }
+      const labels = Array.isArray(quadrants.labels) ? quadrants.labels : null;
+      if (labels) {
+        const corners = [
+          { x: 0.02, y: 0.98, xanchor: 'left', yanchor: 'top' },
+          { x: 0.98, y: 0.98, xanchor: 'right', yanchor: 'top' },
+          { x: 0.02, y: 0.02, xanchor: 'left', yanchor: 'bottom' },
+          { x: 0.98, y: 0.02, xanchor: 'right', yanchor: 'bottom' },
+        ];
+        corners.forEach((corner, i) => {
+          const text = labels[i];
+          if (!text) return;
+          annotations.push({
+            ...corner,
+            xref: 'paper',
+            yref: 'paper',
+            text,
+            showarrow: false,
+            font: { size: 10, color: quadrantLabelColor },
+          });
+        });
       }
     }
 
@@ -486,11 +624,14 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
           ? { orientation: 'h' as const, x: 0, y: -0.18, yanchor: 'top' as const }
           : { orientation: 'v' as const, x: 1.02, y: 1, font: { size: 10 } },
       hovermode: 'closest' as const,
-      dragmode: selectionEnabled ? ('select' as const) : ('zoom' as const),
+      dragmode: selectionActive ? ('select' as const) : ('zoom' as const),
+      // Selected points are keyed apart from the zoom: an outside clear
+      // (group saved, filter removed) undims the plot and keeps the view.
+      selectionrevision: `sel-${selectionRevision}`,
       autosize: true,
     };
 
-    return { data, layout };
+    return { data, layout, highlightedCount };
   }, [
     points,
     numericColour,
@@ -500,7 +641,8 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
     config.color_col,
     config.x_title,
     config.y_title,
-    config.reference_value,
+    refValue,
+    config.quadrants,
     logX,
     logY,
     opacity,
@@ -512,10 +654,15 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
     colourScale,
     refLine,
     legendPos,
-    selectionEnabled,
+    densityView,
+    densityBins,
+    selectionActive,
+    selectionRevision,
+    refHighlight,
     isDark,
     theme,
     palette,
+    quadrantLabelColor,
     themeColors.zeroLineColor,
   ]);
 
@@ -539,32 +686,52 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
   );
   const handleDeselect = useCallback(() => emitSelection([]), [emitSelection]);
 
+  const highlightedCount = figure?.highlightedCount ?? null;
   const counts = useMemo(
-    () => (points ? { points: points.length } : undefined),
-    [points],
+    () =>
+      points
+        ? {
+            points: points.length,
+            ...(highlightedCount != null ? { highlighted: highlightedCount } : {}),
+          }
+        : undefined,
+    [points, highlightedCount],
   );
 
-  const controls = (
-    <Stack gap="xs">
-      <Stack gap={4}>
-        <Text size="xs" fw={500}>
-          Axes
-        </Text>
-        <Switch
-          size="xs"
-          checked={logX}
-          onChange={(e) => setLogX(e.currentTarget.checked)}
-          label="Log x"
-        />
-        <Switch
-          size="xs"
-          checked={logY}
-          onChange={(e) => setLogY(e.currentTarget.checked)}
-          label="Log y"
-        />
-      </Stack>
+  // Encoding tier: what the cloud is (points or a density), how the axes are
+  // scaled and which reference it is read against. Sizes, opacity, labels and
+  // the legend are paint on the same cloud.
+  const primaryControls = (
+    <>
+      <SegmentedControl
+        size="xs"
+        w={150}
+        value={densityView ? 'density' : 'points'}
+        onChange={(v) => {
+          const next = v === 'density';
+          setDensityOverride(next);
+          setDensity(next);
+        }}
+        data={[
+          { value: 'points', label: 'Points' },
+          { value: 'density', label: 'Density' },
+        ]}
+      />
+      <Switch
+        size="xs"
+        checked={logX}
+        onChange={(e) => setLogX(e.currentTarget.checked)}
+        label="Log x"
+      />
+      <Switch
+        size="xs"
+        checked={logY}
+        onChange={(e) => setLogY(e.currentTarget.checked)}
+        label="Log y"
+      />
       <Select
         size="xs"
+        w={190}
         label="Reference line"
         value={refLine}
         onChange={(v) => setRefLine((v as ReferenceLine) || 'none')}
@@ -577,12 +744,47 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
         allowDeselect={false}
         comboboxProps={{ withinPortal: true }}
       />
+      {refLine === 'horizontal' || refLine === 'vertical' ? (
+        <NumberInput
+          size="xs"
+          w={130}
+          label="Reference value"
+          placeholder={refLine === 'horizontal' ? 'y =' : 'x ='}
+          value={refValue ?? ''}
+          onChange={(v) => setRefValue(v === '' || v === null ? null : Number(v))}
+          decimalScale={6}
+        />
+      ) : null}
+      {refLine !== 'none' && !densityView ? (
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            Highlight
+          </Text>
+          <SegmentedControl
+            size="xs"
+            w={190}
+            value={refHighlight}
+            onChange={(v) => setRefHighlight(v as ReferenceHighlight)}
+            data={[
+              { value: 'above', label: 'Above' },
+              { value: 'below', label: 'Below' },
+              { value: 'none', label: 'Both' },
+            ]}
+          />
+        </Stack>
+      ) : null}
+    </>
+  );
+
+  const controls = (
+    <Stack gap="xs">
       {config.size_col ? (
         <Group gap="xs" grow>
           <NumberInput
             size="xs"
             label="Min size"
             value={minSize}
+            disabled={densityView}
             onChange={(v) => setMinSize(Math.max(1, Number(v) || 4))}
             min={1}
             max={40}
@@ -591,6 +793,7 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
             size="xs"
             label="Max size"
             value={maxSize}
+            disabled={densityView}
             onChange={(v) => setMaxSize(Math.max(2, Number(v) || 22))}
             min={2}
             max={80}
@@ -601,6 +804,7 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
           size="xs"
           label="Marker size"
           value={markerSize}
+          disabled={densityView}
           onChange={(v) => setMarkerSize(Math.max(1, Number(v) || 7))}
           min={1}
           max={40}
@@ -620,7 +824,7 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
           label={(v) => v.toFixed(2)}
         />
       </Stack>
-      {config.color_col && numericColour ? (
+      {(config.color_col && numericColour) || densityView ? (
         <Select
           size="xs"
           label="Colourscale"
@@ -639,6 +843,7 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
             config.size_col ? 'Largest by the size column' : 'Furthest from zero on y'
           }
           value={topN}
+          disabled={densityView}
           onChange={(v) => setTopN(Math.max(0, Number(v) || 0))}
           min={0}
           max={50}
@@ -651,6 +856,7 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
         <Switch
           size="xs"
           checked={outline}
+          disabled={densityView}
           onChange={(e) => setOutline(e.currentTarget.checked)}
           label="Marker outline"
         />
@@ -700,6 +906,7 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
       title={metadata.title || 'Scatter'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
       counts={counts}
+      primaryControls={primaryControls}
       controls={controls}
       loading={loading}
       error={error}
@@ -712,10 +919,10 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
           figure={groupedFigure}
           isDark={isDark}
           theme={theme}
-          plotConfig={selectionEnabled ? PLOT_CONFIG_SELECT : PLOT_CONFIG_PLAIN}
-          onSelected={selectionEnabled ? handleSelected : undefined}
-          onClick={selectionEnabled ? handleClick : undefined}
-          onDeselect={selectionEnabled ? handleDeselect : undefined}
+          plotConfig={selectionActive ? PLOT_CONFIG_SELECT : PLOT_CONFIG_PLAIN}
+          onSelected={selectionActive ? handleSelected : undefined}
+          onClick={selectionActive ? handleClick : undefined}
+          onDeselect={selectionActive ? handleDeselect : undefined}
         />
       ) : null}
     </AdvancedVizFrame>

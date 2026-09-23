@@ -126,18 +126,24 @@ def _find_link_for_resolution(
 
     Returns:
         DCLink if found and enabled, None otherwise
+
+    A ``region`` link never matches unless asked for by name: it renames a
+    genomic region onto the target's coordinate columns
+    (``filter_links.region_link_filters``) and cannot resolve values, so
+    returning it here for a value lookup would end in a 500 from the resolver
+    registry. A project may declare a direct link and a region link on the
+    same pair of collections (sarek: ``stage`` and the locus region between
+    ``mosdepth_windows`` and ``mosdepth_targets``); the direct one answers.
     """
     links = project.get("links", [])
     for link_data in links:
+        link_resolver = (link_data.get("link_config") or {}).get("resolver", "direct")
         # Compare as strings — MongoDB stores ObjectId but API receives strings
         if (
             str(link_data.get("source_dc_id")) == source_dc_id
             and str(link_data.get("target_dc_id")) == target_dc_id
             and link_data.get("enabled", True)
-            and (
-                resolver is None
-                or (link_data.get("link_config") or {}).get("resolver", "direct") == resolver
-            )
+            and (link_resolver == resolver if resolver is not None else link_resolver != "region")
         ):
             return DCLink(**link_data)
     return None
@@ -148,8 +154,15 @@ async def _translate_filter_values(
     filter_column: str,
     filter_values: list[Any],
     link_column: str,
+    range_filter: bool = False,
 ) -> list[Any]:
     """Translate filter values from one column to another via source DC query.
+
+    ``range_filter`` reads a two-element ``filter_values`` as an inclusive
+    ``[low, high]`` span on ``filter_column`` (a RangeSlider), whatever the
+    column's dtype. Without it a position range ``[26000000, 26300000]`` was
+    an ``is_in`` on two coordinates, matched nothing, and emptied every linked
+    tile (atacseq AT-D26, 2026-09-23).
 
     When filtering by column A but the link is defined on column B, this function
     queries the source DC to translate values from column A to column B.
@@ -222,13 +235,14 @@ async def _translate_filter_values(
 
         # Filter and extract link column values
         # Check if this is a DateRangePicker filter (2-element list + date/datetime column)
-        is_date_range = (
-            isinstance(filter_values, list)
-            and len(filter_values) == 2
-            and schema[filter_column] in [pl.Date, pl.Datetime]
-        )
+        is_pair = isinstance(filter_values, list) and len(filter_values) == 2
+        is_date_range = is_pair and schema[filter_column] in [pl.Date, pl.Datetime]
 
-        if is_date_range:
+        if range_filter and is_pair and not is_date_range:
+            low, high = filter_values
+            logger.info(f"Range filter on column '{filter_column}': [{low}, {high}]")
+            predicate = (pl.col(filter_column) >= low) & (pl.col(filter_column) <= high)
+        elif is_date_range:
             # DateRangePicker: Use date range filtering
             logger.info(
                 f"Detected DateRangePicker filter for column '{filter_column}' "
@@ -678,12 +692,13 @@ async def _resolve_link_reverse(
 
     join_column = link.link_config.target_field or link.source_column
     values_to_resolve = request.filter_values
-    if request.source_column != join_column:
+    if request.source_column != join_column or request.range_filter:
         values_to_resolve = await _translate_filter_values(
             source_dc_id=request.source_dc_id,
             filter_column=request.source_column,
             filter_values=request.filter_values,
             link_column=join_column,
+            range_filter=request.range_filter,
         )
 
     resolved_values, unmapped_values = get_resolver(link.link_config.resolver).resolve(
@@ -762,12 +777,14 @@ async def resolve_link(
         f"-> {request.target_dc_id} ({link.target_type})"
     )
 
-    # Translate filter values if filtering by different column than link column
+    # Translate filter values if filtering by different column than link column,
+    # or when the values are a range: a range on the join column itself still
+    # has to become the join values it spans.
     values_to_resolve = request.filter_values
-    if request.source_column != link.source_column:
+    if request.source_column != link.source_column or request.range_filter:
         logger.info(
-            f"Filter column '{request.source_column}' differs from link column '{link.source_column}'. "
-            f"Translating filter values via source DC query."
+            f"Filter column '{request.source_column}' differs from link column '{link.source_column}' "
+            f"or is a range. Translating filter values via source DC query."
         )
         # Query source DC to translate filter values to link column values
         translated_values = await _translate_filter_values(
@@ -775,6 +792,7 @@ async def resolve_link(
             filter_column=request.source_column,
             filter_values=request.filter_values,
             link_column=link.source_column,
+            range_filter=request.range_filter,
         )
         logger.info(
             f"Translated {len(request.filter_values)} {request.source_column} values "
