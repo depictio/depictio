@@ -94,3 +94,38 @@ export function selectorFor(
   if (!value) return null;
   return options.find((o) => o.value === value)?.selector ?? null;
 }
+
+/**
+ * The option a configured default names, or null. A default is a plain name
+ * (the YAML author does not know the `saved:` / `col:` prefixes): a saved
+ * selection group of that name wins over a label value of the same spelling,
+ * because a group the reader saved is the more deliberate choice.
+ */
+export function resolveGroupDefault(
+  options: GroupCompareOption[],
+  name: string | null | undefined,
+): string | null {
+  if (!name) return null;
+  for (const source of [SAVED_GROUP_SOURCE, LABEL_VALUE_SOURCE] as const) {
+    const hit = options.find((o) => o.source === source && o.label === name);
+    if (hit) return hit.value;
+  }
+  return null;
+}
+
+/**
+ * The pair to open on when the config names one (`default_group_a`,
+ * `default_group_b`), else the automatic pair. Both defaults must resolve to
+ * two different options; a half-resolved pair falls back as a whole, so the
+ * opening comparison is never one configured arm against an arbitrary one.
+ */
+export function configuredGroupPair(
+  options: GroupCompareOption[],
+  defaultA: string | null | undefined,
+  defaultB: string | null | undefined,
+): [string | null, string | null] {
+  const a = resolveGroupDefault(options, defaultA);
+  const b = resolveGroupDefault(options, defaultB);
+  if (a && b && a !== b) return [a, b];
+  return defaultGroupPair(options);
+}

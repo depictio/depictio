@@ -548,12 +548,15 @@ const GseaRunningScoreRenderer: React.FC<Props> = ({ metadata, filters, refreshT
     return { 'gene sets': shown.length, ranks };
   }, [allSeries.length, shown]);
 
-  const controls = (
-    <Stack gap="xs">
+  // Encoding tier: which gene sets are walked and whether they share an axis.
+  // The leading-edge shading, the hit rug and the metric panel annotate those
+  // same curves.
+  const primaryControls = (
+    <>
       <NumberInput
         size="xs"
+        w={130}
         label="Top-N gene sets"
-        description="Ranked by the size of their peak running score"
         value={topNSets}
         onChange={(v) => setTopNSets(Math.max(1, Math.min(20, Number(v) || 5)))}
         min={1}
@@ -561,8 +564,8 @@ const GseaRunningScoreRenderer: React.FC<Props> = ({ metadata, filters, refreshT
       />
       <Select
         size="xs"
+        w={170}
         label="Layout"
-        description="One panel per set, or every curve on one axis"
         value={layoutMode}
         onChange={(v) => v && setLayoutMode(v as LayoutMode)}
         data={[
@@ -571,10 +574,12 @@ const GseaRunningScoreRenderer: React.FC<Props> = ({ metadata, filters, refreshT
         ]}
         allowDeselect={false}
       />
+    </>
+  );
+
+  const controls = (
+    <Stack gap="xs">
       <Stack gap={4}>
-        <Text size="xs" fw={500}>
-          Panels
-        </Text>
         <Switch
           size="xs"
           checked={showLeadingEdge}
@@ -608,6 +613,7 @@ const GseaRunningScoreRenderer: React.FC<Props> = ({ metadata, filters, refreshT
       title={metadata.title || 'GSEA running enrichment score'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
       counts={counts}
+      primaryControls={primaryControls}
       controls={controls}
       loading={loading}
       error={error}

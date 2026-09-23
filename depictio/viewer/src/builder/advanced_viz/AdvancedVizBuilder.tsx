@@ -628,17 +628,25 @@ const AdvancedVizBuilder: React.FC = () => {
   // scores arrive (no DC bound / still loading) we show one flat list.
   type RankedKind = { k: AdvancedVizKindDescriptor; suggestion?: VizKindSuggestion };
   const { recommendedKinds, otherKinds } = useMemo(() => {
-    const decorated: RankedKind[] = matchedKinds.map((k) => ({
-      k,
-      suggestion: scoreMap.get(k.viz_kind),
-    }));
+    // A legacy kind (`ma`, `qq`, `enrichment`, `roc_pr_curve`) is rewritten into
+    // a view of the kind that survived it the moment it is saved, so offering it
+    // here would let someone pick a name that no longer exists. It stays in
+    // `kinds` rather than being dropped at the fetch, because a component that
+    // already carries one still needs its descriptor for the binding panel, and
+    // it stays in the picker while it is the SELECTED kind for the same reason.
+    const decorated: RankedKind[] = matchedKinds
+      .filter((k) => !k.legacy || k.viz_kind === selectedKind)
+      .map((k) => ({
+        k,
+        suggestion: scoreMap.get(k.viz_kind),
+      }));
     const scoreOf = (d: RankedKind) => d.suggestion?.score ?? -1;
     decorated.sort((a, b) => scoreOf(b) - scoreOf(a) || a.k.label.localeCompare(b.k.label));
     if (suggestions == null) return { recommendedKinds: [], otherKinds: decorated };
     const rec = decorated.filter((d) => (d.suggestion?.score ?? 0) >= RECOMMENDED_SCORE);
     const rest = decorated.filter((d) => (d.suggestion?.score ?? 0) < RECOMMENDED_SCORE);
     return { recommendedKinds: rec, otherKinds: rest };
-  }, [matchedKinds, scoreMap, suggestions]);
+  }, [matchedKinds, scoreMap, suggestions, selectedKind]);
 
   // Every required role already has a column — which is the state a component
   // arrives in when it came from the catalog, and the state a manual build ends

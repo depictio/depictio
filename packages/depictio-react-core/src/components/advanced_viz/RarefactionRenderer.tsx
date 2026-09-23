@@ -500,38 +500,41 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, 
   // Whether any curve matched, for the dispatch's "not grouped" badge.
   useReportGroupColouring(groupRender, figure, groupedFigure);
 
-  const controls = (
-    <Stack gap="xs">
+  // Encoding tier: what the curves are coloured by and how many samples are
+  // drawn. The error bars are an annotation on the same curves.
+  const primaryControls = (
+    <>
       {groupOptions.length > 0 ? (
         <Select
           size="xs"
+          w={180}
           label="Group by"
           value={groupBy}
           onChange={setGroupBy}
           data={groupOptions}
           clearable
-          description="Colour curves by any categorical column the run carries"
         />
       ) : null}
       <NumberInput
         size="xs"
+        w={130}
         label="Top-N samples"
         value={topN}
         onChange={(v) => setTopN(Math.max(1, Number(v) || 60))}
         min={1}
         max={200}
       />
-      <Stack gap={4}>
-        <Text size="xs" fw={500}>
-          Error
-        </Text>
-        <Switch
-          size="xs"
-          checked={showCI}
-          onChange={(e) => setShowCI(e.currentTarget.checked)}
-          label="Error bars (±SE)"
-        />
-      </Stack>
+    </>
+  );
+
+  const controls = (
+    <Stack gap="xs">
+      <Switch
+        size="xs"
+        checked={showCI}
+        onChange={(e) => setShowCI(e.currentTarget.checked)}
+        label="Error bars (±SE)"
+      />
     </Stack>
   );
 
@@ -540,6 +543,7 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, 
       estimated={estimated}
       title={metadata.title || 'Rarefaction curves'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
+      primaryControls={primaryControls}
       controls={controls}
       loading={loading}
       error={error}

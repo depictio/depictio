@@ -30,6 +30,15 @@ import { usePersistedVizControl } from './usePersistedVizControl';
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
+import { demandForItems } from './contentDemand';
+
+/** Room one gene's subplot needs: the stems have to stand clear of the domain
+ *  track under them, and a squashed lane turns the stem heights (the effect
+ *  channel) into noise. */
+const GENE_TRACK_PX = 150;
+/** The shared position axis and its title below the last track, plus the top
+ *  margin. */
+const LOLLIPOP_CHROME_PX = 70;
 
 interface LollipopConfig {
   feature_id_col: string;
@@ -371,6 +380,8 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gro
 
     const { textColor } = plotlyThemeColors(isDark, theme);
     return {
+      // Subplot lanes on screen, one per gene. Feeds the content demand.
+      genesDrawn: genesToShow.length,
       data,
       layout: {
         ...plotlyThemeFragment(isDark, theme),
@@ -413,12 +424,15 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gro
     topNLabels,
   ]);
 
-  const controls = useMemo(
+  // Encoding tier: which gene is on screen and how the genes are ordered. The
+  // rest is marker paint.
+  const primaryControls = useMemo(
     () => (
-      <Stack gap="xs">
+      <>
         {useSinglePicker ? (
           <Select
             size="xs"
+            w={170}
             label="Gene"
             value={selectedGene}
             onChange={setSelectedGene}
@@ -428,6 +442,7 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gro
         ) : null}
         <Select
           size="xs"
+          w={160}
           label="Sort genes"
           value={geneSort}
           onChange={(v) => v && setGeneSort(v as GeneSort)}
@@ -438,6 +453,14 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gro
           ]}
           allowDeselect={false}
         />
+      </>
+    ),
+    [useSinglePicker, selectedGene, genesInData, geneSort],
+  );
+
+  const controls = useMemo(
+    () => (
+      <Stack gap="xs">
         <Group gap="xs" grow>
           <NumberInput
             size="xs"
@@ -517,10 +540,7 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gro
       </Stack>
     ),
     [
-      useSinglePicker,
-      selectedGene,
-      genesInData,
-      geneSort,
+      brandPalette,
       pointSize,
       stemWidth,
       palette,
@@ -551,11 +571,21 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gro
   // Whether any point matched, for the dispatch's "not grouped" badge.
   useReportGroupColouring(groupRender, figure, groupedFigure);
 
+  // One stacked subplot per gene on screen. The single-gene picker mode draws
+  // one lane whatever the collection holds, which the count already says.
+  const genesDrawn = figure?.genesDrawn ?? 0;
+  const contentDemand = useMemo(
+    () => demandForItems(genesDrawn, GENE_TRACK_PX, LOLLIPOP_CHROME_PX),
+    [genesDrawn],
+  );
+
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Lollipop plot'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
+      primaryControls={primaryControls}
       controls={controls}
+      contentDemand={contentDemand}
       loading={loading}
       error={error}
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}

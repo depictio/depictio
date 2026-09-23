@@ -1,12 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Badge,
+  Box,
+  Group,
   MultiSelect,
   SegmentedControl,
   Select,
   Stack,
   Switch,
   Text,
+  Tooltip,
   useMantineColorScheme,
   useMantineTheme,
 } from '@mantine/core';
@@ -25,7 +28,10 @@ import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
 import { GenomeAnnotation, resolveAnnotation } from './genome_annotations';
+import { regionXRange, useFollowedRegion } from './genomicAxis';
 import { usePersistedVizControl, useVizConfigWriter } from './usePersistedVizControl';
+import GenomeViewRenderer from './GenomeViewRenderer';
+import type { GenomeViewConfig } from './genomespy/genomeSpySpec';
 
 interface CoverageTrackConfig {
   chromosome_col: string;
@@ -54,12 +60,27 @@ interface CoverageTrackConfig {
    *  Optional, false keeps today's rendering. The user's own Segmented
    *  Control pick (`view_mode`, persisted separately) still wins once made. */
   facet_by_sample?: boolean;
+  /** Which rendering of the same rows the tile shows. `track` is the smoothed
+   *  Plotly line this file has always drawn; `locus` hands the rows to the
+   *  GenomeSpy track the `genome_view` kind renders. */
+  view?: CoverageView;
+  /** Views offered in the tile's switch; null offers every view the bindings
+   *  and the browser allow. */
+  views?: CoverageView[] | null;
+  /** Locus view only: bundled gene lane drawn under the track. */
+  locus_annotation?: 'none' | 'hg38' | 'mm10';
+  /** Locus view only: assembly whose contig lengths lay out the genome axis.
+   *  Null derives the axis from the rows themselves. */
+  locus_assembly?: string | null;
 }
 
 interface Props {
   metadata: StoredMetadata & { viz_kind?: string; config?: CoverageTrackConfig };
   filters: InteractiveFilter[];
   refreshTick?: number;
+  /** Absent on read-only hosts. Only the locus view uses it, for the region
+   *  brush GenomeSpy publishes; the Plotly track emits no filters. */
+  onFilterChange?: (filter: InteractiveFilter) => void;
   /** Dashboard-wide analysis grouping, applied to the finished figure. */
   groupRender?: GroupRenderState;
 }
@@ -85,16 +106,67 @@ const AGGREGATE_DEFAULT_THRESHOLD = 10;
 
 type ViewMode = 'aggregate' | 'facet' | 'overlay';
 
+/** The two renderings of one coverage binding. `track` is this file's own
+ *  smoothed Plotly line; `locus` is the GenomeSpy track `genome_view` draws,
+ *  mounted here so a template that wanted both no longer needs two tiles over
+ *  the same collection. */
+const ALL_VIEWS = ['track', 'locus'] as const;
+type CoverageView = (typeof ALL_VIEWS)[number];
+
+/**
+ * Whether the locus view is worth offering in this browser at all.
+ *
+ * GenomeSpy draws through a canvas, preferring WebGL and falling back to the
+ * 2D context when no GL slot is free (see `webglBudget.ts`). Where neither
+ * context can be created the track would mount and paint nothing, which is a
+ * worse answer than not offering the view, so the switch hides it. Probed once
+ * per page: the answer cannot change under us, and creating throwaway contexts
+ * per tile would itself eat the GL budget.
+ */
+let canvasProbe: boolean | null = null;
+function locusViewSupported(): boolean {
+  if (canvasProbe !== null) return canvasProbe;
+  if (typeof document === 'undefined') return false;
+  try {
+    const canvas = document.createElement('canvas');
+    canvasProbe = Boolean(
+      canvas.getContext('webgl2') || canvas.getContext('webgl') || canvas.getContext('2d'),
+    );
+  } catch {
+    canvasProbe = false;
+  }
+  return canvasProbe;
+}
+
 const CoverageTrackRenderer: React.FC<Props> = ({
   metadata,
   filters,
   refreshTick,
+  onFilterChange,
   groupRender,
 }) => {
   const config = (metadata.config || {}) as CoverageTrackConfig;
   const theme = useMantineTheme();
   const { colorScheme } = useMantineColorScheme();
   const isDark = colorScheme === 'dark';
+
+  // Which rendering of the binding the tile shows. The two views fetch through
+  // different code paths, this file's Celery coverage job, GenomeSpy's own row
+  // load, which is why the "one fetch per tile" rule still holds: each view
+  // owns exactly one fetch, only the visible view fetches at all, and switching
+  // view is a deliberate click rather than something a re-render can trigger.
+  const [view, setView] = usePersistedVizControl<CoverageView>(metadata, 'view', 'track');
+  const offeredViews = useMemo<CoverageView[]>(() => {
+    const allowed = config.views ?? [...ALL_VIEWS];
+    return ALL_VIEWS.filter(
+      (v) => allowed.includes(v) && (v !== 'locus' || locusViewSupported()),
+    );
+  }, [config.views]);
+  // A persisted view the bindings or the browser no longer offer falls back to
+  // the first offered one here, rather than being corrected through the setter:
+  // an author's pick is not overwritten just because one reader lacks a canvas.
+  const activeView: CoverageView =
+    offeredViews.includes(view) ? view : (offeredViews[0] ?? 'track');
 
   const [yScale, setYScale] = usePersistedVizControl<'linear' | 'log'>(
     metadata,
@@ -135,6 +207,25 @@ const CoverageTrackRenderer: React.FC<Props> = ({
   );
   const [selectedSamples, setSelectedSamples] = useState<string[]>(config.samples_filter ?? []);
 
+  // ---- Following a region someone else brushed ----------------------------
+  // A `genome_selection` filter naming *this* collection's chromosome and
+  // position columns (a genome_view brush above, a chromosome select in the
+  // left panel, or a chrom/pos pair rewritten onto this DC by a `region` link)
+  // already narrows the rows the server returns, because the payload below
+  // forwards the dashboard filters untouched. What the tile adds here is the
+  // other half: it moves its own chromosome control onto the brushed contig
+  // and clamps the x axis to the window, so the track reads as the same locus
+  // as the track above it rather than as the whole contig.
+  const followedRegion = useFollowedRegion(metadata, config, filters);
+  useEffect(() => {
+    if (!followedRegion) return;
+    setSelectedChromosomes((current) =>
+      current.length === 1 && current[0] === followedRegion.chrom
+        ? current
+        : [followedRegion.chrom],
+    );
+  }, [followedRegion]);
+
   const [data, setData] = useState<CoverageTrackResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -142,6 +233,14 @@ const CoverageTrackRenderer: React.FC<Props> = ({
   const [computeMs, setComputeMs] = useState<number | null>(null);
 
   useEffect(() => {
+    // The locus view reads its rows through GenomeSpy's own loader, so queuing
+    // the coverage aggregation job here would burn a worker on a figure nobody
+    // is looking at.
+    if (activeView === 'locus') {
+      setLoading(false);
+      setComputeStatus(null);
+      return;
+    }
     if (!metadata.wf_id || !metadata.dc_id) {
       setError('Coverage track: missing data binding');
       setLoading(false);
@@ -220,6 +319,7 @@ const CoverageTrackRenderer: React.FC<Props> = ({
       if (pollTimer) clearTimeout(pollTimer);
     };
   }, [
+    activeView,
     metadata.wf_id,
     metadata.dc_id,
     JSON.stringify(filters),
@@ -275,6 +375,18 @@ const CoverageTrackRenderer: React.FC<Props> = ({
     const target = selectedChromosomes[0] || chroms[0];
     return resolveAnnotation(config.annotation_id ?? null, target);
   }, [data, selectedChromosomes, config.annotation_id]);
+
+  /** The followed region as an x-axis window, once the rows on screen are
+   *  actually the ones that region names. A region on a contig this tile does
+   *  not hold would clamp the axis onto an empty span. */
+  const regionRange = useMemo<[number, number] | null>(() => {
+    if (!followedRegion) return null;
+    const shown = selectedChromosomes.length
+      ? selectedChromosomes
+      : (data?.summary.chromosomes ?? []);
+    if (shown.length && !shown.includes(followedRegion.chrom)) return null;
+    return regionXRange(followedRegion);
+  }, [followedRegion, selectedChromosomes, data]);
 
   /** Aggregate the long-format rows by position across samples. For each unique
    *  position we compute min/q1/median/q3/max so the renderer can draw a Tukey-
@@ -488,6 +600,11 @@ const CoverageTrackRenderer: React.FC<Props> = ({
             ...shared,
             type: 'bar',
             marker: { color: markerColor ?? traceColor },
+            // `text` is for the hover only. Left to its default `auto`, Plotly
+            // lays an SVG label on every bar, which on a whole-genome fetch
+            // (150k rects before the region lands) held the main thread for
+            // minutes: 68.8 s against 1.1 s for 153,891 bars, measured.
+            textposition: 'none',
           });
         } else {
           traces.push({
@@ -581,6 +698,8 @@ const CoverageTrackRenderer: React.FC<Props> = ({
       position: 0,
       automargin: true,
       ...(annotation ? { range: [0, annotation.length] } : {}),
+      // A followed region is narrower than the contig and wins over it.
+      ...(regionRange ? { range: regionRange } : {}),
     };
 
     const shapes: Record<string, unknown>[] = [];
@@ -677,6 +796,7 @@ const CoverageTrackRenderer: React.FC<Props> = ({
     showIndividuals,
     annotation,
     aggregate,
+    regionRange,
   ]);
 
   // Recolour by the dashboard's analysis groups. Slot 0 of `customdata` is the
@@ -714,55 +834,14 @@ const CoverageTrackRenderer: React.FC<Props> = ({
   const controls = useMemo(
     () => (
       <Stack gap="xs">
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            View
-          </Text>
-          <SegmentedControl
-          size="xs"
-          fullWidth
-          value={viewMode ?? 'overlay'}
-          onChange={(v) => {
-            setViewMode(v as ViewMode);
-            writeConfig({ view_mode: v });
-          }}
-          data={[
-            { value: 'aggregate', label: 'Aggregate' },
-            { value: 'facet', label: 'Per-sample' },
-            { value: 'overlay', label: 'Overlay' },
-          ]}
-        />
-        </Stack>
         {viewMode === 'facet' &&
         data &&
         data.summary.samples.length > MAX_FACETED_SAMPLES_AUTO ? (
           <Text size="xs" c="dimmed">
-            {data.summary.samples.length} samples stacked — Aggregate is usually
+            {data.summary.samples.length} samples stacked. Aggregate is usually
             more legible past ~{MAX_FACETED_SAMPLES_AUTO}.
           </Text>
         ) : null}
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Y-axis scale
-          </Text>
-          <SegmentedControl
-          size="xs"
-          fullWidth
-          value={yScale}
-          onChange={(v) => setYScale(v as 'linear' | 'log')}
-          data={[
-            { value: 'linear', label: 'Linear' },
-            { value: 'log', label: 'Log' },
-          ]}
-        />
-        </Stack>
-        <Select
-          size="xs"
-          label="Smoothing"
-          value={String(smoothingWindow)}
-          onChange={(v) => setSmoothingWindow(Number(v ?? '0'))}
-          data={SMOOTHING_CHOICES}
-        />
         {viewMode !== 'aggregate' ? (
           <Select
             size="xs"
@@ -819,27 +898,6 @@ const CoverageTrackRenderer: React.FC<Props> = ({
           label={annotation ? `Gene strip (${annotation.displayName})` : 'Gene strip (no map)'}
         />
         </Stack>
-        <MultiSelect
-          size="xs"
-          label="Chromosomes"
-          value={selectedChromosomes}
-          onChange={setSelectedChromosomes}
-          data={(data?.summary.chromosomes ?? []).map((c) => ({ value: c, label: c }))}
-          placeholder={data ? 'All chromosomes' : 'Loading…'}
-          searchable
-          clearable
-        />
-        <MultiSelect
-          size="xs"
-          label="Samples"
-          value={selectedSamples}
-          onChange={setSelectedSamples}
-          data={(data?.summary.samples ?? []).map((s) => ({ value: s, label: s }))}
-          placeholder={data ? 'All samples' : 'Loading…'}
-          searchable
-          clearable
-          disabled={!config.sample_col}
-        />
         {computeStatus ? (
           <Badge size="sm" color="grape" variant="light" radius="sm" fullWidth>
             {computeStatus}
@@ -853,24 +911,19 @@ const CoverageTrackRenderer: React.FC<Props> = ({
         ) : null}
         {viewMode === 'aggregate' && data && data.summary.samples.length > AGGREGATE_DEFAULT_THRESHOLD ? (
           <Text size="xs" c="dimmed">
-            Showing cohort median + IQR ribbon — switch to Per-sample to drill in.
+            Showing cohort median + IQR ribbon. Switch to Per-sample to drill in.
           </Text>
         ) : null}
       </Stack>
     ),
     [
       viewMode,
-      yScale,
-      smoothingWindow,
       colorBy,
       mark,
       showAnnotationStrip,
       showIndividuals,
       annotation,
-      selectedChromosomes,
-      selectedSamples,
       config.category_col,
-      config.sample_col,
       data,
       computeStatus,
       computeMs,
@@ -884,10 +937,181 @@ const CoverageTrackRenderer: React.FC<Props> = ({
       .filter((c): c is string => Boolean(c));
   }, [data]);
 
+  /** The view switch itself. Drawn in the frame's header rather than inside the
+   *  Settings popover: it picks which plot the tile is, not how that plot looks,
+   *  and the locus view has no popover of this file's to live in. */
+  const viewControl = useMemo(
+    () =>
+      offeredViews.length > 1 ? (
+        <SegmentedControl
+          size="xs"
+          value={activeView}
+          onChange={(v) => setView(v as CoverageView)}
+          data={[
+            { value: 'track', label: 'Track' },
+            { value: 'locus', label: 'Locus' },
+          ].filter((o) => offeredViews.includes(o.value as CoverageView))}
+        />
+      ) : null,
+    [offeredViews, activeView, setView],
+  );
+
+  // Encoding tier: which view, how samples are laid out, the y scale and
+  // smoothing, and which chromosomes and samples are drawn. Drawn as chips in
+  // the header, so every control carries a fixed width and no description.
+  const primaryControls = useMemo(
+    () => (
+      <>
+        {viewControl}
+        <SegmentedControl
+          size="xs"
+          value={viewMode ?? 'overlay'}
+          onChange={(v) => {
+            setViewMode(v as ViewMode);
+            writeConfig({ view_mode: v });
+          }}
+          data={[
+            { value: 'aggregate', label: 'Aggregate' },
+            { value: 'facet', label: 'Per-sample' },
+            { value: 'overlay', label: 'Overlay' },
+          ]}
+        />
+        <SegmentedControl
+          size="xs"
+          value={yScale}
+          onChange={(v) => setYScale(v as 'linear' | 'log')}
+          data={[
+            { value: 'linear', label: 'Linear' },
+            { value: 'log', label: 'Log' },
+          ]}
+        />
+        <Select
+          size="xs"
+          w={160}
+          label="Smoothing"
+          value={String(smoothingWindow)}
+          onChange={(v) => setSmoothingWindow(Number(v ?? '0'))}
+          data={SMOOTHING_CHOICES}
+        />
+        <Tooltip
+          label={
+            followedRegion
+              ? `Following the dashboard region ${followedRegion.chrom}${
+                  regionRange
+                    ? `:${Math.round(regionRange[0])}-${Math.round(regionRange[1])}`
+                    : ''
+                }`
+              : ''
+          }
+          disabled={!followedRegion}
+        >
+          <MultiSelect
+            size="xs"
+            w={200}
+            label="Chromosomes"
+            value={selectedChromosomes}
+            onChange={setSelectedChromosomes}
+            data={(data?.summary.chromosomes ?? []).map((c) => ({ value: String(c), label: String(c) }))}
+            placeholder={data ? 'All chromosomes' : 'Loading…'}
+            searchable
+            clearable
+          />
+        </Tooltip>
+        <MultiSelect
+          size="xs"
+          w={200}
+          label="Samples"
+          value={selectedSamples}
+          onChange={setSelectedSamples}
+          // A numeric sample column (hic binds `window` and `resolution`) arrives as
+          // numbers; Mantine's search lowercases the value, so coerce here.
+          data={(data?.summary.samples ?? []).map((s) => ({ value: String(s), label: String(s) }))}
+          placeholder={data ? 'All samples' : 'Loading…'}
+          searchable
+          clearable
+          disabled={!config.sample_col}
+        />
+      </>
+    ),
+    [
+      viewControl,
+      viewMode,
+      writeConfig,
+      yScale,
+      smoothingWindow,
+      followedRegion,
+      regionRange,
+      selectedChromosomes,
+      selectedSamples,
+      data,
+      config.sample_col,
+    ],
+  );
+
+  // The same binding, read as a genome_view. Only the roles move: coverage's
+  // chromosome/position/value are genome_view's chr/pos/score, and its `line`
+  // has no GenomeSpy equivalent, so it draws as the bar profile instead.
+  const locusMetadata = useMemo(
+    () => ({
+      ...metadata,
+      viz_kind: 'genome_view',
+      config: {
+        chr_col: config.chromosome_col,
+        pos_col: config.position_col,
+        score_col: config.value_col,
+        end_col: config.end_col ?? null,
+        sample_col: config.sample_col ?? null,
+        category_col: config.category_col ?? null,
+        mark: mark === 'line' ? 'bar' : mark,
+        facet_by_sample: config.facet_by_sample ?? false,
+        annotation: config.locus_annotation ?? 'none',
+        assembly: config.locus_assembly ?? null,
+        score_title: config.value_col,
+      } satisfies GenomeViewConfig,
+    }),
+    [
+      metadata,
+      config.chromosome_col,
+      config.position_col,
+      config.value_col,
+      config.end_col,
+      config.sample_col,
+      config.category_col,
+      config.facet_by_sample,
+      config.locus_annotation,
+      config.locus_assembly,
+      mark,
+    ],
+  );
+
+  // GenomeViewRenderer brings its own AdvancedVizFrame, title, controls and
+  // data popover, so wrapping it in a second frame would double every one of
+  // them. The view switch therefore sits on a bare row above it instead of in
+  // the frame header it would normally use.
+  if (activeView === 'locus') {
+    return (
+      <Stack h="100%" gap={4}>
+        <Group justify="flex-end" gap="xs">
+          {viewControl}
+        </Group>
+        <Box style={{ flex: 1, minHeight: 0 }}>
+          <GenomeViewRenderer
+            metadata={locusMetadata}
+            filters={filters}
+            refreshTick={refreshTick}
+            onFilterChange={onFilterChange}
+            groupRender={groupRender}
+          />
+        </Box>
+      </Stack>
+    );
+  }
+
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Coverage track'}
       subtitle={(metadata as { description?: string; subtitle?: string }).description}
+      primaryControls={primaryControls}
       controls={controls}
       loading={loading}
       error={error}

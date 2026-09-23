@@ -285,6 +285,19 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "chrom_b": _STRING,
         "pos_b": _NUMERIC,
     },
+    # One row read as text. Only the identifier is a role: every other column
+    # of the collection is a field the card can show, so listing them here
+    # would be a second copy of the schema that goes stale on the next
+    # pipeline release.
+    "record_card": {
+        "id": _STRING,
+    },
+    # One polyline per sample across N numeric axes. The axes are inferred
+    # from the numeric columns the same way `complex_heatmap` infers its
+    # matrix, so only the line identity is a required role.
+    "parallel_coordinates": {
+        "sample": _STRING,
+    },
 }
 
 # Per-role column-name aliases used by `suggest_viz_kinds`. The suggester
@@ -625,6 +638,7 @@ ROLE_NAMES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "sample": frozenset({"sample", "sample_id", "library", "replicate"}),
         "end1": frozenset({"end1", "end_1", "bin1_end", "end_a"}),
         "end2": frozenset({"end2", "end_2", "bin2_end", "end_b"}),
+        "resolution": frozenset({"resolution", "bin_size", "binsize"}),
     },
     "knee_plot": {
         "sample": frozenset({"sample", "sample_id", "library", "run"}),
@@ -675,6 +689,14 @@ ROLE_NAMES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "pos_b": frozenset(
             {"pos_b", "pos2", "start2", "breakpoint2", "right_pos", "pos_right", "start_b"}
         ),
+    },
+    "record_card": {
+        "id": frozenset({"id", "sample", "sample_id", "run_id", "library", "name", "feature_id"}),
+        "title": frozenset({"title", "name", "label", "description", "sample_name"}),
+    },
+    "parallel_coordinates": {
+        "sample": frozenset({"sample", "sample_id", "library", "run", "run_id", "id", "name"}),
+        "group": frozenset({"group", "condition", "treatment", "batch", "category", "class"}),
     },
 }
 
@@ -797,6 +819,7 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "sample": _STRING,
         "end1": _NUMERIC,
         "end2": _NUMERIC,
+        "resolution": _NUMERIC,
     },
     "knee_plot": {
         "is_cell": _BOOLEAN,
@@ -822,6 +845,12 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "weight": _NUMERIC,
         "category": _STRING,
         "sample": _STRING,
+    },
+    "record_card": {
+        "title": _STRING,
+    },
+    "parallel_coordinates": {
+        "group": _STRING,
     },
 }
 
@@ -1024,8 +1053,21 @@ def validate_binding(config: VizConfig, dc_schema: dict[str, str]) -> list[Bindi
 # same gate keeps it from claiming every metadata table.
 _MIN_FLOAT_COLS: dict[AdvancedVizKind, int] = {"complex_heatmap": 8, "group_compare": 8}
 _MIN_INT_COLS: dict[AdvancedVizKind, int] = {"upset_plot": 3}
+# parallel_coordinates' only required role is a string line id, so without a
+# floor it matches every table that has a `sample` column. Its point is the
+# many-metric read, and below four axes a scatter or a small-multiples grid says
+# the same thing more plainly, so a narrow table drops out of "recommended"
+# while staying pickable. Counted over every numeric dtype, not just floats:
+# read counts and lengths are Ints and are exactly the axes a QC table carries.
+_MIN_NUMERIC_COLS: dict[AdvancedVizKind, int] = {"parallel_coordinates": 4}
 _MIN_STRING_COLS: dict[AdvancedVizKind, int] = {"sankey": 2}
 _KIND_REQUIRES_DC_TYPE: dict[AdvancedVizKind, str] = {"phylogenetic": "phylogeny"}
+# Kinds a schema can never argue for, because what makes them right is a
+# dashboard decision rather than a column shape. A record card is the detail
+# half of a master/detail pair: it is the right answer only when another tile
+# selects rows, which no schema can reveal. Capped just under the recommended
+# bar so the picker still offers it to an author who knows they want it.
+_AUTHORED_ONLY: frozenset[str] = frozenset({"record_card"})
 _EMBEDDING_LIVE_MIN_NUMERIC = 10
 
 # Float columns whose name is purely a statistic (DESeq2-style results) — used
@@ -1120,9 +1162,16 @@ def _apply_structural_gates(
             _STRUCTURAL_ONLY_SCORE if (strings >= min_string and not stat_floats) else _GATE_PENALTY
         )
 
+    min_numeric = _MIN_NUMERIC_COLS.get(kind)
+    if min_numeric is not None and _count_dtypes(dc_schema, _NUMERIC) < min_numeric:
+        score *= _GATE_PENALTY
+
     required_dc_type = _KIND_REQUIRES_DC_TYPE.get(kind)
     if required_dc_type is not None and dc_type is not None and dc_type != required_dc_type:
         score *= _GATE_PENALTY
+
+    if kind in _AUTHORED_ONLY:
+        score = min(score, _STRUCTURAL_ONLY_SCORE)
 
     return min(score, 1.0)
 
@@ -1312,6 +1361,14 @@ _KIND_ROLE_DESCRIPTIONS: dict[AdvancedVizKind, dict[str, str]] = {
         "effect": "Optional magnitude, drawn as the stem height and the head size.",
         "label": "Optional name for each stem, used in the hover and the top-N labels.",
     },
+    "record_card": {
+        "id": "Column the incoming selection is matched against: which row the card shows.",
+        "title": "Optional column shown as the card's heading.",
+    },
+    "parallel_coordinates": {
+        "sample": "One polyline per distinct value: the line identity, not a facet.",
+        "group": "Optional categorical column driving the line colour.",
+    },
 }
 
 
@@ -1435,6 +1492,7 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         "description": "Dot plot: term on y, NES on x, dot size = gene-set size, colour = -log10(padj).",
         "icon": "tabler:chart-dots",
         "category": "tool",
+        "legacy": True,
     },
     "complex_heatmap": {
         "label": "ComplexHeatmap (clustered)",
@@ -1450,6 +1508,7 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         "label": "MA plot",
         "description": "Mean log intensity vs log2 fold change — same hits as a volcano, classic DE / proteomics layout.",
         "icon": "tabler:chart-bubble",  # tabler has no chart-bell; that one rendered blank
+        "legacy": True,
     },
     "dot_plot": {
         "label": "Dot plot",
@@ -1465,6 +1524,7 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         "label": "QQ plot",
         "description": "Quantile-quantile of -log10(p) vs uniform null — standard p-value distribution QC.",
         "icon": "tabler:chart-line",
+        "legacy": True,
     },
     "sunburst": {
         "label": "Sunburst",
@@ -1495,6 +1555,7 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         "label": "ROC / PR curve",
         "description": "Threshold-sweep precision-recall curve with AUC, one line per tool / caller.",
         "icon": "tabler:chart-line",
+        "legacy": True,
     },
     "confusion_matrix": {
         "label": "Confusion matrix",
@@ -1612,7 +1673,46 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         ),
         "icon": "tabler:circle-dotted",
     },
+    "record_card": {
+        "label": "Record card",
+        "description": (
+            "One row of a collection read as labelled fields and links, filled "
+            "by the selection another tile emits. The detail half of a "
+            "master/detail dashboard."
+        ),
+        "icon": "tabler:id",
+    },
+    "parallel_coordinates": {
+        "label": "Parallel coordinates",
+        "description": (
+            "One polyline per sample across N metric axes, each axis brushable. "
+            "Reads a many-column QC table as a whole where a scatter would need "
+            "one panel per pair."
+        ),
+        "icon": "tabler:chart-line",
+    },
 }
+
+
+#: Kinds that ship without a producer binding them yet.
+#:
+#: The registry test ``test_every_kind_is_reachable`` asserts that every kind
+#: in ``AdvancedVizKind`` is reachable from a catalog ``renders_as`` entry or a
+#: shipped dashboard, so a kind cannot be added, forgotten, and then found
+#: years later with no way for a user to see it. This set is the audit list of
+#: the exceptions, and it is meant to shrink: an entry here is a promise, not a
+#: parking space. Retired kinds (``ma``, ``qq``, ``enrichment``,
+#: ``roc_pr_curve``) are exempt by a different route, the alias table in
+#: ``configs.py``.
+INCUBATING: frozenset[str] = frozenset(
+    {
+        # differentialabundance's pinned prefix publishes no `tables/gsea/`, so
+        # no pipeline run produces the ranked list this kind reads and only the
+        # showcase's synthetic fixture binds it. Kept and flagged rather than
+        # deleted; revisit on a re-pin.
+        "gsea_running_score",
+    }
+)
 
 
 def kind_descriptors() -> list[dict[str, Any]]:
@@ -1633,6 +1733,13 @@ def kind_descriptors() -> list[dict[str, Any]]:
             "roles": role_dtype_specs(kind),
             # Entries without an explicit category are pure visualisations.
             "category": meta.get("category", "plot"),
+            # True for a kind that survives only so stored dashboards keep
+            # loading: it is rewritten into a view of another kind at read
+            # time (see `_KIND_ALIASES` in configs.py). Pickers hide these;
+            # every other consumer treats an absent flag as False, which is
+            # what makes adding it safe for a snapshot read by an older
+            # client.
+            "legacy": bool(meta.get("legacy", False)),
         }
         for kind, meta in KIND_METADATA.items()
     ]

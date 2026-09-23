@@ -1464,30 +1464,25 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
     URL.revokeObjectURL(url);
   };
 
-  const controls = (
-    <Stack gap="xs" id={controlsId}>
+  // Encoding tier: the tree layout, what the tip colour means, the ordering of
+  // the clades and the tip search. Everything below decorates the same tree.
+  const primaryControls = (
+    <>
       <Stack gap={4}>
         <Text size="xs" fw={500}>
           Mode
         </Text>
         <SegmentedControl
-        size="xs"
-        data={LAYOUTS}
-        value={layout}
-        onChange={(v) => setLayout(v as Layout)}
-        fullWidth
-      />
+          size="xs"
+          data={LAYOUTS}
+          value={layout}
+          onChange={(v) => setLayout(v as Layout)}
+        />
       </Stack>
-      <TextInput
-        size="xs"
-        label="Search tip"
-        placeholder="taxon name"
-        value={search}
-        onChange={(e) => setSearch(e.currentTarget.value)}
-      />
       {colorOptions.length > 0 ? (
         <Select
           size="xs"
+          w={170}
           label="Colour by"
           value={colorCol}
           onChange={setColorCol}
@@ -1495,17 +1490,25 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
           clearable
         />
       ) : null}
-      <Stack gap={4}>
-        <Text size="xs" fw={500}>
-          Ladderise
-        </Text>
-        <Switch
+      <TextInput
+        size="xs"
+        w={150}
+        label="Search tip"
+        placeholder="taxon name"
+        value={search}
+        onChange={(e) => setSearch(e.currentTarget.value)}
+      />
+      <Switch
         size="xs"
         checked={doLadderise}
         onChange={(e) => setDoLadderise(e.currentTarget.checked)}
         label="Ladderise"
       />
-      </Stack>
+    </>
+  );
+
+  const controls = (
+    <Stack gap="xs" id={controlsId}>
       <Stack gap={4}>
         <Text size="xs" fw={500}>
           Tip labels
@@ -2112,6 +2115,7 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
       estimated={estimated}
       title={metadata.title || 'Phylogeny'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
+      primaryControls={primaryControls}
       controls={controls}
       loading={loading}
       error={error}

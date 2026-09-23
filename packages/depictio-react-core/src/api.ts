@@ -315,6 +315,8 @@ export interface StoredMetadata {
    *  When omitted, the renderer defaults to visible for ungrouped components and
    *  hidden for components inside a group (compact mode). */
   show_marks?: boolean;
+  /** RangeSlider only: draw the column's histogram above the slider. */
+  show_histogram?: boolean;
   /** Per-component font-size multiplier (figures: scales the whole Plotly
    *  layout font — axis labels, ticks, legend). Multiplies the dashboard-wide
    *  content scale; 1/undefined = no override. */
@@ -378,6 +380,11 @@ export interface DashboardData {
    *  Persisted as HTML via the NotesFooter TipTap editor (see
    *  depictio/viewer/src/components/NotesFooter.tsx). */
   notes_content?: string;
+  /** Dashboard-wide default for where advanced viz tiles draw their controls
+   *  (`controls_placement` on a tile wins). Absent means `popover`. */
+  advanced_viz_controls?: 'popover' | 'rail' | 'header';
+  /** Content-aware tile heights (autofit v2). Absent means on. */
+  autofit?: boolean;
   [key: string]: unknown;
 }
 
@@ -807,6 +814,9 @@ export type InteractiveFilterSource =
    *  position range) because the pipeline filters by column and a genomic
    *  region is two columns. See `genomeRegionFilters` in `selection.ts`. */
   | 'genome_selection'
+  /** A range brushed on one axis of a `parallel_coordinates` tile. Emits an
+   *  ordinary RangeSlider entry on that axis's column. */
+  | 'axis_selection'
   /** Derived projection of saved selection groups (see `selectionGroups.ts`).
    *  Never merged into the user's filter list — composed at the fetch
    *  boundary only. */
@@ -937,6 +947,11 @@ export interface FigureResponse {
     /** Column the figure was actually colored by (global "Color by" mode),
      *  null/absent when the override didn't apply to this frame. */
     column_colored?: string | null;
+    /** Grid rows this figure's content needs, one count the client cannot
+     *  make, since a Plotly figure fills whatever box it is given. Sent for the
+     *  categorical visu types (bar, box, violin) and absent everywhere else;
+     *  acted on only when the component's `fit` is `auto`. */
+    content_demand?: { rows: number };
   };
 }
 
@@ -1032,7 +1047,9 @@ export type AdvancedVizKind =
   | 'group_compare'
   | 'transcript_structure'
   | 'cnv_profile'
-  | 'genome_chord';
+  | 'genome_chord'
+  | 'record_card'
+  | 'parallel_coordinates';
 
 /** Accepted dtypes for one role, plus whether the role is required. Sourced
  *  from the backend canonical schema so the builder never duplicates the
@@ -1056,6 +1073,12 @@ export interface AdvancedVizKindDescriptor {
   /** "plot" for pure visualisations, "tool" for statistical methods that
    *  compute then plot (GSEA, GWAS, ANCOM-BC, DA barplot per contrast). */
   category: 'plot' | 'tool';
+  /** True for a kind kept alive only so stored dashboards keep loading: the
+   *  backend rewrites it into a view of another kind at read time (`ma`, `qq`,
+   *  `enrichment`, `roc_pr_curve`). Pickers must hide these. Optional because
+   *  an older backend's descriptor does not carry the flag, and an absent flag
+   *  means "not legacy". */
+  legacy?: boolean;
 }
 
 /** Metadata used by the builder's viz-kind picker. Cached on first load. */
@@ -1424,6 +1447,99 @@ export async function dispatchCoverageTrack(
 export async function pollCoverageTrack(jobId: string): Promise<CoverageTrackJob> {
   const res = await authFetch(`${API_BASE}/advanced_viz/compute_coverage_track/${jobId}`);
   if (!res.ok) throw new Error(`Failed to poll compute_coverage_track: ${res.status}`);
+  return res.json();
+}
+
+/**
+ * One window of a Hi-C matrix, at one resolution.
+ *
+ * `resolution: null` asks the server to pick: it compares the span the tile is
+ * showing (`start`..`end` over `pixels`) against the resolutions the data
+ * collection actually holds as partitions, and reads the one whose bins land
+ * closest to `target_bins_per_pixel`. A collection with no resolution column
+ * is served as a single matrix, which is what every contact map authored
+ * before multi-resolution gets.
+ */
+export interface ContactMapPayload {
+  wf_id: string;
+  dc_id: string;
+  chrom1_col: string;
+  start1_col: string;
+  chrom2_col: string;
+  start2_col: string;
+  count_col: string;
+  end1_col?: string | null;
+  end2_col?: string | null;
+  sample_col?: string | null;
+  resolution_col?: string | null;
+  chrom?: string | null;
+  start?: number | null;
+  end?: number | null;
+  resolution?: number | null;
+  pixels?: number | null;
+  target_bins_per_pixel?: number | null;
+  sample?: string | null;
+  max_cells?: number | null;
+  filter_metadata: InteractiveFilter[];
+}
+
+export interface ContactMapResult {
+  rows: Record<string, unknown[]>;
+  columns: {
+    chrom1: string;
+    start1: string;
+    end1?: string | null;
+    chrom2: string;
+    start2: string;
+    end2?: string | null;
+    count: string;
+    sample?: string | null;
+    resolution?: string | null;
+  };
+  summary: {
+    row_count: number;
+    /** Every resolution the collection holds, ascending. Empty = flat DC. */
+    resolutions: number[];
+    /** The one this window was read at, or null on a flat DC. */
+    resolution: number | null;
+    resolution_col?: string | null;
+    chromosomes: string[];
+    samples: string[];
+    n_samples: number;
+    bin_count: number;
+    region: { chrom: string | null; start: number | null; end: number | null } | null;
+    bins_per_pixel: number | null;
+    multi_resolution: boolean;
+    /** The window did not fit the cell budget and no coarser level existed. */
+    truncated: boolean;
+  };
+  row_count: number;
+  load_ms?: number;
+  compute_ms?: number;
+}
+
+export interface ContactMapJob {
+  job_id: string;
+  status: 'pending' | 'done' | 'failed';
+  result?: ContactMapResult | null;
+  error?: string | null;
+  from_cache?: boolean;
+}
+
+/** Dispatch a contact-map window Celery task. */
+export async function dispatchContactMap(payload: ContactMapPayload): Promise<ContactMapJob> {
+  const res = await authFetch(`${API_BASE}/advanced_viz/compute_contact_map`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Failed to dispatch compute_contact_map: ${res.status}`);
+  return res.json();
+}
+
+/** Poll a previously-dispatched contact-map window. */
+export async function pollContactMap(jobId: string): Promise<ContactMapJob> {
+  const res = await authFetch(`${API_BASE}/advanced_viz/compute_contact_map/${jobId}`);
+  if (!res.ok) throw new Error(`Failed to poll compute_contact_map: ${res.status}`);
   return res.json();
 }
 

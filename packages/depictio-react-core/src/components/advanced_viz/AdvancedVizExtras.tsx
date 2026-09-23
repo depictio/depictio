@@ -45,6 +45,14 @@ import { useFullscreenPortalTarget } from '../chrome/useFullscreenPortalTarget';
 export interface AdvancedVizExtrasPayload {
   /** Tier-2 settings JSX, rendered bare in a tab or inside the settings popover. */
   controls?: React.ReactNode;
+  /**
+   * The encoding tier (axes, colour-by, normalise, rank, run button), split
+   * out from the cosmetic `controls` so a surface can present the two
+   * differently: the frame draws it inline under `controls_placement: header`,
+   * the inspector lists it first, and the popover keeps it above the cosmetic
+   * tier when nothing has been pinned out.
+   */
+  primaryControls?: React.ReactNode;
   data?: {
     rows: Record<string, unknown[]>;
     columns?: string[];

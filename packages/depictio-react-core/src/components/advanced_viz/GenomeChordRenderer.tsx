@@ -401,10 +401,14 @@ const GenomeChordRenderer: React.FC<Props> = ({
       ).join('  ·  ')
     : null;
 
-  const controls = (
-    <Stack gap="xs">
+  // Encoding tier: the ideogram the ring is built on and what the link colour
+  // means. How many links are drawn, the weight floor and the labels are the
+  // second tier.
+  const primaryControls = (
+    <>
       <Select
         size="xs"
+        w={170}
         label="Assembly"
         value={assembly ?? ASSEMBLY_AUTO}
         onChange={(v) => setAssembly(v && v !== ASSEMBLY_AUTO ? v : null)}
@@ -416,6 +420,7 @@ const GenomeChordRenderer: React.FC<Props> = ({
       />
       <Select
         size="xs"
+        w={170}
         label="Colour by"
         value={colourBy}
         onChange={(v) => setColourBy((v as 'category' | 'chrom_a' | 'none') || 'category')}
@@ -426,6 +431,11 @@ const GenomeChordRenderer: React.FC<Props> = ({
         ]}
         allowDeselect={false}
       />
+    </>
+  );
+
+  const controls = (
+    <Stack gap="xs">
       <Stack gap={4}>
         <Text size="xs" fw={500}>
           Links drawn (at most)
@@ -480,6 +490,7 @@ const GenomeChordRenderer: React.FC<Props> = ({
       estimated={estimated}
       title={metadata.title || 'Genome chord'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
+      primaryControls={primaryControls}
       controls={controls}
       loading={loading}
       error={error}

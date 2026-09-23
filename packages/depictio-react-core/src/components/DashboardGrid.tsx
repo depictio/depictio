@@ -35,6 +35,7 @@ import {
 import ComponentRenderer, { formatValue, inferCardTitle } from './ComponentRenderer';
 import {
   fitLayoutHeights,
+  isAutofitted,
   useAutofitHeights,
   GRID_ROW_GAP_PX,
   GRID_ROW_PX,
@@ -80,6 +81,18 @@ interface DashboardGridProps {
    * `isResizable` is true. We forward whatever react-grid-layout emits.
    */
   onLayoutChange?: (newLayout: Layout[]) => void;
+  /**
+   * Dashboard-level autofit switch (`DashboardData.autofit`). False restores
+   * stored-height-only layout for every tile on the dashboard.
+   */
+  autofit?: boolean;
+  /**
+   * Fired when the user resizes a tile's height by hand, with the height they
+   * dragged it to. The editor answers by writing `fit: 'fixed'` on that
+   * component, which takes it out of autofit for good, the one gesture in the
+   * precedence chain that outranks the content.
+   */
+  onTileFixed?: (componentId: string, height: number) => void;
   /**
    * Optional per-cell overlay renderer. When `editMode` is true and this
    * callback is provided, the returned node is rendered absolutely positioned
@@ -184,6 +197,8 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   isResizable = false,
   editMode = false,
   onLayoutChange,
+  autofit = true,
+  onTileFixed,
   renderItemOverlay,
   gridSections,
   beforeSections,
@@ -440,8 +455,29 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   // they actually need and we turn that into rows here.
   const autoHeights = useAutofitHeights();
 
+  // The height each tile is stored with, and which of them follow their
+  // content. Both are needed on the way back out: what the editor renders is
+  // the fitted layout, and what it must persist is the stored one.
+  const storedHeights = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const l of layouts) map.set(l.i, l.h);
+    return map;
+  }, [layouts]);
+  const autofittedIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (!autofit) return ids;
+    for (const m of metadataList) if (isAutofitted(m)) ids.add(m.index);
+    return ids;
+  }, [metadataList, autofit]);
+  // Tiles the user has just resized by hand, between react-grid-layout's
+  // `onResizeStop` and the `onLayoutChange` that follows it. Their new height
+  // is the one thing on that pass that must be persisted rather than reverted
+  // to what is stored; `onTileFixed` takes them out of autofit for later
+  // passes, but that write is a render away.
+  const resizedByHand = useRef<Set<string>>(new Set());
+
   const layoutsForSection = useCallback(
-    (members: StoredMetadata[]): Layout[] => {
+    (members: StoredMetadata[], fitted = true): Layout[] => {
       const ids = new Set(members.map((m) => m.index));
       const mine = layouts.filter((l) => ids.has(l.i));
       // `y` is stored per dashboard, not per section, so a section whose members
@@ -454,11 +490,12 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       // closes up around the real sizes. GRID_ROW_PX / GRID_ROW_GAP_PX mirror
       // the `rowHeight` and vertical `margin` handed to ResponsiveGridLayout
       // below.
-      // Viewer only. In the editor the author sets geometry by hand, and a
-      // measurement that quietly overrode a drag would both fight them and get
-      // persisted — `onLayoutChange` exists there and nowhere else. Gating here
-      // means the fitted height can never be written back to a dashboard.
-      const sized = fitLayoutHeights(members, mine, autoHeights, !(isDraggable || isResizable));
+      // Runs in the editor too, so the author sizes tiles against what the
+      // reader will see. What the editor must never do is persist a fitted
+      // height: `handleSectionLayoutChange` puts the stored heights back before
+      // anything reaches `onLayoutChange`, and a tile the user resizes by hand
+      // leaves autofit altogether (`fit: fixed`).
+      const sized = fitLayoutHeights(members, mine, autoHeights, fitted && autofit);
       const packed = compactVerticallyForStatic(sized);
       // Lone-row widening runs HERE, against the section's own members — never
       // against the flat union, where co-authored rows from sibling sections
@@ -468,7 +505,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       // neighbour gets widened.
       return isDraggable || isResizable ? packed : widenLoneRows(packed, rowMateSet(mine));
     },
-    [layouts, isDraggable, isResizable, autoHeights],
+    [layouts, isDraggable, isResizable, autoHeights, autofit],
   );
 
   const handleSectionLayoutChange = useCallback(
@@ -478,7 +515,22 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       // arrangement with its 2-column fallback the first time someone opened
       // the dashboard on a small screen.
       if (breakpointRef.current !== GRID_WIDEST_BREAKPOINT) return;
-      sectionLayoutsRef.current.set(sectionKey, current);
+      // What react-grid-layout hands back carries the FITTED heights, because
+      // that is what it was rendered with. Persisting those would freeze one
+      // reader's viewport into the dashboard and make the next content change
+      // unable to move the tile. Put the stored height back on every tile that
+      // follows its content, except the one the user is resizing right now,
+      // whose whole point is the new height.
+      const asStored = current.map((item) => {
+        if (!autofittedIds.has(item.i) || resizedByHand.current.has(item.i)) return item;
+        const stored = storedHeights.get(item.i);
+        return stored === undefined || stored === item.h ? item : { ...item, h: stored };
+      });
+      resizedByHand.current.clear();
+      // Re-close the gaps the restored heights leave behind, so the array we
+      // persist is a layout in its own right rather than one that only packs
+      // correctly at the viewport it was measured in.
+      sectionLayoutsRef.current.set(sectionKey, compactVerticallyForStatic(asStored));
 
       const merged: Layout[] = [];
       // Sections stack, so each one's rows are offset past everything above it.
@@ -490,8 +542,12 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
         // slice of `layouts`: `layoutsForSection` re-packs a section to the top
         // of its own grid, so slicing here would persist the un-rebased
         // positions for every section the user hasn't dragged yet.
+        // `fitted: false`, for the same reason the touched section's heights
+        // are put back: a section the user never opened must be persisted at
+        // the heights it is stored with, not at the ones its content asked for.
         const sectionLayout =
-          sectionLayoutsRef.current.get(section.key) ?? layoutsForSection(section.members);
+          sectionLayoutsRef.current.get(section.key) ??
+          layoutsForSection(section.members, false);
 
         let sectionBottom = 0;
         for (const item of sectionLayout) {
@@ -502,7 +558,19 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       }
       onLayoutChange?.(merged);
     },
-    [onLayoutChange, layoutsForSection, sections],
+    [onLayoutChange, layoutsForSection, sections, autofittedIds, storedHeights],
+  );
+
+  /** A height the user dragged to outranks anything the content asks for, so
+   *  the tile leaves autofit. A drag moves the tile without resizing it and is
+   *  deliberately not a gesture here. */
+  const handleResizeStop = useCallback(
+    (_layout: Layout[], oldItem: Layout, newItem: Layout) => {
+      if (!onTileFixed || newItem.h === oldItem.h) return;
+      resizedByHand.current.add(newItem.i);
+      onTileFixed(newItem.i, newItem.h);
+    },
+    [onTileFixed],
   );
 
   const showOverlays = editMode && typeof renderItemOverlay === 'function';
@@ -635,6 +703,11 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
           window.dispatchEvent(new Event('resize'));
         }
       }}
+      // Fires before the `onLayoutChange` of the same gesture (RGL calls the
+      // prop, then `onLayoutMaybeChanged`), which is what lets the merge tell
+      // this tile's new height apart from every other tile's fitted one on
+      // that pass.
+      onResizeStop={handleResizeStop}
       // Drag is gated to a dedicated handle (see ComponentChrome's
       // `react-grid-dragHandle` action). Cells themselves are NOT draggable
       // — the user can interact with content (Plotly modebar, AG Grid

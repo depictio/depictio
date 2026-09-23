@@ -26,6 +26,18 @@ import { namedColumns } from './namedColumns';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
 import { emphasizeUpsetColumn, upsetHoverColumn, withUpsetHoverTargets } from './upsetHover';
 import { usePersistedVizControl } from './usePersistedVizControl';
+import { demandForItems } from './contentDemand';
+
+/** Room one matrix row (one set) needs: the dot, its label and the gap that
+ *  keeps the connecting line readable. */
+const SET_ROW_PX = 26;
+/** The intersection-size bar panel above the matrix, which is the panel the
+ *  plot is actually read from and must not be squeezed. */
+const INTERSECTION_PANEL_PX = 220;
+/** The intersection labels along the bottom plus the figure's own margins. */
+const UPSET_CHROME_PX = 90;
+/** One annotation track, drawn as its own band under the matrix. */
+const ANNOTATION_TRACK_PX = 90;
 
 interface UpsetPlotConfig {
   /** Deprecated/unused: data comes from the component's resolved dc_id
@@ -263,11 +275,15 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   // Memo the controls JSX so its reference is stable — AdvancedVizFrame
   // publishes it via useEffect and a fresh inline JSX every render would
   // refire that effect into an infinite setState loop.
-  const controls = useMemo(
+  // Encoding tier: which intersections are drawn, in what order, and what
+  // their colour means. The annotation tracks and the count labels decorate
+  // whatever survives those four.
+  const primaryControls = useMemo(
     () => (
-      <Stack gap="xs">
+      <>
         <Select
           size="xs"
+          w={190}
           label="Sort by"
           value={sortBy}
           onChange={(v) => v && setSortBy(v as typeof sortBy)}
@@ -280,6 +296,7 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
         />
         <Select
           size="xs"
+          w={130}
           label="Order"
           value={sortOrder}
           onChange={(v) => v && setSortOrder(v as typeof sortOrder)}
@@ -290,6 +307,7 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
         />
         <NumberInput
           size="xs"
+          w={140}
           label="Min intersection size"
           value={minSize}
           onChange={(v) => setMinSize(Math.max(0, Number(v) || 0))}
@@ -297,6 +315,7 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
         />
         <Select
           size="xs"
+          w={180}
           label="Colour intersections by"
           value={colorBy}
           onChange={(v) => v && setColorBy(v as typeof colorBy)}
@@ -306,9 +325,14 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
             { value: 'degree', label: 'By degree' },
           ]}
         />
-        <Text size="xs" c="dimmed" fw={500} mt={4}>
-          Annotations
-        </Text>
+      </>
+    ),
+    [sortBy, sortOrder, minSize, colorBy],
+  );
+
+  const controls = useMemo(
+    () => (
+      <Stack gap="xs">
         <Switch
           size="xs"
           checked={showAnnotations}
@@ -364,10 +388,6 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
       </Stack>
     ),
     [
-      sortBy,
-      sortOrder,
-      minSize,
-      colorBy,
       showAnnotations,
       showSetSizes,
       showValues,
@@ -423,11 +443,29 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
     [figure, figureRevision, isDark, theme],
   );
 
+  // One matrix row per set, under the intersection-bar panel and over any
+  // annotation tracks. Only once a figure exists: the set columns are known
+  // from the schema well before the worker has drawn anything, and a demand
+  // published then would size the tile for a plot that is not there yet.
+  const setsDrawn = figure ? setColumns.length : 0;
+  const annotationTracks = effectiveAnnotationCols.length;
+  const contentDemand = useMemo(
+    () =>
+      demandForItems(
+        setsDrawn,
+        SET_ROW_PX,
+        INTERSECTION_PANEL_PX + UPSET_CHROME_PX + annotationTracks * ANNOTATION_TRACK_PX,
+      ),
+    [setsDrawn, annotationTracks],
+  );
+
   return (
     <AdvancedVizFrame
       title={metadata.title || 'UpSet plot'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
+      primaryControls={primaryControls}
       controls={controls}
+      contentDemand={contentDemand}
       loading={loading}
       error={error}
       emptyMessage={undefined}

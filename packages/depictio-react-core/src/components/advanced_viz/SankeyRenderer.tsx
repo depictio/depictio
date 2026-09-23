@@ -385,9 +385,12 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
     config.value_format,
   ]);
 
-  const controls = useMemo(
+  // Encoding tier: how many steps the flow runs through, how the nodes are
+  // ordered and what the link colour means. Opacity, labels, the minimum link
+  // and the per-step value filters are the second tier.
+  const primaryControls = useMemo(
     () => (
-      <Stack gap="xs">
+      <>
         {/* Depth picker — SegmentedControl chosen over Slider because (a) the
             value set is tiny (2..available_step_cols.length, typically 2–6)
             and (b) Slider marks visually bleed into the SegmentedControl
@@ -404,7 +407,6 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
             </Text>
             <SegmentedControl
               size="xs"
-              fullWidth
               value={String(depth)}
               onChange={(v) => setDepth(Number(v))}
               data={Array.from({ length: allSteps.length - 1 }, (_, i) => {
@@ -420,7 +422,6 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
           </Text>
           <SegmentedControl
             size="xs"
-            fullWidth
             value={sortMode}
             onChange={(v) => setSortMode(v as typeof sortMode)}
             data={[
@@ -436,7 +437,6 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
           </Text>
           <SegmentedControl
             size="xs"
-            fullWidth
             value={colorMode}
             onChange={(v) => setColorMode(v as typeof colorMode)}
             data={[
@@ -446,6 +446,14 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
             ]}
           />
         </Stack>
+      </>
+    ),
+    [allSteps, depth, effectiveStepCols, sortMode, colorMode],
+  );
+
+  const controls = useMemo(
+    () => (
+      <Stack gap="xs">
         <Stack gap={4}>
           <Text size="xs" fw={500}>
             Link opacity
@@ -505,11 +513,7 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
       </Stack>
     ),
     [
-      allSteps,
-      depth,
       effectiveStepCols,
-      sortMode,
-      colorMode,
       linkOpacity,
       minLinkValue,
       showNodeLabels,
@@ -525,6 +529,7 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
     <AdvancedVizFrame
       title={metadata.title || 'Categorical flow'}
       subtitle={(metadata as { description?: string; subtitle?: string }).description}
+      primaryControls={primaryControls}
       controls={controls}
       loading={loading}
       error={error}

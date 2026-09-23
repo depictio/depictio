@@ -32,6 +32,7 @@ import {
   toBlocks,
   type TranscriptBlock,
 } from './transcript_structure/layout';
+import { regionXRange, useFollowedRegion } from './genomicAxis';
 import { usePersistedVizControl } from './usePersistedVizControl';
 
 /** Mirrors `TranscriptStructureConfig` in
@@ -273,9 +274,33 @@ const TranscriptStructureRenderer: React.FC<Props> = ({ metadata, filters, refre
   );
 
   const geneOptions = useMemo(() => listGenes(blocks), [blocks]);
-  // The gene with the most isoforms, unless the author or the reader picked one.
-  const effectiveGene =
-    gene && geneOptions.some((g) => g.id === gene) ? gene : (geneOptions[0]?.id ?? null);
+
+  // ---- Following a region someone else brushed ----------------------------
+  // One gene at a time is this kind's whole design, so "follow the region"
+  // means: draw the gene the region is over, and clamp the axis to the window
+  // rather than to the gene's full span. A region on a contig this tile does
+  // not hold, or between two genes, changes nothing.
+  const followedRegion = useFollowedRegion(metadata, config, filters);
+  const regionGene = useMemo(() => {
+    if (!followedRegion) return null;
+    const overlapping = new Set<string>();
+    for (const b of blocks) {
+      if (b.chrom !== followedRegion.chrom) continue;
+      if (b.end < followedRegion.start || b.start > followedRegion.end) continue;
+      overlapping.add(b.geneId);
+    }
+    if (!overlapping.size) return null;
+    // `geneOptions` is already ordered by isoform count, so this is the
+    // busiest gene in the window.
+    return geneOptions.find((g) => overlapping.has(g.id))?.id ?? null;
+  }, [followedRegion, blocks, geneOptions]);
+
+  // The gene the region is over, else the author's or the reader's pick, else
+  // the gene with the most isoforms. The region wins over the saved pick for
+  // the same reason it does in `cnv_profile`: navigating the section just now
+  // is a more recent intent than the tile's saved default.
+  const pickedGene = gene && geneOptions.some((g) => g.id === gene) ? gene : null;
+  const effectiveGene = regionGene ?? pickedGene ?? (geneOptions[0]?.id ?? null);
 
   const { lanes, truncated, samples } = useMemo(() => {
     if (!effectiveGene) return { lanes: [], truncated: 0, samples: [] as string[] };
@@ -475,7 +500,14 @@ const TranscriptStructureRenderer: React.FC<Props> = ({ metadata, filters, refre
         ...plotlyAxisOverrides(isDark, theme),
         domain: [0, trackRight],
         title: { text: chrom ? `Position on ${chrom} (bp)` : 'Position (bp)', font: { size: 11 } },
-        range: [xMin - pad, xMax + pad],
+        // A followed region that overlaps the drawn gene is the window the
+        // section is on; otherwise the gene's own span, padded.
+        range: (() => {
+          const window =
+            followedRegion && followedRegion.chrom === chrom ? regionXRange(followedRegion) : null;
+          if (!window) return [xMin - pad, xMax + pad];
+          return window[1] < xMin || window[0] > xMax ? [xMin - pad, xMax + pad] : window;
+        })(),
         zeroline: false,
         automargin: true,
       },
@@ -527,14 +559,19 @@ const TranscriptStructureRenderer: React.FC<Props> = ({ metadata, filters, refre
     theme,
     exonLabel,
     cdsLabel,
+    followedRegion,
   ]);
 
-  const controls = useMemo(
+  // Encoding tier: which gene, which sample's expression and what colours the
+  // isoform lanes. The colour scale, the expression bars and the isoform
+  // budget are how that same selection is painted.
+  const primaryControls = useMemo(
     () => (
-      <Stack gap="xs">
+      <>
         <Select
           size="xs"
-          label="Gene"
+          w={240}
+          label={regionGene ? 'Gene (following the region)' : 'Gene'}
           value={effectiveGene}
           onChange={(v) => setGene(v)}
           data={geneOptions.map((g) => ({
@@ -544,10 +581,12 @@ const TranscriptStructureRenderer: React.FC<Props> = ({ metadata, filters, refre
           placeholder={rows ? 'No gene in this frame' : 'Loading…'}
           searchable
           allowDeselect={false}
+          comboboxProps={{ withinPortal: true }}
         />
         {samples.length > 1 ? (
           <Select
             size="xs"
+            w={160}
             label="Sample"
             value={sample}
             onChange={(v) => setSample(v ?? ALL_SAMPLES)}
@@ -556,6 +595,7 @@ const TranscriptStructureRenderer: React.FC<Props> = ({ metadata, filters, refre
               ...samples.map((s) => ({ value: s, label: s })),
             ]}
             allowDeselect={false}
+            comboboxProps={{ withinPortal: true }}
           />
         ) : null}
         <Stack gap={4}>
@@ -564,7 +604,7 @@ const TranscriptStructureRenderer: React.FC<Props> = ({ metadata, filters, refre
           </Text>
           <SegmentedControl
             size="xs"
-            fullWidth
+            w={230}
             value={colourMode}
             onChange={(v) => setColourBy(v as ColourMode)}
             data={[
@@ -574,6 +614,26 @@ const TranscriptStructureRenderer: React.FC<Props> = ({ metadata, filters, refre
             ]}
           />
         </Stack>
+      </>
+    ),
+    [
+      effectiveGene,
+      regionGene,
+      geneOptions,
+      rows,
+      samples,
+      sample,
+      colourMode,
+      hasClasses,
+      hasExpression,
+      setGene,
+      setColourBy,
+    ],
+  );
+
+  const controls = useMemo(
+    () => (
+      <Stack gap="xs">
         {colourMode === 'expression' ? (
           <Select
             size="xs"
@@ -621,20 +681,12 @@ const TranscriptStructureRenderer: React.FC<Props> = ({ metadata, filters, refre
       </Stack>
     ),
     [
-      effectiveGene,
-      geneOptions,
-      rows,
-      samples,
-      sample,
       colourMode,
       colourScale,
-      hasClasses,
       hasExpression,
       showExpressionPanel,
       maxTranscripts,
       truncated,
-      setGene,
-      setColourBy,
       setColourScale,
       setMaxTranscripts,
     ],
@@ -645,6 +697,7 @@ const TranscriptStructureRenderer: React.FC<Props> = ({ metadata, filters, refre
       estimated={estimated}
       title={metadata.title || 'Transcript structure'}
       subtitle={(metadata as { description?: string; subtitle?: string }).description}
+      primaryControls={primaryControls}
       controls={controls}
       loading={loading}
       error={error}

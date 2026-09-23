@@ -292,15 +292,17 @@ const KneePlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
     };
   }, [rows, config, palette, isDark, theme, logX, logY, showCutoff]);
 
+  // Encoding tier: the two axis scales are the whole reading of a knee plot  -
+  // a linear rank axis hides the knee entirely.
+  const primaryControls = (
+    <>
+      <Switch size="xs" checked={logX} onChange={(e) => setLogX(e.currentTarget.checked)} label="Log rank (x)" />
+      <Switch size="xs" checked={logY} onChange={(e) => setLogY(e.currentTarget.checked)} label="Log UMI count (y)" />
+    </>
+  );
+
   const controls = (
     <Stack gap="xs">
-      <Stack gap={4}>
-        <Text size="xs" fw={500}>
-          Axes
-        </Text>
-        <Switch size="xs" checked={logX} onChange={(e) => setLogX(e.currentTarget.checked)} label="Log rank (x)" />
-        <Switch size="xs" checked={logY} onChange={(e) => setLogY(e.currentTarget.checked)} label="Log UMI count (y)" />
-      </Stack>
       <Switch
         size="xs"
         checked={showCutoff}
@@ -315,6 +317,7 @@ const KneePlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
       estimated={estimated}
       title={metadata.title || 'Knee plot'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
+      primaryControls={primaryControls}
       controls={controls}
       loading={loading}
       error={error}

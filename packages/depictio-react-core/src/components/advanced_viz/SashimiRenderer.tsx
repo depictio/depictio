@@ -4,6 +4,7 @@ import {
   ColorInput,
   Group,
   NumberInput,
+  SegmentedControl,
   Select,
   Slider,
   Stack,
@@ -34,7 +35,10 @@ import {
   plotlyThemeColors,
   plotlyThemeFragment,
 } from './plotlyTheme';
+import { regionXRange, useFollowedRegion } from './genomicAxis';
 import { usePersistedVizControl } from './usePersistedVizControl';
+import SashimiGenomeSpyView from './sashimi/SashimiGenomeSpyView';
+import { coverageData, junctionData, UNANNOTATED } from './sashimi/sashimiGenomeSpySpec';
 
 /** Mirrors `SashimiConfig` (depictio/models/components/advanced_viz/configs.py).
  *  Only keys declared there may be read — see
@@ -70,7 +74,14 @@ interface SashimiConfig {
   max_arc_width?: number;
   arc_width_by_support?: boolean;
   arc_split?: 'annotation' | 'alternate';
+  view?: SashimiView;
+  views?: SashimiView[] | null;
+  annotation?: 'none' | 'hg38' | 'mm10';
 }
+
+type SashimiView = 'plotly' | 'genomespy';
+const SASHIMI_VIEWS: SashimiView[] = ['plotly', 'genomespy'];
+const VIEW_LABELS: Record<SashimiView, string> = { plotly: 'Arcs', genomespy: 'GenomeSpy' };
 
 interface Props {
   metadata: StoredMetadata & { viz_kind?: string; config?: SashimiConfig };
@@ -345,6 +356,20 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
   );
   // Local-only: no field on SashimiConfig carries them, and a region pick or a
   // zoom is a reading position rather than an authored default.
+  /** Which view draws the junctions. Named apart from `view`, the x window. */
+  const allowedViews = useMemo<SashimiView[]>(() => {
+    const listed = (config.views ?? SASHIMI_VIEWS).filter((v) => SASHIMI_VIEWS.includes(v));
+    return listed.length ? listed : SASHIMI_VIEWS;
+  }, [config.views]);
+  const [storedVizView, setVizView] = usePersistedVizControl<SashimiView>(
+    metadata,
+    'view',
+    config.view ?? 'plotly',
+  );
+  const vizView: SashimiView = allowedViews.includes(storedVizView)
+    ? storedVizView
+    : allowedViews[0];
+
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
   const [showCounts, setShowCounts] = useState<boolean>(true);
   /** Explicit x window, or null to fit the region. Set by the zoom buttons and
@@ -572,10 +597,26 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
     return [...loci.slice(0, MAX_LOCUS_OPTIONS), ...whole];
   }, [supported]);
 
+  // ---- Following a region someone else brushed ----------------------------
+  // This kind already opens on one locus at a time, so following a region
+  // means picking the locus it falls in rather than clamping an axis: the
+  // busiest cluster that overlaps the window, else that chromosome as a whole.
+  // The x window itself is set below, through the same `view` state the zoom
+  // buttons and Plotly's drag-zoom write, so the reader can zoom out again.
+  const followedRegion = useFollowedRegion(metadata, config, filters);
+  const regionLocus = useMemo<Region | null>(() => {
+    if (!followedRegion) return null;
+    const onChrom = regions.filter((r) => sameChrom(r.chrom, followedRegion.chrom));
+    const overlapping = onChrom.find(
+      (r) => !r.whole && r.end >= followedRegion.start && r.start <= followedRegion.end,
+    );
+    return overlapping ?? onChrom.find((r) => r.whole) ?? null;
+  }, [followedRegion, regions]);
+
   // Derived rather than stored so a filter change that empties the current
   // region falls back on its own instead of leaving an empty panel.
   const activeRegion =
-    regions.find((r) => r.key === selectedRegion) ?? regions[0] ?? null;
+    regionLocus ?? regions.find((r) => r.key === selectedRegion) ?? regions[0] ?? null;
 
   /** The junctions actually drawn: one region, strongest `top_n` per lane.
    *  Per lane rather than overall so a quiet sample keeps a panel of its own
@@ -727,6 +768,15 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
   useEffect(() => {
     setView(null);
   }, [activeRegion?.key]);
+
+  // A followed region is narrower than the locus that contains it, so it opens
+  // as a zoom rather than as a new locus. Written into the same state the zoom
+  // buttons use, so the reader can widen it again straight away. Declared after
+  // the reset above so that when both fire in one commit, the window wins.
+  useEffect(() => {
+    const window = regionXRange(followedRegion);
+    if (window) setView(window);
+  }, [followedRegion]);
 
   /** Scale the window about its own centre. `factor` < 1 zooms in. */
   const zoomBy = useCallback(
@@ -1429,47 +1479,197 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
     [arcColors, setArcColors],
   );
 
+  // ---- The GenomeSpy view -------------------------------------------------
+  // Built only while that view is on screen: the Plotly view pays nothing.
+  const genomeSpyOn = vizView === 'genomespy';
+
+  /** Every lane in the data, not just the region's, so moving the region or
+   *  the min-reads slider swaps rows instead of rebuilding the lanes. */
+  const allLanes = useMemo(
+    () =>
+      Array.from(new Set(junctions.map((j) => j.lane))).sort((a, b) =>
+        a.localeCompare(b, undefined, { numeric: true }),
+      ),
+    [junctions],
+  );
+
+  const gsJunctions = useMemo(() => {
+    if (!genomeSpyOn) return [];
+    // The same per-lane top-N as the arc panel, taken over the whole data
+    // rather than one locus, since GenomeSpy lets the reader pan to the rest.
+    const byLane = new Map<string, Junction[]>();
+    for (const j of supported) {
+      const bucket = byLane.get(j.lane);
+      if (bucket) bucket.push(j);
+      else byLane.set(j.lane, [j]);
+    }
+    const kept: Junction[] = [];
+    for (const arcs of byLane.values()) {
+      kept.push(...arcs.slice().sort((a, b) => b.count - a.count).slice(0, Math.max(1, topN)));
+    }
+    return junctionData(kept);
+  }, [genomeSpyOn, supported, topN]);
+
+  const gsCoverage = useMemo(() => {
+    if (!genomeSpyOn || !config.coverage_dc_id || !showCoverage || !coverageRows) return null;
+    return coverageData(
+      coverageRows,
+      {
+        chr: config.coverage_chr_col || 'chromosome',
+        pos: config.coverage_position_col || 'position',
+        value: config.coverage_value_col || 'value',
+        end: config.coverage_end_col,
+        sample: config.coverage_sample_col,
+      },
+      SINGLE_LANE,
+      coverageLog,
+    );
+  }, [
+    genomeSpyOn,
+    coverageRows,
+    showCoverage,
+    coverageLog,
+    config.coverage_dc_id,
+    config.coverage_chr_col,
+    config.coverage_position_col,
+    config.coverage_value_col,
+    config.coverage_end_col,
+    config.coverage_sample_col,
+  ]);
+
+  const gsExons = useMemo(
+    () =>
+      genomeSpyOn && activeRegion && showGeneModel
+        ? exons.map((e) => ({
+            chrom: activeRegion.chrom,
+            start: e.start,
+            end: e.end,
+            terminal: e.terminal,
+          }))
+        : [],
+    [genomeSpyOn, activeRegion, exons, showGeneModel],
+  );
+
+  /** The window GenomeSpy opens on and zooms to: the zoom state the arc panel
+   *  shares, else the drawn junctions, else the region itself. */
+  const gsRegion = useMemo(() => {
+    if (!activeRegion) return null;
+    const win = view ?? fitRange ?? [activeRegion.start, activeRegion.end];
+    return {
+      chrom: activeRegion.chrom,
+      start: Math.max(0, Math.floor(win[0])),
+      end: Math.ceil(win[1]),
+    };
+  }, [activeRegion, view, fitRange]);
+
+  const gsColours = useMemo(() => {
+    const themeColours = plotlyThemeColors(isDark, theme);
+    const palette = resolveCategoricalPalette(theme, mantineCategoricalPalette(theme, isDark));
+    const stable = stableColorMap(annotationValues, palette);
+    const base = arcColors[ARC_COLOR_ALL] || palette[0];
+    const annotations = junctions.some((j) => !j.annotation)
+      ? [...annotationValues, UNANNOTATED]
+      : annotationValues;
+    return {
+      colors: {
+        textColor: themeColours.textColor,
+        gridColor: themeColours.gridColor,
+        ruleColor: themeColours.zeroLineColor,
+        palette,
+      },
+      annotations,
+      annotationColours: annotations.map(
+        (a) => arcColors[a] || stable.get(a) || base,
+      ),
+      laneColours: allLanes.map((_, i) => palette[i % palette.length] ?? base),
+    };
+  }, [isDark, theme, annotationValues, arcColors, junctions, allLanes]);
+
+  // The min-reads slider drags a local value and commits on release, so a
+  // drag is one data swap rather than one per tick.
+  const [minDraft, setMinDraft] = useState<number>(minCount);
+  useEffect(() => setMinDraft(minCount), [minCount]);
+  const sliderMax = useMemo(
+    () => Math.max(10, ...junctions.map((j) => j.count)),
+    [junctions],
+  );
+
+  const primaryControls = useMemo(
+    () => (
+      <>
+        {allowedViews.length > 1 ? (
+          <SegmentedControl
+            size="xs"
+            value={vizView}
+            onChange={(v) => setVizView(v as SashimiView)}
+            data={allowedViews.map((v) => ({ value: v, label: VIEW_LABELS[v] }))}
+          />
+        ) : null}
+        <Select
+          size="xs"
+          w={250}
+          aria-label="Locus"
+          value={activeRegion?.key ?? null}
+          onChange={setSelectedRegion}
+          data={[
+            {
+              group: 'Loci',
+              items: regions.filter((r) => !r.whole).map((r) => ({ value: r.key, label: r.label })),
+            },
+            {
+              group: 'Whole chromosome',
+              items: regions.filter((r) => r.whole).map((r) => ({ value: r.key, label: r.label })),
+            },
+          ]}
+          placeholder={rows ? 'No junctions' : 'Loading…'}
+          disabled={regions.length < 2}
+          searchable
+          comboboxProps={{ withinPortal: true, portalProps: { target: fsPortalTarget } }}
+        />
+        <Group gap={6} wrap="nowrap" w={210}>
+          <Text size="xs" fw={500} style={{ whiteSpace: 'nowrap' }}>
+            Min reads {minDraft}
+          </Text>
+          <Slider
+            size="xs"
+            w={120}
+            min={0}
+            max={sliderMax}
+            step={1}
+            value={Math.min(minDraft, sliderMax)}
+            onChange={setMinDraft}
+            onChangeEnd={(v) => setMinCount(v)}
+            label={(v) => `at least ${v}`}
+          />
+        </Group>
+      </>
+    ),
+    [
+      allowedViews,
+      vizView,
+      setVizView,
+      activeRegion,
+      regions,
+      rows,
+      fsPortalTarget,
+      minDraft,
+      sliderMax,
+      setMinCount,
+    ],
+  );
+
   const controls = useMemo(
     () => (
       <Stack gap="sm">
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Region
+        {regionLocus ? (
+          <Text size="xs" c="dimmed">
+            Following the dashboard region on {regionLocus.chrom}.
           </Text>
-          <Select
-            size="xs"
-            value={activeRegion?.key ?? null}
-            onChange={setSelectedRegion}
-            data={[
-              {
-                group: 'Loci',
-                items: regions
-                  .filter((r) => !r.whole)
-                  .map((r) => ({ value: r.key, label: r.label })),
-              },
-              {
-                group: 'Whole chromosome',
-                items: regions.filter((r) => r.whole).map((r) => ({ value: r.key, label: r.label })),
-              },
-            ]}
-            placeholder={rows ? 'No junctions' : 'Loading…'}
-            disabled={regions.length < 2}
-            searchable
-            comboboxProps={{ withinPortal: true, portalProps: { target: fsPortalTarget } }}
-          />
-        </Stack>
+        ) : null}
         <Stack gap={4}>
           <Text size="xs" fw={500}>
             Junctions kept
           </Text>
-          <NumberInput
-            size="xs"
-            label="Min supporting reads"
-            min={0}
-            step={1}
-            value={minCount}
-            onChange={(v) => setMinCount(Math.max(0, Number(v) || 0))}
-          />
           <NumberInput
             size="xs"
             label={config.sample_col ? 'Max junctions per sample' : 'Max junctions'}
@@ -1760,6 +1960,7 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
     ),
     [
       activeRegion,
+      regionLocus,
       regions,
       rows,
       minCount,
@@ -1835,6 +2036,7 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
     <AdvancedVizFrame
       title={metadata.title || 'Splice junctions'}
       subtitle={(metadata as { description?: string; subtitle?: string }).description}
+      primaryControls={primaryControls}
       controls={controls}
       loading={loading}
       error={error}
@@ -1842,7 +2044,27 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
       dataRows={dataRows}
       dataColumns={requiredCols}
     >
-      {figure ? (
+      {genomeSpyOn && figure ? (
+        <SashimiGenomeSpyView
+          junctions={gsJunctions}
+          coverage={gsCoverage}
+          coverageShared={!config.coverage_sample_col}
+          coverageTitle={coverageLog ? 'log10(1 + depth)' : 'depth'}
+          coverageColour={coverageColor || null}
+          exons={gsExons}
+          lanes={allLanes}
+          annotations={gsColours.annotations}
+          colorBy={colorBy}
+          laneColours={gsColours.laneColours}
+          annotationColours={gsColours.annotationColours}
+          colors={gsColours.colors}
+          region={gsRegion}
+          annotation={config.annotation ?? 'none'}
+          logWidth={logWidth}
+          maxArcWidth={maxArcWidth}
+          showCounts={showCounts}
+        />
+      ) : figure ? (
         <AdvancedVizPlot
           data={applyDataTheme(figure.data, isDark, theme) as any}
           layout={

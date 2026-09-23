@@ -250,6 +250,13 @@ export const GROUPING_MODE_BY_KIND: Readonly<Record<AdvancedVizKind, GroupingMod
   transcript_structure: 'none',
   cnv_profile: 'none',
   genome_chord: 'none',
+  // One row read as text: there is no mark for a group to colour and no
+  // distribution for a panel to re-derive.
+  record_card: 'none',
+  // Every polyline already stands for one sample, and the axes are shared, so
+  // splitting would redraw the same axes beside each other; the kind colours by
+  // its own `group_col` rather than taking the dashboard's groups.
+  parallel_coordinates: 'none',
 };
 
 /** The policy for `vizKind`.

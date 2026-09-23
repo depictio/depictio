@@ -529,6 +529,14 @@ def _load_reduced(
             if frame is not None:
                 return _reduced(frame, total, "log_rank")
 
+        if policy == "head":
+            # The kind asked for a prefix rather than a sample: its renderer
+            # draws one mark per row and stops being legible well before the
+            # cap, so "the first N rows" is as faithful as a uniform subset and
+            # is a sentence a reader can act on. Not `degraded`: nothing the
+            # renderer reports is an estimate, there are simply fewer lines.
+            return _reduced(scan.head(cap).collect(), total, "head")
+
         frame = _hash_sample(scan, projection, total, cap)
         if frame is None:
             if not degraded:
@@ -1485,6 +1493,35 @@ def poll_compute_coverage_track(
     current_user=Depends(get_user_or_anonymous),
 ) -> dict[str, Any]:
     """Poll a previously-dispatched coverage-track compute."""
+    return _poll_compute(job_id, current_user)
+
+
+@advanced_viz_endpoint_router.post("/compute_contact_map")
+def dispatch_compute_contact_map(
+    payload: dict = Body(...),
+    current_user=Depends(get_user_or_anonymous),
+    access_token: str | None = Depends(oauth2_scheme_optional),
+) -> dict[str, Any]:
+    """Dispatch one region of a contact matrix, at one resolution.
+
+    Region and resolution are part of the payload, so they are part of the
+    cache key: zooming in dispatches a new job and zooming back out lands on
+    the one already computed. `resolution: null` lets the server pick the level
+    whose bins-per-pixel is closest to the target for the span the client says
+    it is showing.
+    """
+    from depictio.api.v1.celery_tasks import compute_contact_map as compute_task
+
+    _apply_link_filters_to_payload(payload, access_token, "contact_map")
+    return _dispatch_compute(payload, "contact_map", compute_task, current_user)
+
+
+@advanced_viz_endpoint_router.get("/compute_contact_map/{job_id}")
+def poll_compute_contact_map(
+    job_id: str,
+    current_user=Depends(get_user_or_anonymous),
+) -> dict[str, Any]:
+    """Poll a previously-dispatched contact-map window."""
     return _poll_compute(job_id, current_user)
 
 

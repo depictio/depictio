@@ -27,6 +27,8 @@ export interface CnvRow {
   log2: number;
   baf: number | null;
   copyNumber: number | null;
+  /** Minor-allele copy number (ASCAT nMinor), when the collection binds one. */
+  minorCopyNumber?: number | null;
   label: string | null;
   kind: CnvRowKind;
 }
@@ -40,6 +42,7 @@ export interface CnvColumns {
   log2: string;
   baf?: string | null;
   copyNumber?: string | null;
+  minorCopyNumber?: string | null;
   segment?: string | null;
   label?: string | null;
 }
@@ -112,6 +115,7 @@ export function parseCnvRows(rows: Record<string, unknown[]>, cols: CnvColumns):
   const log2s = rows[cols.log2] ?? [];
   const bafs = cols.baf ? (rows[cols.baf] ?? []) : [];
   const cns = cols.copyNumber ? (rows[cols.copyNumber] ?? []) : [];
+  const minors = cols.minorCopyNumber ? (rows[cols.minorCopyNumber] ?? []) : [];
   const kinds = cols.segment ? (rows[cols.segment] ?? []) : [];
   const labels = cols.label ? (rows[cols.label] ?? []) : [];
 
@@ -133,6 +137,7 @@ export function parseCnvRows(rows: Record<string, unknown[]>, cols: CnvColumns):
       log2,
       baf: cols.baf ? num(bafs[i]) : null,
       copyNumber: cols.copyNumber ? num(cns[i]) : null,
+      ...(cols.minorCopyNumber ? { minorCopyNumber: num(minors[i]) } : {}),
       label:
         cols.label && labels[i] !== null && labels[i] !== undefined && labels[i] !== ''
           ? String(labels[i])

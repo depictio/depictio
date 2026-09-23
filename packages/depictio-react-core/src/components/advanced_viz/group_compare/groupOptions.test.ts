@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import type { GroupRenderDef } from '../../../selectionGroups';
 import {
+  configuredGroupPair,
   defaultGroupPair,
   groupCompareOptions,
   LABEL_VALUE_SOURCE,
+  resolveGroupDefault,
   SAVED_GROUP_SOURCE,
   selectorFor,
 } from './groupOptions';
@@ -79,5 +81,32 @@ describe('selectorFor', () => {
   it('returns null for a group that no longer exists', () => {
     expect(selectorFor(options, 'saved:Deleted')).toBeNull();
     expect(selectorFor(options, null)).toBeNull();
+  });
+});
+
+describe('configuredGroupPair', () => {
+  const options = groupCompareOptions(saved, 'cluster', ['cluster_1', 'cluster_2', 'cluster_3']);
+
+  it('opens on the two groups the config names', () => {
+    expect(configuredGroupPair(options, 'cluster_2', 'cluster_3')).toEqual([
+      'col:cluster_2',
+      'col:cluster_3',
+    ]);
+  });
+
+  it('prefers a saved group over a label value of the same name', () => {
+    const clash = groupCompareOptions(
+      [{ name: 'cluster_1', column_name: 'cell_id', values: ['c1'], color: '#000' }],
+      'cluster',
+      ['cluster_1', 'cluster_2'],
+    );
+    expect(resolveGroupDefault(clash, 'cluster_1')).toBe('saved:cluster_1');
+  });
+
+  it('falls back to the automatic pair when a default does not resolve', () => {
+    expect(configuredGroupPair(options, 'cluster_1', 'missing')).toEqual(
+      defaultGroupPair(options),
+    );
+    expect(configuredGroupPair(options, null, null)).toEqual(defaultGroupPair(options));
   });
 });

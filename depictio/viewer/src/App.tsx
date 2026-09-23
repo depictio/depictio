@@ -55,6 +55,7 @@ import {
   SaveGroupContext,
   BrandScope,
   Z_LAYERS,
+  AdvancedVizPlacementDefaultProvider,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -770,6 +771,7 @@ const App: React.FC = () => {
         refreshTick={refreshTick}
         groupRender={groupRender}
         bulkOptions={groupsApi.bulkOptions}
+        autofit={dashboard?.autofit !== false}
       />
     ) : null;
 
@@ -891,6 +893,10 @@ const App: React.FC = () => {
     >
       <DashboardLoadingProvider>
       <InspectorProviders control={inspectorControl}>
+      {/* Dashboard-wide default for where advanced-viz tiles draw their
+          controls. No config sink in the viewer: a reader can still pin a
+          tile's controls open, and it stays local to their session. */}
+      <AdvancedVizPlacementDefaultProvider value={dashboard?.advanced_viz_controls}>
       <SaveGroupContext.Provider value={saveGroupApi}>
       {/* A dashboard that overrides the instance branding retints its own page
           and nothing else — /dashboards and /admin stay on the instance look. */}
@@ -1250,6 +1256,7 @@ const App: React.FC = () => {
                     isDraggable={false}
                     isResizable={false}
                     editMode={false}
+                    autofit={dashboard?.autofit !== false}
                   />
                 )}
               </Box>
@@ -1263,6 +1270,7 @@ const App: React.FC = () => {
                   refreshTick={refreshTick}
                   groupRender={groupRender}
                   bulkOptions={groupsApi.bulkOptions}
+                  autofit={dashboard?.autofit !== false}
                 />
               )}
             </Box>
@@ -1368,6 +1376,7 @@ const App: React.FC = () => {
     </AppShell>
       </BrandScope>
       </SaveGroupContext.Provider>
+      </AdvancedVizPlacementDefaultProvider>
       </InspectorProviders>
       </DashboardLoadingProvider>
     </AvailableFilterValuesProvider>

@@ -555,19 +555,29 @@ const FusionStructureRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     showBreakpoint,
   ]);
 
+  // How many fusions are drawn is the only choice that changes what is on
+  // screen; the bar height, the breakpoint mark, the domain names and the
+  // coordinate axis all describe the same set.
+  const primaryControls = useMemo(
+    () => (
+      <NumberInput
+        size="xs"
+        w={130}
+        label="Fusions"
+        description={facets.length ? `of ${facets.length}` : undefined}
+        value={topN}
+        onChange={(v) => setTopN(Math.max(1, Math.min(20, Number(v) || 1)))}
+        min={1}
+        max={20}
+      />
+    ),
+    [facets.length, topN],
+  );
+
   const controls = useMemo(
     () => (
       <Stack gap="xs">
         <Group gap="xs" grow>
-          <NumberInput
-            size="xs"
-            label="Fusions"
-            description={facets.length ? `of ${facets.length}` : undefined}
-            value={topN}
-            onChange={(v) => setTopN(Math.max(1, Math.min(20, Number(v) || 1)))}
-            min={1}
-            max={20}
-          />
           <NumberInput
             size="xs"
             label="Bar height"
@@ -621,8 +631,6 @@ const FusionStructureRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
       </Stack>
     ),
     [
-      facets.length,
-      topN,
       barHeight,
       showBreakpoint,
       showLabels,
@@ -636,6 +644,7 @@ const FusionStructureRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     <AdvancedVizFrame
       title={metadata.title || 'Fusion structure'}
       subtitle={(metadata as { description?: string; subtitle?: string }).description}
+      primaryControls={primaryControls}
       controls={controls}
       loading={loading}
       error={error}
