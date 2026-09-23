@@ -433,6 +433,10 @@ tabs:
     icon: mdi:chart-line
     color: cyan
     description: How much of each assembly survives each minimum contig length
+  - name: Nx curve
+    icon: mdi:ruler
+    color: indigo
+    description: N50 and N75 as two points of one curve, read across every percent of the assembly
   components:
   - component_type: card
     tag: mg-asm-card-length
@@ -537,6 +541,7 @@ tabs:
       top_n_labels: 4
       selection_enabled: true
       selection_column: assembler
+      controls_placement: header
     title: Assembled length against contig N50
     description: One point per assembly, sized by contig count. Up and to the right is a long assembly in long pieces.
     title_size: h3
@@ -620,6 +625,48 @@ tabs:
     title_align: left
     layout: {x: 0, y: 16, w: 8, h: 7}
 
+  - component_type: text
+    tag: mg-nx-intro
+    index: mg-nx-intro
+    section: Nx curve
+    title: The whole curve N50 is one point of
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Sort an assembly's contigs longest first and walk down them: Nx is the
+      length of the contig at which x percent of the bases are reached. The
+      curve crosses the line at x = 50 exactly at the QUAST N50, since both keep
+      contigs of at least 500 bp. A long-read assembly holds a high plateau far
+      to the right; a short-read one falls off early. The lengths come from
+      the depth tables, so an assembly without one has no curve.
+    workflow_tag: mag
+    data_collection_tag: assembly_nx
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: mg-nx-av-curve
+    index: mg-nx-av-curve
+    section: Nx curve
+    workflow_tag: mag
+    data_collection_tag: assembly_nx
+    viz_kind: profile
+    config:
+      viz_kind: profile
+      series_col: assembly_id
+      x_col: nx
+      y_col: contig_length
+      log_y: true
+      reference_x: 50
+      reference_label: N50
+      x_title: Percent of the assembled bases (x)
+      y_title: Nx, contig length (bp)
+      legend_pos: right
+    title: Nx curve per assembly
+    description: One curve per assembly. The higher and the further right a curve holds, the fewer and longer the pieces the assembly is made of.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 7}
+
   - component_type: interactive
     tag: mg-filter-ladder-rung
     index: mg-ladder-rung-filter
@@ -647,7 +694,22 @@ tabs:
     display: {title_size: md, custom_color: '#1E88E5', icon_name: 'mdi:scale-balance'}
     placement: left
     title: Contig N50 (bp)
+    show_histogram: true
     layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: mg-filter-asm-nx
+    index: mg-asm-nx-filter
+    section: Assembly scope
+    group: Assembly scope
+    workflow_tag: mag
+    data_collection_tag: assembly_nx
+    interactive_component_type: MultiSelect
+    column_name: assembly_id
+    column_type: object
+    display: {title_size: md, custom_color: '#3949AB', icon_name: 'mdi:dna'}
+    placement: left
+    title: Nx curves
+    layout: {x: 0, y: 6, w: 1, h: 3}
 
 # ============================================================================
 # Contigs
@@ -678,6 +740,10 @@ tabs:
     icon: mdi:chart-bell-curve
     color: blue
     description: How the same contigs are covered by each sample's reads
+  - name: Cross-sample recruitment
+    icon: mdi:relation-many-to-many
+    color: indigo
+    description: How much of each sample's community every assembly recruits
   components:
   - component_type: card
     tag: mg-ctg-card-contigs
@@ -779,13 +845,19 @@ tabs:
       y_title: Depth in this sample
       log_x: true
       log_y: true
+      # Points, not the density view: histogram2d on log axes crashes the
+      # tab in Chromium (wave 2b, reproduced 9 of 9 times). The server sends a
+      # hash sample of about 9 500 rows, which scattergl draws without trouble.
+      density: false
+      density_threshold: 20000
       opacity: 0.45
       marker_size: 4
       legend_pos: right
       selection_enabled: true
       selection_column: read_sample
+      controls_placement: header
     title: Contig length against depth
-    description: One point per contig and per sample whose reads cover it. Horizontal bands are organisms, and the spread at a given length is how separable they are.
+    description: A hash sample of the contig and sample pairs, one point each. Horizontal bands are organisms, and the spread at a given length is how separable they are. Pick one sample in the left panel to read its bands alone.
     title_size: h3
     layout: {x: 0, y: 2, w: 8, h: 7}
 
@@ -833,6 +905,46 @@ tabs:
     title_size: h3
     layout: {x: 0, y: 9, w: 8, h: 7}
 
+  - component_type: text
+    tag: mg-rec-intro
+    index: mg-rec-intro
+    section: Cross-sample recruitment
+    title: Which sample's organisms each assembly holds
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The canonical figure here is a bin by sample depth heatmap, and its input
+      (GenomeBinning/depths/bins/) is not published by this run, nor is the
+      contig to bin membership. One level up is honest: each cell is an
+      assembly's length-weighted mean depth in one sample's reads. A bright
+      diagonal means the samples carry different organisms; a bright row means
+      the other samples also carry that assembly's organisms, which is when a
+      co-assembly would have paid off.
+    workflow_tag: mag
+    data_collection_tag: assembly_recruitment
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: mg-rec-av-heatmap
+    index: mg-rec-av-heatmap
+    section: Cross-sample recruitment
+    workflow_tag: mag
+    data_collection_tag: assembly_recruitment
+    viz_kind: complex_heatmap
+    config:
+      viz_kind: complex_heatmap
+      index_column: assembly_id
+      row_annotation_cols: [assembler]
+      cluster_rows: true
+      cluster_cols: false
+      normalize: log1p
+      colorscale: Viridis
+    title: Assembly by sample recruitment
+    description: Rows are assemblies, columns the samples whose reads were mapped back, colour the log of the mean depth. Rows cluster by recruitment profile, so assemblies of one sample by different assemblers sit together.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 6}
+
   - component_type: interactive
     tag: mg-filter-ctg-readsample
     index: mg-ctg-readsample-filter
@@ -860,6 +972,7 @@ tabs:
     display: {title_size: md, custom_color: '#1E88E5', icon_name: 'mdi:ruler'}
     placement: left
     title: Contig length (bp)
+    show_histogram: true
     layout: {x: 0, y: 3, w: 1, h: 3}
   - component_type: interactive
     tag: mg-filter-ctg-depth
@@ -874,6 +987,7 @@ tabs:
     display: {title_size: md, custom_color: '#3949AB', icon_name: 'mdi:waves'}
     placement: left
     title: Depth
+    show_histogram: true
     layout: {x: 0, y: 6, w: 1, h: 3}
 
 # ============================================================================
@@ -987,10 +1101,12 @@ tabs:
     alignment: left
     body: >
       Completeness on the x axis, contamination on the y axis, one point per
-      bin, sized by the bases it holds. The bottom right corner holds the bins
-      worth naming; anything above 10 percent contamination is a chimera
-      whatever its completeness says. Colour is the binner, so the spread
-      between five binners on the same assembly is readable directly.
+      bin, sized by the bases it holds. The lines sit at the MIMAG high-quality
+      cut, 90 percent complete and under 5 percent contaminated, so the bottom
+      right quadrant holds the bins worth naming; anything above 10 percent
+      contamination is a chimera whatever its completeness says. Colour is the
+      binner, so the spread between five binners on the same assembly is
+      readable directly.
     workflow_tag: mag
     data_collection_tag: checkm2_quality_report
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1004,14 +1120,17 @@ tabs:
     config:
       x_title: Completeness (%)
       y_title: Contamination (%)
-      reference_line: horizontal
-      reference_value: 5
+      quadrants:
+        x: 90
+        y: 5
+        labels: [Incomplete and contaminated, Complete but contaminated, Clean but incomplete, Near-complete and clean]
       opacity: 0.75
       legend_pos: right
       selection_enabled: true
       selection_column: binner
+      controls_placement: header
     title: Completeness against contamination
-    description: The line marks 5 percent contamination, the MIMAG limit for a high-quality draft. Marker size is the bin's assembled length.
+    description: The quadrant lines sit at 90 percent completeness and 5 percent contamination, the CheckM2 half of the MIMAG high-quality draft. Marker size is the bin's assembled length.
     title_size: h3
     layout: {x: 0, y: 2, w: 8, h: 7}
   - component_type: advanced_viz
@@ -1027,6 +1146,7 @@ tabs:
       log_x: true
       opacity: 0.75
       legend_pos: right
+      controls_placement: header
     title: Contiguity against completeness
     description: A bin with a high completeness and a low N50 carries the right genes on hundreds of fragments, which is not the same object as a closed genome.
     title_size: h3
@@ -1075,6 +1195,7 @@ tabs:
       log_y: true
       opacity: 0.75
       legend_pos: right
+      controls_placement: header
     title: Bin length against contig N50
     description: One point per bin, sized by contig count. The long-read binners sit an order of magnitude higher on the N50 axis.
     title_size: h3
@@ -1106,6 +1227,7 @@ tabs:
     display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:check-decagram'}
     placement: left
     title: Completeness (%)
+    show_histogram: true
     layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: interactive
     tag: mg-filter-bin-contamination
@@ -1120,6 +1242,7 @@ tabs:
     display: {title_size: md, custom_color: '#D81B60', icon_name: 'mdi:alert-outline'}
     placement: left
     title: Contamination (%)
+    show_histogram: true
     layout: {x: 0, y: 3, w: 1, h: 3}
   - component_type: interactive
     tag: mg-filter-bin-tier
@@ -1284,6 +1407,7 @@ tabs:
       normalise_to_one: true
       sample_sort: input
       show_legend: true
+      controls_placement: header
     title: The community each binning run recovered
     description: One bar per assembler, binner and sample, composed of the bins it placed. The rank dropdown moves from phylum down to genus.
     title_size: h3
@@ -1338,6 +1462,7 @@ tabs:
       legend_pos: right
       reference_line: vertical
       reference_value: 95
+      controls_placement: header
     title: How confidently each bin was named
     description: The line marks 95 percent identity, the GTDB species boundary. Points to its left were named above species level.
     title_size: h3
@@ -1530,6 +1655,7 @@ tabs:
       legend_pos: right
       reference_line: horizontal
       reference_value: 900
+      controls_placement: header
     title: Gene density against bin size
     description: The line is the roughly 900 coding sequences per megabase a prokaryotic genome carries. Distance from it is how unlike a genome the bin is.
     title_size: h3
@@ -1580,6 +1706,7 @@ tabs:
       legend_pos: right
       reference_line: vertical
       reference_value: 18
+      controls_placement: header
     title: Transfer RNAs against ribosomal RNAs
     description: The line marks the MIMAG floor of 18 transfer RNAs. Points on the bottom row carry no ribosomal RNA at all and cannot be high-quality drafts.
     title_size: h3
@@ -1611,6 +1738,7 @@ tabs:
     display: {title_size: md, custom_color: '#F9A825', icon_name: 'mdi:scale-balance'}
     placement: left
     title: Genes per Mbp
+    show_histogram: true
     layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: interactive
     tag: mg-filter-ann-trna
@@ -1625,6 +1753,7 @@ tabs:
     display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:dna'}
     placement: left
     title: Transfer RNAs
+    show_histogram: true
     layout: {x: 0, y: 3, w: 1, h: 3}
   - component_type: interactive
     tag: mg-filter-ann-rrna
@@ -1639,6 +1768,7 @@ tabs:
     display: {title_size: md, custom_color: '#D81B60', icon_name: 'mdi:alert-outline'}
     placement: left
     title: Ribosomal RNAs
+    show_histogram: true
     layout: {x: 0, y: 6, w: 1, h: 3}
 
 # ============================================================================
@@ -1756,7 +1886,9 @@ tabs:
       not publish it, so Depictio rebuilds the join from the four tool outputs.
       The tools see different bins, so sources_present counts how many of the
       four reported on each row: a bin with a taxon and no CheckM2 score is a
-      real state of the run, not a missing value.
+      real state of the run, not a missing value. Click a bin on the scatter to
+      read its whole row in the card beside it; the card opens on a
+      high-quality Klebsiella pneumoniae draft until you do.
     workflow_tag: mag
     data_collection_tag: bin_summary
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1770,16 +1902,46 @@ tabs:
     config:
       x_title: Completeness (%)
       y_title: Contamination (%)
-      reference_line: horizontal
-      reference_value: 5
+      quadrants:
+        x: 90
+        y: 5
+        labels: [Incomplete and contaminated, Complete but contaminated, Clean but incomplete, Near-complete and clean]
       opacity: 0.8
-      legend_pos: right
+      legend_pos: bottom
       selection_enabled: true
-      selection_column: mimag_tier
+      selection_column: bin_id
+      controls_placement: header
     title: The MIMAG tiers
-    description: The same axes as the Bins tab, coloured by the full MIMAG tier rather than by completeness alone. The high-quality drafts are the ones that also carry their ribosomal and transfer RNAs.
+    description: The same axes as the Bins tab, coloured by the full MIMAG tier rather than by completeness alone. A bin in the bottom right quadrant is a high-quality draft only if it also carries its ribosomal and transfer RNAs. Click a point to open its record.
     title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 7}
+    layout: {x: 0, y: 2, w: 5, h: 9}
+  - component_type: advanced_viz
+    tag: mg-det-av-record
+    index: mg-det-av-record
+    section: The bin summary
+    workflow_tag: mag
+    data_collection_tag: bin_summary
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      id_col: bin_id
+      title_col: bin_id
+      selection_source: any
+      default_record: SPAdes-MetaBAT2-CAPES_S7.15
+      sections:
+        Origin: [sample, assembler, binner]
+        Quality: [mimag_tier, quality_tier, completeness, contamination, quality_score, meets_mimag_rna]
+        Assembly: [total_length, n_contigs, n50, gc_percent]
+        Genes: [cds, cds_per_mbp, trna, rrna]
+        Lineage: [domain, phylum, class_name, order, family, genus, species, rank_assigned]
+        Coverage: [sources_present]
+      link_templates:
+        genus: 'https://gtdb.ecogenomic.org/searches?s=al&q={value}'
+        species: 'https://gtdb.ecogenomic.org/searches?s=al&q={value}'
+    title: Bin record
+    description: Everything the four tools say about the picked bin, with its genus and species linked to GTDB. Clearing the selection returns to the default bin.
+    title_size: h3
+    layout: {x: 5, y: 2, w: 3, h: 9}
   - component_type: advanced_viz
     tag: mg-det-av-sankey
     index: mg-det-av-sankey
@@ -1797,7 +1959,7 @@ tabs:
     title: Assembler to binner to phylum, weighted by binned bases
     description: The same flow as the Taxonomy tab, weighted by bases rather than by bins, so one long-read genome does not count the same as one fragment.
     title_size: h3
-    layout: {x: 0, y: 9, w: 8, h: 7}
+    layout: {x: 0, y: 11, w: 8, h: 7}
   - component_type: table
     tag: mg-det-table
     index: mg-det-table
@@ -1810,7 +1972,7 @@ tabs:
     description: Every bin with its quality, assembly statistics, gene content and lineage. Selecting a row carries the bin to the locus map below.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 16, w: 8, h: 7}
+    layout: {x: 0, y: 18, w: 8, h: 7}
 
   - component_type: text
     tag: mg-det-locus-intro

@@ -367,3 +367,45 @@ plus the two generated JSON schemas that the same rename left stale.
 The catalog render therefore binds no `color` role and the dashboard tile carries
 `color_col: amp_candidates` with a continuous scale in its own `config:` instead. A
 numeric colour role on `scatter_xy` would remove the need for that split.
+
+## 2026-09-23: wave 2b (header controls, histograms, BGC double binding)
+
+What changed (dashboard only; `template.yaml`, recipes and `megatest.yaml` untouched):
+
+- BGCs, `Region maps`: the `coverage_track` tile (`combgc/bgc_region_coverage`) is gone. It
+  drew the same `combgc_region_track` rows as the `genome_view` above it, which the
+  `test_no_double_track_binding` lint forbids. The genome track stays (the rows are
+  intervals, which is what it draws) with `controls_placement: header`; its brush or a
+  contig typed in its locus field emits a region filter on `contig`/`start` that the arrow
+  lanes and the region table on the same collection follow. No `default_region`: every
+  contig carries one or two regions, so the whole axis is the fair landing view.
+- `controls_placement: header` on the hub scatter, the contig feature plane, the ARG dot
+  plot, the AMP property plane, the AMP PCA and the BGC genome track.
+- `show_histogram: true` on all 17 threshold `RangeSlider`s.
+
+Discrepancies:
+
+- FS-D16: `depictio/catalog/combgc/region_track.yaml` still describes three tracks and keeps
+  the `bgc_region_coverage` render. It is harmless (nothing binds it now) but its comment is
+  stale; the catalog module is outside this pass's partition.
+
+Commands and results:
+
+| command | result |
+| --- | --- |
+| `uv run pytest -q depictio/tests/models/test_shipped_dashboard_yamls.py -k funcscan` | 10 passed |
+| `... -k double_track --runxfail` | funcscan no longer listed |
+| `uv run pytest -q depictio/tests/models/test_catalog.py` | 99 passed |
+| `depictio.cli run --template nf-core/funcscan/4.0.0 ... --dry-run` | 8/8 steps |
+| delete + re-ingest | project `6ab3c9f17129744458ef4194`, dashboard `6ab3ca0ee8b8ace33d32c787`; 18/18 table DCs have rows (combgc_region_track 155) |
+| Playwright, 1600x1000 | `/tmp/claude-502/shots-funcscan/` (one per tab + BGC region maps) |
+
+Live check (2026-09-23, after the stack restart): picking
+`ERZ1664511.16-NODE-16-length-49668-cov-9.810473` in the genome track's chromosome picker
+zooms the track to that contig, narrows the arrow lanes to its 2 regions and the region
+table (and the linked `combgc_summary` table) from 155 to 2 rows; the caller UpSet follows.
+Typing the same name in the locus field is refused ("Not a locus on this collection").
+
+- FS-D17: the `genome_view` locus field cannot parse assembler contig names that contain
+  dashes (`...-NODE-16-length-49668-...`); the chromosome picker works. Viewer-side, outside
+  this partition.

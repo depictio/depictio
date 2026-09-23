@@ -24,6 +24,12 @@ collections are `optional: true`) or explicitly with `--var SKIP_ARG=true`,
 
 ## How the dashboard is built
 
+Analysis controls (wave 2b): the tiles whose pickers are the analysis draw them as a header
+strip under the title instead of behind the settings icon (`controls_placement: header`):
+the hub scatter, the contig feature plane, the ARG dot plot, the AMP property plane and PCA,
+and the BGC genome track. Every threshold `RangeSlider` shows the column's distribution
+above the handles (`show_histogram: true`).
+
 - **Hub data collection.** `screening_summary` is one row per sample with the counts each
   arm produced (`arg_hits`, `arg_genes`, `amp_candidates`, `amp_high_confidence`,
   `bgc_regions`, `bgc_classes`, `cazymes`, `cazyme_families`, `screens`). It is built by
@@ -185,10 +191,17 @@ the biology is the same cluster.
 `combgc/region_track.py`: the GenomeSpy track (`mark: rect`, `end_col` set to the region
 end, so a row is the cluster's footprint rather than a tick at its start), the arrow track
 that re-parameterises the Resistome tab's island pattern (one lane per contig, one arrow
-per region), and a plain `coverage_track` on the same collection that needs no genome
-renderer, so the section is never empty. comBGC reports no orientation for a region, so
-`strand` is GFF's `.` for every row and every arrow is drawn left to right: a drawing
-convention, not a strand call.
+per region), then the region table. The genome track carries its locus field and pickers
+as a header strip, and its chromosome picker (or a brush) emits a region filter on `contig`
+and `start` that the arrow lanes and the table on the same collection follow. The locus
+text field does not take these contig names: they contain dashes, which it reads as a
+range separator. A `coverage_track` on the same rows used to sit between them as a fallback; the
+wave 2b lint forbids a `coverage_track` and a `genome_view` on one collection in one tab,
+and for point and interval features the genome track is the one to keep. comBGC reports no
+orientation for a region, so `strand` is GFF's `.` for every row and every arrow is drawn
+left to right: a drawing convention, not a strand call. The section opens on the whole
+genome axis rather than a default region: every contig carries one or two regions, so no
+single contig is a fair landing view.
 
 The recipes read comBGC's run-level `combgc_complete_summary.tsv` rather than the per-sample
 `reports/combgc/<sample>/combgc_summary.tsv` files, because only the run-level file carries

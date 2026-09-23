@@ -100,6 +100,7 @@ main_dashboard:
     workflow_tag: funcscan
     data_collection_tag: screening_summary
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: arg_hits
     column_type: int64
     display: {title_size: md, custom_color: '#0CA678', icon_name: 'mdi:bacteria-outline'}
@@ -114,6 +115,7 @@ main_dashboard:
     workflow_tag: funcscan
     data_collection_tag: screening_summary
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: amp_candidates
     column_type: int64
     display: {title_size: md, custom_color: '#0CA678', icon_name: 'mdi:star-outline'}
@@ -128,6 +130,7 @@ main_dashboard:
     workflow_tag: funcscan
     data_collection_tag: screening_summary
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: cazymes
     column_type: int64
     display: {title_size: md, custom_color: '#0CA678', icon_name: 'mdi:shape-outline'}
@@ -142,6 +145,7 @@ main_dashboard:
     workflow_tag: funcscan
     data_collection_tag: screening_summary
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: bgc_regions
     column_type: int64
     display: {title_size: md, custom_color: '#4C6EF5', icon_name: 'mdi:counter'}
@@ -156,6 +160,7 @@ main_dashboard:
     workflow_tag: funcscan
     data_collection_tag: screening_summary
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: bgc_classes
     column_type: int64
     display: {title_size: md, custom_color: '#4C6EF5', icon_name: 'mdi:shape-outline'}
@@ -170,6 +175,7 @@ main_dashboard:
     workflow_tag: funcscan
     data_collection_tag: screening_summary
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: cazyme_families
     column_type: int64
     display: {title_size: md, custom_color: '#4C6EF5', icon_name: 'mdi:chart-donut'}
@@ -481,6 +487,7 @@ main_dashboard:
     data_collection_tag: screening_summary
     use: funcscan/screen_scatter
     config:
+      controls_placement: header
       color_col: amp_candidates
       color_scale: Tealgrn
       x_title: ARG hits
@@ -631,6 +638,7 @@ tabs:
     workflow_tag: funcscan
     data_collection_tag: contig_annotation
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: screens_on_contig
     column_type: int64
     display: {title_size: md, custom_color: '#F08C00', icon_name: 'mdi:set-merge'}
@@ -645,6 +653,7 @@ tabs:
     workflow_tag: funcscan
     data_collection_tag: contig_annotation
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: contig_length
     column_type: int64
     display: {title_size: md, custom_color: '#E8590C', icon_name: 'mdi:ruler'}
@@ -659,6 +668,7 @@ tabs:
     workflow_tag: funcscan
     data_collection_tag: contig_annotation
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: features_per_kb
     column_type: float64
     display: {title_size: md, custom_color: '#E8590C', icon_name: 'mdi:chart-bell-curve'}
@@ -774,6 +784,7 @@ tabs:
     data_collection_tag: contig_annotation
     use: funcscan/contig_feature_scatter
     config:
+      controls_placement: header
       log_x: true
       x_title: Contig length (bp, log scale)
       y_title: Features on the contig
@@ -892,6 +903,7 @@ tabs:
     workflow_tag: funcscan
     data_collection_tag: hamronization_report
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: identity_pct
     column_type: float64
     display: {title_size: md, custom_color: '#F76707', icon_name: 'mdi:ruler'}
@@ -906,6 +918,7 @@ tabs:
     workflow_tag: funcscan
     data_collection_tag: hamronization_gene_presence
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: n_tools
     column_type: int64
     display: {title_size: md, custom_color: '#F76707', icon_name: 'mdi:scale-balance'}
@@ -1085,6 +1098,8 @@ tabs:
     workflow_tag: funcscan
     data_collection_tag: hamronization_gene_presence
     use: hamronization/arg_dot_plot
+    config:
+      controls_placement: header
     title: Gene support per sample
     description: Dot colour is the mean identity of the hits, dot size the share of tools that called the gene.
     title_size: h3
@@ -1226,6 +1241,7 @@ tabs:
     workflow_tag: funcscan
     data_collection_tag: ampcombi_summary
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: prob_max
     column_type: float64
     display: {title_size: md, custom_color: '#7048E8', icon_name: 'mdi:check-decagram'}
@@ -1240,6 +1256,7 @@ tabs:
     workflow_tag: funcscan
     data_collection_tag: ampcombi_summary
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: aa_length
     column_type: int64
     display: {title_size: md, custom_color: '#7048E8', icon_name: 'mdi:ruler'}
@@ -1355,6 +1372,7 @@ tabs:
     data_collection_tag: ampcombi_summary
     use: ampcombi/amp_property_scatter
     config:
+      controls_placement: header
       x_title: Hydrophobicity
       y_title: Isoelectric point (pI)
       reference_line: horizontal
@@ -1373,7 +1391,7 @@ tabs:
     workflow_tag: funcscan
     data_collection_tag: ampcombi_embedding
     use: ampcombi/amp_embedding
-    config: {color_col: charge_class}
+    config: {color_col: charge_class, controls_placement: header}
     title: Physicochemistry PCA
     description: Two components over weight, pI, hydrophobicity and the three structure fractions.
     title_size: h3
@@ -1513,6 +1531,7 @@ tabs:
     workflow_tag: funcscan
     data_collection_tag: combgc_summary
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: length
     column_type: int64
     display: {title_size: md, custom_color: '#1971C2', icon_name: 'mdi:ruler'}
@@ -1527,6 +1546,7 @@ tabs:
     workflow_tag: funcscan
     data_collection_tag: combgc_summary
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: cds_count
     column_type: int64
     display: {title_size: md, custom_color: '#1971C2', icon_name: 'mdi:counter'}
@@ -1557,6 +1577,7 @@ tabs:
     workflow_tag: funcscan
     data_collection_tag: combgc_region_track
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: length_kb
     column_type: float64
     display: {title_size: md, custom_color: '#1971C2', icon_name: 'mdi:ruler'}
@@ -1715,7 +1736,9 @@ tabs:
       carrying one cluster each is a different finding from one contig carrying
       two head to tail, and only a map shows the difference. comBGC reports no
       orientation for a region, so every arrow is drawn left to right: that is
-      a drawing convention, not a strand call.
+      a drawing convention, not a strand call. Pick a contig in the genome
+      track's chromosome picker, or brush a stretch of its axis, and the arrow
+      lanes and the table below narrow to it.
     workflow_tag: funcscan
     data_collection_tag: combgc_region_track
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1727,6 +1750,7 @@ tabs:
     data_collection_tag: combgc_region_track
     use: combgc/bgc_genome_track
     config:
+      controls_placement: header
       mark: rect
       score_title: Region length (kb)
       selection_enabled: true
@@ -1749,20 +1773,6 @@ tabs:
     description: One lane per contig and one arrow per predicted region, the same pattern the Resistome tab uses for resistance islands. Several arrows packed into one lane is a biosynthetic locus rather than a scattered repertoire.
     title_size: h3
     layout: {x: 0, y: 9, w: 8, h: 6}
-  - component_type: advanced_viz
-    tag: bgc-av-region-coverage
-    index: bgc-region-coverage
-    section: Region maps
-    workflow_tag: funcscan
-    data_collection_tag: combgc_region_track
-    use: combgc/bgc_region_coverage
-    config:
-      mark: rect
-      facet_by_sample: false
-    title: Region length along the contig
-    description: The same intervals as a plain coordinate profile. It needs no genome renderer, so it is the one tile on this section that is certain to draw.
-    title_size: h3
-    layout: {x: 0, y: 15, w: 8, h: 6}
   - component_type: table
     tag: bgc-table-track
     section: Region maps
@@ -1772,9 +1782,9 @@ tabs:
     row_selection_enabled: true
     row_selection_column: contig
     title: BGC region coordinates
-    description: The rows behind the three maps, one per region.
+    description: The rows behind the two maps, one per region; a brush on the genome axis narrows them.
     title_size: h3
-    layout: {x: 0, y: 21, w: 8, h: 5}
+    layout: {x: 0, y: 15, w: 8, h: 5}
 
   - component_type: text
     tag: bgc-conc-intro
@@ -1881,6 +1891,7 @@ tabs:
     workflow_tag: funcscan
     data_collection_tag: dbcan_overview
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: n_tools
     column_type: int64
     display: {title_size: md, custom_color: '#66A80F', icon_name: 'mdi:scale-balance'}

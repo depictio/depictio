@@ -569,3 +569,32 @@ Not done: a `samplesheet -> melon_ranks` link. The melon recipe pools the long-r
 and emits no sample column (the sample name lives only in the file path), so there is no
 target field to link on; the tile intro already says the sample scope stops there. Adding
 one would need a catalog recipe change outside this template.
+
+## 2026-09-23: wave 2b (Krona rings per classifier, header controls, histograms)
+
+What changed (dashboard only):
+
+- Profiles, `Lineage rings`: new tile `tp-av-krona-profiler`, the Krona reading of the
+  lineage table. Same render (`taxpasta/lineage_sunburst`) with `rank_cols` overridden to
+  `[profiler, superkingdom, ..., species]`, so the innermost ring is one wedge per
+  classifier; phyla keep one colour across wedges. `controls_placement: header` puts the
+  ring window pickers on the tile. The lineage table moves down to y 20.
+- `controls_placement: header` on both stacked taxonomy panels (rank, sort, top-N,
+  normalise), the profiler PCoA and the two dot plots.
+- `show_histogram: true` on 11 threshold sliders (not on the sequencing-run slider, which
+  is an identifier).
+
+Discrepancies:
+
+- TP-D14: a wedge's width is the number of profiling runs the classifier made (each run's
+  relative abundances sum to one), so classifiers that ran on fewer samples draw narrower
+  wedges. Documented in the tile description rather than renormalised.
+
+Commands and results:
+
+| command | result |
+| --- | --- |
+| `uv run pytest -q depictio/tests/models/test_shipped_dashboard_yamls.py -k taxprofiler` | 10 passed |
+| `depictio.cli run --template nf-core/taxprofiler/2.0.1 ... --dry-run` | 8/8 steps |
+| delete + re-ingest | project `6ab3c9f1ac5a3f0e26e7bf89`, dashboard `6ab3ca0be8b8ace33d32c77e`; 14/14 table DCs have rows (taxpasta_lineage 5,652) |
+| Playwright, 1600x1000 | `/tmp/claude-502/shots-taxprofiler/` (tabs + `verify-profiles-0.png`, Krona with wedges for kaiju, diamond, motus, ...) |

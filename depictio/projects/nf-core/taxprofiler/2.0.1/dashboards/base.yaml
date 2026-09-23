@@ -499,6 +499,7 @@ main_dashboard:
     workflow_tag: taxprofiler
     data_collection_tag: taxpasta_sample_summary
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: taxa_observed
     column_type: int64
     display: {title_size: md, custom_color: '#F2A93B', icon_name: 'mdi:counter'}
@@ -513,6 +514,7 @@ main_dashboard:
     workflow_tag: taxprofiler
     data_collection_tag: taxpasta_sample_summary
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: shannon
     column_type: float64
     display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:chart-bell-curve'}
@@ -831,6 +833,7 @@ tabs:
     workflow_tag: taxprofiler
     data_collection_tag: nonpareil_summary
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: coverage
     column_type: float64
     display: {title_size: md, custom_color: '#0097A7', icon_name: 'mdi:waves'}
@@ -845,6 +848,7 @@ tabs:
     workflow_tag: taxprofiler
     data_collection_tag: nonpareil_summary
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: diversity
     column_type: float64
     display: {title_size: md, custom_color: '#0097A7', icon_name: 'mdi:chart-bell-curve'}
@@ -859,6 +863,7 @@ tabs:
     workflow_tag: taxprofiler
     data_collection_tag: taxpasta_sample_summary
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: taxa_observed
     column_type: int64
     display: {title_size: md, custom_color: '#7CB342', icon_name: 'mdi:counter'}
@@ -873,6 +878,7 @@ tabs:
     workflow_tag: taxprofiler
     data_collection_tag: taxpasta_sample_summary
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: evenness
     column_type: float64
     display: {title_size: md, custom_color: '#7CB342', icon_name: 'mdi:scale-balance'}
@@ -1002,6 +1008,7 @@ tabs:
     data_collection_tag: taxpasta_profiles
     use: taxpasta/stacked_taxonomy
     config:
+      controls_placement: header
       default_rank: species
       top_n: 15
       sort_by: abundance
@@ -1119,6 +1126,28 @@ tabs:
     description: Ring size is the share of the selected profiling runs; four ranks from the domain outwards, and the ring picker in the settings moves that window.
     title_size: h3
     layout: {x: 0, y: 4, w: 8, h: 8}
+  - component_type: advanced_viz
+    tag: tp-av-krona-profiler
+    index: tp-av-krona-profiler
+    section: Lineage rings
+    workflow_tag: taxprofiler
+    data_collection_tag: taxpasta_lineage
+    use: taxpasta/lineage_sunburst
+    config:
+      # Krona's reading, one wedge per classifier: the profiler becomes the
+      # innermost ring and the NCBI ranks fan out from it, so the same phylum
+      # keeps one colour in every classifier's wedge.
+      rank_cols: [profiler, superkingdom, phylum, class, order, family, genus, species]
+      max_depth: 4
+      palette: tab20
+      colour_by_rank: phylum
+      show_counts: true
+      min_percent: 0
+      controls_placement: header
+    title: Krona rings per classifier
+    description: One wedge per classifier, then its domains, phyla and classes outwards. A wedge is as wide as the profiling runs that classifier made, and the ring pickers above the plot move the window deeper into the ranks.
+    title_size: h3
+    layout: {x: 0, y: 12, w: 8, h: 8}
   - component_type: table
     tag: tp-table-lineage
     section: Lineage rings
@@ -1130,7 +1159,7 @@ tabs:
     description: One row per profiler, database, sample and taxon, with the seven ranks widened into their own columns. The rows the rings are built from.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 12, w: 8, h: 7}
+    layout: {x: 0, y: 20, w: 8, h: 7}
 
   - component_type: text
     tag: tp-sylph-intro
@@ -1155,6 +1184,7 @@ tabs:
     data_collection_tag: sylph_profile
     use: sylph/stacked_taxonomy
     config:
+      controls_placement: header
       default_rank: genus
       top_n: 12
       sort_by: abundance
@@ -1283,6 +1313,7 @@ tabs:
     workflow_tag: taxprofiler
     data_collection_tag: taxpasta_profiles
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: rel_abundance
     column_type: float64
     display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:chart-donut'}
@@ -1442,6 +1473,7 @@ tabs:
     data_collection_tag: taxpasta_embedding
     use: taxpasta/profiler_embedding
     config:
+      controls_placement: header
       color_col: profiler
       show_density: false
     title: Bray-Curtis ordination
@@ -1621,6 +1653,7 @@ tabs:
     workflow_tag: taxprofiler
     data_collection_tag: taxpasta_presence
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: n_profilers
     column_type: int64
     display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:set-merge'}
@@ -1770,6 +1803,7 @@ tabs:
     data_collection_tag: sylph_ani
     use: sylph/ani_dot_plot
     config:
+      controls_placement: header
       colour_scale: Viridis
       max_genes: 25
       gene_sort: mean
@@ -1829,6 +1863,7 @@ tabs:
     data_collection_tag: taxpasta_sample_summary
     use: taxpasta/richness_dot_plot
     config:
+      controls_placement: header
       colour_scale: Plasma
       max_genes: 20
       gene_sort: mean
@@ -1858,6 +1893,7 @@ tabs:
     workflow_tag: taxprofiler
     data_collection_tag: sylph_ani
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: adjusted_ani
     column_type: float64
     display: {title_size: md, custom_color: '#0097A7', icon_name: 'mdi:ruler'}
@@ -1872,6 +1908,7 @@ tabs:
     workflow_tag: taxprofiler
     data_collection_tag: sylph_ani
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: taxonomic_abundance
     column_type: float64
     display: {title_size: md, custom_color: '#0097A7', icon_name: 'mdi:chart-donut'}
@@ -1886,6 +1923,7 @@ tabs:
     workflow_tag: taxprofiler
     data_collection_tag: taxpasta_sample_summary
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: top_taxon_fraction
     column_type: float64
     display: {title_size: md, custom_color: '#7CB342', icon_name: 'mdi:chart-bell-curve'}

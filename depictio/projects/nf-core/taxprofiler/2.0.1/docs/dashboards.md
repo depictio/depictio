@@ -164,6 +164,16 @@ database is keyed differently). Pick one classifier in the left panel and the ri
 classifier's view of the community; pick several and they pool, which is a fast way to see
 whose tree is deeper.
 
+Under the pooled rings sits the Krona reading, `Krona rings per classifier`: the same render
+(`taxpasta/lineage_sunburst`) with the profiler prepended to the rank columns, so the
+innermost ring is one wedge per classifier and the domains, phyla and classes fan out from
+it. Phyla keep one colour across every wedge, which is what makes the classifiers
+comparable at a glance. A wedge is as wide as the profiling runs that classifier made, so a
+classifier that ran on fewer samples (the long-read-only tools) draws a narrower wedge. The
+ring window pickers sit above the plot (`controls_placement: header`), as do the rank picker
+of both stacked taxonomy panels, the PCoA axes and the two dot plots; every threshold slider
+shows its column's distribution (`show_histogram: true`).
+
 `Containment composition` shows the same communities as sylph reconstructs them. sylph does
 not count reads into a taxonomy; it estimates how much of each reference genome is contained
 in the sample, and sylph-tax then maps that onto a lineage. Reading it next to the read-count
