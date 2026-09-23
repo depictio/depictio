@@ -40,6 +40,11 @@ recipe to learn sample or caller from a file name; sarek's variant tables, eager
 lane ledger and hic's HiC-Pro stats all pay the extra collection. `melon/ranks`
 (taxprofiler) cannot be linked at all until it does the same.
 
+**2026-09-23 check (wave 2b).** cutandrun's fragment pile-up needed the sample from
+`<sample>.frags.cut.bed` and pays the same price: `seacr_frags_raw` is a 7 M-row raw
+scan whose only job is to carry `source_path` into `seacr/frags_profile`. A
+`file_column` on `RecipeSource` would have made that one recipe reading four files.
+
 ## 2. `optional: true` is not honoured on a glob source
 
 `RecipeSource(optional=True)` is respected for `path` and `dc_ref` sources.
@@ -470,6 +475,12 @@ restarting alone leaves the stored dashboards broken. Declaring a redundant `viz
 in the YAML would hide the symptom while still losing the config defaults and the
 catalog badge, so no template in this lot does that.
 
+**2026-09-23 (wave 2b).** Hit again on cutandrun: `seacr/frags_pileup_matrix`,
+`seacr/frags_pileup_track` and `seacr/seacr_consensus_track` were added to the catalog
+while the stack ran, and the first import stored the three tiles without a
+`viz_kind`. Any live pass that adds a catalog render must restart the backend before
+importing, and re-import after.
+
 ## 14. A long annotation label can collapse a complex_heatmap to nothing
 
 Binding `row_annotation_cols` to a field whose labels are long silently
@@ -533,6 +544,159 @@ a MultiSelect. Both templates now emit a Utf8 twin (`replicate_label`,
 `read_depth_label`) from the sample recipe and filter on that. Recipe-side fix; a
 platform-side option would be to let a low-cardinality integer column opt into a
 Select.
+
+## 19. A follower only zooms when it shares the navigator's column names
+
+A locus section has one navigator (`genome_view` with `region_filter_enabled`) that
+emits a chromosome filter and a position filter named after **its own** columns. The
+API rewrites that pair onto each linked collection through a `resolver: region` link
+(`filter_links.py::region_link_filters`), so the followers' rows are narrowed
+correctly. The x-axis clamp is a different path: `useFollowedRegion`
+(`genomicAxis.ts`) reads the dashboard filters by the follower's own role columns, and
+the dashboard filters still carry the navigator's names. A follower whose columns
+differ from the navigator's therefore gets the right rows on the wrong axis:
+
+- hic: `tad_domains` emits `chrom` / `start`; the contact triangle binds `chrom1` /
+  `start1`, so it draws the region's rows from 65 Mb to the chromosome end and its
+  automatic resolution picks 1 Mb instead of 500 kb (HC-D17).
+- sarek: `mosdepth_windows` emitted `chromosome` / `position`; `vcf_variants` and the
+  file track bind `chrom` / `pos`, so on the first ingest every follower stayed
+  genome-wide and MinIO saw no range request (SK-D14). The template renamed every locus
+  column to `chrom` / `pos`, which is a workaround, not a rule a template author can
+  discover.
+- sarek: cards ignore `genome_selection` filters altogether (SK-D13), so a "variants in
+  view" card cannot exist.
+- hic again: `coverage_track` in its `locus` (GenomeSpy) view narrows its rows to the
+  followed region but keeps the whole-genome x axis, so the insulation track drew as one
+  sliver at chr2 (HC-D20). The TADs tile opens on `view: track`, which clamps, until the
+  locus view reads the same region.
+
+**Smallest fix:** give the client the project's region links (they are already fetched
+for the filter panel) and let `followedRegion` map a foreign region onto the tile's
+roles through the link's `columns: {chrom, pos}`. Then `follow_region_filter` is what
+the docs already say it is: any tile reached by a region link follows the region.
+
+## 20. A genome_view navigator fetches its whole collection, sampled
+
+`genome_view` never narrows its own fetch: the tile receives the collection sampled to
+`figure_max_points` (10 k rows) whatever region it opens on, then zooms client side.
+On methylseq's 135 k-row binned collection that left about 8 of the 112 windows inside
+the default region (MS-D14); the template moved the navigator to the 19 k-row
+group-compare collection and made the binned lanes a follower, whose fetch is
+region-limited and complete. cutandrun's navigator shows a sample of 433 k SEACR calls
+for the same reason (CR-D22). Same family: the y domain spans the whole collection, so
+one 59X mitochondrion flattens every nuclear window of eager's depth navigator to the
+bottom of its lane (EA-D13).
+
+The rule that works today, found on the third methylseq layout: give the navigator a
+`score_threshold` on a significance score (`neg_log10_padj` at 1.3), because the
+sampler keeps every row above the threshold whole, and put the dense per-sample
+tracks on followers, whose fetch is region-narrowed and complete. The navigator then
+shows the hits at any scale and the followers show everything at the locus.
+
+**Smallest fix:** when a `default_region` or a region filter is set, fetch the
+navigator's rows for that region at full density (the coverage_track dispatch already
+does this) and keep the sampled genome-wide frame only for the overview; rescale y on
+the visible rows.
+
+## 21. Assemblies: alt contigs crash the navigator, hg19 has no gene lane
+
+`genome_view` with `assembly: hg38` throws on rows whose contig the assembly does not
+list (SEACR calls on `chr1_KI270706v1_random` and friends, CR-D19), so cutandrun's
+navigator runs without an assembly and without gene-symbol search; the gene lane moved
+to the consensus track, which has no alt contigs. Separately, the bundled gene tables
+and locus search cover hg38 and mm10 only, so the hg19 runs (chipseq 1.2.0, atacseq
+1.2.2) and the cod assembly (eager 2.4.5, gadMor3) have no gene lane and take
+coordinates only in the locus field; HOMER's nearest-gene track stands in.
+
+**Smallest fix:** drop or bucket rows on contigs absent from the assembly before
+building the GenomeSpy spec; ship an hg19 gene asset, and let a template point at a
+GFF3 tabix for any other assembly (the `indexed_file` path already exists).
+
+## 22. `coverage_track` crashed on a numeric `sample_col` (fixed in this PR)
+
+hic's insulation and E1 tracks wanted one line per window size or per resolution, both
+integer columns. The header "Samples" MultiSelect was fed the raw values and Mantine's
+search called `toLowerCase` on a number, taking the whole tile down (HC-D16). The
+renderer now coerces the chromosome and sample option lists to strings; confirmed live
+on the re-ingested hic template, whose insulation tracks draw one line per window and
+whose E1 tracks draw one per resolution.
+
+## 23. New kinds land before their catalog renders
+
+`record_card` and `parallel_coordinates` (wave 2a) have no render in any catalog
+module, so every template that uses them binds `viz_kind` + `config` by hand:
+scrnaseq (marker record, cluster profile), methylseq (QC profile, navigator on the
+group-compare DC), mag (Nx profile, recruitment heatmap, bin record), nanoseq (Nx
+ladder, DEXSeq usage), airrflow (spectratype, V-J, ribbon), rnaseq (QC profile, gene
+record). Each lowers the template's `use:` ratio by two or three tiles. The catalog
+also still spells the alias kinds the wave folded into views: `gsea/gsea_dotplot`
+(`enrichment`), `deseq2/ma`, `deseq2/qq`, and `combgc/region_track` still advertises
+the unbound `bgc_region_coverage` render.
+
+**Smallest fix:** one render per new kind in the modules named above (cellranger,
+bismark, checkm2 or gtdbtk, samtools, enchantr, salmon), and flip the four alias
+renders to their surviving kind plus a `view`. The template lint could then require
+`use:` on any advanced_viz whose module ships a render for that kind.
+
+## 24. `keep_columns` is ignored on a table collection
+
+`DCTableConfig.keep_columns` is accepted by the model and never read by the CLI, so a
+wide raw scan (airrflow's 74-column repertoire table) cannot be projected at ingest.
+Recipe file sources with `read_kwargs.columns` are the workaround; a raw collection
+that is only there to feed `dc_ref` still lands in full. Related: `parallel_coordinates`
+labels its axes with raw column names and two of rnaseq's overlap at width 8 (RS-D12);
+the kind should read `columns_description` for its axis titles like the record card
+does.
+
+## 25. A direct link and a region link on one pair of collections (fixed in this PR)
+
+sarek declared a `stage` link and the locus region link between `mosdepth_windows` and
+`mosdepth_targets`. `_find_link_for_resolution` (`links_endpoints/routes.py`) looked a
+link up by source and target only, returned the region link for a value lookup, and
+the resolver registry answered `Unknown resolver type: region`: every
+`compute_coverage_track` on the targets track was a 500 (SK-D15). The lookup now skips
+region links unless asked for one by name, with a unit test on the sarek pair. The
+template dropped its `stage` link as a workaround before the fix and has not put it
+back: restoring it means the stage picker narrows the per-target track again, which
+needs a re-ingest to check.
+
+## 26. File-backed tracks decode one lane at a time
+
+sarek's `genome_view` on the `indexed_file` collection (8 annotated VCFs plus `.tbi`)
+draws the first lane and fails the other seven with
+`Loading failed: workerPool.decompressBlocks is not a function` (SK-D19). The range
+reads succeed (24 MinIO requests at the default region, 32 after a typed locus); the
+failure is in `@gmod/bgzf-filehandle` 6.6.0's worker pool under concurrent lane loads,
+in the GenomeSpy lazy VCF source. Not a template matter.
+
+**Smallest fix:** serialise the lane loads or pin the bgzf filehandle to a release
+whose pool exists in the bundle; a Playwright check that every lane of a multi-file
+track reaches `loaded`.
+
+## 27. A slider walked a value link as two values (fixed in this PR)
+
+atacseq's Peak locus navigator emits a position range on `macs2_broad_peaks`;
+`extend_filters_via_links` sent it through the direct `peak_id` link to
+`homer_annotated_peaks`, where `_translate_filter_values` read `[26000000, 26300000]`
+as `start IN (26000000, 26300000)`, matched no peak and emptied the HOMER track. The
+q-value and width sliders of the Peaks tab did the same (AT-D26). A `RangeSlider` or
+`DateRangePicker` filter now travels with `range_filter: true`
+(`LinkResolutionRequest`), the translation applies `>= low and <= high` on the first
+hop, and later hops receive the discrete join values as before. The atacseq template
+had disabled the link as a workaround; re-enabling it needs a backend restart and a
+live check of the HOMER track under a region, a q-value range and a peak lasso.
+
+## 28. `scatter_xy` density on a log axis killed the tab (fixed in this PR)
+
+mag's Contigs tab crashed headless Chromium in 8 loads out of 9 whenever the
+length-vs-depth scatter drew its density view on log axes, including through the
+automatic switch above 3,000 rows that every sampled 10 k-row scatter crosses
+(MG-D14). Nothing reached the console. The density view no longer asks Plotly's
+`histogram2d` to bin: the cells are counted in the renderer (`densityHeatmap`) and
+drawn as a `heatmap` with explicit edges in data units, which a linear and a log
+axis map the same way. mag's scatter is pinned to points mode until the fix is seen
+live; any log-axis scatter past the threshold gains the same protection.
 
 ## Pipelines considered and not templated in this lot
 

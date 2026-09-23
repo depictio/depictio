@@ -118,6 +118,52 @@ What changed in the manifests and pins during the lot 1 + lot 2 remediation:
 - methylseq, nanoseq, eager, hic, scrnaseq: manifests unchanged; what changed is what the
   templates read from them (see each `VALIDATION_REPORT.md`).
 
+### 2026-09-23 wave 2b (locus sections, new kinds, header controls)
+
+Twelve template passes ran in parallel on the lot 2 stack (`PORT_OFFSET 112`) after
+the wave 2a platform work (switchable views, `record_card`, `parallel_coordinates`,
+region links, `indexed_file` tracks, `controls_placement: header`, slider histograms).
+The stack was taken down before the last live checks, so every pipeline below has a
+live pass still to run; see each `VALIDATION_REPORT.md` dated section for the exact
+commands.
+
+What changed in the manifests and mirrors:
+
+- **sarek 3.10.0**: `megatest.yaml` gains the 10 `annotation/*/*/*_snpEff.ann.vcf.gz.tbi`
+  keys. Eight SNV / indel annotated VCFs plus their index feed the `indexed_file`
+  collection `snpeff_vcf_files` (Manta and TIDDIT excluded, `max_file_size_mb: 32`), read
+  by the browser through presigned range requests.
+- **cutandrun 3.1**: four `*.frags.cut.bed` (168 MB) fetched; the mirror is now about
+  250 MB / 108 files. They feed the new catalog output `seacr/frags_profile` (fragment
+  pile-up around the kept regions).
+- **airrflow 5.1.0**: `clonal_analysis/repertoire_analysis/repertoire_analysis_report/repertoires/All_samples__repertoire-pass.tsv`
+  (308 MB) fetched for the CDR3 spectratype and V-J usage recipes. The per-sample
+  `vdj_annotation/*_db-pass.tsv` (860 MB) carry the same data and were not fetched.
+- Every other manifest is unchanged; what changed is what the templates read.
+
+What each template gained (ingest state at the moment the stack went down):
+
+| pipeline | wave 2b content | live state on 2026-09-23 |
+|---|---|---|
+| sarek 3.10.0 | Cohort QC locus section on TP53 (`chr17:7,400,000-8,000,000`): mosdepth window navigator, per-target coverage, per-caller calls, range-read VCF track; mutation spectra; callset QC parallel coordinates; VAF density; rainfall manhattan; variant record card | first ingest validated live (34 DCs, 4 somatic optional skipped); locus columns then renamed to `chrom` / `pos`, re-ingest pending |
+| scrnaseq 4.2.0 | marker violin per cluster, gene record card (FCER1A), cluster QC parallel coordinates, group comparison opening on C1 vs C2, header controls, slider histograms | dashboard re-imported in place, validated live |
+| mag 5.5.0 | MIMAG quadrants, contig coverage density, per-assembly Nx curve, assembly by sample recruitment heatmap, bin record card | re-ingested (`lot2-mag`), 2 of 7 tab screenshots |
+| nanoseq 3.0.0 | Nx ladder per library, DESeq2 volcano with MA and QQ views, DEXSeq QQ view and transcript usage bars | re-ingested, validated live |
+| eager 2.4.5 | Coverage locus section (Qualimap depth navigator, MAPQ track through a region link, `NC_044048.1` whole contig), library QC parallel coordinates, endogenous DNA vs clonality | ingested as `lot2-eager-w2b` beside the old `lot2-eager`; three later YAML edits not re-imported |
+| methylseq 2.3.0 | Global methylome locus section on NKX2-1 (`chr14:35,500,000-37,500,000`): group-difference navigator, per-library binned lanes, manhattan; QC parallel coordinates; per-context M-bias panels; volcano / QQ switch | two earlier layouts validated live; final layout (navigator moved to the group-compare DC) pending re-ingest |
+| hic 2.0.0 | Contact maps tab as locus section on HoxD (`chr2:65,000,000-85,000,000`): TAD navigator, multi-resolution triangle (500 kb + 1 Mb partitions, 875,318 rows), insulation and E1 tracks through region links; P(s) with derivative | ingested twice, Contact maps validated live; TADs tab default region added after the last ingest |
+| chipseq 1.2.0 | Locus tab on TFF1 (`chr21:43,600,000-44,000,000`, hg19), summit-centred profiles (new catalog output `macs2/summit_profile`), FRiP per sample, one volcano tile with MA and QQ views | re-ingested, default region validated live; brush walk and full-height screenshots pending |
+| atacseq 1.2.2 | Peak locus tab on HIST1 (`chr6:26,000,000-26,300,000`, hg19), FRiP and peak-count bars, one volcano / MA / QQ tile | re-ingested, region links validated live through the cards; screenshots pending |
+| cutandrun 3.1 | Peak calls locus section (`chr9:130,850,000-131,350,000`): SEACR navigator, fragment pile-up, MACS2 and consensus tracks; fragment pile-up metagene; samtools flagstat duplication | ingested 22/22; final YAML (navigator without assembly, pile-up moved to Signal) not ingested; first import hit the stale catalog cache (section 13 of `TEMPLATE_BOTTLENECKS.md`) |
+| funcscan 4.0.0 | BGC map keeps `genome_view` only, header controls, histograms on 17 sliders | re-ingested 18/18, validated live; two tab screenshots pending |
+| taxprofiler 2.0.1 | Krona-style rings per classifier, header controls, histograms on 11 sliders | re-ingested 14/14, validated live |
+| airrflow 5.1.0 | CDR3 spectratype, V by J pairing heatmap, native diversity ribbon profile | re-ingested 14/14 under the template name, validated live |
+| rnaseq 3.26.0 | MultiQC general-stats parallel coordinates, mean-variance plane with a gene record card (HBG2) | ingested 8/8, top-of-tab screenshots only |
+| differentialabundance 2.0.0 | volcano / MA switch, QQ view, p-value histogram per contrast, record card per contrast (Uchl1) | ingested 8/8, top-of-tab screenshots only |
+
+`test_no_double_track_binding` is enforced since this wave: no shipped template binds
+`coverage_track` and `genome_view` on one collection in one tab any more.
+
 ## How to use
 
 ```bash
