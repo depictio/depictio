@@ -13,7 +13,7 @@
     {
       "index": "gat-text",
       "component_type": "text",
-      "title": "Gene arrow track",
+      "title": "Gene clusters on contigs",
       "workflow_tag": "",
       "data_collection_tag": "",
       "wf_id": {
@@ -30,13 +30,13 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "One lane per contig, one arrow per coding sequence. An arrow points right on the + strand and left on the -. The shaded band is the called BGC region: arrows inside it are coloured by product class, the grey flanking genes either side are the neighbourhood the cluster sits in.\n",
+      "body": "Whole genes as arrows along a contig, one lane per contig: an arrow points right on the + strand, left on the -, and the shaded band is the called biosynthetic gene cluster with its genes coloured by product class. The question here is gene order, strand and neighbourhood across a 20 to 40 kb locus, where the Isoforms tab asks how one gene is spliced. Input: antiSMASH or funcscan BGC calls, or Prokka and Bakta annotations from nf-core/mag and bacass.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
       "index": "gat-track",
       "component_type": "advanced_viz",
-      "title": "Gene arrow track",
+      "title": "Biosynthetic gene clusters",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "gene_arrow_track_demo",
       "wf_id": {
@@ -58,12 +58,13 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "description": "Biosynthetic gene clusters on five bacterial contigs. Arrow direction is the strand, colour is the antiSMASH-style product class, the band behind each lane is the called region. Feature labels, arrow height, lane count and lane ordering live in the Settings \u2699 popover.",
+      "description": "Five bacterial contigs, one arrow per coding sequence. Direction is the strand, colour the antiSMASH-style product class, the band behind each lane the called cluster. Labels and lane ordering are in the settings.",
       "title_size": "sm",
       "title_align": "left",
       "section": "Gene arrow track",
       "viz_kind": "gene_arrow_track",
       "config": {
+        "controls_placement": "header",
         "viz_kind": "gene_arrow_track",
         "contig_col": "contig",
         "feature_id_col": "feature_id",
@@ -117,7 +118,7 @@
       "group": "Locus filters",
       "timescale": null,
       "show_marks": null,
-      "custom_color": "#12B886",
+      "show_histogram": null,
       "icon_name": "mdi:bacteria",
       "wf_tag": "python/advanced_viz_demo"
     },
@@ -159,7 +160,7 @@
       "group": "Locus filters",
       "timescale": null,
       "show_marks": null,
-      "custom_color": "#7950F2",
+      "show_histogram": null,
       "icon_name": "mdi:dna",
       "wf_tag": "python/advanced_viz_demo"
     },
@@ -201,7 +202,7 @@
       "group": "Locus filters",
       "timescale": null,
       "show_marks": null,
-      "custom_color": "#1976D2",
+      "show_histogram": null,
       "icon_name": "mdi:vector-arrange-below",
       "wf_tag": "python/advanced_viz_demo"
     }
@@ -242,7 +243,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 1,
+      "h": 2,
       "static": false,
       "resizeHandles": [
         "se",
@@ -255,7 +256,7 @@
     {
       "i": "box-gat-track",
       "x": 0,
-      "y": 1,
+      "y": 2,
       "w": 8,
       "h": 8,
       "static": false,
@@ -277,8 +278,8 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "Gene arrow track",
-  "subtitle": "Locus map of five biosynthetic gene clusters: strand-aware arrows on a base-pair axis, one lane per contig, with the called BGC region shaded behind them.",
+  "title": "Gene clusters on contigs",
+  "subtitle": "Genes as strand-aware arrows along five bacterial contigs, with the called biosynthetic gene cluster shaded behind them: gene order and neighbourhood, not splicing.",
   "icon": "mdi:dna",
   "icon_color": "teal",
   "icon_variant": "filled",
@@ -340,5 +341,7 @@
     }
   ],
   "funnel_filtering": true,
-  "brand_theme": null
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
 }

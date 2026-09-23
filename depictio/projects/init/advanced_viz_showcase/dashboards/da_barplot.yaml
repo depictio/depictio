@@ -1,12 +1,12 @@
-# DA barplot (per contrast) — one tab of the advanced-visualisation showcase.
+# Taxa in one contrast: one tab of the advanced-visualisation showcase.
 #
 # Regenerate the seed after editing:
 #   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
 #
 # The component `index` values are pinned rather than auto-generated: they are
 # what keeps a regenerated seed byte-identical to the shipped one.
-title: 'DA barplot (per contrast)'
-subtitle: 'Faceted top-N differentially-abundant taxa — one panel per contrast. Useful for side-by-side comparison.'
+title: 'Taxa in one contrast'
+subtitle: 'The top differentially abundant taxa of one contrast, ranked by effect'
 icon: 'mdi:chart-bar-stacked'
 icon_color: 'pink'
 icon_variant: filled
@@ -15,7 +15,7 @@ dashboard_id: '646b0f3c1e4a2d7f8e5b8d24'
 is_main_tab: false
 tab_order: 12
 parent_dashboard_tag: volcano
-tab_icon: 'mdi:chart-bar-stacked'
+tab_icon: 'mdi:scale-balance'
 tab_icon_color: 'pink'
 
 # Left-panel filter section. Deliberately not `persistent`: the 23 tabs of
@@ -44,18 +44,19 @@ components:
     vertical_alignment: top
     section: 'Differential barplot'
     body: >
-      The same ANCOM-BC table as the previous tab, drawn the way a differential-abundance
-      figure usually is: top-N features by effect, bars signed by direction, one panel per
-      contrast. Where the volcano answers which features are significant, this answers how
-      large the differences are.
-    layout: { x: 0, y: 0, w: 8, h: 1 }
+      The same ANCOM-BC table opened on a single contrast, gut against soil, which is how a
+      figure for one comparison is usually drawn: the taxa with the largest effect, ranked,
+      positive bars enriched in the first group. Switch contrast with the tabs inside the
+      tile; the Log-fold change slider on the left shows the distribution you cut. Input: nf-
+      core/ampliseq ANCOM-BC or ALDEx2 differentials.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
 
   - tag: viz-da_barplot
     index: 'da-bar'
     component_type: advanced_viz
     workflow_tag: advanced_viz_demo
     data_collection_tag: 'ancombc_demo'
-    title: 'DA barplot — faceted by contrast'
+    title: 'Gut against soil'
     description: 'Each panel shows the top-N taxa (by |lfc|) for one contrast. Bars coloured by direction; greyed when above the significance threshold.'
     section: 'Differential barplot'
     viz_kind: 'da_barplot'
@@ -68,7 +69,9 @@ components:
       label_col: "label"
       significance_threshold: 0.05
       top_n: 15
-    layout: { x: 0, y: 2, w: 8, h: 8 }
+      contrast_view: "gut_vs_soil"
+      controls_placement: "header"
+    layout: { x: 0, y: 2, w: 8, h: 9 }
 
   - tag: filter-da_barplot-contrast
     index: da-f-contrast
@@ -100,6 +103,7 @@ components:
     placement: left
     section: 'Contrast scope'
     group: 'Call filters'
+    show_histogram: true
     display:
       title_size: md
       custom_color: '#1976D2'

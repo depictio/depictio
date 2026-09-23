@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "One stacked bar per sample, segments sized by abundance and coloured by taxon. Switching the rank in the settings menu recomputes the stack from the lineage columns rather than re-aggregating upstream. Filtering to a phylum on the left is what turns a wall of colour into a readable comparison.\n",
+      "body": "One stacked bar per sample, segments sized by relative abundance and coloured by taxon. The rank picker in the tile header re-aggregates the stack from phylum down to genus, and Top-N lumps the tail into Other; filter to one phylum on the left to compare its members across samples. Input: taxonomic abundance tables from nf-core/ampliseq, nf- core/taxprofiler or nf-core/mag.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -58,12 +58,13 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "description": "Per-sample relative abundance per rank. Toggle Normalise in Settings \u2699 to switch between raw counts and 0\u2013100 % stacks.",
+      "description": "Per-sample relative abundance at the chosen rank. Rank, Top-N and normalisation sit in the tile header.",
       "title_size": "sm",
       "title_align": "left",
       "section": "Community composition",
       "viz_kind": "stacked_taxonomy",
       "config": {
+        "controls_placement": "header",
         "viz_kind": "stacked_taxonomy",
         "sample_id_col": "sample_id",
         "taxon_col": "taxon",
@@ -118,6 +119,7 @@
       "group": "Taxonomy",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
       "custom_color": "#45B8AC",
       "icon_name": "mdi:bacteria",
       "wf_tag": "python/advanced_viz_demo"
@@ -160,6 +162,7 @@
       "group": "Taxonomy",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
       "custom_color": "#2E7D32",
       "icon_name": "mdi:bacteria",
       "wf_tag": "python/advanced_viz_demo"
@@ -202,6 +205,7 @@
       "group": "Taxonomy",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
       "custom_color": "#1976D2",
       "icon_name": "mdi:flask",
       "wf_tag": "python/advanced_viz_demo"
@@ -243,7 +247,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 1,
+      "h": 2,
       "static": false,
       "resizeHandles": [
         "se",
@@ -256,9 +260,9 @@
     {
       "i": "box-tax-stacked",
       "x": 0,
-      "y": 1,
+      "y": 2,
       "w": 8,
-      "h": 8,
+      "h": 9,
       "static": false,
       "resizeHandles": [
         "se",
@@ -278,7 +282,7 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "Stacked taxonomy",
+  "title": "Community composition",
   "subtitle": "Per-sample composition. Toggle 'Normalise' inside the viz to switch between raw counts and 0\u2013100% stacks.",
   "icon": "mdi:chart-bar-stacked",
   "icon_color": "blue",
@@ -315,7 +319,7 @@
   },
   "tab_order": 3,
   "main_tab_name": null,
-  "tab_icon": "mdi:chart-bar-stacked",
+  "tab_icon": "mdi:bacteria-outline",
   "tab_icon_color": "blue",
   "parent_dashboard_title": null,
   "filter_sections": [
@@ -341,5 +345,7 @@
     }
   ],
   "funnel_filtering": true,
-  "brand_theme": null
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
 }

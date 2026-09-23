@@ -1,11 +1,11 @@
-# Clustering: PCA — one tab of the advanced-visualisation showcase.
+# Sample structure (PCA): one tab of the advanced-visualisation showcase.
 #
 # Regenerate the seed after editing:
 #   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
 #
 # The component `index` values are pinned rather than auto-generated: they are
 # what keeps a regenerated seed byte-identical to the shipped one.
-title: 'Clustering: PCA'
+title: 'Sample structure (PCA)'
 subtitle: 'Principal Component Analysis on the synthetic 90×200 feature matrix'
 icon: 'mdi:atom'
 icon_color: 'teal'
@@ -15,7 +15,7 @@ dashboard_id: '646b0f3c1e4a2d7f8e5b8d12'
 is_main_tab: false
 tab_order: 4
 parent_dashboard_tag: volcano
-tab_icon: 'mdi:atom'
+tab_icon: 'mdi:chart-scatter-plot'
 tab_icon_color: 'teal'
 
 # Left-panel filter section. Deliberately not `persistent`: the 23 tabs of
@@ -44,10 +44,13 @@ components:
     vertical_alignment: top
     section: 'PCA projection'
     body: >
-      A linear projection: axes are principal components, so distance along an axis means
-      variance explained and the axes are directly comparable. This is the projection to
-      trust when the question is how much structure there is, rather than what shape it has.
-    layout: { x: 0, y: 0, w: 8, h: 1 }
+      Ninety samples from three conditions projected on their first principal components.
+      Distance along an axis is variance explained, so this is the projection to trust for how
+      much structure there is, and a batch or outlier sample shows here first. The Method and
+      Colour by pickers sit in the tile header; a lasso or box selection publishes the samples
+      as a dashboard filter. nf-core/rnaseq and nf-core/differentialabundance QC reports draw
+      the same plot from the normalised counts.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
 
   - tag: viz-clustering_pca
     index: 'pca-embedding'
@@ -69,7 +72,8 @@ components:
       point_size: 9
       show_density: false
       selection_enabled: true
-    layout: { x: 0, y: 1, w: 8, h: 8 }
+      controls_placement: "header"
+    layout: { x: 0, y: 2, w: 8, h: 9 }
 
   - tag: filter-clustering_pca-cluster
     index: pca-f-cluster
@@ -101,6 +105,7 @@ components:
     placement: left
     section: 'Projection scope'
     group: 'Point filters'
+    show_histogram: true
     display:
       title_size: md
       custom_color: '#00BCD4'

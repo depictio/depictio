@@ -1,12 +1,12 @@
-# Categorical flow (Sankey) — one tab of the advanced-visualisation showcase.
+# Lineage assignment flow: one tab of the advanced-visualisation showcase.
 #
 # Regenerate the seed after editing:
 #   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
 #
 # The component `index` values are pinned rather than auto-generated: they are
 # what keeps a regenerated seed byte-identical to the shipped one.
-title: 'Categorical flow (Sankey)'
-subtitle: 'Per-sample classification flow across QC → Pangolin lineage → Nextclade clade. Server-side aggregation via Celery + categorical filtering.'
+title: 'Lineage assignment flow'
+subtitle: 'SARS-CoV-2 samples flowing from QC status to Pangolin lineage to Nextclade clade'
 icon: 'mdi:chart-sankey'
 icon_color: 'violet'
 icon_variant: filled
@@ -15,7 +15,7 @@ dashboard_id: '646b0f3c1e4a2d7f8e5b8d47'
 is_main_tab: false
 tab_order: 23
 parent_dashboard_tag: volcano
-tab_icon: 'mdi:chart-sankey'
+tab_icon: 'mdi:virus'
 tab_icon_color: 'violet'
 
 # Left-panel filter section. Deliberately not `persistent`: the 23 tabs of
@@ -44,11 +44,12 @@ components:
     vertical_alignment: top
     section: 'Categorical flow'
     body: >
-      A Sankey over three categorical columns: each band is a set of samples carrying the
-      same combination of calls, and its width is how many. It answers what a set of bar
-      charts cannot, such as whether the samples that fail QC are the ones that end up
-      unassigned.
-    layout: { x: 0, y: 0, w: 8, h: 1 }
+      Each band is a set of SARS-CoV-2 samples sharing the same QC status, Pangolin lineage
+      and Nextclade clade, its width the sample count. It answers what three bar charts
+      cannot, such as whether the samples failing QC are the ones left unassigned. The steps
+      and the sort order are in the tile header. Input: the QC, Pangolin and Nextclade reports
+      of nf-core/viralrecon.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
 
   - tag: viz-categorical_flow
     index: 'flow-sankey'
@@ -56,7 +57,7 @@ components:
     workflow_tag: advanced_viz_demo
     data_collection_tag: 'categorical_flow_demo'
     title: 'Categorical flow'
-    description: 'Sankey flow across qc_status → lineage → clade. Server-side aggregation via Celery; sort / colour / opacity / threshold live in the Settings ⚙ popover.'
+    description: 'Sankey across qc_status, lineage and clade, aggregated on the server. Steps and sort order sit in the tile header.'
     section: 'Categorical flow'
     viz_kind: 'sankey'
     config:
@@ -68,7 +69,8 @@ components:
       link_opacity: 0.5
       min_link_value: 0.0
       show_node_labels: true
-    layout: { x: 0, y: 2, w: 8, h: 8 }
+      controls_placement: "header"
+    layout: { x: 0, y: 2, w: 8, h: 9 }
 
   - tag: filter-categorical_flow-qc
     index: flow-f-qc

@@ -1,12 +1,17 @@
-# Coverage track — one tab of the advanced-visualisation showcase.
+# Coverage track: one tab of the advanced-visualisation showcase.
 #
 # Regenerate the seed after editing:
 #   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
 #
 # The component `index` values are pinned rather than auto-generated: they are
 # what keeps a regenerated seed byte-identical to the shipped one.
-title: 'Coverage track'
-subtitle: 'Read-depth signal along a coordinate axis (mosdepth-style). Multi-sample faceting + SARS-CoV-2 gene-region annotation lane.'
+#
+# One tile, two views of one binding (`views: [track, locus]`): the smoothed
+# Plotly track with the median and IQR ribbon, and the GenomeSpy locus track.
+# This is what replaced binding coverage_track and genome_view on the same
+# collection in one tab, which the shipped-YAML lint now forbids.
+title: 'Viral genome coverage'
+subtitle: 'Read depth along the SARS-CoV-2 reference, one lane per sample, with the gene regions underneath: amplicon dropouts and uncovered regions at a glance.'
 icon: 'mdi:chart-areaspline-variant'
 icon_color: 'blue'
 icon_variant: filled
@@ -18,8 +23,8 @@ parent_dashboard_tag: volcano
 tab_icon: 'mdi:chart-areaspline-variant'
 tab_icon_color: 'blue'
 
-# Left-panel filter section. Deliberately not `persistent`: the 23 tabs of
-# this family read different collections whose column names collide while their
+# Left-panel filter section. Deliberately not `persistent`: the tabs of this
+# family read different collections whose column names collide while their
 # value domains do not overlap, so a control fanned out from one tab would show
 # up everywhere and bite on nothing.
 filter_sections:
@@ -38,29 +43,31 @@ components:
   - tag: text-coverage_track
     index: cov-text
     component_type: text
-    title: 'Coverage track'
+    title: 'Viral genome coverage'
     order: 3
     alignment: left
     vertical_alignment: top
     section: 'Coverage track'
     body: >
-      Per-position depth along the reference, one lane per sample, with an annotation lane
-      naming the regions underneath. A dropout reads as a gap in one lane; a region the
-      assay never covers reads as a gap in all of them. The log axis in the settings menu is
-      what makes both visible at once.
-    layout: { x: 0, y: 0, w: 8, h: 1 }
+      Depth along the SARS-CoV-2 reference, one lane per sample, with the gene regions
+      underneath: a gap in one lane is an amplicon dropout, a gap in every lane is a region
+      the panel never covers. The header switches between the smoothed Track (Plotly, with
+      log scale and smoothing in the settings) and the zoomable Locus view (GenomeSpy). Input:
+      the mosdepth per-bin depth of nf-core/viralrecon, sarek or rnaseq.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
 
   - tag: viz-coverage_track
     index: 'cov-track'
     component_type: advanced_viz
     workflow_tag: advanced_viz_demo
     data_collection_tag: 'coverage_track_demo'
-    title: 'Coverage track'
-    description: 'Read-depth tracks along the SARS-CoV-2 reference. Sample multi-select faceting, gene-region colouring lane, log/linear y-scale, rolling-mean smoothing — all live in the Settings ⚙ popover.'
+    title: 'Depth per sample along the reference'
+    description: 'mosdepth 200 bp bins across the SARS-CoV-2 reference, faceted by sample and coloured by gene region. Switch Track and Locus in the header; smoothing and the log axis are in the settings.'
     section: 'Coverage track'
     viz_kind: 'coverage_track'
     config:
       viz_kind: "coverage_track"
+      controls_placement: "header"
       chromosome_col: "chrom"
       position_col: "position"
       value_col: "coverage"
@@ -71,7 +78,9 @@ components:
       smoothing_window: 0
       color_by: "category"
       show_annotation_lane: true
-    layout: { x: 0, y: 1, w: 8, h: 8 }
+      view: "track"
+      views: ["track", "locus"]
+    layout: { x: 0, y: 2, w: 8, h: 8 }
 
   - tag: filter-coverage_track-sample
     index: cov-f-sample
@@ -87,7 +96,6 @@ components:
     group: 'Track filters'
     display:
       title_size: md
-      custom_color: '#1976D2'
       icon_name: 'mdi:flask'
     layout: { x: 0, y: 0, w: 1, h: 3 }
 
@@ -99,13 +107,12 @@ components:
     interactive_component_type: MultiSelect
     column_name: 'gene_region'
     column_type: 'object'
-    title: 'Region'
+    title: 'Gene region'
     placement: left
     section: 'Track scope'
     group: 'Track filters'
     display:
       title_size: md
-      custom_color: '#45B8AC'
       icon_name: 'mdi:map-marker-path'
     layout: { x: 0, y: 3, w: 1, h: 3 }
 
@@ -123,6 +130,5 @@ components:
     group: 'Track filters'
     display:
       title_size: md
-      custom_color: '#00BCD4'
       icon_name: 'mdi:chart-line'
     layout: { x: 0, y: 6, w: 1, h: 3 }

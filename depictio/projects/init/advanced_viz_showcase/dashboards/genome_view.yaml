@@ -1,4 +1,4 @@
-# Genome view — one tab of the advanced-visualisation showcase.
+# Genome view: one tab of the advanced-visualisation showcase.
 #
 # Regenerate the seed after editing:
 #   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
@@ -6,13 +6,16 @@
 # The component `index` values are pinned rather than auto-generated: they are
 # what keeps a regenerated seed byte-identical to the shipped one.
 #
-# Issue #1083. Two tiles on the SAME collection, stacked in one section: an
-# advanced_viz tile binds exactly one data collection, so a multi-track genome
-# view is several tiles sharing a region filter, not one tile over N
-# collections. Brushing the top tile emits a chromosome + position pair that
-# the bottom tile follows. The evaluation is in docs/design/genomespy-eval.md.
-title: 'Genome view'
-subtitle: 'GenomeSpy tracks on a chromosome-aware locus axis: bars, intervals, per-sample lanes and a region brush that filters the dashboard'
+# Issue #1083. An advanced_viz tile binds exactly one data collection, so a
+# multi-track genome view is several tiles sharing a region filter, not one
+# tile over N collections. The navigator opens zoomed on its `default_region`
+# and carries the locus field in its header; it zooms itself when the reader
+# types a locus or brushes, and publishes the region as filters. The depth track
+# under it reads another collection and follows through the project's region
+# link (locus_peaks_demo -> locus_coverage_demo). The evaluation is in
+# docs/design/genomespy-eval.md.
+title: 'Genome browser tracks'
+subtitle: 'GenomeSpy tracks on a chromosome-aware axis: a CTCF peak navigator, ChIP-seq depth per track over the hg38 genes following its region, and a genome-wide marker scan.'
 icon: 'tabler:dna-2'
 icon_color: 'teal'
 icon_variant: filled
@@ -32,13 +35,13 @@ filter_sections:
   - name: 'Track scope'
     icon: 'mdi:filter-variant'
     color: 'teal'
-    description: 'Restricts the tracks to a sample set, a region or a depth range'
+    description: 'Restricts the tracks to a ChIP track, a peak class, a depth or a score range'
 
 grid_sections:
-  - name: 'Coverage across the genome'
+  - name: 'Tracks on a locus'
     icon: 'mdi:dna'
     color: 'teal'
-    description: 'Two GenomeSpy tracks on one collection, linked by the region brush'
+    description: 'A CTCF peak navigator and the ChIP depth that follows its region'
   - name: 'Markers on a locus axis'
     icon: 'mdi:chart-scatter-plot'
     color: 'teal'
@@ -48,66 +51,70 @@ components:
   - tag: text-genome-view
     index: gv-text
     component_type: text
-    title: 'Genome view'
+    title: 'Genome browser tracks'
     order: 3
     alignment: left
     vertical_alignment: top
-    section: 'Coverage across the genome'
+    section: 'Tracks on a locus'
     body: >
-      Two tracks over the same coverage collection. Scroll to zoom into a locus, drag to pan
-      along the genome, brush the axis to publish the chromosome and the position range as
-      ordinary dashboard filters. The lower track follows that region instead of showing the
-      whole reference. Depth is drawn as bars because GenomeSpy has no line mark. Per-sample
-      lanes, the gene annotation lane and the mark type live in the Settings gear.
+      Both tiles open on the IGF2 and KCNQ1 imprinted domain: the navigator shows the CTCF
+      peaks there, the track below the ChIP-seq depth per track over the hg38 genes. Type
+      a locus or a gene symbol in the navigator header, or brush its axis, and both tiles
+      move together; scroll to zoom and drag to pan inside either. Both tiles read table
+      collections here; with source file the same tile range-reads the VCF,
+      BAM, bigWig or GFF3 a pipeline such as sarek, chipseq or rnaseq publishes.
     layout: { x: 0, y: 0, w: 8, h: 2 }
-
-  - tag: viz-genome-view-depth
-    index: 'gv-depth'
-    component_type: advanced_viz
-    workflow_tag: advanced_viz_demo
-    data_collection_tag: 'coverage_track_demo'
-    title: 'Depth along the reference'
-    description: 'Read depth per 200 bp bin, drawn as bars from the baseline. Brush the axis to publish a region filter; switch to per-sample lanes in Settings.'
-    section: 'Coverage across the genome'
-    viz_kind: 'genome_view'
-    config:
-      viz_kind: "genome_view"
-      chr_col: "chrom"
-      pos_col: "start"
-      score_col: "coverage"
-      end_col: "end"
-      sample_col: "sample"
-      category_col: "gene_region"
-      mark: "bar"
-      score_title: "mean depth"
-      facet_by_sample: false
-      max_facets: 6
-      region_filter_enabled: true
-      follow_region_filter: false
-    layout: { x: 0, y: 2, w: 8, h: 6 }
 
   - tag: viz-genome-view-regions
     index: 'gv-regions'
     component_type: advanced_viz
     workflow_tag: advanced_viz_demo
-    data_collection_tag: 'coverage_track_demo'
-    title: 'Bins as intervals, following the brushed region'
-    description: 'The same bins drawn as intervals coloured by gene region. This tile follows an incoming region filter, so a brush on the track above zooms it.'
-    section: 'Coverage across the genome'
+    data_collection_tag: 'locus_peaks_demo'
+    title: 'Locus navigator'
+    description: 'CTCF peaks on the current region, coloured by where they sit. The locus field in the header and a brush on this axis move this tile and publish the region the track below follows.'
+    section: 'Tracks on a locus'
+    viz_kind: 'genome_view'
+    config:
+      viz_kind: "genome_view"
+      controls_placement: "header"
+      chr_col: "chrom"
+      pos_col: "start"
+      end_col: "end"
+      score_col: "score"
+      feature_col: "peak_id"
+      category_col: "peak_class"
+      mark: "bar"
+      score_title: "CTCF -log10(q)"
+      assembly: "hg38"
+      default_region: "chr11:1,950,000-2,950,000"
+      region_filter_enabled: true
+    layout: { x: 0, y: 2, w: 8, h: 3 }
+
+  - tag: viz-genome-view-depth
+    index: 'gv-depth'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'locus_coverage_demo'
+    title: 'ChIP-seq depth over the genes'
+    description: 'CTCF and H3K27ac depth in 2 kb bins, one lane per track, over the bundled hg38 gene lane. Another collection than the navigator: it follows the region through the project region link.'
+    section: 'Tracks on a locus'
     viz_kind: 'genome_view'
     config:
       viz_kind: "genome_view"
       chr_col: "chrom"
       pos_col: "start"
-      score_col: "coverage"
       end_col: "end"
+      score_col: "coverage"
       sample_col: "sample"
-      category_col: "gene_region"
-      mark: "rect"
-      score_title: "mean depth"
+      mark: "bar"
+      score_title: "depth"
+      facet_by_sample: true
+      max_facets: 4
+      annotation: "hg38"
+      assembly: "hg38"
       region_filter_enabled: false
       follow_region_filter: true
-    layout: { x: 0, y: 8, w: 8, h: 5 }
+    layout: { x: 0, y: 5, w: 8, h: 6 }
 
   - tag: text-genome-view-markers
     index: gv-text-markers
@@ -130,11 +137,12 @@ components:
     workflow_tag: advanced_viz_demo
     data_collection_tag: 'manhattan_demo'
     title: 'Markers by position and score'
-    description: 'chr / pos / score on a chromosome-aware locus scale. Zoom with the wheel, pan by dragging; the threshold rule, mark type and assembly live in the Settings gear.'
+    description: 'chr / pos / score on a chromosome-aware locus scale. Type a locus in the header, zoom with the wheel, pan by dragging.'
     section: 'Markers on a locus axis'
     viz_kind: 'genome_view'
     config:
       viz_kind: "genome_view"
+      controls_placement: "header"
       chr_col: "chr"
       pos_col: "pos"
       score_col: "score"
@@ -147,7 +155,7 @@ components:
       selection_enabled: true
       selection_column: "feature"
       # Its own collection has no region filter to follow, and brushing it would
-      # publish contig names the coverage tiles do not share.
+      # publish a region the locus tracks above would then have to ignore.
       region_filter_enabled: false
     layout: { x: 0, y: 2, w: 8, h: 7 }
 
@@ -155,11 +163,11 @@ components:
     index: gv-f-sample
     component_type: interactive
     workflow_tag: advanced_viz_demo
-    data_collection_tag: 'coverage_track_demo'
+    data_collection_tag: 'locus_coverage_demo'
     interactive_component_type: MultiSelect
     column_name: 'sample'
     column_type: 'object'
-    title: 'Sample'
+    title: 'ChIP track'
     placement: left
     section: 'Track scope'
     group: 'Track filters'
@@ -172,11 +180,11 @@ components:
     index: gv-f-region
     component_type: interactive
     workflow_tag: advanced_viz_demo
-    data_collection_tag: 'coverage_track_demo'
+    data_collection_tag: 'locus_peaks_demo'
     interactive_component_type: MultiSelect
-    column_name: 'gene_region'
+    column_name: 'peak_class'
     column_type: 'object'
-    title: 'Gene region'
+    title: 'CTCF peak class'
     placement: left
     section: 'Track scope'
     group: 'Track filters'
@@ -189,7 +197,7 @@ components:
     index: gv-f-depth
     component_type: interactive
     workflow_tag: advanced_viz_demo
-    data_collection_tag: 'coverage_track_demo'
+    data_collection_tag: 'locus_coverage_demo'
     interactive_component_type: RangeSlider
     column_name: 'coverage'
     column_type: 'float64'

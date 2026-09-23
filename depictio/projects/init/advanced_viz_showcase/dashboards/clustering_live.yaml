@@ -1,12 +1,12 @@
-# Clustering: Live (Celery) — one tab of the advanced-visualisation showcase.
+# Recomputed projection: one tab of the advanced-visualisation showcase.
 #
 # Regenerate the seed after editing:
 #   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
 #
 # The component `index` values are pinned rather than auto-generated: they are
 # what keeps a regenerated seed byte-identical to the shipped one.
-title: 'Clustering: Live (Celery)'
-subtitle: 'Recomputes on every filter / param change; results cached by (DC, method, params, filters). Open Settings ⚙ on the viz to tune the method.'
+title: 'Recomputed projection'
+subtitle: 'A projection recomputed by a worker on whatever the filters leave, cached per method, parameters and filters'
 icon: 'mdi:lightning-bolt'
 icon_color: 'grape'
 icon_variant: filled
@@ -15,7 +15,7 @@ dashboard_id: '646b0f3c1e4a2d7f8e5b8d19'
 is_main_tab: false
 tab_order: 8
 parent_dashboard_tag: volcano
-tab_icon: 'mdi:lightning-bolt'
+tab_icon: 'mdi:tune'
 tab_icon_color: 'grape'
 
 # Left-panel filter section. Deliberately not `persistent`: the 23 tabs of
@@ -44,10 +44,13 @@ components:
     vertical_alignment: top
     section: 'Live clustering'
     body: >
-      The only projection on this showcase computed at request time rather than read from a
-      precomputed table: changing the neighbour count or the metric in the settings menu
-      re-runs the reduction. The cost is latency; the gain is a parameter you control.
-    layout: { x: 0, y: 0, w: 8, h: 1 }
+      The only projection here computed on request rather than read from a table: the raw
+      sample by feature matrix is reduced by a worker, and changing the method (PCA, UMAP,
+      t-SNE, PCoA) in the tile header re-runs it on whatever the filters leave. Filter to two
+      conditions on the left and the projection is recomputed on them alone, which a
+      precomputed table cannot do. The input is any count matrix, such as the salmon merged
+      counts of nf-core/rnaseq.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
 
   - tag: viz-clustering_live
     index: 'live-embedding'
@@ -55,7 +58,7 @@ components:
     workflow_tag: advanced_viz_demo
     data_collection_tag: 'embedding_features'
     title: 'Live clustering (Celery)'
-    description: 'Tune method + parameters in Settings ⚙ — the API dispatches a Celery task and renders the result; (DC, method, params, filters) tuples are cached so a second run on the same combo is instant.'
+    description: 'Method and colour-by in the tile header. The API dispatches a Celery task and caches each (collection, method, parameters, filters) result, so a second run of the same combination is instant.'
     section: 'Live clustering'
     viz_kind: 'embedding'
     config:
@@ -74,7 +77,8 @@ components:
       point_size: 7
       show_density: false
       selection_enabled: true
-    layout: { x: 0, y: 2, w: 8, h: 8 }
+      controls_placement: "header"
+    layout: { x: 0, y: 2, w: 8, h: 9 }
 
   - tag: filter-clustering_live-cluster
     index: live-f-cluster
@@ -106,6 +110,7 @@ components:
     placement: left
     section: 'Feature scope'
     group: 'Point filters'
+    show_histogram: true
     display:
       title_size: md
       custom_color: '#00BCD4'

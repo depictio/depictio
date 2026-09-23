@@ -13,7 +13,7 @@
     {
       "index": "lol-text",
       "component_type": "text",
-      "title": "Lollipop plot",
+      "title": "Variants along genes",
       "workflow_tag": "",
       "data_collection_tag": "",
       "wf_id": {
@@ -30,13 +30,13 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Effects placed at their position along a sequence, stem height encoding magnitude and colour encoding class. It is the view that makes a mutational hotspot visible as a cluster of stems rather than a row in a table.\n",
+      "body": "Each variant of TP53, BRCA1, EGFR and KRAS at its position along the gene, one panel per gene: stem height and head size are the effect, colour the consequence class. A mutational hotspot would read as a cluster of tall stems at one position, which a table sorted by gene hides. The panels and the scaling are in the header. Input: the VEP or snpEff annotated VCF of nf-core/sarek, one row per variant.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
       "index": "lol-plot",
       "component_type": "advanced_viz",
-      "title": "Lollipop plot \u2014 variants by consequence",
+      "title": "Variants by consequence",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "lollipop_demo",
       "wf_id": {
@@ -58,12 +58,13 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "description": "Per-gene variant tracks coloured by consequence. Marker size encodes effect strength.",
+      "description": "One panel per gene, coloured by consequence; head size and stem height encode the effect.",
       "title_size": "sm",
       "title_align": "left",
       "section": "Positional effects",
       "viz_kind": "lollipop",
       "config": {
+        "controls_placement": "header",
         "viz_kind": "lollipop",
         "feature_id_col": "feature_id",
         "position_col": "position",
@@ -120,7 +121,7 @@
       "group": "Effect filters",
       "timescale": null,
       "show_marks": null,
-      "custom_color": "#1976D2",
+      "show_histogram": null,
       "icon_name": "mdi:form-select",
       "wf_tag": "python/advanced_viz_demo"
     },
@@ -162,7 +163,7 @@
       "group": "Effect filters",
       "timescale": null,
       "show_marks": null,
-      "custom_color": "#E74C3C",
+      "show_histogram": true,
       "icon_name": "mdi:trending-up",
       "wf_tag": "python/advanced_viz_demo"
     }
@@ -195,7 +196,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 1,
+      "h": 2,
       "static": false,
       "resizeHandles": [
         "se",
@@ -208,7 +209,7 @@
     {
       "i": "box-lol-plot",
       "x": 0,
-      "y": 1,
+      "y": 2,
       "w": 8,
       "h": 8,
       "static": false,
@@ -230,8 +231,8 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "Lollipop plot",
-  "subtitle": "Variant tracks along cancer genes",
+  "title": "Variants along genes",
+  "subtitle": "Coding variants of four cancer genes at their position along the gene, stem height the effect, colour the consequence.",
   "icon": "mdi:chart-timeline-variant",
   "icon_color": "blue",
   "icon_variant": "filled",
@@ -293,5 +294,7 @@
     }
   ],
   "funnel_filtering": true,
-  "brand_theme": null
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
 }

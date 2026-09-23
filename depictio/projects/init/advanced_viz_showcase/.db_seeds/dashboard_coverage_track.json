@@ -13,7 +13,7 @@
     {
       "index": "cov-text",
       "component_type": "text",
-      "title": "Coverage track",
+      "title": "Viral genome coverage",
       "workflow_tag": "",
       "data_collection_tag": "",
       "wf_id": {
@@ -30,13 +30,13 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Per-position depth along the reference, one lane per sample, with an annotation lane naming the regions underneath. A dropout reads as a gap in one lane; a region the assay never covers reads as a gap in all of them. The log axis in the settings menu is what makes both visible at once.\n",
+      "body": "Depth along the SARS-CoV-2 reference, one lane per sample, with the gene regions underneath: a gap in one lane is an amplicon dropout, a gap in every lane is a region the panel never covers. The header switches between the smoothed Track (Plotly, with log scale and smoothing in the settings) and the zoomable Locus view (GenomeSpy). Input: the mosdepth per-bin depth of nf-core/viralrecon, sarek or rnaseq.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
       "index": "cov-track",
       "component_type": "advanced_viz",
-      "title": "Coverage track",
+      "title": "Depth per sample along the reference",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "coverage_track_demo",
       "wf_id": {
@@ -58,12 +58,13 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "description": "Read-depth tracks along the SARS-CoV-2 reference. Sample multi-select faceting, gene-region colouring lane, log/linear y-scale, rolling-mean smoothing \u2014 all live in the Settings \u2699 popover.",
+      "description": "mosdepth 200 bp bins across the SARS-CoV-2 reference, faceted by sample and coloured by gene region. Switch Track and Locus in the header; smoothing and the log axis are in the settings.",
       "title_size": "sm",
       "title_align": "left",
       "section": "Coverage track",
       "viz_kind": "coverage_track",
       "config": {
+        "controls_placement": "header",
         "viz_kind": "coverage_track",
         "chromosome_col": "chrom",
         "position_col": "position",
@@ -81,7 +82,14 @@
         "view_mode": null,
         "show_individuals": true,
         "mark": "line",
-        "facet_by_sample": false
+        "facet_by_sample": false,
+        "locus_annotation": "none",
+        "locus_assembly": null,
+        "view": "track",
+        "views": [
+          "track",
+          "locus"
+        ]
       },
       "wf_tag": "python/advanced_viz_demo"
     },
@@ -123,14 +131,14 @@
       "group": "Track filters",
       "timescale": null,
       "show_marks": null,
-      "custom_color": "#1976D2",
+      "show_histogram": null,
       "icon_name": "mdi:flask",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
       "index": "cov-f-region",
       "component_type": "interactive",
-      "title": "Region",
+      "title": "Gene region",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "coverage_track_demo",
       "wf_id": {
@@ -165,7 +173,7 @@
       "group": "Track filters",
       "timescale": null,
       "show_marks": null,
-      "custom_color": "#45B8AC",
+      "show_histogram": null,
       "icon_name": "mdi:map-marker-path",
       "wf_tag": "python/advanced_viz_demo"
     },
@@ -207,7 +215,7 @@
       "group": "Track filters",
       "timescale": null,
       "show_marks": null,
-      "custom_color": "#00BCD4",
+      "show_histogram": null,
       "icon_name": "mdi:chart-line",
       "wf_tag": "python/advanced_viz_demo"
     }
@@ -248,7 +256,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 1,
+      "h": 2,
       "static": false,
       "resizeHandles": [
         "se",
@@ -261,7 +269,7 @@
     {
       "i": "box-cov-track",
       "x": 0,
-      "y": 1,
+      "y": 2,
       "w": 8,
       "h": 8,
       "static": false,
@@ -283,8 +291,8 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "Coverage track",
-  "subtitle": "Read-depth signal along a coordinate axis (mosdepth-style). Multi-sample faceting + SARS-CoV-2 gene-region annotation lane.",
+  "title": "Viral genome coverage",
+  "subtitle": "Read depth along the SARS-CoV-2 reference, one lane per sample, with the gene regions underneath: amplicon dropouts and uncovered regions at a glance.",
   "icon": "mdi:chart-areaspline-variant",
   "icon_color": "blue",
   "icon_variant": "filled",
@@ -346,5 +354,7 @@
     }
   ],
   "funnel_filtering": true,
-  "brand_theme": null
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
 }

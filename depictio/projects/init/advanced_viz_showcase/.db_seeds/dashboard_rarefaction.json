@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Diversity recomputed at a ladder of sequencing depths, several iterations per depth, with the spread drawn as a confidence band. A curve that flattens means the sample was sequenced deeply enough; one still climbing means richness is bounded by depth.\n",
+      "body": "Alpha diversity recomputed at increasing subsampling depth, one curve per sample with its spread across iterations. A curve that flattens was sequenced deeply enough; one still climbing has richness bounded by depth. Group by habitat and the metric (Faith PD, observed features, Shannon) are in the tile header. Input: the QIIME2 alpha-rarefaction tables of nf-core/ampliseq.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -58,12 +58,13 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "description": "Alpha-diversity rises with sequencing depth then plateaus. Drag the Habitat filter to colour-segregate; tune Top-N samples and \u00b1SE band in the Settings popover.",
+      "description": "Alpha diversity rises with sequencing depth then plateaus. Metric and group-by sit in the tile header.",
       "title_size": "sm",
       "title_align": "left",
       "section": "Rarefaction curves",
       "viz_kind": "rarefaction",
       "config": {
+        "controls_placement": "header",
         "viz_kind": "rarefaction",
         "sample_id_col": "sample_id",
         "depth_col": "depth",
@@ -119,6 +120,7 @@
       "group": "Curve filters",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
       "custom_color": "#2E7D32",
       "icon_name": "mdi:leaf",
       "wf_tag": "python/advanced_viz_demo"
@@ -161,6 +163,7 @@
       "group": "Curve filters",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
       "custom_color": "#45B8AC",
       "icon_name": "mdi:flask",
       "wf_tag": "python/advanced_viz_demo"
@@ -203,6 +206,7 @@
       "group": "Curve filters",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": true,
       "custom_color": "#00BCD4",
       "icon_name": "mdi:chart-line",
       "wf_tag": "python/advanced_viz_demo"
@@ -244,7 +248,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 1,
+      "h": 2,
       "static": false,
       "resizeHandles": [
         "se",
@@ -259,7 +263,7 @@
       "x": 0,
       "y": 2,
       "w": 8,
-      "h": 8,
+      "h": 9,
       "static": false,
       "resizeHandles": [
         "se",
@@ -279,7 +283,7 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "Rarefaction",
+  "title": "Sequencing depth saturation",
   "subtitle": "Alpha-diversity vs sequencing depth across 18 samples in 3 habitats (gut / skin / soil).",
   "icon": "mdi:chart-line",
   "icon_color": "cyan",
@@ -342,5 +346,7 @@
     }
   ],
   "funnel_filtering": true,
-  "brand_theme": null
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
 }

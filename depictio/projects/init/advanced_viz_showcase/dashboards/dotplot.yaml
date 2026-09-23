@@ -1,13 +1,19 @@
-# Dot plot — one tab of the advanced-visualisation showcase.
+# Marker genes and pathway enrichment: one tab of the advanced-visualisation showcase.
 #
 # Regenerate the seed after editing:
 #   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
 #
 # The component `index` values are pinned rather than auto-generated: they are
 # what keeps a regenerated seed byte-identical to the shipped one.
-title: 'Dot plot'
-subtitle: 'Single-cell marker expression × cluster'
-icon: 'mdi:dots-grid'
+#
+# The retired "Pathway enrichment" tab is the `enrichment` view of the dot_plot
+# kind now. It stays a second tile on its own collection rather than a switch on
+# the marker tile: a marker table and an enrichment table are two results, and
+# a table carrying both sets of columns would be invented for the demo. The
+# `gsea-*` indices are the ones the retired tab used.
+title: 'Marker genes and pathways'
+subtitle: 'Two dot plots: marker genes across cell clusters, and enriched pathways across ontologies'
+icon: 'mdi:chart-scatter-plot'
 icon_color: 'teal'
 icon_variant: filled
 workflow_system: python
@@ -15,48 +21,56 @@ dashboard_id: '646b0f3c1e4a2d7f8e5b8d41'
 is_main_tab: false
 tab_order: 17
 parent_dashboard_tag: volcano
-tab_icon: 'mdi:dots-grid'
+tab_icon: 'mdi:chart-scatter-plot'
 tab_icon_color: 'teal'
 
-# Left-panel filter section. Deliberately not `persistent`: the 23 tabs of
-# this family read different collections whose column names collide while their
+# Left-panel filter section. Deliberately not `persistent`: the tabs of this
+# family read different collections whose column names collide while their
 # value domains do not overlap, so a control fanned out from one tab would show
-# up everywhere and bite on nothing.
+# up everywhere and bite on nothing. One group per collection, since each tile
+# reads its own.
 filter_sections:
   - name: 'Expression scope'
     icon: 'mdi:filter-variant'
     color: 'teal'
-    description: 'Restricts which clusters and expression levels are shown'
+    description: 'Restricts which clusters and which genes the marker dot plot shows'
+  - name: 'Term scope'
+    icon: 'mdi:filter-variant'
+    color: 'violet'
+    description: 'Restricts which ontologies and which set sizes the enrichment dot plot shows'
 
 grid_sections:
-  - name: 'Expression dot plot'
+  - name: 'Marker genes and pathways'
     icon: 'mdi:chart-scatter-plot'
     color: 'teal'
-    description: 'Gene against cluster, sized by fraction expressing'
+    description: 'Size says how many, colour says how much, in both tiles'
 
 components:
   - tag: text-dotplot
     index: dot-text
     component_type: text
-    title: 'Dot plot'
+    title: 'Marker genes and pathways'
     order: 3
     alignment: left
     vertical_alignment: top
-    section: 'Expression dot plot'
+    section: 'Marker genes and pathways'
     body: >
-      Genes on one axis and clusters on the other, each dot sized by the fraction of cells
-      expressing the gene and coloured by mean expression. Size says how many, colour says
-      how much, and a marker gene is the dot that is both large and bright in one column.
-    layout: { x: 0, y: 0, w: 8, h: 1 }
+      Left, marker genes against cell clusters: dot size is the fraction of cells expressing
+      the gene, colour its mean expression, so a marker is a large bright dot alone in its
+      column (nf-core/scrnaseq counts after clustering). Right, the same marks on an
+      enrichment table: one row per pathway, x the normalised enrichment score, size the
+      gene-set size, colour the adjusted p-value (GSEA or g:Profiler output of
+      nf-core/differentialabundance). Colour and sort controls sit in each tile header.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
 
   - tag: viz-dotplot
     index: 'dot-plot'
     component_type: advanced_viz
     workflow_tag: advanced_viz_demo
     data_collection_tag: 'dotplot_demo'
-    title: 'Marker dot plot'
-    description: 'Mean expression (colour) × fraction expressing (size) across 6 PBMC-like clusters.'
-    section: 'Expression dot plot'
+    title: 'Marker genes by cluster'
+    description: 'Mean expression (colour) and fraction expressing (size) across six PBMC-like clusters.'
+    section: 'Marker genes and pathways'
     viz_kind: 'dot_plot'
     config:
       viz_kind: "dot_plot"
@@ -66,7 +80,33 @@ components:
       frac_expressing_col: "frac_expressing"
       max_dot_size: 22
       min_dot_size: 2
-    layout: { x: 0, y: 2, w: 8, h: 8 }
+      view: "dotplot"
+      views: ["dotplot"]
+      controls_placement: "header"
+    layout: { x: 0, y: 2, w: 4, h: 9 }
+
+  - tag: viz-enrichment
+    index: 'gsea-dotplot'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'gsea_demo'
+    title: 'Pathway enrichment'
+    description: 'One row per enriched term: NES on x, gene-set size as dot size, adjusted p-value as colour, five ontologies.'
+    section: 'Marker genes and pathways'
+    viz_kind: 'dot_plot'
+    config:
+      viz_kind: "dot_plot"
+      term_col: "term"
+      nes_col: "nes"
+      padj_col: "padj"
+      gene_count_col: "gene_count"
+      source_col: "source"
+      padj_threshold: 0.05
+      top_n: 20
+      view: "enrichment"
+      views: ["enrichment"]
+      controls_placement: "header"
+    layout: { x: 4, y: 2, w: 4, h: 9 }
 
   - tag: filter-dotplot-cluster
     index: dot-f-cluster
@@ -98,8 +138,64 @@ components:
     placement: left
     section: 'Expression scope'
     group: 'Expression filters'
+    show_histogram: true
     display:
       title_size: md
       custom_color: '#2E7D32'
       icon_name: 'mdi:water-percent'
     layout: { x: 0, y: 3, w: 1, h: 3 }
+
+  - tag: filter-enrichment-source
+    index: gsea-f-source
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'gsea_demo'
+    interactive_component_type: MultiSelect
+    column_name: 'source'
+    column_type: 'object'
+    title: 'Ontology'
+    placement: left
+    section: 'Term scope'
+    group: 'Term filters'
+    display:
+      title_size: md
+      custom_color: '#7B1FA2'
+      icon_name: 'mdi:form-select'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-enrichment-padj
+    index: gsea-f-padj
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'gsea_demo'
+    interactive_component_type: RangeSlider
+    column_name: 'padj'
+    column_type: 'float64'
+    title: 'Adjusted p-value'
+    placement: left
+    section: 'Term scope'
+    group: 'Term filters'
+    show_histogram: true
+    display:
+      title_size: md
+      custom_color: '#F68B33'
+      icon_name: 'mdi:target'
+    layout: { x: 0, y: 3, w: 1, h: 3 }
+
+  - tag: filter-enrichment-size
+    index: gsea-f-size
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'gsea_demo'
+    interactive_component_type: RangeSlider
+    column_name: 'gene_count'
+    column_type: 'int64'
+    title: 'Genes in set'
+    placement: left
+    section: 'Term scope'
+    group: 'Term filters'
+    display:
+      title_size: md
+      custom_color: '#45B8AC'
+      icon_name: 'mdi:counter'
+    layout: { x: 0, y: 6, w: 1, h: 3 }

@@ -13,7 +13,7 @@
     {
       "index": "ts-text",
       "component_type": "text",
-      "title": "Transcript structure",
+      "title": "Isoforms of one gene",
       "workflow_tag": "",
       "data_collection_tag": "",
       "wf_id": {
@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "One lane per isoform of the selected gene. Blocks are exons; the taller ones are the coding part of the same exon, so the thin ends either side are the UTRs. The line between blocks is the intron and its chevrons point the way the transcript is read. DPX1 carries the four events a long-read panel exists to show at once: a skipped cassette exon, an alternative first exon, an alternative 3' end and a retained intron, plus one transcript the caller flagged as novel.\n",
+      "body": "One gene, one lane per isoform: exons are blocks, the coding part is drawn taller, the line between blocks is the intron and its chevrons give the strand. DPX1 opens with a skipped exon, an alternative first exon, an alternative 3' end, a retained intron and a novel isoform; the gene picker is in the header. Compare the Gene clusters tab, which draws whole genes as arrows along a contig. Input: bambu or StringTie GTF from nf-core/nanoseq or rnaseq, joined to per-transcript counts.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -58,12 +58,13 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "description": "Eight isoforms across two genes. Lane colour is the novelty class, lane order and the bar on the right are the per-transcript expression. The gene picker, the colouring, the colour scale and the lane budget live in the Settings popover.",
+      "description": "Isoforms of the gene picked in the header. Lane colour is the novelty class, lane order and the bar on the right are the per-transcript expression. Colour scale and lane budget are in the settings.",
       "title_size": "sm",
       "title_align": "left",
       "section": "Transcript structure",
       "viz_kind": "transcript_structure",
       "config": {
+        "controls_placement": "header",
         "viz_kind": "transcript_structure",
         "transcript_id_col": "transcript_id",
         "gene_id_col": "gene_id",
@@ -76,7 +77,7 @@
         "gene_name_col": "gene_name",
         "transcript_class_col": "transcript_class",
         "expression_col": "expression",
-        "gene": null,
+        "gene": "DPX1",
         "max_transcripts": 30,
         "exon_feature": "exon",
         "cds_feature": "CDS",
@@ -123,7 +124,7 @@
       "group": "Isoform filters",
       "timescale": null,
       "show_marks": null,
-      "custom_color": "#BE4BDB",
+      "show_histogram": null,
       "icon_name": "mdi:dna",
       "wf_tag": "python/advanced_viz_demo"
     },
@@ -165,7 +166,7 @@
       "group": "Isoform filters",
       "timescale": null,
       "show_marks": null,
-      "custom_color": "#F76707",
+      "show_histogram": null,
       "icon_name": "mdi:shape-outline",
       "wf_tag": "python/advanced_viz_demo"
     },
@@ -207,7 +208,7 @@
       "group": "Isoform filters",
       "timescale": null,
       "show_marks": null,
-      "custom_color": "#12B886",
+      "show_histogram": null,
       "icon_name": "mdi:swap-vertical",
       "wf_tag": "python/advanced_viz_demo"
     }
@@ -283,8 +284,8 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "Transcript structure",
-  "subtitle": "Isoforms of one gene stacked on a base-pair axis: exons as blocks, coding parts drawn taller, introns as lines with strand chevrons, and the transcripts the caller flagged as novel told apart from the annotated ones.",
+  "title": "Isoforms of one gene",
+  "subtitle": "Isoforms of one gene stacked on a base-pair axis: exons as blocks, coding parts taller, introns as lines with strand chevrons, novel transcripts told apart from annotated ones. Splicing, not gene order.",
   "icon": "mdi:chart-timeline-variant",
   "icon_color": "grape",
   "icon_variant": "filled",
@@ -346,5 +347,7 @@
     }
   ],
   "funnel_filtering": true,
-  "brand_theme": null
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
 }

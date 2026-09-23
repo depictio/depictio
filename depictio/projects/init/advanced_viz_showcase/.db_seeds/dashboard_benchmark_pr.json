@@ -1,19 +1,19 @@
 {
   "_id": {
-    "$oid": "646b0f3c1e4a2d7f8e5b8d13"
+    "$oid": "646b0f3c1e4a2d7f8e5b8d62"
   },
   "description": null,
   "flexible_metadata": null,
   "hash": null,
   "dashboard_id": {
-    "$oid": "646b0f3c1e4a2d7f8e5b8d13"
+    "$oid": "646b0f3c1e4a2d7f8e5b8d62"
   },
   "version": 1,
   "stored_metadata": [
     {
-      "index": "man-text",
+      "index": "pr-text",
       "component_type": "text",
-      "title": "Genome-wide scans",
+      "title": "Variant calling benchmark",
       "workflow_tag": "",
       "data_collection_tag": "",
       "wf_id": {
@@ -26,245 +26,243 @@
       "last_updated": "2026-05-12T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
-      "section": "Genome-wide scan",
+      "section": "Variant calling benchmark",
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Top: an association scan, each marker at its position against -log10(padj), peaks over the dashed threshold labelled; lasso markers to filter by feature. Bottom: the same kind in rainfall mode on one tumour genome, y is log10 of the distance to the previous SNV, so the three kataegis foci (C to T and C to G runs) drop as vertical streaks. Colour-by and the mode sit in each header. Inputs: GWAS or QTL summary statistics, and the somatic VCF of nf-core/sarek.\n",
+      "body": "Left, each caller at its default operating point in precision against recall, with dotted equal-F1 contours: top right is best. Right, the same callers with their quality threshold swept, as a ROC curve by default; the header switch shows the PR curve or both, with the area under each curve in the legend. The inputs are hap.py or RTG vcfeval summaries such as nf-core/variantbenchmarking and nf-core/sarek produce.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
-      "index": "man-manhattan",
+      "index": "pr-points",
       "component_type": "advanced_viz",
-      "title": "Association scan",
+      "title": "Operating points",
       "workflow_tag": "advanced_viz_demo",
-      "data_collection_tag": "manhattan_demo",
+      "data_collection_tag": "benchmark_demo",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8d01"
       },
       "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+        "$oid": "646b0f3c1e4a2d7f8e5b8d60"
       },
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Synthetic Manhattan: 23 chromosomes x ~40 noise points + 6 designed hits",
-        "data_collection_tag": "manhattan_demo",
+        "description": "Synthetic per-caller benchmark summary (precision/recall/F1 + counts + CIs)",
+        "data_collection_tag": "benchmark_demo",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+          "$oid": "646b0f3c1e4a2d7f8e5b8d60"
         }
       },
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "description": "Per-chromosome significance with alternating bands, the threshold line and the top 8 loci labelled. Lasso or click markers to publish a feature filter.",
+      "description": "One point per caller at its default threshold, sized by true positives, against equal-F1 contours.",
       "title_size": "sm",
       "title_align": "left",
-      "section": "Genome-wide scan",
-      "viz_kind": "manhattan",
+      "section": "Variant calling benchmark",
+      "viz_kind": "pr_benchmark",
       "config": {
         "controls_placement": "header",
-        "viz_kind": "manhattan",
-        "chr_col": "chr",
-        "pos_col": "pos",
-        "score_col": "score",
-        "feature_col": "feature",
-        "effect_col": null,
-        "score_kind": "-log10(padj)",
-        "score_threshold": 5.0,
-        "marker_size_above": 6,
-        "marker_size_below": 4,
-        "marker_size_uniform": 5,
-        "highlight": "above",
-        "color_by_columns": [],
-        "default_color_by": null,
-        "top_n_labels": 8,
-        "selection_enabled": true,
-        "selection_column": "feature",
-        "mode": "manhattan",
-        "rainfall_class_col": null
+        "viz_kind": "pr_benchmark",
+        "label_col": "tool",
+        "recall_col": "recall",
+        "precision_col": "precision",
+        "f1_col": "f1",
+        "support_col": "tp",
+        "category_col": null,
+        "show_iso_f1": true,
+        "show_diagonal": true,
+        "show_labels": true,
+        "colorscale": "Tealgrn",
+        "fpr_col": null,
+        "threshold_col": null,
+        "group_col": null,
+        "show_auc": true,
+        "fill": false,
+        "view": "pr",
+        "views": [
+          "pr"
+        ]
       },
       "wf_tag": "python/advanced_viz_demo"
     },
     {
-      "index": "man-rainfall",
+      "index": "pr-sweep",
       "component_type": "advanced_viz",
-      "title": "Somatic mutation rainfall",
+      "title": "Threshold sweep",
       "workflow_tag": "advanced_viz_demo",
-      "data_collection_tag": "somatic_snv_demo",
+      "data_collection_tag": "roc_curve_demo",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8d01"
       },
       "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8dc3"
+        "$oid": "646b0f3c1e4a2d7f8e5b8d61"
       },
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "One tumour genome of somatic SNVs: a clock-like background plus three kataegis foci, for the rainfall view",
-        "data_collection_tag": "somatic_snv_demo",
+        "description": "Synthetic threshold sweep (3 tools \u00d7 ~13 quality thresholds) for the PR/ROC curve",
+        "data_collection_tag": "roc_curve_demo",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8dc3"
+          "$oid": "646b0f3c1e4a2d7f8e5b8d61"
         }
       },
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "description": "Each SNV at its position, y is log10 of the distance to the previous SNV on the chromosome, colour is the substitution class. Clusters fall to the bottom.",
+      "description": "One curve per caller along its quality threshold, as ROC, PR or both, with the area under each curve.",
       "title_size": "sm",
       "title_align": "left",
-      "section": "Genome-wide scan",
-      "viz_kind": "manhattan",
+      "section": "Variant calling benchmark",
+      "viz_kind": "pr_benchmark",
       "config": {
         "controls_placement": "header",
-        "viz_kind": "manhattan",
-        "chr_col": "chr",
-        "pos_col": "pos",
-        "score_col": "vaf",
-        "feature_col": null,
-        "effect_col": null,
-        "score_kind": "-log10(padj)",
-        "score_threshold": null,
-        "marker_size_above": 6,
-        "marker_size_below": 4,
-        "marker_size_uniform": 5,
-        "highlight": "above",
-        "color_by_columns": [],
-        "default_color_by": null,
-        "top_n_labels": 0,
-        "selection_enabled": false,
-        "selection_column": null,
-        "mode": "rainfall",
-        "rainfall_class_col": "mutation_class"
+        "viz_kind": "pr_benchmark",
+        "label_col": "tool",
+        "recall_col": "recall",
+        "precision_col": "precision",
+        "f1_col": "f1",
+        "support_col": null,
+        "category_col": null,
+        "show_iso_f1": true,
+        "show_diagonal": true,
+        "show_labels": false,
+        "colorscale": "Tealgrn",
+        "fpr_col": "fpr",
+        "threshold_col": "quality",
+        "group_col": "tool",
+        "show_auc": true,
+        "fill": false,
+        "view": "roc",
+        "views": [
+          "pr",
+          "roc",
+          "both"
+        ]
       },
       "wf_tag": "python/advanced_viz_demo"
     },
     {
-      "index": "man-f-chr",
+      "index": "pr-f-tool",
       "component_type": "interactive",
-      "title": "Chromosome",
+      "title": "Caller (operating points)",
       "workflow_tag": "advanced_viz_demo",
-      "data_collection_tag": "manhattan_demo",
+      "data_collection_tag": "benchmark_demo",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8d01"
       },
       "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+        "$oid": "646b0f3c1e4a2d7f8e5b8d60"
       },
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Synthetic Manhattan: 23 chromosomes x ~40 noise points + 6 designed hits",
-        "data_collection_tag": "manhattan_demo",
+        "description": "Synthetic per-caller benchmark summary (precision/recall/F1 + counts + CIs)",
+        "data_collection_tag": "benchmark_demo",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+          "$oid": "646b0f3c1e4a2d7f8e5b8d60"
         }
       },
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "title_size": "md",
       "title_align": "left",
-      "section": "Scan scope",
+      "section": "Caller scope",
       "interactive_component_type": "MultiSelect",
-      "column_name": "chr",
+      "column_name": "tool",
       "column_type": "object",
       "value": null,
       "default_state": null,
       "filter_expr": null,
       "placement": "left",
-      "group": "Association filters",
+      "group": "Caller filters",
       "timescale": null,
       "show_marks": null,
       "show_histogram": null,
-      "icon_name": "mdi:dna",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
-      "index": "man-f-score",
+      "index": "pr-f-sweep-tool",
       "component_type": "interactive",
-      "title": "Score",
+      "title": "Caller (sweep)",
       "workflow_tag": "advanced_viz_demo",
-      "data_collection_tag": "manhattan_demo",
+      "data_collection_tag": "roc_curve_demo",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8d01"
       },
       "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+        "$oid": "646b0f3c1e4a2d7f8e5b8d61"
       },
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Synthetic Manhattan: 23 chromosomes x ~40 noise points + 6 designed hits",
-        "data_collection_tag": "manhattan_demo",
+        "description": "Synthetic threshold sweep (3 tools \u00d7 ~13 quality thresholds) for the PR/ROC curve",
+        "data_collection_tag": "roc_curve_demo",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+          "$oid": "646b0f3c1e4a2d7f8e5b8d61"
         }
       },
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "title_size": "md",
       "title_align": "left",
-      "section": "Scan scope",
+      "section": "Caller scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "tool",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Caller filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "pr-f-quality",
+      "component_type": "interactive",
+      "title": "Quality threshold",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "roc_curve_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d61"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic threshold sweep (3 tools \u00d7 ~13 quality thresholds) for the PR/ROC curve",
+        "data_collection_tag": "roc_curve_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d61"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_align": "left",
+      "section": "Caller scope",
       "interactive_component_type": "RangeSlider",
-      "column_name": "score",
+      "column_name": "quality",
       "column_type": "float64",
       "value": null,
       "default_state": null,
       "filter_expr": null,
       "placement": "left",
-      "group": "Association filters",
+      "group": "Caller filters",
       "timescale": null,
       "show_marks": null,
       "show_histogram": true,
-      "icon_name": "mdi:chart-line",
-      "wf_tag": "python/advanced_viz_demo"
-    },
-    {
-      "index": "man-f-mutation-class",
-      "component_type": "interactive",
-      "title": "Substitution class",
-      "workflow_tag": "advanced_viz_demo",
-      "data_collection_tag": "somatic_snv_demo",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
-      },
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8dc3"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "One tumour genome of somatic SNVs: a clock-like background plus three kataegis foci, for the rainfall view",
-        "data_collection_tag": "somatic_snv_demo",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8dc3"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-05-12T00:00:00.000000",
-      "title_size": "md",
-      "title_align": "left",
-      "section": "Scan scope",
-      "interactive_component_type": "MultiSelect",
-      "column_name": "mutation_class",
-      "column_type": "object",
-      "value": null,
-      "default_state": null,
-      "filter_expr": null,
-      "placement": "left",
-      "group": "Rainfall filters",
-      "timescale": null,
-      "show_marks": null,
-      "show_histogram": null,
-      "icon_name": "mdi:shape-outline",
       "wf_tag": "python/advanced_viz_demo"
     }
   ],
@@ -274,7 +272,7 @@
   "stored_edit_dashboard_mode_button": [],
   "left_panel_layout_data": [
     {
-      "i": "box-man-f-chr",
+      "i": "box-pr-f-tool",
       "x": 0,
       "y": 0,
       "w": 1,
@@ -282,7 +280,7 @@
       "static": false
     },
     {
-      "i": "box-man-f-score",
+      "i": "box-pr-f-sweep-tool",
       "x": 0,
       "y": 3,
       "w": 1,
@@ -290,7 +288,7 @@
       "static": false
     },
     {
-      "i": "box-man-f-mutation-class",
+      "i": "box-pr-f-quality",
       "x": 0,
       "y": 6,
       "w": 1,
@@ -300,7 +298,7 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-man-text",
+      "i": "box-pr-text",
       "x": 0,
       "y": 0,
       "w": 8,
@@ -315,11 +313,11 @@
       ]
     },
     {
-      "i": "box-man-manhattan",
+      "i": "box-pr-points",
       "x": 0,
       "y": 2,
-      "w": 8,
-      "h": 6,
+      "w": 4,
+      "h": 9,
       "static": false,
       "resizeHandles": [
         "se",
@@ -330,11 +328,11 @@
       ]
     },
     {
-      "i": "box-man-rainfall",
-      "x": 0,
-      "y": 8,
-      "w": 8,
-      "h": 6,
+      "i": "box-pr-sweep",
+      "x": 4,
+      "y": 2,
+      "w": 4,
+      "h": 9,
       "static": false,
       "resizeHandles": [
         "se",
@@ -354,10 +352,10 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "Genome-wide scans",
-  "subtitle": "An association scan with its significance threshold, and the rainfall of one tumour genome where clustered mutations (kataegis) fall to the bottom.",
-  "icon": "mdi:chart-line-stacked",
-  "icon_color": "orange",
+  "title": "Variant calling benchmark",
+  "subtitle": "Callers against a truth set: operating points, and the curves their quality threshold sweeps",
+  "icon": "mdi:check-decagram",
+  "icon_color": "indigo",
   "icon_variant": "filled",
   "workflow_system": "python",
   "notes_content": "",
@@ -389,17 +387,17 @@
   "parent_dashboard_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8d00"
   },
-  "tab_order": 2,
+  "tab_order": 24,
   "main_tab_name": null,
-  "tab_icon": "mdi:chart-line-stacked",
-  "tab_icon_color": "orange",
+  "tab_icon": "mdi:check-decagram",
+  "tab_icon_color": "indigo",
   "parent_dashboard_title": null,
   "filter_sections": [
     {
-      "name": "Scan scope",
+      "name": "Caller scope",
       "icon": "mdi:filter-variant",
-      "color": "orange",
-      "description": "Restricts the scan to a chromosome or a score range, and the rainfall to substitution classes",
+      "color": "indigo",
+      "description": "Restricts which callers are drawn, in each of the two collections",
       "collapsed": false,
       "persistent": false,
       "pin": "top"
@@ -407,10 +405,10 @@
   ],
   "grid_sections": [
     {
-      "name": "Genome-wide scan",
-      "icon": "mdi:chart-line",
-      "color": "orange",
-      "description": "Markers at their genomic position against significance, then somatic SNVs against the distance to their neighbour",
+      "name": "Variant calling benchmark",
+      "icon": "mdi:check-decagram",
+      "color": "indigo",
+      "description": "Precision and recall of each caller against the truth set",
       "collapsed": false,
       "persistent": false,
       "pin": "top"

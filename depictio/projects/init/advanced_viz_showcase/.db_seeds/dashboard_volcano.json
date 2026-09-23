@@ -13,7 +13,7 @@
     {
       "index": "vol-text",
       "component_type": "text",
-      "title": "Volcano plot",
+      "title": "Differential expression",
       "workflow_tag": "",
       "data_collection_tag": "",
       "wf_id": {
@@ -26,17 +26,17 @@
       "last_updated": "2026-05-12T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
-      "section": "Volcano",
+      "section": "Differential expression",
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Every feature placed by its effect size against its significance, with the two threshold lines drawn rather than assumed. The ones worth reading are far from the centre and high up, and the top-N labels name them. Narrowing on the left removes points rather than greying them out.\n",
+      "body": "One row per gene from a differential expression test, read three ways with the switch in the tile header: volcano (fold change against significance), MA (fold change against mean abundance, where low-count noise shows as a funnel) and QQ (observed against expected p-values, where a curve lifting off early means an inflated test). The input is a DESeq2 or limma results table as nf-core/differentialabundance publishes it after nf-core/rnaseq.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
       "index": "vol-volcano",
       "component_type": "advanced_viz",
-      "title": "Volcano plot \u2014 differential abundance",
+      "title": "Differential expression",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "volcano_demo",
       "wf_id": {
@@ -58,12 +58,13 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "description": "Effect size vs significance with builtin thresholds, top-N labels and search. Settings \u2699 at top-right.",
+      "description": "Volcano, MA and QQ views of the same test results. The view switch and the thresholds sit in the tile header.",
       "title_size": "sm",
       "title_align": "left",
-      "section": "Volcano",
+      "section": "Differential expression",
       "viz_kind": "volcano",
       "config": {
+        "controls_placement": "header",
         "viz_kind": "volcano",
         "feature_id_col": "feature_id",
         "effect_size_col": "effect_size",
@@ -74,7 +75,20 @@
         "significance_threshold": 0.05,
         "effect_threshold": 1.0,
         "top_n_labels": 15,
-        "show_labels": true
+        "show_labels": true,
+        "avg_log_intensity_col": "avg_log_intensity",
+        "log2_fold_change_col": "effect_size",
+        "fold_change_threshold": 1.0,
+        "p_value_col": "significance",
+        "view": "volcano",
+        "views": [
+          "volcano",
+          "ma",
+          "qq"
+        ],
+        "show_ci": true,
+        "show_identity": true,
+        "point_size": 5
       },
       "wf_tag": "python/advanced_viz_demo"
     },
@@ -116,6 +130,7 @@
       "group": "Feature filters",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
       "custom_color": "#E74C3C",
       "icon_name": "mdi:form-select",
       "wf_tag": "python/advanced_viz_demo"
@@ -123,7 +138,7 @@
     {
       "index": "vol-f-significance",
       "component_type": "interactive",
-      "title": "Significance",
+      "title": "P-value",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "volcano_demo",
       "wf_id": {
@@ -158,6 +173,7 @@
       "group": "Feature filters",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": true,
       "custom_color": "#F68B33",
       "icon_name": "mdi:target",
       "wf_tag": "python/advanced_viz_demo"
@@ -165,7 +181,7 @@
     {
       "index": "vol-f-effect",
       "component_type": "interactive",
-      "title": "Effect size",
+      "title": "Log2 fold change",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "volcano_demo",
       "wf_id": {
@@ -200,6 +216,7 @@
       "group": "Feature filters",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
       "custom_color": "#1976D2",
       "icon_name": "mdi:trending-up",
       "wf_tag": "python/advanced_viz_demo"
@@ -264,7 +281,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 1,
+      "h": 2,
       "static": false,
       "resizeHandles": [
         "se",
@@ -279,7 +296,7 @@
       "x": 0,
       "y": 2,
       "w": 8,
-      "h": 8,
+      "h": 9,
       "static": false,
       "resizeHandles": [
         "se",
@@ -315,7 +332,7 @@
     "count": 0
   },
   "title": "Advanced Visualisations",
-  "subtitle": "Showcase of advanced visualisation kinds (volcano, manhattan, clustering, \u2026) backed by synthetic fixtures",
+  "subtitle": "Showcase of the advanced visualisation kinds, each on a small synthetic fixture",
   "icon": "mdi:chart-scatter-plot",
   "icon_color": "red",
   "icon_variant": "filled",
@@ -348,7 +365,7 @@
   "is_main_tab": true,
   "parent_dashboard_id": null,
   "tab_order": 0,
-  "main_tab_name": "Volcano",
+  "main_tab_name": "Differential expression",
   "tab_icon": "mdi:chart-scatter-plot",
   "tab_icon_color": "red",
   "parent_dashboard_title": null,
@@ -357,7 +374,7 @@
       "name": "Feature scope",
       "icon": "mdi:filter-variant",
       "color": "red",
-      "description": "Restricts the point cloud before the thresholds are applied",
+      "description": "Restricts the features drawn before the thresholds are applied",
       "collapsed": false,
       "persistent": false,
       "pin": "top"
@@ -365,10 +382,10 @@
   ],
   "grid_sections": [
     {
-      "name": "Volcano",
+      "name": "Differential expression",
       "icon": "mdi:chart-scatter-plot",
       "color": "red",
-      "description": "Effect size against significance, with the thresholds drawn in",
+      "description": "One table of test results read as a volcano, an MA plot or a QQ plot",
       "collapsed": false,
       "persistent": false,
       "pin": "top"
@@ -384,5 +401,7 @@
     }
   ],
   "funnel_filtering": true,
-  "brand_theme": null
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
 }

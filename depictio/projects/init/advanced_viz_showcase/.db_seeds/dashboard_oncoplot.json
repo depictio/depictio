@@ -30,13 +30,13 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Samples on one axis, genes on the other, each cell coloured by the class of the mutation it carries. Rows and columns are reordered so that co-occurring mutations line up into blocks, which is the pattern the plot exists to surface. Filtering to one mutation class shows which genes carry it.\n",
+      "body": "Tumour samples on one axis, genes on the other, each cell coloured by the class of the mutation it carries, with per-gene and per-sample counts in the margins. Sorting by frequency (tile header) lines co-occurring mutations up into blocks and exposes mutually exclusive genes. Filter to one mutation class on the left. Input: annotated somatic calls (MAF) from nf-core/sarek.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
       "index": "onc-plot",
       "component_type": "advanced_viz",
-      "title": "Oncoplot \u2014 sample \u00d7 gene mutation matrix",
+      "title": "Samples by genes, coloured by mutation class",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "oncoplot_demo",
       "wf_id": {
@@ -64,6 +64,7 @@
       "section": "Mutation matrix",
       "viz_kind": "oncoplot",
       "config": {
+        "controls_placement": "header",
         "viz_kind": "oncoplot",
         "sample_id_col": "sample_id",
         "gene_col": "gene",
@@ -110,6 +111,7 @@
       "group": "Mutation filters",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
       "custom_color": "#E74C3C",
       "icon_name": "mdi:form-select",
       "wf_tag": "python/advanced_viz_demo"
@@ -152,6 +154,7 @@
       "group": "Mutation filters",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
       "custom_color": "#7B1FA2",
       "icon_name": "mdi:dna",
       "wf_tag": "python/advanced_viz_demo"
@@ -185,7 +188,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 1,
+      "h": 2,
       "static": false,
       "resizeHandles": [
         "se",
@@ -198,9 +201,9 @@
     {
       "i": "box-onc-plot",
       "x": 0,
-      "y": 1,
+      "y": 2,
       "w": 8,
-      "h": 8,
+      "h": 9,
       "static": false,
       "resizeHandles": [
         "se",
@@ -220,7 +223,7 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "Oncoplot",
+  "title": "Somatic mutation landscape",
   "subtitle": "Sample \u00d7 gene mutation matrix",
   "icon": "mdi:grid",
   "icon_color": "red",
@@ -257,7 +260,7 @@
   },
   "tab_order": 21,
   "main_tab_name": null,
-  "tab_icon": "mdi:grid",
+  "tab_icon": "mdi:stethoscope",
   "tab_icon_color": "red",
   "parent_dashboard_title": null,
   "filter_sections": [
@@ -283,5 +286,7 @@
     }
   ],
   "funnel_filtering": true,
-  "brand_theme": null
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
 }

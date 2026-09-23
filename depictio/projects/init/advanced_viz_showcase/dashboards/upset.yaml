@@ -1,12 +1,12 @@
-# UpSet plot — one tab of the advanced-visualisation showcase.
+# Shared hits across contrasts: one tab of the advanced-visualisation showcase.
 #
 # Regenerate the seed after editing:
 #   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
 #
 # The component `index` values are pinned rather than auto-generated: they are
 # what keeps a regenerated seed byte-identical to the shipped one.
-title: 'UpSet plot'
-subtitle: 'Alternative to Venn diagrams for >3 sets. Server-side compute via packages/plotly-upset; cached by (DC, params, filters).'
+title: 'Shared hits across contrasts'
+subtitle: 'Features called per contrast, and which contrasts share them, computed on the server via packages/plotly-upset'
 icon: 'mdi:set-merge'
 icon_color: 'yellow'
 icon_variant: filled
@@ -44,11 +44,12 @@ components:
     vertical_alignment: top
     section: 'Set overlap'
     body: >
-      The readable alternative to a five-way Venn diagram: bars count the features in each
-      intersection, and the dot matrix underneath names which sets the intersection belongs
-      to. Sorting by cardinality puts the largest overlaps first; sorting by degree groups
-      the exclusives together.
-    layout: { x: 0, y: 0, w: 8, h: 1 }
+      Which features are called in which of five contrasts: bars count the features in each
+      intersection, the dot matrix below names the contrasts it spans, and the side bars give
+      each contrast's total. Sorting and the minimum intersection size are in the tile header.
+      The readable alternative to a five-way Venn diagram for nf-core/differentialabundance
+      results across contrasts.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
 
   - tag: viz-upset
     index: 'ups-upset'
@@ -56,7 +57,7 @@ components:
     workflow_tag: advanced_viz_demo
     data_collection_tag: 'upset_demo'
     title: 'UpSet plot'
-    description: 'Set-intersection visualisation (alternative to Venn diagrams). Server-side compute via packages/plotly-upset; Settings ⚙ tunes Sort / Min size / Colour / set-size bars. Cached by (DC, params).'
+    description: 'Set intersections as bars over a membership matrix, computed via packages/plotly-upset and cached per parameters. Sorting and minimum size sit in the tile header.'
     section: 'Set overlap'
     viz_kind: 'upset_plot'
     config:
@@ -69,7 +70,8 @@ components:
       min_size: 1
       show_set_sizes: true
       color_intersections_by: "degree"
-    layout: { x: 0, y: 1, w: 8, h: 8 }
+      controls_placement: "header"
+    layout: { x: 0, y: 2, w: 8, h: 9 }
 
   - tag: filter-upset-group
     index: ups-f-group
