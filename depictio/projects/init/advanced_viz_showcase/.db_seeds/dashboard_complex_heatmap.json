@@ -100,10 +100,13 @@
           "feat_28",
           "feat_29"
         ],
+        "value_columns_pattern": null,
         "row_annotation_cols": [
           "cluster"
         ],
         "col_annotations": null,
+        "col_annotation_cols": [],
+        "annotation_source_dc_tag": null,
         "col_annotation_colors": null,
         "cluster_rows": true,
         "cluster_cols": true,

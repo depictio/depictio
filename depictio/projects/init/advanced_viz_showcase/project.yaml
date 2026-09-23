@@ -734,7 +734,7 @@ workflows:
 
       - id: "646b0f3c1e4a2d7f8e5b8d8a"
         data_collection_tag: "damage_profile_demo"
-        description: "Ancient-DNA misincorporation profile for 2 samples: C>T at the 5' end and G>A at the 3' end, both decaying from ~0.3 at position 1"
+        description: "Ancient-DNA misincorporation profile for 2 samples: C-to-T at the 5' end and G-to-A at the 3' end, both decaying from ~0.3 at position 1"
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -750,8 +750,8 @@ workflows:
               sample: "Sample / library the profile belongs to."
               end: "Read end the position is measured from: 5p or 3p."
               position: "Distance from the read end, 1 to 25."
-              base_change: "Substitution class: C>T, G>A, T>C, A>G or other."
-              frequency: "Substitution frequency at that position. C>T at 5p and G>A at 3p are the deamination signature; every other class sits near background."
+              base_change: "Substitution class: C-to-T, G-to-A, T-to-C, A-to-G or other."
+              frequency: "Substitution frequency at that position. C-to-T at 5p and G-to-A at 3p are the deamination signature; every other class sits near background."
 
       - id: "646b0f3c1e4a2d7f8e5b8d8b"
         data_collection_tag: "group_compare_demo"

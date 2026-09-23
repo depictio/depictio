@@ -1,19 +1,19 @@
 {
   "_id": {
-    "$oid": "646b0f3c1e4a2d7f8e5b8d70"
+    "$oid": "646b0f3c1e4a2d7f8e5b8d7e"
   },
   "description": null,
   "flexible_metadata": null,
   "hash": null,
   "dashboard_id": {
-    "$oid": "646b0f3c1e4a2d7f8e5b8d70"
+    "$oid": "646b0f3c1e4a2d7f8e5b8d7e"
   },
   "version": 1,
   "stored_metadata": [
     {
-      "index": "prof-text",
+      "index": "chord-text",
       "component_type": "text",
-      "title": "Signal profile",
+      "title": "Genome chord",
       "workflow_tag": "",
       "data_collection_tag": "",
       "wf_id": {
@@ -26,96 +26,84 @@
       "last_updated": "2026-05-12T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
-      "section": "Signal profile",
+      "section": "Rearrangement map",
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Enrichment against distance to the TSS, one curve per ATAC library, ribbon width set by read depth. A good library spikes on the dotted line at zero; CTRL_rep4 and TREAT_rep3 stay near 3\u00d7 background under a ribbon twice as fat. Click a curve to cross-filter.\n",
+      "body": "Chromosomes run clockwise from twelve o'clock, each band as wide as the chromosome is long, and every chord joins the two breakpoints of one rearrangement. Width is the read support on a log scale, so the recurrent partners stand out without hiding the one-off events. Colour is the event class: only translocations cross between chromosomes, which is why the deletions and duplications hug the rim. Hover a chord for its two loci, click it to filter the dashboard by that link, click the background to clear.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
-      "index": "prof-curve",
+      "index": "chord-ring",
       "component_type": "advanced_viz",
-      "title": "TSS enrichment profile",
+      "title": "Rearrangement partners",
       "workflow_tag": "advanced_viz_demo",
-      "data_collection_tag": "profile_demo",
+      "data_collection_tag": "genome_chord_demo",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8d01"
       },
       "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d80"
+        "$oid": "646b0f3c1e4a2d7f8e5b8d8e"
       },
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "TSS enrichment profiles for 8 synthetic ATAC libraries across two conditions (+/-2 kb, 25 bp bins) with bootstrap confidence ribbons; two libraries are deliberately low-enrichment QC failures",
-        "data_collection_tag": "profile_demo",
+        "description": "40 rearrangement links over the 24 GRCh38 chromosomes: 6 recurrent heavy partners against a background of one-off events, in 4 classes",
+        "data_collection_tag": "genome_chord_demo",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8d80"
+          "$oid": "646b0f3c1e4a2d7f8e5b8d8e"
         }
       },
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "description": "Normalised enrichment over \u00b12 kb around the TSS, 25 bp bins, 8 libraries across two conditions. Ribbon opacity, line width, log axes and legend placement live in the Settings \u2699 popover.",
+      "description": "40 links over the 24 GRCh38 chromosomes, coloured by event class and sized by supporting reads. Assembly, colour encoding, link cap and the intra-chromosomal toggle live in the Settings \u2699 popover.",
       "title_size": "sm",
       "title_align": "left",
-      "section": "Signal profile",
-      "viz_kind": "profile",
+      "section": "Rearrangement map",
+      "viz_kind": "genome_chord",
       "config": {
-        "viz_kind": "profile",
-        "series_col": "series",
-        "x_col": "x",
-        "y_col": "y",
-        "lower_col": "lower",
-        "upper_col": "upper",
-        "reference_x": 0.0,
-        "reference_label": "TSS",
-        "shaded_bands": [
-          [
-            -330.0,
-            -110.0,
-            "-1 nucleosome"
-          ],
-          [
-            110.0,
-            330.0,
-            "+1 nucleosome"
-          ]
-        ],
-        "log_x": false,
-        "log_y": false,
-        "band_opacity": 0.2,
-        "line_width": 2.0,
-        "x_title": "Distance to TSS (bp)",
-        "y_title": "Normalised enrichment",
-        "legend_pos": "right",
+        "viz_kind": "genome_chord",
+        "chrom_a_col": "chrom_a",
+        "pos_a_col": "pos_a",
+        "chrom_b_col": "chrom_b",
+        "pos_b_col": "pos_b",
+        "label_col": "label",
+        "weight_col": "weight",
+        "category_col": "category",
+        "sample_col": null,
+        "assembly": "hg38",
+        "max_links": 500,
+        "min_weight": null,
+        "colour_by": "category",
+        "show_labels": true,
+        "intra_chromosomal": true,
         "selection_enabled": true,
-        "selection_column": "series"
+        "selection_column": "label"
       },
       "wf_tag": "python/advanced_viz_demo"
     },
     {
-      "index": "prof-f-series",
+      "index": "chord-f-category",
       "component_type": "interactive",
-      "title": "Library",
+      "title": "Event class",
       "workflow_tag": "advanced_viz_demo",
-      "data_collection_tag": "profile_demo",
+      "data_collection_tag": "genome_chord_demo",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8d01"
       },
       "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d80"
+        "$oid": "646b0f3c1e4a2d7f8e5b8d8e"
       },
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "TSS enrichment profiles for 8 synthetic ATAC libraries across two conditions (+/-2 kb, 25 bp bins) with bootstrap confidence ribbons; two libraries are deliberately low-enrichment QC failures",
-        "data_collection_tag": "profile_demo",
+        "description": "40 rearrangement links over the 24 GRCh38 chromosomes: 6 recurrent heavy partners against a background of one-off events, in 4 classes",
+        "data_collection_tag": "genome_chord_demo",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8d80"
+          "$oid": "646b0f3c1e4a2d7f8e5b8d8e"
         }
       },
       "cols_json": {},
@@ -123,41 +111,41 @@
       "last_updated": "2026-05-12T00:00:00.000000",
       "title_size": "md",
       "title_align": "left",
-      "section": "Profile scope",
+      "section": "Link scope",
       "interactive_component_type": "MultiSelect",
-      "column_name": "series",
+      "column_name": "category",
       "column_type": "object",
       "value": null,
       "default_state": null,
       "filter_expr": null,
       "placement": "left",
-      "group": "Profile filters",
+      "group": "Link filters",
       "timescale": null,
       "show_marks": null,
-      "custom_color": "#12B886",
-      "icon_name": "mdi:flask",
+      "custom_color": "#FA5252",
+      "icon_name": "mdi:shape-outline",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
-      "index": "prof-f-distance",
+      "index": "chord-f-weight",
       "component_type": "interactive",
-      "title": "Distance to TSS",
+      "title": "Supporting reads",
       "workflow_tag": "advanced_viz_demo",
-      "data_collection_tag": "profile_demo",
+      "data_collection_tag": "genome_chord_demo",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8d01"
       },
       "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d80"
+        "$oid": "646b0f3c1e4a2d7f8e5b8d8e"
       },
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "TSS enrichment profiles for 8 synthetic ATAC libraries across two conditions (+/-2 kb, 25 bp bins) with bootstrap confidence ribbons; two libraries are deliberately low-enrichment QC failures",
-        "data_collection_tag": "profile_demo",
+        "description": "40 rearrangement links over the 24 GRCh38 chromosomes: 6 recurrent heavy partners against a background of one-off events, in 4 classes",
+        "data_collection_tag": "genome_chord_demo",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8d80"
+          "$oid": "646b0f3c1e4a2d7f8e5b8d8e"
         }
       },
       "cols_json": {},
@@ -165,19 +153,19 @@
       "last_updated": "2026-05-12T00:00:00.000000",
       "title_size": "md",
       "title_align": "left",
-      "section": "Profile scope",
+      "section": "Link scope",
       "interactive_component_type": "RangeSlider",
-      "column_name": "x",
+      "column_name": "weight",
       "column_type": "int64",
       "value": null,
       "default_state": null,
       "filter_expr": null,
       "placement": "left",
-      "group": "Profile filters",
+      "group": "Link filters",
       "timescale": null,
       "show_marks": null,
-      "custom_color": "#20C997",
-      "icon_name": "mdi:map-marker-path",
+      "custom_color": "#E64980",
+      "icon_name": "mdi:counter",
       "wf_tag": "python/advanced_viz_demo"
     }
   ],
@@ -187,7 +175,7 @@
   "stored_edit_dashboard_mode_button": [],
   "left_panel_layout_data": [
     {
-      "i": "box-prof-f-series",
+      "i": "box-chord-f-category",
       "x": 0,
       "y": 0,
       "w": 1,
@@ -195,7 +183,7 @@
       "static": false
     },
     {
-      "i": "box-prof-f-distance",
+      "i": "box-chord-f-weight",
       "x": 0,
       "y": 3,
       "w": 1,
@@ -205,11 +193,11 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-prof-text",
+      "i": "box-chord-text",
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 1,
+      "h": 2,
       "static": false,
       "resizeHandles": [
         "se",
@@ -220,9 +208,9 @@
       ]
     },
     {
-      "i": "box-prof-curve",
+      "i": "box-chord-ring",
       "x": 0,
-      "y": 1,
+      "y": 2,
       "w": 8,
       "h": 8,
       "static": false,
@@ -244,10 +232,10 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "Signal profile",
-  "subtitle": "TSS enrichment: one curve per ATAC library over distance to the transcription start site, with bootstrap confidence ribbons.",
-  "icon": "mdi:chart-bell-curve",
-  "icon_color": "teal",
+  "title": "Genome chord",
+  "subtitle": "The 24 GRCh38 chromosomes on a ring, one chord per rearrangement: 40 links in 4 classes, chord width from the supporting reads.",
+  "icon": "mdi:chart-donut",
+  "icon_color": "red",
   "icon_variant": "filled",
   "workflow_system": "python",
   "notes_content": "",
@@ -279,17 +267,17 @@
   "parent_dashboard_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8d00"
   },
-  "tab_order": 28,
+  "tab_order": 42,
   "main_tab_name": null,
-  "tab_icon": "mdi:waveform",
-  "tab_icon_color": "green",
+  "tab_icon": "mdi:chart-donut",
+  "tab_icon_color": "red",
   "parent_dashboard_title": null,
   "filter_sections": [
     {
-      "name": "Profile scope",
+      "name": "Link scope",
       "icon": "mdi:filter-variant",
-      "color": "teal",
-      "description": "Restricts which curves are drawn and over what window",
+      "color": "red",
+      "description": "Restricts which rearrangements are drawn, by class and by read support",
       "collapsed": false,
       "persistent": false,
       "pin": "top"
@@ -297,10 +285,10 @@
   ],
   "grid_sections": [
     {
-      "name": "Signal profile",
-      "icon": "mdi:chart-line",
-      "color": "teal",
-      "description": "Enrichment against distance to the transcription start site",
+      "name": "Rearrangement map",
+      "icon": "mdi:chart-donut",
+      "color": "red",
+      "description": "Which chromosomes this genome joined to which, and how strongly",
       "collapsed": false,
       "persistent": false,
       "pin": "top"

@@ -1,19 +1,19 @@
 {
   "_id": {
-    "$oid": "646b0f3c1e4a2d7f8e5b8d46"
+    "$oid": "646b0f3c1e4a2d7f8e5b8d7d"
   },
   "description": null,
   "flexible_metadata": null,
   "hash": null,
   "dashboard_id": {
-    "$oid": "646b0f3c1e4a2d7f8e5b8d46"
+    "$oid": "646b0f3c1e4a2d7f8e5b8d7d"
   },
   "version": 1,
   "stored_metadata": [
     {
-      "index": "cov-text",
+      "index": "cnv-text",
       "component_type": "text",
-      "title": "Coverage track",
+      "title": "Copy-number profile",
       "workflow_tag": "",
       "data_collection_tag": "",
       "wf_id": {
@@ -26,85 +26,85 @@
       "last_updated": "2026-05-12T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
-      "section": "Coverage track",
+      "section": "Copy number",
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Per-position depth along the reference, one lane per sample, with an annotation lane naming the regions underneath. A dropout reads as a gap in one lane; a region the assay never covers reads as a gap in all of them. The log axis in the settings menu is what makes both visible at once.\n",
+      "body": "Each point is a 20 kb bin, plotted at its log2 ratio against a diploid baseline, and the thick strokes are the segments a caller made over them: red where the segment reads as a gain, blue as a loss, grey where it is neutral. Read the two together. The gain on chr1 and the loss on chr2 are visible in the log2 track alone, but the chr3 event is not: its total copy number never moves, and only the B-allele frequency underneath shows it, splitting away from 0.5 because the region lost one parental haplotype. Sample, chromosome zoom, axis limit and marker size live in the Settings gear popover.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
-      "index": "cov-track",
+      "index": "cnv-track",
       "component_type": "advanced_viz",
-      "title": "Coverage track",
+      "title": "Copy-number profile",
       "workflow_tag": "advanced_viz_demo",
-      "data_collection_tag": "coverage_track_demo",
+      "data_collection_tag": "cnv_profile_demo",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8d01"
       },
       "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d50"
+        "$oid": "646b0f3c1e4a2d7f8e5b8d8d"
       },
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "SARS-CoV-2 coverage tracks (200 bp bins) for ~50 samples with SARS-CoV-2 gene-region annotation; sourced from a viralrecon-bowtie2-mosdepth run",
-        "data_collection_tag": "coverage_track_demo",
+        "description": "A synthetic somatic copy-number profile: 20 000 bins over 5 chromosomes for 2 tumour samples, with the called segments in the same table",
+        "data_collection_tag": "cnv_profile_demo",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8d50"
+          "$oid": "646b0f3c1e4a2d7f8e5b8d8d"
         }
       },
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "description": "Read-depth tracks along the SARS-CoV-2 reference. Sample multi-select faceting, gene-region colouring lane, log/linear y-scale, rolling-mean smoothing \u2014 all live in the Settings \u2699 popover.",
+      "description": "20 000 bins over 5 chromosomes with the called segments over them and the B-allele frequency below. Sample, chromosome zoom, log2 axis limit, marker size and the BAF panel live in the Settings gear popover.",
       "title_size": "sm",
       "title_align": "left",
-      "section": "Coverage track",
-      "viz_kind": "coverage_track",
+      "section": "Copy number",
+      "viz_kind": "cnv_profile",
       "config": {
-        "viz_kind": "coverage_track",
-        "chromosome_col": "chrom",
-        "position_col": "position",
-        "value_col": "coverage",
-        "end_col": "end",
+        "viz_kind": "cnv_profile",
         "sample_col": "sample",
-        "category_col": "gene_region",
-        "y_scale": "linear",
-        "smoothing_window": 0,
-        "color_by": "category",
-        "show_annotation_lane": true,
-        "annotation_id": null,
-        "chromosomes_filter": null,
-        "samples_filter": null,
-        "view_mode": null,
-        "show_individuals": true,
-        "mark": "line",
-        "facet_by_sample": false
+        "chrom_col": "chrom",
+        "start_col": "start",
+        "end_col": "end",
+        "log2_col": "log2",
+        "baf_col": "baf",
+        "copy_number_col": "copy_number",
+        "segment_col": "segment",
+        "label_col": "label",
+        "sample": "TUMOUR_A",
+        "chrom": null,
+        "y_range": 3.0,
+        "show_baf": true,
+        "point_size": 3,
+        "gain_threshold": 0.3,
+        "loss_threshold": -0.3,
+        "max_bins": 50000
       },
       "wf_tag": "python/advanced_viz_demo"
     },
     {
-      "index": "cov-f-sample",
+      "index": "cnv-f-sample",
       "component_type": "interactive",
       "title": "Sample",
       "workflow_tag": "advanced_viz_demo",
-      "data_collection_tag": "coverage_track_demo",
+      "data_collection_tag": "cnv_profile_demo",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8d01"
       },
       "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d50"
+        "$oid": "646b0f3c1e4a2d7f8e5b8d8d"
       },
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "SARS-CoV-2 coverage tracks (200 bp bins) for ~50 samples with SARS-CoV-2 gene-region annotation; sourced from a viralrecon-bowtie2-mosdepth run",
-        "data_collection_tag": "coverage_track_demo",
+        "description": "A synthetic somatic copy-number profile: 20 000 bins over 5 chromosomes for 2 tumour samples, with the called segments in the same table",
+        "data_collection_tag": "cnv_profile_demo",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8d50"
+          "$oid": "646b0f3c1e4a2d7f8e5b8d8d"
         }
       },
       "cols_json": {},
@@ -112,7 +112,7 @@
       "last_updated": "2026-05-12T00:00:00.000000",
       "title_size": "md",
       "title_align": "left",
-      "section": "Track scope",
+      "section": "Profile scope",
       "interactive_component_type": "MultiSelect",
       "column_name": "sample",
       "column_type": "object",
@@ -120,33 +120,33 @@
       "default_state": null,
       "filter_expr": null,
       "placement": "left",
-      "group": "Track filters",
+      "group": "Profile filters",
       "timescale": null,
       "show_marks": null,
-      "custom_color": "#1976D2",
-      "icon_name": "mdi:flask",
+      "custom_color": "#FA5252",
+      "icon_name": "mdi:test-tube",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
-      "index": "cov-f-region",
+      "index": "cnv-f-chrom",
       "component_type": "interactive",
-      "title": "Region",
+      "title": "Chromosome",
       "workflow_tag": "advanced_viz_demo",
-      "data_collection_tag": "coverage_track_demo",
+      "data_collection_tag": "cnv_profile_demo",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8d01"
       },
       "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d50"
+        "$oid": "646b0f3c1e4a2d7f8e5b8d8d"
       },
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "SARS-CoV-2 coverage tracks (200 bp bins) for ~50 samples with SARS-CoV-2 gene-region annotation; sourced from a viralrecon-bowtie2-mosdepth run",
-        "data_collection_tag": "coverage_track_demo",
+        "description": "A synthetic somatic copy-number profile: 20 000 bins over 5 chromosomes for 2 tumour samples, with the called segments in the same table",
+        "data_collection_tag": "cnv_profile_demo",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8d50"
+          "$oid": "646b0f3c1e4a2d7f8e5b8d8d"
         }
       },
       "cols_json": {},
@@ -154,41 +154,41 @@
       "last_updated": "2026-05-12T00:00:00.000000",
       "title_size": "md",
       "title_align": "left",
-      "section": "Track scope",
+      "section": "Profile scope",
       "interactive_component_type": "MultiSelect",
-      "column_name": "gene_region",
+      "column_name": "chrom",
       "column_type": "object",
       "value": null,
       "default_state": null,
       "filter_expr": null,
       "placement": "left",
-      "group": "Track filters",
+      "group": "Profile filters",
       "timescale": null,
       "show_marks": null,
-      "custom_color": "#45B8AC",
-      "icon_name": "mdi:map-marker-path",
+      "custom_color": "#E64980",
+      "icon_name": "mdi:dna",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
-      "index": "cov-f-coverage",
+      "index": "cnv-f-copy-number",
       "component_type": "interactive",
-      "title": "Depth",
+      "title": "Copy number",
       "workflow_tag": "advanced_viz_demo",
-      "data_collection_tag": "coverage_track_demo",
+      "data_collection_tag": "cnv_profile_demo",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8d01"
       },
       "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d50"
+        "$oid": "646b0f3c1e4a2d7f8e5b8d8d"
       },
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "SARS-CoV-2 coverage tracks (200 bp bins) for ~50 samples with SARS-CoV-2 gene-region annotation; sourced from a viralrecon-bowtie2-mosdepth run",
-        "data_collection_tag": "coverage_track_demo",
+        "description": "A synthetic somatic copy-number profile: 20 000 bins over 5 chromosomes for 2 tumour samples, with the called segments in the same table",
+        "data_collection_tag": "cnv_profile_demo",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8d50"
+          "$oid": "646b0f3c1e4a2d7f8e5b8d8d"
         }
       },
       "cols_json": {},
@@ -196,19 +196,19 @@
       "last_updated": "2026-05-12T00:00:00.000000",
       "title_size": "md",
       "title_align": "left",
-      "section": "Track scope",
+      "section": "Profile scope",
       "interactive_component_type": "RangeSlider",
-      "column_name": "coverage",
-      "column_type": "float64",
+      "column_name": "copy_number",
+      "column_type": "int64",
       "value": null,
       "default_state": null,
       "filter_expr": null,
       "placement": "left",
-      "group": "Track filters",
+      "group": "Profile filters",
       "timescale": null,
       "show_marks": null,
-      "custom_color": "#00BCD4",
-      "icon_name": "mdi:chart-line",
+      "custom_color": "#FD7E14",
+      "icon_name": "mdi:numeric",
       "wf_tag": "python/advanced_viz_demo"
     }
   ],
@@ -218,7 +218,7 @@
   "stored_edit_dashboard_mode_button": [],
   "left_panel_layout_data": [
     {
-      "i": "box-cov-f-sample",
+      "i": "box-cnv-f-sample",
       "x": 0,
       "y": 0,
       "w": 1,
@@ -226,7 +226,7 @@
       "static": false
     },
     {
-      "i": "box-cov-f-region",
+      "i": "box-cnv-f-chrom",
       "x": 0,
       "y": 3,
       "w": 1,
@@ -234,7 +234,7 @@
       "static": false
     },
     {
-      "i": "box-cov-f-coverage",
+      "i": "box-cnv-f-copy-number",
       "x": 0,
       "y": 6,
       "w": 1,
@@ -244,11 +244,11 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-cov-text",
+      "i": "box-cnv-text",
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 1,
+      "h": 3,
       "static": false,
       "resizeHandles": [
         "se",
@@ -259,11 +259,11 @@
       ]
     },
     {
-      "i": "box-cov-track",
+      "i": "box-cnv-track",
       "x": 0,
-      "y": 1,
+      "y": 3,
       "w": 8,
-      "h": 8,
+      "h": 10,
       "static": false,
       "resizeHandles": [
         "se",
@@ -283,10 +283,10 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "Coverage track",
-  "subtitle": "Read-depth signal along a coordinate axis (mosdepth-style). Multi-sample faceting + SARS-CoV-2 gene-region annotation lane.",
-  "icon": "mdi:chart-areaspline-variant",
-  "icon_color": "blue",
+  "title": "Copy-number profile",
+  "subtitle": "A synthetic somatic profile over 5 chromosomes: 20 000 bins of log2 ratio, the called segments laid over them, and the B-allele frequency underneath that catches the copy-neutral LOH the log2 track cannot see.",
+  "icon": "mdi:chart-timeline-variant",
+  "icon_color": "red",
   "icon_variant": "filled",
   "workflow_system": "python",
   "notes_content": "",
@@ -318,17 +318,17 @@
   "parent_dashboard_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8d00"
   },
-  "tab_order": 22,
+  "tab_order": 41,
   "main_tab_name": null,
-  "tab_icon": "mdi:chart-areaspline-variant",
-  "tab_icon_color": "blue",
+  "tab_icon": "mdi:chart-timeline-variant",
+  "tab_icon_color": "red",
   "parent_dashboard_title": null,
   "filter_sections": [
     {
-      "name": "Track scope",
+      "name": "Profile scope",
       "icon": "mdi:filter-variant",
-      "color": "blue",
-      "description": "Restricts which lanes and which depth range are drawn",
+      "color": "red",
+      "description": "Restricts which sample, which chromosomes and which row type the profile is built from",
       "collapsed": false,
       "persistent": false,
       "pin": "top"
@@ -336,10 +336,10 @@
   ],
   "grid_sections": [
     {
-      "name": "Coverage track",
-      "icon": "mdi:chart-line",
-      "color": "blue",
-      "description": "Depth along a reference, one lane per sample",
+      "name": "Copy number",
+      "icon": "mdi:dna",
+      "color": "red",
+      "description": "Bin-level evidence, the segments called over it, and the allele fractions underneath",
       "collapsed": false,
       "persistent": false,
       "pin": "top"
