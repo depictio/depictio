@@ -474,3 +474,66 @@ tools' reports, so those stay pipeline-local, as in every other nf-core template
   `input/benchmarking_vikingfish.tsv`, so a filter on any of them would be dead on the
   reference run. They stay in the hub table.
 - `test_shipped_dashboard_yamls.py -k eager` passes.
+
+## 2026-09-23 wave 2b: locus section, header controls, pooled library QC
+
+What changed:
+
+- `Coverage and genotyping`: `Depth along the reference` is now a locus section. Navigator:
+  `genome_view` on `qualimap_coverage_across_reference` (`controls_placement: header`,
+  `facet_by_sample`, `default_region: "NC_044048.1:1-30,875,876"`, `assembly` null because
+  gadMor3 has no GenomeSpy built-in, so no gene lane). Track under it: `coverage_track` on the
+  new `qualimap_mapq_across_reference` collection (pipeline-local
+  `eager/mapq_across_reference.py`, Qualimap's `mapping_quality_across_reference.txt` placed
+  on the same contig coordinates), reached by a new `region` link. The former
+  `coverage_track` + `genome_view` pair on the one depth collection is gone
+  (`test_no_double_track_binding` no longer lists eager). The `Position on the contig`
+  slider is replaced by a `Window depth (X)` slider, because the navigator owns the position
+  filter.
+- `Run and library hub`: new `Library QC profile` section, a `parallel_coordinates` tile over
+  the new `eager_library_qc` collection (pipeline-local `eager/library_qc.py`, left-joining
+  endorS.py, Picard, Qualimap and DamageProfiler on the library id) plus its table.
+- `Mapping, endogenous DNA and duplication`: new endogenous DNA against clonality
+  `scatter_xy` on `eager_library_qc`.
+- `controls_placement: header` on every `scatter_xy` (5 existing + 1 new), the navigator and
+  the parallel coordinates. `show_histogram: true` on the eight QC threshold sliders.
+- Links: `samples` to `eager_library_qc` and `qualimap_mapq_across_reference` (direct), and
+  the region link `qualimap_coverage_across_reference` to `qualimap_mapq_across_reference`.
+
+Discrepancies:
+
+- EA-D10: `damage_profile` `facet_by: length_bin` is not bound. DamageProfiler 0.4.9 writes
+  `misincorporation.txt` per chromosome, end, strand and position only; nothing on disk is
+  stratified by read length, so no recipe can emit an honest `length_bin`.
+- EA-D11: no sex-determination scatter and no contamination `metric_ci_bars`. Sex.DetERRmine
+  and the ANGSD nuclear contamination step did not run in this megatest (the collections
+  stay `optional: true` and were skipped at ingest); `scatter_xy` also has no error-bar
+  option to draw Sex.DetERRmine's SE columns with.
+- EA-D12: the variants cannot join the locus section. `bcftools stats` carries no positions
+  and the VCFs (300 MB each) are not mirrored, so no `indexed_file` track exists on this run.
+- EA-D13: the navigator's y scale spans the whole collection, so the mitochondrion's ~59X
+  window flattens the nuclear windows (about 1X) to the bottom of each lane. `genome_view`
+  has no y-domain or region-aware y option; the mapping-quality track under it rescales to
+  the region correctly.
+
+Commands and results:
+
+```bash
+uv run pytest -q depictio/tests/models/test_shipped_dashboard_yamls.py -k eager   # 10 passed
+uv run pytest -q depictio/tests/models/test_catalog.py                            # 99 passed
+uv run pytest -q depictio/tests/recipes/test_eager_library_qc.py \
+  depictio/tests/recipes/test_eager_mapq_across_reference.py                      # 4 passed
+uv run python -m depictio.cli run --template nf-core/eager/2.4.5 \
+  --data-root ~/Data/depictio-nfcore/eager/2.4.5/megatest --dry-run               # 8/8 steps
+nohup uv run python -m depictio.cli run --CLI-config-path \
+  ~/.depictio/CLI.feat-nfcore-templates-lot2-112.yaml --template nf-core/eager/2.4.5 \
+  --data-root ~/Data/depictio-nfcore/eager/2.4.5/megatest --project-name lot2-eager-w2b
+# 8/8 steps; project 6ab3cb1d815942d33e1eb0d9, main dashboard 6ab3cbc1e8b8ace33d32c919
+```
+
+Every non-optional collection has rows; the new ones: `eager_library_qc` 2 x 10,
+`qualimap_mapq_across_reference` 1252 x 5 (626 windows per library). Live checks: at the
+default region both locus tiles echo `NC_044048.1:1-30,875,876` (the MAPQ track 38 rows,
+19 windows x 2 libraries); typing `NC_044056.1:5,000,000-20,000,000` in the navigator's
+locus field moved the navigator and the MAPQ track (18 rows). Header chips are visible
+without hover on the scatter tiles and the parallel coordinates.

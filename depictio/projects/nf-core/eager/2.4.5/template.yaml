@@ -553,6 +553,50 @@ workflows:
               "coverage_std": "Standard deviation of the depth in the window"
               "global_position": "Window centre on the concatenated reference, bp"
 
+      # Mapping quality over the same Qualimap windows, placed on the same
+      # contig coordinates as the depth track above. The Coverage tab's
+      # locus navigator draws depth; this collection is the track under it,
+      # reached through the region link in `links:`.
+      - data_collection_tag: "qualimap_mapq_across_reference_raw"
+        description: "Raw Qualimap mapping_quality_across_reference tables, one line per row (input of qualimap_mapq_across_reference)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*mapping_quality_across_reference\\.txt$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1f"
+              has_header: false
+              new_columns: ["raw"]
+              comment_prefix: "#"
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw": "One line of the windowed mapping-quality table"
+              "source_path": "File the line came from; the library id is derived from its directory"
+
+      - data_collection_tag: "qualimap_mapq_across_reference"
+        description: "Mean mapping quality per Qualimap window, each window mapped back onto its contig like the depth windows"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/eager/mapq_across_reference.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library Qualimap ran on"
+              "chromosome": "Contig the window falls in"
+              "position": "Window centre on that contig, bp"
+              "mapping_quality": "Mean MAPQ of the reads in the window"
+              "global_position": "Window centre on the concatenated reference, bp"
+
       - data_collection_tag: "qualimap_coverage_histogram_raw"
         description: "Raw Qualimap coverage_histogram tables, one line per row (input of qualimap_coverage_histogram)"
         config:
@@ -780,6 +824,31 @@ workflows:
               "median_length": "Median mapped fragment length, bp"
               "fraction_under_70bp": "Share of mapped fragments shorter than 70 bp, 0 to 1"
               "n_reads": "Mapped fragments the length distribution counted"
+
+      # One row per library pooling endorS.py, Picard, Qualimap and
+      # DamageProfiler, declared after the four collections it reads. It feeds
+      # the endogenous-against-clonality plane and the per-library QC profile.
+      - data_collection_tag: "eager_library_qc"
+        description: "One row per library: endogenous DNA, clonality, depth, mapping quality, error rate, GC, terminal damage and fragment length"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/eager/library_qc.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library id, the samplesheet's Library_ID"
+              "endogenous_dna": "Reads mapped over reads given to the mapper, percent (endorS.py)"
+              "endogenous_dna_post": "The same after the quality filter and deduplication, percent"
+              "clonality_pct": "Picard MarkDuplicates duplicate fraction, as a percent"
+              "mean_coverage": "Mean depth over the reference, X (Qualimap)"
+              "mean_mapping_quality": "Mean MAPQ of mapped reads (Qualimap)"
+              "error_rate_pct": "Mismatches over mapped bases, as a percent (Qualimap)"
+              "gc_percentage": "GC content of mapped bases, percent (Qualimap)"
+              "ct_5p_first_pct": "C to T frequency at the first 5 prime base, as a percent (DamageProfiler)"
+              "mean_length": "Mean mapped fragment length, bp (DamageProfiler)"
 
       # ----------------------------------------------------------------
       # bcftools stats over the HaplotypeCaller VCFs. eager writes them
@@ -1181,4 +1250,40 @@ links:
       resolver: "direct"
       target_field: "sample"
     description: "Carry a library selected on the endogenous DNA tiles over to its flagstat rows"
+    enabled: true
+
+  # ---- The two collections this pass added ------------------------------
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "eager_library_qc"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the per-library QC profile by the libraries picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "qualimap_mapq_across_reference"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the mapping-quality track by the libraries picked in the left panel"
+    enabled: true
+
+  # ---- Region link: the Coverage tab's locus section ---------------------
+  # The navigator is a genome_view on the depth windows; its brush, its locus
+  # field and its default region emit chromosome + position filters on
+  # qualimap_coverage_across_reference. This link renames them onto the
+  # mapping-quality windows so the track under the navigator follows.
+  - source_dc_tag: "qualimap_coverage_across_reference"
+    source_column: "chromosome"
+    target_dc_tag: "qualimap_mapq_across_reference"
+    target_type: "table"
+    link_config:
+      resolver: "region"
+      columns: {chrom: "chromosome", pos: "position"}
+    description: "A region brushed or typed on the depth navigator narrows the mapping-quality track"
     enabled: true

@@ -329,6 +329,26 @@ workflows:
               "average_quality": "SN row: mean base quality of mapped bases"
               "supplementary_alignments": "SN row: supplementary alignments, the split-read signal of a long-read run"
 
+      # Nx ladder. NanoStat reports N50 alone and nanoseq publishes no
+      # per-read table, but the RL block of samtools stats is an exact
+      # read-length histogram, so every rung N1..N99 is recomputed from it
+      # (the N50 rung equals NanoStat's N50 on the megatest, NS-D15).
+      - data_collection_tag: "samtools_read_length_nx"
+        description: "Nx ladder per library (N1 to N99), recomputed from the samtools stats read-length histogram"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/nanoseq/read_length_nx.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library the ladder belongs to"
+              "nx": "Rung of the ladder, in percent of the library's bases (50 is N50)"
+              "read_length": "Nx: the shortest read length inside that share of the bases"
+              "bases_share": "Share of the bases held by reads at least that long"
+
       # ----------------------------------------------------------------
       # Bambu gene / transcript quantification. The wide matrices feed the
       # clustered heatmaps; the long twins carry `sample` so the hub filter
@@ -559,6 +579,32 @@ workflows:
               "significant": "padj < 0.05"
               "direction": "up / down / not significant"
 
+      # DEXSeq usage proportions. The results table carries the verdict,
+      # not the per-library shares it was computed from; those are
+      # recomputed from the Bambu transcript counts DEXSeq ran on, for the
+      # genes the table ranks first.
+      - data_collection_tag: "dexseq_usage"
+        description: "Per-library transcript usage (share of the gene's reads) for the genes with the smallest DEXSeq gene-level q-value"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/nanoseq/dexseq_usage.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library the share is measured in"
+              "condition": "Condition the library belongs to"
+              "gene_id": "Ensembl gene id DEXSeq tested"
+              "gene_label": "The gene id with its DEXSeq gene-level q-value, the facet title"
+              "transcript_id": "Bambu transcript DEXSeq tested inside that gene"
+              "count": "Reads Bambu assigned to the transcript in this library"
+              "usage_pct": "100 x the transcript's reads over the gene's reads in this library"
+              "gene_padj": "DEXSeq gene-level adjusted q-value (dex.padj$gene)"
+              "usage_log2fc": "DEXSeq log2 fold change of the transcript's usage"
+              "significant": "gene_padj below 0.05"
+
       # ----------------------------------------------------------------
       # Isoform structures. GATED: no annotation is on disk in the megatest
       # this template is pinned to, which was quantification-only. A run that
@@ -715,6 +761,26 @@ links:
       resolver: "direct"
       target_field: "sample_id"
     description: "Filter the correlation matrix rows by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "samtools_read_length_nx"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the Nx ladder by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "dexseq_usage"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the DEXSeq usage shares by the samples picked in the left panel"
     enabled: true
 
   - source_dc_tag: "samples"
