@@ -444,3 +444,99 @@ template: it takes down every advanced-viz tile in the repo equally.
   `bcftools_stats_summary.caller -> bcftools_stats_tstv.caller` (so the glance scope reaches
   the Ts/Tv card).
 - `test_shipped_dashboard_yamls.py -k sarek` passes. `.db_seeds` not regenerated here.
+
+## 2026-09-23 wave 2b
+
+### What changed
+
+- New pipeline-local recipes in `recipes/`: `mosdepth_targets` (per-target depth, primary
+  contigs, 850,444 rows), `mosdepth_windows` (the 1 Mb windows renamed onto `chrom` / `pos` /
+  `depth`, 10,836 rows), `substitution_spectrum` (48 rows) and `indel_spectrum` (318 rows) from
+  the `bcftools stats` sections, and `callset_qc` (8 rows, one per SNV-calling callset). Unit
+  tests in `depictio/tests/recipes/test_sarek_locus_recipes.py` (5 tests).
+- New `indexed_file` collection `snpeff_vcf_files` (optional): the eight SNV/indel
+  snpEff-annotated VCFs plus their `.tbi`, `max_file_size_mb: 32`, Manta and TIDDIT excluded.
+  `megatest.yaml` now fetches `annotation/*/*/*_snpEff.ann.vcf.gz.tbi` (10 objects, 3 to 235 kB).
+- Cohort QC: the `mosdepth_regions` double binding (a `coverage_track` and a `genome_view` on
+  the same collection) is replaced by a locus section, `One locus, three tracks`, opening on
+  `chr17:7,400,000-8,000,000`: a `genome_view` navigator on `mosdepth_windows` (header
+  controls, region filter), a `coverage_track` on `mosdepth_targets`, a `genome_view` of
+  `vcf_variants` per caller over the hg38 gene lane, and a `genome_view source: file` on
+  `snpeff_vcf_files`. `test_no_double_track_binding` now XPASSes on sarek.
+- Variant yield: `Mutation spectra` (figure bars of the six folded substitution classes and of
+  indel length within 20 bp, as fractions per callset) and `Callset QC profile`
+  (`parallel_coordinates` over `callset_qc`).
+- Caller concordance: VAF against depth as `density: true`; manhattan in `mode: rainfall`;
+  a `Depth at the call` RangeSlider with `show_histogram`; header controls on the dotplot,
+  scatter and genome view.
+- Consequences: a `record_card` on `snpeff_ann_variants` keyed on `variant_key`, fed by the
+  impact scatter's selection, opening on `chr17:7676154:G:C` (TP53 Pro72Arg).
+- MultiQC tab: the Ts/Tv RangeSlider draws its histogram.
+
+### Validation performed
+
+- `depictio-cli run --template nf-core/sarek/3.10.0 --data-root <megatest> --dry-run`: 8/8
+  steps, after the last template edit.
+- `pytest depictio/tests/recipes/test_sarek_locus_recipes.py` plus
+  `test_shipped_dashboard_yamls.py -k "sarek or double_track"`: 15 passed, 1 xpassed.
+- Live ingest into project `lot2-sarek` on the lot2 stack (before the `chrom` / `pos`
+  restructure below): 34 collections processed, the 4 somatic optional ones skipped,
+  `snpeff_vcf_files` uploaded 8 files and its manifest (`/files/indexed/{dc_id}`) returned
+  presigned URLs that answer range requests (206) with CORS for the viewer origin. All five
+  tabs loaded; the navigator echoed the default region and a typed locus
+  (`chr1:1,000,000-1,600,000`) updated it; the per-caller calls tile held 329 rows there.
+  Screenshots: `/tmp/claude-502/shots-sarek/tab0.png` to `tab5.png`, `tab1_chr1.png`.
+- Offline, on the restructured recipes: at the default region there are 4 windows, 1,328
+  targets in 4 lanes, and 42 to 83 records per annotated VCF (`tabix`).
+- Re-ingest after the restructure (project `6ab3db839baf4b8c12f0d68f`, main dashboard
+  `6ab3dbf430116ab0896e43ec`, tabs `...43ed` to `...43f1`): 35 collections processed, 4 somatic
+  optional ones skipped. Shapes: `mosdepth_windows` 10,836, `mosdepth_targets` 850,444,
+  substitution spectrum 48, indel spectrum 318, `callset_qc` 8, `vcf_variants` 286,631,
+  `snpeff_ann_variants` 371,068; `snpeff_vcf_files` lists 8 files.
+- Locus section, live: at the default region the per-target track draws 1,328 targets in four
+  lanes, the calls track sits on chr17 over TP53, and the file track issues 24 MinIO requests
+  (the `.tbi` and range reads of the `.vcf.gz`). Typing `chr1:1,000,000-1,600,000` moves all
+  four tracks (per-target 968 rows, MinIO 32 requests). No `compute_coverage_track` 500.
+- Other tabs, live: substitution and indel-length bars, the parallel coordinates (8 lines, 8
+  axes), the density heatmap, the rainfall panel, the depth slider and the TP53 Pro72Arg record
+  card (one card per callset, DeepVariant PASS at VAF 0.43, FreeBayes at 0.46) all render. The
+  three Variant yield tiles that did not scroll into view sit in `Variant tables`, which is
+  collapsed by design.
+- Screenshots: `/tmp/claude-502/shots-sarek/tab0.png` to `tab5.png`, `tab1_chr1.png`, and per
+  tile `cqc4_*` (default region), `cqc5_*` (chr1), `vy2_*`, `cc2_*`, `cs2_*`.
+
+### Discrepancies found in this pass
+
+- SK-D13. Cards ignore a `genome_selection` region: the two target cards stayed run-wide while
+  the navigator narrowed the tracks. They are titled as run-wide figures.
+- SK-D14. `follow_region_filter` zooms a follower only when the filter's column names equal the
+  follower's own `chr_col` / `pos_col`; region links narrow the rows but not the view. On the
+  first ingest the calls tile and the file track stayed genome-wide and MinIO saw no request.
+  Fixed by naming every locus collection `chrom` / `pos` (`mosdepth_windows`, renamed
+  `mosdepth_targets`); confirmed live on the re-ingest, all four tracks move together.
+- SK-D15. `compute_coverage_track` returned 500 with `LinkResolutionError: Unknown resolver
+  type: region`, on fresh containers too, so not stale code. Cause: the template also declared
+  a `direct` stage link on the same pair (`mosdepth_windows` to `mosdepth_targets`). The
+  multi-hop walker takes the direct link, but `/links/{project}/resolve` finds a link by its
+  source and target collections and is answered with the region link, which it cannot resolve.
+  Fixed in the template by dropping the stage link (the stage picker no longer reaches the
+  per-target track); after the re-ingest, no 500. Platform follow-up: resolve by link id, or
+  skip region links in the resolver's lookup.
+- SK-D16. The file track is keyed on the VCF file name (`<sample>.<caller>`), so the sample
+  picker does not reach it; `file_max_lanes: 8` shows all eight.
+- SK-D17. `callset_qc` and the spectra are per callset (sample and caller), not per sample:
+  with one individual at two depths, the sample is not a useful unit on its own. Manta has no
+  SNV and is dropped from both.
+- SK-D18. `mosdepth_summary` has no region link, yet live the per-contig bars and table show
+  only the region's contig (chr17, then chr1). Not traced; harmless here, but the section text
+  does not rely on it.
+- SK-D19. The file track decodes one lane per locus and fails the other seven with `Loading
+  failed: workerPool.decompressBlocks is not a function` (the viewer's `@gmod/bgzf-filehandle`
+  6.6.0 worker pool under concurrent loads). The range reads themselves succeed. Viewer bug,
+  outside the template.
+- SK-D20. The calls track's row label reads `329 rows` at both regions while its marks move;
+  the label looks computed once. The density tile draws from the same row sample as the scatter
+  (about 10k of 286k calls), so its text and the docs no longer say it bins every call.
+- SK-D6 (FreeBayes absent from `vcf_variants`) and SK-D9 (`md` and `recal` mosdepth lanes
+  identical) still hold and show in the locus section. `cnv_profile` stays unbound: the run
+  publishes no somatic profile.
