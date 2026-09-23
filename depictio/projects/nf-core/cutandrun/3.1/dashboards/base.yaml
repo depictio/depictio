@@ -537,6 +537,7 @@ main_dashboard:
     workflow_tag: cutandrun
     data_collection_tag: bowtie2_spikein_factors
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: target_align_rate
     column_type: float64
     display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:chart-bar'}
@@ -551,6 +552,7 @@ main_dashboard:
     workflow_tag: cutandrun
     data_collection_tag: bowtie2_spikein_factors
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: scale_factor
     column_type: float64
     display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:ruler'}
@@ -565,6 +567,7 @@ main_dashboard:
     workflow_tag: cutandrun
     data_collection_tag: seacr_peak_summary
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: num_peaks
     column_type: int64
     display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:counter'}
@@ -579,6 +582,7 @@ main_dashboard:
     workflow_tag: cutandrun
     data_collection_tag: seacr_peak_summary
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: signal_density_median
     column_type: float64
     display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:chart-line'}
@@ -622,10 +626,18 @@ tabs:
     icon: mdi:chart-donut
     color: grape
     description: How much of each library is nucleosome-free, mono, di or multi-nucleosomal
+  - name: Fragment pile-up around the peaks
+    icon: mdi:chart-bell-curve
+    color: blue
+    description: The fragments SEACR called from, piled up around the summits of the strongest regions
   - name: Spike-in normalisation
     icon: mdi:ruler
     color: indigo
     description: The carrier depth behind every scale factor the coverage was divided by
+  - name: Library duplication
+    icon: mdi:set-merge
+    color: orange
+    description: How much of each library Picard flagged as duplicate reads
   - name: Coverage concentration and sample similarity
     icon: mdi:chart-line
     color: cyan
@@ -906,6 +918,80 @@ tabs:
     title_align: left
     layout: {x: 0, y: 10, w: 8, h: 4}
 
+  # ------------------------------------------------- pile-up around the peaks
+  - component_type: text
+    tag: cr-pk-pileup-intro
+    section: Fragment pile-up around the peaks
+    title: The fragments behind the calls
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The deepTools heatmap of a CUT&RUN run, rebuilt from the fragment BEDs
+      the pipeline publishes rather than from a bigWig: one row per SEACR
+      region, 3 kb either side of its summit, strongest regions on top, the
+      mean profile above each sample. A sharp mark such as H3K4me3 collapses
+      onto the summit; a broad one such as H3K27me3 stays spread over the
+      whole window. Only the 500 strongest regions per sample whose windows
+      do not overlap are drawn; the Peak calls tab shows the same bins along
+      the genome, under its locus navigator.
+    workflow_tag: cutandrun
+    data_collection_tag: seacr_frags_profile
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: cr-pk-av-pileup-matrix
+    index: cr-pk-av-pileup-matrix
+    section: Fragment pile-up around the peaks
+    workflow_tag: cutandrun
+    data_collection_tag: seacr_frags_profile
+    use: seacr/frags_pileup_matrix
+    config:
+      reference_position: 0
+      reference_label: summit
+      sort_by: signal
+      max_rows: 500
+      show_profile: true
+    title: Fragment pile-up around the SEACR summits
+    description: Regions down, offset from the summit across, fragments per million as colour, one panel per sample, mean profile on top.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 9}
+  - component_type: figure
+    tag: cr-pk-fig-pileup-profile
+    index: cr-pk-fig-pileup-profile
+    section: Fragment pile-up around the peaks
+    workflow_tag: cutandrun
+    data_collection_tag: seacr_frags_profile
+    use: seacr/frags_profile
+    mode: code
+    visu_type: line
+    code_content: |
+      # mean fragments per million at each offset, one curve per sample, so the
+      # samples compare on one axis (the matrix above draws one panel each)
+      df_modified = (
+          df.group_by("sample", "offset_bp")
+          .agg(pl.col("cpm").mean().alias("mean_cpm"))
+          .sort("sample", "offset_bp")
+      )
+
+      fig = px.line(
+          df_modified.to_pandas(),
+          x="offset_bp",
+          y="mean_cpm",
+          color="sample",
+      )
+      fig.add_vline(x=0, line_dash="dot")
+      fig.update_layout(
+          xaxis_title="Offset from the summit (bp)",
+          yaxis_title="Mean fragments per million",
+          legend_title_text="Sample",
+          margin={"t": 24, "l": 64, "r": 16, "b": 48},
+      )
+    title: Mean pile-up per sample
+    description: The profile above each matrix panel, all samples on one axis. Replicates of one mark should overlap; the height gap between marks is the enrichment gap.
+    title_size: h3
+    layout: {x: 0, y: 11, w: 8, h: 6}
+
   # ------------------------------------------------------ spike-in normalisation
   - component_type: text
     tag: cr-sg-spike-intro
@@ -962,6 +1048,95 @@ tabs:
     title_align: left
     layout: {x: 0, y: 8, w: 8, h: 3}
 
+  # ---------------------------------------------------------- duplication
+  - component_type: text
+    tag: cr-sg-dup-intro
+    section: Library duplication
+    title: How much of each library is duplicated
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      CUT&RUN libraries start from little material, so they saturate early and
+      duplication climbs fast. The pipeline marks duplicates with Picard and
+      keeps them in the target BAMs (only the IgG controls are deduplicated),
+      so a high share here inflates every coverage number downstream. The IgG
+      controls hold the least material and duplicate the most, which is
+      expected; a target library climbing towards them is not. Read from
+      samtools flagstat on the marked BAMs.
+    workflow_tag: cutandrun
+    data_collection_tag: samtools_flagstat
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: figure
+    tag: cr-sg-fig-dup
+    index: cr-sg-fig-dup
+    section: Library duplication
+    workflow_tag: cutandrun
+    data_collection_tag: samtools_flagstat
+    use: samtools/flagstat
+    mode: code
+    visu_type: bar
+    code_content: |
+      # duplicate share per library, from the flagstat counts
+      df_modified = df.with_columns(
+          (100 * pl.col("duplicate_reads") / pl.col("total_reads")).alias("duplicate_pct")
+      ).sort("sample")
+
+      fig = px.bar(
+          df_modified.to_pandas(),
+          x="sample",
+          y="duplicate_pct",
+          color="sample",
+      )
+      fig.update_layout(
+          xaxis_title="Sample",
+          yaxis_title="Duplicate reads (%)",
+          showlegend=False,
+          margin={"t": 24, "l": 64, "r": 16, "b": 48},
+      )
+    title: Duplicate reads per library
+    description: Share of each library's reads flagged as duplicates.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 4, h: 6}
+  - component_type: figure
+    tag: cr-sg-fig-dup-depth
+    index: cr-sg-fig-dup-depth
+    section: Library duplication
+    workflow_tag: cutandrun
+    data_collection_tag: samtools_flagstat
+    use: samtools/flagstat
+    mode: code
+    visu_type: scatter
+    code_content: |
+      # duplication against depth: a library that is both deep and highly
+      # duplicated was sequenced past its complexity
+      df_modified = df.with_columns(
+          (100 * pl.col("duplicate_reads") / pl.col("total_reads")).alias("duplicate_pct")
+      )
+
+      fig = px.scatter(
+          df_modified.to_pandas(),
+          x="total_reads",
+          y="duplicate_pct",
+          color="sample",
+          hover_name="sample",
+          custom_data=["sample"],
+      )
+      fig.update_traces(marker={"size": 14})
+      fig.update_layout(
+          xaxis_title="Reads in the BAM",
+          yaxis_title="Duplicate reads (%)",
+          legend_title_text="Sample",
+          margin={"t": 24, "l": 64, "r": 16, "b": 48},
+      )
+    selection_enabled: true
+    selection_column: sample
+    title: Duplication against depth
+    description: Each library's duplicate share against its read count; deep and highly duplicated means sequenced past its complexity.
+    title_size: h3
+    layout: {x: 4, y: 2, w: 4, h: 6}
+
   # --------------------------------------- coverage concentration / similarity
   - component_type: text
     tag: cr-qc-deeptools-intro
@@ -988,6 +1163,7 @@ tabs:
     data_collection_tag: deeptools_fingerprint_metrics
     use: deeptools/fingerprint_scatter
     config:
+      controls_placement: header
       x_title: Area under the observed coverage curve
       y_title: Divergence from a uniform library
       # Six libraries: colour names them and the legend carries the names, so
@@ -1017,6 +1193,7 @@ tabs:
     data_collection_tag: deeptools_sample_pca
     use: deeptools/pca_embedding
     config:
+      controls_placement: header
       color_col: sample
       point_size: 16
       marker_outline: true
@@ -1074,6 +1251,7 @@ tabs:
     workflow_tag: cutandrun
     data_collection_tag: seacr_fragment_lengths
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: fragment_length
     column_type: int64
     display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:ruler'}
@@ -1088,6 +1266,7 @@ tabs:
     workflow_tag: cutandrun
     data_collection_tag: deeptools_fingerprint_metrics
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: auc_ratio
     column_type: float64
     display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:chart-line'}
@@ -1120,10 +1299,12 @@ tabs:
     icon: mdi:chart-donut
     color: teal
     description: How much of a library's fragment coverage its own peaks hold
-  - name: Signal along the genome
+  # The locus section: one region, one x axis. The SEACR navigator on top
+  # drives the tracks under it through the region links in template.yaml.
+  - name: Peak calls locus
     icon: mdi:dna
     color: cyan
-    description: Every region as an interval on a chromosome-aware axis, height is the coverage it carries
+    description: SEACR calls, fragment pile-up, MACS2 calls and consensus intervals on one region
   - name: MACS2 alongside
     icon: mdi:chart-bar
     color: violet
@@ -1221,6 +1402,62 @@ tabs:
     title_align: left
     title: Coverage per base
     layout: {x: 6, y: 2, w: 2, h: 2}
+
+  - component_type: figure
+    tag: cr-pk-fig-signal
+    index: cr-pk-fig-signal
+    section: SEACR peak yield
+    workflow_tag: cutandrun
+    data_collection_tag: seacr_peaks
+    use: seacr/peaks
+    mode: code
+    visu_type: scatter
+    code_content: |
+      # total against maximum coverage for the strongest regions in view; the
+      # full frame is ~430k regions, far more than a scatter can show
+      df_modified = (
+          df.sort("total_signal", descending=True)
+          .head(2000)
+          .with_columns(pl.col("width").clip(100, 5000).alias("region_width"))
+      )
+
+      fig = px.scatter(
+          df_modified.to_pandas(),
+          x="total_signal",
+          y="max_signal",
+          color="sample",
+          size="region_width",
+          size_max=18,
+          hover_name="peak_id",
+          custom_data=["peak_id"],
+          log_x=True,
+          log_y=True,
+          opacity=0.7,
+      )
+      fig.update_layout(
+          xaxis_title="Total fragment coverage (log)",
+          yaxis_title="Maximum coverage (log)",
+          legend_title_text="Sample",
+          margin={"t": 24, "l": 64, "r": 16, "b": 48},
+      )
+    selection_enabled: true
+    selection_column: peak_id
+    title: Total against maximum coverage
+    description: The 2000 strongest regions in view; point size is the region width. Lasso to select regions.
+    title_size: h3
+    layout: {x: 0, y: 4, w: 4, h: 6}
+  - component_type: figure
+    tag: cr-pk-fig-width
+    section: SEACR peak yield
+    workflow_tag: cutandrun
+    data_collection_tag: seacr_peaks
+    use: seacr/seacr_width_hist
+    visu_type: histogram
+    dict_kwargs: {x: width, color: sample, nbins: 60}
+    title: SEACR region width
+    description: How wide the calls are, per sample. A broad mark gives far wider regions than a sharp one.
+    title_size: h3
+    layout: {x: 4, y: 4, w: 4, h: 6}
 
   # ------------------------------------------------------------ signal budget
   - component_type: text
@@ -1335,119 +1572,117 @@ tabs:
     title_align: left
     layout: {x: 0, y: 10, w: 8, h: 3}
 
-  # ------------------------------------------------------ signal on genome
+  # ------------------------------------------------------------ peak locus
+  # Navigator + three tracks that follow it. Default region: chr9 from the 3'
+  # end of ABL1 to PLPP7, where every track of the megatest has data (both
+  # marks called there by both callers, and the fragment windows of the
+  # strongest regions of all four samples sit inside it).
   - component_type: text
     tag: cr-pk-genome-intro
-    section: Signal along the genome
-    title: Where the signal is
+    section: Peak calls locus
+    title: One region, four tracks
     title_size: sm
     title_align: left
     order: 2
     alignment: left
     body: >
-      [SEACR](https://github.com/FredHutch/SEACR) reports no p-value, so the
-      track height is the coverage the region carries. The genome view draws
-      every call as the interval it is, on a chromosome-aware axis that zooms;
-      the coverage track below reads the same columns through the Plotly
-      renderer, so the section still answers the question if the genome canvas
-      is unavailable. Lasso the scatter to keep only those regions in the
-      tables at the bottom of this tab.
+      The tab opens on chr9:130,850,000-131,350,000, from the end of ABL1 to
+      PLPP7. H3K4me3 sits as two sharp calls on the NUP214 and FAM78A
+      promoters while H3K27me3 blankets LAMC3 and FIBCD1; the fragment
+      pile-up under the navigator shows the fragments behind both, and the
+      MACS2 and consensus tracks say which calls the second caller and the
+      replicates reproduce, over the hg38 genes. Type a locus in the
+      navigator header, or brush its axis, and every track moves with it.
     workflow_tag: cutandrun
     data_collection_tag: seacr_peaks
-    layout: {x: 0, y: 0, w: 8, h: 3}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: advanced_viz
     tag: cr-pk-av-track
     index: cr-pk-av-track
-    section: Signal along the genome
+    section: Peak calls locus
     workflow_tag: cutandrun
     data_collection_tag: seacr_peaks
     use: seacr/seacr_peak_track
     config:
+      controls_placement: header
       # `rect` needs an end column, which the role binding supplies: a SEACR
       # call is an interval, not a point at its summit.
       mark: rect
       score_title: log10 total coverage
       opacity: 0.8
-      # No `assembly`: the contig list is derived from the data, so a run on a
-      # non-human reference renders here unchanged.
+      category_col: sample
+      # No `assembly` here, on purpose: SEACR also calls regions on the alt
+      # and unplaced contigs (chr17_GL000205v2_random, chrUn_...), which the
+      # hg38 contig table does not know, and GenomeSpy refuses the whole spec
+      # on the first unknown contig. The axis is derived from the rows; the
+      # gene lane rides the consensus track below, whose rows reach it
+      # already narrowed to the region.
+      default_region: "chr9:130,850,000-131,350,000"
+      region_filter_enabled: true
       selection_enabled: true
       selection_column: peak_id
-    title: SEACR regions along the genome
-    description: Every region as an interval on a chromosome-aware axis; height is log10 of the total fragment coverage. Click a region to carry it into the tables below.
+    title: SEACR regions
+    description: Every SEACR region of every sample as the interval it is; height is log10 of the total fragment coverage. The locus field and a brush on this axis move every track below.
     title_size: h3
-    layout: {x: 0, y: 3, w: 8, h: 7}
+    layout: {x: 0, y: 2, w: 8, h: 4}
   - component_type: advanced_viz
-    tag: cr-pk-av-coverage
-    index: cr-pk-av-coverage
-    section: Signal along the genome
+    tag: cr-pk-av-frags-track
+    index: cr-pk-av-frags-track
+    section: Peak calls locus
     workflow_tag: cutandrun
-    data_collection_tag: seacr_peaks
-    use: seacr/seacr_peak_coverage
+    data_collection_tag: seacr_frags_profile
+    use: seacr/frags_pileup_track
     config:
-      y_scale: linear
-      smoothing_window: 0
+      controls_placement: header
+      view: track
+      views: [track, locus]
+      mark: rect
       color_by: sample
-      facet_by_sample: false
+      facet_by_sample: true
+      smoothing_window: 0
       show_annotation_lane: false
-    title: SEACR coverage profile per sample
-    description: The same regions as a coverage profile, one trace per sample, drawn without the genome canvas.
+      locus_annotation: hg38
+      locus_assembly: hg38
+    title: Fragment pile-up
+    description: Fragments per million in 100 bp bins, one lane per sample, drawn on a 6 kb window around each sample's 500 strongest SEACR regions; the gaps between windows are not measured, not empty.
     title_size: h3
-    layout: {x: 0, y: 10, w: 8, h: 7}
-  - component_type: figure
-    tag: cr-pk-fig-signal
-    index: cr-pk-fig-signal
-    section: Signal along the genome
+    layout: {x: 0, y: 6, w: 8, h: 4}
+  - component_type: advanced_viz
+    tag: cr-pk-av-macs-locus
+    index: cr-pk-av-macs-locus
+    section: Peak calls locus
     workflow_tag: cutandrun
-    data_collection_tag: seacr_peaks
-    use: seacr/peaks
-    mode: code
-    visu_type: scatter
-    code_content: |
-      # total against maximum coverage for the strongest regions in view; the
-      # full frame is ~430k regions, far more than a scatter can show
-      df_modified = (
-          df.sort("total_signal", descending=True)
-          .head(2000)
-          .with_columns(pl.col("width").clip(100, 5000).alias("region_width"))
-      )
-
-      fig = px.scatter(
-          df_modified.to_pandas(),
-          x="total_signal",
-          y="max_signal",
-          color="sample",
-          size="region_width",
-          size_max=18,
-          hover_name="peak_id",
-          custom_data=["peak_id"],
-          log_x=True,
-          log_y=True,
-          opacity=0.7,
-      )
-      fig.update_layout(
-          xaxis_title="Total fragment coverage (log)",
-          yaxis_title="Maximum coverage (log)",
-          legend_title_text="Sample",
-          margin={"t": 24, "l": 64, "r": 16, "b": 48},
-      )
-    selection_enabled: true
-    selection_column: peak_id
-    title: Total against maximum coverage
-    description: The 2000 strongest regions in view; point size is the region width. Lasso to select regions.
+    data_collection_tag: macs2_peaks
+    use: macs2/peak_genome_view
+    config:
+      mark: rect
+      score_title: -log10 q-value
+      category_col: sample
+      assembly: hg38
+      region_filter_enabled: false
+      follow_region_filter: true
+    title: MACS2 calls on the region
+    description: The MACS2 narrow peaks of the same region, coloured by sample; a SEACR region with no MACS2 call under it is one only the coverage threshold saw.
     title_size: h3
-    layout: {x: 0, y: 17, w: 4, h: 6}
-  - component_type: figure
-    tag: cr-pk-fig-width
-    section: Signal along the genome
+    layout: {x: 0, y: 10, w: 8, h: 3}
+  - component_type: advanced_viz
+    tag: cr-pk-av-consensus-locus
+    index: cr-pk-av-consensus-locus
+    section: Peak calls locus
     workflow_tag: cutandrun
-    data_collection_tag: seacr_peaks
-    use: seacr/seacr_width_hist
-    visu_type: histogram
-    dict_kwargs: {x: width, color: sample, nbins: 60}
-    title: SEACR region width
-    description: How wide the calls are, per sample. A broad mark gives far wider regions than a sharp one.
+    data_collection_tag: seacr_consensus_peaks
+    use: seacr/seacr_consensus_track
+    config:
+      mark: rect
+      score_title: max coverage
+      annotation: hg38
+      assembly: hg38
+      region_filter_enabled: false
+      follow_region_filter: true
+    title: Consensus intervals and genes
+    description: The merged SEACR intervals per target, coloured by target, over the hg38 gene lane; an interval here is one the replicates of that mark agree on.
     title_size: h3
-    layout: {x: 4, y: 17, w: 4, h: 6}
+    layout: {x: 0, y: 13, w: 8, h: 4}
 
   # -------------------------------------------------------- macs2 alongside
   - component_type: text
@@ -1608,6 +1843,7 @@ tabs:
     workflow_tag: cutandrun
     data_collection_tag: seacr_peaks
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: width
     column_type: int64
     display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:ruler'}
@@ -1622,6 +1858,7 @@ tabs:
     workflow_tag: cutandrun
     data_collection_tag: seacr_peaks
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: signal_density
     column_type: float64
     display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:chart-line'}
@@ -1786,6 +2023,7 @@ tabs:
     data_collection_tag: caller_agreement
     use: cutandrun/caller_yield_dots
     config:
+      controls_placement: header
       colour_scale: Viridis
       gene_sort: name
       cluster_sort: name
@@ -1958,6 +2196,7 @@ tabs:
     workflow_tag: cutandrun
     data_collection_tag: caller_agreement
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: frac_shared
     column_type: float64
     display: {title_size: md, custom_color: '#E53935', icon_name: 'mdi:set-merge'}
@@ -2243,6 +2482,7 @@ tabs:
     workflow_tag: cutandrun
     data_collection_tag: seacr_consensus_peaks
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: width
     column_type: int64
     display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:ruler'}
@@ -2257,6 +2497,7 @@ tabs:
     workflow_tag: cutandrun
     data_collection_tag: seacr_consensus_peaks
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: num_peaks
     column_type: int64
     display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:counter'}

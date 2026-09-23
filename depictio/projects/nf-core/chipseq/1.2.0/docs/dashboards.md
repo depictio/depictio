@@ -1,7 +1,7 @@
 # nf-core/chipseq 1.2.0: Depictio dashboards
 
 This template turns the output of [nf-core/chipseq](https://nf-co.re/chipseq) 1.2.0 into a
-single five-tab Depictio dashboard. chipseq aligns ChIP and input libraries, filters and
+single six-tab Depictio dashboard. chipseq aligns ChIP and input libraries, filters and
 deduplicates them, calls peaks per sample with MACS2, annotates those peaks with HOMER, merges
 them into one consensus peak set per antibody and finally tests each consensus interval for
 differential binding with DESeq2. The dashboard follows that chain from left to right.
@@ -135,29 +135,40 @@ collections: the share of the genome called enriched, and the extrapolated seque
 
 `Peak yield` is a four-card strip on the peak table: peaks in view with a top-3 breakdown by
 sample, peak width as a box plot, fold enrichment as a histogram, and median -log10 q against
-a threshold.
+a threshold. Under it, `use: macs2/peak_summary` draws the FRiP score per sample as a bar
+chart, the fraction of each library's mapped reads that fall inside its own peaks.
 
 `Significance along the genome` puts every peak at its summit position with -log10 of the
 MACS2 q-value as height, coloured by sample. It is the tab's selection source: lasso a region
 and the peak ids travel to the tables below and, through the project links, to the HOMER
 annotation. Beside it, a volcano of the same significance against fold enrichment over input,
-with the q 1e-10 and five-fold lines drawn and the peaks past both drawn large; and a
+with the q 1e-10 and five-fold lines drawn and the peaks past both drawn large (`views:
+[volcano]`: a peak call has no mean abundance and no uniform null, so the MA and QQ views are
+not offered); and a
 peak-width histogram per sample, which is what separates a sharp transcription-factor profile
 from a broad histone mark.
 
-`Peak landscape` draws the same calls as intervals rather than as points. `use:
-macs2/peak_genome_view` binds the `genome_view` kind, GenomeSpy on a chromosome-aware locus
-axis: one rectangle per peak from its start to its end, height -log10 of the q-value, and a
-brush along the genome axis that emits a chromosome and position filter the rest of the tab
-follows. Under it, `use: macs2/peak_coverage_track` reads the same intervals in plain Plotly
-with fold enrichment on a log axis, one colour per sample. The second panel is deliberate
-redundancy: it is the same rows in a renderer with no external dependency, so the section still
-says something if the GenomeSpy view is unavailable. Neither smooths, because peaks are not
-evenly spaced bins and a rolling mean over them would average across gaps of megabases.
+`Around the summits` binds the `macs2/summit_profile` catalog output (added in wave 2b). The
+canonical ChIP figure here is a read-coverage metagene around the summits, and it cannot be
+built from this run: `computeMatrix` is not published as a table and the bigWigs are not in
+the megatest mirror. What the narrowPeak files do carry is every call's interval and summit,
+so the recipe sets each summit at 0 and aggregates the calls themselves in 50 bp bins across
+4 kb. The first profile counts the summits the OTHER samples called around each summit, per
+anchor and per kb, on a log axis: replicates of a sharp factor pile their summits onto each
+other (FOXA1 here, a spike about a hundred times the flanks), while a broad mark agrees far
+less sharply (EZH2, a few-fold spike). The second is the share of the sample's own calls
+still covering each offset, the average footprint of a call; where it crosses one half is the
+median half-width. Neither is a coverage signal, and the tile text says so.
+
+The genome view and coverage track that used to sit in a `Peak landscape` section here moved
+to the Locus tab: binding both on `macs2_peaks` on one tab is what the
+`test_no_double_track_binding` lint forbids, and the locus navigator's region filters would
+have narrowed this tab's genome-wide cards and Manhattan to one locus.
 
 `Where the peaks land` reads the HOMER annotation: cards for annotated peaks by feature class
 (donut), genes touched (composition by class), distance to TSS (box plot) and peak score
-(histogram); a stacked bar of feature class per sample; and a code-mode histogram of the
+(histogram); the feature-class composition of each sample as a percentage stacked bar
+(`barnorm: percent`, so libraries with 7 000 and 66 000 peaks compare directly); and a code-mode histogram of the
 signed distance to the nearest TSS, clipped to a 10 kb window and split by feature class, with
 the TSS marked. The raw column runs to several hundred kb, so without the window the peak at
 zero flattens out. Under it, `use: homer/tss_distance` reads the same distances pre-binned
@@ -170,9 +181,43 @@ row selection on `peak_id`.
 
 The left panel adds a `Peak scope` group (q-value, fold enrichment and width range sliders,
 plus a chromosome multi-select) and a collapsed `Annotation scope` group (feature class,
-distance to TSS).
+distance to TSS). Every range slider on the dashboard draws the distribution of its column
+above the handles (`show_histogram: true`).
 
 ![Peaks](screenshots/peaks.png)
+
+## Locus
+
+The locus section: one navigator, and the tracks under it follow its region. The navigator
+(`use: macs2/peak_genome_view`, controls in the tile header) draws every MACS2 call as a
+rectangle, one lane per library, and opens on `default_region: chr21:43,600,000-44,000,000`,
+the TFF1 neighbourhood, where all eight libraries called peaks and both consensus sets hold
+intervals. TFF1 is the textbook FOXA1 and oestrogen target, so the FOXA1 E2 lanes are dense
+at its enhancer and promoter. A locus typed in the header or a brush on the axis emits a
+chromosome and a position filter on `macs2_peaks`; two `region` links in `template.yaml`
+rename that pair onto `macs2_consensus_boolean` and `homer_annotated_peaks`, so the tracks
+below show the same region:
+
+- `Consensus intervals per antibody`: a `coverage_track` on the consensus boolean matrix, one
+  lane per consensus set, height the number of libraries calling the interval.
+- `Peaks by nearest gene and feature class`: a second `genome_view` on the HOMER annotation,
+  `follow_region_filter: true`, coloured by feature class with the nearest gene on hover.
+
+The run is hg19 (HOMER places the TFF1 promoter peak at -173 bp from the hg19 TSS), and the
+bundled gene lane exists only for hg38 and mm10, so the navigator sets `assembly: hg19` and
+draws no gene lane; gene-symbol search in the locus field is therefore unavailable, only
+coordinates. The HOMER track stands in for the gene lane. There is no read-coverage track:
+the bigWigs are not in the megatest mirror.
+
+`Region at a glance` recounts the region in view on every move: peaks with a top-3 by
+library, their mean fold enrichment, the consensus support of the intervals as a box plot and
+the number of distinct nearest genes split by feature class. The tab-local `Locus scope`
+carries the chromosome, a q-value slider, the consensus support and the HOMER feature class.
+
+This is a tab of its own rather than a section of Peaks because the navigator's region
+filters narrow every tile of the tab they sit on.
+
+![Locus](screenshots/locus.png)
 
 ## Consensus
 
@@ -226,13 +271,16 @@ matrices over four columns and leaves half the cohort off the plotted axes. The 
 resolves the components per matrix and keeps the catalog output's column names, so the tile
 still binds the catalog render.
 
-`Volcano and MA` pairs the two standard views. The volcano puts -log10(padj) against log2 fold
-change with the padj 0.05 and two-fold lines drawn; the MA plot puts effect size against log2
-mean normalised count, where the low-count intervals fan out on the left. Together they
-separate a real change from a loud one measured on almost no reads.
+`Volcano, MA and QQ` is one `volcano` tile with the view switch in its header (`views:
+[volcano, ma, qq]`, `controls_placement: header`). The volcano puts -log10(padj) against log2
+fold change with the padj 0.05 and two-fold lines drawn; the MA view puts effect size against
+log2 mean normalised count, where the low-count intervals fan out on the left; the QQ view
+compares the observed p-values with the uniform null. These were three tiles on the retired
+`ma` and `qq` kinds.
 
-`Calibration and direction` pairs a QQ plot of observed against expected p-value quantiles
-with a ranked bar chart of the 25 intervals with the largest significant effect.
+`Direction` is a ranked bar chart of the 25 intervals with the largest significant effect.
+
+The PCA tile carries its colour-by and axis pickers in the tile header.
 
 `Differential tables` (collapsed) holds the DESeq2 rows with row selection on `gene_id`.
 
@@ -249,7 +297,7 @@ filter is a single-choice `Select` for that reason.
 
 | Module | Outputs | Renders as |
 |---|---|---|
-| `depictio/catalog/macs2/` | `peaks`, `broad_peaks`, `peak_summary`, `consensus_boolean`, `consensus_fc` | manhattan, genome view, coverage track, volcano, UpSet, complex heatmap, 2 figures, 4 tables, 14 cards |
+| `depictio/catalog/macs2/` | `peaks`, `broad_peaks`, `peak_summary`, `consensus_boolean`, `consensus_fc`, `summit_profile` | manhattan, genome view, coverage track, volcano, UpSet, complex heatmap, 2 profiles, 3 figures, 5 tables, 16 cards |
 | `depictio/catalog/homer/` | `annotate_peaks`, `tss_distance_profile` | profile, 3 figures, 7 cards, table with row selection |
 | `depictio/catalog/preseq/` | `complexity_curve` | profile with a confidence ribbon, figure, 4 cards, table |
 | `depictio/catalog/deeptools/` | `fingerprint_metrics`, `plot_profile` | scatter (X/Y), profile, 2 figures, 7 cards, 2 tables |

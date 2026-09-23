@@ -152,7 +152,9 @@ preseq/complexity_ribbon` adds the 95% confidence band MultiQC drops, so a libra
 extrapolation is guesswork shows as a ribbon that fans out instead of a line that looks as
 certain as any other; `use: deeptools/fingerprint_scatter` puts every library on one plane,
 coverage concentration against divergence from a uniform library, which for ATAC is how much
-of the signal sits in open chromatin. Clicking a curve or a point selects that library.
+of the signal sits in open chromatin. Clicking a curve or a point selects that library. The
+fingerprint plane and the read-distribution dot plot carry `controls_placement: header`, so
+their axis and sort pickers sit under the title instead of behind the settings icon.
 
 `Signal at transcription start sites` holds the canonical ATAC enrichment curve, coverage
 against distance to the TSS with one trace per library, next to a scatter placing each
@@ -186,16 +188,10 @@ their fold enrichment and the strongest significance reached.
 scatter of enrichment against significance carrying `selection_enabled` on `peak_id`, and a
 width histogram in UI mode.
 
-`Peak intervals on the genome` draws the same calls as intervals rather than as points. A
-broad call is a region, and the manhattan panel above collapses it to its midpoint, which is
-the one thing a broad run should not be read as. The `genome_view` tile binds `chr / start /
-end / neg_log10_qvalue` with `mark: rect` and `facet_by_sample`, so each library gets its own
-lane on a shared, chromosome-aware genome axis: scroll to zoom into a locus, drag to pan,
-brush a region to narrow the tab to it and click an interval to select the peak. A
-`coverage_track` tile under it reads the same rows through the Plotly renderer, so the
-section still answers the question if the GenomeSpy renderer is unavailable. Neither tile
-pins an assembly: the contig list is derived from the data, so the pair works on a run
-aligned against any reference rather than only against a human one.
+`Reads in peaks per library` draws the FRiP score and the peak count of every library as
+bars from `macs2/peak_summary`. The main tab's glance strip gives the cohort mean; here each
+library is its own bar, which is where the protocol difference shows: the two FAST libraries
+put 1 to 3 % of their reads in peaks, STD about 13 % and OMNI about 48 %.
 
 `Where the peaks land` reads the HOMER annotation: four cards (feature classes, genes
 reached, distance to TSS, annotated peaks), the annotation bar per library, and a code-mode
@@ -209,8 +205,57 @@ different depth be compared.
 selection on `peak_id`, linked to each other in both directions.
 
 The left rail filters on peak significance, peak width, feature class and reference sequence.
-The last one is what the two genome tiles are read with: one chromosome at a time keeps the
-track legible and the region brush meaningful.
+The two sliders draw the distribution of their column above the handles (`show_histogram`).
+The interval view of the calls that used to close this tab moved to the Peak locus tab: a
+region filter narrows every tile of its collection on a tab, and this tab keeps its
+genome-wide panels.
+
+## Peak locus
+
+The locus section of the wave 2 design: three collections on one genomic region and one
+axis. It opens on `chr6:26,000,000-26,300,000` (hg19), the HIST1 histone gene cluster, where
+every library calls peaks (FAST 3 and 5, STD 22 and 19, OMNI 32 and 33), 34 consensus
+intervals sit and HOMER puts most calls on a histone promoter, so no track opens empty.
+
+`Region at a glance` counts what the libraries called on the region in view: calls per
+library (top 3), libraries per consensus interval (box plot), the HOMER feature classes
+(donut) and the nearest genes. The cards follow the region like the tracks do.
+
+`Peaks on one axis` stacks three tiles:
+
+- the navigator, a `genome_view` on `macs2_broad_peaks` (`mark: rect`, one lane per
+  library, `controls_placement: header`), with `default_region` set to the cluster and
+  `assembly: hg19` for the chromosome sizes. A locus or a brush in its header moves the
+  section. No gene lane: the bundled gene tables are hg38 and mm10 only.
+- `macs2_consensus_boolean` as a second `genome_view` (`mark: bar`,
+  `follow_region_filter: true`): each merged consensus interval as high as the number of
+  libraries calling a peak on it. GenomeSpy rather than a Plotly `coverage_track`: the table
+  holds ~105k intervals, and a Plotly track that fetches before the default region lands
+  draws all of them genome-wide.
+- `homer_annotated_peaks` as a third `genome_view` with `follow_region_filter: true`,
+  coloured by feature class with the nearest gene in the hover. It stands in for the gene
+  lane on a run aligned against hg19.
+
+Two region links in `template.yaml` (`resolver: region`, `columns: {chrom: chr, pos:
+start}`) rename the navigator's chromosome and position filters onto the consensus and HOMER
+collections. `coverage_track` and `genome_view` never share a collection on this tab, which
+the shipped-YAML lint `test_no_double_track_binding` enforces.
+
+The navigator reads its own collection without its own region (so a brush can widen again),
+and the server caps that read at about 10k rows ranked by q-value, so at the default region
+it draws only the strongest calls of each library. The two tracks under it read the region
+exactly (34 consensus intervals, 114 HOMER calls at the HIST1 cluster).
+
+The value link `macs2_broad_peaks -> homer_annotated_peaks` on `peak_id` is disabled in
+`template.yaml`: the API walks every filter on the peak table through it, and a range filter
+(the navigator's position, the q-value and width sliders) resolves as two discrete peak ids
+and empties the HOMER tiles. A lasso on the Peaks tab therefore no longer narrows the HOMER
+tables; the reverse link (HOMER to MACS2) still works.
+
+The `Locus scope` rail filters the chromosome, the consensus support (slider with its
+histogram) and the HOMER feature class. The persistent sample filters reach the broad calls
+and the HOMER track through the project links; the consensus matrix has libraries as
+columns, so they do not narrow it.
 
 ---
 
@@ -228,7 +273,8 @@ in two replicates each, the protocol-specific intersections are what to read.
 `Sample space` reads the two QC tables nf-core's own `featurecounts_deseq2.r` writes beside
 the contrast results, as data rather than as the MultiQC custom-content images the report
 renders them as: `use: deseq2/qc_pca_embedding` places every library on the two principal
-components of the consensus count matrix, and `use: deseq2/qc_distance_heatmap` clusters the
+components of the consensus count matrix (its component and colour pickers in the tile
+header), and `use: deseq2/qc_distance_heatmap` clusters the
 pairwise Euclidean distances. Read together they say whether the contrasts on the next tab
 are worth reading at all: on this run the two replicates of a protocol sit at distance 32 to
 91 of each other and 101 to 119 from any other protocol, so the protocols separate cleanly.
@@ -256,9 +302,12 @@ STD and OMNI against STD.
 `Differential accessibility at a glance` counts the intervals tested, the effect size
 distribution, the direction split as a donut and the strongest significance.
 
-`Volcano and MA` are the catalog's `deseq2/volcano` and `deseq2/ma` panels. `Calibration and
-direction` adds the QQ plot, the strongest differential intervals as a DA barplot, and a
-code-mode bar of significant intervals per contrast.
+`Volcano, MA and QQ` is one `deseq2/volcano` tile with `views: [volcano, ma, qq]` and
+`controls_placement: header`: the view switch and the thresholds sit under the title, the
+tab opens on the volcano, and the MA (`avg_log_intensity_col: log2_base_mean`) and QQ
+(`p_value_col: pvalue`) readings of the same rows are one click away. `Direction of change`
+adds the strongest differential intervals as a DA barplot and a code-mode bar of significant
+intervals per contrast.
 
 The `Contrast` filter is a single-choice `Select` rather than a MultiSelect. That is
 deliberate: DESeq2 scores consensus intervals named `Interval_1 ... Interval_N` and the

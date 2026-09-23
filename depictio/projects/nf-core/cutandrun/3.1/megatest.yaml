@@ -97,6 +97,12 @@ keys:
   - "*.consensus.peak_counts.bed"
   # Fragment-length histograms, the signature CUT&RUN QC figure (5.8 KB each).
   - "*.frags.len.txt"
+  # The fragments themselves (BED3, one row per fragment, 30 to 55 MB each,
+  # 168 MB for the four targets): seacr/frags_profile piles them up around the
+  # SEACR summits for the metagene matrix and the locus fragment track. The
+  # template marks both collections optional, so a mirror without them still
+  # ingests.
+  - "*.frags.cut.bed"
 prefix_keys: []
 renames: {}
 post_fetch_help: |

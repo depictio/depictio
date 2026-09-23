@@ -712,3 +712,102 @@ shape). Not done: group links onto `macs2_consensus_boolean` / `macs2_consensus_
 atacseq 1.2.2 builds one consensus set across every library, so `consensus_set` holds a
 single value no group name prefixes, and both matrices have samples as columns; the link
 would resolve to nothing and blank the tiles. Documented in template.yaml.
+
+## 2026-09-23 wave 2b (locus section, header controls, switchable views)
+
+What changed:
+
+- **Peak locus tab (new, tab_order 4).** The locus section of the wave 2 design on three
+  collections: a `genome_view` navigator on `macs2_broad_peaks` (`mark: bar`, one lane per
+  library, `controls_placement: header`, `assembly: hg19`, `default_region:
+  chr6:26,000,000-26,300,000`), `macs2_consensus_boolean` as a `coverage_track` (`view:
+  track`, `num_samples` per interval) and `homer_annotated_peaks` as a second `genome_view`
+  with `follow_region_filter: true`. Two region links (`resolver: region`, `columns: {chrom:
+  chr, pos: start}`) in `template.yaml` carry the navigator's region to the other two. Glance
+  strip of four region-scoped cards, tab-local `Locus scope` filters (chromosome, consensus
+  support slider, HOMER feature class). Consensus and Differential accessibility move to
+  tab_order 5 and 6.
+- **Double binding fixed (AT-D23).** The Peaks tab bound `genome_view` and `coverage_track`
+  on `macs2_broad_peaks`; both are gone from that tab (the interval view lives on the Peak
+  locus tab, where the coverage track reads a different collection).
+  `test_no_double_track_binding --runxfail` no longer lists atacseq.
+- **Peaks tab.** New `Reads in peaks per library` section: FRiP and peak count bars from
+  `macs2/peak_summary`.
+- **Differential accessibility.** The `deseq2/ma` and `deseq2/qq` tiles are folded into the
+  `deseq2/volcano` tile: `views: [volcano, ma, qq]`, `controls_placement: header`,
+  `avg_log_intensity_col: log2_base_mean`, `p_value_col: pvalue`. Sections renamed `Volcano,
+  MA and QQ` and `Direction of change`.
+- **Header controls** on the fingerprint `scatter_xy`, the read-distribution `dot_plot`, the
+  consensus PCA `embedding`, the volcano and the locus navigator.
+- **`show_histogram: true`** on the 11 threshold RangeSliders (every one but `replicate`).
+
+### AT-D23: the Peaks tab bound genome_view and coverage_track on one collection
+
+Fixed as above. The region filter is also why the interval view left the Peaks tab: a
+`genome_selection` filter narrows every tile of its collection on a tab, which would have
+shrunk the genome-wide Manhattan, the glance strip and the HOMER panels to 300 kb.
+
+### AT-D24: the run is hg19, so the locus section has no gene lane
+
+GAPDH promoter calls sit at chr12:6.64 Mb, the hg19 coordinate. The bundled gene tables
+(`annotation`) are hg38 and mm10 only, so the navigator sets `assembly: hg19` for the
+chromosome sizes and the HOMER track (nearest gene per call) stands in for the gene lane.
+Gene symbol search in the locus field needs hg38 or mm10 and is not available here; locus
+coordinates work.
+
+### AT-D25: no summit-centred profile on this run
+
+T-chipseq's `macs2/summit_profile` exists, but it reads narrowPeak summits through the
+`macs2_peaks` collection. This megatest was called with `--narrow_peak false`: the
+`*_peaks.broadPeak` files carry no summit column, so there is nothing honest to centre on.
+The tile is left out (the region midpoint is not a summit). No computeMatrix output is
+mirrored either, so no read-coverage metagene around TSS beyond the existing deepTools
+plotProfile panel.
+
+Commands and results (2026-09-23):
+
+- `uv run pytest -q depictio/tests/models/test_shipped_dashboard_yamls.py -k atacseq`: 10 passed.
+- `uv run pytest -q depictio/tests/models/test_catalog.py`: 99 passed.
+- `--runxfail -k double`: atacseq absent from the hit list (chipseq, sarek remain).
+- `depictio.cli run --template nf-core/atacseq/1.2.2 ... --dry-run`: 8/8 steps.
+- Re-ingest (old project deleted): project `6ab3ca22dc9db1d257758b63`, dashboard
+  `6ab3ca6de8b8ace33d32c80a`, 20 table DCs with rows (macs2_broad_peaks 224,137,
+  homer_annotated_peaks 224,137, macs2_consensus_boolean 104,657, deseq2_results 313,971),
+  both region links stored. Dashboard re-imported with `--overwrite` after the mark fix.
+- Live on :5612: the Peak locus tab opened with the two region filters in force (chr6,
+  26,000,000-26,300,000); the glance strip read 114 calls, 3.18 libraries per consensus
+  interval and 30 nearest genes; the consensus track drew 34 intervals clamped to
+  26.0-26.3 Mb.
+- Live pass 2 (stack back up, same project and dashboard ids). The consensus track is now a
+  `genome_view` (`mark: bar`, `follow_region_filter`), not a `coverage_track`: the Plotly
+  track fetched all 104,657 intervals before the default region landed and in one run
+  froze the page. At the default region the followers read 34 consensus intervals and 114
+  HOMER calls. Typing `chr12:6,550,000-6,700,000` (GAPDH) in the navigator's locus field
+  moved both: 14 intervals and 37 calls, and the glance cards followed (37 calls, 10 genes).
+  Header chips seen on the volcano (Volcano/MA/QQ, padj, effect, top-N, search), the PCA
+  (2D/3D, colour by), the fingerprint scatter (Points/Density, log axes, reference line)
+  and the read-distribution dot plot (sort, max genes).
+- Navigator: `mark: bar` stored, `h: 6`. It reads its own collection without its own region,
+  and the server caps that at 9,728 of 224,137 rows by q-value, so only the strongest calls
+  of each library show at the region (3 to 4 bars at HIST1). The followers are exact.
+  Viewer behaviour, reported, not worked around.
+
+### AT-D26: range filters on macs2_broad_peaks emptied every HOMER tile
+
+`extend_filters_via_links` walks every filter on a source collection through each value
+link from it, whatever the filter's column. The direct `peak_id` link
+`macs2_broad_peaks -> homer_annotated_peaks` therefore received the navigator's position
+range `[26000000, 26300000]` as two peak ids, matched nothing and returned LINK_NO_MATCH: 0
+HOMER rows at the region. The same happens to the Peaks tab's q-value and width sliders
+(checked: a q-value range of 5 to 100 gave 0 HOMER rows). The link is `enabled: false` in
+`template.yaml` and was disabled on the live project (PUT /links/{project}/{link}); HOMER
+then returns 114 rows at the region. Cost: a peak lasso on the Peaks tab no longer narrows
+the HOMER tables. Platform fix wanted in `depictio/api/v1/filter_links.py` (skip range
+filters, or filters not on the link's source column, when walking value links); then
+re-enable the link.
+
+Screenshots (1600x1000, /tmp/claude-502/shots-atacseq/): w2b-locus-nav.png and
+w2b-locus-tracks.png (default region), w2b-locus-typed-nav.png and
+w2b-locus-typed-tracks.png (chr12 locus typed), w2b-tab5-consensus.png, w2b-0e-0.png (PCA
+header), w2b-tab6-differential.png, w2b-0f-0.png (volcano header), w2b-0b-0.png and
+w2b-0b-1.png (fingerprint and dot plot headers).

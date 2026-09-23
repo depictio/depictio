@@ -809,6 +809,13 @@ links:
       resolver: "direct"
       target_field: "peak_id"
     description: "Carry a peak selected on the MACS2 panels over to its HOMER annotation"
+    # Every filter on macs2_broad_peaks walks this link, not only a peak lasso:
+    # a slider's [min, max] used to be resolved as two discrete peak ids and
+    # emptied every HOMER tile (AT-D26, 2026-09-23). Range filters now travel as
+    # a span (`range_filter` on the resolve request), so the q-value and width
+    # sliders and the locus navigator's position range reach HOMER as the peaks
+    # they select. Re-enabled with that fix; the live project was patched to
+    # disabled during wave 2b and takes this value at the next ingest.
     enabled: true
 
   - source_dc_tag: "homer_annotated_peaks"
@@ -819,6 +826,31 @@ links:
       resolver: "direct"
       target_field: "peak_id"
     description: "Carry a peak selected in the annotation table back to the MACS2 panels"
+    enabled: true
+
+  # Region links: the Peak locus tab's navigator (a genome_view on
+  # macs2_broad_peaks) emits a chromosome and a position filter on its own
+  # `chr` / `start` columns. These rename that pair onto the two collections
+  # stacked under it, so the consensus intervals and the HOMER track clamp to
+  # the same region. No data is read to resolve them (resolver: region).
+  - source_dc_tag: "macs2_broad_peaks"
+    source_column: "chr"
+    target_dc_tag: "macs2_consensus_boolean"
+    target_type: "table"
+    link_config:
+      resolver: "region"
+      columns: {chrom: "chr", pos: "start"}
+    description: "A region typed or brushed on the peak navigator narrows the consensus intervals"
+    enabled: true
+
+  - source_dc_tag: "macs2_broad_peaks"
+    source_column: "chr"
+    target_dc_tag: "homer_annotated_peaks"
+    target_type: "table"
+    link_config:
+      resolver: "region"
+      columns: {chrom: "chr", pos: "start"}
+    description: "A region typed or brushed on the peak navigator narrows the HOMER annotation track"
     enabled: true
 
   # Consensus level: the interval the overlap matrix carries is the interval the

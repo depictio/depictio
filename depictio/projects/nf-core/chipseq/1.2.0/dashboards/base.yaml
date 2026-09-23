@@ -560,6 +560,7 @@ main_dashboard:
     display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:target'}
     placement: left
     title: FRiP score
+    show_histogram: true
     layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: interactive
     tag: cs-filter-peakcount
@@ -574,6 +575,7 @@ main_dashboard:
     display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:counter'}
     placement: left
     title: Peaks called
+    show_histogram: true
     layout: {x: 0, y: 3, w: 1, h: 3}
   - component_type: interactive
     tag: cs-qc-filter-library
@@ -858,6 +860,7 @@ tabs:
     display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:magnet'}
     placement: left
     title: Genome called enriched
+    show_histogram: true
     layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: interactive
     tag: cs-sig-filter-depth
@@ -872,6 +875,7 @@ tabs:
     display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:ruler'}
     placement: left
     title: Extrapolated depth
+    show_histogram: true
     layout: {x: 0, y: 3, w: 1, h: 3}
 
 # ============================================================================
@@ -904,10 +908,10 @@ tabs:
     icon: mdi:chart-scatter-plot
     color: indigo
     description: Every peak placed on its chromosome, height is the q-value
-  - name: Peak landscape
-    icon: mdi:chart-timeline-variant
+  - name: Around the summits
+    icon: mdi:chart-bell-curve
     color: blue
-    description: The peaks as intervals on a zoomable genome axis
+    description: Every sample's peak calls stacked on their summits, as a shape and as agreement between libraries
   - name: Where the peaks land
     icon: mdi:dna
     color: grape
@@ -1004,6 +1008,19 @@ tabs:
     title_align: left
     title: Median -log10 q
     layout: {x: 6, y: 2, w: 2, h: 2}
+  - component_type: figure
+    tag: cs-pk-fig-frip
+    index: cs-pk-fig-frip
+    section: Peak yield
+    workflow_tag: chipseq
+    data_collection_tag: macs2_peak_summary
+    use: macs2/peak_summary
+    visu_type: bar
+    dict_kwargs: {x: sample, y: frip_score, color: sample}
+    title: FRiP score per sample
+    description: The fraction of each library's mapped reads that fall inside its own peaks. ENCODE reads below 0.01 as a failed enrichment for a transcription factor.
+    title_size: h3
+    layout: {x: 0, y: 4, w: 8, h: 5}
 
   # ----------------------------------------------------- manhattan + volcano
   - component_type: text
@@ -1068,6 +1085,10 @@ tabs:
       effect_threshold: 5.0
       top_n_labels: 15
       show_labels: true
+      # A peak call has no mean abundance and no uniform null, so only the
+      # volcano view is offered.
+      view: volcano
+      views: [volcano]
     title: Enrichment against significance
     description: -log10 of the MACS2 q-value against fold enrichment over input. The dashed lines are q 1e-10 and five-fold enrichment; peaks past both are drawn large.
     title_size: h3
@@ -1088,64 +1109,66 @@ tabs:
     title_size: h3
     layout: {x: 4, y: 9, w: 4, h: 6}
 
-  # ---------------------------------------------------------- peak landscape
+  # ------------------------------------------------------- around the summits
+  # The genome_view + coverage_track pair that sat here bound macs2_peaks twice
+  # (lint test_no_double_track_binding). The intervals moved to the Locus tab,
+  # where one navigator drives the consensus and annotation tracks under it.
+  # computeMatrix is not published as a table and the bigWigs are not in the
+  # megatest mirror, so there is no read-coverage metagene around the summits:
+  # these two curves aggregate the peak calls themselves (macs2/summit_profile).
   - component_type: text
-    tag: cs-pk-landscape-intro
-    section: Peak landscape
-    title: The peaks as intervals, not as points
+    tag: cs-pk-summit-intro
+    section: Around the summits
+    title: The peak calls stacked on their summits
     title_size: sm
     title_align: left
     order: 2
     alignment: left
     body: >
-      A Manhattan plot draws a peak as its summit. These two draw it as the
-      interval it is, on a chromosome-aware axis that zooms: brush a region and
-      the rest of the tab follows it. The second panel is the same intervals in
-      plain Plotly, with enrichment rather than significance on the y axis.
+      Every summit of a sample is set at 0 and the calls are counted around it in
+      50 bp bins. The first curve counts the summits the other libraries called
+      there: a sharp spike means they agree on the site, a flat line means they
+      do not. The second is the share of the sample's own peaks still covering
+      each offset, the average width of a call. Both come from the narrowPeak
+      intervals, not from read coverage.
     workflow_tag: chipseq
-    data_collection_tag: macs2_peaks
+    data_collection_tag: macs2_summit_profile
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: advanced_viz
-    tag: cs-pk-av-genomeview
-    index: cs-pk-av-genomeview
-    section: Peak landscape
+    tag: cs-pk-av-summit-concordance
+    index: cs-pk-av-summit-concordance
+    section: Around the summits
     workflow_tag: chipseq
-    data_collection_tag: macs2_peaks
-    use: macs2/peak_genome_view
+    data_collection_tag: macs2_summit_profile
+    use: macs2/summit_concordance_profile
     config:
-      # `rect` needs the end column, which the catalog render binds.
-      mark: rect
-      # No `assembly`: the contig list is derived from the data, so a run
-      # aligned against a different genome still draws.
-      score_title: "-log10(q)"
-      score_threshold: 10
-      opacity: 0.8
-      region_filter_enabled: true
-      selection_enabled: true
-      selection_column: peak_id
-    title: Peak intervals on the genome axis
-    description: Every MACS2 call as a rectangle from its start to its end, height is -log10 of the q-value. Brush the genome axis to narrow the tab to a region.
+      reference_x: 0
+      reference_label: Summit
+      log_y: true
+      x_title: Offset from the summit (bp)
+      y_title: Other samples' summits per kb
+      legend_pos: right
+    title: Other libraries' summits around each summit
+    description: Summits called in the other samples, per anchor summit and per kb, on a log axis. Replicates of a sharp factor pile their summits onto each other; a broad mark or an unrelated antibody agrees far less sharply.
     title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 7}
+    layout: {x: 0, y: 2, w: 8, h: 6}
   - component_type: advanced_viz
-    tag: cs-pk-av-coverage
-    index: cs-pk-av-coverage
-    section: Peak landscape
+    tag: cs-pk-av-summit-footprint
+    index: cs-pk-av-summit-footprint
+    section: Around the summits
     workflow_tag: chipseq
-    data_collection_tag: macs2_peaks
-    use: macs2/peak_coverage_track
+    data_collection_tag: macs2_summit_profile
+    use: macs2/summit_footprint_profile
     config:
-      mark: rect
-      color_by: sample
-      view_mode: overlay
-      y_scale: log
-      # Peaks are not evenly spaced bins, so a rolling mean over them would
-      # average across gaps of megabases.
-      smoothing_window: 0
-    title: Peak enrichment along the genome
-    description: The same intervals with fold enrichment over the input on a log axis, one colour per sample. Kept beside the genome view as the plain-Plotly reading of the same rows.
+      reference_x: 0
+      reference_label: Summit
+      x_title: Offset from the summit (bp)
+      y_title: Share of the sample's peaks covering the offset
+      legend_pos: right
+    title: Average peak footprint
+    description: The share of each sample's calls still open at every offset from their own summit. Where a curve crosses one half is the median half-width of the calls on that side.
     title_size: h3
-    layout: {x: 0, y: 9, w: 8, h: 7}
+    layout: {x: 0, y: 8, w: 8, h: 6}
 
   # -------------------------------------------------------------- annotation
   - component_type: text
@@ -1236,10 +1259,12 @@ tabs:
     workflow_tag: chipseq
     data_collection_tag: homer_annotated_peaks
     use: homer/annotated_peaks
-    visu_type: bar
-    dict_kwargs: {x: sample, color: annotation_class}
-    title: Peak annotation per sample
-    description: How the peaks of each sample split across promoter-TSS, exon, intron, TTS and intergenic.
+    visu_type: histogram
+    # A share per sample, not a count: the libraries called between 6 858 and
+    # 66 004 peaks, and raw bars hide the composition of the small ones.
+    dict_kwargs: {x: sample, color: annotation_class, barnorm: percent}
+    title: Peak annotation composition per sample
+    description: The share of each sample's peaks in promoter-TSS, exon, intron, TTS and intergenic, as a percentage so libraries of different depth compare directly.
     title_size: h3
     layout: {x: 0, y: 4, w: 4, h: 6}
   - component_type: figure
@@ -1368,6 +1393,7 @@ tabs:
     display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:check-decagram'}
     placement: left
     title: -log10 q-value
+    show_histogram: true
     layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: interactive
     tag: cs-pk-filter-fold
@@ -1382,6 +1408,7 @@ tabs:
     display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:magnet'}
     placement: left
     title: Fold enrichment
+    show_histogram: true
     layout: {x: 0, y: 3, w: 1, h: 3}
   - component_type: interactive
     tag: cs-pk-filter-width
@@ -1396,6 +1423,7 @@ tabs:
     display: {title_size: md, custom_color: '#5E35B1', icon_name: 'mdi:ruler'}
     placement: left
     title: Peak width
+    show_histogram: true
     layout: {x: 0, y: 6, w: 1, h: 3}
   - component_type: interactive
     tag: cs-pk-filter-chr
@@ -1438,14 +1466,271 @@ tabs:
     display: {title_size: md, custom_color: '#5E35B1', icon_name: 'mdi:ruler'}
     placement: left
     title: Distance to TSS
+    show_histogram: true
     layout: {x: 0, y: 3, w: 1, h: 3}
+
+# ============================================================================
+# Locus
+# ============================================================================
+# The locus section (plan C.5): one navigator, the tracks under it follow its
+# region. The navigator is a genome_view on macs2_peaks; its default_region
+# emits the chromosome and position filters on open, and the two `region`
+# links in template.yaml carry them to macs2_consensus_boolean and
+# homer_annotated_peaks. A tab of its own rather than a section of Peaks,
+# because those filters narrow every tile on the tab: on the Peaks tab they
+# would have turned the genome-wide cards and Manhattan into one locus.
+# The run is hg19 (HOMER places the TFF1 promoter peak at chr21:43 786 569,
+# -173 bp from the hg19 TSS), and the bundled gene lane exists for hg38 and
+# mm10 only, so no `annotation` lane is drawn: the HOMER track names the
+# nearest gene of every peak instead. No read-coverage track either: the
+# bigWigs are not in the megatest mirror (see VALIDATION_REPORT.md).
+- title: Locus
+  subtitle: One region, three collections - the peak calls of every library, the consensus intervals per antibody and the HOMER annotation, on one genome axis
+  tab_order: 4
+  tab_icon: mdi:dna
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Locus scope
+    icon: mdi:filter-variant
+    color: teal
+    description: Chromosome, peak strength, consensus support and feature class of the tracks on the region
+  grid_sections:
+  - name: Region at a glance
+    icon: mdi:counter
+    color: teal
+    description: What the region in view holds, recounted on every brush or locus entry
+  - name: One region, three collections
+    icon: mdi:dna
+    color: teal
+    description: The peak navigator and the tracks that follow its region
+  components:
+  - component_type: card
+    tag: cs-loc-card-peaks
+    index: cs-loc-card-peaks
+    section: Region at a glance
+    workflow_tag: chipseq
+    data_collection_tag: macs2_peaks
+    use: macs2/peaks
+    aggregation: count
+    column_name: peak_id
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    display: {icon_name: 'mdi:counter', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Peaks in the region
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: cs-loc-card-fold
+    index: cs-loc-card-fold
+    section: Region at a glance
+    workflow_tag: chipseq
+    data_collection_tag: macs2_peaks
+    use: macs2/peaks
+    aggregation: average
+    column_name: fold_enrichment
+    column_type: float64
+    secondary_layout: histogram
+    display: {icon_name: 'mdi:magnet', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Fold enrichment
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: cs-loc-card-consensus
+    index: cs-loc-card-consensus
+    section: Region at a glance
+    workflow_tag: chipseq
+    data_collection_tag: macs2_consensus_boolean
+    use: macs2/consensus_boolean
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: num_samples
+    column_type: int64
+    display: {icon_name: 'mdi:set-merge', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Consensus support
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: cs-loc-card-genes
+    index: cs-loc-card-genes
+    section: Region at a glance
+    workflow_tag: chipseq
+    data_collection_tag: homer_annotated_peaks
+    use: homer/annotated_peaks
+    aggregation: nunique
+    column_name: gene_name
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: annotation_class
+    display: {icon_name: 'mdi:dna', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Nearest genes
+    layout: {x: 6, y: 0, w: 2, h: 2}
+
+  - component_type: text
+    tag: cs-loc-intro
+    section: One region, three collections
+    title: TFF1, the classic FOXA1 and oestrogen target
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The tab opens on chr21:43.6-44.0 Mb (hg19) around TFF1, where every library
+      called peaks: FOXA1 binds the TFF1 enhancer and promoter, EZH2 spreads over
+      the neighbouring genes. Type a region in the navigator header or brush its
+      axis, and the consensus intervals and the HOMER annotation below follow;
+      the cards above recount the region in view.
+    workflow_tag: chipseq
+    data_collection_tag: macs2_peaks
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: cs-loc-av-navigator
+    index: cs-loc-av-navigator
+    section: One region, three collections
+    workflow_tag: chipseq
+    data_collection_tag: macs2_peaks
+    use: macs2/peak_genome_view
+    config:
+      controls_placement: header
+      mark: rect
+      facet_by_sample: true
+      max_facets: 8
+      assembly: hg19
+      default_region: "chr21:43,600,000-44,000,000"
+      score_title: "-log10(q)"
+      opacity: 0.85
+      region_filter_enabled: true
+    title: Peak navigator
+    description: Every MACS2 call on the region, one lane per library, height is -log10 of the q-value. The locus field in the header and a brush on the axis move this tile and every track below.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 5}
+  - component_type: advanced_viz
+    tag: cs-loc-av-consensus
+    index: cs-loc-av-consensus
+    section: One region, three collections
+    workflow_tag: chipseq
+    data_collection_tag: macs2_consensus_boolean
+    viz_kind: coverage_track
+    config:
+      viz_kind: coverage_track
+      chromosome_col: chr
+      position_col: start
+      end_col: end
+      value_col: num_samples
+      sample_col: consensus_set
+      color_by: sample
+      view_mode: facet
+      mark: rect
+      # Intervals, not evenly spaced bins: a rolling mean would average across
+      # the gaps between them.
+      smoothing_window: 0
+      show_annotation_lane: false
+      view: track
+      views: [track]
+    title: Consensus intervals per antibody
+    description: The merged intervals of each antibody's consensus set on the same region, height is how many libraries called a peak there (1 to 4).
+    title_size: h3
+    layout: {x: 0, y: 7, w: 8, h: 3}
+  - component_type: advanced_viz
+    tag: cs-loc-av-annotation
+    index: cs-loc-av-annotation
+    section: One region, three collections
+    workflow_tag: chipseq
+    data_collection_tag: homer_annotated_peaks
+    viz_kind: genome_view
+    config:
+      viz_kind: genome_view
+      chr_col: chr
+      pos_col: start
+      end_col: end
+      score_col: peak_score
+      feature_col: gene_name
+      category_col: annotation_class
+      mark: rect
+      assembly: hg19
+      score_title: HOMER peak score
+      region_filter_enabled: false
+      follow_region_filter: true
+    title: Peaks by nearest gene and feature class
+    description: The same calls as HOMER annotated them, coloured by feature class (promoter-TSS, intron, exon, TTS, intergenic); hover a call for the gene it was assigned to.
+    title_size: h3
+    layout: {x: 0, y: 10, w: 8, h: 3}
+
+  - component_type: interactive
+    tag: cs-loc-filter-chr
+    index: cs-loc-chr-filter
+    section: Locus scope
+    group: Region
+    workflow_tag: chipseq
+    data_collection_tag: macs2_peaks
+    interactive_component_type: MultiSelect
+    column_name: chr
+    column_type: object
+    display: {title_size: md, icon_name: 'mdi:dna'}
+    placement: left
+    title: Chromosome
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: cs-loc-filter-qvalue
+    index: cs-loc-qvalue-range
+    section: Locus scope
+    group: Region
+    workflow_tag: chipseq
+    data_collection_tag: macs2_peaks
+    interactive_component_type: RangeSlider
+    column_name: neg_log10_qvalue
+    column_type: float64
+    show_histogram: true
+    display: {title_size: md, icon_name: 'mdi:check-decagram'}
+    placement: left
+    title: -log10 q-value
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: cs-loc-filter-support
+    index: cs-loc-support-range
+    section: Locus scope
+    group: Region
+    workflow_tag: chipseq
+    data_collection_tag: macs2_consensus_boolean
+    interactive_component_type: RangeSlider
+    column_name: num_samples
+    column_type: int64
+    show_histogram: true
+    display: {title_size: md, icon_name: 'mdi:set-merge'}
+    placement: left
+    title: Consensus support
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: interactive
+    tag: cs-loc-filter-class
+    index: cs-loc-class-filter
+    section: Locus scope
+    group: Region
+    workflow_tag: chipseq
+    data_collection_tag: homer_annotated_peaks
+    interactive_component_type: MultiSelect
+    column_name: annotation_class
+    column_type: object
+    display: {title_size: md, icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: Feature class
+    layout: {x: 0, y: 9, w: 1, h: 3}
 
 # ============================================================================
 # Consensus
 # ============================================================================
 - title: Consensus
   subtitle: Merged peak sets per antibody, which samples agree on an interval and how strong the signal is there
-  tab_order: 4
+  tab_order: 5
   tab_icon: mdi:set-merge
   tab_icon_color: cyan
   icon: /assets/images/workflows/nf-core.png
@@ -1701,6 +1986,7 @@ tabs:
     display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:account-group-outline'}
     placement: left
     title: Samples per interval
+    show_histogram: true
     layout: {x: 0, y: 3, w: 1, h: 3}
   - component_type: interactive
     tag: cs-cons-filter-chr
@@ -1722,7 +2008,7 @@ tabs:
 # ============================================================================
 - title: Differential binding
   subtitle: "DESeq2 on the consensus peak counts: EZH2 NTKO against TKO, FOXA1 E2 against VEH"
-  tab_order: 5
+  tab_order: 6
   tab_icon: mdi:scale-balance
   tab_icon_color: grape
   icon: /assets/images/workflows/nf-core.png
@@ -1742,14 +2028,14 @@ tabs:
     icon: mdi:chart-scatter-plot
     color: violet
     description: Where the libraries sit in the count matrix DESeq2 tested, before any interval is read
-  - name: Volcano and MA
+  - name: Volcano, MA and QQ
     icon: mdi:chart-scatter-plot
     color: grape
-    description: Significance against effect size, and effect size against read depth
-  - name: Calibration and direction
-    icon: mdi:chart-bell-curve
+    description: Significance against effect size, effect size against read depth, and whether the p-values behave
+  - name: Direction
+    icon: mdi:chart-bar
     color: violet
-    description: Whether the p-values behave, and which way the changes go
+    description: Which way the strongest changes go
   - name: Differential tables
     icon: mdi:table
     color: violet
@@ -1885,6 +2171,7 @@ tabs:
       plot_style: grid
       selection_enabled: true
       selection_column: sample_id
+      controls_placement: header
     title: Libraries in the space of the consensus counts
     description: The principal components the pipeline itself computed, read from the file it publishes rather than recomputed. Colour is the consensus set, because a component only compares libraries inside its own matrix.
     title_size: h3
@@ -1931,23 +2218,27 @@ tabs:
 
   - component_type: text
     tag: cs-db-volcano-intro
-    section: Volcano and MA
+    section: Volcano, MA and QQ
     title: Effect size against significance and against depth
     title_size: sm
     title_align: left
     order: 2
     alignment: left
     body: >
-      The volcano puts significance against effect size, the MA plot puts effect
-      size against how many reads the interval carries. Together they separate a
-      real change from a loud one measured on almost no reads.
+      One tile, three readings of the same DESeq2 rows, switched in its header:
+      the volcano puts significance against effect size, the MA view puts effect
+      size against how many reads the interval carries, and the QQ view compares
+      the p-values with the uniform null. A curve that leaves the diagonal at once
+      is usually confounding rather than signal.
     workflow_tag: chipseq
     data_collection_tag: deseq2_results
     layout: {x: 0, y: 0, w: 8, h: 2}
+  # The MA and QQ tiles were separate `ma` / `qq` kinds; they are views of this
+  # volcano now (wave 2a), so the three share one tile and one set of bindings.
   - component_type: advanced_viz
     tag: cs-db-av-volcano
     index: cs-db-av-volcano
-    section: Volcano and MA
+    section: Volcano, MA and QQ
     workflow_tag: chipseq
     data_collection_tag: deseq2_results
     use: deseq2/volcano
@@ -1958,62 +2249,37 @@ tabs:
       effect_threshold: 1.0
       top_n_labels: 15
       show_labels: true
-    title: Volcano
-    description: -log10(padj) against log2 fold change. The dashed lines are padj 0.05 and a two-fold change.
-    title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 7}
-  - component_type: advanced_viz
-    tag: cs-db-av-ma
-    index: cs-db-av-ma
-    section: Volcano and MA
-    workflow_tag: chipseq
-    data_collection_tag: deseq2_results
-    use: deseq2/ma
-    config:
-      significance_col: padj
-      label_col: gene_id
-      significance_threshold: 0.05
+      avg_log_intensity_col: log2_base_mean
+      log2_fold_change_col: log2fc
+      p_value_col: pvalue
       fold_change_threshold: 1.0
-      top_n_labels: 15
-      show_labels: true
-    title: MA plot
-    description: log2 fold change against log2 mean normalised count. Low-count intervals fan out on the left.
+      view: volcano
+      views: [volcano, ma, qq]
+      controls_placement: header
+    title: Differential binding
+    description: -log10(padj) against log2 fold change, with the MA and QQ views of the same rows in the header switch. The dashed lines are padj 0.05 and a two-fold change.
     title_size: h3
-    layout: {x: 0, y: 9, w: 8, h: 7}
+    layout: {x: 0, y: 2, w: 8, h: 8}
 
   - component_type: text
     tag: cs-db-qq-intro
-    section: Calibration and direction
-    title: Do the p-values behave?
+    section: Direction
+    title: Which way the changes go
     title_size: sm
     title_align: left
     order: 2
     alignment: left
     body: >
-      The QQ plot compares the observed p-values against the uniform null: a
-      curve that leaves the diagonal early is real signal, one that leaves it
-      immediately is usually confounding. The bars rank the strongest changes.
+      The strongest significant intervals of the contrast in view, ranked by
+      effect size and signed by direction: gained binding to the right, lost to
+      the left.
     workflow_tag: chipseq
     data_collection_tag: deseq2_results
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: advanced_viz
-    tag: cs-db-av-qq
-    index: cs-db-av-qq
-    section: Calibration and direction
-    workflow_tag: chipseq
-    data_collection_tag: deseq2_results
-    use: deseq2/qq
-    config:
-      feature_id_col: gene_id
-      category_col: direction
-    title: QQ plot
-    description: Observed against expected p-value quantiles for the contrast in view.
-    title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 7}
-  - component_type: advanced_viz
     tag: cs-db-av-dabar
     index: cs-db-av-dabar
-    section: Calibration and direction
+    section: Direction
     workflow_tag: chipseq
     data_collection_tag: deseq2_results
     use: deseq2/da_barplot
@@ -2024,7 +2290,7 @@ tabs:
     title: Strongest differential intervals
     description: The 25 intervals with the largest significant effect, signed by direction.
     title_size: h3
-    layout: {x: 0, y: 9, w: 8, h: 7}
+    layout: {x: 0, y: 2, w: 8, h: 7}
 
   - component_type: text
     tag: cs-db-tables-intro
@@ -2096,6 +2362,7 @@ tabs:
     display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:scale-balance'}
     placement: left
     title: log2 fold change
+    show_histogram: true
     layout: {x: 0, y: 5, w: 1, h: 3}
   - component_type: interactive
     tag: cs-db-filter-padj
@@ -2110,4 +2377,5 @@ tabs:
     display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:check-decagram'}
     placement: left
     title: -log10 padj
+    show_histogram: true
     layout: {x: 0, y: 8, w: 1, h: 3}

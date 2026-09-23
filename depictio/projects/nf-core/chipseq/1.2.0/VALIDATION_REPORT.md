@@ -818,3 +818,61 @@ tab-local `Library scope` (`design_reads.sample_id`). The MultiQC tab renders on
 report plus the pinned `design` and `macs2_peak_summary` tables, which already carry the
 persistent and threshold filters; the `design_reads -> multiqc_data` link is what makes the
 library control narrow the read-level panels, so the binding is functional as declared.
+
+## 2026-09-23 wave 2b (PR #1102)
+
+### What changed
+
+- New `Locus` tab (tab_order 4; Consensus and Differential binding move to 5 and 6). A
+  `genome_view` navigator on `macs2_peaks` (`use: macs2/peak_genome_view`, `mark: rect`, one
+  lane per library, `controls_placement: header`, `assembly: hg19`, `default_region:
+  chr21:43,600,000-44,000,000`) drives a `coverage_track` on `macs2_consensus_boolean` (one
+  lane per consensus set, height = supporting libraries) and a following `genome_view` on
+  `homer_annotated_peaks` (feature class, nearest gene on hover). Two `region` links in
+  `template.yaml` (`macs2_peaks` -> `macs2_consensus_boolean`, -> `homer_annotated_peaks`).
+  Glance strip of four region cards, tab-local `Locus scope` (chromosome, q-value, consensus
+  support, feature class).
+- Peaks tab: the `Peak landscape` section (genome_view + coverage_track, both on
+  `macs2_peaks`) is gone, which clears this template's `test_no_double_track_binding` hit
+  (CS-D28). New `Around the summits` section on the new catalog output
+  `macs2/summit_profile` (CS-D29). FRiP bar per sample (`use: macs2/peak_summary`). Peak
+  volcano restricted to `views: [volcano]`. Annotation bar turned into a percentage
+  composition (`barnorm: percent`).
+- Differential binding: volcano, MA and QQ merged into one `volcano` tile with `views:
+  [volcano, ma, qq]` and header controls; the `ma` and `qq` tiles are removed. PCA embedding
+  gets `controls_placement: header`.
+- `show_histogram: true` on every range slider (11 tiles).
+- New DC `macs2_summit_profile` + design -> summit profile sample link.
+
+### CS-D28: the default region is hg19 and has no gene lane
+
+The run was aligned to hg19 (HOMER puts a TFF1 promoter peak at chr21:43,786,569, -173 bp
+from the hg19 TSS). The bundled gene lane and the gene-symbol search exist for hg38 and mm10
+only, so the navigator draws no gene lane and its locus field takes coordinates only. The
+HOMER nearest-gene track stands in. The region was picked from the data: every one of the
+8 IP libraries has 2 to 18 peaks in it, both consensus sets hold intervals (EZH2 33, FOXA1 18).
+
+### CS-D29: no read-coverage signal is published, so the summit profile aggregates calls
+
+`computeMatrix` output is not published as a table and no bigWig is in the megatest mirror
+(the `test/` profile mirror has `bigwig/`, the megatest does not), so neither a summit-centred
+metagene nor an `indexed_file` bigWig track can be built from this run. `macs2/summit_profile`
+aggregates the narrowPeak calls on a +/-2 kb summit-centred grid instead: the share of a
+sample's calls covering each offset, and the other samples' summits per anchor per kb. On
+this run FOXA1 replicates show a central spike of about 20 summits/kb against 0.15 in the
+flanks; EZH2 about 6.5 against 1.5. The text tiles say it is not read coverage.
+
+### Commands and results
+
+    uv run pytest -q depictio/tests/models/test_shipped_dashboard_yamls.py -k chipseq   10 passed
+    uv run pytest -q depictio/tests/models/test_catalog.py                              99 passed
+    uv run pytest -q depictio/tests/recipes/test_macs2_summit_profile.py                4 passed
+    test_no_double_track_binding --runxfail: chipseq no longer listed
+    depictio run --template nf-core/chipseq/1.2.0 ... --dry-run                         8/8 steps
+    wipe + re-ingest (project 6ab3cadd4da14702f8f30336): 8/8 steps; macs2_summit_profile 648
+    rows, macs2_peaks 258986, homer_annotated_peaks 258986, macs2_consensus_boolean 153891,
+    every Delta DC non-empty.
+
+Live: the Locus tab opened with the navigator's two filters set to chr21 43600000-44000000
+and the region cards recounted to 89 peaks and 8 nearest genes. The brush / locus-entry walk
+could not be completed: the stack stopped answering mid-validation (see the wave report).
