@@ -6,6 +6,7 @@
       "heavy": false,
       "icon": "tabler:chart-dots-3",
       "label": "Copy-number profile",
+      "legacy": false,
       "required_roles": [
         "sample",
         "chrom",
@@ -168,6 +169,7 @@
       "heavy": true,
       "icon": "tabler:grid-pattern",
       "label": "ComplexHeatmap (clustered)",
+      "legacy": false,
       "required_roles": [
         "index"
       ],
@@ -200,6 +202,7 @@
       "heavy": false,
       "icon": "tabler:grid-dots",
       "label": "Confusion matrix",
+      "legacy": false,
       "required_roles": [
         "label",
         "tp",
@@ -311,6 +314,7 @@
       "heavy": false,
       "icon": "tabler:layout-grid",
       "label": "Contact map",
+      "legacy": false,
       "required_roles": [
         "chrom1",
         "start1",
@@ -355,6 +359,11 @@
           "end2",
           "end_2",
           "end_b"
+        ],
+        "resolution": [
+          "bin_size",
+          "binsize",
+          "resolution"
         ],
         "sample": [
           "library",
@@ -444,6 +453,22 @@
           ],
           "required": false
         },
+        "resolution": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
         "sample": {
           "description": "Optional sample column for faceting.",
           "dtypes": [
@@ -493,6 +518,7 @@
       "heavy": false,
       "icon": "tabler:chart-area-line",
       "label": "Coverage track",
+      "legacy": false,
       "required_roles": [
         "chromosome",
         "position",
@@ -595,6 +621,7 @@
       "heavy": false,
       "icon": "tabler:chart-bar-popular",
       "label": "Differential-abundance bars (tool)",
+      "legacy": false,
       "required_roles": [
         "feature_id",
         "contrast",
@@ -669,6 +696,7 @@
       "heavy": false,
       "icon": "tabler:dna-2",
       "label": "Damage profile",
+      "legacy": false,
       "required_roles": [
         "sample",
         "end",
@@ -779,6 +807,7 @@
       "heavy": false,
       "icon": "tabler:circle-dot",
       "label": "Dot plot",
+      "legacy": false,
       "required_roles": [
         "cluster",
         "gene",
@@ -851,6 +880,7 @@
       "heavy": true,
       "icon": "tabler:atom",
       "label": "Embedding / clustering",
+      "legacy": false,
       "required_roles": [
         "sample_id",
         "dim_1",
@@ -955,6 +985,7 @@
       "heavy": false,
       "icon": "tabler:chart-dots",
       "label": "GSEA / pathway enrichment (tool)",
+      "legacy": true,
       "required_roles": [
         "term",
         "nes",
@@ -1045,6 +1076,7 @@
       "heavy": false,
       "icon": "tabler:arrows-join-2",
       "label": "Fusion structure",
+      "legacy": false,
       "required_roles": [
         "fusion_id",
         "partner",
@@ -1195,6 +1227,7 @@
       "heavy": false,
       "icon": "tabler:arrow-big-right-lines",
       "label": "Gene arrow track",
+      "legacy": false,
       "required_roles": [
         "contig",
         "feature_id",
@@ -1352,6 +1385,7 @@
       "heavy": false,
       "icon": "tabler:circle-dotted",
       "label": "Genome chord",
+      "legacy": false,
       "required_roles": [
         "chrom_a",
         "pos_a",
@@ -1494,6 +1528,7 @@
       "heavy": false,
       "icon": "tabler:dna-2",
       "label": "Genome view",
+      "legacy": false,
       "required_roles": [
         "chr",
         "pos",
@@ -1605,6 +1640,7 @@
       "heavy": false,
       "icon": "tabler:arrows-diff",
       "label": "Group comparison",
+      "legacy": false,
       "required_roles": [
         "index"
       ],
@@ -1645,6 +1681,7 @@
       "heavy": false,
       "icon": "tabler:chart-area-line",
       "label": "GSEA running score",
+      "legacy": false,
       "required_roles": [
         "gene_set",
         "rank",
@@ -1739,6 +1776,7 @@
       "heavy": false,
       "icon": "tabler:trending-down",
       "label": "Knee plot",
+      "legacy": false,
       "required_roles": [
         "sample",
         "rank",
@@ -1838,6 +1876,7 @@
       "heavy": false,
       "icon": "tabler:chart-arcs",
       "label": "Lollipop / needle plot",
+      "legacy": false,
       "required_roles": [
         "feature_id",
         "position",
@@ -1925,6 +1964,7 @@
       "heavy": false,
       "icon": "tabler:chart-bubble",
       "label": "MA plot",
+      "legacy": true,
       "required_roles": [
         "feature_id",
         "avg_log_intensity",
@@ -2001,6 +2041,7 @@
       "heavy": false,
       "icon": "tabler:chart-histogram",
       "label": "Manhattan plot",
+      "legacy": false,
       "required_roles": [
         "chr",
         "pos",
@@ -2084,6 +2125,7 @@
       "heavy": false,
       "icon": "tabler:chart-bar",
       "label": "Metric bars with CI",
+      "legacy": false,
       "required_roles": [
         "label",
         "value",
@@ -2159,6 +2201,7 @@
       "heavy": true,
       "icon": "tabler:grid-pattern",
       "label": "Oncoplot",
+      "legacy": false,
       "required_roles": [
         "sample_id",
         "gene",
@@ -2211,10 +2254,60 @@
     },
     {
       "category": "plot",
+      "description": "One polyline per sample across N metric axes, each axis brushable. Reads a many-column QC table as a whole where a scatter would need one panel per pair.",
+      "heavy": false,
+      "icon": "tabler:chart-line",
+      "label": "Parallel coordinates",
+      "legacy": false,
+      "required_roles": [
+        "sample"
+      ],
+      "role_names": {
+        "group": [
+          "batch",
+          "category",
+          "class",
+          "condition",
+          "group",
+          "treatment"
+        ],
+        "sample": [
+          "id",
+          "library",
+          "name",
+          "run",
+          "run_id",
+          "sample",
+          "sample_id"
+        ]
+      },
+      "roles": {
+        "group": {
+          "description": "Optional categorical column driving the line colour.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "sample": {
+          "description": "One polyline per distinct value: the line identity, not a facet.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "parallel_coordinates"
+    },
+    {
+      "category": "plot",
       "description": "Newick tree + tip metadata (Microreact-style): 5 layouts, tip search, subtree highlight.",
       "heavy": false,
       "icon": "tabler:hierarchy-3",
       "label": "Phylogenetic tree",
+      "legacy": false,
       "required_roles": [
         "taxon"
       ],
@@ -2272,6 +2365,7 @@
       "heavy": false,
       "icon": "tabler:target-arrow",
       "label": "Precision-recall benchmark",
+      "legacy": false,
       "required_roles": [
         "label",
         "recall",
@@ -2367,6 +2461,7 @@
       "heavy": false,
       "icon": "tabler:chart-line",
       "label": "Signal profile",
+      "legacy": false,
       "required_roles": [
         "series",
         "x",
@@ -2466,6 +2561,7 @@
       "heavy": false,
       "icon": "tabler:chart-line",
       "label": "QQ plot",
+      "legacy": true,
       "required_roles": [
         "p_value"
       ],
@@ -2512,6 +2608,7 @@
       "heavy": false,
       "icon": "tabler:chart-line",
       "label": "Rarefaction curves",
+      "legacy": false,
       "required_roles": [
         "sample_id",
         "depth",
@@ -2609,10 +2706,59 @@
     },
     {
       "category": "plot",
+      "description": "One row of a collection read as labelled fields and links, filled by the selection another tile emits. The detail half of a master/detail dashboard.",
+      "heavy": false,
+      "icon": "tabler:id",
+      "label": "Record card",
+      "legacy": false,
+      "required_roles": [
+        "id"
+      ],
+      "role_names": {
+        "id": [
+          "feature_id",
+          "id",
+          "library",
+          "name",
+          "run_id",
+          "sample",
+          "sample_id"
+        ],
+        "title": [
+          "description",
+          "label",
+          "name",
+          "sample_name",
+          "title"
+        ]
+      },
+      "roles": {
+        "id": {
+          "description": "Column the incoming selection is matched against: which row the card shows.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "title": {
+          "description": "Optional column shown as the card's heading.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        }
+      },
+      "viz_kind": "record_card"
+    },
+    {
+      "category": "plot",
       "description": "Threshold-sweep precision-recall curve with AUC, one line per tool / caller.",
       "heavy": false,
       "icon": "tabler:chart-line",
       "label": "ROC / PR curve",
+      "legacy": true,
       "required_roles": [
         "recall",
         "precision"
@@ -2678,6 +2824,7 @@
       "heavy": true,
       "icon": "tabler:chart-sankey",
       "label": "Sankey (categorical flow)",
+      "legacy": false,
       "required_roles": [],
       "role_names": {},
       "roles": {},
@@ -2689,6 +2836,7 @@
       "heavy": false,
       "icon": "tabler:chart-arcs",
       "label": "Splice junctions",
+      "legacy": false,
       "required_roles": [
         "chr",
         "start",
@@ -2809,6 +2957,7 @@
       "heavy": false,
       "icon": "tabler:chart-dots",
       "label": "Scatter (X/Y)",
+      "legacy": false,
       "required_roles": [
         "x",
         "y"
@@ -2922,6 +3071,7 @@
       "heavy": false,
       "icon": "tabler:grid-pattern",
       "label": "Signal matrix",
+      "legacy": false,
       "required_roles": [
         "region_id",
         "position",
@@ -3011,6 +3161,7 @@
       "heavy": false,
       "icon": "tabler:chart-pie",
       "label": "Stacked taxonomy",
+      "legacy": false,
       "required_roles": [
         "sample_id",
         "taxon",
@@ -3100,6 +3251,7 @@
       "heavy": false,
       "icon": "tabler:sun",
       "label": "Sunburst",
+      "legacy": false,
       "required_roles": [
         "abundance"
       ],
@@ -3141,6 +3293,7 @@
       "heavy": false,
       "icon": "tabler:layout-rows",
       "label": "Transcript structure",
+      "legacy": false,
       "required_roles": [
         "transcript_id",
         "gene_id",
@@ -3321,6 +3474,7 @@
       "heavy": true,
       "icon": "tabler:chart-bar-popular",
       "label": "UpSet plot",
+      "legacy": false,
       "required_roles": [],
       "role_names": {},
       "roles": {},
@@ -3332,6 +3486,7 @@
       "heavy": false,
       "icon": "tabler:chart-scatter",
       "label": "Volcano plot",
+      "legacy": false,
       "required_roles": [
         "feature_id",
         "effect_size",
