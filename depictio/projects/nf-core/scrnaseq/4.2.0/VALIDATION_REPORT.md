@@ -339,3 +339,50 @@ uv run python -m depictio.cli run --template nf-core/scrnaseq/4.2.0 \
 - `sc-cl-av-sankey` description no longer contains `>` ("graphclust, then kmeans_6, then
   kmeans_10").
 - `test_shipped_dashboard_yamls.py -k scrnaseq` passes. `.db_seeds` not regenerated here.
+
+## 2026-09-23 wave 2b (header controls, violin, record card, parallel coordinates)
+
+What changed, all in `dashboards/base.yaml` (no template, catalog or recipe change):
+- `controls_placement: header` on the analysis tiles: Cell QC UMI-vs-genes scatter, the four
+  Embeddings maps + gene UMAP + HVG scatter, the cell-cycle scatter, the Markers dot plot and
+  volcano, the Compare UMAP and `group_compare`, the aligner-agreement scatter.
+- `show_histogram: true` on every QC threshold `RangeSlider` (UMIs, genes, UMIs per barcode,
+  top-20 share, dispersion, cells per cluster, marker expression, methods agreeing). Not on
+  `Cells called`: `cellranger_metrics` has one row.
+- Markers: `sc-mp-fig-bycluster` is now `visu_type: violin` (`box: true, points: false`);
+  the volcano carries `views: [volcano]` and sits at `w: 5` beside a new `record_card`
+  (`sc-mk-av-record`, `id_col: gene`, `default_record: FCER1A`, follows the marker-table row
+  selection); a text tile opens the Differential expression section.
+- Clusters: new `parallel_coordinates` (`sc-cl-av-pcoords`) on `cellranger_cluster_summary`,
+  one line per cluster, six axes (`median_pct_mito` left out: constant 0).
+- Compare selections: `group_compare` opens on `C1 VPREB3/OSBPL10` vs `C2 FCAR/CLEC4E` with
+  `auto_run: true`.
+
+Discrepancies:
+- **SC-D15** `record_card` and `parallel_coordinates` tiles carry `viz_kind` + `config` rather
+  than `use:`: the `cellranger` catalog outputs have no render for these kinds and the catalog
+  was outside this pass's partition. Adding `{id: gene_record, kind: record_card}` to
+  `diffexp.yaml` and `{id: cluster_profile, kind: parallel_coordinates}` to
+  `cluster_summary.yaml` would restore the `use:` ratio.
+- **SC-D16** `cellranger_diffexp.gene_id` holds the gene symbol, not an Ensembl id, so the card
+  links to an Ensembl search on the symbol rather than a gene page.
+- **SC-D17** The `sc-mp-fig-bycluster` figure keeps `use: cellranger/marker_by_cluster`, whose
+  catalog render still says `visu_type: box`; the dashboard's own `visu_type: violin` wins.
+- **SC-D18** No locus section: scrnaseq publishes no genomic-coordinate collection.
+
+Commands and results:
+```bash
+uv run pytest -q depictio/tests/models/test_shipped_dashboard_yamls.py -k scrnaseq   # 10 passed
+uv run pytest -q depictio/tests/models/test_catalog.py                              # 99 passed
+uv run python -m depictio.cli run --template nf-core/scrnaseq/4.2.0 \
+  --data-root ~/Data/depictio-nfcore/scrnaseq/4.2.0/megatest --dry-run              # 8/8 steps
+uv run python -m depictio.cli dashboard import <base.yaml with project_tag lot2-scrnaseq> \
+  --config ~/.depictio/CLI.feat-nfcore-templates-lot2-112.yaml --api http://localhost:8112 --overwrite
+# updated in place, dashboard 6ab3742e84fc1ee30ed7ea05 (tabs ...ea06 to ...ea0d)
+```
+Data were not re-ingested (no DC changed); every DC of `lot2-scrnaseq` answers
+`/deltatables/shape` with rows (diffexp 6 800, cluster_summary 14, cell_expression 8 767 x 127).
+Live checks (headless Playwright, 1600x1000, `/tmp/claude-502/shots-scrnaseq/`): the record
+card opens on FCER1A (graphclust Cluster 8, rank 1, log2fc 7.72), the comparison opens with a
+result (C1 n=1249 vs C2 n=1189, 9 up, 22 down, 90 not significant), the violin and the
+parallel coordinates (14 lines, 6 axes) render, header chips are visible without hover.

@@ -433,6 +433,47 @@ workflows:
               "sample_id": "Sample identifier"
               "subject_id": "Donor the sample came from"
 
+      # The two collections below read the AIRR rearrangement table enchantR's
+      # repertoire analysis starts from (clonal_analysis/.../repertoires/
+      # *__repertoire-pass.tsv, about 300 MB on the megatest). The recipes read
+      # only the columns they need (read_kwargs.columns), so neither the raw
+      # table nor its 70 columns ever reach Delta. Optional: a run with
+      # --skip_clonal_analysis, or a mirror that did not fetch the table, simply
+      # has no spectratype and no V-J grid.
+      - data_collection_tag: "cdr3_spectratype"
+        optional: true
+        description: "CDR3 amino-acid length distribution per sample (spectratype)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/airrflow/cdr3_spectratype.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample identifier"
+              "subject_id": "Donor the sample came from"
+              "locus": "Receptor locus"
+              "cdr3_aa_length": "CDR3 length in amino acids, the IMGT junction without its two anchor codons"
+              "sequences": "Productive in-frame sequences with that CDR3 length"
+              "fraction": "Share of the sample's productive in-frame sequences"
+
+      - data_collection_tag: "vj_usage_matrix"
+        optional: true
+        description: "V gene by J gene pairing per subject, as sequence fractions"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/airrflow/vj_usage_matrix.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "row_id": "Heatmap row label, subject and V gene; every other numeric column is a J gene"
+              "subject_id": "Donor the sequences came from"
+              "locus": "Receptor locus"
+              "v_gene": "V gene, first call at gene resolution"
+
       - data_collection_tag: "threshold_summary"
         # Only written when the run used --clonal_threshold auto; an explicit
         # threshold means shazam had nothing to fit.
@@ -525,6 +566,28 @@ links:
       resolver: "direct"
       target_field: "sample_id"
     description: "Filter the V gene usage by samplesheet samples"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample_id"
+    target_dc_tag: "cdr3_spectratype"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the CDR3 spectratypes by samplesheet samples"
+    enabled: true
+
+  # Pairing is counted per subject (clones are defined per subject), so the
+  # sample sheet reaches the V-J grid through the donor rather than the sample.
+  - source_dc_tag: "samplesheet"
+    source_column: "subject_id"
+    target_dc_tag: "vj_usage_matrix"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "subject_id"
+    description: "Filter the V-J pairing grid by samplesheet donors"
     enabled: true
 
   # clonal_overlap is wide: one row per sample AND one column per sample, so the

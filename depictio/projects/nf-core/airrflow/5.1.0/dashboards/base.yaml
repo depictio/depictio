@@ -706,6 +706,7 @@ tabs:
     workflow_tag: airrflow
     data_collection_tag: sequence_counts
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: sequences
     column_type: int64
     display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:import'}
@@ -720,6 +721,7 @@ tabs:
     workflow_tag: airrflow
     data_collection_tag: sequence_counts
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: retention
     column_type: float64
     display: {title_size: md, custom_color: '#F2A93B', icon_name: 'mdi:percent-outline'}
@@ -753,6 +755,14 @@ tabs:
     icon: mdi:chart-bar
     color: grape
     description: Which V families and genes the sequences were assigned to
+  - name: CDR3 spectratype
+    icon: mdi:chart-bell-curve
+    color: grape
+    description: CDR3 loop length distribution per sample, the classic clonality readout
+  - name: V-J pairing
+    icon: mdi:relation-many-to-many
+    color: grape
+    description: Which V gene pairs with which J gene, per donor
   - name: Clones and depth
     icon: mdi:chart-scatter-plot
     color: violet
@@ -864,6 +874,7 @@ tabs:
     data_collection_tag: v_gene_usage
     use: enchantr/v_usage_composition
     config:
+      controls_placement: header
       default_rank: V family
       top_n: 20
       normalise_to_one: true
@@ -964,6 +975,7 @@ tabs:
     data_collection_tag: repertoire_summary
     use: enchantr/richness_evenness
     config:
+      controls_placement: header
       x_title: Rarefied richness (clones)
       y_title: Evenness
       log_x: true
@@ -988,6 +1000,74 @@ tabs:
     title_align: left
     layout: {x: 0, y: 8, w: 8, h: 4}
 
+  - component_type: text
+    tag: airr-rep-spectra-intro
+    section: CDR3 spectratype
+    workflow_tag: airrflow
+    data_collection_tag: cdr3_spectratype
+    title: CDR3 length per sample
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The CDR3 is the loop the receptor binds with, and its length in amino
+      acids is read from the IMGT junction without its two anchor codons. A
+      polyclonal repertoire draws a bell around 12 to 16 residues; one length
+      towering over its neighbours is an expanded clone. Each panel is one
+      sample normalised to its own productive in-frame sequences, so a shallow
+      sample is compared on shape rather than on yield.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: figure
+    tag: airr-rep-fig-spectratype
+    index: airr-rep-spectratype-bars
+    section: CDR3 spectratype
+    workflow_tag: airrflow
+    data_collection_tag: cdr3_spectratype
+    visu_type: bar
+    dict_kwargs: {x: cdr3_aa_length, y: fraction, color: subject_id, facet_col: sample_id, facet_col_wrap: 5}
+    title: Spectratype per sample
+    description: Share of each sample's productive sequences at each CDR3 length in amino acids, one panel per sample, coloured by donor.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 8}
+  - component_type: text
+    tag: airr-rep-vj-intro
+    section: V-J pairing
+    workflow_tag: airrflow
+    data_collection_tag: vj_usage_matrix
+    title: Which V genes pair with which J genes
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      One row per donor and V gene, one column per J gene, each cell the share
+      of that donor's productive sequences using the pair. Pairing is counted
+      per donor because clones are defined per donor: two sections of one
+      donor share clones, and counting them apart would weigh one expansion
+      twice. A single bright cell away from the common IGHJ4 column is a
+      candidate expanded lineage.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: airr-rep-vj-heatmap
+    index: airr-rep-vj-heatmap
+    section: V-J pairing
+    workflow_tag: airrflow
+    data_collection_tag: vj_usage_matrix
+    viz_kind: complex_heatmap
+    config:
+      viz_kind: complex_heatmap
+      index_column: row_id
+      row_annotation_cols: [subject_id]
+      cluster_rows: true
+      cluster_cols: false
+      cluster_method: ward
+      cluster_metric: euclidean
+      normalize: none
+    title: V by J pairing
+    description: Share of each donor's sequences per V and J gene pair; rows cluster by pairing profile, J genes keep their genomic order.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 10}
   - component_type: interactive
     tag: airr-rep-filter-clones
     index: airr-rep-clone-range
@@ -996,6 +1076,7 @@ tabs:
     workflow_tag: airrflow
     data_collection_tag: repertoire_summary
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: number_of_clones
     column_type: int64
     display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:dna'}
@@ -1030,6 +1111,21 @@ tabs:
     placement: left
     title: V family
     layout: {x: 0, y: 5, w: 1, h: 3}
+  - component_type: interactive
+    tag: airr-rep-filter-cdr3
+    index: airr-rep-cdr3-range
+    section: Repertoire scope
+    group: CDR3 length
+    workflow_tag: airrflow
+    data_collection_tag: cdr3_spectratype
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: cdr3_aa_length
+    column_type: int64
+    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:ruler'}
+    placement: left
+    title: CDR3 length (aa)
+    layout: {x: 0, y: 8, w: 1, h: 3}
 
 # =========================================================================
 # Tab 3 - Clonal analysis
@@ -1185,40 +1281,26 @@ tabs:
     description: Diversity against order q, one line per sample, coloured by subject.
     title_size: h3
     layout: {x: 0, y: 2, w: 8, h: 6}
-  - component_type: figure
-    tag: airr-clone-fig-ribbons
+  - component_type: advanced_viz
+    tag: airr-clone-div-ribbons
     index: airr-clone-div-ribbons
     section: Diversity profiles
     workflow_tag: airrflow
     data_collection_tag: clonal_diversity
-    use: enchantr/clonal_diversity
-    mode: code
-    code_content: |
-      palette = px.colors.qualitative.D3
-      df_modified = df.sort(['sample_id', 'q'])
-      fig = go.Figure()
-      samples = df_modified.get_column('sample_id').unique(maintain_order=True).to_list()
-      for i, sample in enumerate(samples):
-          s = df_modified.filter(pl.col('sample_id') == sample)
-          colour = palette[i % len(palette)]
-          r, g, b = px.colors.hex_to_rgb(colour)
-          fig.add_trace(go.Scatter(
-              x=s.get_column('q').to_list() + s.get_column('q').to_list()[::-1],
-              y=s.get_column('d_upper').to_list() + s.get_column('d_lower').to_list()[::-1],
-              fill='toself', fillcolor=f'rgba({r},{g},{b},0.15)', line={'width': 0},
-              hoverinfo='skip', showlegend=False,
-          ))
-          fig.add_trace(go.Scatter(
-              x=s.get_column('q').to_list(), y=s.get_column('d').to_list(),
-              mode='lines', line={'color': colour, 'width': 2}, name=sample,
-          ))
-      fig.update_layout(
-          xaxis_title='Diversity order q', yaxis_title='Hill diversity (clones)',
-          legend_title_text='Sample', margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},
-      )
-    selection_enabled: false
+    viz_kind: profile
+    config:
+      viz_kind: profile
+      series_col: sample_id
+      x_col: q
+      y_col: d
+      lower_col: d_lower
+      upper_col: d_upper
+      x_title: Diversity order q
+      y_title: Hill diversity (clones)
+      band_opacity: 0.15
+      legend_pos: right
     title: Diversity profile with confidence ribbons
-    description: The same curves with the bootstrap band alakazam computed, shaded per sample.
+    description: The same curves with the bootstrap band alakazam computed, shaded per sample. Two samples whose bands overlap at a given q are not distinguishable at that order.
     title_size: h3
     layout: {x: 0, y: 8, w: 8, h: 6}
   - component_type: advanced_viz
@@ -1379,6 +1461,7 @@ tabs:
     data_collection_tag: clonal_overlap
     use: enchantr/overlap_mds
     config:
+      controls_placement: header
       compute_method: pcoa
       pcoa_distance: bray_curtis
       default_color_by: subject_id
@@ -1442,6 +1525,7 @@ tabs:
     workflow_tag: airrflow
     data_collection_tag: clone_sets
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: n_samples
     column_type: int64
     display: {title_size: md, custom_color: '#26A69A', icon_name: 'mdi:set-merge'}
