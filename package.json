@@ -1,0 +1,10 @@
+{
+  "name": "depictio-workspace",
+  "private": true,
+  "description": "pnpm workspace root; the apps live in packages/* and depictio/viewer. See pnpm-workspace.yaml for why the override exists.",
+  "pnpm": {
+    "overrides": {
+      "@gmod/bgzf-filehandle": "6.3.3"
+    }
+  }
+}

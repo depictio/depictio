@@ -19,7 +19,7 @@ RUN corepack enable && corepack prepare pnpm@10 --activate
 # depictio-components / depictio-react-core source deps) live in the image.
 # Compose bind-mounts only the `src` trees on top at runtime, so deps are
 # never masked — a dependency change means a rebuild, source edits are live.
-COPY pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages ./packages/
 COPY depictio/viewer ./depictio/viewer/
 

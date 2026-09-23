@@ -22,7 +22,7 @@ WORKDIR /build
 RUN corepack enable && corepack prepare pnpm@10 --activate
 
 # ---- Dependency layer (cached across viewer source changes) ----
-COPY pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/depictio-components/package.json ./packages/depictio-components/
 COPY packages/depictio-react-core/package.json ./packages/depictio-react-core/
 COPY depictio/viewer/package.json ./depictio/viewer/

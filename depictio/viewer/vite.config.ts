@@ -106,6 +106,22 @@ export default defineConfig({
           }
           // GenomeSpy is `import()`ed by its adapter hook only, so this chunk is
           // async and only a dashboard with a genome_view tile fetches it.
+          //
+          // Two chunks, not one: `useGenomeSpy` loads `@genome-spy/core/minimal`
+          // for table-backed tiles and the fat `@genome-spy/core` only for
+          // file-backed ones (`source: 'file'`). The file parsers and their
+          // @gmod readers are what makes the fat entry heavy, so they get their
+          // own chunk and a dashboard without an indexed_file track never
+          // downloads them.
+          if (
+            id.includes('@genome-spy') &&
+            (id.includes('/data/sources/lazy/') || id.includes('/data/formats/'))
+          ) {
+            return 'vendor-genomespy-lazy';
+          }
+          if (id.includes('@gmod/') || id.includes('generic-filehandle')) {
+            return 'vendor-genomespy-lazy';
+          }
           if (id.includes('@genome-spy')) {
             return 'vendor-genomespy';
           }
