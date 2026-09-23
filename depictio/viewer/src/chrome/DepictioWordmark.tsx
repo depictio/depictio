@@ -52,10 +52,14 @@ interface DepictioWordmarkProps {
 }
 
 /**
- * The depictio wordmark, with a small easter egg: rest the pointer on it and
- * the mark comes alive, the `<depictio-rose>` fan playing exactly over the
- * raster's own mark (which is clipped away while it runs). Leaving puts the
- * raster back.
+ * The depictio wordmark: the raster's lettering, with its mark replaced by the
+ * live `<depictio-rose>` drawn exactly over it (the raster's own mark is
+ * clipped away). At rest the element's `logo` mode paints the same static
+ * mark, so nothing moves and nothing animates; resting the pointer on it for a
+ * moment plays the fan, and leaving settles it back.
+ *
+ * The docs header does the same thing with the same element, so the mark
+ * behaves alike wherever it appears.
  *
  * `logo_black.svg` and `logo_white.svg` are byte-identical (a base64 raster
  * inside an SVG wrapper), so dark mode inverts the raster with a filter and
@@ -73,6 +77,24 @@ const DepictioWordmark: React.FC<DepictioWordmarkProps> = ({
   const imgRef = useRef<HTMLImageElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [overlay, setOverlay] = useState<Overlay | null>(null);
+  const [hovered, setHovered] = useState(false);
+
+  // The mark is the live element at all times, so it has to be measured as
+  // soon as the raster gives it a box, and again whenever that box changes
+  // (a collapsing sidebar, a window resize, a late-loading font).
+  useEffect(() => {
+    const img = imgRef.current;
+    if (!img) return;
+    const measure = () => setOverlay(overlayFor(img));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(img);
+    img.addEventListener('load', measure);
+    return () => {
+      observer.disconnect();
+      img.removeEventListener('load', measure);
+    };
+  }, []);
 
   useEffect(
     () => () => {
@@ -85,14 +107,14 @@ const DepictioWordmark: React.FC<DepictioWordmarkProps> = ({
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
       timerRef.current = null;
-      if (imgRef.current) setOverlay(overlayFor(imgRef.current));
+      setHovered(true);
     }, HOVER_DELAY_MS);
   };
 
   const handleLeave = () => {
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = null;
-    setOverlay(null);
+    setHovered(false);
   };
 
   return (
@@ -119,7 +141,7 @@ const DepictioWordmark: React.FC<DepictioWordmarkProps> = ({
       />
       {overlay && (
         <DepictioRose
-          mode="fan"
+          mode={hovered ? 'fan' : 'logo'}
           size={overlay.side}
           label=""
           style={{
