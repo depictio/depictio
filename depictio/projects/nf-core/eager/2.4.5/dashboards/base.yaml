@@ -387,6 +387,7 @@ main_dashboard:
     interactive_component_type: RangeSlider
     column_name: mean_coverage
     column_type: float64
+    show_histogram: true
     display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:waves'}
     placement: left
     title: Mean coverage
@@ -401,6 +402,7 @@ main_dashboard:
     interactive_component_type: RangeSlider
     column_name: duplication_rate
     column_type: float64
+    show_histogram: true
     display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:set-merge'}
     placement: left
     title: Duplication rate
@@ -415,6 +417,7 @@ main_dashboard:
     interactive_component_type: RangeSlider
     column_name: endogenous_dna
     column_type: float64
+    show_histogram: true
     display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:dna'}
     placement: left
     title: Endogenous DNA
@@ -432,6 +435,7 @@ main_dashboard:
     interactive_component_type: RangeSlider
     column_name: ct_5p_first
     column_type: float64
+    show_histogram: true
     display: {title_size: md, custom_color: '#FB8C00', icon_name: 'mdi:chart-bell-curve'}
     placement: left
     title: C-to-T at the first 5p base
@@ -463,6 +467,10 @@ tabs:
     icon: mdi:chart-bar
     color: blue
     description: What each lane returned after trimming and collapsing
+  - name: Library QC profile
+    icon: mdi:chart-timeline-variant
+    color: indigo
+    description: Every per-library QC number eager produced, on one set of axes
   components:
   - component_type: interactive
     tag: ea-hub-filter-lane
@@ -502,6 +510,7 @@ tabs:
     interactive_component_type: RangeSlider
     column_name: retained_reads
     column_type: int64
+    show_histogram: true
     display: {title_size: md, custom_color: '#42A5F5', icon_name: 'mdi:counter'}
     placement: left
     title: Retained reads
@@ -636,6 +645,7 @@ tabs:
     data_collection_tag: eager_lane_stats
     use: adapterremoval/collapse_vs_length
     config:
+      controls_placement: header
       x_col: average_retained_length
       y_col: collapse_rate
       label_col: lane_id
@@ -660,6 +670,65 @@ tabs:
     description: Reads AdapterRemoval dropped before mapping, as a fraction of everything sequenced on that lane.
     title_size: h3
     layout: {x: 0, y: 14, w: 8, h: 6}
+
+  - component_type: text
+    tag: ea-hub-profile-intro
+    section: Library QC profile
+    title: One line per library, across every tool
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      endorS.py, Picard, Qualimap and DamageProfiler each score a library on
+      their own axis. Here they share one plot: one polyline per library across
+      endogenous DNA, clonality, depth, mapping quality, error rate, GC,
+      terminal C-to-T and fragment length. With two libraries the min-max scale
+      stretches every axis end to end, so read the ticks: most gaps are small,
+      but COD076E1bL1 carries 2.4 times the terminal damage of COD092E1bL1i69
+      (14.4% against 5.9%) and more duplication. Brush an axis to narrow the
+      profile and the table below to the libraries inside the band.
+    workflow_tag: eager
+    data_collection_tag: eager_library_qc
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: ea-hub-av-pcoords
+    index: ea-hub-av-pcoords
+    section: Library QC profile
+    workflow_tag: eager
+    data_collection_tag: eager_library_qc
+    viz_kind: parallel_coordinates
+    config:
+      viz_kind: parallel_coordinates
+      controls_placement: header
+      sample_col: sample
+      group_col: sample
+      scale: minmax
+      metric_cols:
+      - endogenous_dna
+      - endogenous_dna_post
+      - clonality_pct
+      - mean_coverage
+      - mean_mapping_quality
+      - error_rate_pct
+      - gc_percentage
+      - ct_5p_first_pct
+      - mean_length
+    title: Per-library QC profile
+    description: One polyline per library across nine metrics from four tools. Each axis is rescaled to its own range and keeps its original units on the ticks.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 7}
+  - component_type: table
+    tag: ea-hub-profile-table
+    section: Library QC profile
+    workflow_tag: eager
+    data_collection_tag: eager_library_qc
+    row_selection_enabled: false
+    title: Library QC, pooled
+    description: The numbers behind the profile, one row per library.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 9, w: 8, h: 3}
 
 # ============================================================================
 # Reads and read fate
@@ -961,6 +1030,7 @@ tabs:
     interactive_component_type: RangeSlider
     column_name: endogenous_dna_post
     column_type: float64
+    show_histogram: true
     display: {title_size: md, custom_color: '#5C6BC0', icon_name: 'mdi:dna'}
     placement: left
     title: Endogenous DNA after filtering
@@ -975,6 +1045,7 @@ tabs:
     interactive_component_type: RangeSlider
     column_name: percent_duplication
     column_type: float64
+    show_histogram: true
     display: {title_size: md, custom_color: '#5C6BC0', icon_name: 'mdi:set-merge'}
     placement: left
     title: Picard duplication
@@ -1074,6 +1145,7 @@ tabs:
     data_collection_tag: endorspy_endogenous
     use: endorspy/endogenous_pre_post
     config:
+      controls_placement: header
       x_title: Endogenous DNA before filtering (%)
       y_title: Endogenous DNA after filtering (%)
       reference_line: diagonal
@@ -1271,6 +1343,7 @@ tabs:
     data_collection_tag: picard_markduplicates_metrics
     use: picard/duplication_vs_depth
     config:
+      controls_placement: header
       x_title: Unique reads kept
       y_title: Duplication rate
       top_n_labels: 4
@@ -1279,6 +1352,31 @@ tabs:
     description: A library high on this plane paid for its depth in PCR copies rather than in molecules.
     title_size: h3
     layout: {x: 0, y: 4, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: ea-dup-av-endo-clonality
+    index: ea-dup-av-endo-clonality
+    section: Duplication and complexity
+    workflow_tag: eager
+    data_collection_tag: eager_library_qc
+    viz_kind: scatter_xy
+    config:
+      viz_kind: scatter_xy
+      controls_placement: header
+      x_col: clonality_pct
+      y_col: endogenous_dna
+      label_col: sample
+      color_col: sample
+      size_col: mean_coverage
+      x_title: Clonality, Picard duplicates (%)
+      y_title: Endogenous DNA (%)
+      top_n_labels: 4
+      marker_size: 14
+      selection_enabled: true
+      selection_column: sample
+    title: Endogenous DNA against clonality
+    description: The screening plane. A library worth sequencing deeper sits high (much of the extract is the organism) and left (few PCR copies yet); marker size is the depth already reached.
+    title_size: h3
+    layout: {x: 0, y: 11, w: 8, h: 7}
   - component_type: advanced_viz
     tag: ea-complex-av-curve
     index: ea-complex-av-curve
@@ -1290,7 +1388,7 @@ tabs:
     title: Library complexity curve
     description: Expected distinct molecules against total reads, extrapolated per library. This run's preseq step wrote no bootstrap confidence interval, so the ribbon is flat.
     title_size: h3
-    layout: {x: 0, y: 11, w: 8, h: 7}
+    layout: {x: 0, y: 18, w: 8, h: 7}
   - component_type: multiqc
     tag: ea-dup-mqc-picard
     section: Duplication and complexity
@@ -1302,7 +1400,7 @@ tabs:
     title: Mark Duplicates (MultiQC)
     title_size: sm
     title_align: left
-    layout: {x: 0, y: 18, w: 4, h: 5}
+    layout: {x: 0, y: 25, w: 4, h: 5}
   - component_type: multiqc
     tag: ea-complex-mqc
     section: Duplication and complexity
@@ -1314,7 +1412,7 @@ tabs:
     title: Complexity curve (MultiQC)
     title_size: sm
     title_align: left
-    layout: {x: 4, y: 18, w: 4, h: 5}
+    layout: {x: 4, y: 25, w: 4, h: 5}
   - component_type: table
     tag: ea-dup-table
     section: Duplication and complexity
@@ -1326,7 +1424,7 @@ tabs:
     description: Reads examined, duplicates flagged and what is left, from Picard MarkDuplicates.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 23, w: 8, h: 3}
+    layout: {x: 0, y: 30, w: 8, h: 3}
 
 # ============================================================================
 # Damage authentication
@@ -1510,6 +1608,7 @@ tabs:
     data_collection_tag: damageprofiler_authenticity
     use: damageprofiler/authenticity_plane
     config:
+      controls_placement: header
       x_title: Mean fragment length (bp)
       y_title: Deamination at the first 5 prime base
       top_n_labels: 4
@@ -1866,6 +1965,7 @@ tabs:
     data_collection_tag: qualimap_coverage_per_contig
     use: qualimap/contig_depth_scatter
     config:
+      controls_placement: header
       x_title: Contig length (bp)
       y_title: Depth relative to the library mean
       log_x: true
@@ -1918,12 +2018,12 @@ tabs:
   - name: Coverage filters
     icon: mdi:filter-variant
     color: cyan
-    description: Narrow the track and the depth curves to a region or a depth band
+    description: Narrow the locus section to contigs or a window-depth band, and the depth curves to a threshold
   grid_sections:
   - name: Depth along the reference
     icon: mdi:waves
     color: cyan
-    description: Windowed depth, mapped back onto the contig each window falls in
+    description: A locus section, depth and mapping quality on one contig axis that follows the navigator's region
   - name: Depth distribution
     icon: mdi:chart-bell-curve
     color: blue
@@ -1947,19 +2047,24 @@ tabs:
     placement: left
     title: Contig
     layout: {x: 0, y: 0, w: 1, h: 3}
+  # No position slider: the navigator's brush and locus field own the position
+  # filter on this collection, and a second control on the same column would
+  # fight them. The window-depth band is the threshold this section reads. No
+  # histogram on it: the mitochondrion's ~59X window puts every nuclear window
+  # in the first bin, so the bars would say nothing.
   - component_type: interactive
-    tag: ea-cov-filter-position
-    index: ea-cov-position-range
+    tag: ea-cov-filter-window-depth
+    index: ea-cov-window-depth-range
     section: Coverage filters
     group: Region scope
     workflow_tag: eager
     data_collection_tag: qualimap_coverage_across_reference
     interactive_component_type: RangeSlider
-    column_name: position
-    column_type: int64
-    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:ruler'}
+    column_name: coverage
+    column_type: float64
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:waves'}
     placement: left
-    title: Position on the contig
+    title: Window depth (X)
     layout: {x: 0, y: 3, w: 1, h: 3}
   - component_type: interactive
     tag: ea-cov-filter-depth
@@ -1971,6 +2076,7 @@ tabs:
     interactive_component_type: RangeSlider
     column_name: min_coverage
     column_type: int64
+    show_histogram: true
     display: {title_size: md, custom_color: '#42A5F5', icon_name: 'mdi:waves'}
     placement: left
     title: Depth threshold
@@ -1985,11 +2091,14 @@ tabs:
     order: 2
     alignment: left
     body: >
-      [Qualimap](http://qualimap.conesalab.org) BamQC windows the whole
-      reference and reports a mean depth per window. Qualimap writes those
-      windows on a single concatenated axis, so the template maps each one back
-      onto the contig it falls in using the per-contig lengths from the same
-      report, which is what makes the contig filter in the left panel work.
+      [Qualimap](http://qualimap.conesalab.org) BamQC reports a mean depth and
+      a mean mapping quality per window of about 1.7 Mb, mapped here back onto
+      the contig each window falls in. The section opens on chromosome 1
+      (NC_044048.1, the whole contig), where both libraries lose depth at the
+      two ends, below 0.6X against about 1X along the arm, while mapping
+      quality barely moves. Type a contig or a range in the navigator header,
+      or brush its axis: the navigator, the cards and the mapping-quality track
+      below all follow that region.
     workflow_tag: eager
     data_collection_tag: qualimap_coverage_across_reference
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -2063,21 +2172,12 @@ tabs:
     title_align: left
     title: Genome covered at 1X (%)
     layout: {x: 6, y: 2, w: 2, h: 2}
-  - component_type: advanced_viz
-    tag: ea-cov-av-track
-    index: ea-cov-av-track
-    section: Depth along the reference
-    workflow_tag: eager
-    data_collection_tag: qualimap_coverage_across_reference
-    use: qualimap/reference_coverage_track
-    config:
-      smoothing_window: 0
-      facet_by_sample: true
-      color_by: sample
-    title: Depth along the reference
-    description: One lane per library. Narrow to a single contig in the left panel to read a chromosome on its own coordinates.
-    title_size: h3
-    layout: {x: 0, y: 4, w: 8, h: 7}
+  # Locus section. The navigator is the only tile on the depth windows that
+  # draws a track (the former coverage_track + genome_view pair on this one
+  # collection is gone, see test_no_double_track_binding); the track under it
+  # reads a second collection, reached by the region link in template.yaml.
+  # The draft cod assembly has no GenomeSpy built-in, so `assembly` stays null
+  # and the contig list comes from the data; there is no gene lane.
   - component_type: advanced_viz
     tag: ea-cov-av-genomeview
     index: ea-cov-av-genomeview
@@ -2086,13 +2186,40 @@ tabs:
     data_collection_tag: qualimap_coverage_across_reference
     use: qualimap/reference_genome_view
     config:
+      controls_placement: header
       score_title: Mean depth (X)
       mark: point
       point_size: 4
-    title: Depth on a chromosome-aware genome axis
-    description: The same windows drawn by GenomeSpy on a locus scale, with the contigs laid out in reference order and native zoom.
+      facet_by_sample: true
+      region_filter_enabled: true
+      default_region: "NC_044048.1:1-30,875,876"
+    title: Locus navigator, depth per window
+    description: One lane per library on the contig axis. The locus field in the header and a brush on this axis move every tile of the section.
     title_size: h3
-    layout: {x: 0, y: 11, w: 8, h: 7}
+    layout: {x: 0, y: 4, w: 8, h: 3}
+  - component_type: advanced_viz
+    tag: ea-cov-av-mapq
+    index: ea-cov-av-mapq
+    section: Depth along the reference
+    workflow_tag: eager
+    data_collection_tag: qualimap_mapq_across_reference
+    viz_kind: coverage_track
+    config:
+      viz_kind: coverage_track
+      chromosome_col: chromosome
+      position_col: position
+      value_col: mapping_quality
+      sample_col: sample
+      view_mode: facet
+      color_by: sample
+      smoothing_window: 0
+      show_annotation_lane: false
+      view: track
+      views: [track]
+    title: Mapping quality along the region
+    description: Mean MAPQ per window, one lane per library, clamped to the navigator's region. A dip under a depth dip marks repeats the mapper could not place.
+    title_size: h3
+    layout: {x: 0, y: 7, w: 8, h: 3}
   - component_type: table
     tag: ea-cov-table-track
     section: Depth along the reference
@@ -2101,10 +2228,10 @@ tabs:
     use: qualimap/coverage_across_reference
     row_selection_enabled: false
     title: Windowed depth
-    description: One row per library and window, with the contig it falls in and its position on both the contig and the concatenated reference.
+    description: One row per library and window of the current region, with the contig it falls in and its position on both the contig and the concatenated reference.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 18, w: 8, h: 7}
+    layout: {x: 0, y: 10, w: 8, h: 7}
 
   - component_type: text
     tag: ea-dist-intro

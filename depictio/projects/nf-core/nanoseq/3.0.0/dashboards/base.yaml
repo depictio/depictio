@@ -539,7 +539,12 @@ tabs:
     workflow_tag: nanoseq
     data_collection_tag: nanostats
     use: nanoplot/length_vs_quality
+    # No `density: true`: nanoseq publishes no per-read table (NanoPlot runs
+    # without --raw, pycoQC needs sequencing_summary.txt), so this collection
+    # holds one row per library and a binned density would be empty bins
+    # (NS-D14).
     config:
+      controls_placement: header
       x_title: Mean read length (bases)
       y_title: Mean read quality (Phred)
       top_n_labels: 6
@@ -550,20 +555,31 @@ tabs:
     description: "The trade-off a Nanopore run is read on: the longer libraries here are also the lower-quality ones, and the marker size is the yield each one delivered."
     title_size: h3
     layout: {x: 0, y: 4, w: 8, h: 7}
-  - component_type: figure
-    tag: ns-rq-fig-n50
-    index: ns-rq-fig-n50
+  # The Nx ladder replaces the N50 bar: N50 is its rung 50 (marked), and the
+  # rest of the ladder is what a single bar hides.
+  - component_type: advanced_viz
+    tag: ns-rq-av-nx-ladder
+    index: ns-rq-av-nx-ladder
     section: Yield and read length
     workflow_tag: nanoseq
-    data_collection_tag: nanostats
-    use: nanoplot/nanostats
-    visu_type: bar
-    dict_kwargs: {x: sample, y: read_length_n50, color: sample}
-    title: Read length N50 per library
-    description: Half of each library's yield sits in reads at least this long.
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 11, w: 8, h: 5}
+    data_collection_tag: samtools_read_length_nx
+    viz_kind: profile
+    config:
+      viz_kind: profile
+      series_col: sample
+      x_col: nx
+      y_col: read_length
+      log_y: true
+      reference_x: 50
+      reference_label: N50
+      x_title: Share of the library's bases (Nx, percent)
+      y_title: Read length (bases)
+      selection_enabled: true
+      selection_column: sample
+    title: "Nx ladder per library"
+    description: "Nx is the shortest read inside the longest x percent of the bases; the marker is N50, which matches NanoStat's value. A flat top is a library whose yield sits in a few long reads, a steep drop one whose reads share one length."
+    title_size: h3
+    layout: {x: 0, y: 11, w: 8, h: 7}
   - component_type: table
     tag: ns-rq-table-nanostats
     section: Yield and read length
@@ -576,7 +592,7 @@ tabs:
     description: Six rows, one per library, with reads, yield, the length and quality summaries, N50 and the run's extremes.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 16, w: 8, h: 3}
+    layout: {x: 0, y: 18, w: 8, h: 3}
 
   - component_type: text
     tag: ns-rq-ladder-intro
@@ -827,6 +843,7 @@ tabs:
     workflow_tag: nanoseq
     data_collection_tag: nanostats_quality
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: q_cutoff
     column_type: int64
     display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:tune'}
@@ -1475,6 +1492,7 @@ tabs:
     data_collection_tag: bambu_sample_pca
     use: bambu/pca
     config:
+      controls_placement: header
       color_col: condition
       default_color_by: condition
       point_size: 16
@@ -1495,6 +1513,7 @@ tabs:
     data_collection_tag: bambu_sample_pca
     use: bambu/depth_vs_complexity
     config:
+      controls_placement: header
       x_title: Reads assigned to a gene
       y_title: Genes detected
       log_x: true
@@ -1702,6 +1721,7 @@ tabs:
     workflow_tag: nanoseq
     data_collection_tag: bambu_counts_gene_long
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: log_cpm
     column_type: float64
     display: {title_size: md, custom_color: '#7C4DFF', icon_name: 'mdi:chart-bell-curve'}
@@ -1835,35 +1855,26 @@ tabs:
     workflow_tag: nanoseq
     data_collection_tag: deseq2_results
     use: deseq2/volcano
+    # One tile, three readings of the same table: the MA and QQ tiles this
+    # tab used to carry are views of the volcano now (header switch).
     config:
+      controls_placement: header
+      view: volcano
+      views: [volcano, ma, qq]
+      avg_log_intensity_col: log2_base_mean
+      log2_fold_change_col: log2fc
+      p_value_col: pvalue
       label_col: gene_id
       category_col: direction
       significance_threshold: 0.05
       effect_threshold: 1.0
-      top_n_labels: 15
-      show_labels: true
-    title: "Volcano: A549 against K562"
-    description: "Effect size against significance, one point per tested feature. Labels are Ensembl gene ids now that the recipe extracts them from Bambu's attribute string."
-    title_size: h3
-    layout: {x: 0, y: 4, w: 8, h: 7}
-  - component_type: advanced_viz
-    tag: ns-de-av-ma
-    index: ns-de-av-ma
-    section: Gene expression (DESeq2)
-    workflow_tag: nanoseq
-    data_collection_tag: deseq2_results
-    use: deseq2/ma
-    config:
-      significance_col: padj
-      label_col: gene_id
-      significance_threshold: 0.05
       fold_change_threshold: 1.0
       top_n_labels: 15
       show_labels: true
-    title: "MA plot"
-    description: "log2 fold change against mean expression: whether the effect size depends on how highly a feature is counted."
+    title: "Volcano, MA and QQ: A549 against K562"
+    description: "Effect size against significance, one point per tested feature; switch to MA to see whether the effect depends on expression, or to QQ to see how far the raw p-values leave the null. Labels are Ensembl gene ids."
     title_size: h3
-    layout: {x: 0, y: 11, w: 8, h: 7}
+    layout: {x: 0, y: 4, w: 8, h: 7}
   - component_type: advanced_viz
     tag: ns-de-av-barplot
     index: ns-de-av-barplot
@@ -1881,21 +1892,7 @@ tabs:
     title: "Largest effect sizes in the contrast"
     description: "The twenty features with the largest absolute fold change, signed, with the ones clearing the adjusted p-value cut-off highlighted."
     title_size: h3
-    layout: {x: 0, y: 18, w: 8, h: 7}
-  - component_type: advanced_viz
-    tag: ns-de-av-qq
-    index: ns-de-av-qq
-    section: Gene expression (DESeq2)
-    workflow_tag: nanoseq
-    data_collection_tag: deseq2_results
-    use: deseq2/qq
-    config:
-      feature_id_col: gene_id
-      category_col: direction
-    title: "QQ plot of raw p-values"
-    description: "Observed against expected p-value quantiles under the null: departure from the diagonal is the differential signal."
-    title_size: h3
-    layout: {x: 0, y: 25, w: 8, h: 7}
+    layout: {x: 0, y: 11, w: 8, h: 7}
 
   - component_type: text
     tag: ns-de-counts-intro
@@ -1952,8 +1949,10 @@ tabs:
       DEXSeq on Bambu's transcript counts: not whether a gene's total
       expression changed, but whether one of its transcripts is used more or
       less relative to its siblings. Significance is the gene-level adjusted
-      q-value DEXSeq reports. 419 features were testable here, of which four
-      clear the cut-off, so one panel and its table say everything there is.
+      q-value DEXSeq reports. 419 features were testable here and the four that
+      clear the cut-off are the isoforms of one gene, ENSG00000124570; the
+      usage bars under the volcano show their share of that gene library by
+      library, beside the five next-ranked genes for contrast.
     workflow_tag: nanoseq
     data_collection_tag: dexseq_results
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -2034,7 +2033,13 @@ tabs:
     workflow_tag: nanoseq
     data_collection_tag: dexseq_results
     use: dexseq/volcano
+    # DEXSeq has no mean-intensity column, so no MA view; QQ reads the raw
+    # p-values.
     config:
+      controls_placement: header
+      view: volcano
+      views: [volcano, qq]
+      p_value_col: pvalue
       label_col: feature_id
       category_col: direction
       significance_threshold: 0.05
@@ -2042,9 +2047,28 @@ tabs:
       top_n_labels: 10
       show_labels: true
     title: "Volcano: differential transcript usage"
-    description: "Usage effect size against the gene-level adjusted q-value, one point per transcript. Four of the 419 tested features clear the cut-off."
+    description: "Usage effect size against the gene-level adjusted q-value, one point per transcript. Four of the 419 tested features clear the cut-off; the QQ view shows how little the rest depart from the null."
     title_size: h3
     layout: {x: 0, y: 4, w: 8, h: 7}
+  - component_type: figure
+    tag: ns-de-dex-fig-usage
+    index: ns-de-dex-fig-usage
+    section: Exon/transcript usage (DEXSeq)
+    workflow_tag: nanoseq
+    data_collection_tag: dexseq_usage
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: usage_pct
+      color: transcript_id
+      facet_col: gene_label
+      facet_col_wrap: 3
+      barmode: stack
+    title: Transcript usage per library, top DEXSeq genes
+    description: Each bar is one library and sums to 100 percent of its gene's reads. A gene DEXSeq calls shows its colours shifting between the A549 and K562 bars; the q-value is in each panel title.
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 11, w: 8, h: 7}
   - component_type: table
     tag: ns-de-dex-table
     section: Exon/transcript usage (DEXSeq)
@@ -2057,7 +2081,7 @@ tabs:
     description: All 419 tested transcripts, with the gene they belong to, the usage fold change and both adjusted q-values.
     title_size: h3
     title_align: left
-    layout: {x: 0, y: 11, w: 8, h: 7}
+    layout: {x: 0, y: 18, w: 8, h: 7}
   - component_type: interactive
     tag: ns-de-filter-direction
     index: ns-de-direction-filter
@@ -2094,6 +2118,7 @@ tabs:
     workflow_tag: nanoseq
     data_collection_tag: deseq2_results
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: log2_base_mean
     column_type: float64
     display: {title_size: md, custom_color: '#AB47BC', icon_name: 'mdi:chart-bell-curve'}
@@ -2111,6 +2136,7 @@ tabs:
     workflow_tag: nanoseq
     data_collection_tag: deseq2_results
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: padj
     column_type: float64
     display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:chart-bell-curve'}
@@ -2125,6 +2151,7 @@ tabs:
     workflow_tag: nanoseq
     data_collection_tag: deseq2_results
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: log2fc
     column_type: float64
     display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:swap-vertical'}
@@ -2315,6 +2342,7 @@ tabs:
     data_collection_tag: gtf_transcripts
     use: gtf/transcript_structures
     config:
+      controls_placement: header
       max_transcripts: 25
       colour_by: transcript_class
     title: "Isoform structures of one gene"
@@ -2343,6 +2371,7 @@ tabs:
     workflow_tag: nanoseq
     data_collection_tag: bambu_counts_transcript_long
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: log_cpm
     column_type: float64
     display: {title_size: md, custom_color: '#D81B60', icon_name: 'mdi:chart-bell-curve'}

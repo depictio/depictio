@@ -118,6 +118,16 @@ The organism, sequencing type, UDG treatment and strandedness columns are consta
 this run, so no filter or card is spent on them. They stay in the hub table, where a run
 that does vary over them can still read them.
 
+`Library QC profile` pools every per-library number eager produces into one row per
+library: the pipeline-local `eager/library_qc.py` recipe left-joins the tidied endorS.py,
+Picard, Qualimap and DamageProfiler collections on the library id and turns their fractions
+into percents. A `parallel_coordinates` tile draws one polyline per library across nine
+axes (endogenous DNA before and after filtering, clonality, depth, mapping quality, error
+rate, GC, terminal C-to-T and fragment length), each rescaled to its own range. With two
+libraries that scale stretches every axis end to end, so the tick values carry the reading:
+most gaps are small, but COD076E1bL1 carries 2.4 times the terminal damage of
+COD092E1bL1i69 and more duplication.
+
 ## Reads and read fate
 
 One sankey, five stages, and the reads that fall out at each. The pipeline-local
@@ -150,7 +160,10 @@ normal for sediment or bone extracts, where most recovered DNA is environmental.
 parses the `## METRICS CLASS` block of eager's `*_rmdup.metrics` files by reading the
 header row rather than assuming a column order, next to `preseq/complexity_curve`. Read the
 two together: high duplication with a flattened complexity curve means the extract, not the
-sequencing, is the limit.
+sequencing, is the limit. Between them sits the screening plane: endogenous DNA against
+clonality, read from the pooled `eager_library_qc` collection, with the marker sized by the
+depth already reached. A library high on endogenous and low on clonality is the one worth
+sequencing deeper.
 
 ## Damage authentication
 
@@ -169,6 +182,12 @@ keeping `C>T` and `G>A` as their own curves and summing the other twelve substit
 into `other`, the background they are read against. `damageprofiler/fragment_length_profile`
 draws the length distribution itself, one curve per library and strand, normalised so
 libraries of different depth are comparable.
+
+The misincorporation curves are not split by read length. DamageProfiler 0.4.9, the version
+eager 2.4.5 runs, writes its `misincorporation.txt` per chromosome, read end, strand and
+position only, and `dmgprof.json` holds the length distribution separately from the damage
+curves, so there is no `length_bin` column for `damage_profile`'s `facet_by: length_bin`
+to split on. The tile stays on one lane per library.
 
 ## Contamination and sex
 
@@ -191,15 +210,31 @@ depth, which is the mitochondrial-to-nuclear ratio MTNucRatio would have reporte
 depth table, 627 rows per library. Qualimap writes those windows on a single concatenated
 axis with no contig column, so the recipe takes an optional second source (the same run's
 `genome_results.txt`), builds a running sum of the per-contig lengths and maps each window
-back onto the contig it falls in with a per-sample `join_asof`. That is what makes the
-contig filter work, and what lets the same table drive both a `coverage_track` and a
-`genome_view`, GenomeSpy's chromosome-aware locus axis with native zoom. If the optional
-source is missing the recipe falls back to a single pseudo-contig rather than failing.
+back onto the contig it falls in with a per-sample `join_asof`. If the optional source is
+missing the recipe falls back to a single pseudo-contig rather than failing.
+
+`Depth along the reference` is a locus section. Its navigator is a `genome_view` on those
+depth windows (one lane per library, locus field and axis brush in the header), which opens
+on chromosome 1 (`NC_044048.1:1-30,875,876`, the whole contig): both libraries lose depth at
+the two ends, under 0.6X against about 1X along the arm. Under it a `coverage_track` draws
+mean mapping quality over the same windows, from the pipeline-local
+`eager/mapq_across_reference.py` recipe that places Qualimap's
+`mapping_quality_across_reference.txt` on the same contig coordinates. A `region` link in
+`template.yaml` carries the navigator's chromosome and position filters onto that second
+collection, so brushing or typing a locus moves both tracks, the cards and the windowed
+table together. The cod reference (gadMor3) has no GenomeSpy built-in assembly and no
+bundled gene lane, so the contig list comes from the data and there is no gene track.
+The earlier `coverage_track` and `genome_view` pair on the one depth collection is gone:
+they drew the same rows twice.
 
 `Depth distribution` answers what a mean depth cannot: `qualimap/coverage_histogram` is how
 many bases sit at each depth, and `qualimap/genome_fraction_coverage` is the share of the
 reference covered at least that deep. A library at 0.9X mean could be spread evenly or
 piled on a tenth of the genome, and only these two say which.
+
+The variants cannot join the locus section: `bcftools stats` reports counts, not
+positions, and the VCFs themselves (300 MB each) are not part of the megatest mirror, so no
+`indexed_file` track can be bound on this run.
 
 `Variant calls` binds the `bcftools/stats_summary` and `bcftools/stats_tstv` outputs to the
 GATK HaplotypeCaller VCFs eager published but which nothing read before. Both key on

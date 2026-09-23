@@ -356,3 +356,52 @@ caused by this template.
 - `template.yaml`: new link `samples.sample_id -> gtf_transcripts.sample` (the DC's own column
   name), so the `Isoforms` structures follow the persistent sample picker.
 - `test_shipped_dashboard_yamls.py -k nanoseq` passes. `.db_seeds` not regenerated here.
+
+# Wave 2b pass, 2026-09-23 (PR #1102)
+
+## What changed
+- **Nx ladder** (`Basecall and read QC`): new transformed DC `samtools_read_length_nx`
+  (versioned recipe `recipes/read_length_nx.py`, reads the `samtools_stats_raw` scan) with
+  N1..N99 per library from the exact `RL` histogram; bound as a `profile` with an N50 marker.
+  It replaces the N50 bar (N50 is rung 50). Test: `depictio/tests/recipes/test_samtools_nx_ladder.py`.
+- **DE views**: the DESeq2 volcano carries `views: [volcano, ma, qq]` with the MA and QQ
+  bindings and `controls_placement: header`; the separate `deseq2/ma` and `deseq2/qq` tiles
+  (legacy kinds) are gone. The DEXSeq volcano offers `views: [volcano, qq]` (no mean
+  intensity, so no MA).
+- **DEXSeq usage**: new transformed DC `dexseq_usage` (recipe `recipes/dexseq_usage.py`,
+  DEXSeq results + Bambu transcript counts), per-library transcript share of the six genes with
+  the smallest gene-level q-value; bound as a stacked, faceted `figure bar`.
+- **Header controls** on the length-vs-quality `scatter_xy`, the PCA `embedding`, the
+  depth-vs-complexity `scatter_xy`, both volcanoes and the `transcript_structure` tile.
+- **`show_histogram: true`** on every threshold `RangeSlider` (quality cutoff, both log CPM
+  floors, log2 mean expression, adjusted p-value, log2 fold change). The two distribution-axis
+  sliders (`bin`) keep the plain slider.
+- Links: `samples.sample_id` to `samtools_read_length_nx.sample` and `dexseq_usage.sample`.
+
+## Discrepancies
+- **NS-D14 (input not published)** Read length against quality as a per-read density cannot be
+  drawn: nanoseq publishes no per-read table (NanoPlot runs without `--raw`, pycoQC needs
+  `sequencing_summary.txt`, absent on this FASTQ-started run). The scatter stays one point per
+  library, without `density: true`. samtools stats `FFQ` is quality by cycle, not by read length.
+- **NS-D15 (check passed)** The recomputed N50 rung equals NanoStat's N50 for all six
+  libraries (919, 1961, 1257, 1326, 1400, 1402).
+- **NS-D16 (input not published)** No sashimi: nanoseq publishes no splice-junction table and the
+  megatest mirror holds no BAM. No `transcript_structure` data either: `bambu/extended_annotations.gtf`
+  is absent (quantification-only run), so the optional `gtf_transcripts` DCs skip and that tile
+  stays empty, as before. No genomic coordinates exist anywhere in the run's tables, so there is
+  no locus section.
+- **NS-D17** Facet order of the usage figure follows Plotly's order of appearance, not the
+  q-value ranking; the q-value is in each facet title.
+
+## What was run (2026-09-23)
+```
+uv run pytest -q depictio/tests/models/test_shipped_dashboard_yamls.py      # 853 passed, 1 xfailed
+uv run pytest -q depictio/tests/models/test_catalog.py                      # 99 passed
+uv run pytest -q depictio/tests/recipes/test_samtools_nx_ladder.py          # 2 passed
+python -m depictio.cli run --template nf-core/nanoseq/3.0.0 --data-root ... --dry-run   # 8/8
+.venv/bin/python -m depictio.cli run ... --project-name lot2-nanoseq        # 8/8, live
+```
+Live rows: samtools_read_length_nx 594, dexseq_usage 84, samtools_stats_sections 3 155,
+deseq2_results 208 722, dexseq_results 419, bambu_counts_transcript_long 415 356; the
+optional GTF pair skipped. Screenshots: `/tmp/claude-502/shots-nanoseq/` (7 tabs + tile shots,
+volcano MA and QQ views clicked live).

@@ -28,7 +28,8 @@ Data comes from the AWS megatest run `results-1e60482a2c4621234393a6eef8e9a10430
   tab with a sample, condition and library-preparation picker, and the template's links fan a
   pick there out to NanoStat, the samtools distributions, the melted Bambu counts, the
   sample-structure collections and the MultiQC panels. Each tab then adds a non-persistent
-  filter section on its own columns: a quality cutoff on read QC, a stats section and an axis
+  filter section on its own columns (every threshold slider draws the column's distribution
+  above it): a quality cutoff on read QC, a stats section and an axis
   range on the two distribution tabs, a biotype and an expression floor on quantification and
   isoforms, a direction and a mean-expression floor on the DE tab.
 - **Bambu's wide matrices are read long.** Bambu writes one row per feature with a column per
@@ -74,7 +75,14 @@ preparations. A bar of Bambu library sizes closes the tab.
 
 NanoStat's summary of the raw FASTQ, read straight from the report rather than through MultiQC,
 so it filters and cards like any other collection: mean and median read length, the spread and
-the longest read, a length-against-quality scatter of the six libraries and an N50 bar. Under
+the longest read, and a length-against-quality scatter of the six libraries with its axis and
+colour controls in the tile header. That scatter stays one point per library: nanoseq publishes
+no per-read table (NanoPlot runs without `--raw`, pycoQC needs a `sequencing_summary.txt`), so a
+read-level length-against-quality density cannot be drawn from this run. Under it, the Nx
+ladder: N1 to N99 per library, recomputed from the exact read-length histogram `samtools stats`
+keeps. Its N50 rung (marked) equals NanoStat's N50 for every library, and the rest of the ladder
+shows what a single N50 bar hid, whether a library's yield sits in a few long reads or in many
+reads of one length. Under
 it, the quality ladder: how many reads, what share of the library and how many megabases survive
 each Phred floor, as a profile with a Q10 marker, a grouped bar and a table. A collapsed
 `MultiQC read panels` section carries the eight FastQC panels and NanoStat's summary table.
@@ -105,21 +113,27 @@ Library size, genes detected, protein-coding share and the share the top 50 gene
 question the preparation filter exists for: do the libraries group by condition or by
 preparation. A PCA on log CPM over the 500 most variable genes (the way DESeq2's `plotPCA` does
 it), a depth-against-complexity scatter, and a Spearman correlation heatmap on the same values,
-which is the plot that catches a swapped label. Under them the gene counts themselves: the 100
+which is the plot that catches a swapped label. The PCA's colour-by and the scatter's axes sit
+in the tile headers, so regrouping by preparation is one click. Under them the gene counts themselves: the 100
 most variable genes as a row-standardised heatmap, the 50 highest-count genes for reference, a
 box of the per-library expression distribution and the full melted matrix.
 
 ### DE and usage
 
 DESeq2 on Bambu's gene counts: direction counts, effect size, the strongest adjusted p-value as
-a gauge, then volcano, MA, a differential-abundance barplot of the twenty largest effects and a
-QQ plot of the raw p-values. The adjusted p-value and log2 fold-change floors live in this tab's
+a gauge, then one tile with three views of the results switched from its header (volcano, MA
+against mean expression, QQ of the raw p-values) and a differential-abundance barplot of the
+twenty largest effects. The adjusted p-value and log2 fold-change floors live in this tab's
 own `Significance thresholds` section, next to the direction, biotype and expression controls,
 because `deseq2_results` is rendered here and nowhere else. The section below it is the per-library expression those statistics
 were computed from, which does follow the sample picker. Last, DEXSeq: whether one of a gene's
 transcripts is used more or less relative to its siblings, holding the gene's total expression
-constant. 419 features were testable and four clear the cut-off, so it gets one volcano and a
-table sized to its rows rather than the two large tiles the earlier build gave it.
+constant. 419 features were testable and four clear the cut-off, all isoforms of one gene
+(ENSG00000124570). The volcano offers a QQ view in its header (DEXSeq writes no mean intensity,
+so there is no MA view). Under it, the proportions DEXSeq tested, which its results table does
+not carry: each library's transcript shares of the six genes with the smallest gene-level
+q-value, recomputed from Bambu's transcript counts, one stacked bar per library and one panel per
+gene with its q-value in the title.
 
 ### Isoforms
 
@@ -129,7 +143,9 @@ transcript table. The isoform lane view underneath needs the exon coordinates, w
 `bambu/extended_annotations.gtf`, written whenever Bambu is allowed to extend the annotation
 rather than only quantify against it. This megatest was quantification-only, so the collection
 behind that tile is optional and the tile is empty here; a run with the file fills it with no
-change to the template.
+change to the template, gene picker in the tile header. A sashimi view is not offered: nanoseq
+publishes no splice-junction table (no `SJ.out.tab`, no junction BED), and the BAMs are not in
+the megatest mirror.
 
 ## Reproducing
 
