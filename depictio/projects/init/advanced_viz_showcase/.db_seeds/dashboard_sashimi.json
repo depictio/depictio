@@ -93,7 +93,9 @@
         "coverage_color": null,
         "coverage_log": false,
         "color_by": "annotation",
-        "max_arc_width": 4
+        "max_arc_width": 2,
+        "arc_width_by_support": false,
+        "arc_split": "annotation"
       },
       "wf_tag": "python/advanced_viz_demo"
     },

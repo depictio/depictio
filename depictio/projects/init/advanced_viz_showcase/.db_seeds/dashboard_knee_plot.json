@@ -1,19 +1,19 @@
 {
   "_id": {
-    "$oid": "646b0f3c1e4a2d7f8e5b8d29"
+    "$oid": "646b0f3c1e4a2d7f8e5b8d78"
   },
   "description": null,
   "flexible_metadata": null,
   "hash": null,
   "dashboard_id": {
-    "$oid": "646b0f3c1e4a2d7f8e5b8d29"
+    "$oid": "646b0f3c1e4a2d7f8e5b8d78"
   },
   "version": 1,
   "stored_metadata": [
     {
-      "index": "ups-text",
+      "index": "knee-text",
       "component_type": "text",
-      "title": "UpSet plot",
+      "title": "Knee plot",
       "workflow_tag": "",
       "data_collection_tag": "",
       "wf_id": {
@@ -26,88 +26,75 @@
       "last_updated": "2026-05-12T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
-      "section": "Set overlap",
+      "section": "Barcode rank",
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "The readable alternative to a five-way Venn diagram: bars count the features in each intersection, and the dot matrix underneath names which sets the intersection belongs to. Sorting by cardinality puts the largest overlaps first; sorting by degree groups the exclusives together.\n",
+      "body": "Rank barcodes by UMI count and the curve drops in two regimes: a gently declining plateau over the called cells, then a steep power-law fall into the empty-droplet background. The dotted cutoff line marks where sample_A and sample_B's `is_cell` flag switches off; sample_B calls fewer, noisier cells than sample_A. Log axes and the cutoff line toggle live in the Settings \u2699 popover.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
-      "index": "ups-upset",
+      "index": "knee-curve",
       "component_type": "advanced_viz",
-      "title": "UpSet plot",
+      "title": "Barcode-rank curve",
       "workflow_tag": "advanced_viz_demo",
-      "data_collection_tag": "upset_demo",
+      "data_collection_tag": "knee_plot_demo",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8d01"
       },
       "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d28"
+        "$oid": "646b0f3c1e4a2d7f8e5b8d89"
       },
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Synthetic set-membership: 400 features \u00d7 5 contrasts (0/1 membership indicators)",
-        "data_collection_tag": "upset_demo",
+        "description": "Two barcode-rank curves: a called-cell plateau followed by a power-law drop into the empty-droplet background",
+        "data_collection_tag": "knee_plot_demo",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8d28"
+          "$oid": "646b0f3c1e4a2d7f8e5b8d89"
         }
       },
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "description": "Set-intersection visualisation (alternative to Venn diagrams). Server-side compute via packages/plotly-upset; Settings \u2699 tunes Sort / Min size / Colour / set-size bars. Cached by (DC, params).",
+      "description": "UMI count against barcode rank, log-log, one line per sample. The cell-calling cutoff is read straight from the is_cell column. Log axes and the cutoff toggle live in the Settings \u2699 popover.",
       "title_size": "sm",
       "title_align": "left",
-      "section": "Set overlap",
-      "viz_kind": "upset_plot",
+      "section": "Barcode rank",
+      "viz_kind": "knee_plot",
       "config": {
-        "viz_kind": "upset_plot",
-        "matrix_wf_id": "646b0f3c1e4a2d7f8e5b8d01",
-        "matrix_dc_id": "646b0f3c1e4a2d7f8e5b8d28",
-        "set_columns": [
-          "contrastA",
-          "contrastB",
-          "contrastC",
-          "contrastD",
-          "contrastE"
-        ],
-        "set_columns_pattern": null,
-        "sort_by": "cardinality",
-        "sort_order": "descending",
-        "min_size": 1,
-        "max_degree": null,
-        "show_set_sizes": true,
-        "color_intersections_by": "degree",
-        "set_colors": null,
-        "default_annotation_cols": null,
-        "show_values": false,
-        "show_annotations": true
+        "viz_kind": "knee_plot",
+        "sample_col": "sample",
+        "rank_col": "rank",
+        "umi_count_col": "umi_count",
+        "is_cell_col": "is_cell",
+        "log_x": true,
+        "log_y": true,
+        "show_cutoff": true
       },
       "wf_tag": "python/advanced_viz_demo"
     },
     {
-      "index": "ups-f-group",
+      "index": "knee-f-sample",
       "component_type": "interactive",
-      "title": "Feature group",
+      "title": "Sample",
       "workflow_tag": "advanced_viz_demo",
-      "data_collection_tag": "upset_demo",
+      "data_collection_tag": "knee_plot_demo",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8d01"
       },
       "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d28"
+        "$oid": "646b0f3c1e4a2d7f8e5b8d89"
       },
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Synthetic set-membership: 400 features \u00d7 5 contrasts (0/1 membership indicators)",
-        "data_collection_tag": "upset_demo",
+        "description": "Two barcode-rank curves: a called-cell plateau followed by a power-law drop into the empty-droplet background",
+        "data_collection_tag": "knee_plot_demo",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8d28"
+          "$oid": "646b0f3c1e4a2d7f8e5b8d89"
         }
       },
       "cols_json": {},
@@ -115,19 +102,19 @@
       "last_updated": "2026-05-12T00:00:00.000000",
       "title_size": "md",
       "title_align": "left",
-      "section": "Set scope",
+      "section": "Curve scope",
       "interactive_component_type": "MultiSelect",
-      "column_name": "feature_group",
+      "column_name": "sample",
       "column_type": "object",
       "value": null,
       "default_state": null,
       "filter_expr": null,
       "placement": "left",
-      "group": "Set filters",
+      "group": "Curve filters",
       "timescale": null,
       "show_marks": null,
-      "custom_color": "#F68B33",
-      "icon_name": "mdi:form-select",
+      "custom_color": "#F76707",
+      "icon_name": "mdi:test-tube",
       "wf_tag": "python/advanced_viz_demo"
     }
   ],
@@ -137,7 +124,7 @@
   "stored_edit_dashboard_mode_button": [],
   "left_panel_layout_data": [
     {
-      "i": "box-ups-f-group",
+      "i": "box-knee-f-sample",
       "x": 0,
       "y": 0,
       "w": 1,
@@ -147,11 +134,11 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-ups-text",
+      "i": "box-knee-text",
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 1,
+      "h": 2,
       "static": false,
       "resizeHandles": [
         "se",
@@ -162,9 +149,9 @@
       ]
     },
     {
-      "i": "box-ups-upset",
+      "i": "box-knee-curve",
       "x": 0,
-      "y": 1,
+      "y": 2,
       "w": 8,
       "h": 8,
       "static": false,
@@ -186,10 +173,10 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "UpSet plot",
-  "subtitle": "Alternative to Venn diagrams for >3 sets. Server-side compute via packages/plotly-upset; cached by (DC, params, filters).",
-  "icon": "mdi:set-merge",
-  "icon_color": "yellow",
+  "title": "Knee plot",
+  "subtitle": "Barcode-rank curves for 2 synthetic single-cell libraries: a called-cell plateau followed by a power-law drop into the empty-droplet background.",
+  "icon": "mdi:chart-line-variant",
+  "icon_color": "orange",
   "icon_variant": "filled",
   "workflow_system": "python",
   "notes_content": "",
@@ -221,17 +208,17 @@
   "parent_dashboard_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8d00"
   },
-  "tab_order": 15,
+  "tab_order": 36,
   "main_tab_name": null,
-  "tab_icon": "mdi:set-merge",
-  "tab_icon_color": "yellow",
+  "tab_icon": "mdi:chart-line-variant",
+  "tab_icon_color": "orange",
   "parent_dashboard_title": null,
   "filter_sections": [
     {
-      "name": "Set scope",
+      "name": "Curve scope",
       "icon": "mdi:filter-variant",
-      "color": "yellow",
-      "description": "Restricts which features are counted into the intersections",
+      "color": "orange",
+      "description": "Restricts which sample curves are drawn",
       "collapsed": false,
       "persistent": false,
       "pin": "top"
@@ -239,10 +226,10 @@
   ],
   "grid_sections": [
     {
-      "name": "Set overlap",
-      "icon": "mdi:set-merge",
-      "color": "yellow",
-      "description": "Intersections between feature sets, ranked by size",
+      "name": "Barcode rank",
+      "icon": "mdi:chart-line",
+      "color": "orange",
+      "description": "UMI count against barcode rank, log-log, with the cell-calling cutoff",
       "collapsed": false,
       "persistent": false,
       "pin": "top"

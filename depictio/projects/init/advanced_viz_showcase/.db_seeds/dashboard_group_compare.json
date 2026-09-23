@@ -1,0 +1,321 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d7b"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d7b"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "gcp-text",
+      "component_type": "text",
+      "title": "Group comparison",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Pick two groups",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "The collection is a wide matrix: one row per cell, one column per gene. Box-select cells on the scatter and save the selection as a group from the Analysis panel, twice, then pick the two groups on the right and press Compare. The test runs as a background job and its result is cached, so the same comparison comes back instantly. With no saved group the two pickers fall back to the cluster labels the matrix shipped with. Six genes were planted as cluster markers, so a comparison between two clusters should return exactly those four that belong to them.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gcp-scatter",
+      "component_type": "advanced_viz",
+      "title": "Cells by two marker genes",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "group_compare_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d8b"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "A 600 cell by 60 gene matrix in 3 clusters, with two planted marker genes per cluster: the wide shape a two-group differential test reads",
+        "data_collection_tag": "group_compare_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d8b"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "One point per cell, a cluster_1 marker against a cluster_2 marker, coloured by the cluster label. Box-select points and save them as a group to compare something other than the shipped labels.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Pick two groups",
+      "viz_kind": "scatter_xy",
+      "config": {
+        "viz_kind": "scatter_xy",
+        "x_col": "gene_01",
+        "y_col": "gene_03",
+        "label_col": "cell_id",
+        "color_col": "cluster",
+        "size_col": null,
+        "log_x": false,
+        "log_y": false,
+        "x_title": "gene_01 (cluster_1 marker)",
+        "y_title": "gene_03 (cluster_2 marker)",
+        "reference_line": "none",
+        "reference_value": null,
+        "min_size": 6.0,
+        "max_size": 6.0,
+        "marker_size": 7.0,
+        "opacity": 0.7,
+        "marker_outline": true,
+        "top_n_labels": 0,
+        "color_scale": "Viridis",
+        "legend_pos": "right",
+        "selection_enabled": true,
+        "selection_column": "cell_id"
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gcp-volcano",
+      "component_type": "advanced_viz",
+      "title": "Group A against group B",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "group_compare_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d8b"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "A 600 cell by 60 gene matrix in 3 clusters, with two planted marker genes per cluster: the wide shape a two-group differential test reads",
+        "data_collection_tag": "group_compare_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d8b"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Every gene tested between the two picked groups, drawn as effect size against adjusted significance. The test, the log1p transform, the two thresholds and the label budget live in the Settings popover.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Differential test",
+      "viz_kind": "group_compare",
+      "config": {
+        "viz_kind": "group_compare",
+        "index_col": "cell_id",
+        "group_col": "cluster",
+        "test": "wilcoxon",
+        "log_transform": true,
+        "max_features": 2000,
+        "min_observations": 3,
+        "fdr_threshold": 0.05,
+        "log2fc_threshold": 1.0,
+        "top_n_labels": 10
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gcp-f-cluster",
+      "component_type": "interactive",
+      "title": "Cluster",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "group_compare_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d8b"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "A 600 cell by 60 gene matrix in 3 clusters, with two planted marker genes per cluster: the wide shape a two-group differential test reads",
+        "data_collection_tag": "group_compare_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d8b"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Cell scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "cluster",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Cell filters",
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:shape-outline",
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-gcp-f-cluster",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-gcp-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-gcp-scatter",
+      "x": 0,
+      "y": 2,
+      "w": 3,
+      "h": 10,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-gcp-volcano",
+      "x": 3,
+      "y": 2,
+      "w": 5,
+      "h": 10,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Group comparison",
+  "subtitle": "Two groups of cells compared gene by gene on demand: a rank-sum test per feature, a volcano, and the ranked markers behind it",
+  "icon": "mdi:scale-balance",
+  "icon_color": "grape",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 38,
+  "main_tab_name": null,
+  "tab_icon": "mdi:scale-balance",
+  "tab_icon_color": "grape",
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Cell scope",
+      "icon": "mdi:filter-variant",
+      "color": "grape",
+      "description": "Restricts which cells enter the comparison, by cluster",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Pick two groups",
+      "icon": "mdi:chart-scatter-plot",
+      "color": "grape",
+      "description": "Where a selection becomes a group: lasso cells, save them, compare",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Differential test",
+      "icon": "mdi:scale-balance",
+      "color": "grape",
+      "description": "A per-feature test between the two groups, run on the server and cached",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
+}

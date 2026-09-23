@@ -57,7 +57,7 @@ components:
     workflow_tag: advanced_viz_demo
     data_collection_tag: 'damage_profile_demo'
     title: 'Misincorporation profile'
-    description: '5-prime and 3-prime substitution frequency by position, 2 samples, C>T and G>A highlighted. Ends, max position and highlighted substitutions live in the Settings ⚙ popover.'
+    description: '5-prime and 3-prime substitution frequency by position, 2 samples, C-to-T and G-to-A highlighted. Ends, max position and highlighted substitutions live in the Settings ⚙ popover.'
     section: 'Misincorporation profile'
     viz_kind: 'damage_profile'
     config:

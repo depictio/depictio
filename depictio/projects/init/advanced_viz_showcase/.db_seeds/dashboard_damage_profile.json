@@ -1,19 +1,19 @@
 {
   "_id": {
-    "$oid": "646b0f3c1e4a2d7f8e5b8d29"
+    "$oid": "646b0f3c1e4a2d7f8e5b8d79"
   },
   "description": null,
   "flexible_metadata": null,
   "hash": null,
   "dashboard_id": {
-    "$oid": "646b0f3c1e4a2d7f8e5b8d29"
+    "$oid": "646b0f3c1e4a2d7f8e5b8d79"
   },
   "version": 1,
   "stored_metadata": [
     {
-      "index": "ups-text",
+      "index": "dmg-text",
       "component_type": "text",
-      "title": "UpSet plot",
+      "title": "Damage profile",
       "workflow_tag": "",
       "data_collection_tag": "",
       "wf_id": {
@@ -26,88 +26,79 @@
       "last_updated": "2026-05-12T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
-      "section": "Set overlap",
+      "section": "Misincorporation profile",
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "The readable alternative to a five-way Venn diagram: bars count the features in each intersection, and the dot matrix underneath names which sets the intersection belongs to. Sorting by cardinality puts the largest overlaps first; sorting by degree groups the exclusives together.\n",
+      "body": "The classic aDNA deamination signature: C>T rises toward the 5' read end and G>A rises toward the 3' end, both starting near 0.3 at position 1 and decaying to background within about 10 bp. Every other substitution class sits flat near background throughout, which is what the highlighted lines are picked out against. Which ends to show, how far to draw, and which substitutions to highlight all live in the Settings \u2699 popover.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
-      "index": "ups-upset",
+      "index": "dmg-curve",
       "component_type": "advanced_viz",
-      "title": "UpSet plot",
+      "title": "Misincorporation profile",
       "workflow_tag": "advanced_viz_demo",
-      "data_collection_tag": "upset_demo",
+      "data_collection_tag": "damage_profile_demo",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8d01"
       },
       "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d28"
+        "$oid": "646b0f3c1e4a2d7f8e5b8d8a"
       },
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Synthetic set-membership: 400 features \u00d7 5 contrasts (0/1 membership indicators)",
-        "data_collection_tag": "upset_demo",
+        "description": "Ancient-DNA misincorporation profile for 2 samples: C-to-T at the 5' end and G-to-A at the 3' end, both decaying from ~0.3 at position 1",
+        "data_collection_tag": "damage_profile_demo",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8d28"
+          "$oid": "646b0f3c1e4a2d7f8e5b8d8a"
         }
       },
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "description": "Set-intersection visualisation (alternative to Venn diagrams). Server-side compute via packages/plotly-upset; Settings \u2699 tunes Sort / Min size / Colour / set-size bars. Cached by (DC, params).",
+      "description": "5-prime and 3-prime substitution frequency by position, 2 samples, C-to-T and G-to-A highlighted. Ends, max position and highlighted substitutions live in the Settings \u2699 popover.",
       "title_size": "sm",
       "title_align": "left",
-      "section": "Set overlap",
-      "viz_kind": "upset_plot",
+      "section": "Misincorporation profile",
+      "viz_kind": "damage_profile",
       "config": {
-        "viz_kind": "upset_plot",
-        "matrix_wf_id": "646b0f3c1e4a2d7f8e5b8d01",
-        "matrix_dc_id": "646b0f3c1e4a2d7f8e5b8d28",
-        "set_columns": [
-          "contrastA",
-          "contrastB",
-          "contrastC",
-          "contrastD",
-          "contrastE"
-        ],
-        "set_columns_pattern": null,
-        "sort_by": "cardinality",
-        "sort_order": "descending",
-        "min_size": 1,
-        "max_degree": null,
-        "show_set_sizes": true,
-        "color_intersections_by": "degree",
-        "set_colors": null,
-        "default_annotation_cols": null,
-        "show_values": false,
-        "show_annotations": true
+        "viz_kind": "damage_profile",
+        "sample_col": "sample",
+        "end_col": "end",
+        "position_col": "position",
+        "base_change_col": "base_change",
+        "frequency_col": "frequency",
+        "ends": "both",
+        "max_position": 25,
+        "highlight": [
+          "C>T",
+          "G>A"
+        ]
       },
       "wf_tag": "python/advanced_viz_demo"
     },
     {
-      "index": "ups-f-group",
+      "index": "dmg-f-sample",
       "component_type": "interactive",
-      "title": "Feature group",
+      "title": "Sample",
       "workflow_tag": "advanced_viz_demo",
-      "data_collection_tag": "upset_demo",
+      "data_collection_tag": "damage_profile_demo",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8d01"
       },
       "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d28"
+        "$oid": "646b0f3c1e4a2d7f8e5b8d8a"
       },
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Synthetic set-membership: 400 features \u00d7 5 contrasts (0/1 membership indicators)",
-        "data_collection_tag": "upset_demo",
+        "description": "Ancient-DNA misincorporation profile for 2 samples: C-to-T at the 5' end and G-to-A at the 3' end, both decaying from ~0.3 at position 1",
+        "data_collection_tag": "damage_profile_demo",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8d28"
+          "$oid": "646b0f3c1e4a2d7f8e5b8d8a"
         }
       },
       "cols_json": {},
@@ -115,19 +106,19 @@
       "last_updated": "2026-05-12T00:00:00.000000",
       "title_size": "md",
       "title_align": "left",
-      "section": "Set scope",
+      "section": "Profile scope",
       "interactive_component_type": "MultiSelect",
-      "column_name": "feature_group",
+      "column_name": "sample",
       "column_type": "object",
       "value": null,
       "default_state": null,
       "filter_expr": null,
       "placement": "left",
-      "group": "Set filters",
+      "group": "Profile filters",
       "timescale": null,
       "show_marks": null,
-      "custom_color": "#F68B33",
-      "icon_name": "mdi:form-select",
+      "custom_color": "#E03131",
+      "icon_name": "mdi:test-tube",
       "wf_tag": "python/advanced_viz_demo"
     }
   ],
@@ -137,7 +128,7 @@
   "stored_edit_dashboard_mode_button": [],
   "left_panel_layout_data": [
     {
-      "i": "box-ups-f-group",
+      "i": "box-dmg-f-sample",
       "x": 0,
       "y": 0,
       "w": 1,
@@ -147,11 +138,11 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-ups-text",
+      "i": "box-dmg-text",
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 1,
+      "h": 2,
       "static": false,
       "resizeHandles": [
         "se",
@@ -162,9 +153,9 @@
       ]
     },
     {
-      "i": "box-ups-upset",
+      "i": "box-dmg-curve",
       "x": 0,
-      "y": 1,
+      "y": 2,
       "w": 8,
       "h": 8,
       "static": false,
@@ -186,10 +177,10 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "UpSet plot",
-  "subtitle": "Alternative to Venn diagrams for >3 sets. Server-side compute via packages/plotly-upset; cached by (DC, params, filters).",
-  "icon": "mdi:set-merge",
-  "icon_color": "yellow",
+  "title": "Damage profile",
+  "subtitle": "Ancient-DNA misincorporation frequency for 2 synthetic samples: C>T enriched at the 5-prime end, G>A at the 3-prime end, both decaying from ~0.3 at position 1.",
+  "icon": "mdi:dna",
+  "icon_color": "red",
   "icon_variant": "filled",
   "workflow_system": "python",
   "notes_content": "",
@@ -221,17 +212,17 @@
   "parent_dashboard_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8d00"
   },
-  "tab_order": 15,
+  "tab_order": 37,
   "main_tab_name": null,
-  "tab_icon": "mdi:set-merge",
-  "tab_icon_color": "yellow",
+  "tab_icon": "mdi:dna",
+  "tab_icon_color": "red",
   "parent_dashboard_title": null,
   "filter_sections": [
     {
-      "name": "Set scope",
+      "name": "Profile scope",
       "icon": "mdi:filter-variant",
-      "color": "yellow",
-      "description": "Restricts which features are counted into the intersections",
+      "color": "red",
+      "description": "Restricts which sample curves are drawn",
       "collapsed": false,
       "persistent": false,
       "pin": "top"
@@ -239,10 +230,10 @@
   ],
   "grid_sections": [
     {
-      "name": "Set overlap",
-      "icon": "mdi:set-merge",
-      "color": "yellow",
-      "description": "Intersections between feature sets, ranked by size",
+      "name": "Misincorporation profile",
+      "icon": "mdi:dna",
+      "color": "red",
+      "description": "Substitution frequency by distance from the read end, 5-prime and 3-prime panels",
       "collapsed": false,
       "persistent": false,
       "pin": "top"

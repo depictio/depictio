@@ -69,6 +69,7 @@
         "position_col": "position",
         "category_col": "category",
         "effect_col": "effect",
+        "label_col": null,
         "max_subplot_genes": 6,
         "point_size": 8,
         "stem_width": 1.2,

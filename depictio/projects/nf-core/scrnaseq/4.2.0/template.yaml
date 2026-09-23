@@ -571,24 +571,6 @@ workflows:
               "feature": "Gene symbol Cell Ranger selected for the PCA"
               "source_path": "File the row came from; the sample name is derived from it"
 
-      - data_collection_tag: "cellranger_hvg_dispersion"
-        description: "Mean expression against normalised dispersion for every gene Cell Ranger measured, flagged with whether it kept the gene for the PCA"
-        config:
-          type: "Table"
-          metatype: "Aggregate"
-          source: "transformed"
-          transform:
-            recipe: "cellranger/hvg_dispersion.py"
-          dc_specific_properties:
-            format: "TSV"
-            columns_description:
-              "sample": "Sample the PCA was computed on"
-              "gene": "Gene symbol"
-              "normalized_dispersion": "Cell Ranger's normalised dispersion; empty for a gene it could not normalise"
-              "mean_expression": "Mean log1p(CP10k) over every called cell, undetected cells counted as 0"
-              "detection_rate": "Share of called cells with at least 1 UMI of this gene"
-              "selection": "selected or not selected, whether Cell Ranger ran the PCA on this gene"
-
       # ----------------------------------------------------------------
       # Cluster marker genes (raw wide table).
       # ----------------------------------------------------------------
@@ -691,6 +673,27 @@ workflows:
               "feature_name": "Gene symbol"
               "feature_type": "Feature type (Gene Expression)"
               "source_path": "File the row came from; the sample name is derived from it"
+
+      # cellranger_hvg_dispersion reads cellranger_filtered_matrix_raw and
+      # cellranger_filtered_features_raw through dc_ref, so it is declared after
+      # them: dc_ref declaration order is the processing order.
+      - data_collection_tag: "cellranger_hvg_dispersion"
+        description: "Mean expression against normalised dispersion for every gene Cell Ranger measured, flagged with whether it kept the gene for the PCA"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cellranger/hvg_dispersion.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the PCA was computed on"
+              "gene": "Gene symbol"
+              "normalized_dispersion": "Cell Ranger's normalised dispersion; empty for a gene it could not normalise"
+              "mean_expression": "Mean log1p(CP10k) over every called cell, undetected cells counted as 0"
+              "detection_rate": "Share of called cells with at least 1 UMI of this gene"
+              "selection": "selected or not selected, whether Cell Ranger ran the PCA on this gene"
 
       - data_collection_tag: "cellranger_filtered_barcode_index_raw"
         description: "Filtered feature-barcode matrix's barcode list WITH row index, row position == matrix barcode_idx (input of cellranger_cell_qc, cellranger_marker_expression; distinct from cellranger_filtered_barcodes_raw, which cellranger_barcode_rank scans without a row index)"
