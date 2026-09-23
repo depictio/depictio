@@ -50,16 +50,19 @@ mapping.
   the compartment, insulation and domain tracks and both distance curves at
   once. This run has one sample, so the filter has one value today; the links
   are ready for a cohort without any change.
-- **Every tab that has coordinates has a chromosome filter.** Project links
-  carry the sample, not the chromosome, so each coordinate collection on a tab
-  gets its own `Select` on its chromosome column, grouped in one tab-local
-  filter section.
+- **One region across collections.** The Contact maps tab is a locus section:
+  a `genome_view` on the TAD domains is the navigator, and three `region` links
+  in `template.yaml` rename the chromosome and position it emits onto the
+  contact matrix (`chrom1` / `start1`), the insulation track and the
+  compartment track. The other coordinate tabs keep a chromosome `Select` per
+  collection in their tab-local filter section.
 - **Resolution and window are filters, not fixed choices.** The run computed
   compartments at two resolutions and insulation at two others (with three
   window sizes each), so those tabs carry local sliders rather than picking one
-  for the whole dashboard. The contact matrix and P(s) are the exception: both
-  keep only the finest resolution the run dumped, because a matrix or a curve
-  at two bin sizes is not drawn on the same axes.
+  for the whole dashboard. The contact matrix keeps every resolution the run
+  dumped (500 kb and 1 Mb) as partitions of one table and reads the one that
+  fits the visible span; only P(s) keeps the finest resolution alone, because
+  a curve at two bin sizes is not drawn on the same axes.
 - **Catalog provenance.** Nearly every tile carries a `use:` catalog
   reference: `hicpro/*` for the funnel, `cooler/*` for the contact matrix,
   `cooltools/*` for P(s), compartments, insulation and domains,
@@ -134,11 +137,11 @@ observed, not the non-zero pixels the sparse dump wrote, which is what keeps
 the tail from flattening artificially. One curve per chromosome plus the
 pooled genome-wide curve, over 40 log-spaced distance bins.
 
-Under it, the same curve differentiated in log-log space. A fractal globule
+The tile carries its own derivative panel (`profile` `derivative: true`): the
+local slope d log P / d log s under the curves, on its own y axis because a
+slope near -1 and a probability near 0.1 share no scale. A fractal globule
 sits near -1, an equilibrium globule falls to -1.5 and steeper, and a genome
-whose loop extrusion has been removed flattens out. It is its own tile rather
-than a second series because a slope near -1 and a probability near 0.1 share
-no scale.
+whose loop extrusion has been removed flattens out.
 
 `The published curve`, collapsed, keeps hicexplorer's `hicPlotDistVsCounts`
 output as the run wrote it, for comparison: 13 points, pooled, from the 250 kb
@@ -151,22 +154,35 @@ matrix.
 `Matrix at a glance` carries the balanced contact value, the insulation score,
 the E1 spread and the A/B bin split.
 
-`Genome architecture` is the binned, ICE-balanced intra-chromosomal contact
-matrix `cooler/contact_matrix.py` builds by joining the sparse `cooler dump`
-triplet to its bins, at the finest resolution the run dumped (500 kb here).
-Trans contacts are dropped: a whole-genome matrix is dominated by them, and
-they would swamp the per-chromosome checkerboard the compartments are read out
-of.
+`Genome architecture` is a locus section: four collections on one genomic
+axis, opening on chr2:65-85 Mb (20 Mb around the HoxD cluster, mm10), where the
+mESC domains, the insulation dips and an A/B switch all fall inside the window.
 
-Stacked underneath it, on a chromosome-aware locus axis, sit the two 1D tracks
-derived from the same matrix: the insulation score, whose dips are TAD
-boundaries, and the first eigenvector, whose sign is the A/B compartment. This
-is the layout pyGenomeTracks and FAN-C use, and it is why they share a section:
-brushing a region on either track emits a chromosome and position filter the
-other follows.
+1. The navigator is the TAD domain track (`genome_view` on `tad_domains`, one
+   rectangle per domain coloured by the insulation window it was called at,
+   over the mm10 gene lane). Its header carries the locus field (a region or a
+   gene symbol); a brush on its axis does the same. Either one emits a
+   chromosome and position filter, and the `region` links carry it to the
+   three tiles below.
+2. The contact triangle is the binned, ICE-balanced intra-chromosomal matrix
+   `cooler/contact_matrix.py` builds by joining the sparse `cooler dump`
+   triplet to its bins. Every resolution the run dumped (500 kb and 1 Mb) is a
+   partition on the `resolution` column, and the tile reads the one that fits
+   the span, so zooming re-bins it. Trans contacts are dropped: a whole-genome
+   matrix is dominated by them. In triangle mode x is genomic position on the
+   same scale as the navigator, and y is the separation between the two bins.
+3. The insulation score, one line per window, whose dips are the boundaries
+   the domains above are cut at.
+4. The first eigenvector, one line per eigs-cis resolution, whose sign is the
+   A/B compartment.
 
-`Plotly fallback tracks`, collapsed, carries the same two tracks on the Plotly
-coverage renderer, one chromosome at a time, smoothed.
+The two 1D tracks are single `coverage_track` tiles with a `track | locus`
+switch in their header rather than a Plotly tile and a GenomeSpy tile on the
+same collection. This is the pyGenomeTracks / gghic layout. Tab-local filters
+choose which calls each track draws: domain window, insulation window,
+compartment resolution. There is no sidebar chromosome filter on this tab: the
+locus field is the section's chromosome, and a sidebar chromosome would not
+travel the region links.
 
 ---
 
@@ -181,8 +197,9 @@ gene-dense, B negative), and its zero-crossings are compartment boundaries.
 The recipe stores that sign as a `compartment` column of its own, so a reader
 can filter to one compartment and colour by it instead of re-deriving the
 threshold in every tile; blacklisted bins carry no value and appear in
-neither. The locus track draws it over the bundled mm10 gene lane; the Plotly
-track below reads one chromosome at a time.
+neither. One tile draws it: the locus view (default) puts E1 over the bundled
+mm10 gene lane coloured by compartment, and its header switch flips to the
+smoothed Plotly line, one chromosome at a time.
 
 `Compartment table`, collapsed, holds every bin's weight, its compartment call
 and its three eigenvectors. The pinned `Reference tables` section, on every
@@ -214,10 +231,14 @@ maximum, with a median domain of 160 kb at 20 kb resolution and a 300 kb
 window.
 
 The domains are drawn as rectangles on the genome axis over the mm10 gene
-lane, with the same intervals on the Plotly renderer underneath.
+lane, coloured by the insulation window they were called at. A brush on that
+track moves the insulation score below through the same region link the
+Contact maps tab uses.
 
 `Insulation score` is `cooltools/insulation.py`'s per-bin log2 insulation
-score, on the same axis as the domains and then one chromosome at a time. The
+score, one line per window, clamped to the region brushed or typed on the
+domains above (track view, default; the header switch flips to the GenomeSpy
+locus view). The
 run scanned two resolutions (20 kb / 40 kb) with three window sizes each, and
 the two files use *different* window-size suffixes at the two resolutions
 (300 kb/500 kb/1 Mb vs 600 kb/1 Mb/2 Mb); the recipe discovers which windows

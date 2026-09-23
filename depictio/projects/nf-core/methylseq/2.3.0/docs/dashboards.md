@@ -108,6 +108,12 @@ false-positive rate. On this megatest every library sits between 98.6 % and 99.2
 spread, the CpG-call count per library, the CHH percentage as the conversion warning, and the
 total cytosines seen.
 
+`Library QC profile` puts eight run-summary metrics on parallel axes, one line per library
+coloured by cell line: reads, mapping efficiency, duplication, CpG calls, methylation in each
+context and the conversion rate. A library that crosses the others on the CHH axis is a
+conversion problem; one that crosses them on the alignment and duplication axes together is a
+library preparation problem. Brushing an axis keeps only the libraries inside it.
+
 ---
 
 ## Alignment and duplication
@@ -164,6 +170,9 @@ narrowed by the context selector, because it is the curve the extraction decisio
 and read as filters on the left rather than as six separate tiles. The CHH panel is the
 read-position view of bisulfite conversion: a CHH curve that climbs at the 5' end says the first
 bases of the read are not converting, which the run-level conversion percentage averages away.
+Under the filtered profile, a faceted line figure draws the same six tables the way Bismark's own
+report does, CpG, CHG and CHH side by side with read 1 above read 2, so the three contexts can
+be compared without touching a filter.
 
 ---
 
@@ -180,9 +189,17 @@ unmethylated islands and promoters, a taller one at 100 % for the methylated bul
 that has lost the bimodality, or whose 0 % peak has drifted upward, is reporting incomplete
 conversion or a depth too low for a site call, long before any mean does.
 
-`Methylation along the genome` draws the binned windows twice: as a faceted Plotly coverage
-track, and as intervals on GenomeSpy's locus scale with the hg38 gene lane underneath, where a
-brushed region narrows the rest of the tab. The windows kept are those with at least twenty CpGs
+`Methylation along the genome` is a locus section: one navigator and the tracks that follow
+its region. The navigator draws the adjusted significance of the group difference per 10 kb
+window on GenomeSpy's locus scale over the hg38 gene lane, with a locus field (a region or a
+gene symbol) in its header; windows above padj 0.05 are always drawn, the rest are sampled at
+genome scale. It opens on chr14:35.5-37.5 Mb around NKX2-1, where the only window of this run
+that passes padj 0.05 sits: at 36.49 Mb the three MShef11 low-oxygen libraries drop to about
+55 % while the four MShef4 libraries stay near 80 %. Under it, the binned windows per library
+(one lane each) and the difference itself (MShef11 minus MShef4, coloured by the call) follow
+the region, every window of it, the lanes through a region link from the group-comparison
+windows to the binned windows. The fourth card of the glance strip reads the binned windows
+too, so it reports the median of the region on screen. The windows kept are those with at least twenty CpGs
 in **every** library, strided evenly across the genome; a uniform stride is the honest decimation
 for a genome-wide screen, because keeping the CpG-densest windows instead would quietly turn
 every downstream panel into a CpG-island panel.
@@ -191,7 +208,8 @@ every downstream panel into a CpG-island panel.
 PCA over it, the pairwise correlation between libraries, and the 150 windows whose methylation
 varies most across the cohort. What you want to see is the design in the first two and nothing
 else; a library that lands with the wrong block in all three is a swap, a mislabelled sheet, or a
-conversion failure that flattened its methylome.
+conversion failure that flattened its methylome. The PCA's axis and colour pickers sit in the
+tile header.
 
 ---
 
@@ -200,7 +218,8 @@ conversion failure that flattened its methylome.
 Every 10 kb window tested between the cohort's two arms with a pooled t-test on the arcsine
 square-root transform of its methylation proportion, then Benjamini-Hochberg corrected. The
 volcano and the Manhattan read the same table, the first by effect size against significance and
-the second along the genome.
+the second along the genome. The volcano's header switches to a QQ view of the window p-values,
+which is where an inflated or deflated test shows before any single window does.
 
 The unit is a window, not a CpG and not a called DMR: a significant window is a region worth
 looking at, not one a caller has delimited. nf-core/methylseq ships no differential-methylation

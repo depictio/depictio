@@ -501,3 +501,100 @@ files would unlock, and that remains out of scope.
 route segment, escaped dot, anchored end). No dashboard change: the main tab already opens
 with the pinned four-card `Run at a glance` strip and carries the tab-local `Funnel scope`.
 `test_shipped_dashboard_yamls.py -k hic` passes.
+
+## 2026-09-23 wave 2b: locus section, one tile per track, P(s) derivative
+
+### What changed
+
+- `template.yaml`: the contact matrix now keeps every resolution the run dumped (500 kb and
+  1 Mb) as partitions on `resolution` (catalog recipe change from wave 2a); the header
+  comment, the `contact_matrix` description and its `resolution` column description no
+  longer say "finest resolution only". Three `region` links added, all from `tad_domains`
+  (`source_column: chrom`): to `contact_matrix` (`chrom1` / `start1`), `tad_insulation` and
+  `compartment_eigenvector` (`chrom` / `start`).
+- Contact maps tab is now a locus section (`Genome architecture`): navigator `genome_view`
+  on `tad_domains` (`controls_placement: header`, `mark: rect`, coloured by window,
+  `annotation: mm10`, `default_region: chr2:65,000,000-85,000,000`, 20 Mb around HoxD),
+  then the `contact_map` in `display: triangle` with `resolution_col` (header controls),
+  then insulation and E1 as single `coverage_track` tiles with `views: [track, locus]`
+  (header). The `Plotly fallback tracks` section and the three per-collection chromosome
+  Selects are gone; tab-local filters are domain window, insulation window and
+  compartment resolution.
+- Compartments: the genome_view + coverage_track pair on `compartment_eigenvector` is one
+  `coverage_track` (`view: locus`, `views: [locus, track]`, `locus_annotation: mm10`,
+  coloured by compartment, header).
+- TADs and boundaries: `domain_size_track` (coverage_track on `tad_domains`) removed, the
+  domain `genome_view` gets header controls, window colour and the same `default_region`;
+  the insulation pair is one `coverage_track` (`view: locus`, `views: [locus, track]`).
+- Library shape: `ps_curve` + separate `ps_slope` tile become one `profile` with
+  `derivative: true`, `derivative_window: 3`; the slope intro text is folded into the P(s)
+  intro.
+- `test_no_double_track_binding` no longer lists hic (5 hits fixed).
+
+### Discrepancies
+
+- HC-D16 (fixed later that day, see the follow-up below): `coverage_track` with a numeric
+  `sample_col` (window, resolution) crashed the tile: the header `Samples` MultiSelect is fed numbers and Mantine calls
+  `item.value.toLowerCase` (CoverageTrackRenderer.tsx, `data={samples.map(s => ({value: s,
+  label: s}))}`; needs `String(s)`). The tracks therefore use `sample_col: sample` and draw
+  every window / resolution in one line per sample until a slider narrows them. After the
+  fix, `sample_col: window` (insulation) and `sample_col: resolution` (E1) give one line per
+  call set.
+- HC-D17: the contact triangle receives the region rows (the region link narrows
+  `start1`) but does not clamp its x axis to the region: the axis runs from 65 Mb to the
+  chromosome end (`start2` is unbounded) and the auto resolution picks 1 Mb. The showcase
+  works because its matrix names its columns `chrom` / `start`; `useFollowedRegion` matches
+  the filter by column name, and the recipe's columns are `chrom1` / `start1`. Needs the
+  renderer to map the region by role (or honour region links client side).
+- HC-D18: no saddle plot. cooltools saddle is not run by nf-core/hic 2.0.0 (no `*saddle*`
+  file in the megatest), so no `complex_heatmap` saddle tile.
+- HC-D19: no sidebar chromosome filter on the locus tab, on purpose: a sidebar chromosome
+  on `tad_domains` does not travel `region` links (they carry only `genome_selection`
+  filters), so it would narrow the navigator and not the tracks.
+- No `show_histogram`: hic has no QC threshold slider (window / resolution sliders are
+  discrete call-set pickers).
+
+### Commands and results
+
+```bash
+uv run pytest -q depictio/tests/models/test_shipped_dashboard_yamls.py -k hic   # 10 passed
+uv run pytest -q depictio/tests/models/test_catalog.py                          # 99 passed
+uv run python -m depictio.cli run --template nf-core/hic/2.0.0 \
+  --data-root ~/Data/depictio-nfcore/hic/2.0.0/megatest \
+  --CLI-config-path ~/.depictio/CLI.feat-nfcore-templates-lot2-112.yaml --dry-run   # 8/8
+# wipe lot2-hic + ingest with --project-name lot2-hic: 8/8 steps
+# project 6ab3cbb16a92d99821c48a7c, dashboard 6ab3cc90e8b8ace33d32c9bc (tabs ...9bc to ...9c2)
+```
+
+Every collection non-empty; `contact_matrix` 875,318 rows (was 696,939), `resolution`
+unique values 500000 and 1000000. At the default region (chr2 65 to 85 Mb): domains and
+insulation at all 5 windows, compartments A and B, matrix at both resolutions. Live: the
+navigator emits `chr2` + `65000000-85000000` on open; the tiles echo 8,842 domain rows,
+4,506 insulation rows and 122 E1 rows at that region, and the insulation and E1 tracks'
+x axes are clamped to 65 to 85 Mb. No console error on any of the seven tabs after the
+HC-D16 workaround. Screenshots in `/tmp/claude-502/shots-hic/`.
+
+### Live follow-up (same day, after the stack came back)
+
+- HC-D16 is fixed on the platform: CoverageTrackRenderer now turns its Samples and
+  Chromosomes options into strings. The tracks now split by `sample_col: window`
+  (insulation, Contact maps and TADs) and `sample_col: resolution` (E1, Contact maps and
+  Compartments). Live: one line per window (300 kb, 500 kb, 600 kb, 1 Mb, 2 Mb) and one
+  per resolution (250 kb, 500 kb), no crash.
+- HC-D20: the `coverage_track` locus (GenomeSpy) view narrows its rows to a followed region
+  (4,506 rows at chr2:65-85 Mb) but keeps the whole-genome x axis, so on the TADs tab the
+  track showed one sliver at chr2. That tile now opens on `view: track` (`views: [track,
+  locus]`), which clamps x to 65-85 Mb. The Compartments tile stays on `view: locus`
+  because no region reaches it there.
+- HC-D17 still open: the triangle's x axis still runs from 65 Mb to the chromosome end
+  at 1 Mb resolution.
+- Locus field test (Contact maps): typing `chr2:70,000,000-75,000,000` in the navigator
+  moves the sidebar region to 70000000-75000000 and every echo line: navigator
+  `chr2:70,000,000-75,000,000`, insulation 1,131 rows, E1 32 rows, contact map `chr2 · 1
+  Mb`; the glance cards recompute (32 A/B bins).
+- Wipe + ingest twice more (`--project-name lot2-hic`, 8/8 each). Final: project
+  6ab3dba9c7b1fa3c5334f550, dashboard 6ab3dc0130116ab0896e43ff (tabs ...43ff to ...4405).
+  The row counts are the same as above (contact_matrix 875,318, tad_insulation 613,314,
+  tad_domains 43,775, compartment_eigenvector 16,375). The full 7-tab screenshot run was on
+  the previous ingest of the same YAML except the TADs view default. No console errors.
+  The TADs tab was re-shot on the final ingest.

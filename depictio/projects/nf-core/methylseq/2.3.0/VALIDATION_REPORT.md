@@ -673,3 +673,72 @@ already fetch everything the eight tabs read.
 - `template.yaml`: new link `samples.sample_id -> bismark_window_correlation.sample` (the
   DC's own column name), so the correlation matrix follows the persistent sample picker.
 - `test_shipped_dashboard_yamls.py -k methylseq` passes. `.db_seeds` not regenerated here.
+
+## 2026-09-23 wave 2b: locus section, header controls, new kinds
+
+What changed:
+
+- `Global methylome`, section `Methylation along the genome`, is now a locus section (plan
+  C.5). Navigator: a `genome_view` on `bismark_window_group_compare` with score
+  `neg_log10_padj`, category `direction`, `score_threshold: 1.3`, `controls_placement: header`,
+  `annotation: hg38`, `region_filter_enabled`, `default_region: "chr14:35,500,000-37,500,000"`.
+  Followers (`follow_region_filter: true`): `bismark/methylation_genome_view` on
+  `bismark_binned_methylation` (one lane per library) and a `genome_view` of
+  `delta_methylation` on the group-comparison windows. The Manhattan stays on the Group
+  comparison tab. The `coverage_track` that shared `bismark_binned_methylation` with the
+  genome_view is removed, which clears this template from `test_no_double_track_binding`.
+- `template.yaml`: region link `bismark_window_group_compare -> bismark_binned_methylation`
+  (`resolver: region`, `columns: {chrom: chromosome, pos: position}`).
+- Default region: chr14:35.5-37.5 Mb around NKX2-1 holds the only window of the run with padj
+  under 0.05 (chr14:36,490,000-36,500,000, delta -24.3 points, MShef11 about 55 % against MShef4
+  about 80 %); the region has 16 shared windows, so every lane and both tracks draw.
+- Glance strip on `Global methylome`: card 3 now reads `bismark/summary_report`
+  `pct_cpg_methylation` (genome-wide, unaffected by the region); card 4 (binned median gauge)
+  is retitled "Median window level, locus region" because the navigator's region narrows it.
+- `Run QC`: new section `Library QC profile` with a `parallel_coordinates` tile on
+  `bismark_summary_report` (8 metrics, `group_col: cell_line`, `scale: minmax`, header).
+- `Bias and context`: a faceted line figure (`facet_col: context`, `facet_row: read`) under
+  the filtered M-bias profile, the per-context M-bias layout of Bismark's report.
+- `Cohort structure`: `controls_placement: header` on the PCA embedding.
+- `Group comparison`: the volcano spells `view: volcano`, `views: [volcano, qq]` with
+  `p_value_col: p_value` and header controls.
+- `show_histogram: true` on all 13 RangeSliders (coverage depth threshold included).
+
+Discrepancies:
+
+- MS-D11: the per-context M-bias `profile` cannot facet (ProfileConfig has no facet field and
+  advanced_viz tiles take no per-tile `filter_expr`), so the profile stays one tile driven by
+  the context and read filters and the per-context panels are a `figure` line with facets.
+- MS-D12: `parallel_coordinates` and the two group-comparison `genome_view` tiles are bound by `viz_kind` +
+  explicit roles, not `use:`: the `bismark` catalog module is not in this wave's partition, so
+  no render id was added for them. Catalog renders would restore the `use:` ratio.
+- MS-D14: a navigator never narrows its own fetch by its own region (by design, so a brush can
+  widen again), so it loads its whole collection sampled to `figure_max_points` (10,000).
+  Three layouts were tried live:
+  1. Navigator on the 135,450-row binned collection: 9,626 sampled rows, about 8 of the 112
+     windows of the default region drawn.
+  2. Navigator on the 19,350-row group-comparison windows, score `delta_methylation`: 9,996
+     sampled rows, and the one significant window (36.49 Mb) was sampled away, at the default
+     region and at a typed chr14:36.2-36.8 Mb.
+  3. Shipped: same collection, score `neg_log10_padj` with `score_threshold: 1.3`, which makes
+     the server keep every row above the threshold whole (tail-preserving sampling). Live
+     (project 6ab3d98bdb3fc8c8d7b62f3d): 9,759 rows, and the 36.49 Mb hit is drawn above the
+     padj line at both regions. The followers are narrowed to the region and complete: 112
+     binned rows and 16 difference rows at the default region; 35 and 5 at chr14:36.2-36.8 Mb.
+  A platform fix would narrow a navigator's fetch to a window around its current view.
+- MS-D13: qualimap `coverage_across_reference` is not on the locus section: its bins are about
+  5 Mb (594 per library genome-wide), coarser than the 2 Mb default region, so it would draw one
+  point or none.
+
+Commands: `pytest test_shipped_dashboard_yamls.py -k methylseq` 10 passed; the double-track
+lint no longer lists methylseq; `test_catalog.py` 99 passed; `test_filter_links_region.py` 12
+passed; dry run 8/8; project wiped and re-ingested as `lot2-methylseq`, every DC has rows
+(binned 135,450, group compare 19,350, summary 7, M-bias all contexts 5,208).
+
+Live, 2026-09-23 after the stack restart (project 6ab3d98bdb3fc8c8d7b62f3d, main dashboard
+6ab3da8430116ab0896e42eb, Global methylome 6ab3da8530116ab0896e42f0): ingest 8/8 with the same
+shapes as above. Typing chr14:36,200,000-36,800,000 in the navigator's locus field moved the
+navigator, the lanes (35 rows) and the difference track (5 rows). The parallel_coordinates tile
+(7 lines, 8 axes, header controls) and the faceted M-bias figure (CpG, CHG, CHH by R1 and R2)
+render. A mouse brush was not exercised; the locus field emits the same filter pair.
+Screenshots: /tmp/claude-502/shots-methylseq/.
