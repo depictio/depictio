@@ -45,14 +45,23 @@
 # contact dump and the contact-probability-vs-distance curve (hicexplorer) -
 # are what the other catalog tools in this lot cover.
 #
-# THREE RESOLUTIONS, PICKED PER OUTPUT.
+# EVERY RESOLUTION IS KEPT, AS A `resolution` COLUMN.
 # The run dumped contact maps at two resolutions (500 kb, 1 Mb) and ran
-# cooltools at a third pair for compartments/insulation (250 kb / 500 kb for
+# cooltools at other pairs for compartments/insulation (250 kb / 500 kb for
 # eigs-cis, 20 kb / 40 kb for insulation). `cooler/contact_matrix.py` keeps
-# only the finest contact-map resolution (500 kb); `cooltools/eigenvector.py`
-# and `cooltools/insulation.py` keep every resolution the run wrote and add a
-# `resolution` column, because unlike the contact matrix a compartment or an
-# insulation track at two resolutions is not drawn on the same axes.
+# both contact-map resolutions as partitions of one table, keyed by
+# `resolution`: the contact_map tile reads exactly one partition at a time and
+# picks the one that fits the visible span, so zooming re-bins the matrix.
+# `cooltools/eigenvector.py` and `cooltools/insulation.py` also keep every
+# resolution the run wrote; the dashboard draws one series per resolution
+# (compartments) or per window (insulation) rather than mixing bin sizes.
+#
+# ONE REGION ACROSS FOUR COLLECTIONS.
+# The Contact maps tab is a locus section: a genome_view on `tad_domains`
+# emits a chromosome + position region (brush, locus field or its
+# default_region), and the `region` links at the end of this file rename it
+# onto the matrix (chrom1 / start1), the insulation track and the compartment
+# track, so the four tiles share one genomic axis.
 #
 # NO params.json. hic 2.0.0's megatest predates the params dump, so the run's
 # parameters survive only in `pipeline_info/software_versions.yml`. Provenance
@@ -273,8 +282,8 @@ workflows:
       # cooler: binned contact matrix. The sample name and the resolution
       # live only in the two files' NAMEs, so both are scanned raw with
       # `include_file_paths` and joined by `cooler/contact_matrix.py`,
-      # which also keeps only the finest resolution and only
-      # intra-chromosomal pairs.
+      # which keeps every resolution as a partition (`resolution` column)
+      # and only intra-chromosomal pairs.
       # ----------------------------------------------------------------
       - data_collection_tag: "cooler_contacts_raw"
         description: "Raw balanced contact dump, every resolution (input of contact_matrix)"
@@ -324,7 +333,7 @@ workflows:
               "source_path": "File the row came from; the resolution is derived from it"
 
       - data_collection_tag: "contact_matrix"
-        description: "Binned, ICE-balanced intra-chromosomal contact matrix at the finest resolution the run dumped"
+        description: "Binned, ICE-balanced intra-chromosomal contact matrix, every resolution the run dumped as a partition on the resolution column"
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -335,7 +344,7 @@ workflows:
             format: "TSV"
             columns_description:
               "sample": "Sample the matrix was dumped for"
-              "resolution": "Bin size in bp (the finest resolution present)"
+              "resolution": "Bin size in bp; one partition per resolution the run dumped (a tile reads one at a time)"
               "chrom1": "Chromosome of the row bin"
               "start1": "Row bin start"
               "end1": "Row bin end"
@@ -700,4 +709,39 @@ links:
       resolver: "direct"
       target_field: "sample"
     description: "Filter the distance-decay curve by the samples picked in the left panel"
+    enabled: true
+
+  # Region links: the Contact maps locus section. The navigator is the TAD
+  # domain track (genome_view on tad_domains); its brush, locus field and
+  # default_region emit a chromosome + position pair on chrom / start, and
+  # each link below re-emits that pair under the target's own column names.
+  # One hop, no data read (depictio/api/v1/filter_links.py::region_link_filters).
+  - source_dc_tag: "tad_domains"
+    source_column: "chrom"
+    target_dc_tag: "contact_matrix"
+    target_type: "table"
+    link_config:
+      resolver: "region"
+      columns: {chrom: "chrom1", pos: "start1"}
+    description: "A region brushed or typed on the TAD domain track narrows the contact matrix"
+    enabled: true
+
+  - source_dc_tag: "tad_domains"
+    source_column: "chrom"
+    target_dc_tag: "tad_insulation"
+    target_type: "table"
+    link_config:
+      resolver: "region"
+      columns: {chrom: "chrom", pos: "start"}
+    description: "A region brushed or typed on the TAD domain track narrows the insulation track"
+    enabled: true
+
+  - source_dc_tag: "tad_domains"
+    source_column: "chrom"
+    target_dc_tag: "compartment_eigenvector"
+    target_type: "table"
+    link_config:
+      resolver: "region"
+      columns: {chrom: "chrom", pos: "start"}
+    description: "A region brushed or typed on the TAD domain track narrows the compartment track"
     enabled: true

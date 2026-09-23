@@ -911,3 +911,19 @@ links:
       target_field: "sample"
     description: "Filter the window-correlation matrix rows by the samples picked in the left panel"
     enabled: true
+
+  # Region link (the locus section of the Global methylome tab). The navigator
+  # genome_view on the group-comparison windows emits a chromosome + position
+  # filter pair on its own columns; this rewrites it onto the binned windows so
+  # the per-library lanes under the navigator (and the glance card that reads
+  # them) follow the same region. Both collections are keyed on the same 10 kb
+  # windows.
+  - source_dc_tag: "bismark_window_group_compare"
+    source_column: "chromosome"
+    target_dc_tag: "bismark_binned_methylation"
+    target_type: "table"
+    link_config:
+      resolver: "region"
+      columns: {chrom: "chromosome", pos: "position"}
+    description: "A region brushed or typed on the group-comparison navigator narrows the binned per-library windows"
+    enabled: true
