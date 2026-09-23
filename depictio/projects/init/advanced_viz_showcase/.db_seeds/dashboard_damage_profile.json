@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "The classic aDNA deamination signature: C>T rises toward the 5' read end and G>A rises toward the 3' end, both starting near 0.3 at position 1 and decaying to background within about 10 bp. Every other substitution class sits flat near background throughout, which is what the highlighted lines are picked out against. Which ends to show, how far to draw, and which substitutions to highlight all live in the Settings \u2699 popover.\n",
+      "body": "Misincorporation frequency by distance from the read end: C to T rises at the 5 prime end and G to A at the 3 prime end, near 0.3 at position 1 and back to background within 10 bp, the deamination signature that authenticates ancient DNA. Ends and the substitutions highlighted are in the tile header. Input: DamageProfiler or mapDamage output of nf-core/eager.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -58,12 +58,13 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "description": "5-prime and 3-prime substitution frequency by position, 2 samples, C-to-T and G-to-A highlighted. Ends, max position and highlighted substitutions live in the Settings \u2699 popover.",
+      "description": "5 prime and 3 prime substitution frequency by position, 2 samples, C to T and G to A highlighted. Ends, maximum position and highlighted substitutions sit in the tile header.",
       "title_size": "sm",
       "title_align": "left",
       "section": "Misincorporation profile",
       "viz_kind": "damage_profile",
       "config": {
+        "controls_placement": "header",
         "viz_kind": "damage_profile",
         "sample_col": "sample",
         "end_col": "end",
@@ -75,7 +76,10 @@
         "highlight": [
           "C>T",
           "G>A"
-        ]
+        ],
+        "facet_by": "none",
+        "length_bin_col": "length_bin",
+        "max_facets": 6
       },
       "wf_tag": "python/advanced_viz_demo"
     },
@@ -117,6 +121,7 @@
       "group": "Profile filters",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
       "custom_color": "#E03131",
       "icon_name": "mdi:test-tube",
       "wf_tag": "python/advanced_viz_demo"
@@ -157,7 +162,7 @@
       "x": 0,
       "y": 2,
       "w": 8,
-      "h": 8,
+      "h": 9,
       "static": false,
       "resizeHandles": [
         "se",
@@ -177,8 +182,8 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "Damage profile",
-  "subtitle": "Ancient-DNA misincorporation frequency for 2 synthetic samples: C>T enriched at the 5-prime end, G>A at the 3-prime end, both decaying from ~0.3 at position 1.",
+  "title": "Ancient DNA damage",
+  "subtitle": "Ancient-DNA misincorporation for 2 synthetic samples: C to T at the 5 prime end, G to A at the 3 prime end, decaying from about 0.3 at position 1",
   "icon": "mdi:dna",
   "icon_color": "red",
   "icon_variant": "filled",
@@ -240,5 +245,7 @@
     }
   ],
   "funnel_filtering": true,
-  "brand_theme": null
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
 }

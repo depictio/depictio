@@ -1,12 +1,12 @@
-# Transcript structure — one tab of the advanced-visualisation showcase.
+# Transcript structure: one tab of the advanced-visualisation showcase.
 #
 # Regenerate the seed after editing:
 #   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
 #
 # The component `index` values are pinned rather than auto-generated: they are
 # what keeps a regenerated seed byte-identical to the shipped one.
-title: 'Transcript structure'
-subtitle: 'Isoforms of one gene stacked on a base-pair axis: exons as blocks, coding parts drawn taller, introns as lines with strand chevrons, and the transcripts the caller flagged as novel told apart from the annotated ones.'
+title: 'Isoforms of one gene'
+subtitle: 'Isoforms of one gene stacked on a base-pair axis: exons as blocks, coding parts taller, introns as lines with strand chevrons, novel transcripts told apart from annotated ones. Splicing, not gene order.'
 icon: 'mdi:chart-timeline-variant'
 icon_color: 'grape'
 icon_variant: filled
@@ -38,18 +38,18 @@ components:
   - tag: text-transcript_structure
     index: ts-text
     component_type: text
-    title: 'Transcript structure'
+    title: 'Isoforms of one gene'
     order: 3
     alignment: left
     vertical_alignment: top
     section: 'Transcript structure'
     body: >
-      One lane per isoform of the selected gene. Blocks are exons; the taller ones are the
-      coding part of the same exon, so the thin ends either side are the UTRs. The line
-      between blocks is the intron and its chevrons point the way the transcript is read.
-      DPX1 carries the four events a long-read panel exists to show at once: a skipped
-      cassette exon, an alternative first exon, an alternative 3' end and a retained intron,
-      plus one transcript the caller flagged as novel.
+      One gene, one lane per isoform: exons are blocks, the coding part is drawn taller, the
+      line between blocks is the intron and its chevrons give the strand. DPX1 opens with a
+      skipped exon, an alternative first exon, an alternative 3' end, a retained intron and a
+      novel isoform; the gene picker is in the header. Compare the Gene clusters tab, which
+      draws whole genes as arrows along a contig. Input: bambu or StringTie GTF from
+      nf-core/nanoseq or rnaseq, joined to per-transcript counts.
     layout: { x: 0, y: 0, w: 8, h: 2 }
 
   - tag: viz-transcript_structure
@@ -58,11 +58,13 @@ components:
     workflow_tag: advanced_viz_demo
     data_collection_tag: 'transcript_structure_demo'
     title: 'Isoform structures'
-    description: 'Eight isoforms across two genes. Lane colour is the novelty class, lane order and the bar on the right are the per-transcript expression. The gene picker, the colouring, the colour scale and the lane budget live in the Settings popover.'
+    description: 'Isoforms of the gene picked in the header. Lane colour is the novelty class, lane order and the bar on the right are the per-transcript expression. Colour scale and lane budget are in the settings.'
     section: 'Transcript structure'
     viz_kind: 'transcript_structure'
     config:
       viz_kind: "transcript_structure"
+      controls_placement: "header"
+      gene: "DPX1"
       transcript_id_col: "transcript_id"
       gene_id_col: "gene_id"
       chrom_col: "chrom"
@@ -95,7 +97,6 @@ components:
     group: 'Isoform filters'
     display:
       title_size: md
-      custom_color: '#BE4BDB'
       icon_name: 'mdi:dna'
     layout: { x: 0, y: 0, w: 1, h: 3 }
 
@@ -113,7 +114,6 @@ components:
     group: 'Isoform filters'
     display:
       title_size: md
-      custom_color: '#F76707'
       icon_name: 'mdi:shape-outline'
     layout: { x: 0, y: 3, w: 1, h: 3 }
 
@@ -131,6 +131,5 @@ components:
     group: 'Isoform filters'
     display:
       title_size: md
-      custom_color: '#12B886'
       icon_name: 'mdi:swap-vertical'
     layout: { x: 0, y: 6, w: 1, h: 3 }

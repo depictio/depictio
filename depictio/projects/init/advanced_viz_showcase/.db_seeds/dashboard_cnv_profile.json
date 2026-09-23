@@ -13,7 +13,7 @@
     {
       "index": "cnv-text",
       "component_type": "text",
-      "title": "Copy-number profile",
+      "title": "Allele-specific copy number",
       "workflow_tag": "",
       "data_collection_tag": "",
       "wf_id": {
@@ -30,13 +30,13 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Each point is a 20 kb bin, plotted at its log2 ratio against a diploid baseline, and the thick strokes are the segments a caller made over them: red where the segment reads as a gain, blue as a loss, grey where it is neutral. Read the two together. The gain on chr1 and the loss on chr2 are visible in the log2 track alone, but the chr3 event is not: its total copy number never moves, and only the B-allele frequency underneath shows it, splitting away from 0.5 because the region lost one parental haplotype. Sample, chromosome zoom, axis limit and marker size live in the Settings gear popover.\n",
+      "body": "Top to bottom: nMajor (red) and nMinor (green) per called segment, the log2 ratio of each 20 kb bin under segments coloured gain, neutral or loss, and the B-allele frequency with mirrored segment bands. On chr3 log2 stays flat while nMinor drops to 0 and the BAF splits, a copy-neutral LOH only the allele-specific tracks show. Scroll to zoom, shift-drag to brush a region, switch sample or view in the header; inputs come from nf-core/sarek (ASCAT, Control-FREEC, CNVkit), and the hg38 gene lane is only an orientation aid on this synthetic genome.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
       "index": "cnv-track",
       "component_type": "advanced_viz",
-      "title": "Copy-number profile",
+      "title": "Copy-number profile, ASCAT layout",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "cnv_profile_demo",
       "wf_id": {
@@ -58,12 +58,13 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "description": "20 000 bins over 5 chromosomes with the called segments over them and the B-allele frequency below. Sample, chromosome zoom, log2 axis limit, marker size and the BAF panel live in the Settings gear popover.",
+      "description": "TUMOUR_A over 5 chromosomes: allele-specific copy number, log2 ratio and mirrored BAF on one zoomable genome axis. The header switches sample, stacks both samples, or returns to the Plotly profile.",
       "title_size": "sm",
       "title_align": "left",
       "section": "Copy number",
       "viz_kind": "cnv_profile",
       "config": {
+        "controls_placement": "header",
         "viz_kind": "cnv_profile",
         "sample_col": "sample",
         "chrom_col": "chrom",
@@ -81,7 +82,12 @@
         "point_size": 3,
         "gain_threshold": 0.3,
         "loss_threshold": -0.3,
-        "max_bins": 50000
+        "max_bins": 50000,
+        "view": "locus",
+        "views": null,
+        "minor_copy_number_col": "minor_copy_number",
+        "annotation": "hg38",
+        "facet_by_sample": false
       },
       "wf_tag": "python/advanced_viz_demo"
     },
@@ -123,6 +129,7 @@
       "group": "Profile filters",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
       "custom_color": "#FA5252",
       "icon_name": "mdi:test-tube",
       "wf_tag": "python/advanced_viz_demo"
@@ -165,6 +172,7 @@
       "group": "Profile filters",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
       "custom_color": "#E64980",
       "icon_name": "mdi:dna",
       "wf_tag": "python/advanced_viz_demo"
@@ -207,6 +215,7 @@
       "group": "Profile filters",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
       "custom_color": "#FD7E14",
       "icon_name": "mdi:numeric",
       "wf_tag": "python/advanced_viz_demo"
@@ -248,7 +257,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 3,
+      "h": 2,
       "static": false,
       "resizeHandles": [
         "se",
@@ -261,9 +270,9 @@
     {
       "i": "box-cnv-track",
       "x": 0,
-      "y": 3,
+      "y": 2,
       "w": 8,
-      "h": 10,
+      "h": 12,
       "static": false,
       "resizeHandles": [
         "se",
@@ -283,8 +292,8 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "Copy-number profile",
-  "subtitle": "A synthetic somatic profile over 5 chromosomes: 20 000 bins of log2 ratio, the called segments laid over them, and the B-allele frequency underneath that catches the copy-neutral LOH the log2 track cannot see.",
+  "title": "Copy number",
+  "subtitle": "Allele-specific copy number of a synthetic tumour in the ASCAT layout: nMajor and nMinor per segment, the log2 ratio of 20 000 bins with the calls over them, and the mirrored B-allele frequency that exposes the copy-neutral LOH the log2 track cannot see.",
   "icon": "mdi:chart-timeline-variant",
   "icon_color": "red",
   "icon_variant": "filled",
@@ -346,5 +355,7 @@
     }
   ],
   "funnel_filtering": true,
-  "brand_theme": null
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
 }

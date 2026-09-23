@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "The only projection on this showcase computed at request time rather than read from a precomputed table: changing the neighbour count or the metric in the settings menu re-runs the reduction. The cost is latency; the gain is a parameter you control.\n",
+      "body": "The only projection here computed on request rather than read from a table: the raw sample by feature matrix is reduced by a worker, and changing the method (PCA, UMAP, t-SNE, PCoA) in the tile header re-runs it on whatever the filters leave. Filter to two conditions on the left and the projection is recomputed on them alone, which a precomputed table cannot do. The input is any count matrix, such as the salmon merged counts of nf-core/rnaseq.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -58,12 +58,13 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "description": "Tune method + parameters in Settings \u2699 \u2014 the API dispatches a Celery task and renders the result; (DC, method, params, filters) tuples are cached so a second run on the same combo is instant.",
+      "description": "Method and colour-by in the tile header. The API dispatches a Celery task and caches each (collection, method, parameters, filters) result, so a second run of the same combination is instant.",
       "title_size": "sm",
       "title_align": "left",
       "section": "Live clustering",
       "viz_kind": "embedding",
       "config": {
+        "controls_placement": "header",
         "viz_kind": "embedding",
         "sample_id_col": "sample_id",
         "dim_1_col": "dim_1",
@@ -134,6 +135,7 @@
       "group": "Point filters",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
       "custom_color": "#8E44AD",
       "icon_name": "mdi:scatter-plot",
       "wf_tag": "python/advanced_viz_demo"
@@ -176,6 +178,7 @@
       "group": "Point filters",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": true,
       "custom_color": "#00BCD4",
       "icon_name": "mdi:blur",
       "wf_tag": "python/advanced_viz_demo"
@@ -209,7 +212,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 1,
+      "h": 2,
       "static": false,
       "resizeHandles": [
         "se",
@@ -224,7 +227,7 @@
       "x": 0,
       "y": 2,
       "w": 8,
-      "h": 8,
+      "h": 9,
       "static": false,
       "resizeHandles": [
         "se",
@@ -244,8 +247,8 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "Clustering: Live (Celery)",
-  "subtitle": "Recomputes on every filter / param change; results cached by (DC, method, params, filters). Open Settings \u2699 on the viz to tune the method.",
+  "title": "Recomputed projection",
+  "subtitle": "A projection recomputed by a worker on whatever the filters leave, cached per method, parameters and filters",
   "icon": "mdi:lightning-bolt",
   "icon_color": "grape",
   "icon_variant": "filled",
@@ -281,7 +284,7 @@
   },
   "tab_order": 8,
   "main_tab_name": null,
-  "tab_icon": "mdi:lightning-bolt",
+  "tab_icon": "mdi:tune",
   "tab_icon_color": "grape",
   "parent_dashboard_title": null,
   "filter_sections": [
@@ -307,5 +310,7 @@
     }
   ],
   "funnel_filtering": true,
-  "brand_theme": null
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
 }

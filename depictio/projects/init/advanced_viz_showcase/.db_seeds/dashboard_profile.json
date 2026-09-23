@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Enrichment against distance to the TSS, one curve per ATAC library, ribbon width set by read depth. A good library spikes on the dotted line at zero; CTRL_rep4 and TREAT_rep3 stay near 3\u00d7 background under a ribbon twice as fat. Click a curve to cross-filter.\n",
+      "body": "ATAC-seq signal against distance to the transcription start site, one curve per library with a confidence ribbon and the nucleosome positions shaded. A good library peaks sharply at zero; CTRL_rep4 and TREAT_rep3 stay low under wide ribbons. Click a curve to filter the dashboard to that library; log axes are in the tile header. Input: deepTools profiles of nf-core/atacseq or nf-core/chipseq.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -58,12 +58,13 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "description": "Normalised enrichment over \u00b12 kb around the TSS, 25 bp bins, 8 libraries across two conditions. Ribbon opacity, line width, log axes and legend placement live in the Settings \u2699 popover.",
+      "description": "Normalised enrichment over 2 kb either side of the TSS, 25 bp bins, 8 libraries in two conditions. Log axes sit in the tile header.",
       "title_size": "sm",
       "title_align": "left",
       "section": "Signal profile",
       "viz_kind": "profile",
       "config": {
+        "controls_placement": "header",
         "viz_kind": "profile",
         "series_col": "series",
         "x_col": "x",
@@ -92,7 +93,9 @@
         "y_title": "Normalised enrichment",
         "legend_pos": "right",
         "selection_enabled": true,
-        "selection_column": "series"
+        "selection_column": "series",
+        "derivative": false,
+        "derivative_window": 5
       },
       "wf_tag": "python/advanced_viz_demo"
     },
@@ -134,6 +137,7 @@
       "group": "Profile filters",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
       "custom_color": "#12B886",
       "icon_name": "mdi:flask",
       "wf_tag": "python/advanced_viz_demo"
@@ -176,6 +180,7 @@
       "group": "Profile filters",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": true,
       "custom_color": "#20C997",
       "icon_name": "mdi:map-marker-path",
       "wf_tag": "python/advanced_viz_demo"
@@ -209,7 +214,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 1,
+      "h": 2,
       "static": false,
       "resizeHandles": [
         "se",
@@ -222,9 +227,9 @@
     {
       "i": "box-prof-curve",
       "x": 0,
-      "y": 1,
+      "y": 2,
       "w": 8,
-      "h": 8,
+      "h": 9,
       "static": false,
       "resizeHandles": [
         "se",
@@ -244,7 +249,7 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "Signal profile",
+  "title": "Chromatin accessibility at TSS",
   "subtitle": "TSS enrichment: one curve per ATAC library over distance to the transcription start site, with bootstrap confidence ribbons.",
   "icon": "mdi:chart-bell-curve",
   "icon_color": "teal",
@@ -281,7 +286,7 @@
   },
   "tab_order": 28,
   "main_tab_name": null,
-  "tab_icon": "mdi:waveform",
+  "tab_icon": "mdi:waves",
   "tab_icon_color": "green",
   "parent_dashboard_title": null,
   "filter_sections": [
@@ -307,5 +312,7 @@
     }
   ],
   "funnel_filtering": true,
-  "brand_theme": null
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
 }

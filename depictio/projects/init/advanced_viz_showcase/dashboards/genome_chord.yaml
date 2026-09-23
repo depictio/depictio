@@ -5,7 +5,7 @@
 #
 # The component `index` values are pinned rather than auto-generated: they are
 # what keeps a regenerated seed byte-identical to the shipped one.
-title: 'Genome chord'
+title: 'Structural rearrangements'
 subtitle: 'The 24 GRCh38 chromosomes on a ring, one chord per rearrangement: 40 links in 4 classes, chord width from the supporting reads.'
 icon: 'mdi:chart-donut'
 icon_color: 'red'
@@ -38,18 +38,18 @@ components:
   - tag: text-genome-chord
     index: chord-text
     component_type: text
-    title: 'Genome chord'
+    title: 'Structural rearrangements'
     order: 3
     alignment: left
     vertical_alignment: top
     section: 'Rearrangement map'
     body: >
-      Chromosomes run clockwise from twelve o'clock, each band as wide as the chromosome is
-      long, and every chord joins the two breakpoints of one rearrangement. Width is the read
-      support on a log scale, so the recurrent partners stand out without hiding the one-off
-      events. Colour is the event class: only translocations cross between chromosomes, which
-      is why the deletions and duplications hug the rim. Hover a chord for its two loci, click
-      it to filter the dashboard by that link, click the background to clear.
+      The 24 GRCh38 chromosomes on a ring, one chord per rearrangement joining its two
+      breakpoints; width is the read support on a log scale, colour the event class, so only
+      translocations cross the ring while deletions and duplications hug the rim. Hover a
+      chord for its loci, click it to filter the dashboard by that event, click the background
+      to clear; colour-by and the intra-chromosomal toggle are in the header. Input: Manta,
+      TIDDIT or SvABA calls from nf-core/sarek, or arriba and STAR-Fusion from rnafusion.
     layout: { x: 0, y: 0, w: 8, h: 2 }
 
   - tag: viz-genome-chord
@@ -58,11 +58,12 @@ components:
     workflow_tag: advanced_viz_demo
     data_collection_tag: 'genome_chord_demo'
     title: 'Rearrangement partners'
-    description: '40 links over the 24 GRCh38 chromosomes, coloured by event class and sized by supporting reads. Assembly, colour encoding, link cap and the intra-chromosomal toggle live in the Settings ⚙ popover.'
+    description: '40 links over the 24 GRCh38 chromosomes, coloured by event class and sized by supporting reads. Click a chord to filter by that event.'
     section: 'Rearrangement map'
     viz_kind: 'genome_chord'
     config:
       viz_kind: "genome_chord"
+      controls_placement: "header"
       chrom_a_col: "chrom_a"
       pos_a_col: "pos_a"
       chrom_b_col: "chrom_b"
@@ -93,7 +94,6 @@ components:
     group: 'Link filters'
     display:
       title_size: md
-      custom_color: '#FA5252'
       icon_name: 'mdi:shape-outline'
     layout: { x: 0, y: 0, w: 1, h: 3 }
 
@@ -107,10 +107,10 @@ components:
     column_type: 'int64'
     title: 'Supporting reads'
     placement: left
+    show_histogram: true
     section: 'Link scope'
     group: 'Link filters'
     display:
       title_size: md
-      custom_color: '#E64980'
       icon_name: 'mdi:counter'
     layout: { x: 0, y: 3, w: 1, h: 3 }

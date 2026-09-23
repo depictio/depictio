@@ -1,19 +1,19 @@
 {
   "_id": {
-    "$oid": "646b0f3c1e4a2d7f8e5b8d43"
+    "$oid": "646b0f3c1e4a2d7f8e5b8d63"
   },
   "description": null,
   "flexible_metadata": null,
   "hash": null,
   "dashboard_id": {
-    "$oid": "646b0f3c1e4a2d7f8e5b8d43"
+    "$oid": "646b0f3c1e4a2d7f8e5b8d63"
   },
   "version": 1,
   "stored_metadata": [
     {
-      "index": "qq-text",
+      "index": "cm-text",
       "component_type": "text",
-      "title": "QQ plot",
+      "title": "Benchmark error profile",
       "workflow_tag": "",
       "data_collection_tag": "",
       "wf_id": {
@@ -26,137 +26,95 @@
       "last_updated": "2026-05-12T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
-      "section": "Quantile-quantile",
+      "section": "Error profile",
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Observed significance against what a null distribution would predict, with the diagonal drawn in. A curve that leaves the diagonal only at the top is genuine signal; one that lifts off along its whole length is inflation, and the test is miscalibrated.\n",
+      "body": "One row per caller, one column per outcome against the truth set: true positives, false positives, false negatives. The shade is normalised per caller so a caller with many more calls stays comparable, and the label is the raw count. Switch the normalisation in the tile header to compare callers per outcome instead. Counts as nf-core/variantbenchmarking reports them.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
-      "index": "qq-plot",
+      "index": "cm-matrix",
       "component_type": "advanced_viz",
-      "title": "QQ plot \u2014 p-value distribution",
+      "title": "Outcome counts per caller",
       "workflow_tag": "advanced_viz_demo",
-      "data_collection_tag": "manhattan_demo",
+      "data_collection_tag": "benchmark_demo",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8d01"
       },
       "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+        "$oid": "646b0f3c1e4a2d7f8e5b8d60"
       },
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Synthetic Manhattan: 23 chromosomes x ~40 noise points + 6 designed hits",
-        "data_collection_tag": "manhattan_demo",
+        "description": "Synthetic per-caller benchmark summary (precision/recall/F1 + counts + CIs)",
+        "data_collection_tag": "benchmark_demo",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+          "$oid": "646b0f3c1e4a2d7f8e5b8d60"
         }
       },
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "description": "Observed vs expected -log10(p). 95% CI band, hover surfaces designed-hit rsids.",
+      "description": "True positive, false positive and false negative counts per caller, shaded per caller.",
       "title_size": "sm",
       "title_align": "left",
-      "section": "Quantile-quantile",
-      "viz_kind": "qq",
+      "section": "Error profile",
+      "viz_kind": "confusion_matrix",
       "config": {
-        "viz_kind": "qq",
-        "p_value_col": "p_value",
-        "feature_id_col": "feature",
-        "category_col": null,
-        "show_ci": true,
-        "show_identity": true,
-        "point_size": 5,
-        "top_n_labels": 0
+        "controls_placement": "header",
+        "viz_kind": "confusion_matrix",
+        "label_col": "tool",
+        "tp_col": "tp",
+        "fp_col": "fp",
+        "fn_col": "fn",
+        "tn_col": null,
+        "normalize": false,
+        "normalize_mode": "per_caller",
+        "colorscale": "Blues"
       },
       "wf_tag": "python/advanced_viz_demo"
     },
     {
-      "index": "qq-f-score",
+      "index": "cm-f-tool",
       "component_type": "interactive",
-      "title": "Score",
+      "title": "Caller",
       "workflow_tag": "advanced_viz_demo",
-      "data_collection_tag": "manhattan_demo",
+      "data_collection_tag": "benchmark_demo",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8d01"
       },
       "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+        "$oid": "646b0f3c1e4a2d7f8e5b8d60"
       },
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Synthetic Manhattan: 23 chromosomes x ~40 noise points + 6 designed hits",
-        "data_collection_tag": "manhattan_demo",
+        "description": "Synthetic per-caller benchmark summary (precision/recall/F1 + counts + CIs)",
+        "data_collection_tag": "benchmark_demo",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+          "$oid": "646b0f3c1e4a2d7f8e5b8d60"
         }
       },
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "title_size": "md",
       "title_align": "left",
-      "section": "Test scope",
-      "interactive_component_type": "RangeSlider",
-      "column_name": "score",
-      "column_type": "float64",
-      "value": null,
-      "default_state": null,
-      "filter_expr": null,
-      "placement": "left",
-      "group": "Test filters",
-      "timescale": null,
-      "show_marks": null,
-      "custom_color": "#8E44AD",
-      "icon_name": "mdi:chart-line",
-      "wf_tag": "python/advanced_viz_demo"
-    },
-    {
-      "index": "qq-f-chr",
-      "component_type": "interactive",
-      "title": "Chromosome",
-      "workflow_tag": "advanced_viz_demo",
-      "data_collection_tag": "manhattan_demo",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
-      },
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d04"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Synthetic Manhattan: 23 chromosomes x ~40 noise points + 6 designed hits",
-        "data_collection_tag": "manhattan_demo",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8d04"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-05-12T00:00:00.000000",
-      "title_size": "md",
-      "title_align": "left",
-      "section": "Test scope",
+      "section": "Caller scope",
       "interactive_component_type": "MultiSelect",
-      "column_name": "chr",
+      "column_name": "tool",
       "column_type": "object",
       "value": null,
       "default_state": null,
       "filter_expr": null,
       "placement": "left",
-      "group": "Test filters",
+      "group": "Caller filters",
       "timescale": null,
       "show_marks": null,
-      "custom_color": "#F68B33",
-      "icon_name": "mdi:dna",
+      "show_histogram": null,
       "wf_tag": "python/advanced_viz_demo"
     }
   ],
@@ -166,17 +124,9 @@
   "stored_edit_dashboard_mode_button": [],
   "left_panel_layout_data": [
     {
-      "i": "box-qq-f-score",
+      "i": "box-cm-f-tool",
       "x": 0,
       "y": 0,
-      "w": 1,
-      "h": 3,
-      "static": false
-    },
-    {
-      "i": "box-qq-f-chr",
-      "x": 0,
-      "y": 3,
       "w": 1,
       "h": 3,
       "static": false
@@ -184,11 +134,11 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-qq-text",
+      "i": "box-cm-text",
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 1,
+      "h": 2,
       "static": false,
       "resizeHandles": [
         "se",
@@ -199,7 +149,7 @@
       ]
     },
     {
-      "i": "box-qq-plot",
+      "i": "box-cm-matrix",
       "x": 0,
       "y": 2,
       "w": 8,
@@ -223,10 +173,10 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "QQ plot",
-  "subtitle": "Quantile-quantile of p-value distribution",
-  "icon": "mdi:chart-line",
-  "icon_color": "grape",
+  "title": "Benchmark error profile",
+  "subtitle": "True positives, false positives and false negatives per caller",
+  "icon": "mdi:alert-outline",
+  "icon_color": "blue",
   "icon_variant": "filled",
   "workflow_system": "python",
   "notes_content": "",
@@ -258,17 +208,17 @@
   "parent_dashboard_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8d00"
   },
-  "tab_order": 19,
+  "tab_order": 26,
   "main_tab_name": null,
-  "tab_icon": "mdi:chart-line",
-  "tab_icon_color": "grape",
+  "tab_icon": "mdi:alert-outline",
+  "tab_icon_color": "blue",
   "parent_dashboard_title": null,
   "filter_sections": [
     {
-      "name": "Test scope",
+      "name": "Caller scope",
       "icon": "mdi:filter-variant",
-      "color": "grape",
-      "description": "Restricts which tests enter the quantile comparison",
+      "color": "blue",
+      "description": "Restricts which callers are drawn",
       "collapsed": false,
       "persistent": false,
       "pin": "top"
@@ -276,15 +226,17 @@
   ],
   "grid_sections": [
     {
-      "name": "Quantile-quantile",
-      "icon": "mdi:chart-line",
-      "color": "grape",
-      "description": "Observed against expected significance",
+      "name": "Error profile",
+      "icon": "mdi:alert-outline",
+      "color": "blue",
+      "description": "Where each caller gains and loses calls against the truth set",
       "collapsed": false,
       "persistent": false,
       "pin": "top"
     }
   ],
   "funnel_filtering": true,
-  "brand_theme": null
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
 }

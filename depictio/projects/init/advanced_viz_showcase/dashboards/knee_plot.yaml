@@ -5,7 +5,7 @@
 #
 # The component `index` values are pinned rather than auto-generated: they are
 # what keeps a regenerated seed byte-identical to the shipped one.
-title: 'Knee plot'
+title: 'Cell calling'
 subtitle: 'Barcode-rank curves for 2 synthetic single-cell libraries: a called-cell plateau followed by a power-law drop into the empty-droplet background.'
 icon: 'mdi:chart-line-variant'
 icon_color: 'orange'
@@ -15,7 +15,7 @@ dashboard_id: '646b0f3c1e4a2d7f8e5b8d78'
 is_main_tab: false
 tab_order: 36
 parent_dashboard_tag: volcano
-tab_icon: 'mdi:chart-line-variant'
+tab_icon: 'mdi:test-tube'
 tab_icon_color: 'orange'
 
 # Left-panel filter section. Deliberately not `persistent`: the tabs of this
@@ -44,11 +44,11 @@ components:
     vertical_alignment: top
     section: 'Barcode rank'
     body: >
-      Rank barcodes by UMI count and the curve drops in two regimes: a gently declining plateau
-      over the called cells, then a steep power-law fall into the empty-droplet background. The
-      dotted cutoff line marks where sample_A and sample_B's `is_cell` flag switches off; sample_B
-      calls fewer, noisier cells than sample_A. Log axes and the cutoff line toggle live in the
-      Settings ⚙ popover.
+      Barcodes ranked by UMI count, one curve per library: a plateau over the called cells,
+      then a steep fall into the empty-droplet background, with the dotted line where the
+      is_cell flag switches off. On the right the same curves with their log-log slope
+      underneath: the knee is the dip in the slope, and sample_B calls fewer cells than sample_A. Log axes and the cutoff are in the tile headers. Input:
+      STARsolo, alevin-fry or Cell Ranger barcode counts of nf-core/scrnaseq.
     layout: { x: 0, y: 0, w: 8, h: 2 }
 
   - tag: viz-knee-plot
@@ -57,7 +57,7 @@ components:
     workflow_tag: advanced_viz_demo
     data_collection_tag: 'knee_plot_demo'
     title: 'Barcode-rank curve'
-    description: 'UMI count against barcode rank, log-log, one line per sample. The cell-calling cutoff is read straight from the is_cell column. Log axes and the cutoff toggle live in the Settings ⚙ popover.'
+    description: 'UMI count against barcode rank, log-log, one line per sample. The cell-calling cutoff is read from the is_cell column.'
     section: 'Barcode rank'
     viz_kind: 'knee_plot'
     config:
@@ -69,7 +69,35 @@ components:
       log_x: true
       log_y: true
       show_cutoff: true
-    layout: { x: 0, y: 2, w: 8, h: 8 }
+      controls_placement: "header"
+    layout: { x: 0, y: 2, w: 4, h: 9 }
+
+  # The profile kind's derivative mode on the same curve: d log(UMI) / d log(rank)
+  # underneath, so the knee is read as the dip in the slope rather than by eye.
+  # The Hi-C P(s) curve is the other place this mode is used; the showcase has no
+  # contact-decay collection, and the barcode-rank curve is the log-log curve it
+  # does have.
+  - tag: viz-knee-slope
+    index: 'knee-slope'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'knee_plot_demo'
+    title: 'Barcode-rank slope'
+    description: 'The same curves with their local log-log slope underneath. The steepest dip marks the transition from cells to empty droplets.'
+    section: 'Barcode rank'
+    viz_kind: 'profile'
+    config:
+      viz_kind: "profile"
+      series_col: "sample"
+      x_col: "rank"
+      y_col: "umi_count"
+      derivative: true
+      derivative_window: 15
+      x_title: "Barcode rank"
+      y_title: "UMI count"
+      legend_pos: "bottom"
+      controls_placement: "header"
+    layout: { x: 4, y: 2, w: 4, h: 9 }
 
   - tag: filter-knee-plot-sample
     index: knee-f-sample

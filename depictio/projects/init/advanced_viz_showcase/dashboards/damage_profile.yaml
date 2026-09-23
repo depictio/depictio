@@ -5,8 +5,8 @@
 #
 # The component `index` values are pinned rather than auto-generated: they are
 # what keeps a regenerated seed byte-identical to the shipped one.
-title: 'Damage profile'
-subtitle: 'Ancient-DNA misincorporation frequency for 2 synthetic samples: C>T enriched at the 5-prime end, G>A at the 3-prime end, both decaying from ~0.3 at position 1.'
+title: 'Ancient DNA damage'
+subtitle: 'Ancient-DNA misincorporation for 2 synthetic samples: C to T at the 5 prime end, G to A at the 3 prime end, decaying from about 0.3 at position 1'
 icon: 'mdi:dna'
 icon_color: 'red'
 icon_variant: filled
@@ -44,11 +44,11 @@ components:
     vertical_alignment: top
     section: 'Misincorporation profile'
     body: >
-      The classic aDNA deamination signature: C>T rises toward the 5' read end and G>A rises
-      toward the 3' end, both starting near 0.3 at position 1 and decaying to background within
-      about 10 bp. Every other substitution class sits flat near background throughout, which is
-      what the highlighted lines are picked out against. Which ends to show, how far to draw, and
-      which substitutions to highlight all live in the Settings ⚙ popover.
+      Misincorporation frequency by distance from the read end: C to T rises at the 5 prime
+      end and G to A at the 3 prime end, near 0.3 at position 1 and back to background within
+      10 bp, the deamination signature that authenticates ancient DNA. Ends and the
+      substitutions highlighted are in the tile header. Input: DamageProfiler or mapDamage
+      output of nf-core/eager.
     layout: { x: 0, y: 0, w: 8, h: 2 }
 
   - tag: viz-damage-profile
@@ -57,7 +57,7 @@ components:
     workflow_tag: advanced_viz_demo
     data_collection_tag: 'damage_profile_demo'
     title: 'Misincorporation profile'
-    description: '5-prime and 3-prime substitution frequency by position, 2 samples, C-to-T and G-to-A highlighted. Ends, max position and highlighted substitutions live in the Settings ⚙ popover.'
+    description: '5 prime and 3 prime substitution frequency by position, 2 samples, C to T and G to A highlighted. Ends, maximum position and highlighted substitutions sit in the tile header.'
     section: 'Misincorporation profile'
     viz_kind: 'damage_profile'
     config:
@@ -70,7 +70,8 @@ components:
       ends: "both"
       max_position: 25
       highlight: ["C>T", "G>A"]
-    layout: { x: 0, y: 2, w: 8, h: 8 }
+      controls_placement: "header"
+    layout: { x: 0, y: 2, w: 8, h: 9 }
 
   - tag: filter-damage-profile-sample
     index: dmg-f-sample

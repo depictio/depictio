@@ -1591,6 +1591,11 @@ SASHIMI_CHROM = "chr12"
 
 # (exon start, exon end) — locus A, the cassette-exon gene. E3 is the cassette.
 #
+# Placed inside the hg38 footprint of CHD4 (chr12:6,570,081-6,614,524) so the
+# GenomeSpy view's bundled gene lane names one gene under the arcs instead of
+# the four neighbours an arbitrary window would straddle. The exons themselves
+# are synthetic, not CHD4's.
+#
 # The intron lengths matter as much as the exons. An earlier draft spaced the
 # exons evenly, every intron between 3.7 and 6.2 kb, and the panel came out as a
 # picket fence of near-identical arcs, which is the one thing a real locus never
@@ -1600,14 +1605,14 @@ SASHIMI_CHROM = "chr12"
 # the mid-length part of the gene so the skipping arc is still readable at
 # whole-locus zoom.
 _SASHIMI_EXONS_A = [
-    (6530000, 6530420),  # E1
-    (6545620, 6545807),  # E2, donor of both the inclusion and the skipping junction
-    (6549207, 6549319),  # E3, the cassette, skipped in the knockdown
-    (6552219, 6552483),  # E4, acceptor of the skipping junction
-    (6553263, 6553418),  # E5, 780 bp downstream of E4 — the shortest intron here
-    (6563018, 6563221),  # E6
-    (6564471, 6564612),  # E7
-    (6568712, 6569101),  # E8
+    (6571000, 6571420),  # E1
+    (6586620, 6586807),  # E2, donor of both the inclusion and the skipping junction
+    (6590207, 6590319),  # E3, the cassette, skipped in the knockdown
+    (6593219, 6593483),  # E4, acceptor of the skipping junction
+    (6594263, 6594418),  # E5, 780 bp downstream of E4, the shortest intron here
+    (6604018, 6604221),  # E6
+    (6605471, 6605612),  # E7
+    (6609712, 6610101),  # E8
 ]
 
 # (exon start, exon end) — locus B, 45.7 Mb downstream.
@@ -1838,59 +1843,193 @@ generate_scatter_xy_demo()
 
 
 # ---------------------------------------------------------------------------
-# NN. Contact map: a 3-chromosome binned Hi-C matrix.
-# columns: chrom1, start1, end1, chrom2, start2, end2, count
+# NN. Contact map: a multi-resolution Hi-C matrix over three real loci.
+# columns: chrom, start, end, chrom2, start2, end2, count, resolution
 # ---------------------------------------------------------------------------
-# Intra-chromosomal only (the showcase's chromosome selector switches between
-# the three), 10 kb bins, 40 bins per chromosome. Two ingredients make the
-# heatmap read as a real contact map rather than a diagonal smear: a log-decay
-# of contact frequency with genomic distance, and two TAD blocks (bins 5-15
-# and 25-35) where contacts within the block are boosted regardless of
-# distance, the signature square-along-the-diagonal shape of a real matrix.
+# Three 1.28 Mb windows of GRCh38 chosen for what a Hi-C reader expects to see
+# there: the HOXA cluster sitting on a TAD boundary (chr7), MYC inside a large
+# domain with a loop to its downstream boundary (chr8), and the IGF2 / KCNQ1
+# imprinted domain (chr11). Coordinates are real, so the showcase can draw the
+# bundled hg38 gene lane under the matrix and a locus typed as a gene symbol
+# lands on the right bins.
+#
+# Every resolution is written as a partition of one collection, the way
+# `cooler dump` over an mcool is ingested: the 10 kb pixels are counted, and
+# the 20 kb and 40 kb levels are those pixels summed over 2x2 and 4x4 blocks
+# (what `cooler coarsen` does), never re-simulated. The `resolution` column
+# names the bin size, which is what lets the tile pick the level that fits the
+# visible span and re-read a finer one on zoom.
+#
+# The first-bin columns are named chrom / start / end rather than chrom1 /
+# start1 / end1 on purpose: the locus tabs brush a region onto chrom / start,
+# and a tile follows a region on the columns it binds, so the matrix shares the
+# name with the peak and coverage tracks stacked under it.
+#
 # Only the upper triangle is written; the renderer mirrors it.
-_CONTACT_MAP_CHROMS = ("chr1", "chr2", "chr3")
+_CONTACT_MAP_WINDOWS = (
+    # (chromosome, window start, TAD bin ranges, loop anchor bin pairs)
+    ("chr7", 26_600_000, ((6, 48), (49, 66), (67, 121)), ((49, 66),)),
+    ("chr8", 127_100_000, ((4, 40), (41, 92), (93, 124)), ((63, 92), (41, 63))),
+    ("chr11", 1_800_000, ((10, 32), (33, 62), (63, 112), (113, 127)), ((33, 62), (63, 110))),
+)
 _CONTACT_MAP_BIN_SIZE = 10_000
-_CONTACT_MAP_N_BINS = 40
-_CONTACT_MAP_DECAY_BINS = 6.0
-_CONTACT_MAP_TADS = ((5, 15), (25, 35))
+_CONTACT_MAP_N_BINS = 128
+_CONTACT_MAP_COARSEN = (1, 2, 4)
+_CONTACT_MAP_PEAK = 300.0
+_CONTACT_MAP_DECAY_EXPONENT = 1.5
+_CONTACT_MAP_TAD_BOOST = 2.5
+
+
+def _contact_map_fine_counts(tads, loops, rng: random.Random) -> dict[tuple[int, int], int]:
+    """Integer 10 kb pixel counts (upper triangle) for one window.
+
+    Power-law decay with separation (the P(s) slope of a real matrix), a boost
+    for pixels inside one TAD, and a focal enrichment at each loop anchor pair,
+    which is the dot that only a fine resolution resolves.
+    """
+    counts: dict[tuple[int, int], int] = {}
+    for i in range(_CONTACT_MAP_N_BINS):
+        for j in range(i, _CONTACT_MAP_N_BINS):
+            value = _CONTACT_MAP_PEAK * (j - i + 1) ** -_CONTACT_MAP_DECAY_EXPONENT
+            if any(lo <= i <= hi and lo <= j <= hi for lo, hi in tads):
+                value *= _CONTACT_MAP_TAD_BOOST
+            for a, b in loops:
+                if abs(i - a) <= 1 and abs(j - b) <= 1:
+                    value *= 6.0 if (i, j) == (a, b) else 2.5
+            count = int(round(value * rng.uniform(0.8, 1.2)))
+            if count > 0:
+                counts[(i, j)] = count
+    return counts
 
 
 def generate_contact_map_demo() -> None:
-    """Write contact_map_demo.tsv: 3 chromosomes, diagonal decay + 2 TADs."""
-    header = ["chrom1", "start1", "end1", "chrom2", "start2", "end2", "count"]
+    """Write contact_map_demo.tsv: 3 loci x 3 resolutions (10, 20, 40 kb)."""
+    header = ["chrom", "start", "end", "chrom2", "start2", "end2", "count", "resolution"]
     rows: list[list] = []
     rng = random.Random(20260517)
 
-    for chrom in _CONTACT_MAP_CHROMS:
-        for i in range(_CONTACT_MAP_N_BINS):
-            for j in range(i, _CONTACT_MAP_N_BINS):
-                distance = j - i
-                base = 200.0 * math.exp(-distance / _CONTACT_MAP_DECAY_BINS)
-                in_same_tad = any(lo <= i <= hi and lo <= j <= hi for lo, hi in _CONTACT_MAP_TADS)
-                boost = 3.0 if in_same_tad else 1.0
-                count = base * boost * rng.uniform(0.85, 1.15)
-                # A sparse matrix, like a real one: drop the long, near-zero
-                # off-diagonal tail rather than write rows that round to nothing.
-                if distance > 0 and count < 0.5:
-                    continue
-                start1 = i * _CONTACT_MAP_BIN_SIZE
-                start2 = j * _CONTACT_MAP_BIN_SIZE
+    for chrom, offset, tads, loops in _CONTACT_MAP_WINDOWS:
+        fine = _contact_map_fine_counts(tads, loops, rng)
+        for factor in _CONTACT_MAP_COARSEN:
+            size = _CONTACT_MAP_BIN_SIZE * factor
+            level: dict[tuple[int, int], int] = {}
+            for (i, j), count in fine.items():
+                key = (i // factor, j // factor)
+                level[key] = level.get(key, 0) + count
+            for (a, b), count in sorted(level.items()):
+                start1 = offset + a * size
+                start2 = offset + b * size
                 rows.append(
-                    [
-                        chrom,
-                        start1,
-                        start1 + _CONTACT_MAP_BIN_SIZE,
-                        chrom,
-                        start2,
-                        start2 + _CONTACT_MAP_BIN_SIZE,
-                        round(count, 2),
-                    ]
+                    [chrom, start1, start1 + size, chrom, start2, start2 + size, count, size]
                 )
 
     write_tsv(OUT / "contact_map_demo.tsv", header, rows)
 
 
 generate_contact_map_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN. Locus tracks: CTCF peaks and ChIP coverage over the contact-map loci.
+# locus_peaks_demo:    chrom, start, end, peak_id, score, peak_class
+# locus_coverage_demo: chrom, start, end, coverage, sample
+# ---------------------------------------------------------------------------
+# The two tracks a Hi-C locus figure stacks under the matrix, on the same three
+# windows and the same chrom / start column names, so a region brushed on one
+# of them moves the matrix and the other track together. CTCF peaks sit on
+# every TAD boundary and on every loop anchor (the convergent-CTCF picture),
+# plus a few weaker sites inside domains. The coverage collection carries two
+# ChIP tracks: CTCF, sharp at those peaks, and H3K27ac, broad over the
+# promoters of the bundled hg38 protein-coding genes in each window.
+_LOCUS_PEAK_WIDTH = (250, 600)
+_LOCUS_INTERNAL_PEAKS = 6
+_LOCUS_COVERAGE_BIN = 2_000
+_LOCUS_GENES_JSON = (
+    _REPO_ROOT / "depictio" / "viewer" / "public" / "assets" / "genomes" / "hg38.genes.json"
+)
+
+
+def _locus_peaks() -> list[list]:
+    """CTCF peaks per window: boundaries, loop anchors, then internal sites."""
+    rng = random.Random(20260523)
+    peaks: list[list] = []
+    for chrom, offset, tads, loops in _CONTACT_MAP_WINDOWS:
+        anchored: dict[int, str] = {}
+        for lo, hi in tads:
+            anchored.setdefault(lo, "TAD boundary")
+            anchored.setdefault(hi + 1, "TAD boundary")
+        for a, b in loops:
+            anchored[a] = "loop anchor"
+            anchored[b] = "loop anchor"
+        sites = [(b, cls) for b, cls in anchored.items() if 0 <= b < _CONTACT_MAP_N_BINS]
+        taken = {b for b, _ in sites}
+        wanted = len(sites) + _LOCUS_INTERNAL_PEAKS
+        while len(sites) < wanted:
+            b = rng.randrange(2, _CONTACT_MAP_N_BINS - 2)
+            if all(abs(b - t) > 3 for t in taken):
+                taken.add(b)
+                sites.append((b, "internal"))
+        for b, cls in sorted(sites):
+            width = rng.randint(*_LOCUS_PEAK_WIDTH)
+            centre = offset + b * _CONTACT_MAP_BIN_SIZE + rng.randint(-2_000, 2_000)
+            base = {"loop anchor": 14.0, "TAD boundary": 10.0, "internal": 4.0}[cls]
+            score = round(base * rng.uniform(0.75, 1.25), 2)
+            peaks.append([chrom, centre - width // 2, centre + width // 2, "", score, cls])
+    for n, peak in enumerate(peaks, start=1):
+        peak[3] = f"CTCF_{n:03d}"
+    return peaks
+
+
+def _locus_promoters(chrom: str, lo: int, hi: int) -> list[int]:
+    """TSS positions of the bundled hg38 protein-coding genes inside a window."""
+    import json
+
+    genes = json.loads(_LOCUS_GENES_JSON.read_text())["genes"]
+    tss = []
+    for name, g_chrom, start, end, strand in genes:
+        if g_chrom != chrom:
+            continue
+        site = start if strand == "+" else end
+        if lo <= site < hi:
+            tss.append(site)
+    return tss
+
+
+def generate_locus_peaks_demo() -> None:
+    """Write locus_peaks_demo.tsv: CTCF peaks over the three contact-map loci."""
+    header = ["chrom", "start", "end", "peak_id", "score", "peak_class"]
+    write_tsv(OUT / "locus_peaks_demo.tsv", header, _locus_peaks())
+
+
+def generate_locus_coverage_demo() -> None:
+    """Write locus_coverage_demo.tsv: CTCF and H3K27ac ChIP depth in 2 kb bins."""
+    header = ["chrom", "start", "end", "coverage", "sample"]
+    rows: list[list] = []
+    rng = random.Random(20260524)
+    peaks = _locus_peaks()
+    span = _CONTACT_MAP_N_BINS * _CONTACT_MAP_BIN_SIZE
+    for chrom, offset, _tads, _loops in _CONTACT_MAP_WINDOWS:
+        centres = [((p[1] + p[2]) // 2, p[4]) for p in peaks if p[0] == chrom]
+        promoters = _locus_promoters(chrom, offset, offset + span)
+        for sample in ("GM12878_CTCF", "GM12878_H3K27ac"):
+            for start in range(offset, offset + span, _LOCUS_COVERAGE_BIN):
+                mid = start + _LOCUS_COVERAGE_BIN / 2
+                depth = 2.0
+                if sample == "GM12878_CTCF":
+                    # Sharp: a peak is one or two bins wide.
+                    for centre, score in centres:
+                        depth += score * 6.0 * math.exp(-(((mid - centre) / 1_200.0) ** 2))
+                else:
+                    # Broad: acetylation spreads a few kb either side of a TSS.
+                    for site in promoters:
+                        depth += 40.0 * math.exp(-(((mid - site) / 4_000.0) ** 2))
+                depth *= rng.uniform(0.85, 1.15)
+                rows.append([chrom, start, start + _LOCUS_COVERAGE_BIN, round(depth, 2), sample])
+    write_tsv(OUT / "locus_coverage_demo.tsv", header, rows)
+
+
+generate_locus_peaks_demo()
+generate_locus_coverage_demo()
 
 
 # ---------------------------------------------------------------------------
@@ -2146,6 +2285,57 @@ generate_genome_chord_demo()
 
 
 # ---------------------------------------------------------------------------
+# NN. Somatic SNVs: one tumour genome for the rainfall view of the Manhattan.
+# columns: chr, pos, vaf, mutation_class, sample
+# ---------------------------------------------------------------------------
+# A rainfall plot puts each variant at its position and the distance to the
+# previous variant on y, so it only says something when the calls carry
+# clusters. The background is scattered along GRCh38 in proportion to
+# chromosome length with the C>T excess of a clock-like signature; three
+# kataegis foci (tens of C>T and C>G calls within a few kb, the APOBEC
+# signature) fall to the bottom of the plot as the vertical streaks the view
+# exists to show. `vaf` fills the score role the kind binds.
+_SOMATIC_BACKGROUND = 1_400
+_SOMATIC_CLASSES = ("C>A", "C>G", "C>T", "T>A", "T>C", "T>G")
+_SOMATIC_BACKGROUND_WEIGHTS = (0.14, 0.10, 0.42, 0.08, 0.17, 0.09)
+_SOMATIC_KATAEGIS = (
+    # (chromosome, focus, number of calls, span in bp)
+    ("chr2", 60_120_000, 38, 9_000),
+    ("chr8", 127_730_000, 30, 6_000),
+    ("chr17", 7_660_000, 26, 5_000),
+)
+
+
+def generate_somatic_snv_demo() -> None:
+    """Write somatic_snv_demo.tsv: a clock-like background plus 3 kataegis foci."""
+    header = ["chr", "pos", "vaf", "mutation_class", "sample"]
+    rng = random.Random(20260525)
+    names = [c for c in _CHORD_CHROM_SIZES if c != "chrY"]
+    total = sum(_CHORD_CHROM_SIZES[c] for c in names)
+    rows: list[list] = []
+    for _ in range(_SOMATIC_BACKGROUND):
+        point = rng.randrange(total)
+        for chrom in names:
+            size = _CHORD_CHROM_SIZES[chrom]
+            if point < size:
+                break
+            point -= size
+        cls = rng.choices(_SOMATIC_CLASSES, weights=_SOMATIC_BACKGROUND_WEIGHTS)[0]
+        rows.append([chrom, point + 1, round(rng.betavariate(4, 8), 3), cls, "TUMOUR_01"])
+    for chrom, focus, n_calls, span in _SOMATIC_KATAEGIS:
+        for _ in range(n_calls):
+            cls = rng.choice(("C>T", "C>T", "C>G"))
+            pos = focus + rng.randint(-span // 2, span // 2)
+            rows.append([chrom, pos, round(rng.betavariate(3, 9), 3), cls, "TUMOUR_01"])
+    order = {c: i for i, c in enumerate(names)}
+    rows.sort(key=lambda r: (order[r[0]], r[1]))
+    write_tsv(OUT / "somatic_snv_demo.tsv", header, rows)
+
+
+generate_somatic_snv_demo()
+
+
+# ---------------------------------------------------------------------------
 # NN. Transcript structure: isoforms of two genes on a base-pair axis.
 # columns: transcript_id, gene_id, gene_name, chrom, start, end, feature,
 #          strand, transcript_class, sample, expression
@@ -2323,7 +2513,8 @@ generate_transcript_structure_demo()
 
 # ---------------------------------------------------------------------------
 # NN. CNV profile: a synthetic somatic copy-number profile, 2 tumour samples.
-# columns: sample, chrom, start, end, log2, baf, copy_number, segment, label
+# columns: sample, chrom, start, end, log2, baf, copy_number, minor_copy_number,
+#          segment, label
 # ---------------------------------------------------------------------------
 # One long table carrying both the evidence and the call, told apart by the
 # `segment` column, which is the shape the three somatic callers in the catalog
@@ -2353,21 +2544,24 @@ _CNV_CHROMS = (
 _CNV_BIN_SIZE = 20_000
 _CNV_LOG2_NOISE = 0.12
 _CNV_BAF_NOISE = 0.035
-# (chrom, first bin, last bin, log2, copy number, BAF bands, label)
+# (chrom, first bin, last bin, log2, copy number, BAF bands, label, minor copy number)
+# The minor copy number is ASCAT's nMinor (nMajor is the total minus it): the
+# allele-specific call that tells a copy-neutral LOH (2 + 0) from a balanced
+# diploid region (1 + 1) when the total copy number is the same.
 _CNV_EVENTS = {
     "TUMOUR_A": (
-        ("chr1", 800, 1400, 0.58, 3, (0.33, 0.67), "CN 3 gain"),
-        ("chr2", 300, 900, -1.00, 1, (0.02, 0.98), "CN 1 loss"),
-        ("chr2", 1600, 2200, 0.28, 3, (0.40, 0.60), "CN 3 subclonal gain"),
-        ("chr3", 500, 1200, 0.00, 2, (0.04, 0.96), "CN 2 copy-neutral LOH"),
-        ("chr4", 700, 760, 1.80, 7, (0.14, 0.86), "CN 7 amplification"),
-        ("chr5", 400, 450, -2.60, 0, None, "CN 0 deletion"),
+        ("chr1", 800, 1400, 0.58, 3, (0.33, 0.67), "CN 3 gain", 1),
+        ("chr2", 300, 900, -1.00, 1, (0.02, 0.98), "CN 1 loss", 0),
+        ("chr2", 1600, 2200, 0.28, 3, (0.40, 0.60), "CN 3 subclonal gain", 1),
+        ("chr3", 500, 1200, 0.00, 2, (0.04, 0.96), "CN 2 copy-neutral LOH", 0),
+        ("chr4", 700, 760, 1.80, 7, (0.14, 0.86), "CN 7 amplification", 1),
+        ("chr5", 400, 450, -2.60, 0, None, "CN 0 deletion", 0),
     ),
     "TUMOUR_B": (
-        ("chr1", 2100, 2800, -0.45, 1, (0.12, 0.88), "CN 1 loss"),
-        ("chr3", 500, 1200, 0.00, 2, (0.05, 0.95), "CN 2 copy-neutral LOH"),
-        ("chr4", 100, 900, 0.45, 3, (0.35, 0.65), "CN 3 gain"),
-        ("chr5", 200, 600, 0.62, 3, (0.34, 0.66), "CN 3 gain"),
+        ("chr1", 2100, 2800, -0.45, 1, (0.12, 0.88), "CN 1 loss", 0),
+        ("chr3", 500, 1200, 0.00, 2, (0.05, 0.95), "CN 2 copy-neutral LOH", 0),
+        ("chr4", 100, 900, 0.45, 3, (0.35, 0.65), "CN 3 gain", 1),
+        ("chr5", 200, 600, 0.62, 3, (0.34, 0.66), "CN 3 gain", 1),
     ),
 }
 
@@ -2400,7 +2594,18 @@ def _cnv_neutral_runs(events, chrom: str, n_bins: int):
 
 def generate_cnv_profile_demo() -> None:
     """Write cnv_profile_demo.tsv: 20 000 bins and the segments called over them."""
-    header = ["sample", "chrom", "start", "end", "log2", "baf", "copy_number", "segment", "label"]
+    header = [
+        "sample",
+        "chrom",
+        "start",
+        "end",
+        "log2",
+        "baf",
+        "copy_number",
+        "minor_copy_number",
+        "segment",
+        "label",
+    ]
     rows: list[list] = []
     rng = random.Random(20260520)
 
@@ -2412,10 +2617,12 @@ def generate_cnv_profile_demo() -> None:
                 if event is None:
                     log2 = rng.gauss(0.0, _CNV_LOG2_NOISE)
                     copy_number = 2
+                    minor_copy_number = 1
                     baf = rng.gauss(0.5, _CNV_BAF_NOISE)
                 else:
                     log2 = rng.gauss(event[3], _CNV_LOG2_NOISE)
                     copy_number = event[4]
+                    minor_copy_number = event[7]
                     bands = event[5]
                     # One of the two allelic bands per bin: drawing both is what
                     # makes an unbalanced region read as a split rather than a
@@ -2434,6 +2641,7 @@ def generate_cnv_profile_demo() -> None:
                         round(log2, 3),
                         None if baf is None else round(baf, 3),
                         copy_number,
+                        minor_copy_number,
                         "bin",
                         None,
                     ]
@@ -2442,11 +2650,15 @@ def generate_cnv_profile_demo() -> None:
         # The calls over those bins: every planted event, plus the neutral
         # stretches between them, so the segment track covers the genome.
         for chrom, n_bins in _CNV_CHROMS:
-            called = [(e[1], e[2], e[3], e[4], e[5], e[6]) for e in events if e[0] == chrom] + [
-                (first, last, 0.0, 2, (0.5, 0.5), "CN 2")
+            called = [
+                (e[1], e[2], e[3], e[4], e[5], e[6], e[7]) for e in events if e[0] == chrom
+            ] + [
+                (first, last, 0.0, 2, (0.5, 0.5), "CN 2", 1)
                 for first, last in _cnv_neutral_runs(events, chrom, n_bins)
             ]
-            for first, last, log2, copy_number, bands, label in sorted(called):
+            for first, last, log2, copy_number, bands, label, minor_copy_number in sorted(
+                called, key=lambda c: (c[0], c[1])
+            ):
                 rows.append(
                     [
                         sample,
@@ -2456,6 +2668,7 @@ def generate_cnv_profile_demo() -> None:
                         round(log2, 3),
                         None if bands is None else round(min(bands), 3),
                         copy_number,
+                        minor_copy_number,
                         "segment",
                         label,
                     ]
@@ -2465,3 +2678,150 @@ def generate_cnv_profile_demo() -> None:
 
 
 generate_cnv_profile_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN. Record card: a per-gene fact sheet, one row per entity.
+# columns: feature_id, gene_symbol, gene_name, biotype, chromosome, start, end,
+#          strand, effect_size, significance, mean_expression, n_variants,
+#          top_consequence, pathway, ensembl_id, uniprot_id
+# ---------------------------------------------------------------------------
+# The card is the one tile in the showcase that draws nothing until something
+# else is clicked, so its collection has to be the same one a scatter binds:
+# the effect-size and mean-expression columns are there to give that scatter
+# real axes, and the identifier columns are there to give the card its links.
+_CARD_BIOTYPES = ("protein_coding", "lncRNA", "pseudogene")
+_CARD_PATHWAYS = (
+    "Interferon signalling",
+    "Cell cycle",
+    "Oxidative phosphorylation",
+    "Extracellular matrix",
+    "Unassigned",
+)
+_CARD_CONSEQUENCES = ("missense", "synonymous", "frameshift", "stop_gained", "intronic")
+_CARD_CHROMS = ("chr1", "chr2", "chr7", "chr12", "chrX")
+
+
+def generate_record_card_demo() -> None:
+    """Write record_card_demo.tsv: 120 genes with the fields a card groups."""
+    header = [
+        "feature_id",
+        "gene_symbol",
+        "gene_name",
+        "biotype",
+        "chromosome",
+        "start",
+        "end",
+        "strand",
+        "effect_size",
+        "significance",
+        "mean_expression",
+        "n_variants",
+        "top_consequence",
+        "pathway",
+        "ensembl_id",
+        "uniprot_id",
+    ]
+    rows: list[list] = []
+    rng = random.Random(20260901)
+
+    for index in range(120):
+        symbol = f"GENE{index:03d}"
+        chrom = _CARD_CHROMS[index % len(_CARD_CHROMS)]
+        start = 1_000_000 + index * 137_000
+        # A quarter of the genes are planted as hits so the scatter that drives
+        # the card has something worth clicking on.
+        is_hit = index % 4 == 0
+        effect = rng.gauss(2.4 if is_hit else 0.0, 0.6) * (1 if index % 2 == 0 else -1)
+        padj = rng.uniform(1e-9, 1e-4) if is_hit else rng.uniform(0.05, 0.95)
+        rows.append(
+            [
+                symbol,
+                symbol,
+                f"{_CARD_BIOTYPES[index % len(_CARD_BIOTYPES)].replace('_', ' ')} gene {index:03d}",
+                _CARD_BIOTYPES[index % len(_CARD_BIOTYPES)],
+                chrom,
+                start,
+                start + rng.randint(4_000, 90_000),
+                "+" if index % 3 else "-",
+                round(effect, 3),
+                float(f"{padj:.3g}"),
+                round(rng.uniform(1.0, 12.0), 3),
+                rng.randint(0, 24),
+                _CARD_CONSEQUENCES[index % len(_CARD_CONSEQUENCES)],
+                _CARD_PATHWAYS[index % len(_CARD_PATHWAYS)],
+                f"ENSG{index:011d}",
+                f"P{index:05d}",
+            ]
+        )
+
+    write_tsv(OUT / "record_card_demo.tsv", header, rows)
+
+
+generate_record_card_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN. Parallel coordinates: per-sample QC metrics, MultiQC general-stats shape.
+# columns: sample, group, total_reads_m, percent_duplicates, percent_gc,
+#          mean_quality, percent_aligned, insert_size_median, percent_rrna,
+#          genes_detected
+# ---------------------------------------------------------------------------
+# Three groups whose polylines cross in some axes and separate in others, which
+# is the whole reason to draw a sample profile as a set of parallel axes rather
+# than as eight box plots: the failing libraries are not the worst on any single
+# metric, they are the ones that bend the same way across four of them.
+_PC_GROUPS = (
+    # name, n, reads, dup, gc, quality, aligned, insert, rrna, genes
+    ("control", 10, 48.0, 12.0, 47.0, 36.5, 94.0, 210.0, 2.5, 14800.0),
+    ("treated", 10, 44.0, 15.0, 48.5, 36.0, 92.5, 205.0, 3.2, 14300.0),
+    ("degraded", 6, 21.0, 34.0, 52.0, 32.0, 71.0, 140.0, 11.5, 9600.0),
+)
+
+
+def generate_parallel_coordinates_demo() -> None:
+    """Write parallel_coordinates_demo.tsv: 26 libraries over 8 QC metrics."""
+    header = [
+        "sample",
+        "group",
+        "total_reads_m",
+        "percent_duplicates",
+        "percent_gc",
+        "mean_quality",
+        "percent_aligned",
+        "insert_size_median",
+        "percent_rrna",
+        "genes_detected",
+    ]
+    rows: list[list] = []
+    rng = random.Random(20260902)
+    counter = 0
+
+    for group, count, *centres in _PC_GROUPS:
+        for _ in range(count):
+            counter += 1
+            reads, dup, gc, quality, aligned, insert, rrna, genes = (
+                # A tenth of the centre as spread: enough for the lines to fan
+                # out, tight enough for the three groups to stay legible.
+                rng.gauss(centre, abs(centre) * 0.10)
+                for centre in centres
+            )
+            rows.append(
+                [
+                    f"SAMPLE_{counter:02d}",
+                    group,
+                    round(max(1.0, reads), 2),
+                    round(min(99.0, max(0.0, dup)), 2),
+                    round(min(80.0, max(20.0, gc)), 2),
+                    round(max(10.0, quality), 2),
+                    round(min(99.9, max(5.0, aligned)), 2),
+                    int(max(50.0, insert)),
+                    round(max(0.0, rrna), 2),
+                    int(max(500.0, genes)),
+                ]
+            )
+
+    write_tsv(OUT / "parallel_coordinates_demo.tsv", header, rows)
+
+
+generate_parallel_coordinates_demo()

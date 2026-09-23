@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "The feature matrix with rows and columns reordered by hierarchical clustering, dendrograms on both axes. The clustering is recomputed on whatever the filters leave, so narrowing to one cluster genuinely changes the tree rather than hiding branches.\n",
+      "body": "Ninety samples by thirty features, z-scored per feature, with rows and columns reordered by hierarchical clustering and dendrograms on both axes; the strip names each sample's condition. Normalisation and the clustering method are in the tile header, and filtering to one condition recomputes the tree. Input: a normalised count matrix such as nf- core/rnaseq or nf-core/differentialabundance produce.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -58,12 +58,13 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "description": "Server-side clustering via packages/plotly-complexheatmap. 90 samples \u00d7 first 30 features of the synthetic matrix, z-scored per column with a cluster annotation strip on the right. Settings \u2699 tunes normalisation / cluster method / cluster axes; each change re-dispatches a Celery task (cached by params).",
+      "description": "Server-side clustering via packages/plotly-complexheatmap: 90 samples by the first 30 features, z-scored per feature, with a condition strip. Normalisation and clustering sit in the tile header; each change re-runs a cached Celery task.",
       "title_size": "sm",
       "title_align": "left",
       "section": "Clustered matrix",
       "viz_kind": "complex_heatmap",
       "config": {
+        "controls_placement": "header",
         "viz_kind": "complex_heatmap",
         "matrix_wf_id": "646b0f3c1e4a2d7f8e5b8d01",
         "matrix_dc_id": "646b0f3c1e4a2d7f8e5b8d0b",
@@ -155,6 +156,7 @@
       "group": "Matrix filters",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
       "custom_color": "#3F51B5",
       "icon_name": "mdi:form-select",
       "wf_tag": "python/advanced_viz_demo"
@@ -180,7 +182,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 1,
+      "h": 2,
       "static": false,
       "resizeHandles": [
         "se",
@@ -195,7 +197,7 @@
       "x": 0,
       "y": 2,
       "w": 8,
-      "h": 8,
+      "h": 9,
       "static": false,
       "resizeHandles": [
         "se",
@@ -215,8 +217,8 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "ComplexHeatmap",
-  "subtitle": "Clustered heatmap with dendrograms + annotation track. Server-side compute via packages/plotly-complexheatmap; cached by (DC, normalize, cluster opts, filters).",
+  "title": "Clustered expression matrix",
+  "subtitle": "Clustered heatmap with dendrograms and a condition strip, computed on the server and cached per parameters and filters",
   "icon": "mdi:grid",
   "icon_color": "indigo",
   "icon_variant": "filled",
@@ -252,7 +254,7 @@
   },
   "tab_order": 14,
   "main_tab_name": null,
-  "tab_icon": "mdi:grid",
+  "tab_icon": "mdi:chart-box-outline",
   "tab_icon_color": "indigo",
   "parent_dashboard_title": null,
   "filter_sections": [
@@ -278,5 +280,7 @@
     }
   ],
   "funnel_filtering": true,
-  "brand_theme": null
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
 }

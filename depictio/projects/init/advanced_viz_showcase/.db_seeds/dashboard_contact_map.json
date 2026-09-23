@@ -13,7 +13,7 @@
     {
       "index": "cmap-text",
       "component_type": "text",
-      "title": "Contact map",
+      "title": "Chromatin contacts",
       "workflow_tag": "",
       "data_collection_tag": "",
       "wf_id": {
@@ -30,13 +30,79 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "One triangle of (bin1, bin2) contacts is enough: the heatmap mirrors it across the diagonal. Contact frequency falls off with genomic distance, and the two TAD blocks read as brighter squares astride the diagonal, regardless of that fall-off. The chromosome selector, log colour scale and row/column balancing all live in the Settings \u2699 popover.\n",
+      "body": "A Hi-C matrix drawn as a triangle: x is the position on chr8, y the distance between the two bins, so a TAD reads as a triangle and a loop as a dot at its apex. The collection holds 10, 20 and 40 kb pixels; the tab opens on the 40 kb level for the whole locus, and a zoom (drag on the matrix, or type MYC in the navigator's locus field) re-reads that window at 10 kb. Resolution pins a level, Display flips to the square matrix. Input: the mcool of nf-core/hic, one partition per resolution.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "cmap-peaks",
+      "component_type": "advanced_viz",
+      "title": "Locus navigator",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "locus_peaks_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8dc1"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "CTCF peaks over the three contact-map loci: every TAD boundary, every loop anchor and a few internal sites",
+        "data_collection_tag": "locus_peaks_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8dc1"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "CTCF peaks along chr8, coloured by where they sit. Type a locus or a gene symbol in the header, or brush an interval, to move this track and the matrix below.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Contact matrix",
+      "viz_kind": "genome_view",
+      "config": {
+        "controls_placement": "header",
+        "viz_kind": "genome_view",
+        "source": "table",
+        "chr_col": "chrom",
+        "pos_col": "start",
+        "score_col": "score",
+        "feature_col": "peak_id",
+        "end_col": "end",
+        "sample_col": null,
+        "category_col": "peak_class",
+        "mark": "bar",
+        "facet_by_sample": false,
+        "max_facets": 8,
+        "annotation": "none",
+        "assembly": "hg38",
+        "score_title": "CTCF -log10(q)",
+        "score_threshold": null,
+        "point_size": 5,
+        "opacity": 0.85,
+        "region_filter_enabled": true,
+        "follow_region_filter": false,
+        "default_region": "chr8",
+        "selection_enabled": false,
+        "selection_column": null,
+        "file_info_fields": null,
+        "file_category_field": null,
+        "file_categories": null,
+        "file_add_chr_prefix": false,
+        "file_window_size": null,
+        "file_max_lanes": 8,
+        "file_tabix_columns": null,
+        "file_bam_view": "coverage"
+      },
       "wf_tag": "python/advanced_viz_demo"
     },
     {
       "index": "cmap-matrix",
       "component_type": "advanced_viz",
-      "title": "Contact matrix",
+      "title": "Contact triangle",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "contact_map_demo",
       "wf_id": {
@@ -48,7 +114,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Binned Hi-C style contact matrix over 3 synthetic chromosomes: diagonal decay plus two TAD blocks",
+        "description": "Hi-C contact matrix over three GRCh38 loci (HOXA, MYC, IGF2 and KCNQ1) at 10, 20 and 40 kb, one partition per resolution",
         "data_collection_tag": "contact_map_demo",
         "dc_specific_properties": null,
         "_id": {
@@ -58,26 +124,28 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "description": "10 kb bins across 3 synthetic chromosomes, diagonal decay plus two TAD blocks. Chromosome, log colour scale and balancing live in the Settings \u2699 popover.",
+      "description": "Contacts on the region above, at the resolution that fits the visible span. Zoom to re-read a window at a finer level; the echo line names the level drawn.",
       "title_size": "sm",
       "title_align": "left",
       "section": "Contact matrix",
       "viz_kind": "contact_map",
       "config": {
+        "controls_placement": "header",
         "viz_kind": "contact_map",
-        "chrom1_col": "chrom1",
-        "start1_col": "start1",
+        "chrom1_col": "chrom",
+        "start1_col": "start",
         "chrom2_col": "chrom2",
         "start2_col": "start2",
         "count_col": "count",
-        "end1_col": "end1",
+        "end1_col": "end",
         "end2_col": "end2",
         "sample_col": null,
-        "chrom": "chr1",
+        "resolution_col": "resolution",
+        "chrom": null,
         "log_scale": true,
         "colour_scale": "Viridis",
         "balance": false,
-        "display": "square",
+        "display": "triangle",
         "max_separation_bins": 0,
         "max_bins": 500
       },
@@ -98,7 +166,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Binned Hi-C style contact matrix over 3 synthetic chromosomes: diagonal decay plus two TAD blocks",
+        "description": "Hi-C contact matrix over three GRCh38 loci (HOXA, MYC, IGF2 and KCNQ1) at 10, 20 and 40 kb, one partition per resolution",
         "data_collection_tag": "contact_map_demo",
         "dc_specific_properties": null,
         "_id": {
@@ -112,7 +180,7 @@
       "title_align": "left",
       "section": "Matrix scope",
       "interactive_component_type": "MultiSelect",
-      "column_name": "chrom1",
+      "column_name": "chrom",
       "column_type": "object",
       "value": null,
       "default_state": null,
@@ -121,8 +189,50 @@
       "group": "Matrix filters",
       "timescale": null,
       "show_marks": null,
-      "custom_color": "#AE3EC9",
+      "show_histogram": null,
       "icon_name": "mdi:dna",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "cmap-f-peak-class",
+      "component_type": "interactive",
+      "title": "CTCF peak class",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "locus_peaks_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8dc1"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "CTCF peaks over the three contact-map loci: every TAD boundary, every loop anchor and a few internal sites",
+        "data_collection_tag": "locus_peaks_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8dc1"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Matrix scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "peak_class",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Matrix filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "icon_name": "mdi:shape-outline",
       "wf_tag": "python/advanced_viz_demo"
     }
   ],
@@ -135,6 +245,14 @@
       "i": "box-cmap-f-chrom",
       "x": 0,
       "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-cmap-f-peak-class",
+      "x": 0,
+      "y": 3,
       "w": 1,
       "h": 3,
       "static": false
@@ -157,9 +275,24 @@
       ]
     },
     {
-      "i": "box-cmap-matrix",
+      "i": "box-cmap-peaks",
       "x": 0,
       "y": 2,
+      "w": 8,
+      "h": 3,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-cmap-matrix",
+      "x": 0,
+      "y": 5,
       "w": 8,
       "h": 8,
       "static": false,
@@ -181,8 +314,8 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "Contact map",
-  "subtitle": "Binned Hi-C style contact matrix over 3 synthetic chromosomes: contact frequency decays with genomic distance, with two TAD blocks standing out as squares along the diagonal.",
+  "title": "Chromatin contacts (Hi-C)",
+  "subtitle": "A multi-resolution Hi-C contact matrix over the MYC, HOXA and IGF2 loci, drawn as a triangle that re-reads a finer resolution as you zoom.",
   "icon": "mdi:grid",
   "icon_color": "grape",
   "icon_variant": "filled",
@@ -226,7 +359,7 @@
       "name": "Matrix scope",
       "icon": "mdi:filter-variant",
       "color": "grape",
-      "description": "Restricts which chromosome the matrix is built from",
+      "description": "Restricts the chromosome the matrix is read from and the peak classes drawn above it",
       "collapsed": false,
       "persistent": false,
       "pin": "top"
@@ -237,12 +370,14 @@
       "name": "Contact matrix",
       "icon": "mdi:chart-box-outline",
       "color": "grape",
-      "description": "Binned intra-chromosomal contact frequency",
+      "description": "A locus navigator above the contact triangle it moves",
       "collapsed": false,
       "persistent": false,
       "pin": "top"
     }
   ],
   "funnel_filtering": true,
-  "brand_theme": null
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
 }

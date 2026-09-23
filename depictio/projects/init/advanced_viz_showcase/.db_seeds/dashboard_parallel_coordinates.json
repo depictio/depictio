@@ -1,19 +1,19 @@
 {
   "_id": {
-    "$oid": "646b0f3c1e4a2d7f8e5b8d40"
+    "$oid": "646b0f3c1e4a2d7f8e5b8db0"
   },
   "description": null,
   "flexible_metadata": null,
   "hash": null,
   "dashboard_id": {
-    "$oid": "646b0f3c1e4a2d7f8e5b8d40"
+    "$oid": "646b0f3c1e4a2d7f8e5b8db0"
   },
   "version": 1,
   "stored_metadata": [
     {
-      "index": "ma-text",
+      "index": "pcoords-text",
       "component_type": "text",
-      "title": "MA plot",
+      "title": "Library QC profile",
       "workflow_tag": "",
       "data_collection_tag": "",
       "wf_id": {
@@ -26,77 +26,86 @@
       "last_updated": "2026-05-12T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
-      "section": "MA plot",
+      "section": "Sample QC profile",
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Effect size against average intensity, the diagnostic companion to the volcano: a fold change that only appears at low intensity is usually noise, and it shows up here as a funnel opening to the left. The same feature set as the volcano tab, read against a different x axis.\n",
+      "body": "Eight QC metrics per library (MultiQC general statistics of nf-core/rnaseq), one axis each, one line per library coloured by group. The degraded libraries are not the worst on any single axis; they bend the same way across duplication, alignment rate and rRNA. Drag along the duplication axis to brush a range: the brush becomes a dashboard filter, and the Duplicates slider on the left shows the distribution you are cutting.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
-      "index": "ma-plot",
+      "index": "pcoords-axes",
       "component_type": "advanced_viz",
-      "title": "MA plot \u2014 differential abundance",
+      "title": "Per-library QC profile",
       "workflow_tag": "advanced_viz_demo",
-      "data_collection_tag": "volcano_demo",
+      "data_collection_tag": "parallel_coordinates_demo",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8d01"
       },
       "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d02"
+        "$oid": "646b0f3c1e4a2d7f8e5b8db2"
       },
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Synthetic volcano: 200 features x 2 contrasts; ~15% are designed hits",
-        "data_collection_tag": "volcano_demo",
+        "description": "26 libraries over 8 QC metrics in 3 groups: the degraded group separates on the combination rather than on any single metric",
+        "data_collection_tag": "parallel_coordinates_demo",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8d02"
+          "$oid": "646b0f3c1e4a2d7f8e5b8db2"
         }
       },
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "description": "Mean log intensity vs log2 fold change \u2014 same tier-colour story as the volcano, different axis pairing.",
+      "description": "One polyline per library across eight metrics, coloured by group. Each axis is rescaled so the axes are comparable, while the tick labels keep the original units. Brushing an axis emits a range filter on that column.",
       "title_size": "sm",
       "title_align": "left",
-      "section": "MA plot",
-      "viz_kind": "ma",
+      "section": "Sample QC profile",
+      "viz_kind": "parallel_coordinates",
       "config": {
-        "viz_kind": "ma",
-        "feature_id_col": "feature_id",
-        "avg_log_intensity_col": "avg_log_intensity",
-        "log2_fold_change_col": "effect_size",
-        "significance_col": "significance",
-        "label_col": "label",
-        "significance_threshold": 0.05,
-        "fold_change_threshold": 1.0,
-        "top_n_labels": 15,
-        "show_labels": true
+        "controls_placement": "header",
+        "viz_kind": "parallel_coordinates",
+        "sample_col": "sample",
+        "metric_cols": [
+          "total_reads_m",
+          "percent_duplicates",
+          "percent_gc",
+          "mean_quality",
+          "percent_aligned",
+          "insert_size_median",
+          "percent_rrna",
+          "genes_detected"
+        ],
+        "group_col": "group",
+        "scale": "minmax",
+        "max_rows": 2000,
+        "max_axes": 12,
+        "colour_scale": "Viridis",
+        "line_opacity": 0.6
       },
       "wf_tag": "python/advanced_viz_demo"
     },
     {
-      "index": "ma-f-category",
+      "index": "pcoords-f-group",
       "component_type": "interactive",
-      "title": "Category",
+      "title": "Group",
       "workflow_tag": "advanced_viz_demo",
-      "data_collection_tag": "volcano_demo",
+      "data_collection_tag": "parallel_coordinates_demo",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8d01"
       },
       "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d02"
+        "$oid": "646b0f3c1e4a2d7f8e5b8db2"
       },
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Synthetic volcano: 200 features x 2 contrasts; ~15% are designed hits",
-        "data_collection_tag": "volcano_demo",
+        "description": "26 libraries over 8 QC metrics in 3 groups: the degraded group separates on the combination rather than on any single metric",
+        "data_collection_tag": "parallel_coordinates_demo",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8d02"
+          "$oid": "646b0f3c1e4a2d7f8e5b8db2"
         }
       },
       "cols_json": {},
@@ -104,41 +113,42 @@
       "last_updated": "2026-05-12T00:00:00.000000",
       "title_size": "md",
       "title_align": "left",
-      "section": "Feature scope",
+      "section": "Library scope",
       "interactive_component_type": "MultiSelect",
-      "column_name": "category",
+      "column_name": "group",
       "column_type": "object",
       "value": null,
       "default_state": null,
       "filter_expr": null,
       "placement": "left",
-      "group": "Feature filters",
+      "group": "Library filters",
       "timescale": null,
       "show_marks": null,
-      "custom_color": "#E91E63",
-      "icon_name": "mdi:form-select",
+      "show_histogram": null,
+      "custom_color": "#0CA678",
+      "icon_name": "mdi:test-tube",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
-      "index": "ma-f-significance",
+      "index": "pcoords-f-dup",
       "component_type": "interactive",
-      "title": "Significance",
+      "title": "Duplicates (%)",
       "workflow_tag": "advanced_viz_demo",
-      "data_collection_tag": "volcano_demo",
+      "data_collection_tag": "parallel_coordinates_demo",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8d01"
       },
       "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8d02"
+        "$oid": "646b0f3c1e4a2d7f8e5b8db2"
       },
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Synthetic volcano: 200 features x 2 contrasts; ~15% are designed hits",
-        "data_collection_tag": "volcano_demo",
+        "description": "26 libraries over 8 QC metrics in 3 groups: the degraded group separates on the combination rather than on any single metric",
+        "data_collection_tag": "parallel_coordinates_demo",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8d02"
+          "$oid": "646b0f3c1e4a2d7f8e5b8db2"
         }
       },
       "cols_json": {},
@@ -146,19 +156,20 @@
       "last_updated": "2026-05-12T00:00:00.000000",
       "title_size": "md",
       "title_align": "left",
-      "section": "Feature scope",
+      "section": "Library scope",
       "interactive_component_type": "RangeSlider",
-      "column_name": "significance",
+      "column_name": "percent_duplicates",
       "column_type": "float64",
       "value": null,
       "default_state": null,
       "filter_expr": null,
       "placement": "left",
-      "group": "Feature filters",
+      "group": "Library filters",
       "timescale": null,
       "show_marks": null,
-      "custom_color": "#F68B33",
-      "icon_name": "mdi:target",
+      "show_histogram": true,
+      "custom_color": "#0CA678",
+      "icon_name": "mdi:chart-bell-curve",
       "wf_tag": "python/advanced_viz_demo"
     }
   ],
@@ -168,7 +179,7 @@
   "stored_edit_dashboard_mode_button": [],
   "left_panel_layout_data": [
     {
-      "i": "box-ma-f-category",
+      "i": "box-pcoords-f-group",
       "x": 0,
       "y": 0,
       "w": 1,
@@ -176,7 +187,7 @@
       "static": false
     },
     {
-      "i": "box-ma-f-significance",
+      "i": "box-pcoords-f-dup",
       "x": 0,
       "y": 3,
       "w": 1,
@@ -186,11 +197,11 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-ma-text",
+      "i": "box-pcoords-text",
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 1,
+      "h": 2,
       "static": false,
       "resizeHandles": [
         "se",
@@ -201,11 +212,11 @@
       ]
     },
     {
-      "i": "box-ma-plot",
+      "i": "box-pcoords-axes",
       "x": 0,
-      "y": 1,
+      "y": 2,
       "w": 8,
-      "h": 8,
+      "h": 9,
       "static": false,
       "resizeHandles": [
         "se",
@@ -225,10 +236,10 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "MA plot",
-  "subtitle": "Mean log intensity vs log2 fold change",
-  "icon": "mdi:chart-bell-curve",
-  "icon_color": "pink",
+  "title": "Library QC profile",
+  "subtitle": "One polyline per library across eight QC metrics. Degraded libraries are not the worst on any single axis; they are the ones that bend the same way across four of them.",
+  "icon": "mdi:chart-timeline-variant",
+  "icon_color": "teal",
   "icon_variant": "filled",
   "workflow_system": "python",
   "notes_content": "",
@@ -260,17 +271,17 @@
   "parent_dashboard_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8d00"
   },
-  "tab_order": 16,
+  "tab_order": 46,
   "main_tab_name": null,
-  "tab_icon": "mdi:chart-bell-curve",
-  "tab_icon_color": "pink",
+  "tab_icon": "mdi:check-decagram",
+  "tab_icon_color": "teal",
   "parent_dashboard_title": null,
   "filter_sections": [
     {
-      "name": "Feature scope",
+      "name": "Library scope",
       "icon": "mdi:filter-variant",
-      "color": "pink",
-      "description": "Restricts the point cloud",
+      "color": "teal",
+      "description": "Restricts which libraries are drawn as polylines",
       "collapsed": false,
       "persistent": false,
       "pin": "top"
@@ -278,15 +289,17 @@
   ],
   "grid_sections": [
     {
-      "name": "MA plot",
-      "icon": "mdi:chart-bell-curve",
-      "color": "pink",
-      "description": "Effect size against mean intensity",
+      "name": "Sample QC profile",
+      "icon": "mdi:chart-timeline-variant",
+      "color": "teal",
+      "description": "Eight per-library metrics on parallel axes, coloured by group",
       "collapsed": false,
       "persistent": false,
       "pin": "top"
     }
   ],
   "funnel_filtering": true,
-  "brand_theme": null
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
 }
