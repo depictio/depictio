@@ -117,11 +117,111 @@ def build(assembly: str, release: str, out_path: Path, max_bytes: int) -> int:
     return size
 
 
+def gff3_url(assembly: str, release: str) -> str:
+    species, _, _ = ASSEMBLIES[assembly]
+    return f"{BASE_URL}/{species}/release_{release}/gencode.v{release}.basic.annotation.gff3.gz"
+
+
+#: Feature types a transcript lane needs. Anything else (Selenocysteine,
+#: start/stop codons) only makes the asset bigger.
+GFF3_KEEP_TYPES = frozenset(
+    {"gene", "transcript", "exon", "CDS", "five_prime_UTR", "three_prime_UTR"}
+)
+
+
+def build_gff3(assembly: str, release: str, out_path: Path) -> Path:
+    """Write ``<assembly>.genes.gff3.gz`` plus its tabix index.
+
+    A file-backed ``genome_view`` (``source: file``) draws its gene lane from a
+    tabix-indexed GFF3 rather than the JSON table: the JSON is a flat gene list
+    by design, which is what keeps it under a megabyte, and a file-backed track
+    is already reading its own data over range requests, so it can afford real
+    transcript models fetched the same way.
+
+    ``bgzip`` and ``tabix`` (htslib) do the compression and the index. They are
+    not a dependency of Depictio and this is a build-time producer, so their
+    absence prints the command to run rather than failing the build.
+
+    The output is tens of megabytes, which is why it is not committed: host it
+    beside the JSON assets (``depictio/viewer/public/assets/genomes/``, served
+    by the API's ``/dashboard/assets`` mount) or anywhere the browser can reach
+    with CORS and HTTP range requests.
+    """
+    import shutil
+    import subprocess
+
+    missing = [tool for tool in ("bgzip", "tabix") if shutil.which(tool) is None]
+    if missing:
+        print(
+            f"[{assembly}] {' and '.join(missing)} not found; skipping the GFF3 asset.\n"
+            f"[{assembly}] Install htslib (brew install htslib, apt install tabix), then:\n"
+            f"[{assembly}]   curl -sSL {gff3_url(assembly, release)} | gunzip \\\n"
+            f"[{assembly}]     | grep -v '^#' | sort -k1,1 -k4,4n \\\n"
+            f"[{assembly}]     | bgzip > {out_path}\n"
+            f"[{assembly}]   tabix -f -p gff {out_path}",
+            file=sys.stderr,
+        )
+        return out_path
+
+    _, _, contigs = ASSEMBLIES[assembly]
+    keep = set(contigs)
+    order = {name: i for i, name in enumerate(contigs)}
+    url = gff3_url(assembly, release)
+    print(f"[{assembly}] streaming {url}", file=sys.stderr)
+
+    # Sorted before bgzip: tabix needs contig then start order, and GENCODE's
+    # own order is not the contig order the locus scale uses.
+    rows: list[tuple[int, int, bytes]] = []
+    with urllib.request.urlopen(url) as resp, gzip.open(resp, "rb") as gz:
+        for raw in gz:
+            if raw.startswith(b"#"):
+                continue
+            parts = raw.split(b"\t")
+            if len(parts) < 9:
+                continue
+            chrom = parts[0].decode("utf-8", "replace")
+            if chrom not in keep:
+                continue
+            if parts[2].decode("utf-8", "replace") not in GFF3_KEEP_TYPES:
+                continue
+            if b"gene_type=protein_coding" not in parts[8]:
+                continue
+            rows.append((order[chrom], int(parts[3]), raw))
+    rows.sort(key=lambda r: (r[0], r[1]))
+    print(f"[{assembly}] {len(rows)} features", file=sys.stderr)
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with out_path.open("wb") as sink:
+        proc = subprocess.Popen(["bgzip", "-c"], stdin=subprocess.PIPE, stdout=sink)
+        assert proc.stdin is not None
+        for _, _, raw in rows:
+            proc.stdin.write(raw)
+        proc.stdin.close()
+        if proc.wait() != 0:
+            raise SystemExit(f"[{assembly}] bgzip failed")
+    subprocess.run(["tabix", "-f", "-p", "gff", str(out_path)], check=True)
+    print(
+        f"[{assembly}] wrote {out_path} ({out_path.stat().st_size} bytes) and {out_path}.tbi",
+        file=sys.stderr,
+    )
+    return out_path
+
+
 def main() -> None:
     repo = Path(__file__).resolve().parents[2]
     default_out = repo / "depictio" / "viewer" / "public" / "assets" / "genomes"
 
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--format",
+        choices=("json", "gff3"),
+        default="json",
+        help=(
+            "json: the compact gene table the table-backed annotation lane reads "
+            "(committed). gff3: a tabix-indexed transcript annotation for "
+            "file-backed tracks (not committed, tens of megabytes)."
+        ),
+    )
     parser.add_argument(
         "--assembly",
         action="append",
@@ -148,12 +248,15 @@ def main() -> None:
 
     for assembly in assemblies:
         release = args.release or ASSEMBLIES[assembly][1]
-        build(
-            assembly,
-            release,
-            args.out_dir / f"{assembly}.genes.json",
-            args.max_bytes,
-        )
+        if args.format == "gff3":
+            build_gff3(assembly, release, args.out_dir / f"{assembly}.genes.gff3.gz")
+        else:
+            build(
+                assembly,
+                release,
+                args.out_dir / f"{assembly}.genes.json",
+                args.max_bytes,
+            )
 
 
 if __name__ == "__main__":
