@@ -2583,6 +2583,10 @@ export interface AuthStatusResponse {
   /** Component inspector feature flag. Older backends omit this — treat absent
    *  as `false`, which keeps the inspect action off everywhere. */
   inspector_enabled?: boolean;
+  /** Which view /dashboards opens in for someone who never picked one
+   *  (`DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW`). Older backends omit it, and
+   *  the listing then keeps its own built-in default. */
+  dashboards_default_view?: string;
 }
 
 /** Session payload persisted to localStorage['local-store'] on successful auth.

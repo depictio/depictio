@@ -957,8 +957,16 @@ async def screenshot_react_dual(
     # The API container has no chromium — Playwright lives only in the Celery
     # worker image. Enqueue the screenshot task and await its result on a
     # threadpool so the event loop isn't blocked.
+    # Keyword arguments, not positional: the task signature carries a `force`
+    # flag between `user_id` and `open_settings`, so the positional form was
+    # passing `open_settings` as `force` and `filename_prefix` as
+    # `open_settings` — both query parameters of this endpoint went nowhere
+    # near the argument they name.
     task = generate_dashboard_screenshot_dual.delay(
-        dashboard_id, user_id or "", open_settings, filename_prefix
+        dashboard_id,
+        user_id=user_id or "",
+        open_settings=open_settings,
+        filename_prefix=filename_prefix,
     )
     try:
         result = await asyncio.to_thread(task.get, timeout=180)

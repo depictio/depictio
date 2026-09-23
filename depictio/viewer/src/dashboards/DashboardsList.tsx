@@ -22,9 +22,9 @@ import SharedViewBanner from '../components/listing/SharedViewBanner';
 import type { SharedViewScope } from '../components/listing/SharedViewBanner';
 import { listingUrl } from '../lib/listingUrl';
 import DashboardThumbnailView from './views/DashboardThumbnailView';
-import DashboardListView from './views/DashboardListView';
 import DashboardTableView from './views/DashboardTableView';
 import { useDashboardViewPrefs } from './hooks/useDashboardViewPrefs';
+import type { ViewMode } from './hooks/useDashboardViewPrefs';
 import { useDashboardFilters } from './hooks/useDashboardFilters';
 import { useDashboardPinsAndRecents } from './hooks/useDashboardPinsAndRecents';
 import {
@@ -38,6 +38,9 @@ interface DashboardsListProps {
   dashboards: DashboardListEntry[];
   projects: ProjectListEntry[];
   currentUserEmail: string | null;
+  /** Deployment default for the view mode, from the auth round-trip. It only
+   *  reaches someone who never picked a view themselves. */
+  defaultView?: ViewMode | null;
   /** When true, pin button is rendered but disabled. Public/demo deployments
    *  pass this so anon visitors don't accumulate per-browser preferences that
    *  bleed across visitor sessions. */
@@ -136,6 +139,7 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
   dashboards,
   projects,
   currentUserEmail,
+  defaultView,
   pinDisabled = false,
   onView,
   onEdit,
@@ -165,8 +169,10 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
     setFilters,
     setDensity,
     setOnlyPinned,
+    setCardsPerRow,
+    setCardBadges,
     clearFilters,
-  } = useDashboardViewPrefs();
+  } = useDashboardViewPrefs(defaultView);
   const { pinnedIds, recents, togglePin } = useDashboardPinsAndRecents();
 
   const filterCtx = useMemo(
@@ -404,6 +410,13 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
     setOpenSections(defaultOpenSig ? defaultOpenSig.split('|') : []);
   }, [userToggled, dashboards.length, defaultOpenSig]);
 
+  // One Set shared by every card, rebuilt only when the selection changes, so
+  // the memoised renderer below doesn't churn on each render.
+  const visibleCardBadges = useMemo(
+    () => new Set(prefs.cardBadges),
+    [prefs.cardBadges],
+  );
+
   // Renderer for the thumbnails view (used inside accordion sections).
   const renderThumbnailsFor = useCallback(
     (groups: GroupedDashboards[]) => (
@@ -411,6 +424,8 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
         groups={groups}
         projectNames={projectNames}
         projectTemplates={projectTemplates}
+        cardsPerRow={prefs.cardsPerRow}
+        visibleBadges={visibleCardBadges}
         currentUserEmail={currentUserEmail}
         pinnedIds={pinnedIds}
         pinDisabled={pinDisabled}
@@ -425,6 +440,8 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
     [
       projectNames,
       projectTemplates,
+      prefs.cardsPerRow,
+      visibleCardBadges,
       currentUserEmail,
       pinnedIds,
       pinDisabled,
@@ -554,6 +571,8 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
         setSearch={setSearch}
         setFilters={setFilters}
         setOnlyPinned={setOnlyPinned}
+        setCardsPerRow={setCardsPerRow}
+        setCardBadges={setCardBadges}
         clearFilters={clearFilters}
       />
 
@@ -596,9 +615,9 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
     </Stack>
   );
 
-  // List & Table modes flatten everything into a single section with a
-  // Category column. Pinned items float to the top of the flat list.
-  if (prefs.view === 'list' || prefs.view === 'table') {
+  // Table mode flattens everything into a single section with a Category
+  // column. Pinned items float to the top of the flat list.
+  if (prefs.view === 'table') {
     if (flatOrderedGroups.length === 0 && !noResults) {
       return chrome(
         <Paper p="xl" radius="md" withBorder>
@@ -609,23 +628,7 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
       );
     }
 
-    const flatContent =
-      prefs.view === 'list' ? (
-        <DashboardListView
-          groups={flatOrderedGroups}
-          projectNames={projectNames}
-          currentUserEmail={currentUserEmail}
-          pinnedIds={pinnedIds}
-          pinDisabled={pinDisabled}
-          categoryById={categoryById}
-          onView={onView}
-          onEdit={onEdit}
-          onDelete={onDelete}
-          onDuplicate={onDuplicate}
-          onExport={onExport}
-          onTogglePin={togglePin}
-        />
-      ) : (
+    const flatContent = (
         <DashboardTableView
           groups={flatOrderedGroups}
           projectNames={projectNames}

@@ -59,6 +59,9 @@ export interface UseCurrentUserResult {
    *  (`DEPICTIO_VIEWER_INSPECTOR_ENABLED=true`). While false, the component
    *  info and notes surfaces stay in their existing popover and drawer. */
   inspectorEnabled: boolean;
+  /** Deployment default for the /dashboards view, or null when the backend
+   *  does not send one. Only applies to someone who never picked a view. */
+  dashboardsDefaultView: string | null;
   loading: boolean;
 }
 
@@ -73,6 +76,7 @@ export function useCurrentUser(): UseCurrentUserResult {
   const [temporaryUserExpiryHours, setTemporaryUserExpiryHours] = useState<number>(24);
   const [temporaryUserExpiryMinutes, setTemporaryUserExpiryMinutes] = useState<number>(0);
   const [inspectorEnabled, setInspectorEnabled] = useState<boolean>(false);
+  const [dashboardsDefaultView, setDashboardsDefaultView] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
@@ -88,6 +92,11 @@ export function useCurrentUser(): UseCurrentUserResult {
         setWalkthroughDisabled(Boolean(data.walkthrough_disabled));
         setIsSingleUserMode(Boolean(data.is_single_user_mode));
         setInspectorEnabled(Boolean(data.inspector_enabled));
+        setDashboardsDefaultView(
+          typeof data.dashboards_default_view === 'string'
+            ? data.dashboards_default_view
+            : null,
+        );
         if (typeof data.temporary_user_expiry_hours === 'number') {
           setTemporaryUserExpiryHours(data.temporary_user_expiry_hours);
         }
@@ -118,6 +127,7 @@ export function useCurrentUser(): UseCurrentUserResult {
     temporaryUserExpiryHours,
     temporaryUserExpiryMinutes,
     inspectorEnabled,
+    dashboardsDefaultView,
     loading,
   };
 }

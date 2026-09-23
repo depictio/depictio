@@ -165,6 +165,14 @@ class ViewerConfig(ServiceConfig):
         "popovers and drawers they live in today.",
     )
 
+    dashboards_default_view: Literal["thumbnails", "table"] = Field(
+        default="thumbnails",
+        description="Which view /dashboards opens in for someone who has never "
+        "picked one: 'thumbnails' for the card grid with screenshot previews, "
+        "'table' for sortable columns with bulk selection. A view chosen in the "
+        "browser, or named by a shared link, always wins over this.",
+    )
+
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_VIEWER_")
 
 
@@ -1209,6 +1217,18 @@ class PerformanceConfig(BaseSettings):
     screenshot_stabilization_wait: int = Field(default=10000)  # 10s for stability
     screenshot_capture_timeout: int = Field(default=120000)  # 120s for actual screenshot capture
     screenshot_api_timeout: int = Field(default=600)  # 10 minutes for complete screenshot API call
+
+    # Screenshot geometry. The viewport is the CSS size the dashboard is laid
+    # out at, and the scale is the pixel density it is rendered with, so the
+    # stored PNG is viewport x scale pixels. 16:10 matches the listing card's
+    # `AspectRatio ratio={16 / 10}`; changing the ratio crops the thumbnail.
+    # Scale 2 is what makes the shot readable once the card shrinks it: at
+    # scale 1 the fine text in a 1440px-wide dashboard turns to mush in a
+    # 350px card. Raising either costs capture time and PNG bytes on every
+    # listing load.
+    screenshot_viewport_width: int = Field(default=1440)
+    screenshot_viewport_height: int = Field(default=900)
+    screenshot_scale: float = Field(default=2.0, ge=1.0, le=3.0)
 
     # Service readiness check settings
     service_readiness_retries: int = Field(default=5)

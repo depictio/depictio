@@ -17,6 +17,8 @@ import {
 import { Icon } from '@iconify/react';
 
 import type {
+  CardBadge,
+  CardsPerRow,
   DashboardFilters,
   DashboardViewPrefs,
   GroupBy,
@@ -26,6 +28,7 @@ import type {
 import { emptyDashboardFilters } from './hooks/useDashboardViewPrefs';
 import { useBrandAccents } from 'depictio-react-core';
 import ShareViewButton from '../components/listing/ShareViewButton';
+import CardDisplayMenu from './CardDisplayMenu';
 
 export type FilterOption = { value: string; label: string };
 
@@ -48,6 +51,8 @@ export interface DashboardsToolbarProps {
   setSearch: (s: string) => void;
   setFilters: (f: DashboardFilters) => void;
   setOnlyPinned: (b: boolean) => void;
+  setCardsPerRow: (c: CardsPerRow) => void;
+  setCardBadges: (b: CardBadge[]) => void;
   clearFilters: () => void;
 }
 
@@ -64,12 +69,6 @@ const VIEW_OPTIONS: ViewOption[] = [
     label: 'Thumbnails',
     icon: 'mdi:view-grid-outline',
     description: 'Cards with screenshot previews',
-  },
-  {
-    value: 'list',
-    label: 'Tiles',
-    icon: 'mdi:card-multiple-outline',
-    description: 'Compact cards without previews',
   },
   {
     value: 'table',
@@ -295,11 +294,16 @@ const DashboardsToolbar: React.FC<DashboardsToolbarProps> = ({
   setSearch,
   setFilters,
   setOnlyPinned,
+  setCardsPerRow,
+  setCardBadges,
   clearFilters,
 }) => {
   const accent = useBrandAccents();
   // Sort selector is meaningless in Table view (column headers handle sort).
   const showSort = prefs.view !== 'table';
+  // Card layout options only shape the thumbnail cards; Table has its own
+  // column picker.
+  const showCardDisplay = prefs.view === 'thumbnails';
 
   const activeFilterChips: { key: string; label: string; onRemove: () => void }[] = [];
   for (const id of prefs.filters.templates) {
@@ -457,6 +461,15 @@ const DashboardsToolbar: React.FC<DashboardsToolbarProps> = ({
               : 'the full dashboard list'
           }
         />
+
+        {showCardDisplay && (
+          <CardDisplayMenu
+            cardsPerRow={prefs.cardsPerRow}
+            cardBadges={prefs.cardBadges}
+            onCardsPerRowChange={setCardsPerRow}
+            onCardBadgesChange={setCardBadges}
+          />
+        )}
 
         <ViewPicker value={prefs.view} onChange={setView} />
       </Group>

@@ -76,7 +76,7 @@ _SCREENSHOT_STALE_AFTER_S = 3600
 
 
 def _should_enqueue_screenshot(dashboard_id: str, now_s: float | None = None) -> bool:
-    """Return True iff dual-theme PNGs are missing or older than 1h.
+    """Return True iff any dual-theme PNG is missing or older than 1h.
 
     Called by the dashboard save endpoint to avoid saturating the celery
     queue on every React viewer interaction. Without this guard, every
@@ -87,12 +87,19 @@ def _should_enqueue_screenshot(dashboard_id: str, now_s: float | None = None) ->
     import os
     import time
 
-    light = os.path.join(_SCREENSHOTS_DIR, f"{dashboard_id}_light.png")
-    dark = os.path.join(_SCREENSHOTS_DIR, f"{dashboard_id}_dark.png")
-    if not (os.path.exists(light) and os.path.exists(dark)):
+    # Both resolutions count: a dashboard captured before the `@2x` preview
+    # existed has its base PNGs on disk and would otherwise never get the
+    # sharp one, leaving the listing's hover preview on the low-res fallback
+    # forever.
+    shots = [
+        os.path.join(_SCREENSHOTS_DIR, name)
+        for theme in ("light", "dark")
+        for name in (f"{dashboard_id}_{theme}.png", f"{dashboard_id}_{theme}@2x.png")
+    ]
+    if not all(os.path.exists(shot) for shot in shots):
         return True  # missing → must (re)generate
     now = now_s if now_s is not None else time.time()
-    newest = max(os.path.getmtime(light), os.path.getmtime(dark))
+    newest = max(os.path.getmtime(shot) for shot in shots)
     return (now - newest) >= _SCREENSHOT_STALE_AFTER_S
 
 

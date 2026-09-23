@@ -13,7 +13,9 @@ hider, notification dismisser, unreachable-host markers) live in
 without dragging the MongoDB-backed token loader along.
 """
 
+import functools
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import TypedDict, cast
@@ -430,6 +432,30 @@ def _react_output_paths(
     return light, dark
 
 
+def hidpi_screenshot_path(path: str) -> str:
+    """The `@2x` sibling of a screenshot path.
+
+    Two files come out of every capture: the base one, at CSS resolution, is
+    what the listing grid downloads for all its cards, and this one, at the
+    context's device pixel density, is fetched only when a card is hovered and
+    the preview needs the detail. Keeping them apart is what lets the preview
+    be sharp without making the grid pay for it.
+    """
+    root, ext = os.path.splitext(path)
+    return f"{root}@2x{ext}"
+
+
+async def _capture_both_scales(capture, output_path: str, timeout: int) -> None:
+    """Write both resolutions of one shot from an already-loaded page.
+
+    `capture` is a `screenshot` coroutine function (the page's or an
+    element's). The second call re-encodes the same rendered page, so this
+    costs an encode rather than another navigation and settle.
+    """
+    await capture(path=output_path, timeout=timeout, scale="css")
+    await capture(path=hidpi_screenshot_path(output_path), timeout=timeout, scale="device")
+
+
 async def generate_react_dual_theme_screenshots(
     dashboard_id: str,
     output_folder: str = "/app/depictio/api/static/screenshots",
@@ -512,7 +538,17 @@ async def generate_react_dual_theme_screenshots(
                 # (DashboardCard.tsx), so a 16:9 capture gets scaled to the
                 # box height and loses ~5.5% off each side. Matching the box
                 # ratio here means the card shows the whole shot.
-                context = await browser.new_context(viewport={"width": 1920, "height": 1200})
+                # `device_scale_factor` is the thumbnail's sharpness: the card
+                # shows the shot at roughly a quarter of its CSS width, so
+                # rendering at 1x left the text with fewer pixels than the
+                # display could show. See the settings for the trade-off.
+                context = await browser.new_context(
+                    viewport={
+                        "width": settings.performance.screenshot_viewport_width,
+                        "height": settings.performance.screenshot_viewport_height,
+                    },
+                    device_scale_factor=settings.performance.screenshot_scale,
+                )
                 await apply_init_script(context, token_data_json, theme)
                 page = await context.new_page()
 
@@ -615,32 +651,25 @@ async def generate_react_dual_theme_screenshots(
                 if open_settings:
                     popover_open = await _try_open_viz_settings(page)
 
-                if popover_open:
-                    # Mantine popovers portal to document.body, so they sit
-                    # outside the AppShell.Main DOM bbox — element.screenshot()
-                    # would clip them off. Fall back to a viewport capture.
-                    await page.screenshot(
-                        path=output_path,
-                        full_page=False,
-                        timeout=settings.performance.screenshot_capture_timeout,
-                    )
-                else:
-                    main_element = await page.query_selector(".mantine-AppShell-main")
-                    if main_element:
-                        # Honour the configured capture timeout instead of
-                        # Playwright's default 30s — phylogeny / advanced-viz
-                        # heavy tabs do animated layout passes that the default
-                        # "wait for stable" can't catch in time.
-                        await main_element.screenshot(
-                            path=output_path,
-                            timeout=settings.performance.screenshot_capture_timeout,
-                        )
-                    else:
-                        await page.screenshot(
-                            path=output_path,
-                            full_page=False,
-                            timeout=settings.performance.screenshot_capture_timeout,
-                        )
+                # Mantine popovers portal to document.body, so they sit
+                # outside the AppShell.Main DOM bbox — element.screenshot()
+                # would clip them off, hence the viewport capture whenever one
+                # is open (or the main element is missing).
+                main_element = (
+                    None if popover_open else await page.query_selector(".mantine-AppShell-main")
+                )
+                capture = (
+                    main_element.screenshot
+                    if main_element
+                    else functools.partial(page.screenshot, full_page=False)
+                )
+                # The configured capture timeout rather than Playwright's
+                # default 30s — phylogeny / advanced-viz heavy tabs do animated
+                # layout passes that the default "wait for stable" can't catch
+                # in time.
+                await _capture_both_scales(
+                    capture, output_path, settings.performance.screenshot_capture_timeout
+                )
 
                 await context.close()
 

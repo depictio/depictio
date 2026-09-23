@@ -118,6 +118,12 @@ services:
         # the numbers useless. The shipped docker-compose.yaml has it on.
         DEPICTIO_TELEMETRY_ENABLED: "${DEPICTIO_TELEMETRY_ENABLED:-false}"
         DEPICTIO_TELEMETRY_DEPLOYMENT_KIND: "${DEPICTIO_TELEMETRY_DEPLOYMENT_KIND:-docker-compose-dev}"
+        # Which view /dashboards opens in for someone who never picked one, and
+        # the geometry of the thumbnails it shows. See .env.example.
+        DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW: "${DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW:-thumbnails}"
+        DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_WIDTH: "${DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_WIDTH:-1440}"
+        DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_HEIGHT: "${DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_HEIGHT:-900}"
+        DEPICTIO_PERFORMANCE_SCREENSHOT_SCALE: "${DEPICTIO_PERFORMANCE_SCREENSHOT_SCALE:-2.0}"
         # Dashboard feedback link, served to the SPA through
         # /utils/public-config. Off unless both halves are set: the flag alone
         # renders nothing, and so does a URL without it. The URL is a template

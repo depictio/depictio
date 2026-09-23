@@ -329,6 +329,15 @@ backend:
     DEPICTIO_FEEDBACK_URL: ""
     DEPICTIO_FEEDBACK_LABEL: "Feedback"
 
+    # Which view /dashboards opens in for someone who never picked one
+    # ("thumbnails" or "table"), and the geometry of the thumbnails it shows:
+    # the CSS viewport the dashboard is laid out at, times a pixel density that
+    # keeps the shot readable once a card shrinks it.
+    DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW: "thumbnails"
+    DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_WIDTH: "1440"
+    DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_HEIGHT: "900"
+    DEPICTIO_PERFORMANCE_SCREENSHOT_SCALE: "2.0"
+
     # Google Analytics configuration (GA4)
     # Enable to track page views, user interactions, and engagement metrics
     # Get your tracking ID from Google Analytics dashboard (Property → Data Streams)

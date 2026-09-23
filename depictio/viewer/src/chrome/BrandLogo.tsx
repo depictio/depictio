@@ -4,6 +4,7 @@ import { useComputedColorScheme } from '@mantine/core';
 import { resolveBrandLogo, type BrandTheme } from 'depictio-react-core';
 
 import { useBranding } from '../branding';
+import DepictioWordmark from './DepictioWordmark';
 
 interface BrandLogoProps {
   /** A dashboard's own brand theme, tried before the instance one. Omit for
@@ -35,7 +36,8 @@ interface BrandLogoProps {
  * - The default depictio logo ships as one raster for both themes
  *   (`logo_black.svg` and `logo_white.svg` are byte-identical), so dark mode
  *   applies the established `invert(1) hue-rotate(180deg)` filter instead of
- *   swapping `src` — same trick as `PoweredBy.tsx`.
+ *   swapping `src` (see `DepictioWordmark`, which also carries the hover
+ *   easter egg; custom logos never get it).
  */
 export default function BrandLogo({
   theme,
@@ -66,10 +68,24 @@ export default function BrandLogo({
   if (stopped) return null;
   if (!src && fallback === 'none') return null;
 
+  const alt = instance?.app_name ?? 'depictio';
+  if (!src) {
+    return (
+      <DepictioWordmark
+        width={width}
+        height={height}
+        alt={alt}
+        dark={isDark}
+        style={style}
+        testId={testId}
+      />
+    );
+  }
+
   return (
     <img
-      src={src ?? '/dashboard/logos/logo_black.svg'}
-      alt={instance?.app_name ?? 'depictio'}
+      src={src}
+      alt={alt}
       data-testid={testId}
       style={{
         width,
@@ -77,7 +93,6 @@ export default function BrandLogo({
         maxWidth: '100%',
         objectFit: 'contain',
         display: 'block',
-        filter: !src && isDark ? 'invert(1) hue-rotate(180deg)' : undefined,
         ...style,
       }}
     />

@@ -2,6 +2,9 @@ import os
 from contextlib import contextmanager
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
+
 from depictio.api.v1.configs.settings_models import (
     AuthConfig,
     # Collections,
@@ -267,6 +270,20 @@ class TestViewerConfig:
             assert config.debug is False
             assert config.external_port == 4000
             assert config.workers == 2
+
+    def test_dashboards_default_view(self):
+        """The listing's default view is a deployment setting."""
+        with env_vars({"DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW": None}):
+            assert ViewerConfig().dashboards_default_view == "thumbnails"
+
+        with env_vars({"DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW": "table"}):
+            assert ViewerConfig().dashboards_default_view == "table"
+
+    def test_dashboards_default_view_rejects_unknown(self):
+        """A typo must fail at startup rather than reach the SPA."""
+        with env_vars({"DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW": "tiles"}):
+            with pytest.raises(ValidationError):
+                ViewerConfig()
 
 
 # class TestJBrowseConfig:
