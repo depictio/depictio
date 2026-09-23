@@ -19,6 +19,7 @@ import {
   Badge,
   Collapse,
   Divider,
+  Grid,
   Group,
   MultiSelect,
   Paper,
@@ -44,6 +45,7 @@ import {
 } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
 import AdvancedVizPreview from './AdvancedVizPreview';
+import StickyPreview from '../shared/StickyPreview';
 import { mergedPresetConfig, rolesFromConfigBlob } from './configBlob';
 
 /** Acceptable polars dtype names per canonical role (mirrors
@@ -764,276 +766,285 @@ const AdvancedVizBuilder: React.FC = () => {
         renderKindSection('Visualisations', otherKinds)
       )}
 
+      {/* Bindings beside the preview rather than above it, so the chart stays
+          in view while the bindings list is open and scrolled. */}
       {selectedKind ? (
-        <Paper withBorder p="md" radius="md">
-          <Disclosure title="Column bindings" defaultOpen={!allRequiredBound}>
-           <Stack gap="xs">
-            <Paper withBorder p="xs" radius="sm">
-              <Stack gap={4}>
-                <Text size="xs" fw={500}>Roles reference</Text>
-                <Text size="xs" c="dimmed">
-                  The roles this visualization binds. Hover a binding below for full details.
-                </Text>
-                <Table withTableBorder withColumnBorders striped fz="xs" layout="auto">
-                  <Table.Thead>
-                    <Table.Tr>
-                      <Table.Th style={{ whiteSpace: 'nowrap', width: '1%' }}>Role</Table.Th>
-                      <Table.Th style={{ whiteSpace: 'nowrap', width: '1%' }}>Type</Table.Th>
-                      <Table.Th style={{ whiteSpace: 'nowrap', width: '96px' }}>Required</Table.Th>
-                      <Table.Th>Description</Table.Th>
-                    </Table.Tr>
-                  </Table.Thead>
-                  <Table.Tbody>
+        <Grid columns={24} gutter="md">
+          <Grid.Col span={{ base: 24, md: 10 }}>
+            <Paper withBorder p="md" radius="md">
+              <Disclosure title="Column bindings" defaultOpen={!allRequiredBound}>
+               <Stack gap="xs">
+                <Paper withBorder p="xs" radius="sm">
+                  <Stack gap={4}>
+                    <Text size="xs" fw={500}>Roles reference</Text>
+                    <Text size="xs" c="dimmed">
+                      The roles this visualization binds. Hover a binding below for full details.
+                    </Text>
+                    <Table withTableBorder withColumnBorders striped fz="xs" layout="auto">
+                      <Table.Thead>
+                        <Table.Tr>
+                          <Table.Th style={{ whiteSpace: 'nowrap', width: '1%' }}>Role</Table.Th>
+                          <Table.Th style={{ whiteSpace: 'nowrap', width: '1%' }}>Type</Table.Th>
+                          <Table.Th style={{ whiteSpace: 'nowrap', width: '96px' }}>Required</Table.Th>
+                          <Table.Th>Description</Table.Th>
+                        </Table.Tr>
+                      </Table.Thead>
+                      <Table.Tbody>
+                        {requiredRoles
+                          .filter(
+                            ([role]) =>
+                              !liveEmbedding || (role !== 'dim_1' && role !== 'dim_2'),
+                          )
+                          .map(([role, accepted, description]) =>
+                            exampleInputRow(role, simplifyDtypes(accepted), description, true),
+                          )}
+                        {selectedKind === 'sunburst'
+                          ? exampleInputRow(
+                              'ranks',
+                              'any (≥2, ordered)',
+                              'Hierarchy columns from root to leaf.',
+                              true,
+                            )
+                          : null}
+                        {selectedKind === 'sankey'
+                          ? exampleInputRow(
+                              'step columns',
+                              'any (≥2, ordered)',
+                              'Ordered categorical levels the flow passes through.',
+                              true,
+                            )
+                          : null}
+                        {liveEmbedding
+                          ? exampleInputRow(
+                              'compute_method',
+                              'choice',
+                              'Dimensionality reduction: pca / umap / tsne / pcoa.',
+                              true,
+                            )
+                          : null}
+                        {optionalRoles.map(([role, accepted, description]) =>
+                          exampleInputRow(role, simplifyDtypes(accepted), description, false),
+                        )}
+                      </Table.Tbody>
+                    </Table>
+                  </Stack>
+                </Paper>
+                <Divider />
+                {schemaError ? (
+                  <Alert color="red" title="Failed to load DC schema">
+                    {schemaError}
+                  </Alert>
+                ) : !dcId ? (
+                  <Alert color="yellow">Pick a data collection in step 1 first.</Alert>
+                ) : !schema ? (
+                  <Text size="sm" c="dimmed">Loading DC schema…</Text>
+                ) : (
+                  <>
+                    {/* Sunburst has a multi-column "ranks" binding alongside its
+                        single-column abundance role; render the MultiSelect when
+                        the kind supports a list binding. */}
+                    {selectedKind === 'sunburst' ? (
+                      <MultiSelect
+                        label={roleBindingLabel(
+                          'ranks',
+                          [],
+                          'Hierarchy columns from root to leaf — pick at least 2, in order.',
+                          true,
+                        )}
+                        placeholder="Pick rank columns in order"
+                        value={
+                          Array.isArray(columnMapping.ranks)
+                            ? (columnMapping.ranks as string[])
+                            : []
+                        }
+                        onChange={(v) => setRole('ranks', v)}
+                        data={allColumnOptions()}
+                        searchable
+                        clearable
+                      />
+                    ) : null}
+                    {/* Sankey has no single <role>_col schema — it binds an ordered
+                        list of categorical columns (step_cols). Without this block
+                        the kind was selectable but unbindable, so the renderer
+                        failed with "≥2 step columns required". */}
+                    {selectedKind === 'sankey' ? (
+                      <MultiSelect
+                        label={roleBindingLabel(
+                          'step columns',
+                          [],
+                          'Ordered categorical levels the flow passes through (e.g. sample → lineage → clade). Pick at least 2, in order.',
+                          true,
+                        )}
+                        placeholder="Pick step columns in order"
+                        value={
+                          Array.isArray(columnMapping.steps)
+                            ? (columnMapping.steps as string[])
+                            : []
+                        }
+                        onChange={(v) => setRole('steps', v)}
+                        data={allColumnOptions()}
+                        searchable
+                        clearable
+                      />
+                    ) : null}
+                    {/* ComplexHeatmap: beyond the index row-id, let the user choose
+                        which numeric columns form the matrix (excluding the rest)
+                        and which categorical columns annotate the rows. */}
+                    {selectedKind === 'complex_heatmap' ? (
+                      <>
+                        <MultiSelect
+                          label={roleBindingLabel(
+                            'value columns',
+                            NUMERIC_ANY,
+                            'Numeric columns that form the heatmap matrix. Leave empty to use every numeric column; pick a subset to exclude the rest.',
+                            false,
+                          )}
+                          placeholder="All numeric columns (pick to restrict / exclude)"
+                          value={
+                            Array.isArray(columnMapping.value_columns)
+                              ? (columnMapping.value_columns as string[])
+                              : []
+                          }
+                          onChange={(v) => setRole('value_columns', v)}
+                          data={columnOptions(NUMERIC_ANY)}
+                          searchable
+                          clearable
+                        />
+                        <MultiSelect
+                          label={roleBindingLabel(
+                            'row annotation columns',
+                            STRING_LIKE,
+                            'Categorical columns drawn as a colour strip beside the rows (e.g. Kingdom / taxonomy level). Excluded from the matrix.',
+                            false,
+                          )}
+                          placeholder="Pick categorical columns to annotate rows"
+                          value={
+                            Array.isArray(columnMapping.row_annotation_cols)
+                              ? (columnMapping.row_annotation_cols as string[])
+                              : []
+                          }
+                          onChange={(v) => setRole('row_annotation_cols', v)}
+                          data={columnOptions(STRING_LIKE)}
+                          searchable
+                          clearable
+                        />
+                      </>
+                    ) : null}
+                    {/* Embedding live-compute mode: surface compute_method Select
+                        in place of dim_1/dim_2 pickers. Renderer dispatches the
+                        chosen reduction as a Celery task. */}
+                    {liveEmbedding ? (
+                      <>
+                        <Alert color="teal" variant="light">
+                          <Text size="xs">
+                            Live-compute mode: the renderer will run the chosen
+                            dim-reduction on this DC's feature columns via Celery.
+                          </Text>
+                        </Alert>
+                        <Select
+                          label="compute method (required)"
+                          placeholder="Pick a dim-reduction"
+                          value={
+                            typeof columnMapping.compute_method === 'string'
+                              ? (columnMapping.compute_method as string)
+                              : null
+                          }
+                          onChange={(v) => setRole('compute_method', v)}
+                          data={[
+                            { value: 'pca', label: 'PCA' },
+                            { value: 'umap', label: 'UMAP' },
+                            { value: 'tsne', label: 't-SNE' },
+                            { value: 'pcoa', label: 'PCoA (Bray–Curtis)' },
+                          ]}
+                        />
+                      </>
+                    ) : null}
                     {requiredRoles
                       .filter(
+                        // Skip dim_1/dim_2 when running embedding live — the
+                        // Celery task derives them.
                         ([role]) =>
                           !liveEmbedding || (role !== 'dim_1' && role !== 'dim_2'),
                       )
-                      .map(([role, accepted, description]) =>
-                        exampleInputRow(role, simplifyDtypes(accepted), description, true),
-                      )}
-                    {selectedKind === 'sunburst'
-                      ? exampleInputRow(
-                          'ranks',
-                          'any (≥2, ordered)',
-                          'Hierarchy columns from root to leaf.',
-                          true,
-                        )
-                      : null}
-                    {selectedKind === 'sankey'
-                      ? exampleInputRow(
-                          'step columns',
-                          'any (≥2, ordered)',
-                          'Ordered categorical levels the flow passes through.',
-                          true,
-                        )
-                      : null}
-                    {liveEmbedding
-                      ? exampleInputRow(
-                          'compute_method',
-                          'choice',
-                          'Dimensionality reduction: pca / umap / tsne / pcoa.',
-                          true,
-                        )
-                      : null}
-                    {optionalRoles.map(([role, accepted, description]) =>
-                      exampleInputRow(role, simplifyDtypes(accepted), description, false),
-                    )}
-                  </Table.Tbody>
-                </Table>
-              </Stack>
+                      .map(([role, accepted, description]) => (
+                      <Select
+                        key={role}
+                        label={roleBindingLabel(role, accepted, description, true)}
+                        placeholder="Pick a column"
+                        value={
+                          typeof columnMapping[role] === 'string'
+                            ? (columnMapping[role] as string)
+                            : null
+                        }
+                        onChange={(v) => setRole(role, v)}
+                        data={columnOptions(accepted)}
+                        searchable
+                        clearable
+                        nothingFoundMessage="No column with a compatible dtype"
+                      />
+                    ))}
+                    {optionalRoles.map(([role, accepted, description]) => (
+                      <Select
+                        key={role}
+                        label={roleBindingLabel(role, accepted, description, false)}
+                        placeholder="Pick a column"
+                        value={
+                          typeof columnMapping[role] === 'string'
+                            ? (columnMapping[role] as string)
+                            : null
+                        }
+                        onChange={(v) => setRole(role, v)}
+                        data={columnOptions(accepted)}
+                        searchable
+                        clearable
+                        nothingFoundMessage="No column with a compatible dtype"
+                      />
+                    ))}
+                    {!validation.ok ? (
+                      <Alert color="orange" title="Bindings incomplete or invalid">
+                        <ul style={{ margin: 0, paddingLeft: 16 }}>
+                          {validation.errors.map((e) => (
+                            <li key={e}>
+                              <Text size="xs">{e}</Text>
+                            </li>
+                          ))}
+                        </ul>
+                      </Alert>
+                    ) : null}
+                    {validation.warnings.length > 0 ? (
+                      <Alert color="yellow" variant="light" title="Heads up — dtype coercion">
+                        <ul style={{ margin: 0, paddingLeft: 16 }}>
+                          {validation.warnings.map((w) => (
+                            <li key={w}>
+                              <Text size="xs">{w}</Text>
+                            </li>
+                          ))}
+                        </ul>
+                      </Alert>
+                    ) : null}
+                  </>
+                )}
+               </Stack>
+              </Disclosure>
             </Paper>
-            <Divider />
-            {schemaError ? (
-              <Alert color="red" title="Failed to load DC schema">
-                {schemaError}
-              </Alert>
-            ) : !dcId ? (
-              <Alert color="yellow">Pick a data collection in step 1 first.</Alert>
-            ) : !schema ? (
-              <Text size="sm" c="dimmed">Loading DC schema…</Text>
-            ) : (
-              <>
-                {/* Sunburst has a multi-column "ranks" binding alongside its
-                    single-column abundance role; render the MultiSelect when
-                    the kind supports a list binding. */}
-                {selectedKind === 'sunburst' ? (
-                  <MultiSelect
-                    label={roleBindingLabel(
-                      'ranks',
-                      [],
-                      'Hierarchy columns from root to leaf — pick at least 2, in order.',
-                      true,
-                    )}
-                    placeholder="Pick rank columns in order"
-                    value={
-                      Array.isArray(columnMapping.ranks)
-                        ? (columnMapping.ranks as string[])
-                        : []
-                    }
-                    onChange={(v) => setRole('ranks', v)}
-                    data={allColumnOptions()}
-                    searchable
-                    clearable
-                  />
-                ) : null}
-                {/* Sankey has no single <role>_col schema — it binds an ordered
-                    list of categorical columns (step_cols). Without this block
-                    the kind was selectable but unbindable, so the renderer
-                    failed with "≥2 step columns required". */}
-                {selectedKind === 'sankey' ? (
-                  <MultiSelect
-                    label={roleBindingLabel(
-                      'step columns',
-                      [],
-                      'Ordered categorical levels the flow passes through (e.g. sample → lineage → clade). Pick at least 2, in order.',
-                      true,
-                    )}
-                    placeholder="Pick step columns in order"
-                    value={
-                      Array.isArray(columnMapping.steps)
-                        ? (columnMapping.steps as string[])
-                        : []
-                    }
-                    onChange={(v) => setRole('steps', v)}
-                    data={allColumnOptions()}
-                    searchable
-                    clearable
-                  />
-                ) : null}
-                {/* ComplexHeatmap: beyond the index row-id, let the user choose
-                    which numeric columns form the matrix (excluding the rest)
-                    and which categorical columns annotate the rows. */}
-                {selectedKind === 'complex_heatmap' ? (
-                  <>
-                    <MultiSelect
-                      label={roleBindingLabel(
-                        'value columns',
-                        NUMERIC_ANY,
-                        'Numeric columns that form the heatmap matrix. Leave empty to use every numeric column; pick a subset to exclude the rest.',
-                        false,
-                      )}
-                      placeholder="All numeric columns (pick to restrict / exclude)"
-                      value={
-                        Array.isArray(columnMapping.value_columns)
-                          ? (columnMapping.value_columns as string[])
-                          : []
-                      }
-                      onChange={(v) => setRole('value_columns', v)}
-                      data={columnOptions(NUMERIC_ANY)}
-                      searchable
-                      clearable
-                    />
-                    <MultiSelect
-                      label={roleBindingLabel(
-                        'row annotation columns',
-                        STRING_LIKE,
-                        'Categorical columns drawn as a colour strip beside the rows (e.g. Kingdom / taxonomy level). Excluded from the matrix.',
-                        false,
-                      )}
-                      placeholder="Pick categorical columns to annotate rows"
-                      value={
-                        Array.isArray(columnMapping.row_annotation_cols)
-                          ? (columnMapping.row_annotation_cols as string[])
-                          : []
-                      }
-                      onChange={(v) => setRole('row_annotation_cols', v)}
-                      data={columnOptions(STRING_LIKE)}
-                      searchable
-                      clearable
-                    />
-                  </>
-                ) : null}
-                {/* Embedding live-compute mode: surface compute_method Select
-                    in place of dim_1/dim_2 pickers. Renderer dispatches the
-                    chosen reduction as a Celery task. */}
-                {liveEmbedding ? (
-                  <>
-                    <Alert color="teal" variant="light">
-                      <Text size="xs">
-                        Live-compute mode: the renderer will run the chosen
-                        dim-reduction on this DC's feature columns via Celery.
-                      </Text>
-                    </Alert>
-                    <Select
-                      label="compute method (required)"
-                      placeholder="Pick a dim-reduction"
-                      value={
-                        typeof columnMapping.compute_method === 'string'
-                          ? (columnMapping.compute_method as string)
-                          : null
-                      }
-                      onChange={(v) => setRole('compute_method', v)}
-                      data={[
-                        { value: 'pca', label: 'PCA' },
-                        { value: 'umap', label: 'UMAP' },
-                        { value: 'tsne', label: 't-SNE' },
-                        { value: 'pcoa', label: 'PCoA (Bray–Curtis)' },
-                      ]}
-                    />
-                  </>
-                ) : null}
-                {requiredRoles
-                  .filter(
-                    // Skip dim_1/dim_2 when running embedding live — the
-                    // Celery task derives them.
-                    ([role]) =>
-                      !liveEmbedding || (role !== 'dim_1' && role !== 'dim_2'),
-                  )
-                  .map(([role, accepted, description]) => (
-                  <Select
-                    key={role}
-                    label={roleBindingLabel(role, accepted, description, true)}
-                    placeholder="Pick a column"
-                    value={
-                      typeof columnMapping[role] === 'string'
-                        ? (columnMapping[role] as string)
-                        : null
-                    }
-                    onChange={(v) => setRole(role, v)}
-                    data={columnOptions(accepted)}
-                    searchable
-                    clearable
-                    nothingFoundMessage="No column with a compatible dtype"
-                  />
-                ))}
-                {optionalRoles.map(([role, accepted, description]) => (
-                  <Select
-                    key={role}
-                    label={roleBindingLabel(role, accepted, description, false)}
-                    placeholder="Pick a column"
-                    value={
-                      typeof columnMapping[role] === 'string'
-                        ? (columnMapping[role] as string)
-                        : null
-                    }
-                    onChange={(v) => setRole(role, v)}
-                    data={columnOptions(accepted)}
-                    searchable
-                    clearable
-                    nothingFoundMessage="No column with a compatible dtype"
-                  />
-                ))}
-                {!validation.ok ? (
-                  <Alert color="orange" title="Bindings incomplete or invalid">
-                    <ul style={{ margin: 0, paddingLeft: 16 }}>
-                      {validation.errors.map((e) => (
-                        <li key={e}>
-                          <Text size="xs">{e}</Text>
-                        </li>
-                      ))}
-                    </ul>
-                  </Alert>
-                ) : null}
-                {validation.warnings.length > 0 ? (
-                  <Alert color="yellow" variant="light" title="Heads up — dtype coercion">
-                    <ul style={{ margin: 0, paddingLeft: 16 }}>
-                      {validation.warnings.map((w) => (
-                        <li key={w}>
-                          <Text size="xs">{w}</Text>
-                        </li>
-                      ))}
-                    </ul>
-                  </Alert>
-                ) : null}
-              </>
-            )}
-           </Stack>
-          </Disclosure>
-        </Paper>
-      ) : null}
-
-      {selectedKind && wfId && dcId ? (
-        <AdvancedVizPreview
-          vizKind={selectedKind}
-          columnMapping={columnMapping}
-          wfId={wfId}
-          dcId={dcId}
-          bindingsValid={validation.ok}
-          onReady={setPreviewReady}
-          presetConfig={mergedPreset}
-          onVizControlChange={setVizOverride}
-        />
+          </Grid.Col>
+          {wfId && dcId ? (
+            <Grid.Col span={{ base: 24, md: 14 }}>
+              <StickyPreview>
+                <AdvancedVizPreview
+                  vizKind={selectedKind}
+                  columnMapping={columnMapping}
+                  wfId={wfId}
+                  dcId={dcId}
+                  bindingsValid={validation.ok}
+                  onReady={setPreviewReady}
+                  presetConfig={mergedPreset}
+                  onVizControlChange={setVizOverride}
+                />
+              </StickyPreview>
+            </Grid.Col>
+          ) : null}
+        </Grid>
       ) : null}
     </Stack>
   );

@@ -1,8 +1,8 @@
 /**
- * Figure builder. Layout matches Dash's design_figure() in
- * depictio/dash/modules/figure_component/utils.py:2226+ — centered mode
- * toggle on top, then preview-LEFT (60%) / controls-RIGHT (38%) inline-block
- * row. Mode toggle drives which controls panel is shown; preview pane reads
+ * Figure builder: centered mode toggle on top, then controls-LEFT (38%) /
+ * preview-RIGHT (60%) row, the same sides as every other builder, the
+ * preview sticking while the controls scroll. Mode toggle drives which
+ * controls panel is shown; preview pane reads
  * `figureMode` to decide between live UI preview and the last code-mode
  * Execute result.
  */
@@ -14,6 +14,7 @@ import { useDashboardAccess } from '../../hooks/useDashboardAccess';
 import CrossFilterSection from '../shared/CrossFilterSection';
 import FigureUIMode from './FigureUIMode';
 import FigurePreview from './FigurePreview';
+import StickyPreview from '../shared/StickyPreview';
 
 const FigureCodeMode = React.lazy(() => import('./FigureCodeMode'));
 
@@ -89,57 +90,13 @@ const FigureBuilder: React.FC = () => {
         </Tooltip>
       </Center>
 
-      <Box style={{ width: '100%' }}>
+      {/* Flex items stretch to the row, so the preview column is as tall as
+          the controls and the preview has room to stick inside it. */}
+      <Box style={{ display: 'flex', gap: '2%' }}>
         <Box
-          component="div"
           style={{
-            width: '60%',
-            display: 'inline-block',
-            verticalAlign: 'top',
-            marginRight: '2%',
-            boxSizing: 'border-box',
-          }}
-        >
-          <Box
-            component="div"
-            style={{
-              minHeight: 400,
-              border: '1px solid var(--mantine-color-gray-3)',
-              borderRadius: 'var(--mantine-radius-md)',
-              padding: 'var(--mantine-spacing-sm)',
-              boxSizing: 'border-box',
-            }}
-          >
-            <FigurePreview />
-          </Box>
-
-          {/* In UI mode the cross-filter section is rendered inside the
-           *  right-panel Accordion (see FigureUIMode) to match the other
-           *  visualization config sections. In code mode the right panel is
-           *  taken by the editor, so the section sits under the preview in
-           *  the left pane — same column, directly below the chart, easy to
-           *  reach without the eyes leaving the preview area. Gated to
-           *  scatter-like visus only (see supportsCrossFilter above). */}
-          {figureMode === 'code' && supportsCrossFilter && (
-            <Accordion variant="separated" radius="md" multiple mt="sm">
-              <CrossFilterSection
-                enabled={Boolean(config.selection_enabled)}
-                onEnabledChange={(checked) =>
-                  patchConfig({ selection_enabled: checked })
-                }
-                column={config.selection_column}
-                onColumnChange={(name) => patchConfig({ selection_column: name })}
-                columnDescription="Column to extract from selected points"
-              />
-            </Accordion>
-          )}
-        </Box>
-        <Box
-          component="div"
-          style={{
-            width: '38%',
-            display: 'inline-block',
-            verticalAlign: 'top',
+            flex: '0 0 38%',
+            minWidth: 0,
             minHeight: 400,
             padding: '0 var(--mantine-spacing-sm)',
             boxSizing: 'border-box',
@@ -152,6 +109,43 @@ const FigureBuilder: React.FC = () => {
               <FigureCodeMode />
             </Suspense>
           )}
+        </Box>
+        <Box style={{ flex: '0 0 60%', minWidth: 0 }}>
+          <StickyPreview>
+            <Box
+              component="div"
+              style={{
+                minHeight: 400,
+                border: '1px solid var(--mantine-color-gray-3)',
+                borderRadius: 'var(--mantine-radius-md)',
+                padding: 'var(--mantine-spacing-sm)',
+                boxSizing: 'border-box',
+              }}
+            >
+              <FigurePreview />
+            </Box>
+
+            {/* In UI mode the cross-filter section is rendered inside the
+             *  controls Accordion (see FigureUIMode) to match the other
+             *  visualization config sections. In code mode the controls column
+             *  is taken by the editor, so the section sits under the preview
+             *  instead, in the same column directly below the chart, easy to
+             *  reach without the eyes leaving the preview area. Gated to
+             *  scatter-like visus only (see supportsCrossFilter above). */}
+            {figureMode === 'code' && supportsCrossFilter && (
+              <Accordion variant="separated" radius="md" multiple mt="sm">
+                <CrossFilterSection
+                  enabled={Boolean(config.selection_enabled)}
+                  onEnabledChange={(checked) =>
+                    patchConfig({ selection_enabled: checked })
+                  }
+                  column={config.selection_column}
+                  onColumnChange={(name) => patchConfig({ selection_column: name })}
+                  columnDescription="Column to extract from selected points"
+                />
+              </Accordion>
+            )}
+          </StickyPreview>
         </Box>
       </Box>
     </Stack>

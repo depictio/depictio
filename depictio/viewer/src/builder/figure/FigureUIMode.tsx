@@ -373,7 +373,7 @@ const FigureUIMode: React.FC<FigureUIModeProps> = ({ hideCrossFilter = false }) 
           </Accordion.Item>
         )}
 
-        {/* Placement lives in the right-hand control column with everything
+        {/* Placement lives in the control column with everything
             else, not full-width beneath the preview. Self-hiding when the
             dashboard declares no sections. */}
         <PlacementSection />
