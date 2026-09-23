@@ -238,3 +238,36 @@ The four tab-local contrast multi-selects were removed so no tab shows two contr
 controls; each tab keeps its own local controls (direction, biotype, chromosome, pole,
 thresholds). The contrast-vs-contrast description now says which two contrasts it pairs
 (the first two by id) instead of the run's count.
+
+## 2026-09-23: wave 2b (switchable DE views, diagnostics, gene record)
+
+What changed:
+
+- Differential expression: the `deseq2/volcano` and `deseq2/ma` tiles are one volcano tile
+  with `views: [volcano, ma]`, `avg_log_intensity_col: log2_base_mean` and the view switch in
+  the header. The QQ tile is the same render opened on `view: qq` (`views: [qq]`); the
+  retired `deseq2/qq` and `deseq2/ma` renders are no longer used. New raw p-value histogram
+  (`figure` histogram on `pvalue`, one facet per contrast). New `record_card` under the
+  annotated table (`default_record` Uchl1, `ENSMUSG00000029223`, one card per contrast,
+  Ensembl link template `https://www.ensembl.org/id/{value}`), driven by the table's row
+  selection and by the contrast-against-contrast figure.
+- Samples: PCA `controls_placement: header`. Genome view: the annotated volcano offers
+  `views: [volcano]` with header controls. Enrichment: the GSEA dot plot spells
+  `view: enrichment`, `views: [enrichment]`, header controls.
+- `show_histogram: true` on all eight RangeSliders. GSEA running score stays unbound
+  (incubating).
+
+Commands and results:
+
+- Shipped-YAML tests: 30 passed (shared run with rnaseq). Dry run and full `run` on
+  `megatest/`: 8/8 steps; `deseq2_results` 62,634 rows, `deseq2_results_annotated` 55,486,
+  `gsea_report` 100, `samples` 24, `deseq2_sample_distance` 24 x 26.
+
+Discrepancies:
+
+- DA-D1: `gsea/gsea_dotplot` is still declared `kind: enrichment` in the catalog, so the tile
+  resolves through the alias table even though the dashboard spells the view. Flipping the
+  catalog render to `kind: dot_plot` + `view: enrichment` belongs to the gsea catalog owner.
+  Likewise `deseq2/ma` and `deseq2/qq` still exist as alias renders, now unused here.
+- DA-D2: no parallel-coordinates QC profile: the pipeline runs no MultiQC, and the samples
+  sheet has one numeric column (size factor).

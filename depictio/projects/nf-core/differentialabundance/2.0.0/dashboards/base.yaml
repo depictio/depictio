@@ -189,6 +189,7 @@ main_dashboard:
       legend_pos: right
       selection_enabled: true
       selection_column: sample_id
+      controls_placement: header
     title: Sample PCA
     description: One point per sample, coloured by the sheet's leading factor. The Colour-by and Hover-columns controls list every column of this collection, so a blocking factor such as batch is one pick away; lasso a cluster to filter the linked panels.
     title_size: h3
@@ -391,6 +392,7 @@ main_dashboard:
     interactive_component_type: RangeSlider
     column_name: size_factor
     column_type: float64
+    show_histogram: true
     display: {title_size: md, custom_color: '#0E9384', icon_name: 'mdi:scale-balance'}
     placement: left
     title: Size factor
@@ -438,7 +440,7 @@ tabs:
   - name: Volcano and MA
     icon: mdi:chart-scatter-plot
     color: indigo
-    description: Effect size against significance, and against expression level
+    description: One tile, two readings of the same calls, switched from the tile header
   - name: Test diagnostics
     icon: mdi:chart-bell-curve
     color: orange
@@ -446,7 +448,7 @@ tabs:
   - name: Gene table
     icon: mdi:table
     color: blue
-    description: The annotated calls, selectable row by row
+    description: The annotated calls, selectable row by row, and the record of the gene picked
   components:
   # ------------------------------------------------------- calls at a glance
   - component_type: text
@@ -546,10 +548,11 @@ tabs:
     order: 2
     alignment: left
     body: >
-      The volcano puts significance against effect size, the MA plot puts
-      effect size against expression level. Together they separate a real
-      change from a loud one measured on almost no reads. Pick a single
-      contrast in the left panel before reading either.
+      One tile, two readings of the same calls: the volcano puts significance
+      against effect size, the MA view (switch in the tile header) puts effect
+      size against expression level. Together they separate a real change from
+      a loud one measured on almost no reads. Pick a single contrast in the
+      left panel before reading either.
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: advanced_viz
     tag: da-av-volcano
@@ -563,29 +566,19 @@ tabs:
       category_col: direction
       significance_threshold: 0.05
       effect_threshold: 1.0
-      top_n_labels: 15
-      show_labels: true
-    title: Volcano
-    description: -log10(padj) against log2 fold change. The dashed lines are the pipeline's own cut-offs, padj 0.05 and a two-fold change.
-    title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 7}
-  - component_type: advanced_viz
-    tag: da-av-ma
-    index: da-av-ma
-    section: Volcano and MA
-    workflow_tag: differentialabundance
-    data_collection_tag: deseq2_results
-    use: deseq2/ma
-    config:
-      significance_col: padj
-      label_col: gene_id
-      significance_threshold: 0.05
       fold_change_threshold: 1.0
       top_n_labels: 15
-    title: MA plot
-    description: Fold change against mean expression. The funnel narrowing to the right is the shrinkage DESeq2 applies to low-count features.
+      show_labels: true
+      # MA view bindings: mean expression on x, the same fold change on y.
+      avg_log_intensity_col: log2_base_mean
+      log2_fold_change_col: log2fc
+      view: volcano
+      views: [volcano, ma]
+      controls_placement: header
+    title: Volcano and MA
+    description: -log10(padj) against log2 fold change, or fold change against mean expression in the MA view, where the funnel narrowing to the right is the shrinkage DESeq2 applies to low-count features. The dashed lines are the pipeline's own cut-offs, padj 0.05 and a two-fold change.
     title_size: h3
-    layout: {x: 0, y: 9, w: 8, h: 7}
+    layout: {x: 0, y: 2, w: 8, h: 9}
 
   # ------------------------------------------------------- test diagnostics
   - component_type: text
@@ -599,27 +592,46 @@ tabs:
     order: 2
     alignment: left
     body: >
-      The QQ plot compares the observed p-values with the uniform null: a curve
-      that lifts off the diagonal only at the far right is what a healthy
-      contrast looks like. The scatter beside it puts one contrast's effect
-      sizes against the other's, one point per gene.
+      The raw p-value histogram should be flat with a spike at zero: a hump in
+      the middle or a rise towards one says the test is mis-specified. The QQ
+      view reads the same p-values against the uniform null, where a curve that
+      lifts off the diagonal only at the far right is a healthy contrast. The
+      scatter below puts one contrast's effect sizes against the other's, one
+      point per gene.
     layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: figure
+    tag: da-fig-pvalue-histogram
+    index: da-pvalue-histogram
+    section: Test diagnostics
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results
+    use: deseq2/results
+    visu_type: histogram
+    dict_kwargs: {x: pvalue, facet_col: contrast, facet_col_wrap: 1, nbins: 40}
+    title: Raw p-value distribution
+    description: One histogram per contrast, 40 bins over 0 to 1. Features DESeq2 did not test carry no p-value and are left out.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 4, h: 6}
   - component_type: advanced_viz
     tag: da-av-qq
     index: da-av-qq
     section: Test diagnostics
     workflow_tag: differentialabundance
     data_collection_tag: deseq2_results
-    use: deseq2/qq
+    use: deseq2/volcano
     config:
       feature_id_col: gene_id
       category_col: direction
+      p_value_col: pvalue
       show_ci: true
       show_identity: true
+      view: qq
+      views: [qq]
+      controls_placement: header
     title: QQ plot
     description: Observed against expected p-value quantiles, with the 95% null band. Filter to one contrast to read it.
     title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 6}
+    layout: {x: 4, y: 2, w: 4, h: 6}
   - component_type: figure
     tag: da-fig-contrast-vs-contrast
     index: da-contrast-vs-contrast
@@ -685,7 +697,9 @@ tabs:
       The same statistics carrying the gene symbol, coordinates and biotype
       from the GTF. Selecting a row sends that gene back to the panels above
       and to the [DESeq2](https://bioconductor.org/packages/DESeq2) results
-      table pinned at the bottom of every tab.
+      table pinned at the bottom of every tab, and fills the record below, one
+      card per contrast. It opens on Uchl1, among the strongest calls of the
+      genotype contrast.
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: table
     tag: da-de-table-annotated
@@ -700,6 +714,29 @@ tabs:
     title_size: h3
     title_align: left
     layout: {x: 0, y: 2, w: 8, h: 5}
+  - component_type: advanced_viz
+    tag: da-av-gene-record
+    index: da-av-gene-record
+    section: Gene table
+    workflow_tag: differentialabundance
+    data_collection_tag: deseq2_results_annotated
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      id_col: gene_id
+      title_col: gene_name
+      selection_source: any
+      default_record: ENSMUSG00000029223
+      sections:
+        Gene: [gene_name, gene_id, gene_biotype]
+        Location: [chromosome, start, end]
+        Test: [contrast, direction, log2fc, lfc_se, base_mean, pvalue, padj]
+      link_templates:
+        gene_id: "https://www.ensembl.org/id/{value}"
+    title: Gene record
+    description: The picked gene, one card per contrast it was tested in. Ensembl resolves the stable identifier for any species.
+    title_size: h3
+    layout: {x: 0, y: 7, w: 8, h: 6}
 
   # --------------------------------------------------------------- left panel
   - component_type: interactive
@@ -726,6 +763,7 @@ tabs:
     interactive_component_type: RangeSlider
     column_name: log2fc
     column_type: float64
+    show_histogram: true
     display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:chart-bell-curve'}
     placement: left
     title: log2 fold change
@@ -740,6 +778,7 @@ tabs:
     interactive_component_type: RangeSlider
     column_name: neg_log10_padj
     column_type: float64
+    show_histogram: true
     display: {title_size: md, custom_color: '#F2A93B', icon_name: 'mdi:star-outline'}
     placement: left
     title: Significance
@@ -754,6 +793,7 @@ tabs:
     interactive_component_type: RangeSlider
     column_name: log2_base_mean
     column_type: float64
+    show_histogram: true
     display: {title_size: md, custom_color: '#0E9384', icon_name: 'mdi:ruler'}
     placement: left
     title: Expression level
@@ -1190,6 +1230,10 @@ tabs:
       effect_threshold: 1.0
       top_n_labels: 15
       show_labels: true
+      # No mean-expression column on the log2 scale here, and the QQ view sits
+      # on the Differential expression tab.
+      views: [volcano]
+      controls_placement: header
     title: Volcano with gene symbols
     description: The annotated calls, laid out as a volcano and coloured by biotype rather than by direction.
     title_size: h3
@@ -1220,6 +1264,7 @@ tabs:
     interactive_component_type: RangeSlider
     column_name: neg_log10_padj
     column_type: float64
+    show_histogram: true
     display: {title_size: md, custom_color: '#D6336C', icon_name: 'mdi:star-outline'}
     placement: left
     title: Significance
@@ -1234,6 +1279,7 @@ tabs:
     interactive_component_type: RangeSlider
     column_name: log2fc
     column_type: float64
+    show_histogram: true
     display: {title_size: md, custom_color: '#D6336C', icon_name: 'mdi:chart-bell-curve'}
     placement: left
     title: log2 fold change
@@ -1401,6 +1447,9 @@ tabs:
       term_sort: nes
       max_dot_size: 26
       min_dot_size: 6
+      view: enrichment
+      views: [enrichment]
+      controls_placement: header
     title: Enriched gene sets
     description: Normalised enrichment score against gene set, sized by the genes found and coloured by significance.
     title_size: h3
@@ -1490,6 +1539,7 @@ tabs:
     interactive_component_type: RangeSlider
     column_name: neg_log10_fdr
     column_type: float64
+    show_histogram: true
     display: {title_size: md, custom_color: '#F2A93B', icon_name: 'mdi:star-outline'}
     placement: left
     title: Significance
@@ -1504,6 +1554,7 @@ tabs:
     interactive_component_type: RangeSlider
     column_name: size
     column_type: int64
+    show_histogram: true
     display: {title_size: md, custom_color: '#F2A93B', icon_name: 'mdi:ruler'}
     placement: left
     title: Set size
