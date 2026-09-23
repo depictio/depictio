@@ -122,6 +122,11 @@ Genes Cell Ranger could not normalise carry no dispersion, and those are
 exactly the ones it dropped. The PCA scree then shows how much the first 3
 components (used everywhere else) actually explain.
 
+Every scatter and embedding on this tab draws its colour-by and axis
+controls as chips under the title (`controls_placement: header`), so
+switching the UMAP from cluster to depth to a gene is one click, not a
+settings popover.
+
 ### Clusters
 What to look for: cluster sizes, then the same cluster's QC medians as a
 row-z-scored heatmap (`median_pct_mito` dropped: constant 0 on this
@@ -131,6 +136,15 @@ artefact rather than a cell type. The stability sankey (graphclust ->
 kmeans_6 -> kmeans_10) shows whether a graph-based cluster stays a single
 ribbon as k grows (stable) or fans out across several k-means clusters
 (candidate for further splitting).
+
+The parallel coordinates under the heatmap draw the same cluster summary
+as one line per cluster across six axes (cells, share of cells, median
+UMIs, median genes, flagged share, CellBender share), each rescaled to its
+own range. A small, shallow, heavily flagged cluster bends away from the
+rest on several axes at once, which a single bar never shows. Brushing an
+axis becomes a range filter on the cluster summary. The Cells per cluster
+slider draws its distribution above the handle, like every QC threshold
+slider of this template.
 
 "Cell cycle" answers a question Cell Ranger does not: is this cluster a
 distinct cell type, or the same type cycling? The S and G2/M scores are
@@ -159,14 +173,26 @@ half its cells and absent in the other half, is indistinguishable from a
 uniform one on a dot plot. Cells are capped per cluster there so the box
 stays drawable; the wide matrix behind the Compare selections tab keeps
 every cell.
+The per-cluster tile is a violin (with its box inside), so a bimodal
+marker shows as two bulges.
+
+"Differential expression" pairs the volcano (volcano view only: these are
+the markers Cell Ranger kept per cluster, already filtered on
+significance, so a QQ view has no null to read against) with a gene
+record card. The card opens on FCER1A, the top marker of the
+dendritic-cell cluster, and shows one card per (resolution, cluster) row
+where the gene ranks as a marker; ticking a gene in the marker table swaps
+it, clearing the tick brings FCER1A back. The dot plot's gene sort and
+cap sit as chips under its title.
 
 ### Compare selections
 What to look for: lasso a set of cells on the UMAP, save it as group A,
 lasso a second set and save it as group B, then run the comparison: every
 gene of the panel is tested between the two groups and drawn as a volcano,
-effect size against significance. With no groups saved the comparison falls
-back to the cluster each cell belongs to, so the tile shows something
-before you touch it. The values are already log1p(CP10k), so no further
+effect size against significance. With no groups saved the tab opens on
+the B-cell cluster (C1) against the classical monocytes (C2), already
+compared (`auto_run`), so the tile shows a result before you touch it;
+the group pickers sit as chips under the title. The values are already log1p(CP10k), so no further
 transform is applied, and the test is a Wilcoxon rank-sum. Two caveats:
 narrow to `qc_status: pass` first, since a comparison run over flagged
 cells is a comparison of QC artefacts, and check that the two groups have

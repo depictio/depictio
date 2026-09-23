@@ -43,6 +43,10 @@ keys:
   - clonal_analysis/repertoire_analysis/repertoire_analysis_report/tables/clonal_overlap.tsv
   - clonal_analysis/repertoire_analysis/repertoire_analysis_report/tables/clone_sizes_table.tsv
   - clonal_analysis/repertoire_analysis/repertoire_analysis_report/tables/num_clones_table.tsv
+  # The AIRR rearrangement table the repertoire analysis starts from (all
+  # samples, one row per collapsed sequence, about 310 MB). The spectratype and
+  # V-J recipes read six or seven of its 74 columns; nothing else ingests it.
+  - clonal_analysis/repertoire_analysis/repertoire_analysis_report/repertoires/All_samples__repertoire-pass.tsv
   # enchantR find-threshold report: the shazam distance threshold per subject.
   - clonal_analysis/find_threshold/all_reps_dist_report/tables/all_reps_threshold-summary.tsv
   # Repertoire comparison report: V family and V gene usage per sample, plus the
@@ -58,9 +62,10 @@ keys:
   #     is byte-identical to parsed_logs/Table_sequences_process.tsv.
   #   parsed_logs/Table_all_details_*.tsv and report_file_size/ are the
   #     per-process and per-file detail behind the same counts; nothing reads them.
-  #   vdj_annotation/*/*_db-pass.tsv (about 20 MB) are the per-sample AIRR
-  #     rearrangement tables. They would add V by J pairing, CDR3 length and
-  #     isotype panels; see VALIDATION_REPORT.md.
+  #   vdj_annotation/*/02-make-db/*_db-pass.tsv (860 MB for the ten samples)
+  #     and clonal_assignment/*/repertoires/*_clone-pass.tsv (320 MB) carry the
+  #     same rearrangements as the repertoire-pass table above, before and
+  #     after clone definition.
 prefix_keys: []
 renames: {}
 post_fetch_help: |

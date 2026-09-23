@@ -15,6 +15,16 @@ two-subject multiple sclerosis B cell study of cervical lymph node and brain les
 
 ## How the dashboard is built
 
+Wave 2b: the V gene composition (rank picker), the richness against evenness scatter and the
+overlap MDS draw their pickers as a header strip under the title
+(`controls_placement: header`), and the processing and repertoire threshold sliders show the
+column's distribution (`show_histogram: true`). The Repertoire tab also carries the two
+figures the AIRR literature expects that the report tables cannot give: a CDR3 spectratype
+per sample and a V by J pairing grid per donor. Both read the AIRR rearrangement table the
+repertoire analysis starts from (`*__repertoire-pass.tsv`, about 310 MB on the megatest)
+through two version-local recipes in `recipes/`, which read only the six or seven columns
+they need, so the raw table never reaches Delta. Both collections are optional.
+
 - **One funnel, four tabs.** MultiQC, then Sequence processing, then Repertoire, then
   Clonal analysis. Each tab answers the question the previous one raises: are the reads good,
   how many survive, what repertoire do the survivors make, and how is that repertoire
@@ -104,6 +114,22 @@ rows in the table below, narrows the clonal tab.
 ![Repertoire](screenshots/repertoire.png)
 
 
+### CDR3 spectratype and V-J pairing (Repertoire tab)
+
+`CDR3 spectratype` is one small bar panel per sample (`facet_col: sample_id`), the share of
+the sample's productive in-frame sequences at each CDR3 length in amino acids, coloured by
+donor. The CDR3 length is the IMGT junction length minus the two anchor codons, divided by
+three. The seven deep samples draw the expected bell around 14 to 16 residues; the three
+shallow brain-lesion sections are spikier, and SRR1383456 (27 sequences) is a handful of
+bars rather than a distribution. A `CDR3 length (aa)` slider in `Repertoire scope` narrows
+the panels.
+
+`V-J pairing` is a `complex_heatmap` with one row per donor and V gene (`M4 IGHV3-23`) and
+one column per J gene, each cell the share of the donor's productive sequences using the
+pair, with `subject_id` as a row annotation. Rows cluster; J columns keep their genomic
+order. It is per donor because clones are defined per donor, and the sample sheet reaches it
+through a `subject_id` link.
+
 ## Clonal analysis
 
 `Clonal analysis at a glance` puts the distance threshold on the card row, because clones are
@@ -113,9 +139,12 @@ threshold's sensitivity.
 
 `Diversity profiles` shows the Hill diversity profile, one curve per repertoire, against the
 order q. At q of 0 every clone counts once; as q rises the large clones dominate, so a curve
-that falls steeply is a repertoire carried by a few expanded clones. The panel beside it draws
-the same curves with alakazam's bootstrap confidence band shaded per sample, and a ranked
-confidence-interval strip below compares one Hill number per sample once a q is picked.
+that falls steeply is a repertoire carried by a few expanded clones. The panel below it is a
+`profile` tile that draws the same curves with alakazam's bootstrap confidence band
+(`d_lower` to `d_upper`) shaded per sample, and a ranked confidence-interval strip below
+compares one Hill number per sample once a q is picked. The ribbon panel used to be a
+hand-written Plotly figure with its own palette; the `profile` kind draws the band natively
+and follows the theme.
 
 `Clone abundance` opens with the rank-abundance curve alakazam bootstrapped: relative abundance
 against rank on log axes, one curve per sample, with the bootstrap interval drawn as a shaded

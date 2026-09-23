@@ -283,3 +283,41 @@ MultiQC scan regex brought to the mandated form
 10 rows) the column is constant (`IG` throughout), so a control on it could never narrow
 anything and stays out per the dead-filter rule; `subject_id` (2), `treatment` (2) and
 `sex` (2) already carry the varying factors.
+
+## 2026-09-23: wave 2b (spectratype, V-J pairing, ribbon profile, header controls)
+
+What changed:
+
+- New optional collections `cdr3_spectratype` and `vj_usage_matrix`, built by two
+  version-local recipes (`recipes/cdr3_spectratype.py`, `recipes/vj_usage_matrix.py`) from
+  the AIRR rearrangement table `clonal_analysis/.../repertoires/All_samples__repertoire-pass.tsv`
+  (now a `megatest.yaml` key, 308 MB, 130,232 rows, IGH only). The recipes read six and
+  seven of its 74 columns through `read_kwargs.columns` (0.06 s), so the raw table never
+  reaches Delta. Links: `sample_id` to the spectratype, `subject_id` to the V-J grid.
+- Repertoire tab: sections `CDR3 spectratype` (text + faceted bar figure, one panel per
+  sample, coloured by donor) and `V-J pairing` (text + `complex_heatmap`, rows donor and V
+  gene, columns IGHJ1 to IGHJ6, subject row annotation); a `CDR3 length (aa)` slider with
+  histogram in `Repertoire scope`.
+- Clonal analysis: the hand-written Plotly ribbon figure (own palette, `code_content`) is
+  replaced by a `profile` tile with `lower_col: d_lower`, `upper_col: d_upper`.
+- `controls_placement: header` on the V gene composition, richness against evenness and
+  overlap MDS; `show_histogram: true` on four threshold sliders.
+
+Discrepancies:
+
+- AF-D12: the spectratype and V-J tiles bind no catalog render (`use:`): the collections are
+  version-local recipes, and `enchantr` is not in this pass's partition. Promoting them to
+  `depictio/catalog/enchantr/{cdr3_spectratype,vj_usage}.yaml` would restore the `use:` ratio.
+- AF-D13: the diversity ribbon tile is a direct `viz_kind: profile` for the same reason.
+- AF-D14: SRR1383456 has 27 sequences in the repertoire table, so its spectratype panel is a
+  handful of bars; it is kept (filtering is the reader's call through the sample filter).
+
+Commands and results:
+
+| command | result |
+| --- | --- |
+| recipes on the real table (`resolve_sources` + `transform` + `validate_schema`) | spectratype 259 x 6, V-J 103 x 10 |
+| `uv run pytest -q depictio/tests/models/test_shipped_dashboard_yamls.py -k airrflow` | 10 passed |
+| `depictio.cli run --template nf-core/airrflow/5.1.0 ... --dry-run` | 8/8 steps |
+| delete + re-ingest | project `6ab3cc7c81d2d7032d3ff302`, dashboard `6ab3ccdce8b8ace33d32c9f6`; cdr3_spectratype 259 rows, vj_usage_matrix 103 rows |
+| Playwright, 1600x1000 | `/tmp/claude-502/shots-airrflow/` (tabs + `verify-repertoire-*.png`, `verify-rep2-*`, `verify-clonal-*`) |
