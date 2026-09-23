@@ -466,3 +466,10 @@ benchmark/output*/
 # `uv sync` inside depictio/cli (the depictio-cli alias) writes a lock nobody uses:
 # the root uv.lock is the only one.
 depictio/cli/uv.lock
+
+# Tabix-indexed gene annotations for file-backed genome_view tracks.
+# dev/advanced_viz_kinds/build_genome_gene_assets.py --format gff3 builds them;
+# they are tens of megabytes, so they are hosted, not committed (the small JSON
+# gene tables beside them are).
+depictio/viewer/public/assets/genomes/*.gff3.gz
+depictio/viewer/public/assets/genomes/*.gff3.gz.tbi
