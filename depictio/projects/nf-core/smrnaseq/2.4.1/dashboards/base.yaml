@@ -1,0 +1,1655 @@
+version: 1
+main_dashboard:
+  title: nf-core/smrnaseq
+  subtitle: "nf-core/smrnaseq 2.4.1: library QC, miRNA expression, group comparison, isomiRs and novel miRNAs"
+  project_tag: Small RNA-seq Analysis
+  main_tab_name: MultiQC
+  tab_icon: /assets/images/logos/multiqc_icon_color.svg
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  # Left panel. `Sample scope` is persistent and pinned: it reads the sample
+  # hub (always present) and the design table (present when METADATA_FILE is
+  # given; its filter disappears with it), both of which link to every
+  # sample-keyed collection, so the same controls narrow every tab.
+  filter_sections:
+  - name: Sample scope
+    icon: mdi:filter-variant
+    color: orange
+    description: Which samples and design groups every tab is about
+    persistent: true
+    pin: top
+  - name: Read QC scope
+    icon: mdi:tune
+    color: blue
+    description: Keep the libraries inside a miRNA or rRNA share band
+  # Right panel, in the order the pipeline runs: trimming, small RNA QC,
+  # isomiR annotation, genome mapping. The miRTrace RNA-type, length,
+  # contamination and complexity panels are not repeated here: the Library QC
+  # tab draws the same numbers as filterable tiles. The two pinned persistent
+  # sections ride every tab; they are declared here, on the tab no route
+  # conditional can remove.
+  grid_sections:
+  - name: Run at a glance
+    icon: mdi:counter
+    color: teal
+    description: The size and design of the run, on every tab
+    persistent: true
+    pin: top
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: teal
+    description: The design table and the per-sample summary every tab filters through
+    collapsed: true
+    persistent: true
+    pin: top
+  - name: Read trimming
+    icon: mdi:chart-bell-curve
+    color: blue
+    description: What fastp removed and how long the reads are after trimming
+  - name: Small RNA QC
+    icon: mdi:test-tube
+    color: cyan
+    description: miRTrace's verdict on every read, and the isomiR counts mirtop assigned
+  - name: Genome mapping
+    icon: mdi:dna
+    color: indigo
+    description: How much of each library Bowtie placed on the genome for miRDeep2
+  - name: More QC panels
+    icon: mdi:file-document-outline
+    color: gray
+    description: The remaining fastp and FastQC panels
+    collapsed: true
+  components:
+  # ------------------------------------------------------------ run at a glance
+  - component_type: card
+    tag: sr-glance-samples
+    section: Run at a glance
+    workflow_tag: smrnaseq
+    data_collection_tag: samples
+    aggregation: nunique
+    column_name: sample
+    column_type: object
+    secondary_layout: uniqueness
+    display: {icon_name: 'mdi:flask'}
+    title: Samples
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  # Bound to the design table, so it is pruned with it on a run without one.
+  - component_type: card
+    tag: sr-glance-groups
+    section: Run at a glance
+    workflow_tag: smrnaseq
+    data_collection_tag: metadata
+    aggregation: nunique
+    column_name: '{GROUP_COL}'
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: '{GROUP_COL}'
+    top_n_count: 4
+    display: {icon_name: 'mdi:account-group-outline'}
+    title: '{GROUP_COL_DISPLAY} groups'
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: sr-glance-mirna-reads
+    section: Run at a glance
+    workflow_tag: smrnaseq
+    data_collection_tag: samples
+    aggregation: sum
+    column_name: mirna_reads
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    display: {icon_name: 'mdi:chart-bar'}
+    title: Reads assigned to miRNAs
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: sr-glance-mirnas-detected
+    section: Run at a glance
+    workflow_tag: smrnaseq
+    data_collection_tag: samples
+    aggregation: median
+    aggregations: [box_plot_stats]
+    column_name: mirnas_detected
+    column_type: int64
+    secondary_layout: box_plot
+    display: {icon_name: 'mdi:dna'}
+    title: miRNAs detected per sample
+    title_size: sm
+    title_align: left
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # --------------------------------------------------------------- sample sheet
+  - component_type: text
+    tag: sr-sheet-intro
+    section: Sample sheet
+    workflow_tag: smrnaseq
+    data_collection_tag: samples
+    title: The rows every tab filters through
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The design table is the one declared with METADATA_FILE and is absent
+      when the run was ingested without one. The sample summary below it is
+      always there: one row per sample with its miRNA library size, miRTrace
+      composition and miRDeep2 call counts.
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: table
+    tag: sr-sheet-design
+    section: Sample sheet
+    workflow_tag: smrnaseq
+    data_collection_tag: metadata
+    row_selection_enabled: true
+    row_selection_column: '{METADATA_ID_COL}'
+    title: Design table
+    description: One row per sample as the design file declares it. Ticking rows narrows the MultiQC panels to those samples.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 1, w: 8, h: 4}
+  - component_type: table
+    tag: sr-sheet-samples
+    section: Sample sheet
+    workflow_tag: smrnaseq
+    data_collection_tag: samples
+    row_selection_enabled: true
+    row_selection_column: sample
+    title: Sample summary
+    description: One row per sample. Ticking rows selects those samples for the record card on the Library QC tab.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 5, w: 8, h: 5}
+  # -------------------------------------------------------------- read trimming
+  - component_type: text
+    tag: sr-qc-trim-intro
+    section: Read trimming
+    workflow_tag: smrnaseq
+    data_collection_tag: multiqc_data
+    title: Adapters out, short reads kept
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      [fastp](https://github.com/OpenGene/fastp) removes the 3' adapter and
+      keeps reads inside the length window the run set, so the trimmed length
+      distribution should pile up where mature miRNAs are, around 22 nt. A
+      library whose reads mostly fail the length filter was either adapter
+      dimer or degraded RNA.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: multiqc
+    tag: sr-qc-fastp-filtered
+    section: Read trimming
+    workflow_tag: smrnaseq
+    data_collection_tag: multiqc_data
+    use: multiqc/fastp
+    selected_module: fastp
+    selected_plot: Filtered Reads
+    title: Reads kept by fastp
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 2, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sr-qc-trimmed-length
+    section: Read trimming
+    workflow_tag: smrnaseq
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc-1
+    selected_plot: Sequence Length Distribution
+    title: Read length after trimming
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 2, w: 4, h: 5}
+  # -------------------------------------------------------------- small RNA QC
+  - component_type: text
+    tag: sr-qc-smallrna-intro
+    section: Small RNA QC
+    workflow_tag: smrnaseq
+    data_collection_tag: multiqc_data
+    title: What the reads are
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      [miRTrace](https://github.com/friedlanderlab/mirtrace) sorts every read
+      by QC outcome, and [mirtop](https://github.com/miRTop/mirtop) splits the
+      miRNA reads by isomiR type. Composition, length and contamination views
+      of the same miRTrace numbers are on the Library QC tab.
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: multiqc
+    tag: sr-qc-mirtrace-qc
+    section: Small RNA QC
+    workflow_tag: smrnaseq
+    data_collection_tag: multiqc_data
+    use: multiqc/mirtrace
+    selected_module: mirtrace
+    selected_plot: QC Plot
+    title: miRTrace read QC
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 2, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sr-qc-mirtop-counts
+    section: Small RNA QC
+    workflow_tag: smrnaseq
+    data_collection_tag: multiqc_data
+    use: multiqc/mirtop
+    selected_module: mirtop
+    selected_plot: IsomiR read counts
+    title: isomiR read counts by type
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 2, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sr-qc-mirtop-unique
+    section: Small RNA QC
+    workflow_tag: smrnaseq
+    data_collection_tag: multiqc_data
+    use: multiqc/mirtop
+    selected_module: mirtop
+    selected_plot: IsomiR unique read counts
+    title: Distinct isomiR sequences by type
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 7, w: 8, h: 5}
+  # ------------------------------------------------------------ genome mapping
+  - component_type: multiqc
+    tag: sr-qc-samtools-mapped
+    section: Genome mapping
+    workflow_tag: smrnaseq
+    data_collection_tag: multiqc_data
+    use: multiqc/samtools
+    selected_module: samtools
+    selected_plot: Percent mapped
+    title: Reads mapped to the genome
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 0, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sr-qc-samtools-stats
+    section: Genome mapping
+    workflow_tag: smrnaseq
+    data_collection_tag: multiqc_data
+    use: multiqc/samtools
+    selected_module: samtools
+    selected_plot: Alignment stats
+    title: Alignment statistics
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 0, w: 4, h: 5}
+  # ----------------------------------------------------------- more QC panels
+  - component_type: multiqc
+    tag: sr-qc-fastqc-raw-counts
+    section: More QC panels
+    workflow_tag: smrnaseq
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Sequence Counts
+    title: Raw sequence counts
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 0, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sr-qc-fastqc-raw-adapter
+    section: More QC panels
+    workflow_tag: smrnaseq
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Adapter Content
+    title: Adapter content before trimming
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 0, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sr-qc-fastp-quality
+    section: More QC panels
+    workflow_tag: smrnaseq
+    data_collection_tag: multiqc_data
+    use: multiqc/fastp
+    selected_module: fastp
+    selected_plot: Sequence Quality
+    title: Base quality, fastp
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 5, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sr-qc-fastqc-trimmed-status
+    section: More QC panels
+    workflow_tag: smrnaseq
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc-1
+    selected_plot: Status Checks
+    title: FastQC status after trimming
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 5, w: 4, h: 5}
+  - component_type: multiqc
+    tag: sr-qc-mirtop-mean
+    section: More QC panels
+    workflow_tag: smrnaseq
+    data_collection_tag: multiqc_data
+    use: multiqc/mirtop
+    selected_module: mirtop
+    selected_plot: Mean isomiR read counts
+    title: Mean isomiR read counts
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 10, w: 8, h: 5}
+  # ------------------------------------------------------------------- filters
+  - component_type: interactive
+    tag: sr-filter-sample
+    index: sr-sample-filter
+    section: Sample scope
+    group: Samples
+    workflow_tag: smrnaseq
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display: {title_size: md, custom_color: '#FB8C00', icon_name: 'mdi:flask'}
+    placement: left
+    title: Sample
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: sr-filter-group
+    index: sr-group-filter
+    section: Sample scope
+    group: Samples
+    workflow_tag: smrnaseq
+    data_collection_tag: metadata
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display: {title_size: md, custom_color: '#7B1FA2', icon_name: 'mdi:account-group-outline'}
+    placement: left
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: sr-filter-mirna-reads
+    index: sr-mirna-reads-filter
+    section: Sample scope
+    group: Samples
+    workflow_tag: smrnaseq
+    data_collection_tag: samples
+    interactive_component_type: RangeSlider
+    column_name: mirna_reads
+    column_type: int64
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:chart-bar'}
+    placement: left
+    title: Reads assigned to miRNAs
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: interactive
+    tag: sr-filter-mirna-pct
+    index: sr-mirna-pct-filter
+    section: Read QC scope
+    group: Library composition
+    workflow_tag: smrnaseq
+    data_collection_tag: samples
+    interactive_component_type: RangeSlider
+    column_name: mirna_pct
+    column_type: float64
+    display: {title_size: md, custom_color: '#1E88E5', icon_name: 'mdi:test-tube'}
+    placement: left
+    title: miRNA reads (%)
+    layout: {x: 0, y: 9, w: 1, h: 3}
+  - component_type: interactive
+    tag: sr-filter-rrna-pct
+    index: sr-rrna-pct-filter
+    section: Read QC scope
+    group: Library composition
+    workflow_tag: smrnaseq
+    data_collection_tag: samples
+    interactive_component_type: RangeSlider
+    column_name: rrna_pct
+    column_type: float64
+    display: {title_size: md, custom_color: '#1E88E5', icon_name: 'mdi:alert-outline'}
+    placement: left
+    title: rRNA reads (%)
+    layout: {x: 0, y: 12, w: 1, h: 3}
+
+tabs:
+# =============================================================================
+# Library QC: is each library a small RNA library, and a clean one?
+# =============================================================================
+- title: Library QC
+  tab_order: 1
+  tab_icon: mdi:test-tube
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Library scope
+    icon: mdi:tune
+    color: teal
+    description: Keep the libraries inside a composition or depth band
+  grid_sections:
+  - name: Libraries at a glance
+    icon: mdi:counter
+    color: teal
+    description: What each library is made of, one box per measure
+  - name: Read length
+    icon: mdi:ruler
+    color: blue
+    description: Where the reads pile up, as a share of each library
+  - name: RNA composition
+    icon: mdi:chart-bar
+    color: cyan
+    description: RNA types, QC outcomes and organism clades per library
+  - name: Complexity
+    icon: mdi:chart-line
+    color: indigo
+    description: How many distinct miRNAs deeper sequencing still finds
+  - name: Library profile
+    icon: mdi:chart-timeline-variant
+    color: grape
+    description: Every per-library measure on one line
+  - name: Sample detail
+    icon: mdi:information-outline
+    color: gray
+    description: Pick a library on the plane, read its record beside it
+  components:
+  - component_type: card
+    tag: sr-lib-card-mirna
+    section: Libraries at a glance
+    workflow_tag: smrnaseq
+    data_collection_tag: samples
+    aggregation: median
+    aggregations: [box_plot_stats]
+    column_name: mirna_pct
+    column_type: float64
+    secondary_layout: box_plot
+    display: {icon_name: 'mdi:test-tube'}
+    title: miRNA reads (%)
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: sr-lib-card-rrna
+    section: Libraries at a glance
+    workflow_tag: smrnaseq
+    data_collection_tag: samples
+    aggregation: median
+    aggregations: [box_plot_stats]
+    column_name: rrna_pct
+    column_type: float64
+    secondary_layout: box_plot
+    display: {icon_name: 'mdi:alert-outline'}
+    title: rRNA reads (%)
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: sr-lib-card-trna
+    section: Libraries at a glance
+    workflow_tag: smrnaseq
+    data_collection_tag: samples
+    aggregation: median
+    aggregations: [box_plot_stats]
+    column_name: trna_pct
+    column_type: float64
+    secondary_layout: box_plot
+    display: {icon_name: 'mdi:alert-outline'}
+    title: tRNA reads (%)
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: sr-lib-card-clade
+    section: Libraries at a glance
+    workflow_tag: smrnaseq
+    data_collection_tag: samples
+    aggregation: median
+    aggregations: [box_plot_stats]
+    column_name: top_clade_pct
+    column_type: float64
+    secondary_layout: box_plot
+    display: {icon_name: 'mdi:shield-check-outline'}
+    title: miRNAs in the main clade (%)
+    title_size: sm
+    title_align: left
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: text
+    tag: sr-lib-length-intro
+    section: Read length
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtrace_length
+    title: A miRNA library peaks at 20 to 24 nt
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The shaded band is miRTrace's miRNA window; a second peak around 30 nt
+      is usually tRNA or piRNA fragments, and a smear to longer reads points at
+      degraded RNA. Selecting curves narrows every tab to those libraries.
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: sr-lib-length-profile
+    index: sr-lib-length-profile
+    section: Read length
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtrace_length
+    use: multiqc/length_profile
+    config:
+      x_title: Read length (nt)
+      y_title: Reads (% of library)
+      shaded_bands:
+        - [18, 26, miRNA]
+      selection_enabled: true
+      selection_column: sample
+      legend_pos: bottom
+      controls_placement: header
+    title: Read length distribution
+    description: One curve per library, as a share of its reads, so libraries of different depth overlay.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 8, h: 7}
+  - component_type: text
+    tag: sr-lib-composition-intro
+    section: RNA composition
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtrace_composition
+    title: Three ways to split a library
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Switch the level between RNA type (the miRNA share is the headline),
+      miRTrace's read QC outcome, and the organism clade of the detected
+      miRNAs, where anything outside the sequenced species' clade flags
+      contamination.
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: sr-lib-composition
+    index: sr-lib-composition
+    section: RNA composition
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtrace_composition
+    use: multiqc/rna_composition
+    config:
+      default_rank: RNA type
+      top_n: 12
+      sort_by: abundance
+      normalise_to_one: true
+      sample_sort: first_taxon
+      controls_placement: header
+    title: Library composition
+    description: Stacked to 100 % per library. The Clade level counts detected miRNAs, not reads.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 8, h: 7}
+  - component_type: text
+    tag: sr-lib-complexity-intro
+    section: Complexity
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtrace_complexity
+    title: Has the library been sequenced deep enough?
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      A curve that has flattened at the library's full depth would find few
+      new miRNAs with more reads; one still climbing was sequenced short of
+      its complexity.
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: sr-lib-complexity
+    index: sr-lib-complexity
+    section: Complexity
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtrace_complexity
+    use: multiqc/complexity_curve
+    config:
+      x_title: Reads sampled
+      y_title: Distinct miRNAs detected
+      log_x: true
+      selection_enabled: true
+      selection_column: sample
+      legend_pos: bottom
+      controls_placement: header
+    title: miRNA complexity curves
+    description: Distinct miRNAs against reads sampled, per library, on a log depth axis.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 8, h: 7}
+  - component_type: text
+    tag: sr-lib-profile-intro
+    section: Library profile
+    workflow_tag: smrnaseq
+    data_collection_tag: samples
+    title: The odd library out, on every measure at once
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Each line is a library across its miRNA depth, detection, composition,
+      reference isoform share and miRDeep2 calls. Brush an axis to keep the
+      libraries inside that range.
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: sr-lib-parcoords
+    index: sr-lib-parcoords
+    section: Library profile
+    workflow_tag: smrnaseq
+    data_collection_tag: samples
+    viz_kind: parallel_coordinates
+    config:
+      viz_kind: parallel_coordinates
+      sample_col: sample
+      scale: minmax
+      metric_cols:
+        - mirna_reads
+        - mirnas_detected
+        - mirnas_10cpm
+        - mirna_pct
+        - rrna_pct
+        - trna_pct
+        - reference_isoform_pct
+        - novel_candidates
+      controls_placement: header
+    title: Per-library profile
+    description: Each axis rescaled to its own range; the ticks keep the original units.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 8, h: 7}
+  - component_type: text
+    tag: sr-lib-detail-intro
+    section: Sample detail
+    workflow_tag: smrnaseq
+    data_collection_tag: samples
+    title: Depth against miRNA share
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      A library low on both axes is the first to question. Click a point to
+      read its record on the right.
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: sr-lib-detail-plane
+    index: sr-lib-detail-plane
+    section: Sample detail
+    workflow_tag: smrnaseq
+    data_collection_tag: samples
+    viz_kind: scatter_xy
+    config:
+      viz_kind: scatter_xy
+      x_col: mirna_reads
+      y_col: mirna_pct
+      label_col: sample
+      color_col: top_clade
+      x_title: Reads assigned to miRNAs
+      y_title: miRNA reads (%)
+      log_x: true
+      marker_size: 10
+      selection_enabled: true
+      selection_column: sample
+      legend_pos: bottom
+      controls_placement: header
+    title: miRNA depth and share per library
+    description: One point per library, coloured by the clade holding most of its detected miRNAs.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 5, h: 8}
+  - component_type: advanced_viz
+    tag: sr-lib-detail-record
+    index: sr-lib-detail-record
+    section: Sample detail
+    workflow_tag: smrnaseq
+    data_collection_tag: samples
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: sr-lib-detail-plane
+      id_col: sample
+      selection_source: any
+      sections:
+        miRNA library: [mirna_reads, mirnas_detected, mirnas_10cpm, reference_isoform_pct]
+        miRTrace composition: [mirna_pct, rrna_pct, trna_pct, artifact_pct, unknown_pct, top_clade, top_clade_pct]
+        miRDeep2: [novel_candidates, known_recovered]
+    title: Sample record
+    description: The picked library as a fact panel.
+    title_size: h3
+    layout: {x: 5, y: 1, w: 3, h: 8}
+  - component_type: interactive
+    tag: sr-lib-filter-detected
+    index: sr-lib-detected-filter
+    section: Library scope
+    group: Libraries
+    workflow_tag: smrnaseq
+    data_collection_tag: samples
+    interactive_component_type: RangeSlider
+    column_name: mirnas_detected
+    column_type: int64
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:dna'}
+    placement: left
+    title: miRNAs detected
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: sr-lib-filter-trna
+    index: sr-lib-trna-filter
+    section: Library scope
+    group: Libraries
+    workflow_tag: smrnaseq
+    data_collection_tag: samples
+    interactive_component_type: RangeSlider
+    column_name: trna_pct
+    column_type: float64
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:alert-outline'}
+    placement: left
+    title: tRNA reads (%)
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: sr-lib-filter-clade
+    index: sr-lib-clade-filter
+    section: Library scope
+    group: Libraries
+    workflow_tag: smrnaseq
+    data_collection_tag: samples
+    interactive_component_type: RangeSlider
+    column_name: top_clade_pct
+    column_type: float64
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:shield-check-outline'}
+    placement: left
+    title: miRNAs in the main clade (%)
+    layout: {x: 0, y: 6, w: 1, h: 3}
+
+# =============================================================================
+# Expression: which miRNAs, how much, how variable.
+# =============================================================================
+- title: miRNA expression
+  tab_order: 2
+  tab_icon: mdi:chart-box-outline
+  tab_icon_color: cyan
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: miRNA scope
+    icon: mdi:dna
+    color: cyan
+    description: Which miRNAs and which expression range the panels cover
+  grid_sections:
+  - name: Expression at a glance
+    icon: mdi:counter
+    color: cyan
+    description: How many miRNAs the run measures and how widely
+  - name: Top variable miRNAs
+    icon: mdi:chart-box-outline
+    color: grape
+    description: The miRNAs that vary most across samples, clustered
+  - name: Expression by group
+    icon: mdi:chart-bell-curve
+    color: teal
+    description: Per-sample expression of the picked miRNAs, split by design group
+  - name: miRNA detail
+    icon: mdi:information-outline
+    color: gray
+    description: Pick a miRNA on the mean-variance plane and read its record beside it
+  - name: miRNA rows
+    icon: mdi:table
+    color: gray
+    description: One row per miRNA, selectable
+    collapsed: true
+  components:
+  - component_type: card
+    tag: sr-expr-card-mirnas
+    section: Expression at a glance
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtop_mirna_summary
+    aggregation: nunique
+    column_name: mirna
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: arm
+    top_n_count: 3
+    display: {icon_name: 'mdi:dna'}
+    title: miRNAs with reads
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: sr-expr-card-reads
+    section: Expression at a glance
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtop_mirna_counts
+    aggregation: sum
+    column_name: reads
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: mirna
+    top_n_count: 5
+    display: {icon_name: 'mdi:chart-bar'}
+    title: Reads, top miRNAs
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: sr-expr-card-10cpm
+    section: Expression at a glance
+    workflow_tag: smrnaseq
+    data_collection_tag: samples
+    aggregation: median
+    aggregations: [box_plot_stats]
+    column_name: mirnas_10cpm
+    column_type: int64
+    secondary_layout: box_plot
+    display: {icon_name: 'mdi:counter'}
+    title: miRNAs at 10 CPM or more
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: sr-expr-card-detection
+    section: Expression at a glance
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtop_mirna_summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    column_name: samples_detected
+    column_type: int64
+    secondary_layout: box_plot
+    display: {icon_name: 'mdi:flask'}
+    title: Samples detecting a miRNA
+    title_size: sm
+    title_align: left
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: text
+    tag: sr-expr-heatmap-intro
+    section: Top variable miRNAs
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtop_top_variable_heatmap
+    title: Samples of one group should form a block
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The most variable miRNAs at 10 CPM or more, row-scaled log2(CPM + 1),
+      rows and columns clustered. The strips above the columns are the design
+      factors, when a design table was given.
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: sr-expr-heatmap
+    index: sr-expr-heatmap
+    section: Top variable miRNAs
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtop_top_variable_heatmap
+    use: mirtop/top_variable_mirna_heatmap
+    config:
+      cluster_rows: true
+      cluster_cols: true
+      cluster_method: ward
+      normalize: row_z
+      colorscale: RdBu
+      controls_placement: header
+    title: Top variable miRNAs
+    description: Row-normalised log2(CPM + 1), CPM over the miRNA-assigned reads of each sample.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 8, h: 9}
+  - component_type: text
+    tag: sr-expr-box-intro
+    section: Expression by group
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtop_mirna_counts
+    title: One box per miRNA and group
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      The twelve most expressed miRNAs, or the ones picked in the miRNA filter
+      or on the plane below, with every sample drawn beside its box.
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: figure
+    tag: sr-expr-box
+    index: sr-expr-box
+    section: Expression by group
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtop_mirna_counts
+    visu_type: box
+    mode: code
+    code_content: |-
+      # Group on the viewer's analysis groups when there are some, else the
+      # run's design column; a run without a design table gets one box per miRNA.
+      grp_col = depictio_group_by[0] if depictio_group_by else '{GROUP_COL}'
+      has_grp = grp_col in df.columns
+      top = (
+          df.group_by('mirna').agg(pl.col('cpm').mean().alias('_m'))
+          .sort('_m', descending=True).head(12)['mirna'].to_list()
+      )
+      d = df.filter(pl.col('mirna').is_in(top))
+      fig = px.box(
+          d.to_pandas(),
+          x='mirna', y='log2_cpm',
+          color=grp_col if has_grp else None,
+          points='all',
+          category_orders={'mirna': top},
+          hover_data=['sample'],
+          labels={'mirna': '', 'log2_cpm': 'log2(CPM + 1)', grp_col: '{GROUP_COL_DISPLAY}'},
+          color_discrete_map=depictio_group_kwargs.get('color_discrete_map', {}),
+      )
+      fig.update_layout(title=None, margin={'t': 24, 'l': 56, 'r': 16, 'b': 80}, legend={'orientation': 'h', 'y': 1.08})
+    selection_enabled: false
+    title: Expression of the top miRNAs by {GROUP_COL_DISPLAY}
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 1, w: 8, h: 7}
+  - component_type: text
+    tag: sr-expr-detail-intro
+    section: miRNA detail
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtop_mirna_summary
+    title: Well expressed and variable sits top right
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Each point is a miRNA: mean against spread of log2(CPM + 1) across
+      samples. Clicking one fills the record on the right and narrows the boxes
+      above and the isomiR landscape to it.
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: sr-expr-plane
+    index: sr-expr-plane
+    section: miRNA detail
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtop_mirna_summary
+    use: mirtop/mirna_mean_variance
+    config:
+      x_title: Mean log2(CPM + 1)
+      y_title: Standard deviation of log2(CPM + 1)
+      marker_size: 6
+      opacity: 0.7
+      top_n_labels: 10
+      selection_enabled: true
+      selection_column: mirna
+      legend_pos: bottom
+      controls_placement: header
+    title: Mean-variance plane
+    description: Every miRNA with at least one read, coloured by precursor arm.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 5, h: 9}
+  - component_type: advanced_viz
+    tag: sr-expr-record
+    index: sr-expr-record
+    section: miRNA detail
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtop_mirna_summary
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: sr-expr-plane
+      id_col: mirna
+      selection_source: any
+      sections:
+        miRNA: [mirna, arm, expression_rank]
+        Expression: [total_reads, mean_cpm, median_cpm, mean_log2_cpm, sd_log2_cpm]
+        Detection: [samples_detected, detection_pct]
+        isomiRs: [max_isomirs, reference_pct]
+      link_templates:
+        mirna: "https://mirbase.org/results/?query={value}"
+    title: miRNA record
+    description: The picked miRNA as a fact panel, linked to its miRBase entry.
+    title_size: h3
+    layout: {x: 5, y: 1, w: 3, h: 9}
+  - component_type: table
+    tag: sr-expr-table-summary
+    section: miRNA rows
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtop_mirna_summary
+    row_selection_enabled: true
+    row_selection_column: mirna
+    page_size: 25
+    title: miRNA summary
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: interactive
+    tag: sr-expr-filter-mirna
+    index: sr-expr-mirna-filter
+    section: miRNA scope
+    group: miRNAs
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtop_mirna_counts
+    interactive_component_type: MultiSelect
+    column_name: mirna
+    column_type: object
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:dna'}
+    placement: left
+    title: miRNA
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: sr-expr-filter-mean
+    index: sr-expr-mean-filter
+    section: miRNA scope
+    group: miRNAs
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtop_mirna_summary
+    interactive_component_type: RangeSlider
+    column_name: mean_log2_cpm
+    column_type: float64
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:chart-bell-curve'}
+    placement: left
+    title: Mean log2(CPM + 1)
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: sr-expr-filter-detection
+    index: sr-expr-detection-filter
+    section: miRNA scope
+    group: miRNAs
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtop_mirna_summary
+    interactive_component_type: RangeSlider
+    column_name: samples_detected
+    column_type: int64
+    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:flask'}
+    placement: left
+    title: Samples detecting the miRNA
+    layout: {x: 0, y: 6, w: 1, h: 3}
+
+# =============================================================================
+# Group comparison: which miRNAs separate two groups of samples.
+# =============================================================================
+- title: Group comparison
+  tab_order: 3
+  tab_icon: mdi:scale-balance
+  tab_icon_color: grape
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Comparison scope
+    icon: mdi:tune
+    color: grape
+    description: Drop shallow or off-target libraries before comparing
+  grid_sections:
+  - name: Sample relationships
+    icon: mdi:chart-scatter-plot
+    color: indigo
+    description: Which samples look alike on miRNA expression, and a lasso to make groups
+  - name: Two-group test
+    icon: mdi:scale-balance
+    color: grape
+    description: Every expressed miRNA tested between two groups of samples
+  components:
+  - component_type: text
+    tag: sr-cmp-pca-intro
+    section: Sample relationships
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtop_sample_pca
+    title: Samples of one group should sit together
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      PCA of log2(CPM + 1) over the most variable expressed miRNAs, coloured
+      by {GROUP_COL_DISPLAY} when a design table was given. Lasso a set of
+      points and save it as a group to compare it below.
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: sr-cmp-pca
+    index: sr-cmp-pca
+    section: Sample relationships
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtop_sample_pca
+    use: mirtop/mirna_pca
+    config:
+      color_col: '{GROUP_COL}'
+      point_size: 12
+      show_density: false
+      show_centroids: true
+      hover_cols: [mirna_reads, mirnas_detected]
+      selection_enabled: true
+      selection_column: sample
+      controls_placement: header
+    title: Sample PCA on miRNA expression
+    description: One point per sample. A point far from its group is worth checking against its depth on the Library QC tab.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 8, h: 7}
+  - component_type: text
+    tag: sr-cmp-test-intro
+    section: Two-group test
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtop_sample_matrix
+    title: A screen, not a differential expression analysis
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Pick two {GROUP_COL_DISPLAY} levels or two saved groups: each miRNA's CPM
+      is tested with a Wilcoxon rank-sum test and corrected with
+      Benjamini-Hochberg. The pipeline publishes no model-based test, so read
+      the hits as candidates to confirm with edgeR or DESeq2.
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: sr-cmp-test
+    index: sr-cmp-test
+    section: Two-group test
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtop_sample_matrix
+    use: mirtop/mirna_group_compare
+    config:
+      group_col: '{GROUP_COL}'
+      test: wilcoxon
+      log_transform: true
+      min_observations: 3
+      fdr_threshold: 0.05
+      log2fc_threshold: 1.0
+      top_n_labels: 15
+      controls_placement: header
+    title: miRNAs that separate two groups
+    description: Volcano of log2 fold change of mean CPM against the adjusted p-value, group A relative to group B.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 8, h: 10}
+  - component_type: interactive
+    tag: sr-cmp-filter-reads
+    index: sr-cmp-reads-filter
+    section: Comparison scope
+    group: Libraries
+    workflow_tag: smrnaseq
+    data_collection_tag: samples
+    interactive_component_type: RangeSlider
+    column_name: mirnas_10cpm
+    column_type: int64
+    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:counter'}
+    placement: left
+    title: miRNAs at 10 CPM or more
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: sr-cmp-filter-pc1
+    index: sr-cmp-pc1-filter
+    section: Comparison scope
+    group: Libraries
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtop_sample_pca
+    interactive_component_type: RangeSlider
+    column_name: dim_1
+    column_type: float64
+    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:chart-scatter-plot'}
+    placement: left
+    title: First principal component
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+# =============================================================================
+# isomiRs: how the reads of a miRNA differ from its reference sequence.
+# =============================================================================
+- title: isomiRs
+  tab_order: 4
+  tab_icon: mdi:shape-outline
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: isomiR scope
+    icon: mdi:shape-outline
+    color: orange
+    description: Which isomiR classes and which libraries the panels cover
+  grid_sections:
+  - name: isomiRs at a glance
+    icon: mdi:counter
+    color: orange
+    description: How far the reads stray from the reference sequences
+  - name: isomiR composition
+    icon: mdi:chart-bar
+    color: orange
+    description: Each library's miRNA reads split by 3' end, 5' end, addition and nucleotide change
+  - name: isomiR landscape
+    icon: mdi:chart-scatter-plot
+    color: yellow
+    description: Which isomiR classes each of the most expressed miRNAs carries
+  - name: isomiR rows
+    icon: mdi:table
+    color: gray
+    description: The landscape as rows
+    collapsed: true
+  components:
+  - component_type: card
+    tag: sr-iso-card-reference
+    section: isomiRs at a glance
+    workflow_tag: smrnaseq
+    data_collection_tag: samples
+    aggregation: median
+    aggregations: [box_plot_stats]
+    column_name: reference_isoform_pct
+    column_type: float64
+    secondary_layout: box_plot
+    display: {icon_name: 'mdi:check-decagram'}
+    title: Reads on the reference sequence (%)
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: sr-iso-card-isomirs
+    section: isomiRs at a glance
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtop_mirna_counts
+    aggregation: median
+    aggregations: [box_plot_stats]
+    column_name: isomirs
+    column_type: int64
+    secondary_layout: box_plot
+    display: {icon_name: 'mdi:shape-outline'}
+    title: isomiRs per miRNA and sample
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: sr-iso-card-mirna-reference
+    section: isomiRs at a glance
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtop_mirna_summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    column_name: reference_pct
+    column_type: float64
+    secondary_layout: box_plot
+    display: {icon_name: 'mdi:dna'}
+    title: Reference share per miRNA (%)
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: sr-iso-card-max-isomirs
+    section: isomiRs at a glance
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtop_mirna_summary
+    aggregation: max
+    aggregations: [box_plot_stats]
+    column_name: max_isomirs
+    column_type: int64
+    secondary_layout: box_plot
+    display: {icon_name: 'mdi:chart-bell-curve'}
+    title: Most isomiRs of one miRNA
+    title_size: sm
+    title_align: left
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: text
+    tag: sr-iso-composition-intro
+    section: isomiR composition
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtop_isomir_composition
+    title: Four partitions of the same reads
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Switch the level to see the reads split by 3' end, 5' end, the
+      untemplated nucleotide added at the 3' end, or nucleotide changes. Each
+      level sums to the library's miRNA reads.
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: sr-iso-composition
+    index: sr-iso-composition
+    section: isomiR composition
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtop_isomir_composition
+    use: mirtop/isomir_classes
+    config:
+      default_rank: "3' end"
+      top_n: 12
+      sort_by: abundance
+      normalise_to_one: true
+      sample_sort: first_taxon
+      controls_placement: header
+    title: isomiR composition per library
+    description: Stacked to 100 % of each library's miRNA reads.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 8, h: 7}
+  - component_type: text
+    tag: sr-iso-landscape-intro
+    section: isomiR landscape
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtop_isomir_landscape
+    title: Class by class, for the top miRNAs
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Colour is the mean share of a miRNA's reads in the class; size is the
+      fraction of samples where the class holds at least 5 % of them. Classes
+      overlap, so a row does not sum to 100 %.
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: sr-iso-landscape
+    index: sr-iso-landscape
+    section: isomiR landscape
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtop_isomir_landscape
+    use: mirtop/isomir_dot_plot
+    config:
+      gene_sort: mean
+      cluster_sort: name
+      max_genes: 40
+      controls_placement: header
+    title: isomiR landscape of the most expressed miRNAs
+    description: One row per miRNA, one column per isomiR class.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 8, h: 10}
+  - component_type: table
+    tag: sr-iso-table-landscape
+    section: isomiR rows
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtop_isomir_landscape
+    row_selection_enabled: true
+    row_selection_column: mirna
+    page_size: 25
+    title: isomiR landscape rows
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: interactive
+    tag: sr-iso-filter-class
+    index: sr-iso-class-filter
+    section: isomiR scope
+    group: isomiRs
+    workflow_tag: smrnaseq
+    data_collection_tag: mirtop_isomir_landscape
+    interactive_component_type: MultiSelect
+    column_name: variant_class
+    column_type: object
+    display: {title_size: md, custom_color: '#F4511E', icon_name: 'mdi:shape-outline'}
+    placement: left
+    title: isomiR class
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: sr-iso-filter-reference
+    index: sr-iso-reference-filter
+    section: isomiR scope
+    group: isomiRs
+    workflow_tag: smrnaseq
+    data_collection_tag: samples
+    interactive_component_type: RangeSlider
+    column_name: reference_isoform_pct
+    column_type: float64
+    display: {title_size: md, custom_color: '#F4511E', icon_name: 'mdi:check-decagram'}
+    placement: left
+    title: Reads on the reference sequence (%)
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+# =============================================================================
+# Novel miRNAs: what miRDeep2 proposes beyond miRBase, and how much to trust it.
+# =============================================================================
+- title: Novel miRNAs
+  tab_order: 5
+  tab_icon: mdi:star-outline
+  tab_icon_color: red
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Precursor scope
+    icon: mdi:filter-variant
+    color: red
+    description: Which novel precursors the panels keep, by recurrence and score
+  grid_sections:
+  - name: Discovery at a glance
+    icon: mdi:counter
+    color: red
+    description: How many novel precursors, how recurrent, and how many known ones were recovered
+  - name: Score calibration
+    icon: mdi:chart-line
+    color: pink
+    description: miRDeep2's own curves for choosing a score cutoff
+  - name: Precursor detail
+    icon: mdi:information-outline
+    color: gray
+    description: Pick a precursor on the recurrence plane, read its record beside it
+  - name: Precursor rows
+    icon: mdi:table
+    color: gray
+    description: The merged novel precursors and every per-sample call
+    collapsed: true
+  components:
+  - component_type: card
+    tag: sr-novel-card-precursors
+    section: Discovery at a glance
+    workflow_tag: smrnaseq
+    data_collection_tag: mirdeep2_novel_precursors
+    aggregation: nunique
+    column_name: precursor_id
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: star_support
+    top_n_count: 2
+    display: {icon_name: 'mdi:star-outline'}
+    title: Novel precursors
+    title_size: sm
+    title_align: left
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: sr-novel-card-recurrence
+    section: Discovery at a glance
+    workflow_tag: smrnaseq
+    data_collection_tag: mirdeep2_novel_precursors
+    aggregation: median
+    aggregations: [box_plot_stats]
+    column_name: samples_detected
+    column_type: int64
+    secondary_layout: box_plot
+    display: {icon_name: 'mdi:flask'}
+    title: Samples per novel precursor
+    title_size: sm
+    title_align: left
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: sr-novel-card-calls
+    section: Discovery at a glance
+    workflow_tag: smrnaseq
+    data_collection_tag: samples
+    aggregation: median
+    aggregations: [box_plot_stats]
+    column_name: novel_candidates
+    column_type: int64
+    secondary_layout: box_plot
+    display: {icon_name: 'mdi:test-tube'}
+    title: Novel calls per sample
+    title_size: sm
+    title_align: left
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: sr-novel-card-known
+    section: Discovery at a glance
+    workflow_tag: smrnaseq
+    data_collection_tag: samples
+    aggregation: median
+    aggregations: [box_plot_stats]
+    column_name: known_recovered
+    column_type: int64
+    secondary_layout: box_plot
+    display: {icon_name: 'mdi:check-decagram'}
+    title: Known precursors recovered per sample
+    title_size: sm
+    title_align: left
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: text
+    tag: sr-novel-calibration-intro
+    section: Score calibration
+    workflow_tag: smrnaseq
+    data_collection_tag: mirdeep2_score_summary
+    title: Where to set the score cutoff
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      A good cutoff keeps signal-to-noise high (left) while known miRBase
+      precursors are still recovered (right). Calls below it are mostly the
+      noise miRDeep2 estimates from permuted structures.
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: sr-novel-snr
+    index: sr-novel-snr
+    section: Score calibration
+    workflow_tag: smrnaseq
+    data_collection_tag: mirdeep2_score_summary
+    use: mirdeep2/signal_to_noise_curve
+    config:
+      x_title: miRDeep2 score cutoff
+      y_title: Signal-to-noise
+      legend_pos: none
+      controls_placement: header
+    title: Signal-to-noise by score cutoff
+    description: One curve per sample, real over permuted candidate counts.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 4, h: 7}
+  - component_type: advanced_viz
+    tag: sr-novel-known
+    index: sr-novel-known
+    section: Score calibration
+    workflow_tag: smrnaseq
+    data_collection_tag: mirdeep2_score_summary
+    use: mirdeep2/known_recovery_curve
+    config:
+      x_title: miRDeep2 score cutoff
+      y_title: Known precursors recovered (%)
+      legend_pos: none
+      controls_placement: header
+    title: Known precursors recovered by score cutoff
+    description: Share of the miRBase precursors with reads that miRDeep2 recovers at each cutoff.
+    title_size: h3
+    layout: {x: 4, y: 1, w: 4, h: 7}
+  - component_type: text
+    tag: sr-novel-detail-intro
+    section: Precursor detail
+    workflow_tag: smrnaseq
+    data_collection_tag: mirdeep2_novel_precursors
+    title: Recurrent, well scored and with star reads
+    title_size: sm
+    title_align: left
+    order: 2
+    alignment: left
+    body: >
+      Each point is a novel hairpin merged across samples; those found in many
+      samples, scoring high and with reads on both arms are the credible ones.
+      Click one to read its sequences and locus on the right.
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: advanced_viz
+    tag: sr-novel-plane
+    index: sr-novel-plane
+    section: Precursor detail
+    workflow_tag: smrnaseq
+    data_collection_tag: mirdeep2_novel_precursors
+    use: mirdeep2/novel_support
+    config:
+      x_title: Samples reporting the precursor
+      y_title: Best miRDeep2 score
+      log_y: false
+      marker_outline: true
+      top_n_labels: 0
+      selection_enabled: true
+      selection_column: precursor_id
+      legend_pos: bottom
+      controls_placement: header
+    title: Recurrence against score
+    description: Marker size follows the reads on the precursor summed over samples; colour says whether any call had star-arm reads.
+    title_size: h3
+    layout: {x: 0, y: 1, w: 5, h: 9}
+  - component_type: advanced_viz
+    tag: sr-novel-record
+    index: sr-novel-record
+    section: Precursor detail
+    workflow_tag: smrnaseq
+    data_collection_tag: mirdeep2_novel_precursors
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: sr-novel-plane
+      id_col: precursor_id
+      selection_source: any
+      sections:
+        Locus: [precursor_id, genome_position, precursor_length]
+        Support: [samples_detected, detection_pct, calls, max_score, median_score, max_true_positive_pct]
+        Reads: [total_reads, mature_reads, star_reads, loop_reads, star_support]
+        Checks: [randfold_pct, rfam_alert, seed_match]
+        Sequences: [best_sample, mature_sequence, star_sequence, precursor_sequence]
+      link_templates:
+        genome_position: "https://genome.ucsc.edu/cgi-bin/hgTracks?db={GENOME}&position={value}"
+    title: Precursor record
+    description: The picked precursor, with its strongest call's sequences and a genome browser link.
+    title_size: h3
+    layout: {x: 5, y: 1, w: 3, h: 9}
+  - component_type: table
+    tag: sr-novel-table-precursors
+    section: Precursor rows
+    workflow_tag: smrnaseq
+    data_collection_tag: mirdeep2_novel_precursors
+    row_selection_enabled: true
+    row_selection_column: precursor_id
+    page_size: 25
+    title: Novel precursors
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    tag: sr-novel-table-calls
+    section: Precursor rows
+    workflow_tag: smrnaseq
+    data_collection_tag: mirdeep2_predictions
+    row_selection_enabled: false
+    page_size: 25
+    title: Every miRDeep2 call, per sample
+    description: Novel and known precursors as miRDeep2 reported them, before merging across samples.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 6, w: 8, h: 6}
+  - component_type: interactive
+    tag: sr-novel-filter-recurrence
+    index: sr-novel-recurrence-filter
+    section: Precursor scope
+    group: Precursors
+    workflow_tag: smrnaseq
+    data_collection_tag: mirdeep2_novel_precursors
+    interactive_component_type: RangeSlider
+    column_name: samples_detected
+    column_type: int64
+    display: {title_size: md, custom_color: '#E53935', icon_name: 'mdi:flask'}
+    placement: left
+    title: Samples reporting the precursor
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: sr-novel-filter-score
+    index: sr-novel-score-filter
+    section: Precursor scope
+    group: Precursors
+    workflow_tag: smrnaseq
+    data_collection_tag: mirdeep2_novel_precursors
+    interactive_component_type: RangeSlider
+    column_name: max_score
+    column_type: float64
+    display: {title_size: md, custom_color: '#E53935', icon_name: 'mdi:star-outline'}
+    placement: left
+    title: Best miRDeep2 score
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    tag: sr-novel-filter-star
+    index: sr-novel-star-filter
+    section: Precursor scope
+    group: Precursors
+    workflow_tag: smrnaseq
+    data_collection_tag: mirdeep2_novel_precursors
+    interactive_component_type: MultiSelect
+    column_name: star_support
+    column_type: object
+    display: {title_size: md, custom_color: '#E53935', icon_name: 'mdi:check-decagram'}
+    placement: left
+    title: Star-arm reads
+    layout: {x: 0, y: 6, w: 1, h: 3}
