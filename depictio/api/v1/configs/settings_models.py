@@ -260,6 +260,10 @@ class MongoDBConfig(ServiceConfig):
         # stored there would be regenerated on every dev wipe and inflate the
         # project's installation count.
         telemetry_collection: str = Field(default="telemetry")
+        # Comment threads and annotations pinned to dashboard components. Stored
+        # apart from `dashboards` so a dashboard save never rewrites or drops them.
+        comment_threads_collection: str = Field(default="comment_threads")
+        annotations_collection: str = Field(default="annotations")
         test_collection: str = Field(default="test")
 
     collections: Collections = Field(default_factory=Collections)
